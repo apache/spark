@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.connect.pipelines
 
+import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.DatasetType
+import org.apache.spark.connect.proto.{DatasetType, PipelineCommand, PipelineEvent}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
 import org.apache.spark.sql.pipelines.utils.{EventVerificationTestHelpers, TestPipelineUpdateContextMixin}
+
 
 /**
  * Comprehensive test suite that validates pipeline refresh functionality by running actual
@@ -42,7 +43,7 @@ class PipelineRefreshFunctionalSuite
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    // Create source directory for streaming input
+    // Create source table to simulate streaming updates
     spark.sql(s"CREATE TABLE $externalSourceTable AS SELECT * FROM RANGE(1, 2)")
   }
 
@@ -52,304 +53,211 @@ class PipelineRefreshFunctionalSuite
     spark.sql(s"DROP TABLE IF EXISTS $externalSourceTable")
   }
 
-  private def createTwoSTPipeline(graphId: String): TestPipelineDefinition = {
+  private def createTestPipeline(graphId: String): TestPipelineDefinition = {
     new TestPipelineDefinition(graphId) {
       // Create tables that depend on the mv
       createTable(
         name = "a",
         datasetType = DatasetType.TABLE,
-        sql = Some(s"SELECT id FROM STREAM $externalSourceTable"))
-
+        sql = Some(s"SELECT id FROM STREAM $externalSourceTable")
+      )
       createTable(
         name = "b",
         datasetType = DatasetType.TABLE,
-        sql = Some(s"SELECT id FROM STREAM $externalSourceTable"))
+        sql = Some(s"SELECT id FROM STREAM $externalSourceTable")
+      )
+      createTable(
+        name = "mv",
+        datasetType = DatasetType.MATERIALIZED_VIEW,
+        sql = Some(s"SELECT id FROM a")
+      )
+    }
+  }
+
+  /**
+   * Helper method to run refresh tests with common setup and verification logic.
+   * This reduces code duplication across the refresh test cases.
+   */
+  private def runRefreshTest(
+    refreshConfigBuilder: String => Option[PipelineCommand.StartRun] = _ => None,
+    expectedContentAfterRefresh: Map[String, Set[Map[String, Any]]],
+    eventValidation: Option[ArrayBuffer[PipelineEvent] => Unit] = None
+  ): Unit = {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      val pipeline = createTestPipeline(graphId)
+      registerPipelineDatasets(pipeline)
+
+      // First run to populate tables
+      startPipelineAndWaitForCompletion(graphId)
+
+      // Verify initial data - all tests expect the same initial state
+      verifyMultipleTableContent(
+        tableNames = Set("spark_catalog.default.a",
+          "spark_catalog.default.b", "spark_catalog.default.mv"),
+        columnsToVerify = Map(
+          "spark_catalog.default.a" -> Seq("id"),
+          "spark_catalog.default.b" -> Seq("id"),
+          "spark_catalog.default.mv" -> Seq("id")
+        ),
+        expectedContent = Map(
+          "spark_catalog.default.a" -> Set(Map("id" -> 1)),
+          "spark_catalog.default.b" -> Set(Map("id" -> 1)),
+          "spark_catalog.default.mv" -> Set(Map("id" -> 1))
+        )
+      )
+
+      // Clear cached pipeline execution before starting new run
+      SparkConnectService.sessionManager
+        .getIsolatedSessionIfPresent(SessionKey(defaultUserId, defaultSessionId))
+        .foreach(_.removeAllPipelineExecutions())
+
+      // Replace source data to simulate a streaming update
+      spark.sql("INSERT OVERWRITE TABLE spark_catalog.default.source_data " +
+        "SELECT * FROM VALUES (2), (3) AS t(id)")
+
+      // Run with specified refresh configuration
+      val capturedEvents = refreshConfigBuilder(graphId) match {
+        case Some(startRun) => startPipelineAndWaitForCompletion(graphId, Some(startRun))
+        case None => startPipelineAndWaitForCompletion(graphId)
+      }
+
+      // Additional validation if provided
+      eventValidation.foreach(_(capturedEvents))
+
+      // Verify final content
+      verifyMultipleTableContent(
+        tableNames = Set("spark_catalog.default.a",
+          "spark_catalog.default.b", "spark_catalog.default.mv"),
+        columnsToVerify = Map(
+          "spark_catalog.default.a" -> Seq("id"),
+          "spark_catalog.default.b" -> Seq("id"),
+          "spark_catalog.default.mv" -> Seq("id")
+        ),
+        expectedContent = expectedContentAfterRefresh
+      )
     }
   }
 
   test("pipeline runs selective full_refresh") {
-    withRawBlockingStub { implicit stub =>
-      val graphId = createDataflowGraph
-      val pipeline = createTwoSTPipeline(graphId)
-      registerPipelineDatasets(pipeline)
-
-      // First run to populate tables
-      startPipelineAndWaitForCompletion(graphId)
-
-      // Verify initial data from file stream
-      verifyMultipleTableContent(
-        tableNames = Set(
-          "spark_catalog.default.a",
-          "spark_catalog.default.b"),
-        columnsToVerify = Map(
-          "spark_catalog.default.a" -> Seq("id"),
-          "spark_catalog.default.b" -> Seq("id")
+    runRefreshTest(
+      refreshConfigBuilder = { graphId =>
+        Some(PipelineCommand.StartRun.newBuilder()
+          .setDataflowGraphId(graphId)
+          .addAllFullRefresh(List("a").asJava)
+          .build())
+      },
+      expectedContentAfterRefresh = Map(
+        "spark_catalog.default.a" -> Set(
+          Map("id" -> 2), // a is fully refreshed and only contains the new values
+          Map("id" -> 3)
         ),
-        expectedContent = Map(
-          "spark_catalog.default.a" -> Set(
-            Map("id" -> 1)
-          ),
-          "spark_catalog.default.b" -> Set(
-            Map("id" -> 1)
-          )
-        )
-      )
-
-      // Clear cached pipeline execution before starting new run
-      SparkConnectService.sessionManager
-        .getIsolatedSessionIfPresent(SessionKey(defaultUserId, defaultSessionId))
-        .foreach(_.removeAllPipelineExecutions())
-
-      // spark overwrite the table source_data with new data
-      spark.sql("INSERT OVERWRITE TABLE spark_catalog.default.source_data " +
-        "SELECT * FROM VALUES (2), (3) AS t(id)")
-
-      // Run with full refresh on specific tables
-      val fullRefreshTables = List("a")
-      val startRun = proto.PipelineCommand.StartRun.newBuilder()
-        .setDataflowGraphId(graphId)
-        .addAllFullRefresh(fullRefreshTables.asJava)
-        .build()
-
-      val capturedEvents = startPipelineAndWaitForCompletion(graphId, Some(startRun))
-      // assert that table_b is excluded
-      assert(capturedEvents.exists(
-        _.getMessage.contains(s"Flow \'spark_catalog.default.b\' is EXCLUDED.")))
-      // assert that table_a and file_data ran to completion
-      assert(capturedEvents.exists(
-        _.getMessage.contains(s"Flow spark_catalog.default.a has COMPLETED.")))
-      // Verify completion event
-      assert(capturedEvents.exists(_.getMessage.contains("Run is COMPLETED")))
-
-      verifyMultipleTableContent(
-        tableNames = Set(
-          "spark_catalog.default.a",
-          "spark_catalog.default.b"),
-        columnsToVerify = Map(
-          "spark_catalog.default.a" -> Seq("id"),
-          "spark_catalog.default.b" -> Seq("id")
+        "spark_catalog.default.b" -> Set(
+          Map("id" -> 1) // b is not refreshed, so it retains the old value
         ),
-        expectedContent = Map(
-          "spark_catalog.default.a" -> Set(
-            Map("id" -> 2), // a should be fully refreshed and only contain the new value
-            Map("id" -> 3)
-          ),
-          "spark_catalog.default.b" -> Set(
-            Map("id" -> 1) // b is refreshed, so it retains the old value
-          )
+        "spark_catalog.default.mv" -> Set(
+          Map("id" -> 1) // mv is not refreshed, so it retains the old value
         )
-      )
-    }
+      ),
+      eventValidation = Some { capturedEvents =>
+        // assert that table_b is excluded
+        assert(capturedEvents.exists(
+          _.getMessage.contains(s"Flow \'spark_catalog.default.b\' is EXCLUDED.")))
+        // assert that table_a ran to completion
+        assert(capturedEvents.exists(
+          _.getMessage.contains(s"Flow spark_catalog.default.a has COMPLETED.")))
+        // assert that mv is excluded
+        assert(capturedEvents.exists(
+          _.getMessage.contains(s"Flow \'spark_catalog.default.mv\' is EXCLUDED.")))
+        // Verify completion event
+        assert(capturedEvents.exists(_.getMessage.contains("Run is COMPLETED")))
+      }
+    )
   }
 
   test("pipeline runs selective full_refresh and selective refresh") {
-    withRawBlockingStub { implicit stub =>
-      val graphId = createDataflowGraph
-      val pipeline = createTwoSTPipeline(graphId)
-      registerPipelineDatasets(pipeline)
-
-      // First run to populate tables
-      startPipelineAndWaitForCompletion(graphId)
-
-      // Verify initial data from file stream
-      verifyMultipleTableContent(
-        tableNames = Set(
-          "spark_catalog.default.a",
-          "spark_catalog.default.b"),
-        columnsToVerify = Map(
-          "spark_catalog.default.a" -> Seq("id"),
-          "spark_catalog.default.b" -> Seq("id")
+    runRefreshTest(
+      refreshConfigBuilder = { graphId =>
+        Some(PipelineCommand.StartRun.newBuilder()
+          .setDataflowGraphId(graphId)
+          .addAllFullRefresh(Seq("a", "mv").asJava)
+          .addRefresh("b")
+          .build())
+      },
+      expectedContentAfterRefresh = Map(
+        "spark_catalog.default.a" -> Set(
+          Map("id" -> 2), // a is fully refreshed and only contains the new values
+          Map("id" -> 3)
         ),
-        expectedContent = Map(
-          "spark_catalog.default.a" -> Set(
-            Map("id" -> 1)
-          ),
-          "spark_catalog.default.b" -> Set(
-            Map("id" -> 1)
-          )
+        "spark_catalog.default.b" -> Set(
+          Map("id" -> 1), // b is refreshed, so it retains the old value and adds the new ones
+          Map("id" -> 2),
+          Map("id" -> 3)
+        ),
+        "spark_catalog.default.mv" -> Set(
+          Map("id" -> 2), // mv is fully refreshed and only contains the new values
+          Map("id" -> 3)
         )
       )
-
-      // Clear cached pipeline execution before starting new run
-      SparkConnectService.sessionManager
-        .getIsolatedSessionIfPresent(SessionKey(defaultUserId, defaultSessionId))
-        .foreach(_.removeAllPipelineExecutions())
-
-      // spark overwrite the table source_data with new data
-      spark.sql("INSERT OVERWRITE TABLE spark_catalog.default.source_data " +
-        "SELECT * FROM VALUES (2), (3) AS t(id)")
-
-      val startRun = proto.PipelineCommand.StartRun.newBuilder()
-        .setDataflowGraphId(graphId)
-        .addFullRefresh("a")
-        .addRefresh("b")
-        .build()
-
-      startPipelineAndWaitForCompletion(graphId, Some(startRun))
-
-      // assert that table_b is refreshed
-      verifyMultipleTableContent(
-        tableNames = Set(
-          "spark_catalog.default.a",
-          "spark_catalog.default.b"),
-        columnsToVerify = Map(
-          "spark_catalog.default.a" -> Seq("id"),
-          "spark_catalog.default.b" -> Seq("id")
-        ),
-        expectedContent = Map(
-          "spark_catalog.default.a" -> Set(
-            Map("id" -> 2), // a is fully refreshed and only contain the new value
-            Map("id" -> 3)
-          ),
-          "spark_catalog.default.b" -> Set(
-            Map("id" -> 1), // b is refreshed, so it retains the old value and adds the new one
-            Map("id" -> 2),
-            Map("id" -> 3)
-          )
-        )
-      )
-    }
+    )
   }
 
   test("pipeline runs refresh by default") {
-    withRawBlockingStub { implicit stub =>
-      val graphId = createDataflowGraph
-      val pipeline = createTwoSTPipeline(graphId)
-      registerPipelineDatasets(pipeline)
-
-      // First run to populate tables
-      startPipelineAndWaitForCompletion(graphId)
-
-      // Verify initial data from file stream
-      verifyMultipleTableContent(
-        tableNames = Set(
-          "spark_catalog.default.a",
-          "spark_catalog.default.b"),
-        columnsToVerify = Map(
-          "spark_catalog.default.a" -> Seq("id"),
-          "spark_catalog.default.b" -> Seq("id")
+    runRefreshTest(
+      expectedContentAfterRefresh = Map(
+        "spark_catalog.default.a" -> Set(
+          Map("id" -> 1), // a is refreshed by default, retains the old value and adds the new ones
+          Map("id" -> 2),
+          Map("id" -> 3)
         ),
-        expectedContent = Map(
-          "spark_catalog.default.a" -> Set(
-            Map("id" -> 1)
-          ),
-          "spark_catalog.default.b" -> Set(
-            Map("id" -> 1)
-          )
+        "spark_catalog.default.b" -> Set(
+          Map("id" -> 1), // b is refreshed by default, retains the old value and adds the new ones
+          Map("id" -> 2),
+          Map("id" -> 3)
+        ),
+        "spark_catalog.default.mv" -> Set(
+          Map("id" -> 1),
+          Map("id" -> 2), // mv is refreshed from table a, retains all values
+          Map("id" -> 3)
         )
       )
-
-      // Clear cached pipeline execution before starting new run
-      SparkConnectService.sessionManager
-        .getIsolatedSessionIfPresent(SessionKey(defaultUserId, defaultSessionId))
-        .foreach(_.removeAllPipelineExecutions())
-
-      // spark overwrite the table source_data with new data
-      spark.sql("INSERT OVERWRITE TABLE spark_catalog.default.source_data " +
-        "SELECT * FROM VALUES (2), (3) AS t(id)")
-
-      // Create a default StartRun command that refreshes all tables
-      startPipelineAndWaitForCompletion(graphId)
-
-      // assert that both tables are refreshed
-      verifyMultipleTableContent(
-        tableNames = Set(
-          "spark_catalog.default.a",
-          "spark_catalog.default.b"),
-        columnsToVerify = Map(
-          "spark_catalog.default.a" -> Seq("id"),
-          "spark_catalog.default.b" -> Seq("id")
-        ),
-        expectedContent = Map(
-          "spark_catalog.default.a" -> Set(
-            Map("id" -> 1), // a is refreshed by default, retains the old value and adds the new one
-            Map("id" -> 2),
-            Map("id" -> 3)
-          ),
-          "spark_catalog.default.b" -> Set(
-            Map("id" -> 1), // b is refreshed by default, retains the old value and adds the new one
-            Map("id" -> 2),
-            Map("id" -> 3)
-          )
-        )
-      )
-    }
+    )
   }
 
   test("pipeline runs full refresh all") {
-    withRawBlockingStub { implicit stub =>
-      val graphId = createDataflowGraph
-      val pipeline = createTwoSTPipeline(graphId)
-      registerPipelineDatasets(pipeline)
-
-      // First run to populate tables
-      startPipelineAndWaitForCompletion(graphId)
-
-      // Verify initial data from file stream
-      verifyMultipleTableContent(
-        tableNames = Set(
-          "spark_catalog.default.a",
-          "spark_catalog.default.b"),
-        columnsToVerify = Map(
-          "spark_catalog.default.a" -> Seq("id"),
-          "spark_catalog.default.b" -> Seq("id")
+    runRefreshTest(
+      refreshConfigBuilder = { graphId =>
+        Some(PipelineCommand.StartRun.newBuilder()
+          .setDataflowGraphId(graphId)
+          .setFullRefreshAll(true)
+          .build())
+      },
+      // full refresh all causes all tables to lose the initial value
+      // and only contain the new values after the source data is updated
+      expectedContentAfterRefresh = Map(
+        "spark_catalog.default.a" -> Set(
+          Map("id" -> 2),
+          Map("id" -> 3)
         ),
-        expectedContent = Map(
-          "spark_catalog.default.a" -> Set(
-            Map("id" -> 1)
-          ),
-          "spark_catalog.default.b" -> Set(
-            Map("id" -> 1)
-          )
+        "spark_catalog.default.b" -> Set(
+          Map("id" -> 2),
+          Map("id" -> 3)
+        ),
+        "spark_catalog.default.mv" -> Set(
+          Map("id" -> 2),
+          Map("id" -> 3)
         )
       )
-
-      // Clear cached pipeline execution before starting new run
-      SparkConnectService.sessionManager
-        .getIsolatedSessionIfPresent(SessionKey(defaultUserId, defaultSessionId))
-        .foreach(_.removeAllPipelineExecutions())
-
-      // spark overwrite the table source_data with new data
-      spark.sql("INSERT OVERWRITE TABLE spark_catalog.default.source_data " +
-        "SELECT * FROM VALUES (2), (3) AS t(id)")
-
-      // Create a default StartRun command that refreshes all tables
-      val startRun = proto.PipelineCommand.StartRun.newBuilder()
-        .setDataflowGraphId(graphId)
-        .setFullRefreshAll(true)
-        .build()
-      startPipelineAndWaitForCompletion(graphId, Some(startRun))
-
-      // assert that both tables are refreshed
-      verifyMultipleTableContent(
-        tableNames = Set(
-          "spark_catalog.default.a",
-          "spark_catalog.default.b"),
-        columnsToVerify = Map(
-          "spark_catalog.default.a" -> Seq("id"),
-          "spark_catalog.default.b" -> Seq("id")
-        ),
-        expectedContent = Map(
-          "spark_catalog.default.a" -> Set(
-            Map("id" -> 2),
-            Map("id" -> 3)
-          ),
-          "spark_catalog.default.b" -> Set(
-            Map("id" -> 2),
-            Map("id" -> 3)
-          )
-        )
-      )
-    }
+    )
   }
 
   test("validation: cannot specify subset refresh when full_refresh_all is true") {
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
-      val pipeline = createTwoSTPipeline(graphId)
+      val pipeline = createTestPipeline(graphId)
       registerPipelineDatasets(pipeline)
 
-      val startRun = proto.PipelineCommand.StartRun.newBuilder()
+      val startRun = PipelineCommand.StartRun.newBuilder()
         .setDataflowGraphId(graphId)
         .setFullRefreshAll(true)
         .addRefresh("a")
@@ -366,10 +274,10 @@ class PipelineRefreshFunctionalSuite
   test("validation: cannot specify subset full_refresh when full_refresh_all is true") {
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
-      val pipeline = createTwoSTPipeline(graphId)
+      val pipeline = createTestPipeline(graphId)
       registerPipelineDatasets(pipeline)
 
-      val startRun = proto.PipelineCommand.StartRun.newBuilder()
+      val startRun = PipelineCommand.StartRun.newBuilder()
         .setDataflowGraphId(graphId)
         .setFullRefreshAll(true)
         .addFullRefresh("a")
@@ -386,10 +294,10 @@ class PipelineRefreshFunctionalSuite
   test("validation: refresh and full_refresh cannot overlap") {
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
-      val pipeline = createTwoSTPipeline(graphId)
+      val pipeline = createTestPipeline(graphId)
       registerPipelineDatasets(pipeline)
 
-      val startRun = proto.PipelineCommand.StartRun.newBuilder()
+      val startRun = PipelineCommand.StartRun.newBuilder()
         .setDataflowGraphId(graphId)
         .addRefresh("a")
         .addFullRefresh("a")
@@ -407,15 +315,14 @@ class PipelineRefreshFunctionalSuite
   test("validation: multiple overlapping tables in refresh and full_refresh not allowed") {
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
-      val pipeline = createTwoSTPipeline(graphId)
+      val pipeline = createTestPipeline(graphId)
       registerPipelineDatasets(pipeline)
 
-      val startRun = proto.PipelineCommand.StartRun.newBuilder()
+      val startRun = PipelineCommand.StartRun.newBuilder()
         .setDataflowGraphId(graphId)
         .addRefresh("a")
         .addRefresh("b")
         .addFullRefresh("a")
-        .addFullRefresh("file_data")
         .build()
 
       val exception = intercept[IllegalArgumentException] {
@@ -430,10 +337,10 @@ class PipelineRefreshFunctionalSuite
   test("validation: fully qualified table names in validation") {
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
-      val pipeline = createTwoSTPipeline(graphId)
+      val pipeline = createTestPipeline(graphId)
       registerPipelineDatasets(pipeline)
 
-      val startRun = proto.PipelineCommand.StartRun.newBuilder()
+      val startRun = PipelineCommand.StartRun.newBuilder()
         .setDataflowGraphId(graphId)
         .addRefresh("spark_catalog.default.a")
         .addFullRefresh("a")  // This should be treated as the same table
