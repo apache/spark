@@ -109,7 +109,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
   }
 
   def shouldDisplayApplications(requestedIncomplete: Boolean): Boolean = {
-    parent.getApplicationList(1)(isApplicationCompleted(_) != requestedIncomplete).hasNext
+    parent.getApplicationInfoList(1)(isApplicationCompleted(_) != requestedIncomplete).nonEmpty
   }
 
   private def makePageLink(request: HttpServletRequest, showIncomplete: Boolean): String = {

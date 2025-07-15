@@ -83,8 +83,8 @@ private[spark] trait UIRoot {
 
   def getApplicationInfoList: Iterator[ApplicationInfo]
 
-  def getApplicationInfoList(max: Int)(filter: ApplicationInfo => Boolean)
-    : Iterator[ApplicationInfo]
+  def getApplicationInfoList(max: Int)(
+      filter: ApplicationInfo => Boolean): Iterator[ApplicationInfo]
 
   def getApplicationInfo(appId: String): Option[ApplicationInfo]
 
