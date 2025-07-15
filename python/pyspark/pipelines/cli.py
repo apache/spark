@@ -226,29 +226,21 @@ def run(
     """Run the pipeline defined with the given spec.
     
     :param spec_path: Path to the pipeline specification file.
-    :param full_refresh: List of tables to reset and recompute.
+    :param full_refresh: List of datasets to reset and recompute.
     :param full_refresh_all: Perform a full graph reset and recompute.
-    :param refresh: List of tables to update.
+    :param refresh: List of datasets to update.
     """
     # Validate conflicting arguments
     if full_refresh_all:
         if full_refresh:
             raise PySparkException(
                 errorClass="CONFLICTING_PIPELINE_REFRESH_OPTIONS",
-                messageParameters={
-                    "message": "--full-refresh-all option conflicts with --full-refresh. "
-                              "The --full-refresh-all option performs a full refresh of all tables, "
-                              "so specifying individual tables with --full-refresh is not allowed."
-                }
+                messageParameters={}
             )
         if refresh:
             raise PySparkException(
-                errorClass="CONFLICTING_PIPELINE_REFRESH_OPTIONS", 
-                messageParameters={
-                    "message": "--full-refresh-all option conflicts with --refresh. "
-                              "The --full-refresh-all option performs a full refresh of all tables, "
-                              "so specifying individual tables with --refresh is not allowed."
-                }
+                errorClass="CONFLICTING_PIPELINE_REFRESH_OPTIONS",
+                messageParameters={}
             )
     
     log_with_curr_timestamp(f"Loading pipeline spec from {spec_path}...")
@@ -313,14 +305,14 @@ if __name__ == "__main__":
         "--full-refresh", 
         type=parse_table_list, 
         action="append",
-        help="List of tables to reset and recompute (comma-separated). Can be specified multiple times."
+        help="List of datasets to reset and recompute (comma-separated)."
     )
     run_parser.add_argument("--full-refresh-all", action="store_true", help="Perform a full graph reset and recompute.")
     run_parser.add_argument(
         "--refresh", 
         type=parse_table_list,
         action="append", 
-        help="List of tables to update (comma-separated). Can be specified multiple times."
+        help="List of datasets to update (comma-separated)."
     )
 
     # "init" subcommand

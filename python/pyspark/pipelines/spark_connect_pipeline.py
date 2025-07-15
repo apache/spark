@@ -75,9 +75,9 @@ def start_run(
     """Start a run of the dataflow graph in the Spark Connect server.
 
     :param dataflow_graph_id: The ID of the dataflow graph to start.
-    :param full_refresh: List of tables to reset and recompute.
+    :param full_refresh: List of datasets to reset and recompute.
     :param full_refresh_all: Perform a full graph reset and recompute.
-    :param refresh: List of tables to update.
+    :param refresh: List of datasets to update.
     """
     inner_command = pb2.PipelineCommand.StartRun(
         dataflow_graph_id=dataflow_graph_id,
