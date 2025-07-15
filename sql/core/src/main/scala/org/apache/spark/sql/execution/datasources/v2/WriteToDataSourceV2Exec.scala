@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.OptionalLong
+
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
@@ -453,15 +455,11 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
         }
       )
 
-      val mergeMetricsOpt = if (batchWrite.requestMergeMetrics()) {
-        Some(getMergeMetrics(query))
-      } else {
-        None
-      }
+      val mergeMetricsOpt = getMergeMetrics(query)
 
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} is committing.")
       mergeMetricsOpt match {
-        case Some(metrics) => batchWrite.commitWithMerge(messages, metrics)
+        case Some(metrics) => batchWrite.commitMerge(messages, metrics)
         case None => batchWrite.commit(messages)
       }
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} committed.")
@@ -486,34 +484,28 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
     Nil
   }
 
-  private def getMergeMetrics(query: SparkPlan): MergeMetrics = {
-    val mergeMetricsBuilder = new MergeMetrics.Builder()
-    val mergeNode = collectFirst(query) {case c: MergeRowsExec => c}
-    mergeNode.foreach {n => mergeMetricValues(n.metrics, mergeMetricsBuilder)}
-    mergeMetricsBuilder.build()
-  }
-
-  private def metric(metrics: Map[String, SQLMetric], metric: String): Long = {
-    metrics.get(metric) match {
-      case Some(m) => m.value
-      case None => -1
+  private def getMergeMetrics(query: SparkPlan): Option[MergeMetrics] = {
+    collectFirst(query) { case m: MergeRowsExec => m }.map{ n =>
+      MergeMetricsImpl(
+        numTargetRowsCopied = metric(n.metrics, "numTargetRowsCopied"),
+        numTargetRowsDeleted = metric(n.metrics, "numTargetRowsDeleted"),
+        numTargetRowsUpdated = metric(n.metrics, "numTargetRowsUpdated"),
+        numTargetRowsInserted = metric(n.metrics, "numTargetRowsInserted"),
+        numTargetRowsMatchedDeleted = metric(n.metrics, "numTargetRowsMatchedDeleted"),
+        numTargetRowsMatchedUpdated = metric(n.metrics, "numTargetRowsMatchedUpdated"),
+        numTargetRowsNotMatchedBySourceDeleted =
+          metric(n.metrics, "numTargetRowsNotMatchedBySourceDeleted"),
+        numTargetRowsNotMatchedBySourceUpdated =
+          metric(n.metrics, "numTargetRowsNotMatchedBySourceUpdated")
+      )
     }
   }
 
-  private def mergeMetricValues(mergeNodeMetrics: Map[String, SQLMetric],
-                           metricBuilder: MergeMetrics.Builder): Option[MergeMetrics.Builder] = {
-    metricBuilder
-      .numTargetRowsCopied(metric(mergeNodeMetrics, "numTargetRowsCopied"))
-      .numTargetRowsDeleted(metric(mergeNodeMetrics, "numTargetRowsDeleted"))
-      .numTargetRowsUpdated(metric(mergeNodeMetrics, "numTargetRowsUpdated"))
-      .numTargetRowsInserted(metric(mergeNodeMetrics, "numTargetRowsInserted"))
-      .numTargetRowsNotMatchedBySourceDeleted(
-        metric(mergeNodeMetrics, "numTargetRowsNotMatchedBySourceDeleted"))
-      .numTargetRowsNotMatchedBySourceUpdated(
-        metric(mergeNodeMetrics, "numTargetRowsNotMatchedBySourceUpdated"))
-      .numTargetRowsMatchedDeleted(metric(mergeNodeMetrics, "numTargetRowsMatchedDeleted"))
-      .numTargetRowsMatchedUpdated(metric(mergeNodeMetrics, "numTargetRowsMatchedUpdated"))
-    Some(metricBuilder)
+  private def metric(metrics: Map[String, SQLMetric], metric: String): OptionalLong = {
+    metrics.get(metric) match {
+      case Some(m) => OptionalLong.of(m.value)
+      case None => OptionalLong.empty()
+    }
   }
 }
 
@@ -769,3 +761,13 @@ private[v2] case class DataWritingSparkTaskResult(
  * Sink progress information collected after commit.
  */
 private[sql] case class StreamWriterCommitProgress(numOutputRows: Long)
+
+private case class MergeMetricsImpl(
+    override val numTargetRowsCopied: OptionalLong,
+    override val numTargetRowsDeleted: OptionalLong,
+    override val numTargetRowsUpdated: OptionalLong,
+    override val numTargetRowsInserted: OptionalLong,
+    override val numTargetRowsMatchedUpdated: OptionalLong,
+    override val numTargetRowsMatchedDeleted: OptionalLong,
+    override val numTargetRowsNotMatchedBySourceUpdated: OptionalLong,
+    override val numTargetRowsNotMatchedBySourceDeleted: OptionalLong) extends MergeMetrics
