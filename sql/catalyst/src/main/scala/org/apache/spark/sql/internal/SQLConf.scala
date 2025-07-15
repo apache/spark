@@ -1252,7 +1252,7 @@ object SQLConf {
           |`spark.sql.parser.parserDfaCacheFlushThreshold`.""".stripMargin)
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val FILE_COMPRESSION_FACTOR = buildConf("spark.sql.sources.fileCompressionFactor")
     .internal()
