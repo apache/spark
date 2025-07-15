@@ -18,6 +18,10 @@ package org.apache.spark.sql.connector.metric;
 
 import java.util.OptionalLong;
 
+/**
+ * Execution metrics for a Merge Operation for a Connector that supports RowLevelOperations
+ * of this type.
+ */
 public interface MergeMetrics {
 
   /**

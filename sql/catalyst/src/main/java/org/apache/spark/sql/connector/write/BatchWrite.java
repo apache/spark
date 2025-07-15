@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.write;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.metric.CustomTaskMetric;
 import org.apache.spark.sql.connector.metric.MergeMetrics;
 
 /**
@@ -108,7 +107,8 @@ public interface BatchWrite {
   void abort(WriterCommitMessage[] messages);
 
   /**
-   * Similar to {@link #commit(WriterCommitMessage[])}, but providing merge exec metrics to this batch write.
+   * Similar to {@link #commit(WriterCommitMessage[])}, but providing merge exec metrics to
+   * this batch write.
    * @param metrics merge execution metrics
    */
   default void commitMerge(WriterCommitMessage[] messages, MergeMetrics metrics) {

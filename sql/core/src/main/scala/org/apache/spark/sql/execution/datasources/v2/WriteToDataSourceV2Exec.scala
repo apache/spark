@@ -425,7 +425,6 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
         tempRdd
       }
     }
-
     // introduce a local var to avoid serializing the whole class
     val task = writingTask
     val writerFactory = batchWrite.createBatchWriterFactory(
@@ -456,7 +455,6 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
       )
 
       val mergeMetricsOpt = getMergeMetrics(query)
-
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} is committing.")
       mergeMetricsOpt match {
         case Some(metrics) => batchWrite.commitMerge(messages, metrics)

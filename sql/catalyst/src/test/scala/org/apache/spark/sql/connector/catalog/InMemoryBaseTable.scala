@@ -22,7 +22,8 @@ import java.time.temporal.ChronoUnit
 import java.util
 import java.util.OptionalLong
 
-import scala.collection.mutable._
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
 
 import com.google.common.base.Objects
