@@ -1107,7 +1107,8 @@ private[hive] trait HiveInspectors {
     if (value == null) {
       null
     } else {
-      new hiveIo.TimestampWritableV2(HiveDateTimeUtils.toHiveTimestamp(value.asInstanceOf[Long]))
+      new hiveIo.TimestampWritableV2(
+        HiveDateTimeUtils.toHiveTimestamp(value.asInstanceOf[Long]))
     }
 
   private def getHiveIntervalDayTimeWritable(value: Any): hiveIo.HiveIntervalDayTimeWritable =
