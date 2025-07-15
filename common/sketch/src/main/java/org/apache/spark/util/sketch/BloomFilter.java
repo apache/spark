@@ -45,7 +45,6 @@ import java.nio.ByteBuffer;
 public abstract class BloomFilter {
 
   public enum Version {
-
     /**
      * {@code BloomFilter} binary format version 1. All values written in big-endian order:
      * <ul>
