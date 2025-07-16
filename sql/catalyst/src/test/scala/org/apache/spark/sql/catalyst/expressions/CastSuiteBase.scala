@@ -1508,8 +1508,11 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-52620: cast time to decimal") {
-    // Test various TIME values converted to decimals.
+  test("SPARK-52620: cast time to decimal with sufficient precision and scale") {
+    // Test various TIME values converted to DecimalType(14, 9), which always has sufficient
+    // precision and scale to represent the number of (nano)seconds since midnight. Note that
+    // 5 decimal places are sufficient to represent the maximum number of seconds in any TIME
+    // value, while 9 decimal places are needed to account for nanosecond fractional values.
     Seq(
       // 00:00:00 -> 0
       (LocalTime.MIDNIGHT, Decimal(0)),
@@ -1536,22 +1539,91 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       // 23:59:59.00001 -> 86399.00001
       (LocalTime.of(23, 59, 59, 10000), Decimal(86399.00001)),
       // 23:59:59.000001 -> 86399.000001
-      (LocalTime.of(23, 59, 59, 1000), Decimal(86399.000001))
+      (LocalTime.of(23, 59, 59, 1000), Decimal(86399.000001)),
+      // 23:59:59.0000001 -> 86399.0000001
+      (LocalTime.of(23, 59, 59, 100), Decimal(86399.0000001)),
+      // 23:59:59.00000001 -> 86399.00000001
+      (LocalTime.of(23, 59, 59, 10), Decimal(86399.00000001)),
+      // 23:59:59.000000001 -> 86399.000000001
+      (LocalTime.of(23, 59, 59, 1), Decimal(86399.000000001))
     ).foreach { case (time, expectedDecimal) =>
-      checkEvaluation(Cast(Literal(time), DecimalType(11, 6)), expectedDecimal)
+      checkEvaluation(Cast(Literal(time), DecimalType(14, 9)), expectedDecimal)
     }
 
-    // Test with different decimal precision and scale.
+    // Test with different decimal precision and scale. The precision and scale of the
+    // DecimalType should be sufficient to represent the number of seconds since midnight.
+    // However, if the scale of the DecimalType is larger than necessary, the fractional
+    // seconds will be padded with zeros - which is the correct and expected behavior.
+    checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(5, 0)), Decimal(43200, 5, 0))
     checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(6, 1)), Decimal(43200.0, 6, 1))
     checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(7, 2)), Decimal(43200.00, 7, 2))
     checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(8, 3)), Decimal(43200.000, 8, 3))
     checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(9, 4)), Decimal(43200.0000, 9, 4))
     checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(10, 5)), Decimal(43200.00000, 10, 5))
     checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(11, 6)), Decimal(43200.000000, 11, 6))
+  }
 
-    // Test consistency between interpreted and codegen modes.
-    checkConsistencyBetweenInterpretedAndCodegen(
-      (child: Expression) => Cast(child, DecimalType(11, 6)), TimeType())
+  test("SPARK-52620: cast time to decimal with insufficient scale") {
+    // Decimal time precision loss happens if the scale of the target the DecimalType is not
+    // sufficient to represent the fractional seconds of the TIME value. The following tests
+    // check that the cast operation correctly rounds the fractional seconds to the nearest
+    // decimal value that can be represented by the DecimalType, as limited by its scale.
+
+    // The following test cases will test DecimalType(1,0). Here, the scale is 0, meaning
+    // that the fractional seconds will be ignored, and rounded to the nearest whole second.
+    var precision = 1
+    var scale = 0
+    Seq(
+      // 00:00:00.1 -> 0 (when scale is: 0)
+      (LocalTime.of(0, 0, 0, 100000000), 0),
+      // 00:00:00.4 -> 0 (when scale is: 0)
+      (LocalTime.of(0, 0, 0, 400000000), 0),
+      // 00:00:00.49 -> 0 (when scale is: 0)
+      (LocalTime.of(0, 0, 0, 490000000), 0),
+      // 00:00:00.499999999 -> 0 (when scale is: 0)
+      (LocalTime.of(0, 0, 0, 499999999), 0),
+      // 00:00:00.5 -> 0 (when scale is: 0)
+      (LocalTime.of(0, 0, 0, 500000000), 1),
+      // 00:00:00.500000001 -> 1 (when scale is: 0)
+      (LocalTime.of(0, 0, 0, 500000001), 1),
+      // 00:00:00.599999999 -> 1 (when scale is: 0)
+      (LocalTime.of(0, 0, 0, 599999999), 1),
+      // 00:00:00.999999999 -> 1 (when scale is: 0)
+      (LocalTime.of(0, 0, 0, 999999999), 1)
+    ).foreach { case (timeValue, decimalValue) =>
+      checkEvaluation(
+        expression = Cast(Literal(timeValue), DecimalType(precision, scale)),
+        expected = Decimal(decimalValue, precision, scale)
+      )
+    }
+
+    // The following test cases will test DecimalType(2,1). Here, the scale is 1, meaning
+    // that the fractional seconds will be rounded to the nearest tenth of a second.
+    precision = 2
+    scale = 1
+    Seq(
+      // 00:00:00.1 -> 0.1 (when scale is: 1)
+      (LocalTime.of(0, 0, 0, 100000000), 0.1),
+      // 00:00:00.4 -> 0.4 (when scale is: 1)
+      (LocalTime.of(0, 0, 0, 400000000), 0.4),
+      // 00:00:00.49 -> 0.5 (when scale is: 1)
+      (LocalTime.of(0, 0, 0, 490000000), 0.5),
+      // 00:00:00.499999999 -> 0.5 (when scale is: 1)
+      (LocalTime.of(0, 0, 0, 499999999), 0.5),
+      // 00:00:00.5 -> 0.5 (when scale is: 1)
+      (LocalTime.of(0, 0, 0, 500000000), 0.5),
+      // 00:00:00.500000001 -> 0.5 (when scale is: 1)
+      (LocalTime.of(0, 0, 0, 500000001), 0.5),
+      // 00:00:00.599999999 -> 0.6 (when scale is: 1)
+      (LocalTime.of(0, 0, 0, 599999999), 0.6),
+      // 00:00:00.999999999 -> 1.0 (when scale is: 1)
+      (LocalTime.of(0, 0, 0, 999999999), 1.0)
+    ).foreach { case (timeValue, decimalValue) =>
+      checkEvaluation(
+        expression = Cast(Literal(timeValue), DecimalType(precision, scale)),
+        expected = Decimal(decimalValue, precision, scale)
+      )
+    }
   }
 
   test("SPARK-52619: cast time to integral types") {
