@@ -420,7 +420,6 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       .createOrReplaceTempView("unioned")
   }
 
-
   val mixedNumberTypeSeqs: Seq[(String, String, Seq[Any])] = Seq(
     (IntegerType.typeName, "INT",
       Seq(0, 0, 0, 1, 1, 2, 2, 3)),
@@ -469,12 +468,12 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-combine: among different number or datetime types - fail") {
+  test("SPARK-combine: among different number or datetime types - fail at combine") {
     checkMixedTypeError(mixedNumberTypeSeqs)
     checkMixedTypeError(mixedDateTimeSeqs)
   }
 
-  gridTest("SPARK-combine: string vs number - fail")(mixedNumberTypeSeqs) {
+  gridTest("SPARK-combine: string vs number - fail at combine")(mixedNumberTypeSeqs) {
     case (type1, _, seq1) =>
       setupMixedTypeAccumulation(seq1, Seq("'a'", "'b'", "'c'", "'c'", "'c'", "'c'", "'d'", "'d'"))
       checkError(
@@ -486,41 +485,8 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       )
   }
 
-
-  gridTest("SPARK-combine: different types - fail on UNION")(
-    Seq(
-      ("INT", Seq(0, 0, 0, 1, 1, 2, 2, 3),
-        "BOOLEAN", Seq("(true)", "(true)", "(false)", "(false)")),
-      ("INT", Seq(0, 0, 0, 1, 1, 2, 2, 3),
-        "DATE", Seq("DATE'2025-01-01'", "DATE'2025-01-01'", "DATE'2025-01-02'")),
-      ("BIGINT", Seq("cast(0 AS LONG)", "cast(0 AS LONG)", "cast(1 AS LONG)"),
-        "TIMESTAMP", Seq("TIMESTAMP'2025-01-01 00:00:00'", "TIMESTAMP'2025-01-01 00:00:00'"))
-    )) {
-    case (type1, seq1, type2, seq2) =>
-      checkError(
-        exception = intercept[ExtendedAnalysisException] {
-          setupMixedTypeAccumulation(seq1, seq2)
-        },
-        condition = "INCOMPATIBLE_COLUMN_TYPE",
-        parameters = Map(
-          "tableOrdinalNumber" -> "second",
-          "columnOrdinalNumber" -> "first",
-          "dataType2" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: " + type1 + ", " +
-            "maxItemsTracked: INT NOT NULL, typeCode: BINARY NOT NULL>\""),
-          "operator" -> "UNION",
-          "hint" -> "",
-          "dataType1" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: " + type2 + ", " +
-            "maxItemsTracked: INT NOT NULL, typeCode: BINARY NOT NULL>\"")
-        ),
-        queryContext = Array(
-          ExpectedContext(
-            "SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2", 0, 68))
-      )
-  }
-
-  gridTest("SPARK-combine: boolean and number types - fail on UNION")(mixedNumberTypeSeqs) {
-    numberItems =>
-      val (_, type1, seq1) = numberItems
+  gridTest("SPARK-combine: boolean vs number - fail at UNION")(mixedNumberTypeSeqs) {
+    case (_, type1, seq1) =>
       val seq2 = Seq("(true)", "(true)", "(false)", "(false)")
       checkError(
         exception = intercept[ExtendedAnalysisException] {
@@ -535,6 +501,79 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
           "operator" -> "UNION",
           "hint" -> "",
           "dataType1" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: BOOLEAN, " +
+            "maxItemsTracked: INT NOT NULL, typeCode: BINARY NOT NULL>\"")
+        ),
+        queryContext = Array(
+          ExpectedContext(
+            "SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2", 0, 68))
+      )
+  }
+
+  gridTest("SPARK-combine: string vs datetime - fail at combine")(mixedDateTimeSeqs) {
+    case (type1, _, seq1) =>
+      setupMixedTypeAccumulation(seq1, Seq("'a'", "'b'", "'c'", "'c'", "'c'", "'c'", "'d'", "'d'"))
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned;").collect()
+        },
+        condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
+        parameters = Map("type1" -> type1, "type2" -> StringType.typeName)
+      )
+  }
+
+  gridTest("SPARK-combine: boolean vs datetime - fail at UNION")(mixedDateTimeSeqs) {
+    case (_, type1, seq1) =>
+      val seq2 = Seq("(true)", "(true)", "(false)", "(false)")
+      checkError(
+        exception = intercept[ExtendedAnalysisException] {
+          setupMixedTypeAccumulation(seq1, seq2)
+        },
+        condition = "INCOMPATIBLE_COLUMN_TYPE",
+        parameters = Map(
+          "tableOrdinalNumber" -> "second",
+          "columnOrdinalNumber" -> "first",
+          "dataType2" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: " + type1 +
+            ", maxItemsTracked: INT NOT NULL, typeCode: BINARY NOT NULL>\""),
+          "operator" -> "UNION",
+          "hint" -> "",
+          "dataType1" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: BOOLEAN, " +
+            "maxItemsTracked: INT NOT NULL, typeCode: BINARY NOT NULL>\"")
+        ),
+        queryContext = Array(
+          ExpectedContext(
+            "SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2", 0, 68))
+      )
+  }
+
+  test("SPARK-combine: string vs boolean - fail at combine") {
+    val seq1 = Seq("'a'", "'b'", "'c'", "'c'", "'c'", "'c'", "'d'", "'d'")
+    val seq2 = Seq("(true)", "(true)", "(false)", "(false)")
+    setupMixedTypeAccumulation(seq1, seq2)
+  }
+
+  // enumerate all combinations of number and datetime types
+  val mixedNumberAndDateTimeSeqs: Seq[((String, String, Seq[Any]), (String, String, Seq[Any]))] =
+    for {
+      (type1, typeName1, seq1) <- mixedNumberTypeSeqs
+      (type2, typeName2, seq2) <- mixedDateTimeSeqs
+    } yield ((type1, typeName1, seq1), (type2, typeName2, seq2))
+
+
+  gridTest("SPARK-combine: number vs datetime - fail on UNION")(mixedNumberAndDateTimeSeqs) {
+    case ((_, type1, seq1), (_, type2, seq2)) =>
+      checkError(
+        exception = intercept[ExtendedAnalysisException] {
+          setupMixedTypeAccumulation(seq1, seq2)
+        },
+        condition = "INCOMPATIBLE_COLUMN_TYPE",
+        parameters = Map(
+          "tableOrdinalNumber" -> "second",
+          "columnOrdinalNumber" -> "first",
+          "dataType2" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: " + type1 + ", " +
+            "maxItemsTracked: INT NOT NULL, typeCode: BINARY NOT NULL>\""),
+          "operator" -> "UNION",
+          "hint" -> "",
+          "dataType1" -> ("\"STRUCT<sketch: BINARY NOT NULL, itemDataType: " + type2 + ", " +
             "maxItemsTracked: INT NOT NULL, typeCode: BINARY NOT NULL>\"")
         ),
         queryContext = Array(
