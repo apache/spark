@@ -520,10 +520,7 @@ class CombineInternal[T](
     if (this.itemDataType == null) {
       this.itemDataType = dataType
     } else if (this.itemDataType != dataType) {
-      throw QueryExecutionErrors.approxTopKSketchTypeUnmatched(
-        this.itemDataType.typeName,
-        dataType.typeName
-      )
+      throw QueryExecutionErrors.approxTopKSketchTypeUnmatched(this.itemDataType, dataType)
     }
   }
 
@@ -653,8 +650,8 @@ case class ApproxTopKCombine(
     if (buffer.getItemDataType != null && input.getItemDataType != null &&
       buffer.getItemDataType != input.getItemDataType) {
       throw QueryExecutionErrors.approxTopKSketchTypeUnmatched(
-        buffer.getItemDataType.typeName,
-        input.getItemDataType.typeName
+        buffer.getItemDataType,
+        input.getItemDataType
       )
     } else if (buffer.getItemDataType == null) {
       // If buffer is a placeholder sketch, set it to the input sketch's item data type

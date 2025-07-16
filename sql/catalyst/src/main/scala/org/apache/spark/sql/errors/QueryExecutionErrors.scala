@@ -2823,7 +2823,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "size2" -> toSQLValue(size2, IntegerType)))
   }
 
-  def approxTopKSketchTypeUnmatched(type1: String, type2: String): Throwable = {
+  def approxTopKSketchTypeUnmatched(type1: DataType, type2: DataType): Throwable = {
     new SparkRuntimeException(
       errorClass = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
       messageParameters = Map(

@@ -24,7 +24,7 @@ import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BooleanType, ByteType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, TimestampNTZType, TimestampType}
 
 
 class ApproxTopKSuite extends QueryTest with SharedSparkSession {
@@ -359,33 +359,33 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       .createOrReplaceTempView("unioned")
   }
 
-  val mixedNumberTypeSeqs: Seq[(String, String, Seq[Any])] = Seq(
-    (IntegerType.typeName, "INT",
+  val mixedNumberTypeSeqs: Seq[(DataType, String, Seq[Any])] = Seq(
+    (IntegerType, "INT",
       Seq(0, 0, 0, 1, 1, 2, 2, 3)),
-    (ByteType.typeName, "TINYINT",
+    (ByteType, "TINYINT",
       Seq("cast(0 AS BYTE)", "cast(0 AS BYTE)", "cast(1 AS BYTE)")),
-    (ShortType.typeName, "SMALLINT",
+    (ShortType, "SMALLINT",
       Seq("cast(0 AS SHORT)", "cast(0 AS SHORT)", "cast(1 AS SHORT)")),
-    (LongType.typeName, "BIGINT",
+    (LongType, "BIGINT",
       Seq("cast(0 AS LONG)", "cast(0 AS LONG)", "cast(1 AS LONG)")),
-    (FloatType.typeName, "FLOAT",
+    (FloatType, "FLOAT",
       Seq("cast(0 AS FLOAT)", "cast(0 AS FLOAT)", "cast(1 AS FLOAT)")),
-    (DoubleType.typeName, "DOUBLE",
+    (DoubleType, "DOUBLE",
       Seq("cast(0 AS DOUBLE)", "cast(0 AS DOUBLE)", "cast(1 AS DOUBLE)")),
-    (DecimalType(4, 2).typeName, "DECIMAL(4,2)",
+    (DecimalType(4, 2), "DECIMAL(4,2)",
       Seq("cast(0 AS DECIMAL(4, 2))", "cast(0 AS DECIMAL(4, 2))", "cast(1 AS DECIMAL(4, 2))")),
-    (DecimalType(10, 2).typeName, "DECIMAL(10,2)",
+    (DecimalType(10, 2), "DECIMAL(10,2)",
       Seq("cast(0 AS DECIMAL(10, 2))", "cast(0 AS DECIMAL(10, 2))", "cast(1 AS DECIMAL(10, 2))")),
-    (DecimalType(20, 3).typeName, "DECIMAL(20,3)",
+    (DecimalType(20, 3), "DECIMAL(20,3)",
       Seq("cast(0 AS DECIMAL(20, 3))", "cast(0 AS DECIMAL(20, 3))", "cast(1 AS DECIMAL(20, 3))"))
   )
 
-  val mixedDateTimeSeqs: Seq[(String, String, Seq[String])] = Seq(
-    (DateType.typeName, "DATE",
+  val mixedDateTimeSeqs: Seq[(DataType, String, Seq[String])] = Seq(
+    (DateType, "DATE",
       Seq("DATE'2025-01-01'", "DATE'2025-01-01'", "DATE'2025-01-02'")),
-    (TimestampType.typeName, "TIMESTAMP",
+    (TimestampType, "TIMESTAMP",
       Seq("TIMESTAMP'2025-01-01 00:00:00'", "TIMESTAMP'2025-01-01 00:00:00'")),
-    (TimestampNTZType.typeName, "TIMESTAMP_NTZ",
+    (TimestampNTZType, "TIMESTAMP_NTZ",
       Seq("TIMESTAMP_NTZ'2025-01-01 00:00:00'", "TIMESTAMP_NTZ'2025-01-01 00:00:00'")
     )
   )
@@ -471,7 +471,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-52798: among different number or datetime types - fail at combine") {
-    def checkMixedTypeError(mixedTypeSeq: Seq[(String, String, Seq[Any])]): Unit = {
+    def checkMixedTypeError(mixedTypeSeq: Seq[(DataType, String, Seq[Any])]): Unit = {
       for (i <- 0 until mixedTypeSeq.size - 1) {
         for (j <- i + 1 until mixedTypeSeq.size) {
           val (type1, _, seq1) = mixedTypeSeq(i)
