@@ -1458,6 +1458,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       } else {
         assert(e.getMessage contains "HDFSStateStore")
       }
+      assert(e.getMessage contains "operatorId=0")
+      assert(e.getMessage contains "partitionId=0")
       assert(e.getMessage contains "Error writing state store files")
       assert(e.getCause.getMessage.contains("Failed to rename"))
     }

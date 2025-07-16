@@ -347,8 +347,7 @@ private[sql] class RocksDBStateStoreProvider
     override def hasCommitted: Boolean = state == COMMITTED
 
     override def toString: String = {
-      s"RocksDBStateStore[id=(op=${id.operatorId},part=${id.partitionId})," +
-        s"dir=${id.storeCheckpointLocation()}]"
+      s"RocksDBStateStore[stateStoreProviderId=$stateStoreProviderId]"
     }
 
     /** Return the [[RocksDB]] instance in this store. This is exposed mainly for testing. */
