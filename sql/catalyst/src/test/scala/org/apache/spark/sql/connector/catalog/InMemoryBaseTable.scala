@@ -337,7 +337,8 @@ abstract class InMemoryBaseTable(
     TableCapability.STREAMING_WRITE,
     TableCapability.OVERWRITE_BY_FILTER,
     TableCapability.OVERWRITE_DYNAMIC,
-    TableCapability.TRUNCATE)
+    TableCapability.TRUNCATE,
+    TableCapability.ACCEPT_ANY_SCHEMA)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new InMemoryScanBuilder(schema, options)

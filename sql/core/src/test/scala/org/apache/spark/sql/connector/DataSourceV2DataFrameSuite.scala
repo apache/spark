@@ -846,6 +846,20 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("insert with schema evolution") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val columns = Array(
+        Column.create("c1", IntegerType)
+      )
+      val tableInfo = new TableInfo.Builder().withColumns(columns).build()
+      catalog("testcat").createTable(Identifier.of(Array("ns1", "ns2"), "tbl"), tableInfo)
+      Seq((1, "a"), (2, "b"), (3, "c")).toDF("c1", "c2")
+        .writeTo(tableName)
+        .append()
+    }
+  }
+
   private def executeAndKeepPhysicalPlan[T <: SparkPlan](func: => Unit): T = {
     val qe = withQueryExecutionsCaptured(spark) {
       func
