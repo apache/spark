@@ -389,6 +389,24 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
     )
   )
 
+  // positive tests for approx_top_k_combine on every types
+  gridTest("SPARK-52798: same type, same size, specified combine size - success")(itemsWithTopK) {
+    case (input, expected) =>
+      sql(s"SELECT approx_top_k_accumulate(expr) AS acc FROM VALUES $input AS tab(expr);")
+        .createOrReplaceTempView("accumulation1")
+      sql(s"SELECT approx_top_k_accumulate(expr) AS acc FROM VALUES $input AS tab(expr);")
+        .createOrReplaceTempView("accumulation2")
+      sql("SELECT approx_top_k_combine(acc, 30) as com " +
+        "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+        .createOrReplaceTempView("combined")
+      val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
+      // expected should be doubled because we combine two identical sketches
+      val expectedDoubled = expected.map {
+        case Row(value: Any, count: Int) => Row(value, count * 2)
+      }
+      checkAnswer(est, Row(expectedDoubled))
+  }
+
   test("SPARK-52798: same type, same size, specified combine size - success") {
     setupAccumulations(10, 10)
 
@@ -437,7 +455,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  gridTest("SPARK-combine: invalid combine size - fail")(Seq((10, 10), (10, 20))) {
+  gridTest("SPARK-52798: invalid combine size - fail")(Seq((10, 10), (10, 20))) {
     case (size1, size2) =>
       setupAccumulations(size1, size2)
       checkError(
@@ -451,7 +469,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       )
   }
 
-  test("SPARK-combine: among different number or datetime types - fail at combine") {
+  test("SPARK-52798: among different number or datetime types - fail at combine") {
     def checkMixedTypeError(mixedTypeSeq: Seq[(String, String, Seq[Any])]): Unit = {
       for (i <- 0 until mixedTypeSeq.size - 1) {
         for (j <- i + 1 until mixedTypeSeq.size) {
@@ -474,7 +492,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
   }
 
   // enumerate all combinations of number and datetime types
-  gridTest("SPARK-combine: number vs datetime - fail on UNION")(
+  gridTest("SPARK-52798: number vs datetime - fail on UNION")(
     for {
       (type1, typeName1, seq1) <- mixedNumberTypeSeqs
       (type2, typeName2, seq2) <- mixedDateTimeSeqs
@@ -501,7 +519,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       )
   }
 
-  gridTest("SPARK-combine: number vs string - fail at combine")(mixedNumberTypeSeqs) {
+  gridTest("SPARK-52798: number vs string - fail at combine")(mixedNumberTypeSeqs) {
     case (type1, _, seq1) =>
       setupMixedTypeAccumulation(seq1, Seq("'a'", "'b'", "'c'", "'c'", "'c'", "'c'", "'d'", "'d'"))
       checkError(
@@ -513,7 +531,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       )
   }
 
-  gridTest("SPARK-combine: number vs boolean - fail at UNION")(mixedNumberTypeSeqs) {
+  gridTest("SPARK-52798: number vs boolean - fail at UNION")(mixedNumberTypeSeqs) {
     case (_, type1, seq1) =>
       val seq2 = Seq("(true)", "(true)", "(false)", "(false)")
       checkError(
@@ -537,7 +555,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       )
   }
 
-  gridTest("SPARK-combine: datetime vs string - fail at combine")(mixedDateTimeSeqs) {
+  gridTest("SPARK-52798: datetime vs string - fail at combine")(mixedDateTimeSeqs) {
     case (type1, _, seq1) =>
       setupMixedTypeAccumulation(seq1, Seq("'a'", "'b'", "'c'", "'c'", "'c'", "'c'", "'d'", "'d'"))
       checkError(
@@ -549,7 +567,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       )
   }
 
-  gridTest("SPARK-combine: datetime vs boolean - fail at UNION")(mixedDateTimeSeqs) {
+  gridTest("SPARK-52798: datetime vs boolean - fail at UNION")(mixedDateTimeSeqs) {
     case (_, type1, seq1) =>
       val seq2 = Seq("(true)", "(true)", "(false)", "(false)")
       checkError(
@@ -573,7 +591,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       )
   }
 
-  test("SPARK-combine: string vs boolean - fail at combine") {
+  test("SPARK-52798: string vs boolean - fail at combine") {
     val seq1 = Seq("'a'", "'b'", "'c'", "'c'", "'c'", "'c'", "'d'", "'d'")
     val seq2 = Seq("(true)", "(true)", "(false)", "(false)")
     setupMixedTypeAccumulation(seq1, seq2)
