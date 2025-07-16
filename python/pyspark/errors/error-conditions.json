@@ -176,9 +176,9 @@
   },
   "CONFLICTING_PIPELINE_REFRESH_OPTIONS" : {
     "message" : [
-      "--full-refresh-all option conflicts with --refresh and --full-refresh. ",
+      "--full-refresh-all option conflicts with <conflicting_option>",
       "The --full-refresh-all option performs a full refresh of all datasets, ",
-      "so specifying individual datasets with --refresh or --full-refresh is not allowed."
+      "so specifying individual datasets with <conflicting_option> is not allowed."
     ]
   },
   "CONNECT_URL_ALREADY_DEFINED": {

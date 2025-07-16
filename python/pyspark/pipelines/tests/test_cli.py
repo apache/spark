@@ -359,12 +359,6 @@ class CLIUtilityTests(unittest.TestCase):
                     ),
                 )
 
-
-@unittest.skipIf(
-    not should_test_connect or not have_yaml,
-    connect_requirement_message or yaml_requirement_message,
-)
-class CLIValidationTests(unittest.TestCase):
     def test_full_refresh_all_conflicts_with_full_refresh(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create a minimal pipeline spec
@@ -378,11 +372,16 @@ class CLIValidationTests(unittest.TestCase):
                     spec_path=spec_path,
                     full_refresh=["table1", "table2"],
                     full_refresh_all=True,
-                    refresh=None,
+                    refresh=[],
                 )
 
             self.assertEqual(
                 context.exception.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS"
+            )
+            self.assertEqual(
+                context.exception.getMessageParameters(), {
+                    "conflicting_option": "--full_refresh"
+                }
             )
 
     def test_full_refresh_all_conflicts_with_refresh(self):
@@ -396,13 +395,18 @@ class CLIValidationTests(unittest.TestCase):
             with self.assertRaises(PySparkException) as context:
                 run(
                     spec_path=spec_path,
-                    full_refresh=None,
+                    full_refresh=[],
                     full_refresh_all=True,
                     refresh=["table1", "table2"],
                 )
 
             self.assertEqual(
                 context.exception.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS"
+            )
+            self.assertEqual(
+                context.exception.getMessageParameters(), {
+                    "conflicting_option": "--refresh"
+                },
             )
 
     def test_full_refresh_all_conflicts_with_both(self):
@@ -446,51 +450,6 @@ class CLIValidationTests(unittest.TestCase):
 
         result = parse_table_list("table1, table2 , table3")
         self.assertEqual(result, ["table1", "table2", "table3"])
-
-    def test_flatten_table_lists_single_list(self):
-        """Test flattening single list."""
-        from pyspark.pipelines.cli import flatten_table_lists
-
-        result = flatten_table_lists([["table1", "table2"]])
-        self.assertEqual(result, ["table1", "table2"])
-
-    def test_flatten_table_lists_multiple_lists(self):
-        """Test flattening multiple lists."""
-        from pyspark.pipelines.cli import flatten_table_lists
-
-        result = flatten_table_lists([["table1", "table2"], ["table3"], ["table4", "table5"]])
-        self.assertEqual(result, ["table1", "table2", "table3", "table4", "table5"])
-
-    def test_cli_argument_parsing_patterns(self):
-        """Test CLI argument parsing patterns for refresh options."""
-        import argparse
-        from pyspark.pipelines.cli import parse_table_list
-
-        # Simulate the argument parser
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--full-refresh", type=parse_table_list, action="append")
-        parser.add_argument("--full-refresh-all", action="store_true")
-        parser.add_argument("--refresh", type=parse_table_list, action="append")
-
-        # Test parsing various argument combinations
-        test_cases = [
-            (["--full-refresh", "table1,table2"], {"full_refresh": [["table1", "table2"]]}),
-            (["--refresh", "table1", "--refresh", "table2"], {"refresh": [["table1"], ["table2"]]}),
-            (["--full-refresh-all"], {"full_refresh_all": True}),
-            (
-                ["--full-refresh", "table1", "--refresh", "table2"],
-                {"full_refresh": [["table1"]], "refresh": [["table2"]]},
-            ),
-            (
-                ["--full-refresh", "schema.table1,schema.table2"],
-                {"full_refresh": [["schema.table1", "schema.table2"]]},
-            ),
-        ]
-
-        for args, expected in test_cases:
-            parsed = parser.parse_args(args)
-            for key, value in expected.items():
-                self.assertEqual(getattr(parsed, key), value)
 
 
 if __name__ == "__main__":

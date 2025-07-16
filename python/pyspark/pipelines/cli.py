@@ -219,9 +219,9 @@ def change_dir(path: Path) -> Generator[None, None, None]:
 
 def run(
     spec_path: Path,
-    full_refresh: Optional[Sequence[str]] = None,
-    full_refresh_all: bool = False,
-    refresh: Optional[Sequence[str]] = None,
+    full_refresh: Sequence[str],
+    full_refresh_all: bool,
+    refresh: Sequence[str],
 ) -> None:
     """Run the pipeline defined with the given spec.
 
@@ -234,11 +234,15 @@ def run(
     if full_refresh_all:
         if full_refresh:
             raise PySparkException(
-                errorClass="CONFLICTING_PIPELINE_REFRESH_OPTIONS", messageParameters={}
+                errorClass="CONFLICTING_PIPELINE_REFRESH_OPTIONS", messageParameters={
+                    "conflicting_option": "--full_refresh",
+                }
             )
         if refresh:
             raise PySparkException(
-                errorClass="CONFLICTING_PIPELINE_REFRESH_OPTIONS", messageParameters={}
+                errorClass="CONFLICTING_PIPELINE_REFRESH_OPTIONS", messageParameters={
+                    "conflicting_option": "--refresh",
+                }
             )
 
     log_with_curr_timestamp(f"Loading pipeline spec from {spec_path}...")
@@ -281,28 +285,20 @@ def parse_table_list(value: str) -> List[str]:
     """Parse a comma-separated list of table names, handling whitespace."""
     return [table.strip() for table in value.split(",") if table.strip()]
 
-
-def flatten_table_lists(table_lists: Optional[List[List[str]]]) -> Optional[List[str]]:
-    """Flatten a list of lists of table names into a single list."""
-    if not table_lists:
-        return None
-    result = []
-    for table_list in table_lists:
-        result.extend(table_list)
-    return result if result else None
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pipeline CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # "run" subcommand
-    run_parser = subparsers.add_parser("run", help="Run a pipeline.")
+    run_parser = subparsers.add_parser(
+        "run",
+        help="Run a pipeline. If no refresh options are specified, a default incremental update is performed.",
+    )
     run_parser.add_argument("--spec", help="Path to the pipeline spec.")
     run_parser.add_argument(
         "--full-refresh",
         type=parse_table_list,
-        action="append",
+        action="extend",
         help="List of datasets to reset and recompute (comma-separated).",
     )
     run_parser.add_argument(
@@ -311,7 +307,7 @@ if __name__ == "__main__":
     run_parser.add_argument(
         "--refresh",
         type=parse_table_list,
-        action="append",
+        action="extend",
         help="List of datasets to update (comma-separated).",
     )
 
@@ -343,9 +339,9 @@ if __name__ == "__main__":
 
         run(
             spec_path=spec_path,
-            full_refresh=flatten_table_lists(args.full_refresh),
+            full_refresh=args.full_refresh,
             full_refresh_all=args.full_refresh_all,
-            refresh=flatten_table_lists(args.refresh),
+            refresh=args.refresh,
         )
     elif args.command == "init":
         init(args.name)

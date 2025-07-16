@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.connect.proto.{DatasetType, PipelineCommand, PipelineEvent}
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
 import org.apache.spark.sql.pipelines.utils.{EventVerificationTestHelpers, TestPipelineUpdateContextMixin}
@@ -85,19 +86,16 @@ class PipelineRefreshFunctionalSuite
       // First run to populate tables
       startPipelineAndWaitForCompletion(graphId)
 
-      // Verify initial data - all tests expect the same initial state
-      verifyMultipleTableContent(
-        tableNames =
-          Set("spark_catalog.default.a", "spark_catalog.default.b", "spark_catalog.default.mv"),
-        columnsToVerify = Map(
-          "spark_catalog.default.a" -> Seq("id"),
-          "spark_catalog.default.b" -> Seq("id"),
-          "spark_catalog.default.mv" -> Seq("id")),
-        expectedContent = Map(
-          "spark_catalog.default.a" -> Set(Map("id" -> 1)),
-          "spark_catalog.default.b" -> Set(Map("id" -> 1)),
-          "spark_catalog.default.mv" -> Set(Map("id" -> 1))))
-
+      // combine above into a map for verification
+      val initialContent = Map(
+        "spark_catalog.default.a" -> Set(Map("id" -> 1)),
+        "spark_catalog.default.b" -> Set(Map("id" -> 1)),
+        "spark_catalog.default.mv" -> Set(Map("id" -> 1))
+      )
+      // Verify initial content
+      initialContent.foreach { case (tableName, expectedRows) =>
+        checkTableContent(tableName, expectedRows)
+      }
       // Clear cached pipeline execution before starting new run
       SparkConnectService.sessionManager
         .getIsolatedSessionIfPresent(SessionKey(defaultUserId, defaultSessionId))
@@ -110,22 +108,17 @@ class PipelineRefreshFunctionalSuite
 
       // Run with specified refresh configuration
       val capturedEvents = refreshConfigBuilder(graphId) match {
-        case Some(startRun) => startPipelineAndWaitForCompletion(graphId, Some(startRun))
+        case Some(startRun) => startPipelineAndWaitForCompletion(startRun)
         case None => startPipelineAndWaitForCompletion(graphId)
       }
 
       // Additional validation if provided
       eventValidation.foreach(_(capturedEvents))
 
-      // Verify final content
-      verifyMultipleTableContent(
-        tableNames =
-          Set("spark_catalog.default.a", "spark_catalog.default.b", "spark_catalog.default.mv"),
-        columnsToVerify = Map(
-          "spark_catalog.default.a" -> Seq("id"),
-          "spark_catalog.default.b" -> Seq("id"),
-          "spark_catalog.default.mv" -> Seq("id")),
-        expectedContent = expectedContentAfterRefresh)
+      // Verify final content with checkTableContent
+      expectedContentAfterRefresh.foreach { case (tableName, expectedRows) =>
+        checkTableContent(tableName, expectedRows)
+      }
     }
   }
 
@@ -244,11 +237,11 @@ class PipelineRefreshFunctionalSuite
         .build()
 
       val exception = intercept[IllegalArgumentException] {
-        startPipelineAndWaitForCompletion(graphId, Some(startRun))
+        startPipelineAndWaitForCompletion(startRun)
       }
       assert(
         exception.getMessage.contains(
-          "Cannot specify a subset to full refresh when full refresh all is set to true"))
+          "Cannot specify a subset to refresh when full refresh all is set to true"))
     }
   }
 
@@ -266,11 +259,11 @@ class PipelineRefreshFunctionalSuite
         .build()
 
       val exception = intercept[IllegalArgumentException] {
-        startPipelineAndWaitForCompletion(graphId, Some(startRun))
+        startPipelineAndWaitForCompletion(startRun)
       }
       assert(
         exception.getMessage.contains(
-          "Cannot specify a subset to refresh when full refresh all is set to true"))
+          "Cannot specify a subset to full refresh when full refresh all is set to true"))
     }
   }
 
@@ -288,7 +281,7 @@ class PipelineRefreshFunctionalSuite
         .build()
 
       val exception = intercept[IllegalArgumentException] {
-        startPipelineAndWaitForCompletion(graphId, Some(startRun))
+        startPipelineAndWaitForCompletion(startRun)
       }
       assert(
         exception.getMessage.contains(
@@ -312,7 +305,7 @@ class PipelineRefreshFunctionalSuite
         .build()
 
       val exception = intercept[IllegalArgumentException] {
-        startPipelineAndWaitForCompletion(graphId, Some(startRun))
+        startPipelineAndWaitForCompletion(startRun)
       }
       assert(
         exception.getMessage.contains(
@@ -335,7 +328,7 @@ class PipelineRefreshFunctionalSuite
         .build()
 
       val exception = intercept[IllegalArgumentException] {
-        startPipelineAndWaitForCompletion(graphId, Some(startRun))
+        startPipelineAndWaitForCompletion(startRun)
       }
       assert(
         exception.getMessage.contains(
@@ -343,25 +336,18 @@ class PipelineRefreshFunctionalSuite
     }
   }
 
-  private def verifyMultipleTableContent(
-      tableNames: Set[String],
-      columnsToVerify: Map[String, Seq[String]],
-      expectedContent: Map[String, Set[Map[String, Any]]]): Unit = {
-    tableNames.foreach { tableName =>
-      spark.catalog.refreshTable(tableName) // clear cache for the table
-      val df = spark.table(tableName)
-      assert(
-        df.columns.toSet == columnsToVerify(tableName).toSet,
-        s"Columns in $tableName do not match expected: ${df.columns.mkString(", ")}")
-      val actualContent = df
-        .collect()
-        .map(row => {
-          columnsToVerify(tableName).map(col => col -> row.getAs[Any](col)).toMap
-        })
-        .toSet
-      assert(
-        actualContent == expectedContent(tableName),
-        s"Content of $tableName does not match expected: $actualContent")
-    }
+  private def checkTableContent[A <: Map[String, Any]](
+    name: String,
+    expectedContent: Set[A]
+  ): Unit = {
+    spark.catalog.refreshTable(name) // clear cache for the table
+    val df = spark.table(name)
+    QueryTest.checkAnswer(
+      df,
+      expectedContent.map(row => {
+        // Convert each row to a Row object
+        org.apache.spark.sql.Row.fromSeq(row.values.toSeq)
+      }).toSeq.asJava
+    )
   }
 }

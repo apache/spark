@@ -128,15 +128,18 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
   def createPlanner(): SparkConnectPlanner =
     new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(spark))
 
+  def startPipelineAndWaitForCompletion(graphId: String)
+  : ArrayBuffer[PipelineEvent] = {
+    val defaultStartRunCommand =
+      PipelineCommand.StartRun.newBuilder().setDataflowGraphId(graphId).build()
+    startPipelineAndWaitForCompletion(defaultStartRunCommand)
+  }
+
   def startPipelineAndWaitForCompletion(
-      graphId: String,
-      customStartRunCommand: Option[PipelineCommand.StartRun] = None)
-      : ArrayBuffer[PipelineEvent] = {
+      startRunCommand: PipelineCommand.StartRun): ArrayBuffer[PipelineEvent] = {
     withClient { client =>
       val capturedEvents = new ArrayBuffer[PipelineEvent]()
-      val startRunRequest = buildStartRunPlan(
-        customStartRunCommand.getOrElse(
-          PipelineCommand.StartRun.newBuilder().setDataflowGraphId(graphId).build()))
+      val startRunRequest = buildStartRunPlan(startRunCommand)
       val responseIterator = client.execute(startRunRequest)
       // The response iterator will be closed when the pipeline is completed.
       while (responseIterator.hasNext) {
