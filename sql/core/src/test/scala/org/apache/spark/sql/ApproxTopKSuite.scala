@@ -344,6 +344,9 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
     sql(s"SELECT approx_top_k_accumulate(expr, $size2) as acc " +
       "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
       .createOrReplaceTempView("accumulation2")
+
+    sql("SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2")
+      .createOrReplaceTempView("unioned")
   }
 
   def setupMixedTypeAccumulation(seq1: Seq[Any], seq2: Seq[Any]): Unit = {
@@ -411,8 +414,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
   test("SPARK-52798: same type, same size, specified combine size - success") {
     setupAccumulations(10, 10)
 
-    sql("SELECT approx_top_k_combine(acc, 30) as com " +
-      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+    sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned")
       .createOrReplaceTempView("combined")
 
     val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
@@ -422,8 +424,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
   test("SPARK-52798: same type, same size, unspecified combine size - success") {
     setupAccumulations(10, 10)
 
-    sql("SELECT approx_top_k_combine(acc) as com " +
-      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+    sql("SELECT approx_top_k_combine(acc) as com FROM unioned")
       .createOrReplaceTempView("combined")
 
     val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
@@ -433,8 +434,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
   test("SPARK-52798: same type, different size, specified combine size - success") {
     setupAccumulations(10, 20)
 
-    sql("SELECT approx_top_k_combine(acc, 30) as com " +
-      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+    sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned")
       .createOrReplaceTempView("combination")
 
     val est = sql("SELECT approx_top_k_estimate(com) FROM combination;")
@@ -444,8 +444,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
   test("SPARK-52798: same type, different size, unspecified combine size - fail") {
     setupAccumulations(10, 20)
 
-    val comb = sql("SELECT approx_top_k_combine(acc) as com " +
-      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+    val comb = sql("SELECT approx_top_k_combine(acc) as com FROM unioned")
 
     checkError(
       exception = intercept[SparkRuntimeException] {
@@ -461,9 +460,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       setupAccumulations(size1, size2)
       checkError(
         exception = intercept[SparkRuntimeException] {
-          sql("SELECT approx_top_k_combine(acc, 0) as com " +
-            "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
-            .collect()
+          sql("SELECT approx_top_k_combine(acc, 0) as com FROM unioned").collect()
         },
         condition = "APPROX_TOP_K_NON_POSITIVE_ARG",
         parameters = Map("argName" -> "`maxItemsTracked`", "argValue" -> "0")
