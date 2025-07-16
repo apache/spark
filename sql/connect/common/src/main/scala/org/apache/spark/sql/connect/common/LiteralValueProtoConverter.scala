@@ -21,7 +21,6 @@ import java.lang.{Boolean => JBoolean, Byte => JByte, Character => JChar, Double
 import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Date, Timestamp}
 import java.time._
-import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.{immutable, mutable}
 import scala.jdk.CollectionConverters._
@@ -40,22 +39,6 @@ import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.SparkClassUtils
 
 object LiteralValueProtoConverter {
-
-  private var optionalDataTypeEnabled = new AtomicBoolean(
-    sys.env.getOrElse(
-      "CONNECT_OPTIONAL_DATATYPE_FOR_MAP_AND_ARRAY_LITERALS_ENABLED",
-      "false") == "true")
-
-  object forTest {
-    def withOptionalDataType(enabled: Boolean)(f: => Unit): Unit = {
-      val previousValue = optionalDataTypeEnabled.getAndSet(enabled)
-      try {
-        f
-      } finally {
-        optionalDataTypeEnabled.set(previousValue)
-      }
-    }
-  }
 
   /**
    * Transforms literal value to the `proto.Expression.Literal.Builder`.
@@ -81,7 +64,7 @@ object LiteralValueProtoConverter {
     def arrayBuilder(array: Array[_]) = {
       val ab = builder.getArrayBuilder
       array.foreach(x => ab.addElements(toLiteralProto(x)))
-      if (!optionalDataTypeEnabled.get() || ab.getElementsCount == 0) {
+      if (ab.getElementsCount == 0) {
         ab.setElementType(toConnectProtoType(toDataType(array.getClass.getComponentType)))
       }
       ab
@@ -146,7 +129,7 @@ object LiteralValueProtoConverter {
           throw new IllegalArgumentException(s"literal $other not supported (yet).")
       }
 
-      if (!optionalDataTypeEnabled.get() || ab.getElementsCount == 0) {
+      if (ab.getElementsCount == 0) {
         ab.setElementType(toConnectProtoType(elementType))
       }
 
@@ -168,13 +151,11 @@ object LiteralValueProtoConverter {
           throw new IllegalArgumentException(s"literal $other not supported (yet).")
       }
 
-      val enabled = optionalDataTypeEnabled.get()
-
-      if (!enabled || mb.getKeysCount == 0) {
+      if (mb.getKeysCount == 0) {
         mb.setKeyType(toConnectProtoType(keyType))
       }
 
-      if (!enabled || mb.getValuesCount == 0) {
+      if (mb.getValuesCount == 0) {
         mb.setValueType(toConnectProtoType(valueType))
       }
 

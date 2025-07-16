@@ -29,10 +29,9 @@ from typing import (
     Optional,
 )
 
-import os
-import json
-import decimal
 import datetime
+import decimal
+import json
 import warnings
 from threading import Lock
 
@@ -85,9 +84,6 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.window import WindowSpec
     from pyspark.sql.connect.plan import LogicalPlan
 
-_optional_data_types_for_map_and_array_literals_enabled = (
-    os.getenv("CONNECT_OPTIONAL_DATATYPE_FOR_MAP_AND_ARRAY_LITERALS_ENABLED", "false") == "true"
-)
 
 class Expression:
     """
@@ -494,8 +490,10 @@ class LiteralExpression(Expression):
         elif isinstance(self._dataType, DayTimeIntervalType):
             expr.literal.day_time_interval = int(self._value)
         elif isinstance(self._dataType, ArrayType):
-            if not _optional_data_types_for_map_and_array_literals_enabled or len(self._value) == 0:
-                expr.literal.array.element_type.CopyFrom(pyspark_types_to_proto_types(self._dataType.elementType))
+            if len(self._value) == 0:
+                expr.literal.array.element_type.CopyFrom(
+                    pyspark_types_to_proto_types(self._dataType.elementType)
+                )
             for v in self._value:
                 expr.literal.array.elements.append(
                     LiteralExpression(v, self._dataType.elementType).to_plan(session).literal
