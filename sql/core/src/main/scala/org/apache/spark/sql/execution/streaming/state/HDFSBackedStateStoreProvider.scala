@@ -90,7 +90,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     override def abort(): Unit = {}
 
     override def toString(): String = {
-      s"HDFSReadStateStore[stateStoreProviderId=$stateStoreProviderId]"
+      s"HDFSReadStateStore[stateStoreId=$stateStoreId_, version=$version]"
     }
 
     override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
@@ -244,7 +244,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
 
     override def toString(): String = {
-      s"HDFSStateStore[stateStoreProviderId=$stateStoreProviderId]"
+      s"HDFSStateStore[stateStoreId=$stateStoreId_, version=$version]"
     }
 
     override def removeColFamilyIfExists(colFamilyName: String): Boolean = {
