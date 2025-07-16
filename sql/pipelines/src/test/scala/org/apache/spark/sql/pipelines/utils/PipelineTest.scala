@@ -26,15 +26,16 @@ import scala.util.control.NonFatal
 
 import org.scalactic.source
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Tag}
+import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Column, QueryTest, Row, TypedColumn}
-import org.apache.spark.sql.SparkSession.{clearActiveSession, clearDefaultSession, setActiveSession}
+import org.apache.spark.sql.{Column, QueryTest, Row, SQLContext, TypedColumn}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession, SQLContext}
+import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl, SqlGraphRegistrationContext}
 import org.apache.spark.sql.pipelines.utils.PipelineTest.{cleanupMetastore, createTempDir}
 
 abstract class PipelineTest
@@ -44,21 +45,22 @@ abstract class PipelineTest
     with Matchers
     with SparkErrorTestMixin
     with TargetCatalogAndDatabaseMixin
-    with Logging {
+    with Logging
+    with Eventually {
 
   final protected val storageRoot = createTempDir()
 
-  var spark: SparkSession = createAndInitializeSpark()
-  val originalSpark: SparkSession = spark.cloneSession()
+  protected def spark: SparkSession
 
+  protected implicit def sqlContext: SQLContext
 
-  implicit def sqlContext: SQLContext = spark.sqlContext
   def sql(text: String): DataFrame = spark.sql(text)
 
-  protected def sparkConf: SparkConf = {
-    new SparkConf()
-      .set("spark.sql.shuffle.partitions", "2")
-      .set("spark.sql.session.timeZone", "UTC")
+  protected def startPipelineAndWaitForCompletion(unresolvedDataflowGraph: DataflowGraph): Unit = {
+    val updateContext = new PipelineUpdateContextImpl(
+      unresolvedDataflowGraph, eventCallback = _ => ())
+    updateContext.pipelineExecution.runPipeline()
+    updateContext.pipelineExecution.awaitCompletion()
   }
 
   /** Returns the dataset name in the event log. */
@@ -76,9 +78,9 @@ abstract class PipelineTest
       name: String,
       catalog: Option[String] = catalogInPipelineSpec,
       database: Option[String] = databaseInPipelineSpec,
-      isView: Boolean = false
+      isTemporaryView: Boolean = false
   ): TableIdentifier = {
-    if (isView) {
+    if (isTemporaryView) {
       TableIdentifier(name)
     } else {
       TableIdentifier(
@@ -89,72 +91,58 @@ abstract class PipelineTest
     }
   }
 
-  /**
-   * This exists temporarily for compatibility with tests that become invalid when multiple
-   * executors are available.
-   */
-  protected def master = "local[*]"
+  /** Helper class to represent a SQL file by its contents and path. */
+  protected case class TestSqlFile(sqlText: String, sqlFilePath: String)
 
-  /** Creates and returns a initialized spark session. */
-  def createAndInitializeSpark(): SparkSession = {
-    val newSparkSession = SparkSession
-      .builder()
-      .config(sparkConf)
-      .master(master)
-      .getOrCreate()
-    newSparkSession
+  /** Construct an unresolved DataflowGraph object from possibly multiple SQL files. */
+  protected def unresolvedDataflowGraphFromSqlFiles(
+      sqlFiles: Seq[TestSqlFile]
+  ): DataflowGraph = {
+    val graphRegistrationContext = new TestGraphRegistrationContext(spark)
+    sqlFiles.foreach { sqlFile =>
+      new SqlGraphRegistrationContext(graphRegistrationContext).processSqlFile(
+        sqlText = sqlFile.sqlText,
+        sqlFilePath = sqlFile.sqlFilePath,
+        spark = spark
+      )
+    }
+    graphRegistrationContext
+      .toDataflowGraph
   }
 
-  /** Set up the spark session before each test. */
-  protected def initializeSparkBeforeEachTest(): Unit = {
-    clearActiveSession()
-    spark = createAndInitializeSpark()
-    setActiveSession(spark)
+  /** Construct an unresolved DataflowGraph object from a single SQL file, given the file contents
+   * and path. */
+  protected def unresolvedDataflowGraphFromSql(
+      sqlText: String,
+      sqlFilePath: String = "dataset.sql"
+  ): DataflowGraph = {
+    unresolvedDataflowGraphFromSqlFiles(
+      Seq(TestSqlFile(sqlText = sqlText, sqlFilePath = sqlFilePath))
+    )
   }
 
-  override def beforeEach(): Unit = {
+  protected override def beforeEach(): Unit = {
     super.beforeEach()
-    initializeSparkBeforeEachTest()
     cleanupMetastore(spark)
     (catalogInPipelineSpec, databaseInPipelineSpec) match {
       case (Some(catalog), Some(schema)) =>
-        sql(s"CREATE DATABASE IF NOT EXISTS `$catalog`.`$schema`")
+        spark.sql(s"CREATE DATABASE IF NOT EXISTS `$catalog`.`$schema`")
       case _ =>
-        databaseInPipelineSpec.foreach(s => sql(s"CREATE DATABASE IF NOT EXISTS `$s`"))
+        databaseInPipelineSpec.foreach(s => spark.sql(s"CREATE DATABASE IF NOT EXISTS `$s`"))
     }
   }
 
-  override def afterEach(): Unit = {
+  protected override def afterEach(): Unit = {
     cleanupMetastore(spark)
     super.afterEach()
   }
 
-  override def afterAll(): Unit = {
-    try {
-      super.afterAll()
-    } finally {
-      try {
-        if (spark != null) {
-          try {
-            spark.sessionState.catalog.reset()
-          } finally {
-            spark.stop()
-            spark = null
-          }
-        }
-      } finally {
-        clearActiveSession()
-        clearDefaultSession()
-      }
-    }
-  }
-
-  protected def gridTest[A](testNamePrefix: String, testTags: Tag*)(params: Seq[A])(
+  override protected def gridTest[A](testNamePrefix: String, testTags: Tag*)(params: Seq[A])(
       testFun: A => Unit): Unit = {
     namedGridTest(testNamePrefix, testTags: _*)(params.map(a => a.toString -> a).toMap)(testFun)
   }
 
-  override def test(testName: String, testTags: Tag*)(testFun: => Any /* Assertion */ )(
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any /* Assertion */ )(
       implicit pos: source.Position): Unit = super.test(testName, testTags: _*) {
     runWithInstrumentation(testFun)
   }
@@ -326,15 +314,7 @@ abstract class PipelineTest
 
   /**
    * Helper method to verify unresolved column error message. We expect three elements to be present
-   * in the message: error class, unresolved column name, list of suggested columns. There are three
-   * significant differences between different versions of DBR:
-   * - Error class changed in DBR 11.3 from `MISSING_COLUMN` to `UNRESOLVED_COLUMN.WITH_SUGGESTION`
-   * - Name parts in suggested columns are escaped with backticks starting from DBR 11.3,
-   *   e.g. table.column => `table`.`column`
-   * - Starting from DBR 13.1 suggested columns qualification matches unresolved column, i.e. if
-   *   unresolved column is a single-part identifier then suggested column will be as well. E.g.
-   *   for unresolved column `x` suggested columns will omit catalog/schema or `LIVE` qualifier. For
-   *   this reason we verify only last part of suggested column name.
+   * in the message: error class, unresolved column name, list of suggested columns.
    */
   protected def verifyUnresolveColumnError(
       errorMessage: String,

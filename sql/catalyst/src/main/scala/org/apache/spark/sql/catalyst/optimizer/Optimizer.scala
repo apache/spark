@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import java.util.HashSet
+
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression.hasCorrelatedSubquery
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -574,19 +575,6 @@ object EliminateAggregateFilter extends Rule[LogicalPlan] {
 }
 
 /**
- * An optimizer used in test code.
- *
- * To ensure extendability, we leave the standard rules in the abstract optimizer rules, while
- * specific rules go to the subclasses
- */
-object SimpleTestOptimizer extends SimpleTestOptimizer
-
-class SimpleTestOptimizer extends Optimizer(
-  new CatalogManager(
-    FakeV2SessionCatalog,
-    new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, EmptyTableFunctionRegistry)))
-
-/**
  * Remove redundant aliases from a query plan. A redundant alias is an alias that does not change
  * the name or metadata of a column, and does not deduplicate it.
  */
@@ -910,6 +898,24 @@ object LimitPushDown extends Rule[LogicalPlan] {
 object PushProjectionThroughUnion extends Rule[LogicalPlan] {
 
   /**
+   * When pushing a [[Project]] through [[Union]] we need to maintain the invariant that [[Union]]
+   * children must have unique [[ExprId]]s per branch. We can safely deduplicate [[ExprId]]s
+   * without updating any references because those [[ExprId]]s will simply remain unused.
+   * For example, in a `Project(col1#1, col#1)` we will alias the second `col1` and get
+   * `Project(col1#1, col1 as col1#2)`. We don't need to update any references to `col1#1` we
+   * aliased because `col1#1` still exists in [[Project]] output.
+   */
+  private def deduplicateProjectList(projectList: Seq[NamedExpression]) = {
+    val existingExprIds = new HashSet[ExprId]
+    projectList.map(attr => if (existingExprIds.contains(attr.exprId)) {
+      Alias(attr, attr.name)()
+    } else {
+      existingExprIds.add(attr.exprId)
+      attr
+    })
+  }
+
+  /**
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
    */
   private def buildRewrites(left: LogicalPlan, right: LogicalPlan): AttributeMap[Attribute] = {
@@ -937,10 +943,15 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
   }
 
   def pushProjectionThroughUnion(projectList: Seq[NamedExpression], u: Union): Seq[LogicalPlan] = {
-    val newFirstChild = Project(projectList, u.children.head)
+    val deduplicatedProjectList = if (conf.unionIsResolvedWhenDuplicatesPerChildResolved) {
+      deduplicateProjectList(projectList)
+    } else {
+      projectList
+    }
+    val newFirstChild = Project(deduplicatedProjectList, u.children.head)
     val newOtherChildren = u.children.tail.map { child =>
       val rewrites = buildRewrites(u.children.head, child)
-      Project(projectList.map(pushToRight(_, rewrites)), child)
+      Project(deduplicatedProjectList.map(pushToRight(_, rewrites)), child)
     }
     newFirstChild +: newOtherChildren
   }
@@ -1041,8 +1052,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
         p
       }
 
-    // TODO: Pruning `UnionLoop`s needs to take into account both the outer `Project` and the inner
-    //  `UnionLoopRef` nodes.
+    // Avoid pruning UnionLoop because of its recursive nature.
     case p @ Project(_, _: UnionLoop) => p
 
     // Prune unnecessary window expressions

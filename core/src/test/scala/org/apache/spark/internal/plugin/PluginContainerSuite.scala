@@ -38,10 +38,11 @@ import org.apache.spark.api.plugin._
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.MemoryMode
-import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.resource.ResourceUtils.GPU
 import org.apache.spark.resource.TestResourceIDs.{DRIVER_GPU_ID, EXECUTOR_GPU_ID, WORKER_GPU_ID}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
+import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.util.Utils
 
 class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
@@ -236,6 +237,7 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
     val conf = new SparkConf()
       .setAppName(getClass().getName())
       .set(SparkLauncher.SPARK_MASTER, "local-cluster[2,1,1024]")
+      .set(EXECUTOR_MEMORY.key, "1024M")
       .set(PLUGINS, Seq(classOf[MemoryOverridePlugin].getName()))
 
     var sc: SparkContext = null
@@ -245,6 +247,14 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
 
       assert(memoryManager.tungstenMemoryMode == MemoryMode.OFF_HEAP)
       assert(memoryManager.maxOffHeapStorageMemory == MemoryOverridePlugin.offHeapMemory)
+
+      val defaultResourceProfile = sc.resourceProfileManager.defaultResourceProfile
+      assert(512L ==
+        defaultResourceProfile.executorResources
+          .get(ResourceProfile.MEMORY).map(_.amount).getOrElse(-1L))
+      assert(512L ==
+        defaultResourceProfile.executorResources
+          .get(ResourceProfile.OFFHEAP_MEM).map(_.amount).getOrElse(-1L))
 
       // Ensure all executors has started
       TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
@@ -292,6 +302,20 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
     // If the listener bus is stopped before the plugin is shutdown,
     // then the event will be dropped and won't be delivered to the listener.
   }
+
+  test("SPARK-52548: override shuffle manager in plugin") {
+    val conf = new SparkConf()
+      .setAppName(getClass().getName())
+      .set(SparkLauncher.SPARK_MASTER, "local[1]")
+      .set(SHUFFLE_MANAGER, "sort")
+      .set(PLUGINS, Seq(classOf[SetShuffleManagerPlugin].getName()))
+
+    sc = new SparkContext(conf)
+
+    // Ensures the shuffle manager specified in configuration was
+    // overridden by the Spark plugin.
+    assert(sc.env.shuffleManager.isInstanceOf[SetShuffleManagerPlugin.MyShuffleManager])
+  }
 }
 
 class MemoryOverridePlugin extends SparkPlugin {
@@ -300,10 +324,13 @@ class MemoryOverridePlugin extends SparkPlugin {
       override def init(sc: SparkContext, pluginContext: PluginContext): JMap[String, String] = {
         // Take the original executor memory, and set `spark.memory.offHeap.size` to be the
         // same value. Also set `spark.memory.offHeap.enabled` to true.
-        val originalExecutorMemBytes =
+        val originalExecutorMem =
           sc.conf.getSizeAsMb(EXECUTOR_MEMORY.key, EXECUTOR_MEMORY.defaultValueString)
+        val newExecutorMem = originalExecutorMem / 2
+        val offHeapSize = originalExecutorMem - newExecutorMem
+        sc.conf.set(EXECUTOR_MEMORY.key, s"${newExecutorMem}M")
         sc.conf.set(MEMORY_OFFHEAP_ENABLED.key, "true")
-        sc.conf.set(MEMORY_OFFHEAP_SIZE.key, s"${originalExecutorMemBytes}M")
+        sc.conf.set(MEMORY_OFFHEAP_SIZE.key, s"${offHeapSize}M")
         MemoryOverridePlugin.offHeapMemory = sc.conf.getSizeAsBytes(MEMORY_OFFHEAP_SIZE.key)
         Map.empty[String, String].asJava
       }
@@ -389,6 +416,26 @@ object NonLocalModeSparkPlugin {
   def reset(): Unit = {
     driverContext = null
   }
+}
+
+class SetShuffleManagerPlugin extends SparkPlugin {
+  import SetShuffleManagerPlugin._
+  override def driverPlugin(): DriverPlugin = {
+    new DriverPlugin {
+      override def init(sc: SparkContext, ctx: PluginContext): JMap[String, String] = {
+        sc.conf.set(SHUFFLE_MANAGER, classOf[MyShuffleManager].getName)
+        Map.empty[String, String].asJava
+      }
+    }
+  }
+
+  override def executorPlugin(): ExecutorPlugin = {
+    new ExecutorPlugin {}
+  }
+}
+
+private object SetShuffleManagerPlugin {
+  class MyShuffleManager(conf: SparkConf) extends SortShuffleManager(conf)
 }
 
 class TestSparkPlugin extends SparkPlugin {

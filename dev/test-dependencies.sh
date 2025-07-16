@@ -37,6 +37,9 @@ HADOOP_HIVE_PROFILES=(
     hadoop-3-hive-2.3
 )
 
+MVN_EXEC_PLUGIN_VERSION=$(build/mvn help:evaluate \
+    -Dexpression=exec-maven-plugin.version -q -DforceStdout | grep -E "[0-9]+\.[0-9]+\.[0-9]+")
+
 # We'll switch the version to a temp. one, publish POMs using that new version, then switch back to
 # the old version. We need to do this because the `dependency:build-classpath` task needs to
 # resolve Spark's internal submodule dependencies.
@@ -47,7 +50,7 @@ OLD_VERSION=$($MVN -q \
     -Dexec.executable="echo" \
     -Dexec.args='${project.version}' \
     --non-recursive \
-    org.codehaus.mojo:exec-maven-plugin:1.6.0:exec | grep -E '[0-9]+\.[0-9]+\.[0-9]+')
+    org.codehaus.mojo:exec-maven-plugin:${MVN_EXEC_PLUGIN_VERSION}:exec | grep -E '[0-9]+\.[0-9]+\.[0-9]+')
 # dependency:get for guava and jetty-io are workaround for SPARK-37302.
 GUAVA_VERSION=$(build/mvn help:evaluate -Dexpression=guava.version -q -DforceStdout | grep -E "^[0-9\.]+")
 build/mvn dependency:get -Dartifact=com.google.guava:guava:${GUAVA_VERSION} -q
@@ -61,7 +64,7 @@ SCALA_BINARY_VERSION=$($MVN -q \
     -Dexec.executable="echo" \
     -Dexec.args='${scala.binary.version}' \
     --non-recursive \
-    org.codehaus.mojo:exec-maven-plugin:1.6.0:exec | grep -E '[0-9]+\.[0-9]+')
+    org.codehaus.mojo:exec-maven-plugin:${MVN_EXEC_PLUGIN_VERSION}:exec | grep -E '[0-9]+\.[0-9]+')
 if [[ "$SCALA_BINARY_VERSION" != "2.13" ]]; then
   echo "Skip dependency testing on $SCALA_BINARY_VERSION"
   exit 0

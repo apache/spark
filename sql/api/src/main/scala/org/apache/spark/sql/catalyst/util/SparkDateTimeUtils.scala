@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 import java.lang.invoke.{MethodHandles, MethodType}
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZonedDateTime, ZoneId, ZoneOffset}
-import java.time.temporal.ChronoField.MICRO_OF_DAY
+import java.time.temporal.ChronoField.NANO_OF_DAY
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit.{MICROSECONDS, NANOSECONDS}
 import java.util.regex.Pattern
@@ -84,6 +84,12 @@ trait SparkDateTimeUtils {
   }
 
   /**
+   * Converts the time to microseconds since midnight. In Spark time values have nanoseconds
+   * precision, so this conversion is lossy.
+   */
+  def nanosToMicros(nanos: Long): Long = Math.floorDiv(nanos, MICROS_PER_MILLIS)
+
+  /**
    * Converts the timestamp to milliseconds since epoch. In Spark timestamp values have
    * microseconds precision, so this conversion is lossy.
    */
@@ -100,6 +106,11 @@ trait SparkDateTimeUtils {
   def millisToMicros(millis: Long): Long = {
     Math.multiplyExact(millis, MICROS_PER_MILLIS)
   }
+
+  /**
+   * Converts microseconds since the midnight to nanoseconds.
+   */
+  def microsToNanos(micros: Long): Long = Math.multiplyExact(micros, NANOS_PER_MICROS)
 
   // See issue SPARK-35679
   // min second cause overflow in instant to micro
@@ -134,42 +145,42 @@ trait SparkDateTimeUtils {
   }
 
   /**
-   * Gets the number of microseconds since midnight using the given time zone.
+   * Gets the number of nanoseconds since midnight using the given time zone.
    */
-  def instantToMicrosOfDay(instant: Instant, timezone: String): Long = {
-    instantToMicrosOfDay(instant, getZoneId(timezone))
+  def instantToNanosOfDay(instant: Instant, timezone: String): Long = {
+    instantToNanosOfDay(instant, getZoneId(timezone))
   }
 
   /**
-   * Gets the number of microseconds since midnight using the given time zone.
+   * Gets the number of nanoseconds since midnight using the given time zone.
    */
-  def instantToMicrosOfDay(instant: Instant, zoneId: ZoneId): Long = {
+  def instantToNanosOfDay(instant: Instant, zoneId: ZoneId): Long = {
     val localDateTime = LocalDateTime.ofInstant(instant, zoneId)
-    localDateTime.toLocalTime.getLong(MICRO_OF_DAY)
+    localDateTime.toLocalTime.getLong(NANO_OF_DAY)
   }
 
   /**
-   * Truncates a time value (in microseconds) to the specified fractional precision `p`.
+   * Truncates a time value (in nanoseconds) to the specified fractional precision `p`.
    *
    * For example, if `p = 3`, we keep millisecond resolution and discard any digits beyond the
-   * thousand-microsecond place. So a value like `123456` microseconds (12:34:56.123456) becomes
+   * thousand-nanosecond place. So a value like `123456` microseconds (12:34:56.123456) becomes
    * `123000` microseconds (12:34:56.123).
    *
-   * @param micros
-   *   The original time in microseconds.
+   * @param nanos
+   *   The original time in nanoseconds.
    * @param p
    *   The fractional second precision (range 0 to 6).
    * @return
-   *   The truncated microsecond value, preserving only `p` fractional digits.
+   *   The truncated nanosecond value, preserving only `p` fractional digits.
    */
-  def truncateTimeMicrosToPrecision(micros: Long, p: Int): Long = {
+  def truncateTimeToPrecision(nanos: Long, p: Int): Long = {
     assert(
-      p >= TimeType.MIN_PRECISION && p <= TimeType.MICROS_PRECISION,
+      TimeType.MIN_PRECISION <= p && p <= TimeType.MAX_PRECISION,
       s"Fractional second precision $p out" +
-        s" of range [${TimeType.MIN_PRECISION}..${TimeType.MICROS_PRECISION}].")
-    val scale = TimeType.MICROS_PRECISION - p
+        s" of range [${TimeType.MIN_PRECISION}..${TimeType.MAX_PRECISION}].")
+    val scale = TimeType.NANOS_PRECISION - p
     val factor = math.pow(10, scale).toLong
-    (micros / factor) * factor
+    (nanos / factor) * factor
   }
 
   /**
@@ -225,17 +236,15 @@ trait SparkDateTimeUtils {
   }
 
   /**
-   * Converts the local time to the number of microseconds within the day, from 0 to (24 * 60 * 60
-   * * 1000000) - 1.
+   * Converts the local time to the number of nanoseconds within the day, from 0 to (24 * 60 * 60
+   * * 1000 * 1000 * 1000) - 1.
    */
-  def localTimeToMicros(localTime: LocalTime): Long = localTime.getLong(MICRO_OF_DAY)
+  def localTimeToNanos(localTime: LocalTime): Long = localTime.getLong(NANO_OF_DAY)
 
   /**
-   * Converts the number of microseconds within the day to the local time.
+   * Converts the number of nanoseconds within the day to the local time.
    */
-  def microsToLocalTime(micros: Long): LocalTime = {
-    LocalTime.ofNanoOfDay(Math.multiplyExact(micros, NANOS_PER_MICROS))
-  }
+  def nanosToLocalTime(nanos: Long): LocalTime = LocalTime.ofNanoOfDay(nanos)
 
   /**
    * Converts a local date at the default JVM time zone to the number of days since 1970-01-01 in
@@ -716,7 +725,7 @@ trait SparkDateTimeUtils {
       }
       val nanoseconds = MICROSECONDS.toNanos(segments(6))
       val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
-      Some(localTimeToMicros(localTime))
+      Some(localTimeToNanos(localTime))
     } catch {
       case NonFatal(_) => None
     }

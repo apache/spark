@@ -32,7 +32,10 @@ import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOptions)
+case class JDBCTable(
+    ident: Identifier,
+    override val schema: StructType,
+    jdbcOptions: JDBCOptions)
   extends Table
   with SupportsRead
   with SupportsWrite

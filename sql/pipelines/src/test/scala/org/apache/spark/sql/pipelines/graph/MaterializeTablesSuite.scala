@@ -25,33 +25,32 @@ import org.apache.spark.sql.connector.expressions.Expressions
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.pipelines.graph.DatasetManager.TableMaterializationException
 import org.apache.spark.sql.pipelines.utils.{BaseCoreExecutionTest, TestGraphRegistrationContext}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils.exceptionString
+
+class DefaultMaterializeTablesSuite extends MaterializeTablesSuite with SharedSparkSession
 
 /**
  * Local integration tests for materialization of `Table`s in a `DataflowGraph` to make sure
  * tables are written with the appropriate schemas.
  */
-class MaterializeTablesSuite extends BaseCoreExecutionTest {
-
-  import originalSpark.implicits._
-
+abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   test("basic") {
+    val session = spark
+    import session.implicits._
+
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
-        registerFlow(
-          "a",
-          "a",
-          query = dfFlowFunc(Seq((1, 1), (2, 3)).toDF("x", "x2"))
-        )
-        registerTable(
+        registerMaterializedView(
           "a",
           specifiedSchema = Option(
             new StructType()
               .add("x", IntegerType, nullable = false, "comment1")
               .add("x2", IntegerType, nullable = true, "comment2")
           ),
-          comment = Option("p-comment")
+          comment = Option("p-comment"),
+          query = dfFlowFunc(Seq((1, 1), (2, 3)).toDF("x", "x2"))
         )
       }.resolveToDataflowGraph()
     )
@@ -71,19 +70,15 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
-        registerFlow(
-          "a",
-          "a",
-          query = dfFlowFunc(Seq((1, 1), (2, 3)).toDF("x", "x2"))
-        )
-        registerTable(
+        registerMaterializedView(
           "a",
           specifiedSchema = Option(
             new StructType()
               .add("x", IntegerType, nullable = false, "comment3")
               .add("x2", IntegerType, nullable = true, "comment4")
           ),
-          comment = Option("p-comment")
+          comment = Option("p-comment"),
+          query = dfFlowFunc(Seq((1, 1), (2, 3)).toDF("x", "x2"))
         )
       }.resolveToDataflowGraph()
     )
@@ -99,19 +94,15 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
-        registerFlow(
-          "a",
-          "a",
-          query = dfFlowFunc(Seq((1, 1), (2, 3)).toDF("x", "x2"))
-        )
-        registerTable(
+        registerMaterializedView(
           "a",
           specifiedSchema = Option(
             new StructType()
               .add("x", IntegerType, nullable = false)
               .add("x2", IntegerType, nullable = true)
           ),
-          comment = Option("p-comment")
+          comment = Option("p-comment"),
+          query = dfFlowFunc(Seq((1, 1), (2, 3)).toDF("x", "x2"))
         )
       }.resolveToDataflowGraph()
     )
@@ -128,6 +119,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("multiple") {
+    val session = spark
+    import session.implicits._
+
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
         registerFlow(
@@ -162,6 +156,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("temporary views don't get materialized") {
+    val session = spark
+    import session.implicits._
+
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
         registerFlow(
@@ -199,9 +196,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
         query = Option(dfFlowFunc(spark.readStream.format("rate").load()))
       )
       // Defines a column called timestamp as `int`.
-      registerTable(
+      registerMaterializedView(
         "b",
-        query = Option(sqlFlowFunc(spark, "SELECT value AS timestamp FROM a"))
+        query = sqlFlowFunc(spark, "SELECT value AS timestamp FROM a")
       )
     }
     materializeGraph(new P1().resolveToDataflowGraph())
@@ -220,9 +217,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
         query = Option(dfFlowFunc(spark.readStream.format("rate").load()))
       )
       // Defines a column called timestamp as `timestamp`.
-      registerTable(
+      registerMaterializedView(
         "b",
-        query = Option(sqlFlowFunc(spark, "SELECT timestamp FROM a"))
+        query = sqlFlowFunc(spark, "SELECT timestamp FROM a")
       )
     }
     materializeGraph(new P2().resolveToDataflowGraph())
@@ -235,6 +232,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("schema matches existing table schema") {
+    val session = spark
+    import session.implicits._
+
     sql(s"CREATE TABLE ${TestGraphRegistrationContext.DEFAULT_DATABASE}.t2(x INT)")
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t2")
@@ -260,6 +260,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("invalid schema merge") {
+    val session = spark
+    import session.implicits._
+
     val streamInts = MemoryStream[Int]
     streamInts.addData(1, 2)
 
@@ -286,6 +289,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("table materialized with specified schema, even if different from inferred") {
+    val session = spark
+    import session.implicits._
+
     sql(s"CREATE TABLE ${TestGraphRegistrationContext.DEFAULT_DATABASE}.t4(x INT)")
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t4")
@@ -298,14 +304,14 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
-        registerFlow("t4", "t4", query = dfFlowFunc(Seq[Short](1, 2).toDF("x")))
-        registerTable(
+        registerMaterializedView(
           "t4",
           specifiedSchema = Option(
             new StructType()
               .add("x", IntegerType, nullable = true, "this is column x")
               .add("z", LongType, nullable = true, "this is column z")
-          )
+          ),
+          query = dfFlowFunc(Seq[Short](1, 2).toDF("x"))
         )
       }.resolveToDataflowGraph()
     )
@@ -321,6 +327,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("specified schema incompatible with existing table") {
+    val session = spark
+    import session.implicits._
+
     sql(s"CREATE TABLE ${TestGraphRegistrationContext.DEFAULT_DATABASE}.t6(x BOOLEAN)")
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t6")
@@ -349,10 +358,10 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     // Works fine for a complete table
     materializeGraph(new TestGraphRegistrationContext(spark) {
-      registerTable(
+      registerMaterializedView(
         "t6",
         specifiedSchema = Option(new StructType().add("x", IntegerType)),
-        query = Option(dfFlowFunc(Seq(1, 2).toDF("x")))
+        query = dfFlowFunc(Seq(1, 2).toDF("x"))
       )
     }.resolveToDataflowGraph())
     val table2 = catalog.loadTable(identifier)
@@ -363,6 +372,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("partition columns with user schema") {
+    val session = spark
+    import session.implicits._
+
     materializeGraph(
       new TestGraphRegistrationContext(spark) {
         registerTable(
@@ -389,6 +401,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("specifying partition column with existing partitioned table") {
+    val session = spark
+    import session.implicits._
+
     sql(
       s"CREATE TABLE ${TestGraphRegistrationContext.DEFAULT_DATABASE}.t7(x BOOLEAN, y INT) " +
       s"PARTITIONED BY (x)"
@@ -451,11 +466,13 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("specifying partition column different from existing partitioned table") {
+    val session = spark
+    import session.implicits._
+
     sql(
       s"CREATE TABLE ${TestGraphRegistrationContext.DEFAULT_DATABASE}.t8(x BOOLEAN, y INT) " +
       s"PARTITIONED BY (x)"
     )
-    Seq((true, 1), (false, 1)).toDF("x", "y").write.mode("append").saveAsTable("t8")
 
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t8")
@@ -513,6 +530,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("Invalid table properties error during table materialization") {
+    val session = spark
+    import session.implicits._
+
     // Invalid pipelines property
     val graph1 =
       new TestGraphRegistrationContext(spark) {
@@ -550,10 +570,13 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
     test(
       s"Complete tables should not evolve schema - isFullRefresh = $isFullRefresh"
     ) {
+      val session = spark
+      import session.implicits._
+
       val rawGraph =
         new TestGraphRegistrationContext(spark) {
           registerView("a", query = dfFlowFunc(Seq((1, 2), (2, 3)).toDF("x", "y")))
-          registerTable("b", query = Option(sqlFlowFunc(spark, "SELECT x FROM a")))
+          registerMaterializedView("b", query = sqlFlowFunc(spark, "SELECT x FROM a"))
         }.resolveToDataflowGraph()
 
       val graph = materializeGraph(rawGraph)
@@ -587,7 +610,7 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
       materializeGraph(
         new TestGraphRegistrationContext(spark) {
           registerView("a", query = dfFlowFunc(Seq((1, 2), (2, 3)).toDF("x", "y")))
-          registerTable("b", query = Option(sqlFlowFunc(spark, "SELECT y FROM a")))
+          registerMaterializedView("b", query = sqlFlowFunc(spark, "SELECT y FROM a"))
         }.resolveToDataflowGraph()
       )
       val table2 = catalog.loadTable(identifier)
@@ -602,6 +625,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
     test(
       s"Streaming tables should evolve schema only if not full refresh = $isFullRefresh"
     ) {
+      val session = spark
+      import session.implicits._
+
       val streamInts = MemoryStream[Int]
       streamInts.addData(1 until 5: _*)
 
@@ -665,6 +691,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   test(
     "materialize only selected tables"
   ) {
+    val session = spark
+    import session.implicits._
+
     val graph = new TestGraphRegistrationContext(spark) {
       registerTable("a", query = Option(dfFlowFunc(Seq((1, 2), (2, 3)).toDF("x", "y"))))
       registerTable("b", query = Option(sqlFlowFunc(spark, "SELECT x FROM a")))
@@ -707,6 +736,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("tables with arrays and maps") {
+    val session = spark
+    import session.implicits._
+
     val rawGraph =
       new TestGraphRegistrationContext(spark) {
         registerTable("a", query = Option(sqlFlowFunc(spark, "select map(1, struct('a', 'b')) m")))
@@ -800,6 +832,9 @@ class MaterializeTablesSuite extends BaseCoreExecutionTest {
   }
 
   test("materializing no tables doesn't throw") {
+    val session = spark
+    import session.implicits._
+
     val graph1 =
       new DataflowGraph(flows = Seq.empty, tables = Seq.empty, views = Seq.empty)
     val graph2 = new TestGraphRegistrationContext(spark) {

@@ -16,7 +16,10 @@
  */
 package org.apache.spark.sql.pipelines.logging
 
+import java.sql.Timestamp
+
 import org.apache.spark.sql.pipelines.common.{FlowStatus, RunState}
+import org.apache.spark.sql.pipelines.graph.QueryOrigin
 
 /**
  * An internal event that is emitted during the run of a pipeline.
@@ -30,12 +33,12 @@ import org.apache.spark.sql.pipelines.common.{FlowStatus, RunState}
  */
 case class PipelineEvent(
     id: String,
-    timestamp: String,
+    timestamp: Timestamp,
     origin: PipelineEventOrigin,
     level: EventLevel,
     message: String,
     details: EventDetails,
-    error: Option[ErrorDetail]
+    error: Option[Throwable]
 )
 
 /**
@@ -47,23 +50,7 @@ case class PipelineEvent(
 case class PipelineEventOrigin(
     datasetName: Option[String],
     flowName: Option[String],
-    sourceCodeLocation: Option[SourceCodeLocation]
-)
-
-/**
- * Describes the location of the source code
- * @param path The path to the source code
- * @param lineNumber The line number of the source code
- * @param columnNumber The column number of the source code
- * @param endingLineNumber The ending line number of the source code
- * @param endingColumnNumber The ending column number of the source code
- */
-case class SourceCodeLocation(
-    path: Option[String],
-    lineNumber: Option[Int],
-    columnNumber: Option[Int],
-    endingLineNumber: Option[Int],
-    endingColumnNumber: Option[Int]
+    sourceCodeLocation: Option[QueryOrigin]
 )
 
 // Additional details about the PipelineEvent
@@ -74,15 +61,6 @@ case class FlowProgress(status: FlowStatus) extends EventDetails
 
 // An event indicating that a run has made progress and transitioned to a different state
 case class RunProgress(state: RunState) extends EventDetails
-
-// Additional details about the error that occurred during the event
-case class ErrorDetail(exceptions: Seq[SerializedException])
-
-// An exception that was thrown during a pipeline run
-case class SerializedException(className: String, message: String, stack: Seq[StackFrame])
-
-// A stack frame of an exception
-case class StackFrame(declaringClass: String, methodName: String)
 
 // The severity level of the event.
 sealed trait EventLevel

@@ -27,6 +27,7 @@ import org.apache.hadoop.shaded.com.ctc.wstx.api.WstxOutputProperties
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.ToStringBase
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, DateTimeUtils, MapData, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.types._
@@ -62,6 +63,8 @@ class StaxXmlGenerator(
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
+
+  private val binaryFormatter = ToStringBase.getBinaryFormatter
 
   private val gen = {
     val factory = XMLOutputFactory.newInstance()
@@ -197,6 +200,7 @@ class StaxXmlGenerator(
     case (DecimalType(), v: Decimal) => gen.writeCharacters(v.toString)
     case (ByteType, v: Byte) => gen.writeCharacters(v.toString)
     case (BooleanType, v: Boolean) => gen.writeCharacters(v.toString)
+    case (BinaryType, v: Array[Byte]) => gen.writeCharacters(binaryFormatter(v).toString)
 
     // For the case roundtrip in reading and writing XML files, [[ArrayType]] cannot have
     // [[ArrayType]] as element type. It always wraps the element with [[StructType]]. So,
@@ -227,6 +231,8 @@ class StaxXmlGenerator(
       (attributes ++ elements).foreach { case (field, value) =>
         writeChild(field.name, field.dataType, value)
       }
+
+    case (u: UserDefinedType[_], v) => writeElement(u.sqlType, v, options)
 
     case (_, _) =>
       throw new SparkIllegalArgumentException(
