@@ -244,7 +244,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
 
     override def toString(): String = {
-      s"HDFSStateStore[ stateStoreProviderId=$stateStoreProviderId] "
+      s"HDFSStateStore[stateStoreProviderId=$stateStoreProviderId]"
     }
 
     override def removeColFamilyIfExists(colFamilyName: String): Boolean = {
@@ -402,7 +402,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     Seq(instanceMetricSnapshotLastUpload)
 
   override def toString(): String = {
-    s"HDFSStateStoreProvider[ stateStoreProviderId=$stateStoreProviderId ]"
+    s"HDFSStateStoreProvider[stateStoreProviderId=$stateStoreProviderId]"
   }
 
   /* Internal fields and methods */

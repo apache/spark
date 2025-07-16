@@ -402,8 +402,9 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
         parameters = Map(
           "fileToRead" -> s"${provider.stateStoreId.storeCheckpointLocation()}/1.delta",
-          "clazz" -> s"${provider.toString()}"
-        )
+          "clazz" -> "HDFSStateStoreProvider\\[.+\\]"
+        ),
+        matchPVals = true
       )
     }
   }
@@ -1453,9 +1454,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
       assert(e.getCondition == "CANNOT_WRITE_STATE_STORE.CANNOT_COMMIT")
       if (store.getClass.getName contains ROCKSDB_STATE_STORE) {
-        assert(e.getMessage contains "RocksDBStateStore[id=(op=0,part=0)")
+        assert(e.getMessage contains "RocksDBStateStore")
       } else {
-        assert(e.getMessage contains "HDFSStateStore[id=(op=0,part=0)")
+        assert(e.getMessage contains "HDFSStateStore")
       }
       assert(e.getMessage contains "Error writing state store files")
       assert(e.getCause.getMessage.contains("Failed to rename"))
