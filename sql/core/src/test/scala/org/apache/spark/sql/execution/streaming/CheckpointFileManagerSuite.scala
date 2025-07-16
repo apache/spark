@@ -24,7 +24,7 @@ import scala.util.Random
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
@@ -145,6 +145,42 @@ class CheckpointFileManagerSuite extends SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-52824: CheckpointFileManager.create() does not throw InvocationTargetException") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->
+        classOf[ConstructorFailureTestManager].getName) {
+      val ex = intercept[SparkException] {
+        CheckpointFileManager.create(new Path("/"), spark.sessionState.newHadoopConf())
+      }
+      checkError(
+        ex,
+        condition = "CANNOT_LOAD_CHECKPOINT_FILE_MANAGER.ERROR_LOADING_CLASS",
+        parameters = Map(
+          "path" -> "/",
+          "className" -> classOf[ConstructorFailureTestManager].getName,
+          "msg" -> "java.lang.IllegalStateException: error")
+      )
+    }
+  }
+
+  test("SPARK-52824: CheckpointFileManager.create() throws error when class cannot be found") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->
+        "notarealclass") {
+      val ex = intercept[SparkException] {
+        CheckpointFileManager.create(new Path("/"), spark.sessionState.newHadoopConf())
+      }
+      checkError(
+        ex,
+        condition = "CANNOT_LOAD_CHECKPOINT_FILE_MANAGER.ERROR_LOADING_CLASS",
+        parameters = Map(
+          "path" -> "/",
+          "className" -> "notarealclass",
+          "msg" -> "java.lang.ClassNotFoundException: notarealclass")
+      )
+    }
+  }
 }
 
 abstract class CheckpointFileManagerTestsOnLocalFs
@@ -222,6 +258,11 @@ object CreateAtomicTestManager {
   @volatile var cancelCalledInCreateAtomic = false
 }
 
+/** A fake implementation to test constructor failure */
+class ConstructorFailureTestManager(path: Path, hadoopConf: Configuration)
+  extends FileSystemBasedCheckpointFileManager(path, hadoopConf) {
+  throw new IllegalStateException("error")
+}
 
 /**
  * CheckpointFileManagerSuiteFileSystem to test fallback of the CheckpointFileManager

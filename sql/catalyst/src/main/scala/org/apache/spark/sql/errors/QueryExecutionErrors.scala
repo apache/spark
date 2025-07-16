@@ -3086,4 +3086,22 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       )
     )
   }
+
+  def cannotLoadCheckpointFileManagerClass(path: String, className: String, err: Throwable):
+  Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_CHECKPOINT_FILE_MANAGER.ERROR_LOADING_CLASS",
+      messageParameters = Map("path" -> path, "className" -> className, "msg" -> err.toString),
+      cause = err
+    )
+  }
+
+  def cannotLoadCheckpointFileManager(path: String, err: Throwable):
+  Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_CHECKPOINT_FILE_MANAGER.UNCATEGORIZED",
+      messageParameters = Map("path" -> path),
+      cause = err
+    )
+  }
 }

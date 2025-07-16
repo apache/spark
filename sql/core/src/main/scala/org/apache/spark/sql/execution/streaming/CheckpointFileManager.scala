@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.io.{FileNotFoundException, OutputStream}
+import java.lang.reflect.InvocationTargetException
 import java.util.{EnumSet, UUID}
 
 import scala.util.control.NonFatal
@@ -200,10 +201,19 @@ object CheckpointFileManager extends Logging {
     val fileManagerClass = hadoopConf.get(
       SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key)
     if (fileManagerClass != null) {
-      return Utils.classForName(fileManagerClass)
-        .getConstructor(classOf[Path], classOf[Configuration])
-        .newInstance(path, hadoopConf)
-        .asInstanceOf[CheckpointFileManager]
+      try {
+        return Utils.classForName(fileManagerClass)
+          .getConstructor(classOf[Path], classOf[Configuration])
+          .newInstance(path, hadoopConf)
+          .asInstanceOf[CheckpointFileManager]
+      } catch {
+        case e: InvocationTargetException if e.getCause != null =>
+          throw QueryExecutionErrors.cannotLoadCheckpointFileManagerClass(path.toString,
+            fileManagerClass, e.getCause)
+        case NonFatal(e) =>
+          throw QueryExecutionErrors.cannotLoadCheckpointFileManagerClass(path.toString,
+              fileManagerClass, e)
+      }
     }
     try {
       // Try to create a manager based on `FileContext` because HDFS's `FileContext.rename()
@@ -218,6 +228,8 @@ object CheckpointFileManager extends Logging {
             log"the implementation of FileSystem.rename() is not atomic, then the correctness " +
             log"and fault-tolerance of your Structured Streaming is not guaranteed.")
         new FileSystemBasedCheckpointFileManager(path, hadoopConf)
+      case NonFatal(e) =>
+        throw QueryExecutionErrors.cannotLoadCheckpointFileManager(path.toString, e)
     }
   }
 
