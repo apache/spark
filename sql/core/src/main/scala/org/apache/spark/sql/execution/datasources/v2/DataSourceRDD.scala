@@ -61,11 +61,7 @@ class DataSourceRDD(
       private var currentIter: Option[Iterator[Object]] = None
       private var currentIndex: Int = 0
 
-      private val partitionMetricCallback = if (columnarReads) {
-        new PartitionMetricCallback[ColumnarBatch](customMetrics)
-      } else {
-        new PartitionMetricCallback[InternalRow](customMetrics)
-      }
+      private val partitionMetricCallback = new PartitionMetricCallback(customMetrics)
 
       // In case of early stopping before consuming the entire iterator,
       // we need to do one more metric update at the end of the task.
@@ -117,7 +113,7 @@ class DataSourceRDD(
   }
 }
 
-private class PartitionMetricCallback[_]
+private class PartitionMetricCallback
     (customMetrics: Map[String, SQLMetric]) {
   private var iter: MetricsIterator[_] = null
   private var reader: PartitionReader[_] = null
