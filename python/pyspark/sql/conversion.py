@@ -531,14 +531,14 @@ class ArrowTableToRowsConversion:
 
         assert schema is not None and isinstance(schema, StructType)
 
+        fields = schema.fieldNames()
         field_converters = [
             ArrowTableToRowsConversion._create_converter(f.dataType) for f in schema.fields
         ]
 
-        columnar_data = [column.to_pylist() for column in table.columns]
+        columnar_data = [
+            [conv(v) for v in column.to_pylist()]
+            for column, conv in zip(table.columns, field_converters)
+        ]
 
-        rows: List[Row] = []
-        for i in range(0, table.num_rows):
-            values = [field_converters[j](columnar_data[j][i]) for j in range(table.num_columns)]
-            rows.append(_create_row(fields=schema.fieldNames(), values=values))
-        return rows
+        return [_create_row(fields, tuple(cols)) for cols in zip(*columnar_data)]
