@@ -18,6 +18,9 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.SparkException
 
+/**
+ * Object for grouping error messages from streaming query exceptions
+ */
 object StreamingErrors {
   def cannotLoadCheckpointFileManagerClass(path: String, className: String, err: Throwable):
   Throwable = {
