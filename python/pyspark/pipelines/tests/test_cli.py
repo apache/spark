@@ -372,20 +372,19 @@ class CLIValidationTests(unittest.TestCase):
             spec_path = Path(temp_dir) / "pipeline.yaml"
             with spec_path.open("w") as f:
                 f.write('{"name": "test_pipeline"}')
-            
+
             # Test that providing both --full-refresh-all and --full-refresh raises an exception
             with self.assertRaises(PySparkException) as context:
                 run(
                     spec_path=spec_path,
                     full_refresh=["table1", "table2"],
                     full_refresh_all=True,
-                    refresh=None
+                    refresh=None,
                 )
-            
+
             self.assertEqual(
                 context.exception.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS"
             )
-
 
     def test_full_refresh_all_conflicts_with_refresh(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -393,16 +392,16 @@ class CLIValidationTests(unittest.TestCase):
             spec_path = Path(temp_dir) / "pipeline.yaml"
             with spec_path.open("w") as f:
                 f.write('{"name": "test_pipeline"}')
-            
+
             # Test that providing both --full-refresh-all and --refresh raises an exception
             with self.assertRaises(PySparkException) as context:
                 run(
                     spec_path=spec_path,
                     full_refresh=None,
                     full_refresh_all=True,
-                    refresh=["table1", "table2"]
+                    refresh=["table1", "table2"],
                 )
-            
+
             self.assertEqual(
                 context.exception.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS"
             )
@@ -413,7 +412,7 @@ class CLIValidationTests(unittest.TestCase):
             spec_path = Path(temp_dir) / "pipeline.yaml"
             with spec_path.open("w") as f:
                 f.write('{"name": "test_pipeline"}')
-            
+
             # Test that providing --full-refresh-all with both other options raises an exception
             # (it should catch the first conflict - full_refresh)
             with self.assertRaises(PySparkException) as context:
@@ -421,9 +420,9 @@ class CLIValidationTests(unittest.TestCase):
                     spec_path=spec_path,
                     full_refresh=["table1"],
                     full_refresh_all=True,
-                    refresh=["table2"]
+                    refresh=["table2"],
                 )
-            
+
             self.assertEqual(
                 context.exception.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS"
             )
@@ -434,16 +433,11 @@ class CLIValidationTests(unittest.TestCase):
             spec_path = Path(temp_dir) / "pipeline.yaml"
             with spec_path.open("w") as f:
                 f.write('{"name": "test_pipeline"}')
-            
+
             # Test that providing only --full-refresh-all doesn't raise an exception
             # (it should fail later when trying to actually run, but not in our validation)
             try:
-                run(
-                    spec_path=spec_path,
-                    full_refresh=None,
-                    full_refresh_all=True,
-                    refresh=None
-                )
+                run(spec_path=spec_path, full_refresh=None, full_refresh_all=True, refresh=None)
                 # If we get here, the validation passed (it will fail later in pipeline execution)
                 self.fail("Expected the run to fail later, but validation should have passed")
             except PySparkException as e:
@@ -456,14 +450,14 @@ class CLIValidationTests(unittest.TestCase):
             spec_path = Path(temp_dir) / "pipeline.yaml"
             with spec_path.open("w") as f:
                 f.write('{"name": "test_pipeline"}')
-            
+
             # Test that providing --refresh and --full-refresh without --full-refresh-all doesn't raise our validation error
             try:
                 run(
                     spec_path=spec_path,
                     full_refresh=["table1"],
                     full_refresh_all=False,
-                    refresh=["table2"]
+                    refresh=["table2"],
                 )
                 # If we get here, the validation passed (it will fail later in pipeline execution)
                 self.fail("Expected the run to fail later, but validation should have passed")
@@ -474,30 +468,35 @@ class CLIValidationTests(unittest.TestCase):
     def test_parse_table_list_single_table(self):
         """Test parsing a single table name."""
         from pyspark.pipelines.cli import parse_table_list
+
         result = parse_table_list("table1")
         self.assertEqual(result, ["table1"])
 
     def test_parse_table_list_multiple_tables(self):
         """Test parsing multiple table names."""
         from pyspark.pipelines.cli import parse_table_list
+
         result = parse_table_list("table1,table2,table3")
         self.assertEqual(result, ["table1", "table2", "table3"])
 
     def test_parse_table_list_with_spaces(self):
         """Test parsing table names with spaces."""
         from pyspark.pipelines.cli import parse_table_list
+
         result = parse_table_list("table1, table2 , table3")
         self.assertEqual(result, ["table1", "table2", "table3"])
 
     def test_flatten_table_lists_single_list(self):
         """Test flattening single list."""
         from pyspark.pipelines.cli import flatten_table_lists
+
         result = flatten_table_lists([["table1", "table2"]])
         self.assertEqual(result, ["table1", "table2"])
 
     def test_flatten_table_lists_multiple_lists(self):
         """Test flattening multiple lists."""
         from pyspark.pipelines.cli import flatten_table_lists
+
         result = flatten_table_lists([["table1", "table2"], ["table3"], ["table4", "table5"]])
         self.assertEqual(result, ["table1", "table2", "table3", "table4", "table5"])
 
@@ -505,22 +504,28 @@ class CLIValidationTests(unittest.TestCase):
         """Test CLI argument parsing patterns for refresh options."""
         import argparse
         from pyspark.pipelines.cli import parse_table_list
-        
+
         # Simulate the argument parser
         parser = argparse.ArgumentParser()
         parser.add_argument("--full-refresh", type=parse_table_list, action="append")
         parser.add_argument("--full-refresh-all", action="store_true")
         parser.add_argument("--refresh", type=parse_table_list, action="append")
-        
+
         # Test parsing various argument combinations
         test_cases = [
             (["--full-refresh", "table1,table2"], {"full_refresh": [["table1", "table2"]]}),
             (["--refresh", "table1", "--refresh", "table2"], {"refresh": [["table1"], ["table2"]]}),
             (["--full-refresh-all"], {"full_refresh_all": True}),
-            (["--full-refresh", "table1", "--refresh", "table2"], {"full_refresh": [["table1"]], "refresh": [["table2"]]}),
-            (["--full-refresh", "schema.table1,schema.table2"], {"full_refresh": [["schema.table1", "schema.table2"]]}),
+            (
+                ["--full-refresh", "table1", "--refresh", "table2"],
+                {"full_refresh": [["table1"]], "refresh": [["table2"]]},
+            ),
+            (
+                ["--full-refresh", "schema.table1,schema.table2"],
+                {"full_refresh": [["schema.table1", "schema.table2"]]},
+            ),
         ]
-        
+
         for args, expected in test_cases:
             parsed = parser.parse_args(args)
             for key, value in expected.items():

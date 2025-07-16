@@ -218,13 +218,13 @@ def change_dir(path: Path) -> Generator[None, None, None]:
 
 
 def run(
-    spec_path: Path, 
+    spec_path: Path,
     full_refresh: Optional[Sequence[str]] = None,
     full_refresh_all: bool = False,
-    refresh: Optional[Sequence[str]] = None
+    refresh: Optional[Sequence[str]] = None,
 ) -> None:
     """Run the pipeline defined with the given spec.
-    
+
     :param spec_path: Path to the pipeline specification file.
     :param full_refresh: List of datasets to reset and recompute.
     :param full_refresh_all: Perform a full graph reset and recompute.
@@ -234,15 +234,13 @@ def run(
     if full_refresh_all:
         if full_refresh:
             raise PySparkException(
-                errorClass="CONFLICTING_PIPELINE_REFRESH_OPTIONS",
-                messageParameters={}
+                errorClass="CONFLICTING_PIPELINE_REFRESH_OPTIONS", messageParameters={}
             )
         if refresh:
             raise PySparkException(
-                errorClass="CONFLICTING_PIPELINE_REFRESH_OPTIONS",
-                messageParameters={}
+                errorClass="CONFLICTING_PIPELINE_REFRESH_OPTIONS", messageParameters={}
             )
-    
+
     log_with_curr_timestamp(f"Loading pipeline spec from {spec_path}...")
     spec = load_pipeline_spec(spec_path)
 
@@ -267,11 +265,11 @@ def run(
 
     log_with_curr_timestamp("Starting run...")
     result_iter = start_run(
-        spark, 
+        spark,
         dataflow_graph_id,
         full_refresh=full_refresh,
         full_refresh_all=full_refresh_all,
-        refresh=refresh
+        refresh=refresh,
     )
     try:
         handle_pipeline_events(result_iter)
@@ -302,17 +300,19 @@ if __name__ == "__main__":
     run_parser = subparsers.add_parser("run", help="Run a pipeline.")
     run_parser.add_argument("--spec", help="Path to the pipeline spec.")
     run_parser.add_argument(
-        "--full-refresh", 
-        type=parse_table_list, 
-        action="append",
-        help="List of datasets to reset and recompute (comma-separated)."
-    )
-    run_parser.add_argument("--full-refresh-all", action="store_true", help="Perform a full graph reset and recompute.")
-    run_parser.add_argument(
-        "--refresh", 
+        "--full-refresh",
         type=parse_table_list,
-        action="append", 
-        help="List of datasets to update (comma-separated)."
+        action="append",
+        help="List of datasets to reset and recompute (comma-separated).",
+    )
+    run_parser.add_argument(
+        "--full-refresh-all", action="store_true", help="Perform a full graph reset and recompute."
+    )
+    run_parser.add_argument(
+        "--refresh",
+        type=parse_table_list,
+        action="append",
+        help="List of datasets to update (comma-separated).",
     )
 
     # "init" subcommand
@@ -345,7 +345,7 @@ if __name__ == "__main__":
             spec_path=spec_path,
             full_refresh=flatten_table_lists(args.full_refresh),
             full_refresh_all=args.full_refresh_all,
-            refresh=flatten_table_lists(args.refresh)
+            refresh=flatten_table_lists(args.refresh),
         )
     elif args.command == "init":
         init(args.name)
