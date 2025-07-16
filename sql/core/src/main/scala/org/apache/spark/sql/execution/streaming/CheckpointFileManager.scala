@@ -208,10 +208,10 @@ object CheckpointFileManager extends Logging {
           .asInstanceOf[CheckpointFileManager]
       } catch {
         case e: InvocationTargetException if e.getCause != null =>
-          throw QueryExecutionErrors.cannotLoadCheckpointFileManagerClass(path.toString,
+          throw StreamingErrors.cannotLoadCheckpointFileManagerClass(path.toString,
             fileManagerClass, e.getCause)
         case NonFatal(e) =>
-          throw QueryExecutionErrors.cannotLoadCheckpointFileManagerClass(path.toString,
+          throw StreamingErrors.cannotLoadCheckpointFileManagerClass(path.toString,
               fileManagerClass, e)
       }
     }
@@ -229,7 +229,7 @@ object CheckpointFileManager extends Logging {
             log"and fault-tolerance of your Structured Streaming is not guaranteed.")
         new FileSystemBasedCheckpointFileManager(path, hadoopConf)
       case NonFatal(e) =>
-        throw QueryExecutionErrors.cannotLoadCheckpointFileManager(path.toString, e)
+        throw StreamingErrors.cannotLoadCheckpointFileManager(path.toString, e)
     }
   }
 
