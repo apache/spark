@@ -541,4 +541,7 @@ class ArrowTableToRowsConversion:
             for column, conv in zip(table.columns, field_converters)
         ]
 
-        return [_create_row(fields, tuple(cols)) for cols in zip(*columnar_data)]
+        if len(columnar_data) > 0:
+            return [_create_row(fields, tuple(cols)) for cols in zip(*columnar_data)]
+        else:
+            return [Row()] * table.num_rows
