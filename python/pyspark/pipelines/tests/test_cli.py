@@ -44,7 +44,7 @@ if should_test_connect and have_yaml:
 
 @unittest.skipIf(
     not should_test_connect or not have_yaml,
-    (connect_requirement_message or yaml_requirement_message) or "Connect or YAML not available",
+    connect_requirement_message or yaml_requirement_message,
 )
 class CLIUtilityTests(unittest.TestCase):
     def test_load_pipeline_spec(self):
@@ -363,7 +363,7 @@ class CLIUtilityTests(unittest.TestCase):
 
 @unittest.skipIf(
     not should_test_connect or not have_yaml,
-    (connect_requirement_message or yaml_requirement_message) or "Connect or YAML not available",
+    connect_requirement_message or yaml_requirement_message,
 )
 class CLIValidationTests(unittest.TestCase):
     def test_full_refresh_all_conflicts_with_full_refresh(self):
