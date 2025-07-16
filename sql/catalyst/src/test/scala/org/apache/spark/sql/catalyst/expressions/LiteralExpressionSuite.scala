@@ -617,7 +617,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("context dependent foldable literals") {
+  test("context independent foldable literals with UDT") {
     // Create point instances with ExamplePointUDT
     val point1 = Array(1.0, 2.0)
     val point2 = Array(3.0, 4.0)
@@ -651,7 +651,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         MapType(StringType, ArrayType(new ExamplePointUDT), valueContainsNull = false))
     ).foreach { expr =>
       assert(expr.foldable, s"Expression $expr should be foldable")
-      assert(!expr.contextIndependentFoldable,
+      assert(expr.contextIndependentFoldable,
         s"Expression $expr should not be context independent foldable")
     }
   }
