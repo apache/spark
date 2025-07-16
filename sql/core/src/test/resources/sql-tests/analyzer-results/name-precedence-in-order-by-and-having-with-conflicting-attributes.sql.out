@@ -64,39 +64,54 @@ Filter (col1#x > 50)
 
 
 -- !query
-SELECT col1 AS c, 2 AS col1 FROM v1 ORDER BY col1
+SELECT * FROM (
+  SELECT col1 AS c, 2 AS col1 FROM v1 ORDER BY col1
+) ORDER BY 1
 -- !query analysis
-Sort [col1#x ASC NULLS FIRST], true
-+- Project [col1#x AS c#x, 2 AS col1#x]
-   +- SubqueryAlias v1
-      +- View (`v1`, [col1#x])
-         +- Project [cast(col1#x as int) AS col1#x]
-            +- Project [col1#x]
-               +- LocalRelation [col1#x]
+Sort [c#x ASC NULLS FIRST], true
++- Project [c#x, col1#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Sort [col1#x ASC NULLS FIRST], true
+         +- Project [col1#x AS c#x, 2 AS col1#x]
+            +- SubqueryAlias v1
+               +- View (`v1`, [col1#x])
+                  +- Project [cast(col1#x as int) AS col1#x]
+                     +- Project [col1#x]
+                        +- LocalRelation [col1#x]
 
 
 -- !query
-SELECT col1 AS c, 2 AS col1 FROM v1 GROUP BY ALL ORDER BY col1
+SELECT * FROM (
+  SELECT col1 AS c, 2 AS col1 FROM v1 GROUP BY ALL ORDER BY col1
+) ORDER BY 1
 -- !query analysis
-Sort [col1#x ASC NULLS FIRST], true
-+- Aggregate [col1#x, 2], [col1#x AS c#x, 2 AS col1#x]
-   +- SubqueryAlias v1
-      +- View (`v1`, [col1#x])
-         +- Project [cast(col1#x as int) AS col1#x]
-            +- Project [col1#x]
-               +- LocalRelation [col1#x]
+Sort [c#x ASC NULLS FIRST], true
++- Project [c#x, col1#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Sort [col1#x ASC NULLS FIRST], true
+         +- Aggregate [col1#x, 2], [col1#x AS c#x, 2 AS col1#x]
+            +- SubqueryAlias v1
+               +- View (`v1`, [col1#x])
+                  +- Project [cast(col1#x as int) AS col1#x]
+                     +- Project [col1#x]
+                        +- LocalRelation [col1#x]
 
 
 -- !query
-SELECT col1 AS c, 2 AS col1 FROM v1 GROUP BY ALL HAVING col1 > 50
+SELECT * FROM (
+  SELECT col1 AS c, 2 AS col1 FROM v1 GROUP BY ALL HAVING col1 > 50
+) ORDER BY 1
 -- !query analysis
-Filter (c#x > 50)
-+- Aggregate [col1#x, 2], [col1#x AS c#x, 2 AS col1#x]
-   +- SubqueryAlias v1
-      +- View (`v1`, [col1#x])
-         +- Project [cast(col1#x as int) AS col1#x]
-            +- Project [col1#x]
-               +- LocalRelation [col1#x]
+Sort [c#x ASC NULLS FIRST], true
++- Project [c#x, col1#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Filter (c#x > 50)
+         +- Aggregate [col1#x, 2], [col1#x AS c#x, 2 AS col1#x]
+            +- SubqueryAlias v1
+               +- View (`v1`, [col1#x])
+                  +- Project [cast(col1#x as int) AS col1#x]
+                     +- Project [col1#x]
+                        +- LocalRelation [col1#x]
 
 
 -- !query
@@ -180,15 +195,20 @@ Sort [c#x ASC NULLS FIRST], true
 
 
 -- !query
-SELECT col1 AS c, 2 AS col1, 3 AS col1 FROM v1 GROUP BY ALL HAVING col1 > 50
+SELECT * FROM (
+  SELECT col1 AS c, 2 AS col1, 3 AS col1 FROM v1 GROUP BY ALL HAVING col1 > 50
+) ORDER BY 1
 -- !query analysis
-Filter (c#x > 50)
-+- Aggregate [col1#x, 2, 3], [col1#x AS c#x, 2 AS col1#x, 3 AS col1#x]
-   +- SubqueryAlias v1
-      +- View (`v1`, [col1#x])
-         +- Project [cast(col1#x as int) AS col1#x]
-            +- Project [col1#x]
-               +- LocalRelation [col1#x]
+Sort [c#x ASC NULLS FIRST], true
++- Project [c#x, col1#x, col1#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Filter (c#x > 50)
+         +- Aggregate [col1#x, 2, 3], [col1#x AS c#x, 2 AS col1#x, 3 AS col1#x]
+            +- SubqueryAlias v1
+               +- View (`v1`, [col1#x])
+                  +- Project [cast(col1#x as int) AS col1#x]
+                     +- Project [col1#x]
+                        +- LocalRelation [col1#x]
 
 
 -- !query
@@ -216,15 +236,20 @@ Sort [col1#x ASC NULLS FIRST], true
 
 
 -- !query
-SELECT col1, 2 AS col1 FROM v1 GROUP BY ALL HAVING col1 > 50
+SELECT * FROM (
+  SELECT col1, 2 AS col1 FROM v1 GROUP BY ALL HAVING col1 > 50
+) ORDER BY 1
 -- !query analysis
-Filter (col1#x > 50)
-+- Aggregate [col1#x, 2], [col1#x, 2 AS col1#x]
-   +- SubqueryAlias v1
-      +- View (`v1`, [col1#x])
-         +- Project [cast(col1#x as int) AS col1#x]
-            +- Project [col1#x]
-               +- LocalRelation [col1#x]
+Sort [col1#x ASC NULLS FIRST], true
++- Project [col1#x, col1#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Filter (col1#x > 50)
+         +- Aggregate [col1#x, 2], [col1#x, 2 AS col1#x]
+            +- SubqueryAlias v1
+               +- View (`v1`, [col1#x])
+                  +- Project [cast(col1#x as int) AS col1#x]
+                     +- Project [col1#x]
+                        +- LocalRelation [col1#x]
 
 
 -- !query
@@ -357,39 +382,54 @@ Filter (col1#x > banana)
 
 
 -- !query
-SELECT col1 AS c, 'col1' FROM v2 ORDER BY col1
+SELECT * FROM (
+  SELECT col1 AS c, 'col1' FROM v2 ORDER BY col1
+) ORDER BY 1
 -- !query analysis
-Sort [col1#x ASC NULLS FIRST], true
-+- Project [col1#x AS c#x, col1 AS col1#x]
-   +- SubqueryAlias v2
-      +- View (`v2`, [col1#x])
-         +- Project [cast(col1#x as string) AS col1#x]
-            +- Project [col1#x]
-               +- LocalRelation [col1#x]
+Sort [c#x ASC NULLS FIRST], true
++- Project [c#x, col1#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Sort [col1#x ASC NULLS FIRST], true
+         +- Project [col1#x AS c#x, col1 AS col1#x]
+            +- SubqueryAlias v2
+               +- View (`v2`, [col1#x])
+                  +- Project [cast(col1#x as string) AS col1#x]
+                     +- Project [col1#x]
+                        +- LocalRelation [col1#x]
 
 
 -- !query
-SELECT col1 AS c, 'col1' FROM v2 GROUP BY ALL ORDER BY col1
+SELECT * FROM (
+  SELECT col1 AS c, 'col1' FROM v2 GROUP BY ALL ORDER BY col1
+) ORDER BY 1
 -- !query analysis
-Sort [col1#x ASC NULLS FIRST], true
-+- Aggregate [col1#x, col1], [col1#x AS c#x, col1 AS col1#x]
-   +- SubqueryAlias v2
-      +- View (`v2`, [col1#x])
-         +- Project [cast(col1#x as string) AS col1#x]
-            +- Project [col1#x]
-               +- LocalRelation [col1#x]
+Sort [c#x ASC NULLS FIRST], true
++- Project [c#x, col1#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Sort [col1#x ASC NULLS FIRST], true
+         +- Aggregate [col1#x, col1], [col1#x AS c#x, col1 AS col1#x]
+            +- SubqueryAlias v2
+               +- View (`v2`, [col1#x])
+                  +- Project [cast(col1#x as string) AS col1#x]
+                     +- Project [col1#x]
+                        +- LocalRelation [col1#x]
 
 
 -- !query
-SELECT col1 AS c, 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana'
+SELECT * FROM (
+  SELECT col1 AS c, 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana'
+) ORDER BY 1
 -- !query analysis
-Filter (c#x > banana)
-+- Aggregate [col1#x, col1], [col1#x AS c#x, col1 AS col1#x]
-   +- SubqueryAlias v2
-      +- View (`v2`, [col1#x])
-         +- Project [cast(col1#x as string) AS col1#x]
-            +- Project [col1#x]
-               +- LocalRelation [col1#x]
+Sort [c#x ASC NULLS FIRST], true
++- Project [c#x, col1#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Filter (c#x > banana)
+         +- Aggregate [col1#x, col1], [col1#x AS c#x, col1 AS col1#x]
+            +- SubqueryAlias v2
+               +- View (`v2`, [col1#x])
+                  +- Project [cast(col1#x as string) AS col1#x]
+                     +- Project [col1#x]
+                        +- LocalRelation [col1#x]
 
 
 -- !query
@@ -473,15 +513,20 @@ Sort [c#x ASC NULLS FIRST], true
 
 
 -- !query
-SELECT col1 AS c, 'col1', 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana'
+SELECT * FROM (
+  SELECT col1 AS c, 'col1', 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana'
+) ORDER BY 1
 -- !query analysis
-Filter (c#x > banana)
-+- Aggregate [col1#x, col1, col1], [col1#x AS c#x, col1 AS col1#x, col1 AS col1#x]
-   +- SubqueryAlias v2
-      +- View (`v2`, [col1#x])
-         +- Project [cast(col1#x as string) AS col1#x]
-            +- Project [col1#x]
-               +- LocalRelation [col1#x]
+Sort [c#x ASC NULLS FIRST], true
++- Project [c#x, col1#x, col1#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Filter (c#x > banana)
+         +- Aggregate [col1#x, col1, col1], [col1#x AS c#x, col1 AS col1#x, col1 AS col1#x]
+            +- SubqueryAlias v2
+               +- View (`v2`, [col1#x])
+                  +- Project [cast(col1#x as string) AS col1#x]
+                     +- Project [col1#x]
+                        +- LocalRelation [col1#x]
 
 
 -- !query
@@ -509,15 +554,20 @@ Sort [col1#x ASC NULLS FIRST], true
 
 
 -- !query
-SELECT col1, 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana'
+SELECT * FROM (
+  SELECT col1, 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana'
+) ORDER BY 1
 -- !query analysis
-Filter (col1#x > banana)
-+- Aggregate [col1#x, col1], [col1#x, col1 AS col1#x]
-   +- SubqueryAlias v2
-      +- View (`v2`, [col1#x])
-         +- Project [cast(col1#x as string) AS col1#x]
-            +- Project [col1#x]
-               +- LocalRelation [col1#x]
+Sort [col1#x ASC NULLS FIRST], true
++- Project [col1#x, col1#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Filter (col1#x > banana)
+         +- Aggregate [col1#x, col1], [col1#x, col1 AS col1#x]
+            +- SubqueryAlias v2
+               +- View (`v2`, [col1#x])
+                  +- Project [cast(col1#x as string) AS col1#x]
+                     +- Project [col1#x]
+                        +- LocalRelation [col1#x]
 
 
 -- !query
