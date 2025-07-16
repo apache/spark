@@ -134,8 +134,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
   }
 
   private def runStateVarChecks(
-                                 sourceOptions: StateSourceOptions,
-                                 stateStoreMetadata: Array[StateMetadataTableEntry]): Unit = {
+      sourceOptions: StateSourceOptions,
+      stateStoreMetadata: Array[StateMetadataTableEntry]): Unit = {
     def runTWSChecks(opMetadata: StateMetadataTableEntry): Unit = {
       // if the operator is transformWithState, but the operator properties are empty, then
       // the user has not defined any state variables for the operator
@@ -583,7 +583,6 @@ object StateSourceOptions extends DataSourceOptions {
       case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
     }
   }
-
 
   // Modifies options due to external data. Returns modified options.
   // If this is a join operator specifying a store name using state format v3,
