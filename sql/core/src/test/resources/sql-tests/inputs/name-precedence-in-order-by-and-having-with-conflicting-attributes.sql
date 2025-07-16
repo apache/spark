@@ -20,11 +20,17 @@ SELECT 2 AS col1 FROM v1 GROUP BY ALL ORDER BY col1;
 
 SELECT 2 AS col1 FROM v1 GROUP BY ALL HAVING col1 > 50;
 
-SELECT col1 AS c, 2 AS col1 FROM v1 ORDER BY col1;
+SELECT * FROM (
+  SELECT col1 AS c, 2 AS col1 FROM v1 ORDER BY col1
+) ORDER BY 1;
 
-SELECT col1 AS c, 2 AS col1 FROM v1 GROUP BY ALL ORDER BY col1;
+SELECT * FROM (
+  SELECT col1 AS c, 2 AS col1 FROM v1 GROUP BY ALL ORDER BY col1
+) ORDER BY 1;
 
-SELECT col1 AS c, 2 AS col1 FROM v1 GROUP BY ALL HAVING col1 > 50;
+SELECT * FROM (
+  SELECT col1 AS c, 2 AS col1 FROM v1 GROUP BY ALL HAVING col1 > 50
+) ORDER BY 1;
 
 -- Conflict in main output
 
@@ -38,13 +44,17 @@ SELECT col1 AS c, 2 AS col1, 3 AS col1 FROM v1 ORDER BY col1;
 
 SELECT col1 AS c, 2 AS col1, 3 AS col1 FROM v1 GROUP BY ALL ORDER BY col1;
 
-SELECT col1 AS c, 2 AS col1, 3 AS col1 FROM v1 GROUP BY ALL HAVING col1 > 50;
+SELECT * FROM (
+  SELECT col1 AS c, 2 AS col1, 3 AS col1 FROM v1 GROUP BY ALL HAVING col1 > 50
+) ORDER BY 1;
 
 SELECT col1, 2 AS col1 FROM v1 ORDER BY col1;
 
 SELECT col1, 2 AS col1 FROM v1 GROUP BY ALL ORDER BY col1;
 
-SELECT col1, 2 AS col1 FROM v1 GROUP BY ALL HAVING col1 > 50;
+SELECT * FROM (
+  SELECT col1, 2 AS col1 FROM v1 GROUP BY ALL HAVING col1 > 50
+) ORDER BY 1;
 
 -- Conflict in hidden output
 
@@ -70,11 +80,17 @@ SELECT 'col1' FROM v2 GROUP BY ALL ORDER BY col1;
 
 SELECT 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana';
 
-SELECT col1 AS c, 'col1' FROM v2 ORDER BY col1;
+SELECT * FROM (
+  SELECT col1 AS c, 'col1' FROM v2 ORDER BY col1
+) ORDER BY 1;
 
-SELECT col1 AS c, 'col1' FROM v2 GROUP BY ALL ORDER BY col1;
+SELECT * FROM (
+  SELECT col1 AS c, 'col1' FROM v2 GROUP BY ALL ORDER BY col1
+) ORDER BY 1;
 
-SELECT col1 AS c, 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana';
+SELECT * FROM (
+  SELECT col1 AS c, 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana'
+) ORDER BY 1;
 
 -- Conflict in main output
 
@@ -88,13 +104,17 @@ SELECT col1 AS c, 'col1', 'col1' FROM v2 ORDER BY col1;
 
 SELECT col1 AS c, 'col1', 'col1' FROM v2 GROUP BY ALL ORDER BY col1;
 
-SELECT col1 AS c, 'col1', 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana';
+SELECT * FROM (
+  SELECT col1 AS c, 'col1', 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana'
+) ORDER BY 1;
 
 SELECT col1, 'col1' FROM v2 ORDER BY col1;
 
 SELECT col1, 'col1' FROM v2 GROUP BY ALL ORDER BY col1;
 
-SELECT col1, 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana';
+SELECT * FROM (
+  SELECT col1, 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana'
+) ORDER BY 1;
 
 -- Conflict in hidden output
 
