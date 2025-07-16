@@ -982,6 +982,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  lazy val COLLATION_AGNOSTIC_HASHING_ENABLED =
+    buildConf("spark.sql.collation.collationAgnosticHashing.enabled")
+      .doc("Enables collation agnostic hashing for collated strings for Murmur3Hash and XxHash64" +
+        " user-facing expressions.")
+      .version("4.0.1")
+      .booleanConf
+      .createWithDefault(true)
+
   val ICU_CASE_MAPPINGS_ENABLED =
     buildConf("spark.sql.icu.caseMappings.enabled")
       .doc("When enabled we use the ICU library (instead of the JVM) to implement case mappings" +

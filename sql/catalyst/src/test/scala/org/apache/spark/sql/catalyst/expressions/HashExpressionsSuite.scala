@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CollationFactory, DateTimeUtils, GenericArrayData, IntervalUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, StructType, _}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -91,7 +92,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   def checkHiveHash(input: Any, dataType: DataType, expected: Long): Unit = {
     // Note : All expected hashes need to be computed using Hive 1.2.1
-    val actual = HiveHashFunction.hash(input, dataType, seed = 0)
+    val actual = HiveHashFunction.hash(input, dataType, seed = 0, isCollationAware = true)
 
     withClue(s"hash mismatch for input = `$input` of type `$dataType`.") {
       assert(actual == expected)
@@ -621,7 +622,37 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   for (collation <- Seq("UTF8_LCASE", "UNICODE_CI", "UTF8_BINARY")) {
-    test(s"hash check for collated $collation strings") {
+    test(s"hash check for collated $collation strings - collation aware") {
+      val s1 = "aaa"
+      val s2 = "AAA"
+
+      val murmur3Hash1 = CollationAwareMurmur3Hash(
+        Seq(Collate(Literal(s1), ResolvedCollation(collation))),
+        42
+      )
+      val murmur3Hash2 = CollationAwareMurmur3Hash(
+        Seq(Collate(Literal(s2), ResolvedCollation(collation))),
+        42
+      )
+
+      // Interpreted hash values for s1 and s2
+      val interpretedHash1 = murmur3Hash1.eval()
+      val interpretedHash2 = murmur3Hash2.eval()
+
+      // Check that interpreted and codegen hashes are equal
+      checkEvaluation(murmur3Hash1, interpretedHash1)
+      checkEvaluation(murmur3Hash2, interpretedHash2)
+
+      if (CollationFactory.fetchCollation(collation).isUtf8BinaryType) {
+        assert(interpretedHash1 != interpretedHash2)
+      } else {
+        assert(interpretedHash1 == interpretedHash2)
+      }
+    }
+  }
+
+  for (collation <- Seq("UTF8_LCASE", "UNICODE_CI", "UTF8_BINARY")) {
+    test(s"hash check for collated $collation strings - collation agnostic") {
       val s1 = "aaa"
       val s2 = "AAA"
 
@@ -636,10 +667,74 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(murmur3Hash1, interpretedHash1)
       checkEvaluation(murmur3Hash2, interpretedHash2)
 
-      if (CollationFactory.fetchCollation(collation).isUtf8BinaryType) {
-        assert(interpretedHash1 != interpretedHash2)
-      } else {
-        assert(interpretedHash1 == interpretedHash2)
+      assert(interpretedHash1 != interpretedHash2)
+
+      // Check that the hash computed is the same as the UTF8_BINARY version of it.
+      if (!CollationFactory.fetchCollation(collation).isUtf8BinaryType) {
+        Seq[String](s1, s2).foreach { s =>
+          val utf8BinaryStringExpr = Collate(Literal(s), ResolvedCollation("UTF8_BINARY"))
+          val murmur3HashBinary = Murmur3Hash(Seq(utf8BinaryStringExpr), 42)
+          val hashBinary = murmur3HashBinary.eval()
+          val murmur3Hash = Murmur3Hash(Seq(Collate(Literal(s), ResolvedCollation(collation))), 42)
+          val interpretedHash = murmur3Hash.eval()
+          assert(interpretedHash == hashBinary)
+        }
+      }
+    }
+  }
+
+  // Below we test the `Murmur3Hash` and `XxHash64` expressions for the old behavior before the fix.
+  // The expected values have been computed using the old implementation of the expression.
+  test("always collation aware hash expression") {
+    withSQLConf(SQLConf.COLLATION_AGNOSTIC_HASHING_ENABLED.key -> "false") {
+      val testCases = Seq[(String, String, Int, Long)](
+        // UTF8_BINARY
+        ("AAA", "UTF8_BINARY", 22125783, 3965631622972380050L),
+        ("AAA  ", "UTF8_BINARY", 399014599, 196039582279068044L),
+        ("aaa", "UTF8_BINARY", -1689629761, 2465751751477118478L),
+        ("aaa   ", "UTF8_BINARY", -1721438718, -2249763606958050730L),
+        // UTF8_BINARY_RTRIM
+        ("AAA", "UTF8_BINARY_RTRIM", -1493064582, 982928955165138586L),
+        ("AAA  ", "UTF8_BINARY_RTRIM", -1493064582, 982928955165138586L),
+        ("aaa", "UTF8_BINARY_RTRIM", 2132077201, -4940759280126763524L),
+        ("aaa   ", "UTF8_BINARY_RTRIM", 2132077201, -4940759280126763524L),
+        // UTF8_LCASE
+        ("AAA", "UTF8_LCASE", 2132077201, -4940759280126763524L),
+        ("AAA  ", "UTF8_LCASE", -619073595, -1146641051608991690L),
+        ("aaa", "UTF8_LCASE", 2132077201, -4940759280126763524L),
+        ("aaa   ", "UTF8_LCASE", -1498994355, -739345240752106297L),
+        // UTF8_LCASE_RTRIM
+        ("AAA", "UTF8_LCASE_RTRIM", 2132077201, -4940759280126763524L),
+        ("AAA  ", "UTF8_LCASE_RTRIM", 2132077201, -4940759280126763524L),
+        ("aaa", "UTF8_LCASE_RTRIM", 2132077201, -4940759280126763524L),
+        ("aaa   ", "UTF8_LCASE_RTRIM", 2132077201, -4940759280126763524L),
+        // UNICODE
+        ("AAA", "UNICODE", -1327180905, 16805125465392203L),
+        ("AAA  ", "UNICODE", -350461590, 5544233715607598421L),
+        ("aaa", "UNICODE", -273694131, 3658327516500833011L),
+        ("aaa   ", "UNICODE", 2066032879, 8855535431863588476L),
+        // UNICODE_RTRIM
+        ("AAA", "UNICODE_RTRIM", -1327180905, 16805125465392203L),
+        ("AAA  ", "UNICODE_RTRIM", -1327180905, 16805125465392203L),
+        ("aaa", "UNICODE_RTRIM", -273694131, 3658327516500833011L),
+        ("aaa   ", "UNICODE_RTRIM", -273694131, 3658327516500833011L),
+        // UNICODE_CI
+        ("AAA", "UNICODE_CI", 916306139, 8904561200245968094L),
+        ("AAA  ", "UNICODE_CI", -553252967, -1748848902857348313L),
+        ("aaa", "UNICODE_CI", 916306139, 8904561200245968094L),
+        ("aaa   ", "UNICODE_CI", -1236999165, -3290967075179141112L),
+        // UNICODE_CI_RTRIM
+        ("AAA", "UNICODE_CI_RTRIM", 916306139, 8904561200245968094L),
+        ("AAA  ", "UNICODE_CI_RTRIM", 916306139, 8904561200245968094L),
+        ("aaa", "UNICODE_CI_RTRIM", 916306139, 8904561200245968094L),
+        ("aaa   ", "UNICODE_CI_RTRIM", 916306139, 8904561200245968094L)
+      )
+      testCases.foreach { case (str, collationName, expectedMurmur3, expectedXxHash64) =>
+        val stringExpr = Collate(Literal(str), ResolvedCollation(collationName))
+        val murmur3Expr = Murmur3Hash(Seq(stringExpr), 42)
+        checkEvaluation(murmur3Expr, expectedMurmur3)
+        val xxHash64Expr = XxHash64(Seq(stringExpr), 42L)
+        checkEvaluation(xxHash64Expr, expectedXxHash64)
       }
     }
   }
