@@ -1537,11 +1537,21 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("context dependent foldable") {
-    val array = Literal.create(Seq(1L, 2L, 3L), ArrayType(LongType))
+    val array = Literal.create(Seq("1", "2", "3"), ArrayType(StringType))
+    val dateArray = Literal.create(Seq(
+      Date.valueOf("2023-01-01"),
+      Date.valueOf("2023-01-02"),
+      Date.valueOf("2023-01-03")), ArrayType(DateType))
     val targetArrayType = ArrayType(TimestampType, containsNull = true)
+
     val map = Literal.create(
       Map("a" -> "123", "b" -> "true", "c" -> "f"),
       MapType(StringType, StringType, valueContainsNull = true))
+    val dateMap = Literal.create(
+      Map("a" -> Date.valueOf("2023-01-01"),
+        "b" -> Date.valueOf("2023-01-02"),
+        "c" -> Date.valueOf("2023-01-03")),
+      MapType(StringType, DateType, valueContainsNull = true))
     val targetMapType = MapType(StringType, TimestampType, valueContainsNull = true)
     val struct = Literal.create(
       Row(1, "2", true, null),
@@ -1550,17 +1560,27 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         StructField("b", StringType),
         StructField("c", BooleanType),
         StructField("d", NullType))))
+    val dateStruct = Literal.create(
+      Row(1, Date.valueOf("2023-01-02"), true, null),
+      StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", DateType),
+        StructField("c", BooleanType),
+        StructField("d", NullType))))
     val targetStructType = StructType(Seq(
       StructField("a", StringType),
       StructField("b", TimestampType),
       StructField("c", BooleanType),
       StructField("d", BooleanType)))
     Seq(
-      cast(Literal(1L), TimestampType),
       cast(Literal("abc"), TimestampType),
+      cast(Literal(Date.valueOf("2023-01-01")), TimestampType),
       cast(array, targetArrayType),
+      cast(dateArray, targetArrayType),
       cast(map, targetMapType),
-      cast(struct, targetStructType)
+      cast(dateMap, targetMapType),
+      cast(struct, targetStructType),
+      cast(dateStruct, targetStructType)
     ).foreach { expr =>
       assert(expr.foldable, s"Expression $expr should be foldable")
       assert(!expr.contextIndependentFoldable,
