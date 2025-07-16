@@ -2814,6 +2814,22 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "limit" -> toSQLValue(limit, IntegerType)))
   }
 
+  def approxTopKSketchSizeUnmatched(size1: Int, size2: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "APPROX_TOP_K_SKETCH_SIZE_UNMATCHED",
+      messageParameters = Map(
+        "leftSize" -> toSQLValue(size1, IntegerType),
+        "rightSize" -> toSQLValue(size2, IntegerType)))
+  }
+
+  def approxTopKSketchTypeUnmatched(leftType: String, rightType: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
+      messageParameters = Map(
+        "leftType" -> toSQLType(leftType),
+        "rightType" -> toSQLType(rightType)))
+  }
+
   def mergeCardinalityViolationError(): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "MERGE_CARDINALITY_VIOLATION",

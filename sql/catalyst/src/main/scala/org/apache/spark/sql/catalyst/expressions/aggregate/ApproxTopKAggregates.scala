@@ -21,7 +21,6 @@ import org.apache.datasketches.common._
 import org.apache.datasketches.frequencies.{ErrorType, ItemsSketch}
 import org.apache.datasketches.memory.Memory
 
-import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
@@ -521,11 +520,10 @@ class CombineInternal[T](
     if (this.itemDataType == null) {
       this.itemDataType = dataType
     } else if (this.itemDataType != dataType) {
-      throw new SparkUnsupportedOperationException(
-        errorClass = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
-        messageParameters = Map(
-          "type1" -> this.itemDataType.typeName,
-          "type2" -> dataType.typeName))
+      throw QueryExecutionErrors.approxTopKSketchTypeUnmatched(
+        this.itemDataType.typeName,
+        dataType.typeName
+      )
     }
   }
 
@@ -550,7 +548,7 @@ class CombineInternal[T](
   """,
   examples = """
     Examples:
-      > SELECT approx_top_k_estimate(_FUNC_(sketch)) FROM (SELECT approx_top_k_accumulate(expr) AS sketch FROM VALUES (0), (0), (1), (1) AS tab(expr) UNION ALL SELECT approx_top_k_accumulate(expr) AS sketch FROM VALUES (2), (3), (4), (4) AS tab(expr));
+      > SELECT approx_top_k_estimate(_FUNC_(sketch, 10000), 5) FROM (SELECT approx_top_k_accumulate(expr) AS sketch FROM VALUES (0), (0), (1), (1) AS tab(expr) UNION ALL SELECT approx_top_k_accumulate(expr) AS sketch FROM VALUES (2), (3), (4), (4) AS tab(expr));
        [{"item":0,"count":2},{"item":4,"count":2},{"item":1,"count":2},{"item":2,"count":1},{"item":3,"count":1}]
   """,
   group = "agg_funcs",
@@ -645,21 +643,19 @@ case class ApproxTopKCombine(
         buffer.setMaxItemsTracked(input.getMaxItemsTracked)
       }
       if (buffer.getMaxItemsTracked != input.getMaxItemsTracked) {
-        throw new SparkUnsupportedOperationException(
-          errorClass = "APPROX_TOP_K_SKETCH_SIZE_UNMATCHED",
-          messageParameters = Map(
-            "size1" -> buffer.getMaxItemsTracked.toString,
-            "size2" -> input.getMaxItemsTracked.toString))
+        throw QueryExecutionErrors.approxTopKSketchSizeUnmatched(
+          buffer.getMaxItemsTracked,
+          input.getMaxItemsTracked
+        )
       }
     }
     // check item data type
     if (buffer.getItemDataType != null && input.getItemDataType != null &&
       buffer.getItemDataType != input.getItemDataType) {
-      throw new SparkUnsupportedOperationException(
-        errorClass = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
-        messageParameters = Map(
-          "type1" -> buffer.getItemDataType.typeName,
-          "type2" -> input.getItemDataType.typeName))
+      throw QueryExecutionErrors.approxTopKSketchTypeUnmatched(
+        buffer.getItemDataType.typeName,
+        input.getItemDataType.typeName
+      )
     } else if (buffer.getItemDataType == null) {
       // If buffer is a placeholder sketch, set it to the input sketch's item data type
       buffer.setItemDataType(input.getItemDataType)
@@ -669,14 +665,8 @@ case class ApproxTopKCombine(
   }
 
   override def eval(buffer: CombineInternal[Any]): Any = {
-    val sketchBytes = try {
+    val sketchBytes =
       buffer.getSketch.toByteArray(ApproxTopK.genSketchSerDe(buffer.getItemDataType))
-    } catch {
-      case _: ArrayStoreException =>
-        throw new SparkUnsupportedOperationException(
-          errorClass = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED"
-        )
-    }
     val maxItemsTracked = buffer.getMaxItemsTracked
     val typeCode = ApproxTopK.dataTypeToBytes(buffer.getItemDataType)
     InternalRow.apply(sketchBytes, null, maxItemsTracked, typeCode)
@@ -716,4 +706,7 @@ case class ApproxTopKCombine(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def nullable: Boolean = false
+
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("approx_top_k_combine")
 }
