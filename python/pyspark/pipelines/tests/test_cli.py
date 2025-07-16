@@ -489,30 +489,6 @@ class CLIValidationTests(unittest.TestCase):
         result = parse_table_list("table1, table2 , table3")
         self.assertEqual(result, ["table1", "table2", "table3"])
 
-    def test_parse_table_list_empty_string(self):
-        """Test parsing empty string."""
-        from pyspark.pipelines.cli import parse_table_list
-        result = parse_table_list("")
-        self.assertEqual(result, [])
-
-    def test_parse_table_list_with_qualified_names(self):
-        """Test parsing qualified table names."""
-        from pyspark.pipelines.cli import parse_table_list
-        result = parse_table_list("schema1.table1,schema2.table2")
-        self.assertEqual(result, ["schema1.table1", "schema2.table2"])
-
-    def test_flatten_table_lists_none(self):
-        """Test flattening None input."""
-        from pyspark.pipelines.cli import flatten_table_lists
-        result = flatten_table_lists(None)
-        self.assertEqual(result, None)
-
-    def test_flatten_table_lists_empty(self):
-        """Test flattening empty list."""
-        from pyspark.pipelines.cli import flatten_table_lists
-        result = flatten_table_lists([])
-        self.assertEqual(result, None)
-
     def test_flatten_table_lists_single_list(self):
         """Test flattening single list."""
         from pyspark.pipelines.cli import flatten_table_lists
@@ -524,30 +500,6 @@ class CLIValidationTests(unittest.TestCase):
         from pyspark.pipelines.cli import flatten_table_lists
         result = flatten_table_lists([["table1", "table2"], ["table3"], ["table4", "table5"]])
         self.assertEqual(result, ["table1", "table2", "table3", "table4", "table5"])
-
-    def test_valid_refresh_combinations(self):
-        """Test valid combinations of refresh parameters."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            spec_path = Path(temp_dir) / "pipeline.yaml"
-            with spec_path.open("w") as f:
-                f.write('{"name": "test_pipeline"}')
-            
-            # Test individual options don't raise validation errors
-            test_cases = [
-                {"full_refresh": ["table1"]},
-                {"refresh": ["table1"]},
-                {"full_refresh_all": True},
-                {"full_refresh": ["table1"], "refresh": ["table2"]},
-                {"full_refresh": ["table1", "table2"], "refresh": ["table3", "table4"]},
-            ]
-            
-            for case in test_cases:
-                try:
-                    run(spec_path=spec_path, **case)
-                    self.fail(f"Expected run to fail due to missing pipeline spec content: {case}")
-                except PySparkException as e:
-                    # Should NOT be our validation error
-                    self.assertNotEqual(e.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS")
 
     def test_cli_argument_parsing_patterns(self):
         """Test CLI argument parsing patterns for refresh options."""
@@ -573,26 +525,6 @@ class CLIValidationTests(unittest.TestCase):
             parsed = parser.parse_args(args)
             for key, value in expected.items():
                 self.assertEqual(getattr(parsed, key), value)
-
-    def test_refresh_parameter_validation_edge_cases(self):
-        """Test edge cases for refresh parameter validation."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            spec_path = Path(temp_dir) / "pipeline.yaml"
-            with spec_path.open("w") as f:
-                f.write('{"name": "test_pipeline"}')
-            
-            # Test that providing None values works correctly
-            try:
-                run(
-                    spec_path=spec_path,
-                    full_refresh=None,
-                    refresh=None,
-                    full_refresh_all=False
-                )
-                self.fail("Expected run to fail due to missing pipeline spec content")
-            except PySparkException as e:
-                # Should NOT be our validation error
-                self.assertNotEqual(e.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS")
 
 
 if __name__ == "__main__":

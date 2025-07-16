@@ -26,7 +26,6 @@ import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
 import org.apache.spark.sql.pipelines.utils.PipelineTest
 
-
 class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
 
   override def afterEach(): Unit = {
@@ -130,12 +129,14 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
     new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(spark))
 
   def startPipelineAndWaitForCompletion(
-     graphId: String,
-     customStartRunCommand: Option[PipelineCommand.StartRun] = None): ArrayBuffer[PipelineEvent] = {
+      graphId: String,
+      customStartRunCommand: Option[PipelineCommand.StartRun] = None)
+      : ArrayBuffer[PipelineEvent] = {
     withClient { client =>
       val capturedEvents = new ArrayBuffer[PipelineEvent]()
-      val startRunRequest = buildStartRunPlan(customStartRunCommand.getOrElse(
-        PipelineCommand.StartRun.newBuilder().setDataflowGraphId(graphId).build()))
+      val startRunRequest = buildStartRunPlan(
+        customStartRunCommand.getOrElse(
+          PipelineCommand.StartRun.newBuilder().setDataflowGraphId(graphId).build()))
       val responseIterator = client.execute(startRunRequest)
       // The response iterator will be closed when the pipeline is completed.
       while (responseIterator.hasNext) {

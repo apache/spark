@@ -234,12 +234,13 @@ private[connect] object PipelinesHandler extends Logging {
     // Convert table names to fully qualified TableIdentifier objects
     def parseTableNames(tableNames: Seq[String]): Set[TableIdentifier] = {
       tableNames.map { name =>
-        GraphIdentifierManager.parseAndQualifyTableIdentifier(
-          rawTableIdentifier =
-            GraphIdentifierManager.parseTableIdentifier(name, sessionHolder.session),
-          currentCatalog = Some(graphElementRegistry.defaultCatalog),
-          currentDatabase = Some(graphElementRegistry.defaultDatabase)
-        ).identifier
+        GraphIdentifierManager
+          .parseAndQualifyTableIdentifier(
+            rawTableIdentifier =
+              GraphIdentifierManager.parseTableIdentifier(name, sessionHolder.session),
+            currentCatalog = Some(graphElementRegistry.defaultCatalog),
+            currentDatabase = Some(graphElementRegistry.defaultDatabase))
+          .identifier
       }.toSet
     }
 
@@ -261,8 +262,7 @@ private[connect] object PipelinesHandler extends Logging {
       if (intersection.nonEmpty) {
         throw new IllegalArgumentException(
           "Datasets specified for refresh and full refresh cannot overlap: " +
-            s"${intersection.mkString(", ")}"
-        )
+            s"${intersection.mkString(", ")}")
       }
     }
 
@@ -281,7 +281,7 @@ private[connect] object PipelinesHandler extends Logging {
         NoTables
       } else {
         AllTables
-     }
+      }
 
     // We will use this variable to store the run failure event if it occurs. This will be set
     // by the event callback.
@@ -342,8 +342,7 @@ private[connect] object PipelinesHandler extends Logging {
       graphElementRegistry.toDataflowGraph,
       eventCallback,
       refreshTablesFilter,
-      fullRefreshTablesFilter
-    )
+      fullRefreshTablesFilter)
     sessionHolder.cachePipelineExecution(dataflowGraphId, pipelineUpdateContext)
     pipelineUpdateContext.pipelineExecution.runPipeline()
 
