@@ -22,8 +22,9 @@ import java.time.LocalDateTime
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ByteType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, TimestampNTZType, TimestampType}
 
 
 class ApproxTopKSuite extends QueryTest with SharedSparkSession {
@@ -469,7 +470,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       )
   }
 
-  test("SPARK-52798T: among different number or datetime types - fail at combine") {
+  test("SPARK-52798: among different number or datetime types - fail at combine") {
     def checkMixedTypeError(mixedTypeSeq: Seq[(String, String, Seq[Any])]): Unit = {
       for (i <- 0 until mixedTypeSeq.size - 1) {
         for (j <- i + 1 until mixedTypeSeq.size) {
@@ -481,7 +482,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
               sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned;").collect()
             },
             condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
-            parameters = Map("type1" -> type1, "type2" -> type2)
+            parameters = Map("type1" -> toSQLType(type1), "type2" -> toSQLType(type2))
           )
         }
       }
@@ -519,7 +520,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       )
   }
 
-  gridTest("SPARK-52798T: number vs string - fail at combine")(mixedNumberTypeSeqs) {
+  gridTest("SPARK-52798: number vs string - fail at combine")(mixedNumberTypeSeqs) {
     case (type1, _, seq1) =>
       setupMixedTypeAccumulation(seq1, Seq("'a'", "'b'", "'c'", "'c'", "'c'", "'c'", "'d'", "'d'"))
       checkError(
@@ -527,7 +528,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
           sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned;").collect()
         },
         condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
-        parameters = Map("type1" -> type1, "type2" -> StringType.typeName)
+        parameters = Map("type1" -> toSQLType(type1), "type2" -> toSQLType(StringType))
       )
   }
 
@@ -555,7 +556,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       )
   }
 
-  gridTest("SPARK-52798T: datetime vs string - fail at combine")(mixedDateTimeSeqs) {
+  gridTest("SPARK-52798: datetime vs string - fail at combine")(mixedDateTimeSeqs) {
     case (type1, _, seq1) =>
       setupMixedTypeAccumulation(seq1, Seq("'a'", "'b'", "'c'", "'c'", "'c'", "'c'", "'d'", "'d'"))
       checkError(
@@ -563,7 +564,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
           sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned;").collect()
         },
         condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
-        parameters = Map("type1" -> type1, "type2" -> StringType.typeName)
+        parameters = Map("type1" -> toSQLType(type1), "type2" -> toSQLType(StringType))
       )
   }
 
@@ -595,5 +596,12 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
     val seq1 = Seq("'a'", "'b'", "'c'", "'c'", "'c'", "'c'", "'d'", "'d'")
     val seq2 = Seq("(true)", "(true)", "(false)", "(false)")
     setupMixedTypeAccumulation(seq1, seq2)
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned;").collect()
+      },
+      condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
+      parameters = Map("type1" -> toSQLType(StringType), "type2" -> toSQLType(BooleanType))
+    )
   }
 }
