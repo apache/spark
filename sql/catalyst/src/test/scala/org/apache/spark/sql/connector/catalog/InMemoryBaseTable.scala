@@ -23,6 +23,7 @@ import java.util
 import java.util.OptionalLong
 
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import com.google.common.base.Objects
 
@@ -50,7 +51,7 @@ import org.apache.spark.util.ArrayImplicits._
  */
 abstract class InMemoryBaseTable(
     val name: String,
-    override val columns: Array[Column],
+    val initialColumns: Array[Column],
     override val partitioning: Array[Transform],
     override val properties: util.Map[String, String],
     override val constraints: Array[Constraint] = Array.empty,
@@ -67,6 +68,10 @@ abstract class InMemoryBaseTable(
 
   // Stores the table version validated during the last `ALTER TABLE ... ADD CONSTRAINT` operation.
   private var validatedTableVersion: String = null
+
+  private var tableColumns: Array[Column] = initialColumns
+
+  override def columns(): Array[Column] = tableColumns
 
   override def currentVersion(): String = currentTableVersion.toString
 
@@ -114,7 +119,7 @@ abstract class InMemoryBaseTable(
     }
   }
 
-  override val schema: StructType = CatalogV2Util.v2ColumnsToStructType(columns)
+  override def schema(): StructType = CatalogV2Util.v2ColumnsToStructType(columns())
 
   // purposely exposes a metadata column that conflicts with a data column in some tests
   override val metadataColumns: Array[MetadataColumn] = Array(IndexColumn, PartitionKeyColumn)
@@ -126,6 +131,8 @@ abstract class InMemoryBaseTable(
 
   private val allowUnsupportedTransforms =
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
+
+  private val acceptAnySchema = properties.getOrDefault("accept-any-schema", "false").toBoolean
 
   partitioning.foreach {
     case _: IdentityTransform =>
@@ -257,9 +264,9 @@ abstract class InMemoryBaseTable(
       val newRows = new BufferedRows(to)
       rows.rows.foreach { r =>
         val newRow = new GenericInternalRow(r.numFields)
-        for (i <- 0 until r.numFields) newRow.update(i, r.get(i, schema(i).dataType))
+        for (i <- 0 until r.numFields) newRow.update(i, r.get(i, schema()(i).dataType))
         for (i <- 0 until partitionSchema.length) {
-          val j = schema.fieldIndex(partitionSchema(i).name)
+          val j = schema().fieldIndex(partitionSchema(i).name)
           newRow.update(j, to(i))
         }
         newRows.withRow(newRow)
@@ -331,7 +338,7 @@ abstract class InMemoryBaseTable(
     this
   }
 
-  override def capabilities: util.Set[TableCapability] = util.EnumSet.of(
+  def baseCapabiilities: Set[TableCapability] = Set(
     TableCapability.BATCH_READ,
     TableCapability.BATCH_WRITE,
     TableCapability.STREAMING_WRITE,
@@ -339,6 +346,14 @@ abstract class InMemoryBaseTable(
     TableCapability.OVERWRITE_DYNAMIC,
     TableCapability.TRUNCATE,
     TableCapability.ACCEPT_ANY_SCHEMA)
+
+  override def capabilities(): util.Set[TableCapability] = {
+    if (acceptAnySchema) {
+      (baseCapabiilities ++ Set(TableCapability.ACCEPT_ANY_SCHEMA)).asJava
+    } else {
+      baseCapabiilities.asJava
+    }
+  }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new InMemoryScanBuilder(schema, options)
@@ -558,7 +573,12 @@ abstract class InMemoryBaseTable(
         advisoryPartitionSize.getOrElse(0)
       }
 
-      override def toBatch: BatchWrite = writer
+      override def toBatch: BatchWrite = {
+        val newSchema = info.schema()
+        tableColumns = CatalogV2Util.structTypeToV2Columns(
+          mergeSchema(CatalogV2Util.v2ColumnsToStructType(columns()), newSchema))
+        writer
+      }
 
       override def toStreaming: StreamingWrite = streamingWriter match {
         case exc: StreamingNotSupportedOperation => exc.throwsException()
@@ -571,6 +591,17 @@ abstract class InMemoryBaseTable(
 
       override def reportDriverMetrics(): Array[CustomTaskMetric] = {
         Array(new InMemoryCustomDriverTaskMetric(rows.size))
+      }
+
+      def mergeSchema(oldType: StructType, newType: StructType): StructType = {
+        val (oldFields, newFields) = (oldType.fields, newType.fields)
+
+        // this does not override the old field with the new field with same name for now
+        val nameToFieldMap = oldFields.map (f => f.name -> f).toMap
+        val remainingNewFields = newFields.filterNot (f => nameToFieldMap.contains (f.name) )
+
+        // Create the merged struct with the new fields are appended at the end of the struct.
+        StructType (oldFields ++ remainingNewFields)
       }
     }
   }
