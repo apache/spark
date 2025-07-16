@@ -1524,7 +1524,7 @@ case class Cast(
         (c, evPrim, evNull) =>
           code"""
             Decimal $tmp = Decimal.apply(
-              scala.math.BigDecimal.valueOf((double)$c / $NANOS_PER_SECOND));
+              scala.math.BigDecimal.valueOf(${timeToDoubleCode(c)}));
             ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
       case DecimalType() =>
@@ -1774,6 +1774,8 @@ case class Cast(
   private[this] def timestampToDoubleCode(ts: ExprValue): Block =
     code"$ts / (double)$MICROS_PER_SECOND"
 
+  private[this] def timeToDoubleCode(ts: ExprValue): Block =
+    code"$ts / (double)$NANOS_PER_SECOND"
   private[this] def timeToLongCode(timeValue: ExprValue): Block =
     code"Math.floorDiv($timeValue, ${NANOS_PER_SECOND}L)"
 
