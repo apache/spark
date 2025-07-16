@@ -451,7 +451,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkRuntimeException] {
         comb.collect()
       },
-      condition = "APPROX_TOP_K_SKETCH_SIZE_UNMATCHED",
+      condition = "APPROX_TOP_K_SKETCH_SIZE_NOT_MATCH",
       parameters = Map("size1" -> "10", "size2" -> "20")
     )
   }
@@ -481,7 +481,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
             exception = intercept[SparkRuntimeException] {
               sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned;").collect()
             },
-            condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
+            condition = "APPROX_TOP_K_SKETCH_TYPE_NOT_MATCH",
             parameters = Map("type1" -> toSQLType(type1), "type2" -> toSQLType(type2))
           )
         }
@@ -527,7 +527,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
         exception = intercept[SparkRuntimeException] {
           sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned;").collect()
         },
-        condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
+        condition = "APPROX_TOP_K_SKETCH_TYPE_NOT_MATCH",
         parameters = Map("type1" -> toSQLType(type1), "type2" -> toSQLType(StringType))
       )
   }
@@ -563,7 +563,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
         exception = intercept[SparkRuntimeException] {
           sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned;").collect()
         },
-        condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
+        condition = "APPROX_TOP_K_SKETCH_TYPE_NOT_MATCH",
         parameters = Map("type1" -> toSQLType(type1), "type2" -> toSQLType(StringType))
       )
   }
@@ -600,7 +600,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkRuntimeException] {
         sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned;").collect()
       },
-      condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
+      condition = "APPROX_TOP_K_SKETCH_TYPE_NOT_MATCH",
       parameters = Map("type1" -> toSQLType(StringType), "type2" -> toSQLType(BooleanType))
     )
   }

@@ -520,7 +520,7 @@ class CombineInternal[T](
     if (this.itemDataType == null) {
       this.itemDataType = dataType
     } else if (this.itemDataType != dataType) {
-      throw QueryExecutionErrors.approxTopKSketchTypeUnmatched(this.itemDataType, dataType)
+      throw QueryExecutionErrors.approxTopKSketchTypeNotMatch(this.itemDataType, dataType)
     }
   }
 
@@ -640,7 +640,7 @@ case class ApproxTopKCombine(
         buffer.setMaxItemsTracked(input.getMaxItemsTracked)
       }
       if (buffer.getMaxItemsTracked != input.getMaxItemsTracked) {
-        throw QueryExecutionErrors.approxTopKSketchSizeUnmatched(
+        throw QueryExecutionErrors.approxTopKSketchSizeNotMatch(
           buffer.getMaxItemsTracked,
           input.getMaxItemsTracked
         )
@@ -649,7 +649,7 @@ case class ApproxTopKCombine(
     // check item data type
     if (buffer.getItemDataType != null && input.getItemDataType != null &&
       buffer.getItemDataType != input.getItemDataType) {
-      throw QueryExecutionErrors.approxTopKSketchTypeUnmatched(
+      throw QueryExecutionErrors.approxTopKSketchTypeNotMatch(
         buffer.getItemDataType,
         input.getItemDataType
       )

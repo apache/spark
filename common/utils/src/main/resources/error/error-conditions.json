@@ -114,13 +114,13 @@
     ],
     "sqlState" : "22004"
   },
-  "APPROX_TOP_K_SKETCH_SIZE_UNMATCHED" : {
+  "APPROX_TOP_K_SKETCH_SIZE_NOT_MATCH" : {
     "message" : [
       "Combining approx_top_k sketches of different sizes is not allowed. Found sketches of size <size1> and <size2>."
     ],
     "sqlState" : "42846"
   },
-  "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED" : {
+  "APPROX_TOP_K_SKETCH_TYPE_NOT_MATCH" : {
     "message" : [
       "Combining approx_top_k sketches of different types is not allowed. Found sketches of type <type1> and <type2>."
     ],
