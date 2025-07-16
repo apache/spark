@@ -532,16 +532,19 @@ class ArrowTableToRowsConversion:
         assert schema is not None and isinstance(schema, StructType)
 
         fields = schema.fieldNames()
-        field_converters = [
-            ArrowTableToRowsConversion._create_converter(f.dataType) for f in schema.fields
-        ]
 
-        columnar_data = [
-            [conv(v) for v in column.to_pylist()]
-            for column, conv in zip(table.columns, field_converters)
-        ]
+        if len(fields) > 0:
+            field_converters = [
+                ArrowTableToRowsConversion._create_converter(f.dataType) for f in schema.fields
+            ]
 
-        if len(columnar_data) > 0:
-            return [_create_row(fields, tuple(cols)) for cols in zip(*columnar_data)]
+            columnar_data = [
+                [conv(v) for v in column.to_pylist()]
+                for column, conv in zip(table.columns, field_converters)
+            ]
+
+            rows = [_create_row(fields, tuple(cols)) for cols in zip(*columnar_data)]
+            assert len(rows) == table.num_rows, f"{len(rows)}, {table.num_rows}"
+            return rows
         else:
-            return [Row()] * table.num_rows
+            return [_create_row(fields, tuple())] * table.num_rows
