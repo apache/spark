@@ -806,9 +806,7 @@ case class StateStoreId(
   }
 
   override def toString: String = {
-    s"""StateStoreId[ checkpointRootLocation=$checkpointRootLocation, operatorId=$operatorId,
-       | partitionId=$partitionId, storeName=$storeName ]
-       |""".stripMargin.replaceAll("\n", "")
+    s"StateStoreId[ operatorId=$operatorId, partitionId=$partitionId, storeName=$storeName ]"
   }
 }
 
