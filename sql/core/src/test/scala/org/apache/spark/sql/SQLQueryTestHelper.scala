@@ -119,7 +119,7 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
     if (deterministic) {
       // Perform query analysis, but also get rid of the #1234 expression IDs that show up in the
       // resolved plans.
-      withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> "100") {
+      withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> Int.MaxValue.toString) {
         (schema, Seq(replaceNotIncludedMsg(analyzed.toString)))
       }
     } else {

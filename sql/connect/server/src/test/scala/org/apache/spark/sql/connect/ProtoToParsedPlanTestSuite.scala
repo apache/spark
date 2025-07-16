@@ -199,7 +199,7 @@ class ProtoToParsedPlanTestSuite
         }
         Helper.execute(catalystPlan)
       }
-      val actual = withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> "100") {
+      val actual = withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> Int.MaxValue.toString) {
         removeMemoryAddress(normalizeExprIds(finalAnalyzedPlan).treeString)
       }
       val goldenFile = goldenFilePath.resolve(relativePath).getParent.resolve(name + ".explain")
