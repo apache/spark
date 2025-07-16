@@ -1022,6 +1022,36 @@ class jsonProtocolSuite extends SparkFunSuite {
       "String value length (10000) exceeds the maximum allowed"
     ))
   }
+
+  test("SPARK-52381: handle class not found") {
+    val unknownJson =
+      """{
+        |  "Event" : "com.example.UnknownEvent",
+        |  "foo" : "foo"
+        |}""".stripMargin
+    try {
+      jsonProtocol.sparkEventFromJson(unknownJson)
+      fail("Expected ClassNotFoundException for unknown event type")
+    } catch {
+      case e: ClassNotFoundException =>
+    }
+  }
+
+  test("SPARK-52381: only read classes that extend SparkListenerEvent") {
+    val unknownJson =
+      """{
+        |  "Event" : "org.apache.spark.SparkException",
+        |  "foo" : "foo"
+        |}""".stripMargin
+    try {
+      jsonProtocol.sparkEventFromJson(unknownJson)
+      fail("Expected SparkException for unknown event type")
+    } catch {
+      case e: SparkException =>
+        assert(e.getMessage.startsWith("Unknown event type"))
+    }
+  }
+
 }
 
 

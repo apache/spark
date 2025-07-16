@@ -1596,6 +1596,18 @@ package object config {
       .intConf
       .createWithDefault(Integer.MAX_VALUE)
 
+  private[spark] val SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD =
+    ConfigBuilder("spark.shuffle.spill.maxRecordsSizeForSpillThreshold")
+      .internal()
+      .doc("The maximum size in memory before forcing the shuffle sorter to spill. " +
+        "By default it is Long.MAX_VALUE, which means we never force the sorter to spill, " +
+        "until we reach some limitations, like the max page size limitation for the pointer " +
+        "array in the sorter.")
+      .version("4.1.0")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(v => v > 0, "The threshold should be positive.")
+      .createWithDefault(Long.MaxValue)
+
   private[spark] val SHUFFLE_MAP_OUTPUT_PARALLEL_AGGREGATION_THRESHOLD =
     ConfigBuilder("spark.shuffle.mapOutput.parallelAggregationThreshold")
       .internal()
@@ -2846,4 +2858,30 @@ package object config {
       .checkValues(Set("connect", "classic"))
       .createWithDefault(
         if (sys.env.get("SPARK_CONNECT_MODE").contains("1")) "connect" else "classic")
+
+  private[spark] val DRIVER_REDIRECT_CONSOLE_OUTPUTS =
+    ConfigBuilder("spark.driver.log.redirectConsoleOutputs")
+      .doc("Comma-separated list of the console output kind for driver that needs to redirect " +
+        "to logging system. Supported values are `stdout`, `stderr`. It only takes affect when " +
+        s"`${PLUGINS.key}` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.")
+      .version("4.1.0")
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .toSequence
+      .checkValue(v => v.forall(Set("stdout", "stderr").contains),
+        "The value only can be one or more of 'stdout, stderr'.")
+      .createWithDefault(Seq("stdout", "stderr"))
+
+  private[spark] val EXEC_REDIRECT_CONSOLE_OUTPUTS =
+    ConfigBuilder("spark.executor.log.redirectConsoleOutputs")
+      .doc("Comma-separated list of the console output kind for executor that needs to redirect " +
+        "to logging system. Supported values are `stdout`, `stderr`. It only takes affect when " +
+        s"`${PLUGINS.key}` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.")
+      .version("4.1.0")
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .toSequence
+      .checkValue(v => v.forall(Set("stdout", "stderr").contains),
+        "The value only can be one or more of 'stdout, stderr'.")
+      .createWithDefault(Seq("stdout", "stderr"))
 }

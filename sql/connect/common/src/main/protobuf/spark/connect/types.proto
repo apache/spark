@@ -69,7 +69,12 @@ message DataType {
 
     // UnparsedDataType
     Unparsed unparsed = 24;
+
+    Time time = 28;
   }
+
+  // Reserved for geometry and geography types
+  reserved 26, 27;
 
   message Boolean {
     uint32 type_variation_reference = 1;
@@ -122,6 +127,11 @@ message DataType {
 
   message TimestampNTZ {
     uint32 type_variation_reference = 1;
+  }
+
+  message Time {
+    optional int32 precision = 1;
+    uint32 type_variation_reference = 2;
   }
 
   message CalendarInterval {

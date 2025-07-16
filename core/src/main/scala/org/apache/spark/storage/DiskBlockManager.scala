@@ -316,7 +316,7 @@ private[spark] class DiskBlockManager(
         throw SparkCoreErrors.failToCreateDirectoryError(dirToCreate.getAbsolutePath, maxAttempts)
       }
       try {
-        dirToCreate.mkdirs()
+        Utils.createDirectory(dirToCreate)
         Files.setPosixFilePermissions(
           dirToCreate.toPath, PosixFilePermissions.fromString("rwxrwx---"))
         if (dirToCreate.exists()) {

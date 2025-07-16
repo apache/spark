@@ -347,6 +347,10 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
         checkIfSelfReferenceIsPlacedCorrectly(right, cteId, allowRecursiveRef = false)
       case Aggregate(_, _, child, _) =>
         checkIfSelfReferenceIsPlacedCorrectly(child, cteId, allowRecursiveRef = false)
+      case Window(_, _, _, child, _) =>
+        checkIfSelfReferenceIsPlacedCorrectly(child, cteId, allowRecursiveRef = false)
+      case Sort(_, _, child, _) =>
+        checkIfSelfReferenceIsPlacedCorrectly(child, cteId, allowRecursiveRef = false)
       case r: UnionLoopRef if !allowRecursiveRef && r.loopId == cteId =>
         throw new AnalysisException(
           errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",

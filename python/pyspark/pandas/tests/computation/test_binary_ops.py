@@ -208,7 +208,11 @@ class FrameBinaryOpsMixin:
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: 1 / psdf["a"])
 
     def test_binary_operator_floordiv(self):
-        psdf = ps.DataFrame({"a": ["x"], "b": [1]})
+        pdf = pd.DataFrame({"a": ["x"], "b": [1], "c": [1.0], "d": [0]})
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(pdf["b"] // 0, psdf["b"] // 0)
+        self.assert_eq(pdf["c"] // 0, psdf["c"] // 0)
+        self.assert_eq(pdf["d"] // 0, psdf["d"] // 0)
 
         ks_err_msg = "Floor division can not be applied to strings"
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] // psdf["b"])
@@ -221,10 +225,12 @@ class FrameBinaryOpsMixin:
 
     def test_binary_operator_mod(self):
         # Positive
-        pdf = pd.DataFrame({"a": [3], "b": [2]})
+        pdf = pd.DataFrame({"a": [3], "b": [2], "c": [0]})
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(psdf["a"] % psdf["b"], pdf["a"] % pdf["b"])
+        self.assert_eq(psdf["a"] % 0, pdf["a"] % 0)
+        self.assert_eq(1 % psdf["c"], 1 % pdf["c"])
 
         # Negative
         psdf = ps.DataFrame({"a": ["x"], "b": [1]})

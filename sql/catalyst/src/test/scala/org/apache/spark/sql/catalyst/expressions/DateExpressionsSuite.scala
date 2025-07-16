@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{DateTimeException, Duration, Instant, LocalDate, LocalDateTime, Period, ZoneId}
+import java.time.{DateTimeException, Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
@@ -483,32 +483,33 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val timeZoneId = Option(zid.getId)
         sdf.setTimeZone(TimeZone.getTimeZone(zid))
         checkEvaluation(
-          TimeAdd(
+          TimestampAddInterval(
             timestampLiteral("2016-01-29 10:00:00.000", sdf, dt),
             Literal(new CalendarInterval(1, 2, 123000L)),
             timeZoneId),
           timestampAnswer("2016-03-02 10:00:00.123", sdf, dt))
 
         checkEvaluation(
-          TimeAdd(
+          TimestampAddInterval(
             Literal.create(null, dt),
             Literal(new CalendarInterval(1, 2, 123000L)),
             timeZoneId),
           null)
         checkEvaluation(
-          TimeAdd(
+          TimestampAddInterval(
             timestampLiteral("2016-01-29 10:00:00.000", sdf, dt),
             Literal.create(null, CalendarIntervalType),
             timeZoneId),
           null)
         checkEvaluation(
-          TimeAdd(
+          TimestampAddInterval(
             Literal.create(null, dt),
             Literal.create(null, CalendarIntervalType),
             timeZoneId),
           null)
         checkConsistencyBetweenInterpretedAndCodegen(
-          (start: Expression, interval: Expression) => TimeAdd(start, interval, timeZoneId),
+          (start: Expression, interval: Expression) =>
+            TimestampAddInterval(start, interval, timeZoneId),
           dt, CalendarIntervalType)
       }
     }
@@ -521,28 +522,28 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       sdf.setTimeZone(TimeZone.getTimeZone(zid))
 
       checkEvaluation(
-        TimeAdd(
+        TimestampAddInterval(
           Literal(new Timestamp(sdf.parse("2016-03-31 10:00:00.000").getTime)),
           UnaryMinus(Literal(new CalendarInterval(1, 0, 0))),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2016-02-29 10:00:00.000").getTime)))
       checkEvaluation(
-        TimeAdd(
+        TimestampAddInterval(
           Literal(new Timestamp(sdf.parse("2016-03-31 10:00:00.000").getTime)),
           UnaryMinus(Literal(new CalendarInterval(1, 1, 0))),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2016-02-28 10:00:00.000").getTime)))
       checkEvaluation(
-        TimeAdd(
+        TimestampAddInterval(
           Literal(new Timestamp(sdf.parse("2016-03-30 00:00:01.000").getTime)),
           UnaryMinus(Literal(new CalendarInterval(1, 0, 2000000.toLong))),
           timeZoneId),
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse("2016-02-28 23:59:59.000").getTime)))
       checkEvaluation(
-        TimeAdd(
+        TimestampAddInterval(
           Literal(new Timestamp(sdf.parse("2016-03-30 00:00:01.000").getTime)),
           UnaryMinus(Literal(new CalendarInterval(1, 1, 2000000.toLong))),
           timeZoneId),
@@ -550,25 +551,25 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           new Timestamp(sdf.parse("2016-02-27 23:59:59.000").getTime)))
 
       checkEvaluation(
-        TimeAdd(
+        TimestampAddInterval(
           Literal.create(null, TimestampType),
           UnaryMinus(Literal(new CalendarInterval(1, 2, 123000L))),
           timeZoneId),
         null)
       checkEvaluation(
-        TimeAdd(
+        TimestampAddInterval(
           Literal(new Timestamp(sdf.parse("2016-01-29 10:00:00.000").getTime)),
           UnaryMinus(Literal.create(null, CalendarIntervalType)),
           timeZoneId),
         null)
       checkEvaluation(
-        TimeAdd(
+        TimestampAddInterval(
           Literal.create(null, TimestampType),
           UnaryMinus(Literal.create(null, CalendarIntervalType)),
           timeZoneId),
         null)
       checkConsistencyBetweenInterpretedAndCodegen((start: Expression, interval: Expression) =>
-        TimeAdd(start, UnaryMinus(interval), timeZoneId),
+        TimestampAddInterval(start, UnaryMinus(interval), timeZoneId),
         TimestampType, CalendarIntervalType)
     }
   }
@@ -1800,13 +1801,13 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val timeZoneId = Option(zid.getId)
         sdf.setTimeZone(TimeZone.getTimeZone(zid))
         checkEvaluation(
-          TimeAdd(
+          TimestampAddInterval(
             timestampLiteral("2021-01-01 00:00:00.123", sdf, dt),
             Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(321)),
             timeZoneId),
           timestampAnswer("2021-01-11 00:10:00.444", sdf, dt))
         checkEvaluation(
-          TimeAdd(
+          TimestampAddInterval(
             timestampLiteral("2021-01-01 00:10:00.123", sdf, dt),
             Literal(Duration.ofDays(-10).minusMinutes(9).minusMillis(120)),
             timeZoneId),
@@ -1814,7 +1815,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
         val e = intercept[Exception] {
           checkEvaluation(
-            TimeAdd(
+            TimestampAddInterval(
               timestampLiteral("2021-01-01 00:00:00.123", sdf, dt),
               Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
               timeZoneId),
@@ -1824,26 +1825,26 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         assert(e.getMessage.contains("long overflow"))
 
         checkEvaluation(
-          TimeAdd(
+          TimestampAddInterval(
             Literal.create(null, dt),
             Literal(Duration.ofDays(1)),
             timeZoneId),
           null)
         checkEvaluation(
-          TimeAdd(
+          TimestampAddInterval(
             timestampLiteral("2021-01-01 00:00:00.123", sdf, dt),
             Literal.create(null, DayTimeIntervalType()),
             timeZoneId),
           null)
         checkEvaluation(
-          TimeAdd(
+          TimestampAddInterval(
             Literal.create(null, dt),
             Literal.create(null, DayTimeIntervalType()),
             timeZoneId),
           null)
         dayTimeIntervalTypes.foreach { it =>
           checkConsistencyBetweenInterpretedAndCodegen((ts: Expression, interval: Expression) =>
-            TimeAdd(ts, interval, timeZoneId), dt, it)
+            TimestampAddInterval(ts, interval, timeZoneId), dt, it)
         }
       }
     }
@@ -2139,5 +2140,21 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           TimestampType, TimestampType)
       }
     }
+  }
+
+  test("make timestamp_ntz from date and time") {
+    def dateLit(d: String): Expression = Literal(LocalDate.parse(d))
+    def timeLit(t: String): Expression = Literal(LocalTime.parse(t))
+    def tsNtz(s: String): Long = localDateTimeToMicros(LocalDateTime.parse(s), UTC)
+
+    checkEvaluation(MakeTimestampNTZ(dateLit("1970-01-01"), timeLit("00:00:00")), 0L)
+    checkEvaluation(MakeTimestampNTZ(dateLit("2025-06-20"), timeLit("15:20:30.123456")),
+      tsNtz("2025-06-20T15:20:30.123456"))
+    checkEvaluation(MakeTimestampNTZ(Literal(null, DateType), timeLit("15:20:30.123456")),
+      null)
+    checkEvaluation(MakeTimestampNTZ(dateLit("2025-06-20"), Literal(null, TimeType())),
+      null)
+    checkEvaluation(MakeTimestampNTZ(Literal(null, DateType), Literal(null, TimeType())),
+      null)
   }
 }

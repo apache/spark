@@ -32,3 +32,10 @@ SELECT to_csv(named_struct('n', 1, 'info', X'4561736F6E2059616F20323031382D31312
 -- !query analysis
 Project [to_csv(named_struct(n, 1, info, 0x4561736F6E2059616F20323031382D31312D31373A31333A33333A3333), Some(America/Los_Angeles)) AS to_csv(named_struct(n, 1, info, X'4561736F6E2059616F20323031382D31312D31373A31333A33333A3333'))#x]
 +- OneRowRelation
+
+
+-- !query
+select to_xml(named_struct('name', binary('Eason'), 'birth', 2018, 'org', binary('Kindergarten Cop')))
+-- !query analysis
+Project [to_xml(named_struct(name, cast(Eason as binary), birth, 2018, org, cast(Kindergarten Cop as binary)), Some(America/Los_Angeles)) AS to_xml(named_struct(name, Eason, birth, 2018, org, Kindergarten Cop))#x]
++- OneRowRelation

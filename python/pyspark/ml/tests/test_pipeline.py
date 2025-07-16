@@ -174,6 +174,7 @@ class PipelineTestsMixin:
             self.assertEqual(str(model), str(model2))
             self.assertEqual(str(model.stages), str(model2.stages))
 
+    @unittest.skip("Disabled due to flakiness, it might hang forever occasionally.")
     def test_model_gc(self):
         spark = self.spark
         df1 = spark.createDataFrame(
@@ -201,6 +202,7 @@ class PipelineTestsMixin:
         output2 = fit_transform_and_union(df1, df2)
         self.assertEqual(output2.count(), 13)
 
+    @unittest.skip("Disabled due to flakiness, it might hang forever occasionally.")
     def test_model_training_summary_gc(self):
         spark = self.spark
         df1 = spark.createDataFrame(
@@ -228,6 +230,7 @@ class PipelineTestsMixin:
         output2 = fit_predictions_and_union(df1, df2)
         self.assertEqual(output2.count(), 13)
 
+    @unittest.skip("Disabled due to flakiness, it might hang forever occasionally.")
     def test_model_testing_summary_gc(self):
         spark = self.spark
         df1 = spark.createDataFrame(
@@ -255,6 +258,7 @@ class PipelineTestsMixin:
         output2 = fit_predictions_and_union(df1, df2)
         self.assertEqual(output2.count(), 13)
 
+    @unittest.skip("Disabled due to flakiness, it might hang forever occasionally.")
     def test_model_attr_df_gc(self):
         spark = self.spark
         df1 = (

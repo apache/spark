@@ -24,7 +24,6 @@ import java.nio.file.{Files, Paths}
 import scala.sys.process._
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
@@ -143,7 +142,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
     val outDir = new File(targetDir)
     if (!outDir.exists()) {
-      outDir.mkdirs()
+      Utils.createDirectory(outDir)
     }
 
     // propagate exceptions up to the caller of getFileFromUrl
@@ -200,7 +199,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
     if (PROCESS_TABLES.testingVersions.isEmpty) {
       if (PROCESS_TABLES.isPythonVersionAvailable) {
-        if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
+        if (Utils.isJavaVersionAtMost17) {
           logError("Fail to get the latest Spark versions to test.")
         } else {
           logInfo("Skip tests because old Spark versions don't support Java 21.")
@@ -265,7 +264,7 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
     "https://dist.apache.org/repos/dist/release")
   // Tests the latest version of every release line if Java version is at most 17.
   val testingVersions: Seq[String] = if (isPythonVersionAvailable &&
-      SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
+      Utils.isJavaVersionAtMost17) {
     import scala.io.Source
     val sparkVersionPattern = """<a href="spark-(\d.\d.\d)/">""".r
     try Utils.tryWithResource(
