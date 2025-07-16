@@ -1477,7 +1477,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
 
         def generate_data_batches(batches):
             """
-            Deserialize ArrowRecordBatches and return a generator of Rows.
+            Deserialize ArrowRecordBatches and return a generator of pandas.Series list.
 
             The deserialization logic assumes that Arrow RecordBatches contain the data with the
             ordering that data chunks for same grouping key will appear sequentially.
