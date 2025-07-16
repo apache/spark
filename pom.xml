@@ -116,6 +116,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <java.version>17</java.version>
+    <java.minimum.version>17.0.11</java.minimum.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
     <maven.version>3.9.10</maven.version>
     <exec-maven-plugin.version>3.5.1</exec-maven-plugin.version>
@@ -2629,7 +2630,8 @@
                     <version>${maven.version}</version>
                   </requireMavenVersion>
                   <requireJavaVersion>
-                    <version>${java.version}</version>
+                    <version>[${java.minimum.version},)</version>
+                    <message>The Java version used to build the project is outdated. Please use ${java.minimum.version} or later.</message>
                   </requireJavaVersion>
                   <bannedDependencies>
                     <excludes>
