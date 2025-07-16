@@ -19,7 +19,10 @@ package org.apache.spark.sql.connect.planner
 
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
+import org.apache.spark.connect.proto
+import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
+import org.apache.spark.sql.types._
 
 class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
 
@@ -28,6 +31,60 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     for (v <- values) {
       assertResult(v)(
         LiteralValueProtoConverter.toCatalystValue(LiteralValueProtoConverter.toLiteralProto(v)))
+    }
+  }
+
+  for (optionalDataTypeEnabled <- Seq(false, true)) {
+    LiteralValueProtoConverter.forTest.withOptionalDataType(optionalDataTypeEnabled) {
+      Seq(
+        (Array(true, false, true), ArrayType(BooleanType)),
+        (Array(1.toByte, 2.toByte, 3.toByte), ArrayType(ByteType)),
+        (Array(1.toShort, 2.toShort, 3.toShort), ArrayType(ShortType)),
+        (Array(1, 2, 3), ArrayType(IntegerType)),
+        (Array(1L, 2L, 3L), ArrayType(LongType)),
+        (Array(1.1d, 2.1d, 3.1d), ArrayType(DoubleType)),
+        (Array(1.1f, 2.1f, 3.1f), ArrayType(FloatType)),
+        (Array(Array[Int](), Array(1, 2, 3), Array(4, 5, 6)), ArrayType(ArrayType(IntegerType))),
+        (Array(Array(1, 2, 3), Array(4, 5, 6), Array[Int]()), ArrayType(ArrayType(IntegerType))),
+        (
+          Array(Array(Array(Array(Array(Array(1, 2, 3)))))),
+          ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(IntegerType))))))),
+        (Array(Map(1 -> 2)), ArrayType(MapType(IntegerType, IntegerType))),
+        (Map[Int, Int](), MapType(IntegerType, IntegerType)),
+        (Map(1 -> 2, 3 -> 4, 5 -> 6), MapType(IntegerType, IntegerType))).zipWithIndex.foreach {
+        case ((v, t), idx) =>
+          test(
+            s"complex proto value and catalyst value conversion #$idx - " +
+              s"optionalDataTypeEnabled = $optionalDataTypeEnabled") {
+            assertResult(v)(
+              LiteralValueProtoConverter.toCatalystValue(
+                LiteralValueProtoConverter.toLiteralProto(v, t)))
+          }
+      }
+
+      test(
+        "invalid array literal - empty array - " +
+          s"optionalDataTypeEnabled = $optionalDataTypeEnabled") {
+        val literalProto = proto.Expression.Literal
+          .newBuilder()
+          .setArray(proto.Expression.Literal.Array.newBuilder())
+          .build()
+        intercept[InvalidPlanInput] {
+          LiteralValueProtoConverter.toCatalystValue(literalProto)
+        }
+      }
+
+      test(
+        "invalid map literal - " +
+          s"optionalDataTypeEnabled = $optionalDataTypeEnabled") {
+        val literalProto = proto.Expression.Literal
+          .newBuilder()
+          .setMap(proto.Expression.Literal.Map.newBuilder())
+          .build()
+        intercept[InvalidPlanInput] {
+          LiteralValueProtoConverter.toCatalystValue(literalProto)
+        }
+      }
     }
   }
 }

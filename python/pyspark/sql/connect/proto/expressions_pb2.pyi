@@ -475,7 +475,10 @@ class Expression(google.protobuf.message.Message):
             ELEMENT_TYPE_FIELD_NUMBER: builtins.int
             ELEMENTS_FIELD_NUMBER: builtins.int
             @property
-            def element_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            def element_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+                """(Optional) The element type of the array. Only need to set this when the elements are
+                empty, since spark 4.1+ supports inferring the element type from the elements.
+                """
             @property
             def elements(
                 self,
@@ -489,14 +492,25 @@ class Expression(google.protobuf.message.Message):
                 elements: collections.abc.Iterable[global___Expression.Literal] | None = ...,
             ) -> None: ...
             def HasField(
-                self, field_name: typing_extensions.Literal["element_type", b"element_type"]
+                self,
+                field_name: typing_extensions.Literal[
+                    "_element_type", b"_element_type", "element_type", b"element_type"
+                ],
             ) -> builtins.bool: ...
             def ClearField(
                 self,
                 field_name: typing_extensions.Literal[
-                    "element_type", b"element_type", "elements", b"elements"
+                    "_element_type",
+                    b"_element_type",
+                    "element_type",
+                    b"element_type",
+                    "elements",
+                    b"elements",
                 ],
             ) -> None: ...
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["_element_type", b"_element_type"]
+            ) -> typing_extensions.Literal["element_type"] | None: ...
 
         class Map(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -506,9 +520,15 @@ class Expression(google.protobuf.message.Message):
             KEYS_FIELD_NUMBER: builtins.int
             VALUES_FIELD_NUMBER: builtins.int
             @property
-            def key_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            def key_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+                """(Optional) The key type of the map. Only need to set this when the keys are
+                empty, since spark 4.1+ supports inferring the key type from the keys
+                """
             @property
-            def value_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            def value_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+                """(Optional) The value type of the map. Only need to set this when the values are
+                empty, since spark 4.1+ supports inferring the value type from the values.
+                """
             @property
             def keys(
                 self,
@@ -532,12 +552,23 @@ class Expression(google.protobuf.message.Message):
             def HasField(
                 self,
                 field_name: typing_extensions.Literal[
-                    "key_type", b"key_type", "value_type", b"value_type"
+                    "_key_type",
+                    b"_key_type",
+                    "_value_type",
+                    b"_value_type",
+                    "key_type",
+                    b"key_type",
+                    "value_type",
+                    b"value_type",
                 ],
             ) -> builtins.bool: ...
             def ClearField(
                 self,
                 field_name: typing_extensions.Literal[
+                    "_key_type",
+                    b"_key_type",
+                    "_value_type",
+                    b"_value_type",
                     "key_type",
                     b"key_type",
                     "keys",
@@ -548,6 +579,14 @@ class Expression(google.protobuf.message.Message):
                     b"values",
                 ],
             ) -> None: ...
+            @typing.overload
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["_key_type", b"_key_type"]
+            ) -> typing_extensions.Literal["key_type"] | None: ...
+            @typing.overload
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["_value_type", b"_value_type"]
+            ) -> typing_extensions.Literal["value_type"] | None: ...
 
         class Struct(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor

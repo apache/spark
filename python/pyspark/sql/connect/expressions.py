@@ -29,6 +29,7 @@ from typing import (
     Optional,
 )
 
+import os
 import json
 import decimal
 import datetime
@@ -84,6 +85,9 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.window import WindowSpec
     from pyspark.sql.connect.plan import LogicalPlan
 
+_optional_data_types_for_map_and_array_literals_enabled = (
+    os.getenv("CONNECT_OPTIONAL_DATATYPE_FOR_MAP_AND_ARRAY_LITERALS_ENABLED", "false") == "true"
+)
 
 class Expression:
     """
@@ -426,11 +430,26 @@ class LiteralExpression(Expression):
             assert dataType is None or isinstance(dataType, DayTimeIntervalType)
             return DayTimeIntervalType().fromInternal(literal.day_time_interval)
         elif literal.HasField("array"):
-            elementType = proto_schema_to_pyspark_data_type(literal.array.element_type)
+            elements = literal.array.elements
+            result = []
             if dataType is not None:
                 assert isinstance(dataType, ArrayType)
-                assert elementType == dataType.elementType
-            return [LiteralExpression._to_value(v, elementType) for v in literal.array.elements]
+                elementType = dataType.elementType
+            elif literal.array.HasField("element_type"):
+                elementType = proto_schema_to_pyspark_data_type(literal.array.element_type)
+            elif len(elements) > 0:
+                result.append(LiteralExpression._to_value(elements[0], None))
+                elements = elements[1:]
+                elementType = LiteralExpression._infer_type(result[0])
+            else:
+                raise PySparkTypeError(
+                    errorClass="CANNOT_INFER_ARRAY_ELEMENT_TYPE",
+                    messageParameters={},
+                )
+
+            for element in elements:
+                result.append(LiteralExpression._to_value(element, elementType))
+            return result
 
         raise PySparkTypeError(
             errorClass="UNSUPPORTED_LITERAL",
@@ -475,11 +494,11 @@ class LiteralExpression(Expression):
         elif isinstance(self._dataType, DayTimeIntervalType):
             expr.literal.day_time_interval = int(self._value)
         elif isinstance(self._dataType, ArrayType):
-            element_type = self._dataType.elementType
-            expr.literal.array.element_type.CopyFrom(pyspark_types_to_proto_types(element_type))
+            if not _optional_data_types_for_map_and_array_literals_enabled or len(self._value) == 0:
+                expr.literal.array.element_type.CopyFrom(pyspark_types_to_proto_types(self._dataType.elementType))
             for v in self._value:
                 expr.literal.array.elements.append(
-                    LiteralExpression(v, element_type).to_plan(session).literal
+                    LiteralExpression(v, self._dataType.elementType).to_plan(session).literal
                 )
         else:
             raise PySparkTypeError(
