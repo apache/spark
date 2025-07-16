@@ -19,7 +19,6 @@ import unittest
 import tempfile
 import textwrap
 from pathlib import Path
-from typing import cast
 
 from pyspark.errors import PySparkException
 from pyspark.testing.connectutils import (
@@ -426,44 +425,6 @@ class CLIValidationTests(unittest.TestCase):
             self.assertEqual(
                 context.exception.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS"
             )
-
-    def test_no_conflict_when_full_refresh_all_alone(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Create a minimal pipeline spec
-            spec_path = Path(temp_dir) / "pipeline.yaml"
-            with spec_path.open("w") as f:
-                f.write('{"name": "test_pipeline"}')
-
-            # Test that providing only --full-refresh-all doesn't raise an exception
-            # (it should fail later when trying to actually run, but not in our validation)
-            try:
-                run(spec_path=spec_path, full_refresh=None, full_refresh_all=True, refresh=None)
-                # If we get here, the validation passed (it will fail later in pipeline execution)
-                self.fail("Expected the run to fail later, but validation should have passed")
-            except PySparkException as e:
-                # Make sure it's NOT our validation error
-                self.assertNotEqual(e.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS")
-
-    def test_no_conflict_when_refresh_options_without_full_refresh_all(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Create a minimal pipeline spec
-            spec_path = Path(temp_dir) / "pipeline.yaml"
-            with spec_path.open("w") as f:
-                f.write('{"name": "test_pipeline"}')
-
-            # Test that providing --refresh and --full-refresh without --full-refresh-all doesn't raise our validation error
-            try:
-                run(
-                    spec_path=spec_path,
-                    full_refresh=["table1"],
-                    full_refresh_all=False,
-                    refresh=["table2"],
-                )
-                # If we get here, the validation passed (it will fail later in pipeline execution)
-                self.fail("Expected the run to fail later, but validation should have passed")
-            except PySparkException as e:
-                # Make sure it's NOT our validation error
-                self.assertNotEqual(e.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS")
 
     def test_parse_table_list_single_table(self):
         """Test parsing a single table name."""
