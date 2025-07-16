@@ -164,6 +164,20 @@ class CheckpointFileManagerSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-52824: CheckpointFileManager.create() throws uncategorized error") {
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    // Set invalid fs.defaultFS to trigger uncategorized error from URI.create
+    hadoopConf.set("fs.defaultFS", "|invalid/")
+    val ex = intercept[SparkException] {
+      CheckpointFileManager.create(new Path("/"), hadoopConf)
+    }
+    checkError(
+      ex,
+      condition = "CANNOT_LOAD_CHECKPOINT_FILE_MANAGER.UNCATEGORIZED",
+      parameters = Map("path" -> "/")
+    )
+  }
+
   test("SPARK-52824: CheckpointFileManager.create() throws error when class cannot be found") {
     withSQLConf(
       SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->
