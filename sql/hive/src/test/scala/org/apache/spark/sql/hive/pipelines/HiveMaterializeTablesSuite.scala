@@ -15,22 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+package org.apache.spark.sql.hive.pipelines
 
-import org.apache.spark.sql.connector.expressions.SortOrder
-import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.pipelines.graph.MaterializeTablesSuite
 
-/**
- * Pushed down operators
- */
-case class PushedDownOperators(
-    aggregation: Option[Aggregation],
-    sample: Option[TableSampleInfo],
-    limit: Option[Int],
-    offset: Option[Int],
-    sortValues: Seq[SortOrder],
-    pushedPredicates: Seq[Predicate],
-    joinedRelations: Seq[String]) {
-  assert((limit.isEmpty && sortValues.isEmpty) || limit.isDefined)
+class HiveMaterializeTablesSuite extends MaterializeTablesSuite with TestHiveSingleton {
+  override def afterAll(): Unit = {
+    try {
+      hiveContext.reset()
+    } finally {
+      super.afterAll()
+    }
+  }
+
+  override def afterEach(): Unit = {
+    try {
+      spark.artifactManager.cleanUpResourcesForTesting()
+    } finally {
+      super.afterEach()
+    }
+  }
+
+  override protected implicit def sqlContext: SQLContext = spark.sqlContext
 }

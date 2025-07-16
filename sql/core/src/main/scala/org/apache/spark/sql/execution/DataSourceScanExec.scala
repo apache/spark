@@ -189,6 +189,12 @@ case class RowDataSourceScanExec(
       seqToString(markedFilters.toSeq)
     }
 
+    val pushedJoins = if (pushedDownOperators.joinedRelations.length > 1) {
+      Map("PushedJoins" -> seqToString(pushedDownOperators.joinedRelations))
+    } else {
+      Map()
+    }
+
     Map("ReadSchema" -> requiredSchema.catalogString,
       "PushedFilters" -> pushedFilters) ++
       pushedDownOperators.aggregation.fold(Map[String, String]()) { v =>
@@ -200,7 +206,8 @@ case class RowDataSourceScanExec(
       offsetInfo ++
       pushedDownOperators.sample.map(v => "PushedSample" ->
         s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
-      )
+      ) ++
+      pushedJoins
   }
 
   // Don't care about `rdd` and `tableIdentifier`, and `stream` when canonicalizing.
