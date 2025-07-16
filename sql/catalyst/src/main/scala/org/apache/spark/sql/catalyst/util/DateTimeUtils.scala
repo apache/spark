@@ -885,6 +885,6 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * @return The number of nanoseconds past midnight on that day.
    */
   def getNanosInADay(micros: Long): Long = {
-    toJulianDay(micros)._2
+    localTimeToNanos(microsToLocalDateTime(micros).toLocalTime)
   }
 }
