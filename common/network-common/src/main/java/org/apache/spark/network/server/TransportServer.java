@@ -105,7 +105,7 @@ public class TransportServer implements Closeable {
       conf.getModuleName() + "-server");
 
     String name = System.getProperty("os.name");
-    boolean isNotWindows = 7 > name.length() || !name.regionMatches(true, 0, "Windows", 0, 7);
+    boolean isNotWindows = !name.regionMatches(true, 0, "Windows", 0, 7);
     bootstrap = new ServerBootstrap()
       .group(bossGroup, workerGroup)
       .channel(NettyUtils.getServerChannelClass(ioMode))
