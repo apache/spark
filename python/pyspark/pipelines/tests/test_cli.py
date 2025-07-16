@@ -50,6 +50,7 @@ class CLIUtilityTests(unittest.TestCase):
             tmpfile.write(
                 """
                 {
+                    "name": "test_pipeline",
                     "catalog": "test_catalog",
                     "database": "test_database",
                     "configuration": {
@@ -64,17 +65,44 @@ class CLIUtilityTests(unittest.TestCase):
             )
             tmpfile.flush()
             spec = load_pipeline_spec(Path(tmpfile.name))
+            assert spec.name == "test_pipeline"
             assert spec.catalog == "test_catalog"
             assert spec.database == "test_database"
             assert spec.configuration == {"key1": "value1", "key2": "value2"}
             assert len(spec.definitions) == 1
             assert spec.definitions[0].include == "test_include"
 
+    def test_load_pipeline_spec_name_is_required(self):
+        with tempfile.NamedTemporaryFile(mode="w") as tmpfile:
+            tmpfile.write(
+                """
+                {
+                    "catalog": "test_catalog",
+                    "database": "test_database",
+                    "configuration": {
+                        "key1": "value1",
+                        "key2": "value2"
+                    },
+                    "definitions": [
+                        {"glob": {"include": "test_include"}}
+                    ]
+                }
+                """
+            )
+            tmpfile.flush()
+            with self.assertRaises(PySparkException) as context:
+                load_pipeline_spec(Path(tmpfile.name))
+            self.assertEqual(
+                context.exception.getCondition(), "PIPELINE_SPEC_MISSING_REQUIRED_FIELD"
+            )
+            self.assertEqual(context.exception.getMessageParameters(), {"field_name": "name"})
+
     def test_load_pipeline_spec_schema_fallback(self):
         with tempfile.NamedTemporaryFile(mode="w") as tmpfile:
             tmpfile.write(
                 """
                 {
+                    "name": "test_pipeline",
                     "catalog": "test_catalog",
                     "schema": "test_database",
                     "configuration": {
@@ -120,20 +148,22 @@ class CLIUtilityTests(unittest.TestCase):
             )
 
     def test_unpack_empty_pipeline_spec(self):
-        empty_spec = PipelineSpec(catalog=None, database=None, configuration={}, definitions=[])
-        self.assertEqual(unpack_pipeline_spec({}), empty_spec)
+        empty_spec = PipelineSpec(
+            name="test_pipeline", catalog=None, database=None, configuration={}, definitions=[]
+        )
+        self.assertEqual(unpack_pipeline_spec({"name": "test_pipeline"}), empty_spec)
 
     def test_unpack_pipeline_spec_bad_configuration(self):
         with self.assertRaises(TypeError) as context:
-            unpack_pipeline_spec({"configuration": "not_a_dict"})
+            unpack_pipeline_spec({"name": "test_pipeline", "configuration": "not_a_dict"})
         self.assertIn("should be a dict", str(context.exception))
 
         with self.assertRaises(TypeError) as context:
-            unpack_pipeline_spec({"configuration": {"key": {}}})
+            unpack_pipeline_spec({"name": "test_pipeline", "configuration": {"key": {}}})
         self.assertIn("key", str(context.exception))
 
         with self.assertRaises(TypeError) as context:
-            unpack_pipeline_spec({"configuration": {1: "something"}})
+            unpack_pipeline_spec({"name": "test_pipeline", "configuration": {1: "something"}})
         self.assertIn("int", str(context.exception))
 
     def test_find_pipeline_spec_in_current_directory(self):
@@ -205,6 +235,7 @@ class CLIUtilityTests(unittest.TestCase):
 
     def test_register_definitions(self):
         spec = PipelineSpec(
+            name="test_pipeline",
             catalog=None,
             database=None,
             configuration={},
@@ -247,6 +278,7 @@ class CLIUtilityTests(unittest.TestCase):
     def test_register_definitions_file_raises_error(self):
         """Errors raised while executing definitions code should make it to the outer context."""
         spec = PipelineSpec(
+            name="test_pipeline",
             catalog=None,
             database=None,
             configuration={},
@@ -264,6 +296,7 @@ class CLIUtilityTests(unittest.TestCase):
 
     def test_register_definitions_unsupported_file_extension_matches_glob(self):
         spec = PipelineSpec(
+            name="test_pipeline",
             catalog=None,
             database=None,
             configuration={},
@@ -317,6 +350,7 @@ class CLIUtilityTests(unittest.TestCase):
                     inner_dir1 / "pipeline.yaml",
                     registry,
                     PipelineSpec(
+                        name="test_pipeline",
                         catalog=None,
                         database=None,
                         configuration={},

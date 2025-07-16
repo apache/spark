@@ -75,6 +75,7 @@ A YAML-formatted pipeline spec file contains the top-level configuration for the
 An example pipeline spec file:
 
 ```yaml
+name: my_pipeline
 definitions:
   - glob:
       include: transformations/**/*.py
@@ -99,7 +100,7 @@ The `spark-pipelines` command line interface (CLI) is the primary way to execute
 
 ### `spark-pipelines init`
 
-`spark-pipelines init` generates a simple pipeline project, including a spec file and example definitions.
+`spark-pipelines init --name my_pipeline` generates a simple pipeline project, inside a directory named "my_pipeline", including a spec file and example definitions.
 
 ### `spark-pipelines run`
 

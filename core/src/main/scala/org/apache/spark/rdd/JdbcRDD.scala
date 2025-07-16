@@ -54,7 +54,9 @@ private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) e
  * @param mapRow a function from a ResultSet to a single row of the desired result type(s).
  *   This should only call getInt, getString, etc; the RDD takes care of calling next.
  *   The default maps a ResultSet to an array of Object.
+ * @deprecated Jdbc RDD is deprecated, consider using JDBC data source instead.
  */
+@deprecated("Jdbc RDD is deprecated, consider using JDBC data source instead.", "4.1.0")
 class JdbcRDD[T: ClassTag](
     sc: SparkContext,
     getConnection: () => Connection,

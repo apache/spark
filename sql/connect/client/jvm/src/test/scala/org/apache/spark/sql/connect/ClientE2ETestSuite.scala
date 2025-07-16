@@ -18,7 +18,7 @@ package org.apache.spark.sql.connect
 
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
-import java.time.DateTimeException
+import java.time.{DateTimeException, LocalTime}
 import java.util.Properties
 
 import scala.collection.mutable
@@ -1690,6 +1690,12 @@ class ClientE2ETestSuite
       df.optimizedPlan.getSerializedSize.toDouble / df.plan.getSerializedSize.toDouble
     assert(compressionRatio < (1.0d / 32.0d)) // It should be very close to a 1/33 ratio.
     checkAnswer(df, data.take(5).map(kv => Row(kv._1, kv._2, 32L)))
+  }
+
+  test("SPARK-52770: Support Time type") {
+    val df = spark.sql("SELECT TIME '12:13:14'")
+
+    checkAnswer(df, Row(LocalTime.of(12, 13, 14)))
   }
 }
 

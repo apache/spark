@@ -38,7 +38,9 @@ import org.apache.spark.sql.catalyst.expressions.{
   MultiplyYMInterval,
   Subtract,
   SubtractDates,
+  SubtractTimes,
   SubtractTimestamps,
+  TimeAddInterval,
   TimestampAddInterval,
   TimestampAddYMInterval,
   UnaryMinus
@@ -47,12 +49,14 @@ import org.apache.spark.sql.types.{
   AnsiIntervalType,
   AnyTimestampTypeExpression,
   CalendarIntervalType,
+  DatetimeType,
   DateType,
   DayTimeIntervalType,
   NullType,
   StringType,
   TimestampNTZType,
   TimestampType,
+  TimeType,
   YearMonthIntervalType
 }
 import org.apache.spark.sql.types.DayTimeIntervalType.DAY
@@ -80,6 +84,12 @@ object BinaryArithmeticWithDatetimeResolver {
           a.copy(right = Cast(a.right, a.left.dataType))
         case (DateType, CalendarIntervalType) =>
           DateAddInterval(l, r, ansiEnabled = mode == EvalMode.ANSI)
+        case (_: TimeType, _: DayTimeIntervalType) => TimeAddInterval(l, r)
+        case (_: DatetimeType, _: NullType) =>
+          a.copy(right = Cast(a.right, DayTimeIntervalType.DEFAULT))
+        case (_: DayTimeIntervalType, _: TimeType) => TimeAddInterval(r, l)
+        case (_: NullType, _: DatetimeType) =>
+          a.copy(left = Cast(a.left, DayTimeIntervalType.DEFAULT))
         case (_, CalendarIntervalType | _: DayTimeIntervalType) =>
           Cast(TimestampAddInterval(l, r), l.dataType)
         case (CalendarIntervalType, DateType) =>
@@ -104,9 +114,9 @@ object BinaryArithmeticWithDatetimeResolver {
         case (CalendarIntervalType, CalendarIntervalType) |
              (_: DayTimeIntervalType, _: DayTimeIntervalType) =>
           s
-        case (_: NullType, _: AnsiIntervalType) =>
+        case (_: NullType, _: AnsiIntervalType | _: DatetimeType) =>
           s.copy(left = Cast(s.left, s.right.dataType))
-        case (_: AnsiIntervalType, _: NullType) =>
+        case (_: AnsiIntervalType | _: DatetimeType, _: NullType) =>
           s.copy(right = Cast(s.right, s.left.dataType))
         case (DateType, CalendarIntervalType) =>
           DatetimeSub(
@@ -118,6 +128,8 @@ object BinaryArithmeticWithDatetimeResolver {
               ansiEnabled = mode == EvalMode.ANSI
             )
           )
+        case (_: TimeType, _: DayTimeIntervalType) =>
+          DatetimeSub(l, r, TimeAddInterval(l, UnaryMinus(r, mode == EvalMode.ANSI)))
         case (_, CalendarIntervalType | _: DayTimeIntervalType) =>
           Cast(DatetimeSub(l, r,
             TimestampAddInterval(l, UnaryMinus(r, mode == EvalMode.ANSI))), l.dataType)
@@ -127,6 +139,7 @@ object BinaryArithmeticWithDatetimeResolver {
           SubtractTimestamps(l, r)
         case (_, DateType) => SubtractDates(l, r)
         case (DateType, dt) if dt != StringType => DateSub(l, r)
+        case (_: TimeType, _: TimeType) => SubtractTimes(l, r)
         case _ => s
       }
     case m @ Multiply(l, r, mode) =>

@@ -1484,4 +1484,69 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(Literal.create("23:59:59.000001     "),
       TimeType(6)), localTime(23, 59, 59, 1))
   }
+
+  test("cast time to time") {
+    checkEvaluation(cast(Literal(localTime(), TimeType(0)), TimeType(0)), 0L)
+    checkEvaluation(cast(Literal(localTime(0, 0, 0, 1), TimeType(6)), TimeType(6)),
+      localTime(0, 0, 0, 1))
+    checkEvaluation(cast(Literal(localTime(0, 0, 0, 19), TimeType(6)), TimeType(5)),
+      localTime(0, 0, 0, 10))
+    checkEvaluation(cast(Literal(localTime(23, 59, 59, 999990), TimeType(5)), TimeType(6)),
+      localTime(23, 59, 59, 999990))
+    checkEvaluation(cast(Literal(localTime(23, 59, 59, 999999), TimeType(6)), TimeType(5)),
+      localTime(23, 59, 59, 999990))
+    checkEvaluation(cast(Literal(localTime(11, 58, 59, 123400), TimeType(4)), TimeType(5)),
+      localTime(11, 58, 59, 123400))
+    checkEvaluation(cast(Literal(localTime(19, 2, 3, 765000), TimeType(3)), TimeType(2)),
+      localTime(19, 2, 3, 760000))
+
+    for (sp <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+      for (tp <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (child: Expression) => Cast(child, TimeType(sp)), TimeType(tp))
+      }
+    }
+  }
+  test("SPARK-52619: cast time to integral types") {
+    // Test normal cases that should work with a small number like 112 seconds after midnight
+    val smallTime = Literal.create(LocalTime.of(0, 1, 52), TimeType(6))
+    checkEvaluation(cast(smallTime, ByteType), 112.toByte)
+    checkEvaluation(cast(smallTime, ShortType), 112.toShort)
+    checkEvaluation(cast(smallTime, IntegerType), 112)
+    checkEvaluation(cast(smallTime, LongType), 112L)
+
+    // Test midnight to all integral types
+    val midnight = Literal.create(LocalTime.MIDNIGHT, TimeType(6))
+    checkEvaluation(cast(midnight, ByteType), 0.toByte)
+    checkEvaluation(cast(midnight, ShortType), 0.toShort)
+    checkEvaluation(cast(midnight, IntegerType), 0)
+    checkEvaluation(cast(midnight, LongType), 0L)
+
+    // Precision rounding/truncation tests with fractional seconds
+    val time0 = Literal.create(LocalTime.NOON, TimeType(0))
+    val time2 = Literal.create(LocalTime.of(12, 0, 0, 120000000), TimeType(2))
+    val time4 = Literal.create(LocalTime.of(12, 0, 0, 345600000), TimeType(4))
+    val oneTwoThreeTime5 = Literal.create(LocalTime.of(1, 2, 3, 555550000), TimeType(5))
+    val maxTime4 = Literal.create(LocalTime.of(23, 59, 59, 999900000), TimeType(4))
+    val fractional5 = Literal.create(LocalTime.of(0, 0, 17, 500000000), TimeType(1))
+    val fractional000001 = Literal.create(LocalTime.of(0, 0, 17, 1000), TimeType(6))
+    val fractional999999 = Literal.create(LocalTime.of(0, 0, 17, 999999000), TimeType(6))
+    val fractional6 = Literal.create(LocalTime.of(0, 0, 17, 600000000), TimeType(1))
+    val fractional4 = Literal.create(LocalTime.of(0, 0, 17, 400000000), TimeType(1))
+    val fractional555 = Literal.create(LocalTime.of(0, 0, 17, 555000000), TimeType(3))
+    checkEvaluation(cast(fractional5, IntegerType), 17)
+    checkEvaluation(cast(fractional5, LongType), 17L)
+    checkEvaluation(cast(fractional000001, IntegerType), 17)
+    checkEvaluation(cast(fractional999999, IntegerType), 17)
+    checkEvaluation(cast(fractional6, IntegerType), 17)
+    checkEvaluation(cast(fractional4, IntegerType), 17)
+    checkEvaluation(cast(fractional555, IntegerType), 17)
+    checkEvaluation(cast(time0, IntegerType), 43200)
+    checkEvaluation(cast(time2, IntegerType), 43200)
+    checkEvaluation(cast(time4, IntegerType), 43200)
+    checkEvaluation(cast(oneTwoThreeTime5, IntegerType), 3723)
+    checkEvaluation(cast(oneTwoThreeTime5, LongType), 3723L)
+    checkEvaluation(cast(maxTime4, IntegerType), 86399)
+    checkEvaluation(cast(maxTime4, LongType), 86399L)
+  }
 }

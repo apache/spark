@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysTrue, Predicate => V2Predicate}
@@ -26,6 +27,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.BooleanType
 
 class PushablePredicateSuite extends QueryTest with SharedSparkSession {
+
+  override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
 
   test("simple boolean expression should always return v2 Predicate") {
     Seq(true, false).foreach { createV2Predicate =>

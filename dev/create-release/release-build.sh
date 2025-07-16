@@ -137,12 +137,12 @@ if [[ "$1" == "finalize" ]]; then
     --repository-url https://upload.pypi.org/legacy/ \
     "pyspark_connect-$PYSPARK_VERSION.tar.gz" \
     "pyspark_connect-$PYSPARK_VERSION.tar.gz.asc"
-  svn update "pyspark_client-$RELEASE_VERSION.tar.gz"
-  svn update "pyspark_client-$RELEASE_VERSION.tar.gz.asc"
+  svn update "pyspark_client-$PYSPARK_VERSION.tar.gz"
+  svn update "pyspark_client-$PYSPARK_VERSION.tar.gz.asc"
   twine upload -u __token__ -p $PYPI_API_TOKEN \
     --repository-url https://upload.pypi.org/legacy/ \
-    "pyspark_client-$RELEASE_VERSION.tar.gz" \
-    "pyspark_client-$RELEASE_VERSION.tar.gz.asc"
+    "pyspark_client-$PYSPARK_VERSION.tar.gz" \
+    "pyspark_client-$PYSPARK_VERSION.tar.gz.asc"
   cd ..
   rm -rf svn-spark
   echo "PySpark uploaded"
@@ -993,13 +993,15 @@ if [[ "$1" == "publish-release" ]]; then
 
     # Calculate deadline in Pacific Time (PST/PDT)
     DEADLINE=$(TZ=America/Los_Angeles date -d "+4 days" "+%a, %d %b %Y %H:%M:%S %Z")
+    PYSPARK_VERSION=`echo "$RELEASE_VERSION" |  sed -e "s/-/./" -e "s/preview/dev/"`
 
     JIRA_API_URL="https://issues.apache.org/jira/rest/api/2/project/SPARK/versions"
+    SPARK_VERSION_BASE=$(echo "$SPARK_VERSION" | sed 's/-preview[0-9]*//')
     JIRA_VERSION_ID=$(curl -s "$JIRA_API_URL" | \
       # Split JSON objects by replacing '},{' with a newline-separated pattern
       tr '}' '\n' | \
       # Find the block containing the exact version name
-      grep -F "\"name\":\"$SPARK_VERSION\"" -A 5 | \
+      grep -F "\"name\":\"$SPARK_VERSION_BASE\"" -A 5 | \
       # Extract the line with "id"
       grep '"id"' | \
       # Extract the numeric id value (assuming "id":"123456")
@@ -1071,7 +1073,7 @@ EOF
       echo "reporting any regressions."
       echo
       echo "If you're working in PySpark you can set up a virtual env and install"
-      echo "the current RC via \"pip install https://dist.apache.org/repos/dist/dev/spark/${GIT_REF}-bin/pyspark-${SPARK_VERSION}.tar.gz\""
+      echo "the current RC via \"pip install https://dist.apache.org/repos/dist/dev/spark/${GIT_REF}-bin/pyspark-${PYSPARK_VERSION}.tar.gz\""
       echo "and see if anything important breaks."
       echo "In the Java/Scala, you can add the staging repository to your project's resolvers and test"
       echo "with the RC (make sure to clean up the artifact cache before/after so"
