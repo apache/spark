@@ -727,6 +727,9 @@ case class Cast(
   private[this] def timestampToDouble(ts: Long): Double = {
     ts / MICROS_PER_SECOND.toDouble
   }
+  private[this] def timeToDouble(timeNanos: Long): Double = {
+    timeNanos / NANOS_PER_SECOND.toDouble
+  }
   private[this] def timeToLong(timeNanos: Long): Long = {
     Math.floorDiv(timeNanos, NANOS_PER_SECOND)
   }
@@ -1051,7 +1054,7 @@ case class Cast(
       // Note that we lose precision here.
       buildCast[Long](_, t => changePrecision(Decimal(timestampToDouble(t)), target))
     case _: TimeType =>
-      buildCast[Long](_, t => changePrecision(Decimal(t / MICROS_PER_SECOND.toDouble), target))
+      buildCast[Long](_, t => changePrecision(Decimal(timeToDouble(t)), target))
     case dt: DecimalType =>
       b => toPrecision(b.asInstanceOf[Decimal], target, getContextOrNull())
     case t: IntegralType =>
@@ -1521,7 +1524,7 @@ case class Cast(
         (c, evPrim, evNull) =>
           code"""
             Decimal $tmp = Decimal.apply(
-              scala.math.BigDecimal.valueOf((double)$c / $MICROS_PER_SECOND));
+              scala.math.BigDecimal.valueOf((double)$c / $NANOS_PER_SECOND));
             ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
       case DecimalType() =>
