@@ -856,14 +856,7 @@ case class Cast(
         }
       })
     case _: TimeType =>
-      buildCast[Long](_, t => {
-        val longValue = timeToLong(t)
-        if (longValue == longValue.toInt) {
-          longValue.toInt
-        } else {
-          errorOrNull(t, from, IntegerType)
-        }
-      })
+      buildCast[Long](_, t => timeToLong(t).toInt)
     case x: NumericType if ansiEnabled =>
       val exactNumeric = PhysicalNumericType.exactNumeric(x)
       b => exactNumeric.toInt(b)
@@ -2027,7 +2020,8 @@ case class Cast(
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType => castTimestampToIntegralTypeCode(ctx, "int", from, IntegerType)
-    case _: TimeType => castTimeToIntegralTypeCode(ctx, "int", from, IntegerType)
+    case _: TimeType =>
+      (c, evPrim, _) => code"$evPrim = (int) ${timeToLongCode(c)};"
     case DecimalType() => castDecimalToIntegralTypeCode("int")
     case LongType if ansiEnabled =>
       castIntegralTypeToIntegralTypeExactCode(ctx, "int", from, IntegerType)
