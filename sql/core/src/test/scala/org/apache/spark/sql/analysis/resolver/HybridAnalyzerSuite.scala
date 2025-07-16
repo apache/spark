@@ -21,30 +21,18 @@ import org.scalactic.source.Position
 import org.scalatest.Tag
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.catalyst.{
-  ExtendedAnalysisException,
-  QueryPlanningTracker
-}
+import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{
   AnalysisContext,
   Analyzer,
   UnresolvedAttribute,
   UnresolvedStar
 }
-import org.apache.spark.sql.catalyst.analysis.resolver.{
-  AnalyzerBridgeState,
-  ExplicitlyUnsupportedResolverFeature,
-  HybridAnalyzer,
-  Resolver,
-  ResolverGuard
-}
+import org.apache.spark.sql.catalyst.analysis.resolver._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.NormalizePlan
-import org.apache.spark.sql.catalyst.plans.logical.{
-  LocalRelation,
-  LogicalPlan,
-  Project
-}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -94,6 +82,13 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
         analyzerBridgeState: Option[AnalyzerBridgeState] = None): LogicalPlan = {
       validateSinglePassResolverBridgeState(bridgeRelations)
       throw ex
+    }
+  }
+
+  private class BrokenResolverGuard(catalogManager: CatalogManager)
+      extends ResolverGuard(catalogManager) {
+    override def apply(plan: LogicalPlan): Boolean = {
+      throw new Exception("Broken resolver guard")
     }
   }
 
@@ -300,13 +295,7 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Explicitly unsupported resolver feature") {
-    val plan: LogicalPlan = {
-      Project(
-        Seq(UnresolvedStar(None)),
-        LocalRelation(col1Integer)
-      )
-    }
-    checkAnswer(
+    assertPlansEqual(
       new HybridAnalyzer(
         new ValidatingAnalyzer(bridgeRelations = true),
         new ResolverGuard(spark.sessionState.catalogManager),
@@ -314,8 +303,8 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
           new ExplicitlyUnsupportedResolverFeature("FAILURE"),
           bridgeRelations = true
         )
-      ).apply(plan, new QueryPlanningTracker),
-      plan
+      ).apply(unresolvedPlan, new QueryPlanningTracker),
+      resolvedPlan
     )
   }
 
