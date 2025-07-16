@@ -336,7 +336,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
   // approx_top_k_combine
   /////////////////////////////////
 
-  def setupAccumulations(size1: Int, size2: Int): Unit = {
+  def setupMixedSizeAccumulations(size1: Int, size2: Int): Unit = {
     sql(s"SELECT approx_top_k_accumulate(expr, $size1) as acc " +
       "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
       .createOrReplaceTempView("accumulation1")
@@ -362,7 +362,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       .createOrReplaceTempView("unioned")
   }
 
-  val mixedNumberTypeSeqs: Seq[(DataType, String, Seq[Any])] = Seq(
+  val mixedNumberTypes: Seq[(DataType, String, Seq[Any])] = Seq(
     (IntegerType, "INT",
       Seq(0, 0, 0, 1, 1, 2, 2, 3)),
     (ByteType, "TINYINT",
@@ -383,7 +383,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       Seq("cast(0 AS DECIMAL(20, 3))", "cast(0 AS DECIMAL(20, 3))", "cast(1 AS DECIMAL(20, 3))"))
   )
 
-  val mixedDateTimeSeqs: Seq[(DataType, String, Seq[String])] = Seq(
+  val mixedDateTimeTypes: Seq[(DataType, String, Seq[String])] = Seq(
     (DateType, "DATE",
       Seq("DATE'2025-01-01'", "DATE'2025-01-01'", "DATE'2025-01-02'")),
     (TimestampType, "TIMESTAMP",
@@ -412,7 +412,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-52798: same type, same size, specified combine size - success") {
-    setupAccumulations(10, 10)
+    setupMixedSizeAccumulations(10, 10)
 
     sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned")
       .createOrReplaceTempView("combined")
@@ -422,7 +422,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-52798: same type, same size, unspecified combine size - success") {
-    setupAccumulations(10, 10)
+    setupMixedSizeAccumulations(10, 10)
 
     sql("SELECT approx_top_k_combine(acc) as com FROM unioned")
       .createOrReplaceTempView("combined")
@@ -432,7 +432,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-52798: same type, different size, specified combine size - success") {
-    setupAccumulations(10, 20)
+    setupMixedSizeAccumulations(10, 20)
 
     sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned")
       .createOrReplaceTempView("combination")
@@ -442,7 +442,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-52798: same type, different size, unspecified combine size - fail") {
-    setupAccumulations(10, 20)
+    setupMixedSizeAccumulations(10, 20)
 
     val comb = sql("SELECT approx_top_k_combine(acc) as com FROM unioned")
 
@@ -457,7 +457,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
 
   gridTest("SPARK-52798: invalid combine size - fail")(Seq((10, 10), (10, 20))) {
     case (size1, size2) =>
-      setupAccumulations(size1, size2)
+      setupMixedSizeAccumulations(size1, size2)
       checkError(
         exception = intercept[SparkRuntimeException] {
           sql("SELECT approx_top_k_combine(acc, 0) as com FROM unioned").collect()
@@ -485,15 +485,15 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       }
     }
 
-    checkMixedTypeError(mixedNumberTypeSeqs)
-    checkMixedTypeError(mixedDateTimeSeqs)
+    checkMixedTypeError(mixedNumberTypes)
+    checkMixedTypeError(mixedDateTimeTypes)
   }
 
   // enumerate all combinations of number and datetime types
   gridTest("SPARK-52798: number vs datetime - fail on UNION")(
     for {
-      (type1, typeName1, seq1) <- mixedNumberTypeSeqs
-      (type2, typeName2, seq2) <- mixedDateTimeSeqs
+      (type1, typeName1, seq1) <- mixedNumberTypes
+      (type2, typeName2, seq2) <- mixedDateTimeTypes
     } yield ((type1, typeName1, seq1), (type2, typeName2, seq2))) {
     case ((_, type1, seq1), (_, type2, seq2)) =>
       checkError(
@@ -517,7 +517,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       )
   }
 
-  gridTest("SPARK-52798: number vs string - fail at combine")(mixedNumberTypeSeqs) {
+  gridTest("SPARK-52798: number vs string - fail at combine")(mixedNumberTypes) {
     case (type1, _, seq1) =>
       setupMixedTypeAccumulation(seq1, Seq("'a'", "'b'", "'c'", "'c'", "'c'", "'c'", "'d'", "'d'"))
       checkError(
@@ -529,7 +529,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       )
   }
 
-  gridTest("SPARK-52798: number vs boolean - fail at UNION")(mixedNumberTypeSeqs) {
+  gridTest("SPARK-52798: number vs boolean - fail at UNION")(mixedNumberTypes) {
     case (_, type1, seq1) =>
       val seq2 = Seq("(true)", "(true)", "(false)", "(false)")
       checkError(
@@ -553,7 +553,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       )
   }
 
-  gridTest("SPARK-52798: datetime vs string - fail at combine")(mixedDateTimeSeqs) {
+  gridTest("SPARK-52798: datetime vs string - fail at combine")(mixedDateTimeTypes) {
     case (type1, _, seq1) =>
       setupMixedTypeAccumulation(seq1, Seq("'a'", "'b'", "'c'", "'c'", "'c'", "'c'", "'d'", "'d'"))
       checkError(
@@ -565,7 +565,7 @@ class ApproxTopKSuite extends QueryTest with SharedSparkSession {
       )
   }
 
-  gridTest("SPARK-52798: datetime vs boolean - fail at UNION")(mixedDateTimeSeqs) {
+  gridTest("SPARK-52798: datetime vs boolean - fail at UNION")(mixedDateTimeTypes) {
     case (_, type1, seq1) =>
       val seq2 = Seq("(true)", "(true)", "(false)", "(false)")
       checkError(
