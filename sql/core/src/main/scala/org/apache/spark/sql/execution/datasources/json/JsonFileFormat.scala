@@ -39,22 +39,15 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {
-    val parsedOptions = new JSONOptionsInRead(
-      options,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
-    val jsonDataSource = JsonDataSource(parsedOptions)
-    jsonDataSource.isSplitable && super.isSplitable(sparkSession, options, path)
+    val parsedOptions = getJsonOptions(sparkSession, options)
+    JsonDataSource(parsedOptions).isSplitable && super.isSplitable(sparkSession, options, path)
   }
 
   override def inferSchema(
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    val parsedOptions = new JSONOptionsInRead(
-      options,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+    val parsedOptions = getJsonOptions(sparkSession, options)
     JsonDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
   }
 
@@ -63,13 +56,9 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    val conf = job.getConfiguration
-    val parsedOptions = new JSONOptions(
-      options,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+    val parsedOptions = getJsonOptions(sparkSession, options, inRead = false)
     parsedOptions.compressionCodec.foreach { codec =>
-      CompressionCodecs.setCodecConfiguration(conf, codec)
+      CompressionCodecs.setCodecConfiguration(job.getConfiguration, codec)
     }
 
     new OutputWriterFactory {
@@ -96,12 +85,7 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
     val broadcastedHadoopConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
-
-    val parsedOptions = new JSONOptionsInRead(
-      options,
-      sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
-
+    val parsedOptions = getJsonOptions(sparkSession, options)
     val actualSchema =
       StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
     // Check a field requirement for corrupt records here to throw an exception in a driver side
@@ -146,5 +130,17 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
     case _: NullType => true
 
     case _ => false
+  }
+
+  private def getJsonOptions(
+      spark: SparkSession,
+      options: Map[String, String],
+      inRead: Boolean = true): JSONOptions = {
+    val conf = getSqlConf(spark)
+    if (inRead) {
+      new JSONOptionsInRead(options, conf.sessionLocalTimeZone, conf.columnNameOfCorruptRecord)
+    } else {
+      new JSONOptions(options, conf.sessionLocalTimeZone, conf.columnNameOfCorruptRecord)
+    }
   }
 }

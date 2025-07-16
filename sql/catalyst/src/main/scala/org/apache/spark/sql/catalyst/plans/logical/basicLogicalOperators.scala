@@ -614,13 +614,20 @@ case class Union(
     Some(sum.toLong)
   }
 
-  def duplicateResolved: Boolean = {
+  private def duplicatesResolvedPerBranch: Boolean =
+    children.forall(child => child.outputSet.size == child.output.size)
+
+  def duplicatesResolvedBetweenBranches: Boolean = {
     children.map(_.outputSet.size).sum ==
       AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
   }
 
   override lazy val resolved: Boolean = {
-    children.length > 1 && !(byName || allowMissingCol) && childrenResolved && allChildrenCompatible
+    children.length > 1 &&
+    !(byName || allowMissingCol) &&
+    childrenResolved &&
+    allChildrenCompatible &&
+    (!conf.unionIsResolvedWhenDuplicatesPerChildResolved || duplicatesResolvedPerBranch)
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): Union =

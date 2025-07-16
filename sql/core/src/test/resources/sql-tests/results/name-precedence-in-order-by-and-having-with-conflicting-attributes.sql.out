@@ -60,46 +60,52 @@ struct<col1:int>
 
 
 -- !query
-SELECT col1 AS c, 2 AS col1 FROM v1 ORDER BY col1
+SELECT * FROM (
+  SELECT col1 AS c, 2 AS col1 FROM v1 ORDER BY col1
+) ORDER BY 1
 -- !query schema
 struct<c:int,col1:int>
 -- !query output
-42	2
-17	2
-99	2
-5	2
-42	2
-23	2
-8	2
-17	2
-76	2
-33	2
-99	2
-55	2
 3	2
-42	2
+5	2
 8	2
+8	2
+17	2
+17	2
+23	2
+33	2
+42	2
+42	2
+42	2
+55	2
+76	2
+99	2
+99	2
 
 
 -- !query
-SELECT col1 AS c, 2 AS col1 FROM v1 GROUP BY ALL ORDER BY col1
+SELECT * FROM (
+  SELECT col1 AS c, 2 AS col1 FROM v1 GROUP BY ALL ORDER BY col1
+) ORDER BY 1
 -- !query schema
 struct<c:int,col1:int>
 -- !query output
-42	2
-17	2
-99	2
-23	2
+3	2
 5	2
 8	2
-76	2
-55	2
+17	2
+23	2
 33	2
-3	2
+42	2
+55	2
+76	2
+99	2
 
 
 -- !query
-SELECT col1 AS c, 2 AS col1 FROM v1 GROUP BY ALL HAVING col1 > 50
+SELECT * FROM (
+  SELECT col1 AS c, 2 AS col1 FROM v1 GROUP BY ALL HAVING col1 > 50
+) ORDER BY 1
 -- !query schema
 struct<c:int,col1:int>
 -- !query output
@@ -216,7 +222,9 @@ struct<c:int,col1:int,col1:int>
 
 
 -- !query
-SELECT col1 AS c, 2 AS col1, 3 AS col1 FROM v1 GROUP BY ALL HAVING col1 > 50
+SELECT * FROM (
+  SELECT col1 AS c, 2 AS col1, 3 AS col1 FROM v1 GROUP BY ALL HAVING col1 > 50
+) ORDER BY 1
 -- !query schema
 struct<c:int,col1:int,col1:int>
 -- !query output
@@ -265,7 +273,9 @@ struct<col1:int,col1:int>
 
 
 -- !query
-SELECT col1, 2 AS col1 FROM v1 GROUP BY ALL HAVING col1 > 50
+SELECT * FROM (
+  SELECT col1, 2 AS col1 FROM v1 GROUP BY ALL HAVING col1 > 50
+) ORDER BY 1
 -- !query schema
 struct<col1:int,col1:int>
 -- !query output
@@ -406,7 +416,33 @@ col1
 
 
 -- !query
-SELECT col1 AS c, 'col1' FROM v2 ORDER BY col1
+SELECT * FROM (
+  SELECT col1 AS c, 'col1' FROM v2 ORDER BY col1
+) ORDER BY 1
+-- !query schema
+struct<c:string,col1:string>
+-- !query output
+apple	col1
+apple	col1
+apple	col1
+banana	col1
+banana	col1
+cherry	col1
+cherry	col1
+date	col1
+fig	col1
+grape	col1
+grape	col1
+kiwi	col1
+lemon	col1
+mango	col1
+orange	col1
+
+
+-- !query
+SELECT * FROM (
+  SELECT col1 AS c, 'col1' FROM v2 GROUP BY ALL ORDER BY col1
+) ORDER BY 1
 -- !query schema
 struct<c:string,col1:string>
 -- !query output
@@ -414,38 +450,18 @@ apple	col1
 banana	col1
 cherry	col1
 date	col1
-apple	col1
 fig	col1
 grape	col1
-banana	col1
 kiwi	col1
 lemon	col1
-cherry	col1
 mango	col1
-orange	col1
-apple	col1
-grape	col1
-
-
--- !query
-SELECT col1 AS c, 'col1' FROM v2 GROUP BY ALL ORDER BY col1
--- !query schema
-struct<c:string,col1:string>
--- !query output
-date	col1
-cherry	col1
-grape	col1
-apple	col1
-banana	col1
-fig	col1
-mango	col1
-kiwi	col1
-lemon	col1
 orange	col1
 
 
 -- !query
-SELECT col1 AS c, 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana'
+SELECT * FROM (
+  SELECT col1 AS c, 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana'
+) ORDER BY 1
 -- !query schema
 struct<c:string,col1:string>
 -- !query output
@@ -567,7 +583,9 @@ orange	col1	col1
 
 
 -- !query
-SELECT col1 AS c, 'col1', 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana'
+SELECT * FROM (
+  SELECT col1 AS c, 'col1', 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana'
+) ORDER BY 1
 -- !query schema
 struct<c:string,col1:string,col1:string>
 -- !query output
@@ -621,7 +639,9 @@ orange	col1
 
 
 -- !query
-SELECT col1, 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana'
+SELECT * FROM (
+  SELECT col1, 'col1' FROM v2 GROUP BY ALL HAVING col1 > 'banana'
+) ORDER BY 1
 -- !query schema
 struct<col1:string,col1:string>
 -- !query output

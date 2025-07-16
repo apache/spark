@@ -2106,9 +2106,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       oe: OutOfMemoryError, tables: Seq[TableIdentifier]): Throwable = {
     val analyzeTblMsg = if (tables.nonEmpty) {
       " or analyze these tables through: " +
-        s"${tables.map(t => s"ANALYZE TABLE $t COMPUTE STATISTICS;").mkString(" ")}."
+        s"`${tables.map(t => s"ANALYZE TABLE $t COMPUTE STATISTICS;").mkString(" ")}`"
     } else {
-      "."
+      ""
     }
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2250",

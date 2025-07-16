@@ -31,6 +31,7 @@ import org.apache.spark.sql.connector.catalog.{
   TableChange,
   TableInfo
 }
+import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructType
 import org.apache.spark.sql.connector.expressions.Expressions
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils.diffSchemas
@@ -178,14 +179,13 @@ object DatasetManager extends Logging {
     }
 
     // Wipe the data if we need to
-    val dropTable = (isFullRefresh || !table.isStreamingTable) && existingTableOpt.isDefined
-    if (dropTable) {
-      catalog.dropTable(identifier)
+    if ((isFullRefresh || !table.isStreamingTable) && existingTableOpt.isDefined) {
+      context.spark.sql(s"TRUNCATE TABLE ${table.identifier.quotedString}")
     }
 
     // Alter the table if we need to
-    if (existingTableOpt.isDefined && !dropTable) {
-      val existingSchema = existingTableOpt.get.schema()
+    if (existingTableOpt.isDefined) {
+      val existingSchema = v2ColumnsToStructType(existingTableOpt.get.columns())
 
       val targetSchema = if (table.isStreamingTable && !isFullRefresh) {
         SchemaMergingUtils.mergeSchemas(existingSchema, outputSchema)
@@ -199,7 +199,7 @@ object DatasetManager extends Logging {
     }
 
     // Create the table if we need to
-    if (dropTable || existingTableOpt.isEmpty) {
+    if (existingTableOpt.isEmpty) {
       catalog.createTable(
         identifier,
         new TableInfo.Builder()

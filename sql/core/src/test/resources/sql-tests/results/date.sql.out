@@ -802,7 +802,7 @@ struct<(2001-10-01 - DATE '2001-09-28'):interval day>
 -- !query
 select date '2001-09-28' - null
 -- !query schema
-struct<date_sub(DATE '2001-09-28', NULL):date>
+struct<(DATE '2001-09-28' - NULL):interval day>
 -- !query output
 NULL
 
@@ -886,7 +886,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select date'2011-11-11' + null
 -- !query schema
-struct<date_add(DATE '2011-11-11', NULL):date>
+struct<DATE '2011-11-11' + NULL:timestamp>
 -- !query output
 NULL
 
@@ -894,7 +894,7 @@ NULL
 -- !query
 select null + date'2011-11-11'
 -- !query schema
-struct<date_add(DATE '2011-11-11', NULL):date>
+struct<DATE '2011-11-11' + NULL:timestamp>
 -- !query output
 NULL
 
