@@ -2629,7 +2629,8 @@
                     <version>${maven.version}</version>
                   </requireMavenVersion>
                   <requireJavaVersion>
-                    <version>${java.version}</version>
+                    <version>[17.0.11,)</version>
+                    <message>Java version must be 17.0.11 or higher</message>
                   </requireJavaVersion>
                   <bannedDependencies>
                     <excludes>
