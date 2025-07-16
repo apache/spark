@@ -25,6 +25,7 @@ import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.jdk.CollectionConverters._
+import scala.util.Random
 
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
@@ -1669,6 +1670,26 @@ class ClientE2ETestSuite
       df = df.union(spark.sql("SELECT :key", args = Map("key" -> (2 * i + 1))))
     }
     checkAnswer(df, (0 until 6).map(i => Row(i)))
+  }
+
+  test("Execute optimized plan - 33 duplicate local relations") {
+    val implicits = spark.implicits
+    import implicits._
+    val rng = new Random(61209389765L)
+    val data = IndexedSeq.tabulate(128) { id =>
+      id -> rng.nextBytes(1024)
+    }
+    val input = data.toDF("key", "value")
+    val unions = Iterator.range(0, 5).foldLeft(input) {
+      case (current, _) => current.union(current)
+    }
+    val df = unions.filter($"key".isin(input.select($"key").filter($"key" < 5)))
+      .groupBy($"key", $"value")
+      .count()
+    val compressionRatio =
+      df.optimizedPlan.getSerializedSize.toDouble / df.plan.getSerializedSize.toDouble
+    assert(compressionRatio < (1.0d / 32.0d)) // It should be very close to a 1/33 ratio.
+    checkAnswer(df, data.take(5).map(kv => Row(kv._1, kv._2, 32L)))
   }
 }
 

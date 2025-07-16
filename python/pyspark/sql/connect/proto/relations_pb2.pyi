@@ -108,6 +108,7 @@ class Relation(google.protobuf.message.Message):
     TRANSPOSE_FIELD_NUMBER: builtins.int
     UNRESOLVED_TABLE_VALUED_FUNCTION_FIELD_NUMBER: builtins.int
     LATERAL_JOIN_FIELD_NUMBER: builtins.int
+    REFERENCED_PLAN_ID_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -215,6 +216,14 @@ class Relation(google.protobuf.message.Message):
     def unresolved_table_valued_function(self) -> global___UnresolvedTableValuedFunction: ...
     @property
     def lateral_join(self) -> global___LateralJoin: ...
+    referenced_plan_id: builtins.int
+    """Reference to a node else where in the tree. There are two use cases for this:
+    1. Reduce tree duplication. In this case the tree contains two or more subtrees that are
+       identical. The referenced plan can only be a back reference, to a subtree that was
+       already visited by the planner. The planner is expected to visit the tree bottom-up from
+       left to right.
+    1. Reduce tree depth.
+    """
     @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
@@ -301,6 +310,7 @@ class Relation(google.protobuf.message.Message):
         transpose: global___Transpose | None = ...,
         unresolved_table_valued_function: global___UnresolvedTableValuedFunction | None = ...,
         lateral_join: global___LateralJoin | None = ...,
+        referenced_plan_id: builtins.int = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -394,6 +404,8 @@ class Relation(google.protobuf.message.Message):
             b"range",
             "read",
             b"read",
+            "referenced_plan_id",
+            b"referenced_plan_id",
             "rel_type",
             b"rel_type",
             "repartition",
@@ -519,6 +531,8 @@ class Relation(google.protobuf.message.Message):
             b"range",
             "read",
             b"read",
+            "referenced_plan_id",
+            b"referenced_plan_id",
             "rel_type",
             b"rel_type",
             "repartition",
@@ -614,6 +628,7 @@ class Relation(google.protobuf.message.Message):
             "transpose",
             "unresolved_table_valued_function",
             "lateral_join",
+            "referenced_plan_id",
             "fill_na",
             "drop_na",
             "replace",

@@ -81,6 +81,14 @@ message Relation {
     UnresolvedTableValuedFunction unresolved_table_valued_function = 43;
     LateralJoin lateral_join = 44;
 
+    // Reference to a node else where in the tree. There are two use cases for this:
+    // 1. Reduce tree duplication. In this case the tree contains two or more subtrees that are
+    //    identical. The referenced plan can only be a back reference, to a subtree that was
+    //    already visited by the planner. The planner is expected to visit the tree bottom-up from
+    //    left to right.
+    // 1. Reduce tree depth.
+    int64 referenced_plan_id = 45;
+
     // NA functions
     NAFill fill_na = 90;
     NADrop drop_na = 91;

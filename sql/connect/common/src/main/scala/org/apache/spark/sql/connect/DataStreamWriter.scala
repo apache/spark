@@ -195,5 +195,5 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T])
 
   private val sinkBuilder = WriteStreamOperationStart
     .newBuilder()
-    .setInput(ds.plan.getRoot)
+    .setInput(ds.optimizedPlan.getRoot)
 }

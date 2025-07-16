@@ -37,7 +37,7 @@ final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
 
   private val builder = proto.WriteOperationV2
     .newBuilder()
-    .setInput(ds.plan.getRoot)
+    .setInput(ds.optimizedPlan.getRoot)
     .setTableName(table)
 
   /** @inheritdoc */
