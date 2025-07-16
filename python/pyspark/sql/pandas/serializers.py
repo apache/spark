@@ -255,14 +255,8 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
             for packed in iterator:
                 arrs = []
 
-                if isinstance(packed, list) and len(packed) == 1 and isinstance(packed[0], tuple) and len(packed[0]) == 2:
-                    arr, arrow_type = packed[0]
-                    if isinstance(arr, pa.ChunkedArray):
-                        arr = arr.combine_chunks()
-                    if not isinstance(arr, pa.Array):
-                        raise ValueError(f"Expected pa.Array, got {type(arr)}: {arr}")
-                    arrs = [arr]
-                elif isinstance(packed, tuple) and len(packed) == 2 and not isinstance(packed[0], list):
+                if isinstance(packed, tuple) and len(packed) == 2 and not isinstance(packed[0], list):
+                    # Single UDF result case
                     arr, arrow_type = packed
                     if isinstance(arrow_type, pa.DataType):
                         if isinstance(arr, pa.ChunkedArray):
