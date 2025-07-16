@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.io.{File, IOException}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, IOException, ObjectInputStream, ObjectOutputStream}
 import java.net.URI
 import java.util
 import java.util.UUID
@@ -984,6 +984,43 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       assertCacheHitAndMiss(reloadedStoreV2.metrics, expectedCacheHitCount = 0,
         expectedCacheMissCount = 2)
     }
+  }
+
+  test("SPARK-52740: HDFSBackedStateStoreProvider checkpoint format version 2 with " +
+    "deserialized sqlConf throws error correctly") {
+    val sqlConf = getDefaultSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
+      SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get)
+    sqlConf.setConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 2)
+    val originalConf = new StateStoreConf(sqlConf)
+
+    // Serialize
+    val baos = new ByteArrayOutputStream()
+    val oos = new ObjectOutputStream(baos)
+    oos.writeObject(originalConf)
+    oos.close()
+
+    // Deserialize
+    val bais = new ByteArrayInputStream(baos.toByteArray)
+    val ois = new ObjectInputStream(bais)
+    val deserializedConf = ois.readObject().asInstanceOf[StateStoreConf]
+    ois.close()
+
+    val provider = new HDFSBackedStateStoreProvider()
+    val hadoopConf = new Configuration()
+    hadoopConf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
+
+    val e = intercept[AssertionError] {
+      provider.init(
+        StateStoreId(newDir(), Random.nextInt(), 0),
+        keySchema,
+        valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema),
+        useColumnFamilies = false,
+        deserializedConf,
+        hadoopConf)
+    }
+    assert(e.getMessage.contains(
+      "HDFS State Store Provider doesn't support checkpointFormatVersion >= 2"))
   }
 
   override def newStoreProvider(): HDFSBackedStateStoreProvider = {

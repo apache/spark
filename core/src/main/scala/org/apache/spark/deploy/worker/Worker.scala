@@ -600,7 +600,7 @@ private[deploy] class Worker(
 
           // Create the executor's working directory
           val executorDir = new File(workDir, appId + "/" + execId)
-          if (!executorDir.mkdirs()) {
+          if (!Utils.createDirectory(executorDir)) {
             throw new IOException("Failed to create directory " + executorDir)
           }
 

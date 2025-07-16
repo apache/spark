@@ -307,4 +307,6 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
   override def supportsLimit: Boolean = true
 
   override def supportsOffset: Boolean = true
+
+  override def supportsJoin: Boolean = true
 }

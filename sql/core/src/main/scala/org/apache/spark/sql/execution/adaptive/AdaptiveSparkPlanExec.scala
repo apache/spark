@@ -430,6 +430,7 @@ case class AdaptiveSparkPlanExec(
       addSuffix: Boolean = false,
       maxFields: Int,
       printNodeId: Boolean,
+      printOutputColumns: Boolean,
       indent: Int = 0): Unit = {
     super.generateTreeString(
       depth,
@@ -440,6 +441,7 @@ case class AdaptiveSparkPlanExec(
       addSuffix,
       maxFields,
       printNodeId,
+      printOutputColumns,
       indent)
     if (currentPhysicalPlan.fastEquals(initialPlan)) {
       lastChildren.add(true)
@@ -452,6 +454,7 @@ case class AdaptiveSparkPlanExec(
         addSuffix = false,
         maxFields,
         printNodeId,
+        printOutputColumns,
         indent)
       lastChildren.remove(lastChildren.size() - 1)
     } else {
@@ -462,7 +465,8 @@ case class AdaptiveSparkPlanExec(
         append,
         verbose,
         maxFields,
-        printNodeId)
+        printNodeId,
+        printOutputColumns)
       generateTreeStringWithHeader(
         "Initial Plan",
         initialPlan,
@@ -470,10 +474,10 @@ case class AdaptiveSparkPlanExec(
         append,
         verbose,
         maxFields,
-        printNodeId)
+        printNodeId,
+        printOutputColumns)
     }
   }
-
 
   private def generateTreeStringWithHeader(
       header: String,
@@ -482,7 +486,8 @@ case class AdaptiveSparkPlanExec(
       append: String => Unit,
       verbose: Boolean,
       maxFields: Int,
-      printNodeId: Boolean): Unit = {
+      printNodeId: Boolean,
+      printOutputColumns: Boolean): Unit = {
     append("   " * depth)
     append(s"+- == $header ==\n")
     plan.generateTreeString(
@@ -494,6 +499,7 @@ case class AdaptiveSparkPlanExec(
       addSuffix = false,
       maxFields,
       printNodeId,
+      printOutputColumns,
       indent = depth + 1)
   }
 
@@ -891,7 +897,7 @@ case class AdaptiveSparkPlanExec(
     val e = if (originalErrors.size == 1) {
       originalErrors.head
     } else {
-      val se = QueryExecutionErrors.multiFailuresInStageMaterializationError(originalErrors.head)
+      val se = QueryExecutionErrors.multiFailuresInStageMaterializationError(originalErrors)
       originalErrors.tail.foreach(se.addSuppressed)
       se
     }

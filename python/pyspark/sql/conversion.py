@@ -95,7 +95,6 @@ class LocalDataToArrowConversion:
     def _create_converter(
         dataType: DataType,
         nullable: bool = True,
-        variants_as_dicts: bool = False,  # some code paths may require python internal types
     ) -> Callable:
         assert dataType is not None and isinstance(dataType, DataType)
         assert isinstance(nullable, bool)
@@ -117,9 +116,7 @@ class LocalDataToArrowConversion:
             dedup_field_names = _dedup_names(dataType.names)
 
             field_convs = [
-                LocalDataToArrowConversion._create_converter(
-                    field.dataType, field.nullable, variants_as_dicts
-                )
+                LocalDataToArrowConversion._create_converter(field.dataType, field.nullable)
                 for field in dataType.fields
             ]
 
@@ -161,7 +158,7 @@ class LocalDataToArrowConversion:
 
         elif isinstance(dataType, ArrayType):
             element_conv = LocalDataToArrowConversion._create_converter(
-                dataType.elementType, dataType.containsNull, variants_as_dicts
+                dataType.elementType, dataType.containsNull
             )
 
             def convert_array(value: Any) -> Any:
@@ -178,7 +175,7 @@ class LocalDataToArrowConversion:
         elif isinstance(dataType, MapType):
             key_conv = LocalDataToArrowConversion._create_converter(dataType.keyType)
             value_conv = LocalDataToArrowConversion._create_converter(
-                dataType.valueType, dataType.valueContainsNull, variants_as_dicts
+                dataType.valueType, dataType.valueContainsNull
             )
 
             def convert_map(value: Any) -> Any:
@@ -258,7 +255,7 @@ class LocalDataToArrowConversion:
                     return None
                 else:
                     if isinstance(value, bool):
-                        # To match the PySpark which convert bool to string in
+                        # To match the PySpark Classic which convert bool to string in
                         # the JVM side (python.EvaluatePython.makeFromJava)
                         return str(value).lower()
                     else:
@@ -288,14 +285,7 @@ class LocalDataToArrowConversion:
                     if not nullable:
                         raise PySparkValueError(f"input for {dataType} must not be None")
                     return None
-                elif (
-                    isinstance(value, dict)
-                    and all(key in value for key in ["value", "metadata"])
-                    and all(isinstance(value[key], bytes) for key in ["value", "metadata"])
-                    and not variants_as_dicts
-                ):
-                    return VariantVal(value["value"], value["metadata"])
-                elif isinstance(value, VariantVal) and variants_as_dicts:
+                elif isinstance(value, VariantVal):
                     return VariantType().toInternal(value)
                 else:
                     raise PySparkValueError(errorClass="MALFORMED_VARIANT")
@@ -323,43 +313,47 @@ class LocalDataToArrowConversion:
         assert schema is not None and isinstance(schema, StructType)
 
         column_names = schema.fieldNames()
+        len_column_names = len(column_names)
 
-        column_convs = [
-            LocalDataToArrowConversion._create_converter(
-                field.dataType, field.nullable, variants_as_dicts=True
-            )
-            for field in schema.fields
-        ]
-
-        pylist: List[List] = [[] for _ in range(len(column_names))]
-
-        for item in data:
-            if isinstance(item, VariantVal):
-                raise PySparkValueError("Rows cannot be of type VariantVal")
-            if (
-                not isinstance(item, Row)
-                and not isinstance(item, tuple)  # inherited namedtuple
-                and hasattr(item, "__dict__")
-            ):
-                item = item.__dict__
-            if isinstance(item, dict):
-                for i, col in enumerate(column_names):
-                    pylist[i].append(column_convs[i](item.get(col)))
-            elif item is None:
-                for i, col in enumerate(column_names):
-                    pylist[i].append(None)
-            else:
-                if len(item) != len(column_names):
+        def to_row(item: Any) -> tuple:
+            if item is None:
+                return tuple([None] * len_column_names)
+            elif isinstance(item, (Row, tuple)):
+                if len(item) != len_column_names:
                     raise PySparkValueError(
                         errorClass="AXIS_LENGTH_MISMATCH",
                         messageParameters={
-                            "expected_length": str(len(column_names)),
+                            "expected_length": str(len_column_names),
                             "actual_length": str(len(item)),
                         },
                     )
+                return tuple(item)
+            elif isinstance(item, dict):
+                return tuple([item.get(col) for col in column_names])
+            elif isinstance(item, VariantVal):
+                raise PySparkValueError("Rows cannot be of type VariantVal")
+            elif hasattr(item, "__dict__"):
+                item = item.__dict__
+                return tuple([item.get(col) for col in column_names])
+            else:
+                if len(item) != len_column_names:
+                    raise PySparkValueError(
+                        errorClass="AXIS_LENGTH_MISMATCH",
+                        messageParameters={
+                            "expected_length": str(len_column_names),
+                            "actual_length": str(len(item)),
+                        },
+                    )
+                return tuple(item)
 
-                for i in range(len(column_names)):
-                    pylist[i].append(column_convs[i](item[i]))
+        rows = [to_row(item) for item in data]
+
+        column_convs = [
+            LocalDataToArrowConversion._create_converter(field.dataType, field.nullable)
+            for field in schema.fields
+        ]
+
+        pylist = [[conv(row[i]) for row in rows] for i, conv in enumerate(column_convs)]
 
         pa_schema = to_arrow_schema(
             StructType(

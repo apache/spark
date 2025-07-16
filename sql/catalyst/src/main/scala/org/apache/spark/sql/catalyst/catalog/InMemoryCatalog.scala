@@ -331,6 +331,21 @@ class InMemoryCatalog(
     catalog(db).tables(table).table = origTable.copy(schema = newSchema)
   }
 
+  override def alterTableSchema(
+      db: String,
+      table: String,
+      newSchema: StructType): Unit = synchronized {
+    requireTableExists(db, table)
+    val origTable = catalog(db).tables(table).table
+
+    val partCols = origTable.partitionColumnNames
+    assert(newSchema.map(_.name).takeRight(partCols.length) == partCols,
+      s"Partition columns ${partCols.mkString("[", ", ", "]")} are only supported at the end of " +
+        s"the new schema ${newSchema.catalogString} for now.")
+
+    catalog(db).tables(table).table = origTable.copy(schema = newSchema)
+  }
+
   override def alterTableStats(
       db: String,
       table: String,

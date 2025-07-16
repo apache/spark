@@ -58,6 +58,7 @@ private[sql] object ArrowUtils {
       case TimestampType => new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
       case TimestampNTZType =>
         new ArrowType.Timestamp(TimeUnit.MICROSECOND, null)
+      case _: TimeType => new ArrowType.Time(TimeUnit.NANOSECOND, 8 * 8)
       case NullType => ArrowType.Null.INSTANCE
       case _: YearMonthIntervalType => new ArrowType.Interval(IntervalUnit.YEAR_MONTH)
       case _: DayTimeIntervalType => new ArrowType.Duration(TimeUnit.MICROSECOND)
@@ -88,6 +89,8 @@ private[sql] object ArrowUtils {
         if ts.getUnit == TimeUnit.MICROSECOND && ts.getTimezone == null =>
       TimestampNTZType
     case ts: ArrowType.Timestamp if ts.getUnit == TimeUnit.MICROSECOND => TimestampType
+    case t: ArrowType.Time if t.getUnit == TimeUnit.NANOSECOND =>
+      TimeType(TimeType.MICROS_PRECISION)
     case ArrowType.Null.INSTANCE => NullType
     case yi: ArrowType.Interval if yi.getUnit == IntervalUnit.YEAR_MONTH =>
       YearMonthIntervalType()

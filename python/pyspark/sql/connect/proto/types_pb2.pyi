@@ -279,6 +279,40 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    class Time(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        PRECISION_FIELD_NUMBER: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
+        precision: builtins.int
+        type_variation_reference: builtins.int
+        def __init__(
+            self,
+            *,
+            precision: builtins.int | None = ...,
+            type_variation_reference: builtins.int = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_precision", b"_precision", "precision", b"precision"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_precision",
+                b"_precision",
+                "precision",
+                b"precision",
+                "type_variation_reference",
+                b"type_variation_reference",
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_precision", b"_precision"]
+        ) -> typing_extensions.Literal["precision"] | None: ...
+
     class CalendarInterval(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -788,6 +822,7 @@ class DataType(google.protobuf.message.Message):
     VARIANT_FIELD_NUMBER: builtins.int
     UDT_FIELD_NUMBER: builtins.int
     UNPARSED_FIELD_NUMBER: builtins.int
+    TIME_FIELD_NUMBER: builtins.int
     @property
     def null(self) -> global___DataType.NULL: ...
     @property
@@ -845,6 +880,8 @@ class DataType(google.protobuf.message.Message):
     @property
     def unparsed(self) -> global___DataType.Unparsed:
         """UnparsedDataType"""
+    @property
+    def time(self) -> global___DataType.Time: ...
     def __init__(
         self,
         *,
@@ -873,6 +910,7 @@ class DataType(google.protobuf.message.Message):
         variant: global___DataType.Variant | None = ...,
         udt: global___DataType.UDT | None = ...,
         unparsed: global___DataType.Unparsed | None = ...,
+        time: global___DataType.Time | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -915,6 +953,8 @@ class DataType(google.protobuf.message.Message):
             b"string",
             "struct",
             b"struct",
+            "time",
+            b"time",
             "timestamp",
             b"timestamp",
             "timestamp_ntz",
@@ -972,6 +1012,8 @@ class DataType(google.protobuf.message.Message):
             b"string",
             "struct",
             b"struct",
+            "time",
+            b"time",
             "timestamp",
             b"timestamp",
             "timestamp_ntz",
@@ -1017,6 +1059,7 @@ class DataType(google.protobuf.message.Message):
             "variant",
             "udt",
             "unparsed",
+            "time",
         ]
         | None
     ): ...

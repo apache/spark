@@ -403,12 +403,16 @@ object ExpressionPatternBitMask {
   }
 }
 
+
 /**
- * An expression that cannot be evaluated but is guaranteed to be replaced with a foldable value
- * by query optimizer (e.g. CurrentDate).
+ * An expression that cannot be evaluated. These expressions don't live past analysis or
+ * optimization time (e.g. Star) and should not be evaluated during query planning and
+ * execution.
  */
-trait FoldableUnevaluable extends Expression {
-  override def foldable: Boolean = true
+trait Unevaluable extends Expression {
+
+  /** Unevaluable is not foldable because we don't have an eval for it. */
+  final override def foldable: Boolean = false
 
   override def eval(input: InternalRow = null): Any =
     throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
@@ -417,19 +421,6 @@ trait FoldableUnevaluable extends Expression {
     throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
 
-/**
- * An expression that cannot be evaluated. These expressions don't live past analysis or
- * optimization time (e.g. Star) and should not be evaluated during query planning and
- * execution.
- */
-trait Unevaluable extends Expression with FoldableUnevaluable {
-
-  /** Unevaluable is not foldable by default because we don't have an eval for it.
-   * Exception are expressions that will be replaced by a literal by Optimizer (e.g. CurrentDate).
-   * Hence we allow overriding overriding of this field in special cases.
-   */
-  final override def foldable: Boolean = false
-}
 
 /**
  * An expression that gets replaced at runtime (currently by the optimizer) into a different

@@ -26,7 +26,18 @@ import io
 from contextlib import redirect_stdout
 
 from pyspark.sql import Row, functions, DataFrame
-from pyspark.sql.functions import col, lit, count, struct, date_format, to_date, array, explode
+from pyspark.sql.functions import (
+    col,
+    lit,
+    count,
+    struct,
+    date_format,
+    to_date,
+    array,
+    explode,
+    when,
+    concat,
+)
 from pyspark.sql.types import (
     StringType,
     IntegerType,
@@ -188,6 +199,26 @@ class DataFrameTestsMixin:
         self.assertEqual(df.drop(col("name")).columns, ["age", "active"])
         self.assertEqual(df.drop(col("name"), col("age")).columns, ["active"])
         self.assertEqual(df.drop(col("name"), col("age"), col("random")).columns, ["active"])
+
+    def test_drop_notexistent_col(self):
+        df1 = self.spark.createDataFrame(
+            [("a", "b", "c")],
+            schema="colA string, colB string, colC string",
+        )
+        df2 = self.spark.createDataFrame(
+            [("c", "d", "e")],
+            schema="colC string, colD string, colE string",
+        )
+        df3 = df1.join(df2, df1["colC"] == df2["colC"]).withColumn(
+            "colB",
+            when(df1["colB"] == "b", concat(df1["colB"].cast("string"), lit("x"))).otherwise(
+                df1["colB"]
+            ),
+        )
+        df4 = df3.drop(df1["colB"])
+
+        self.assertEqual(df4.columns, ["colA", "colB", "colC", "colC", "colD", "colE"])
+        self.assertEqual(df4.count(), 1)
 
     def test_drop_join(self):
         left_df = self.spark.createDataFrame(

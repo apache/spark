@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.classic.Catalog
 import org.apache.spark.sql.connector.{FakeV2Provider, InMemoryTableSessionCatalog}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -811,7 +811,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     val testCatalog =
       spark.sessionState.catalogManager.catalog(catalogName).asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(dbName), tableName))
-    assert(table.schema().equals(tableSchema))
+    assert(table.columns sameElements CatalogV2Util.structTypeToV2Columns(tableSchema))
     assert(table.properties().get("provider").equals(classOf[FakeV2Provider].getName))
     assert(table.properties().get("comment").equals(description))
   }
@@ -831,7 +831,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       val testCatalog =
         spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array(dbName), tableName))
-      assert(table.schema().equals(tableSchema))
+      assert(table.columns sameElements CatalogV2Util.structTypeToV2Columns(tableSchema))
       assert(table.properties().get("provider").equals(classOf[FakeV2Provider].getName))
       assert(table.properties().get("comment").equals(description))
       assert(table.properties().get("path").equals(dir.getAbsolutePath))

@@ -139,15 +139,18 @@ object JDBCRDD extends Logging {
       // these are already quoted in JDBCScanBuilder
       requiredColumns
     }
+    val connectionFactory = dialect.createConnectionFactory(options)
+
     new JDBCRDD(
       sc,
-      dialect.createConnectionFactory(options),
+      connectionFactory,
       outputSchema.getOrElse(pruneSchema(schema, requiredColumns)),
       quotedColumns,
       predicates,
       parts,
       url,
       options,
+      databaseMetadata = JDBCDatabaseMetadata.fromJDBCConnectionFactory(connectionFactory),
       groupByColumns,
       sample,
       limit,
@@ -171,6 +174,7 @@ class JDBCRDD(
     partitions: Array[Partition],
     url: String,
     options: JDBCOptions,
+    databaseMetadata: JDBCDatabaseMetadata,
     groupByColumns: Option[Array[String]],
     sample: Option[TableSampleInfo],
     limit: Int,
@@ -218,6 +222,11 @@ class JDBCRDD(
   override def getExternalEngineQuery: String = {
     generateJdbcQuery(partition = None)
   }
+
+  /**
+   * Get the external engine database metadata.
+   */
+  def getDatabaseMetadata: JDBCDatabaseMetadata = databaseMetadata
 
   /**
    * Runs the SQL query against the JDBC driver.
