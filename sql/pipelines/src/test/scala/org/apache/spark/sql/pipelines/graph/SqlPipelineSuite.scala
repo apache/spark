@@ -19,11 +19,11 @@ package org.apache.spark.sql.pipelines.graph
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.util.Utils
 
-class SQLPipelineSuite extends PipelineTest with SQLTestUtils {
+class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
   private val externalTable1Ident = fullyQualifiedIdentifier("external_t1")
   private val externalTable2Ident = fullyQualifiedIdentifier("external_t2")
 
@@ -849,6 +849,67 @@ class SQLPipelineSuite extends PipelineTest with SQLTestUtils {
         "datasetNames" -> Seq(fullyQualifiedIdentifier("st").quotedString,
           fullyQualifiedIdentifier("st2").quotedString).mkString(",")
       )
+    )
+  }
+
+  test("No table defined pipeline fails with RUN_EMPTY_PIPELINE") {
+    val graphRegistrationContext = new TestGraphRegistrationContext(spark)
+    val sqlGraphRegistrationContext = new SqlGraphRegistrationContext(graphRegistrationContext)
+
+    sqlGraphRegistrationContext.processSqlFile(sqlText = "", sqlFilePath = "a.sql", spark = spark)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        graphRegistrationContext.toDataflowGraph
+      },
+      condition = "RUN_EMPTY_PIPELINE",
+      sqlState = Option("42617"),
+      parameters = Map.empty
+    )
+  }
+
+  test("Pipeline with only temp views fails with RUN_EMPTY_PIPELINE") {
+    val graphRegistrationContext = new TestGraphRegistrationContext(spark)
+    val sqlGraphRegistrationContext = new SqlGraphRegistrationContext(graphRegistrationContext)
+
+    sqlGraphRegistrationContext.processSqlFile(
+      sqlText = s"""
+                   |CREATE TEMPORARY VIEW a AS SELECT id FROM range(1,3);
+                   |""".stripMargin,
+      sqlFilePath = "a.sql",
+      spark = spark
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        graphRegistrationContext.toDataflowGraph
+      },
+      condition = "RUN_EMPTY_PIPELINE",
+      sqlState = Option("42617"),
+      parameters = Map.empty
+    )
+  }
+
+  test("Pipeline with only flow fails with RUN_EMPTY_PIPELINE") {
+    val graphRegistrationContext = new TestGraphRegistrationContext(spark)
+    val sqlGraphRegistrationContext = new SqlGraphRegistrationContext(graphRegistrationContext)
+
+    sqlGraphRegistrationContext.processSqlFile(
+      sqlText = s"""
+                   |CREATE FLOW f AS INSERT INTO a BY NAME
+                   |SELECT 1;
+                   |""".stripMargin,
+      sqlFilePath = "a.sql",
+      spark = spark
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        graphRegistrationContext.toDataflowGraph
+      },
+      condition = "RUN_EMPTY_PIPELINE",
+      sqlState = Option("42617"),
+      parameters = Map.empty
     )
   }
 }

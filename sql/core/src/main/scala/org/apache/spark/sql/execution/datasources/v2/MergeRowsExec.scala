@@ -48,21 +48,21 @@ case class MergeRowsExec(
 
   override lazy val metrics: Map[String, SQLMetric] = Map(
     "numTargetRowsCopied" -> SQLMetrics.createMetric(sparkContext,
-      "Number of target rows copied unmodified because they did not match any action"),
+      "number of target rows copied unmodified because they did not match any action"),
     "numTargetRowsInserted" -> SQLMetrics.createMetric(sparkContext,
-      "Number of target rows inserted"),
+      "number of target rows inserted"),
     "numTargetRowsDeleted" -> SQLMetrics.createMetric(sparkContext,
-      "Number of target rows deleted"),
+      "number of target rows deleted"),
     "numTargetRowsUpdated" -> SQLMetrics.createMetric(sparkContext,
-      "Number of target rows updated"),
+      "number of target rows updated"),
     "numTargetRowsMatchedUpdated" -> SQLMetrics.createMetric(sparkContext,
-      "Number of target rows updated by a matched clause"),
+      "number of target rows updated by a matched clause"),
     "numTargetRowsMatchedDeleted" -> SQLMetrics.createMetric(sparkContext,
-      "Number of target rows deleted by a matched clause"),
+      "number of target rows deleted by a matched clause"),
     "numTargetRowsNotMatchedBySourceUpdated" -> SQLMetrics.createMetric(sparkContext,
-      "Number of target rows updated by a not matched by source clause"),
+      "number of target rows updated by a not matched by source clause"),
     "numTargetRowsNotMatchedBySourceDeleted" -> SQLMetrics.createMetric(sparkContext,
-      "Number of target rows deleted by a not matched by source clause"))
+      "number of target rows deleted by a not matched by source clause"))
 
   @transient override lazy val producedAttributes: AttributeSet = {
     AttributeSet(output.filterNot(attr => inputSet.contains(attr)))
@@ -252,17 +252,14 @@ case class MergeRowsExec(
                 case _ => throw new IllegalArgumentException(
                   s"Unexpected context for KeepExec: ${keep.context}")
               }
-
               return keep.apply(row)
 
             case _: DiscardExec =>
               incrementDeleteMetric(sourcePresent)
-
               return null
 
             case split: SplitExec =>
               incrementUpdateMetric(sourcePresent)
-
               cachedExtraRow = split.projectExtraRow(row)
               return split.projectRow(row)
           }

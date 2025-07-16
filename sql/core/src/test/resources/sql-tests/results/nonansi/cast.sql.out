@@ -920,6 +920,110 @@ struct<CAST(10.654321 AS INTERVAL MONTH):interval month>
 
 
 -- !query
+SELECT CAST(TIME '00:01:52' AS tinyint)
+-- !query schema
+struct<CAST(TIME '00:01:52' AS TINYINT):tinyint>
+-- !query output
+112
+
+
+-- !query
+SELECT CAST(TIME '00:01:52' AS smallint)
+-- !query schema
+struct<CAST(TIME '00:01:52' AS SMALLINT):smallint>
+-- !query output
+112
+
+
+-- !query
+SELECT CAST(TIME '00:01:52' AS int)
+-- !query schema
+struct<CAST(TIME '00:01:52' AS INT):int>
+-- !query output
+112
+
+
+-- !query
+SELECT CAST(TIME '00:01:52' AS bigint)
+-- !query schema
+struct<CAST(TIME '00:01:52' AS BIGINT):bigint>
+-- !query output
+112
+
+
+-- !query
+SELECT CAST(TIME '23:59:59' AS tinyint)
+-- !query schema
+struct<CAST(TIME '23:59:59' AS TINYINT):tinyint>
+-- !query output
+NULL
+
+
+-- !query
+SELECT CAST(TIME '23:59:59' AS smallint)
+-- !query schema
+struct<CAST(TIME '23:59:59' AS SMALLINT):smallint>
+-- !query output
+NULL
+
+
+-- !query
+SELECT CAST(TIME '23:59:59' AS int)
+-- !query schema
+struct<CAST(TIME '23:59:59' AS INT):int>
+-- !query output
+86399
+
+
+-- !query
+SELECT CAST(TIME '23:59:59' AS bigint)
+-- !query schema
+struct<CAST(TIME '23:59:59' AS BIGINT):bigint>
+-- !query output
+86399
+
+
+-- !query
+SELECT CAST(TIME '00:00:17.5' AS tinyint)
+-- !query schema
+struct<CAST(TIME '00:00:17.5' AS TINYINT):tinyint>
+-- !query output
+17
+
+
+-- !query
+SELECT CAST(TIME '00:00:17.5' AS int)
+-- !query schema
+struct<CAST(TIME '00:00:17.5' AS INT):int>
+-- !query output
+17
+
+
+-- !query
+SELECT CAST(TIME '00:00:17.9' AS int)
+-- !query schema
+struct<CAST(TIME '00:00:17.9' AS INT):int>
+-- !query output
+17
+
+
+-- !query
+SELECT CAST(TIME '00:00:00' AS tinyint)
+-- !query schema
+struct<CAST(TIME '00:00:00' AS TINYINT):tinyint>
+-- !query output
+0
+
+
+-- !query
+SELECT CAST(TIME '00:00:00' AS int)
+-- !query schema
+struct<CAST(TIME '00:00:00' AS INT):int>
+-- !query output
+0
+
+
+-- !query
 SELECT '1.23' :: int
 -- !query schema
 struct<CAST(1.23 AS INT):int>
@@ -1071,6 +1175,38 @@ select 10.123456BD :: interval day to second
 struct<CAST(10.123456 AS INTERVAL DAY TO SECOND):interval day to second>
 -- !query output
 0 00:00:10.123456000
+
+
+-- !query
+SELECT TIME '00:01:52' :: tinyint
+-- !query schema
+struct<CAST(TIME '00:01:52' AS TINYINT):tinyint>
+-- !query output
+112
+
+
+-- !query
+SELECT TIME '00:01:52' :: int
+-- !query schema
+struct<CAST(TIME '00:01:52' AS INT):int>
+-- !query output
+112
+
+
+-- !query
+SELECT TIME '23:59:59' :: tinyint
+-- !query schema
+struct<CAST(TIME '23:59:59' AS TINYINT):tinyint>
+-- !query output
+NULL
+
+
+-- !query
+SELECT TIME '23:59:59' :: int
+-- !query schema
+struct<CAST(TIME '23:59:59' AS INT):int>
+-- !query output
+86399
 
 
 -- !query

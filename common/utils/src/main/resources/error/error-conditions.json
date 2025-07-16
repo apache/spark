@@ -4930,6 +4930,13 @@
     ],
     "sqlState" : "22023"
   },
+  "RUN_EMPTY_PIPELINE" : {
+    "message" : [
+      "Pipelines are expected to have at least one non-temporary dataset defined (tables, persisted views) but no non-temporary datasets were found in your pipeline.",
+      "Please verify that you have included the expected source files, and that your source code includes table definitions (e.g., CREATE MATERIALIZED VIEW in SQL code, @sdp.table in python code)."
+    ],
+    "sqlState" : "42617"
+  },
   "SCALAR_FUNCTION_NOT_COMPATIBLE" : {
     "message" : [
       "ScalarFunction <scalarFunc> not overrides method 'produceResult(InternalRow)' with custom implementation."

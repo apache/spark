@@ -96,6 +96,11 @@ object LiteralValueProtoConverter {
       case v: Date => builder.setDate(SparkDateTimeUtils.fromJavaDate(v))
       case v: Duration => builder.setDayTimeInterval(SparkIntervalUtils.durationToMicros(v))
       case v: Period => builder.setYearMonthInterval(SparkIntervalUtils.periodToMonths(v))
+      case v: LocalTime =>
+        builder.setTime(
+          builder.getTimeBuilder
+            .setNano(SparkDateTimeUtils.localTimeToNanos(v))
+            .setPrecision(TimeType.DEFAULT_PRECISION))
       case v: Array[_] => builder.setArray(arrayBuilder(v))
       case v: CalendarInterval =>
         builder.setCalendarInterval(calendarIntervalBuilder(v.months, v.days, v.microseconds))
@@ -181,6 +186,11 @@ object LiteralValueProtoConverter {
         } else {
           builder.setNull(toConnectProtoType(dataType))
         }
+      case (v: LocalTime, timeType: TimeType) =>
+        builder.setTime(
+          builder.getTimeBuilder
+            .setNano(SparkDateTimeUtils.localTimeToNanos(v))
+            .setPrecision(timeType.precision))
       case _ => toLiteralProtoBuilder(literal)
     }
   }

@@ -936,7 +936,12 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
       windowSpec(
         Seq(UnresolvedAttribute("a")),
         Seq(SortOrder(Literal(1L), Ascending)),
-        SpecifiedWindowFrame(RangeFrame, Cast(3, LongType), Literal(2147483648L)))
+        SpecifiedWindowFrame(
+          RangeFrame,
+          Cast(3, LongType).withTimeZone(conf.sessionLocalTimeZone),
+          Literal(2147483648L)
+        )
+      )
     )
     // Cannot cast frame boundaries to order dataType.
     ruleTest(WindowFrameCoercion,

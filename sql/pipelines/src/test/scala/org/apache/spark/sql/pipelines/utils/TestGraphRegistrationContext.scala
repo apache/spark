@@ -18,7 +18,7 @@
 package org.apache.spark.sql.pipelines.utils
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{LocalTempView, UnresolvedRelation, ViewType}
+import org.apache.spark.sql.catalyst.analysis.{LocalTempView, PersistedView => PersistedViewType, UnresolvedRelation, ViewType}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.pipelines.graph.{
   DataflowGraph,
@@ -160,6 +160,25 @@ class TestGraphRegistrationContext(
         )
       )
     }
+  }
+
+  def registerPersistedView(
+      name: String,
+      query: FlowFunction,
+      sqlConf: Map[String, String] = Map.empty,
+      comment: Option[String] = None,
+      origin: QueryOrigin = QueryOrigin.empty,
+      catalog: Option[String] = None,
+      database: Option[String] = None): Unit = {
+    registerView(
+      name = name,
+      query = query,
+      sqlConf = sqlConf,
+      comment = comment,
+      origin = origin,
+      viewType = PersistedViewType,
+      catalog = catalog,
+      database = database)
   }
 
   def registerView(

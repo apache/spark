@@ -1200,10 +1200,10 @@ class InternalFrame:
 
         :param spark_frame: the new Spark DataFrame
         :param index_fields: the new InternalFields for the index columns.
-                             If None, the original dtyeps are used.
+                             If None, the original dtypes are used.
         :param data_columns: the new column names. If None, the original one is used.
         :param data_fields: the new InternalFields for the data columns.
-                            If None, the original dtyeps are used.
+                            If None, the original dtypes are used.
         :return: the copied InternalFrame.
         """
         if index_fields is None:

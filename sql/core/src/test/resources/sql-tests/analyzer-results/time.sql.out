@@ -432,23 +432,15 @@ Project [cast(12:43:33.1234 as time(4)) + INTERVAL '01:04:05.56' HOUR TO SECOND 
 -- !query
 SELECT TIME'08:30' + NULL
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "left" : "\"TIME(6)\"",
-    "right" : "\"VOID\"",
-    "sqlExpr" : "\"(TIME '08:30:00' + NULL)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 25,
-    "fragment" : "TIME'08:30' + NULL"
-  } ]
-}
+Project [08:30:00 + cast(null as interval day to second) AS TIME '08:30:00' + NULL#x]
++- OneRowRelation
+
+
+-- !query
+SELECT NULL + TIME'08:30'
+-- !query analysis
+Project [08:30:00 + cast(null as interval day to second) AS TIME '08:30:00' + NULL#x]
++- OneRowRelation
 
 
 -- !query
@@ -533,45 +525,15 @@ Project [12:30:41 - 10:00:00 AS TIME '12:30:41' - TIME '10:00:00'#x]
 -- !query
 SELECT TIME'08:30' - NULL
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "left" : "\"TIME(6)\"",
-    "right" : "\"VOID\"",
-    "sqlExpr" : "\"(TIME '08:30:00' - NULL)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 25,
-    "fragment" : "TIME'08:30' - NULL"
-  } ]
-}
+Project [08:30:00 - cast(null as time(6)) AS TIME '08:30:00' - NULL#x]
++- OneRowRelation
 
 
 -- !query
 SELECT NULL - TIME'10:32'
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "left" : "\"VOID\"",
-    "right" : "\"TIME(6)\"",
-    "sqlExpr" : "\"(NULL - TIME '10:32:00')\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 25,
-    "fragment" : "NULL - TIME'10:32'"
-  } ]
-}
+Project [cast(null as time(6)) - 10:32:00 AS NULL - TIME '10:32:00'#x]
++- OneRowRelation
 
 
 -- !query

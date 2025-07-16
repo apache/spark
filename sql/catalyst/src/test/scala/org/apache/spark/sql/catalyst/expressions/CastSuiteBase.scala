@@ -1507,50 +1507,46 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
+  test("SPARK-52619: cast time to integral types") {
+    // Test normal cases that should work with a small number like 112 seconds after midnight
+    val smallTime = Literal.create(LocalTime.of(0, 1, 52), TimeType(6))
+    checkEvaluation(cast(smallTime, ByteType), 112.toByte)
+    checkEvaluation(cast(smallTime, ShortType), 112.toShort)
+    checkEvaluation(cast(smallTime, IntegerType), 112)
+    checkEvaluation(cast(smallTime, LongType), 112L)
 
-  test("cast time to decimal") {
-    // Test various TIME values converted to decimals.
-    Seq(
-      // 00:00:00 -> 0
-      (LocalTime.MIDNIGHT, Decimal(0)),
-      // 01:00:00 -> 3600
-      (LocalTime.of(1, 0, 0), Decimal(3600)),
-      // 01:01:00 -> 3660
-      (LocalTime.of(1, 1, 0), Decimal(3660)),
-      // 01:01:01 -> 3661
-      (LocalTime.of(1, 1, 1), Decimal(3661)),
-      // 01:02:03 -> 3723
-      (LocalTime.of(1, 2, 3), Decimal(3723)),
-      // 12:00:00 -> 43200
-      (LocalTime.NOON, Decimal(43200)),
-      // 23:59:59 -> 86399
-      (LocalTime.of(23, 59, 59), Decimal(86399)),
-      // 23:59:59.1 -> 86399.1
-      (LocalTime.of(23, 59, 59, 100000000), Decimal(86399.1)),
-      // 23:59:59.01 -> 86399.01
-      (LocalTime.of(23, 59, 59, 10000000), Decimal(86399.01)),
-      // 23:59:59.001 -> 86399.001
-      (LocalTime.of(23, 59, 59, 1000000), Decimal(86399.001)),
-      // 23:59:59.0001 -> 86399.0001
-      (LocalTime.of(23, 59, 59, 100000), Decimal(86399.0001)),
-      // 23:59:59.00001 -> 86399.00001
-      (LocalTime.of(23, 59, 59, 10000), Decimal(86399.00001)),
-      // 23:59:59.000001 -> 86399.000001
-      (LocalTime.of(23, 59, 59, 1000), Decimal(86399.000001))
-    ).foreach { case (time, expectedDecimal) =>
-      checkEvaluation(Cast(Literal(time), DecimalType(11, 6)), expectedDecimal)
-    }
+    // Test midnight to all integral types
+    val midnight = Literal.create(LocalTime.MIDNIGHT, TimeType(6))
+    checkEvaluation(cast(midnight, ByteType), 0.toByte)
+    checkEvaluation(cast(midnight, ShortType), 0.toShort)
+    checkEvaluation(cast(midnight, IntegerType), 0)
+    checkEvaluation(cast(midnight, LongType), 0L)
 
-    // Test with different decimal precision and scale.
-    checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(6, 1)), Decimal(43200.0, 6, 1))
-    checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(7, 2)), Decimal(43200.00, 7, 2))
-    checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(8, 3)), Decimal(43200.000, 8, 3))
-    checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(9, 4)), Decimal(43200.0000, 9, 4))
-    checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(10, 5)), Decimal(43200.00000, 10, 5))
-    checkEvaluation(Cast(Literal(LocalTime.NOON), DecimalType(11, 6)), Decimal(43200.000000, 11, 6))
-
-    // Test consistency between interpreted and codegen modes.
-    checkConsistencyBetweenInterpretedAndCodegen(
-      (child: Expression) => Cast(child, DecimalType(11, 6)), TimeType())
+    // Precision rounding/truncation tests with fractional seconds
+    val time0 = Literal.create(LocalTime.NOON, TimeType(0))
+    val time2 = Literal.create(LocalTime.of(12, 0, 0, 120000000), TimeType(2))
+    val time4 = Literal.create(LocalTime.of(12, 0, 0, 345600000), TimeType(4))
+    val oneTwoThreeTime5 = Literal.create(LocalTime.of(1, 2, 3, 555550000), TimeType(5))
+    val maxTime4 = Literal.create(LocalTime.of(23, 59, 59, 999900000), TimeType(4))
+    val fractional5 = Literal.create(LocalTime.of(0, 0, 17, 500000000), TimeType(1))
+    val fractional000001 = Literal.create(LocalTime.of(0, 0, 17, 1000), TimeType(6))
+    val fractional999999 = Literal.create(LocalTime.of(0, 0, 17, 999999000), TimeType(6))
+    val fractional6 = Literal.create(LocalTime.of(0, 0, 17, 600000000), TimeType(1))
+    val fractional4 = Literal.create(LocalTime.of(0, 0, 17, 400000000), TimeType(1))
+    val fractional555 = Literal.create(LocalTime.of(0, 0, 17, 555000000), TimeType(3))
+    checkEvaluation(cast(fractional5, IntegerType), 17)
+    checkEvaluation(cast(fractional5, LongType), 17L)
+    checkEvaluation(cast(fractional000001, IntegerType), 17)
+    checkEvaluation(cast(fractional999999, IntegerType), 17)
+    checkEvaluation(cast(fractional6, IntegerType), 17)
+    checkEvaluation(cast(fractional4, IntegerType), 17)
+    checkEvaluation(cast(fractional555, IntegerType), 17)
+    checkEvaluation(cast(time0, IntegerType), 43200)
+    checkEvaluation(cast(time2, IntegerType), 43200)
+    checkEvaluation(cast(time4, IntegerType), 43200)
+    checkEvaluation(cast(oneTwoThreeTime5, IntegerType), 3723)
+    checkEvaluation(cast(oneTwoThreeTime5, LongType), 3723L)
+    checkEvaluation(cast(maxTime4, IntegerType), 86399)
+    checkEvaluation(cast(maxTime4, LongType), 86399L)
   }
 }

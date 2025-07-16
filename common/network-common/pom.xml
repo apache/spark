@@ -84,10 +84,6 @@
     <!-- Netty End -->
 
     <dependency>
-      <groupId>org.apache.commons</groupId>
-      <artifactId>commons-lang3</artifactId>
-    </dependency>
-    <dependency>
       <groupId>${leveldbjni.group}</groupId>
       <artifactId>leveldbjni-all</artifactId>
       <version>1.8</version>
