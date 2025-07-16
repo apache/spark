@@ -80,6 +80,7 @@ __all__ = [
     "BinaryType",
     "BooleanType",
     "DateType",
+    "TimeType",
     "TimestampType",
     "TimestampNTZType",
     "DecimalType",
@@ -382,6 +383,33 @@ class DateType(AtomicType, metaclass=DataTypeSingleton):
     def fromInternal(self, v: int) -> datetime.date:
         if v is not None:
             return datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
+
+
+class TimeType(AtomicType):
+    """Time (datetime.time) data type."""
+
+    def __init__(self, precision: int = 6):
+        self.precision = precision
+
+    def needConversion(self) -> bool:
+        return True
+
+    def toInternal(self, t: datetime.time) -> int:
+        if t is not None:
+            return (
+                t.hour * 3_600_000_000_000
+                + t.minute * 60_000_000_000
+                + t.second * 1_000_000_000
+                + t.microsecond * 1_000
+            )
+
+    def fromInternal(self, nano: int) -> datetime.time:
+        if nano is not None:
+            hours, remainder = divmod(nano, 3_600_000_000_000)
+            minutes, remainder = divmod(remainder, 60_000_000_000)
+            seconds, remainder = divmod(remainder, 1_000_000_000)
+            microseconds = remainder // 1_000
+            return datetime.time(hours, minutes, seconds, microseconds)
 
 
 class TimestampType(AtomicType, metaclass=DataTypeSingleton):
@@ -1846,6 +1874,7 @@ _LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
 _INTERVAL_DAYTIME = re.compile(r"interval (day|hour|minute|second)( to (day|hour|minute|second))?")
 _INTERVAL_YEARMONTH = re.compile(r"interval (year|month)( to (year|month))?")
+_TIME = re.compile(r"time\(\s*(\d+)\s*\)")
 
 _COLLATIONS_METADATA_KEY = "__COLLATIONS"
 
@@ -1987,6 +2016,9 @@ def _parse_datatype_json_value(
         elif _FIXED_DECIMAL.match(json_value):
             m = _FIXED_DECIMAL.match(json_value)
             return DecimalType(int(m.group(1)), int(m.group(2)))  # type: ignore[union-attr]
+        elif _TIME.match(json_value):
+            m = _TIME.match(json_value)
+            return TimeType(int(m.group(1)))  # type: ignore[union-attr]
         elif _INTERVAL_DAYTIME.match(json_value):
             m = _INTERVAL_DAYTIME.match(json_value)
             inverted_fields = DayTimeIntervalType._inverted_fields
