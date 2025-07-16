@@ -1,0 +1,130 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.jdbc.v2
+
+import org.apache.spark.sql.{DataFrame}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sample, Sort}
+import org.apache.spark.sql.connector.expressions.aggregate.GeneralAggregateFunc
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
+
+trait V2JDBCPushdownTestUtils {
+  protected def checkSamplePushed(df: DataFrame, pushed: Boolean = true): Unit = {
+    val sample = df.queryExecution.optimizedPlan.collect {
+      case s: Sample => s
+    }
+    if (pushed) {
+      assert(sample.isEmpty)
+    } else {
+      assert(sample.nonEmpty)
+    }
+  }
+
+  protected def checkFilterPushed(df: DataFrame, pushed: Boolean = true): Unit = {
+    val filter = df.queryExecution.optimizedPlan.collect {
+      case f: Filter => f
+    }
+    if (pushed) {
+      assert(filter.isEmpty)
+    } else {
+      assert(filter.nonEmpty)
+    }
+  }
+
+  protected def checkLimitRemoved(df: DataFrame, pushed: Boolean = true): Unit = {
+    val limit = df.queryExecution.optimizedPlan.collect {
+      case l: LocalLimit => l
+      case g: GlobalLimit => g
+    }
+    if (pushed) {
+      assert(limit.isEmpty)
+    } else {
+      assert(limit.nonEmpty)
+    }
+  }
+
+  protected def checkLimitPushed(df: DataFrame, limit: Option[Int]): Unit = {
+    df.queryExecution.optimizedPlan.collect {
+      case relation: DataSourceV2ScanRelation => relation.scan match {
+        case v1: V1ScanWrapper =>
+          assert(v1.pushedDownOperators.limit == limit)
+      }
+    }
+  }
+
+  protected def checkColumnPruned(df: DataFrame, col: String): Unit = {
+    val scan = df.queryExecution.optimizedPlan.collectFirst {
+      case s: DataSourceV2ScanRelation => s
+    }.get
+    assert(scan.schema.names.sameElements(Seq(col)))
+  }
+
+  protected def checkAggregateRemoved(df: DataFrame): Unit = {
+    val aggregates = df.queryExecution.optimizedPlan.collect {
+      case agg: Aggregate => agg
+    }
+    assert(aggregates.isEmpty)
+  }
+
+
+  protected def checkAggregatePushed(df: DataFrame, funcName: String): Unit = {
+    df.queryExecution.optimizedPlan.collect {
+      case DataSourceV2ScanRelation(_, scan, _, _, _) =>
+        assert(scan.isInstanceOf[V1ScanWrapper])
+        val wrapper = scan.asInstanceOf[V1ScanWrapper]
+        assert(wrapper.pushedDownOperators.aggregation.isDefined)
+        val aggregationExpressions =
+          wrapper.pushedDownOperators.aggregation.get.aggregateExpressions()
+        assert(aggregationExpressions.length == 1)
+        assert(aggregationExpressions(0).isInstanceOf[GeneralAggregateFunc])
+        assert(aggregationExpressions(0).asInstanceOf[GeneralAggregateFunc].name() == funcName)
+    }
+  }
+
+  protected def checkSortRemoved(df: DataFrame, pushed: Boolean = true): Unit = {
+    val sorts = df.queryExecution.optimizedPlan.collect {
+      case s: Sort => s
+    }
+
+    if (pushed) {
+      assert(sorts.isEmpty)
+    } else {
+      assert(sorts.nonEmpty)
+    }
+  }
+
+  protected def checkOffsetRemoved(df: DataFrame, pushed: Boolean = true): Unit = {
+    val offsets = df.queryExecution.optimizedPlan.collect {
+      case o: Offset => o
+    }
+
+    if (pushed) {
+      assert(offsets.isEmpty)
+    } else {
+      assert(offsets.nonEmpty)
+    }
+  }
+
+  protected def checkOffsetPushed(df: DataFrame, offset: Option[Int]): Unit = {
+    df.queryExecution.optimizedPlan.collect {
+      case relation: DataSourceV2ScanRelation => relation.scan match {
+        case v1: V1ScanWrapper =>
+          assert(v1.pushedDownOperators.offset == offset)
+      }
+    }
+  }
+}
