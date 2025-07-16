@@ -25588,7 +25588,7 @@ def theta_union(
             "theta_union",
             _to_java_column(col1),
             _to_java_column(col2),
-            lit(lgNomEntries),
+            _enum_to_value(lgNomEntries),
         )
     else:
         return _invoke_function("theta_union", _to_java_column(col1), _to_java_column(col2))
@@ -25645,7 +25645,7 @@ def theta_intersection(
             "theta_intersection",
             _to_java_column(col1),
             _to_java_column(col2),
-            lit(lgNomEntries),
+            _enum_to_value(lgNomEntries),
         )
     else:
         return _invoke_function("theta_intersection", _to_java_column(col1), _to_java_column(col2))
@@ -25703,7 +25703,7 @@ def theta_difference(
             "theta_difference",
             _to_java_column(col1),
             _to_java_column(col2),
-            lit(lgNomEntries),
+            _enum_to_value(lgNomEntries),
         )
     else:
         return _invoke_function("theta_difference", _to_java_column(col1), _to_java_column(col2))

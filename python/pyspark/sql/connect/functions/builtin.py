@@ -4201,10 +4201,10 @@ theta_sketch_estimate.__doc__ = pysparkfuncs.theta_sketch_estimate.__doc__
 def theta_union(
     col1: "ColumnOrName", col2: "ColumnOrName", lgNomEntries: Optional[int] = None
 ) -> Column:
-    if lgNomEntries is not None:
-        return _invoke_function("theta_union", _to_col(col1), _to_col(col2), lit(lgNomEntries))
-    else:
+    if lgNomEntries is None:
         return _invoke_function("theta_union", _to_col(col1), _to_col(col2))
+    else:
+        return _invoke_function("theta_union", _to_col(col1), _to_col(col2), lit(lgNomEntries))
 
 
 theta_union.__doc__ = pysparkfuncs.theta_union.__doc__
@@ -4213,12 +4213,12 @@ theta_union.__doc__ = pysparkfuncs.theta_union.__doc__
 def theta_intersection(
     col1: "ColumnOrName", col2: "ColumnOrName", lgNomEntries: Optional[int] = None
 ) -> Column:
-    if lgNomEntries is not None:
+    if lgNomEntries is None:
+        return _invoke_function("theta_intersection", _to_col(col1), _to_col(col2))
+    else:
         return _invoke_function(
             "theta_intersection", _to_col(col1), _to_col(col2), lit(lgNomEntries)
         )
-    else:
-        return _invoke_function("theta_intersection", _to_col(col1), _to_col(col2))
 
 
 theta_intersection.__doc__ = pysparkfuncs.theta_intersection.__doc__
@@ -4227,10 +4227,10 @@ theta_intersection.__doc__ = pysparkfuncs.theta_intersection.__doc__
 def theta_difference(
     col1: "ColumnOrName", col2: "ColumnOrName", lgNomEntries: Optional[int] = None
 ) -> Column:
-    if lgNomEntries is not None:
-        return _invoke_function("theta_difference", _to_col(col1), _to_col(col2), lit(lgNomEntries))
-    else:
+    if lgNomEntries is None:
         return _invoke_function("theta_difference", _to_col(col1), _to_col(col2))
+    else:
+        return _invoke_function("theta_difference", _to_col(col1), _to_col(col2), lit(lgNomEntries))
 
 
 theta_difference.__doc__ = pysparkfuncs.theta_difference.__doc__

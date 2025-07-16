@@ -5517,7 +5517,7 @@
   },
   "THETA_INVALID_LG_NOM_ENTRIES" : {
     "message" : [
-      "Invalid Theta Sketch call; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
+      "Invalid Theta sketch call; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
     ],
     "sqlState" : "22546"
   },

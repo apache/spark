@@ -147,13 +147,13 @@ case class ThetaSketchAgg(
    * function only supports a subset of Spark SQL types, and an exception will be thrown for
    * unsupported types.
    *
-   * @param sketchState
-   *   The UpdateSketch instance wrapped with ThetaSketchState.
+   * @param updateBuffer
+   *   A previously initialized UpdateSketch instance
    * @param input
-   *   an input row
+   *   An input row
    */
-  override def update(sketchState: ThetaSketchState, input: InternalRow): ThetaSketchState =
-    sketchState match {
+  override def update(updateBuffer: ThetaSketchState, input: InternalRow): ThetaSketchState =
+    updateBuffer match {
       case UpdatableSketchBuffer(sketch) =>
         val v = left.eval(input)
         if (v != null) {
@@ -187,27 +187,26 @@ case class ThetaSketchAgg(
         }
         UpdatableSketchBuffer(sketch) // Return updated sketch wrapped again
       case _ =>
-        sketchState
+        updateBuffer
     }
 
   /**
-   * Merges an input CompactSketch into the sketch which is acting as the aggregation buffer.
+   * Merges an input Compact sketch into the UpdateSketch which is acting as the aggregation buffer.
    *
-   * @param sketchState
-   *   the UpdateSketch instance used to store the aggregation result wrapped with
-   *   ThetaSketchState.
+   * @param updateBuffer
+   *   the UpdateSketch instance used to store the aggregation result
    * @param input
-   *   an input CompactSketch instance wrapped with ThetaSketchState
+   *   An input UpdateSketch or Compact sketch instance
    */
   override def merge(
-      sketchState: ThetaSketchState,
+      updateBuffer: ThetaSketchState,
       input: ThetaSketchState): ThetaSketchState = {
     val union = SetOperation.builder
       .setLogNominalEntries(lgNomEntries)
       .buildUnion
 
     // match all the possible Theta Sketch states possible in this class
-    (sketchState, input) match {
+    (updateBuffer, input) match {
       case (UpdatableSketchBuffer(sketch1), UpdatableSketchBuffer(sketch2)) =>
         union.union(sketch1.compact)
         union.union(sketch2.compact)
@@ -228,13 +227,12 @@ case class ThetaSketchAgg(
   }
 
   /**
-   * Returns a CompactSketch derived from the input column or expression
+   * Returns a Compact sketch derived from the input column or expression
    *
    * @param sketchState
-   *   UpdateSketch instance used as an aggregation buffer or a CompactSketch result wrapped with
-   *   ThetaSketchState
+   *   UpdateSketch instance used as an aggregation buffer, or a Compact sketch
    * @return
-   *   A binary compact sketch which can be evaluated or merged
+   *   A Compact binary sketch
    */
   override def eval(sketchState: ThetaSketchState): Any = {
     sketchState match {
@@ -244,7 +242,7 @@ case class ThetaSketchAgg(
     }
   }
 
-  /** Convert the underlying UpdateSketch into an compact byte array */
+  /** Convert the underlying UpdateSketch into an Compact byte array */
   override def serialize(sketchState: ThetaSketchState): Array[Byte] = {
     sketchState match {
       case UpdatableSketchBuffer(s) => s.rebuild.compact.toByteArray
@@ -253,7 +251,7 @@ case class ThetaSketchAgg(
     }
   }
 
-  /** De-serializes byte array into a Compact Sketch instance wrapped with FinalizedSketch */
+  /** Wrap the byte array into a Compact sketch instance */
   override def deserialize(buffer: Array[Byte]): ThetaSketchState = {
     FinalizedSketch(CompactSketch.wrap(Memory.wrap(buffer)))
   }
@@ -273,7 +271,7 @@ case class ThetaSketchAgg(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, lgNomEntries) - Returns the ThetaSketch's compact binary representation.
+    _FUNC_(expr, lgNomEntries) - Returns the ThetaSketch's Compact binary representation.
       `lgNomEntries` (optional) the log-base-2 of Nominal Entries, with Nominal Entries deciding
       the number buckets or slots for the ThetaSketch.""",
   examples = """
@@ -339,10 +337,10 @@ case class ThetaUnionAgg(
   override def nullable: Boolean = false
 
   /**
-   * Instantiate an Union instance using the lgNomEntries param.
+   * Instantiate a Union instance using the lgNomEntries param.
    *
    * @return
-   *   an Union instance wrapped with UnionAggregationBuffer
+   *   a Union instance wrapped with UnionAggregationBuffer
    */
   override def createAggregationBuffer(): ThetaSketchState = {
     UnionAggregationBuffer(
@@ -352,7 +350,7 @@ case class ThetaUnionAgg(
   }
 
   /**
-   * Update the Union instance with the Compact Sketch byte array obtained from the row.
+   * Update the Union instance with the Compact sketch byte array obtained from the row.
    *
    * @param unionBuffer
    *   A previously initialized Union instance
@@ -389,12 +387,12 @@ case class ThetaUnionAgg(
   }
 
   /**
-   * Merges an input Union into the union which is acting as the aggregation buffer.
+   * Merges an input Compact sketch into the Union which is acting as the aggregation buffer.
    *
    * @param unionBuffer
    *   The Union instance used to store the aggregation result
    * @param input
-   *   An input Union or Compact Sketch instance
+   *   An input Union or Compact sketch instance
    */
   override def merge(unionBuffer: ThetaSketchState, input: ThetaSketchState): ThetaSketchState = {
     (unionBuffer, input) match {
@@ -403,7 +401,7 @@ case class ThetaUnionAgg(
         unionLeft.union(unionRight.getResult)
         FinalizedSketch(unionLeft.getResult)
 
-      // One or both are immutable sketches (need to wrap in union)
+      // One or both are immutable sketches
       case (FinalizedSketch(sketch1), FinalizedSketch(sketch2)) =>
         val union = SetOperation.builder.setLogNominalEntries(lgNomEntries).buildUnion
         union.union(sketch1)
@@ -422,12 +420,12 @@ case class ThetaUnionAgg(
   }
 
   /**
-   * Returns an Compact Sketch derived from the merged sketches
+   * Returns an Compact sketch derived from the merged sketches
    *
    * @param sketchState
-   *   Union instance used as an aggregation buffer or a compact sketch
+   *   Union instance used as an aggregation buffer, or a Compact sketch
    * @return
-   *   A binary sketch which can be evaluated or merged
+   *   A Compact binary sketch
    */
   override def eval(sketchState: ThetaSketchState): Any = {
     sketchState match {
@@ -437,7 +435,7 @@ case class ThetaUnionAgg(
     }
   }
 
-  /** Convert the underlying Union into an compact byte array */
+  /** Convert the underlying Union into an Compact byte array */
   override def serialize(sketchState: ThetaSketchState): Array[Byte] = {
     sketchState match {
       case UnionAggregationBuffer(union) => union.getResult.toByteArray
@@ -446,7 +444,7 @@ case class ThetaUnionAgg(
     }
   }
 
-  /** Wrap the byte array into a compact sketch instance */
+  /** Wrap the byte array into a Compact sketch instance */
   override def deserialize(buffer: Array[Byte]): ThetaSketchState = {
     if (buffer.nonEmpty) {
       FinalizedSketch(CompactSketch.wrap(Memory.wrap(buffer)))
@@ -460,8 +458,8 @@ case class ThetaUnionAgg(
 }
 
 /**
- * The ThetaIntersectionAgg function ingests and merges Datasketches ThetaSketch instances
- * previously produced by the ThetaSketchAgg function, and outputs the merged ThetaSketch.
+ * The ThetaIntersectionAgg function ingests and intersects Datasketches ThetaSketch instances
+ * previously produced by the ThetaSketchAgg function, and outputs the intersected ThetaSketch.
  *
  * See [[https://datasketches.apache.org/docs/Theta/ThetaSketches.html]] for more information.
  *
@@ -473,7 +471,7 @@ case class ThetaUnionAgg(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, lgNomEntries) - Returns the ThetaSketch's compact binary representation.
+    _FUNC_(expr, lgNomEntries) - Returns the ThetaSketch's Compact binary representation.
       `lgNomEntries` (optional) the log-base-2 of Nominal Entries, with Nominal Entries deciding
       the number buckets or slots for the ThetaSketch.""",
   examples = """
@@ -553,7 +551,7 @@ case class ThetaIntersectionAgg(
   }
 
   /**
-   * Update the Intersection instance with the Compact Sketch byte array obtained from the row.
+   * Update the Intersection instance with the Compact sketch byte array obtained from the row.
    *
    * @param intersectionBuffer
    *   A previously initialized Intersection instance
@@ -592,12 +590,13 @@ case class ThetaIntersectionAgg(
   }
 
   /**
-   * Merges an input Intersection into the union which is acting as the aggregation buffer.
+   * Merges an input Compact sketch into the Intersection which is
+   * acting as the aggregation buffer.
    *
    * @param intersectionBuffer
    *   The Intersection instance used to store the aggregation result
    * @param input
-   *   An input Union or Compact Sketch instance
+   *   An input Intersection or Compact sketch instance
    */
   override def merge(
       intersectionBuffer: ThetaSketchState,
@@ -610,7 +609,7 @@ case class ThetaIntersectionAgg(
         intersectLeft.intersect(intersectRight.getResult)
         FinalizedSketch(intersectLeft.getResult)
 
-      // One or both are immutable sketches (need to wrap in union)
+      // One or both are immutable sketches
       case (FinalizedSketch(sketch1), FinalizedSketch(sketch2)) =>
         val intersection =
           SetOperation.builder.setLogNominalEntries(lgNomEntries).buildIntersection
@@ -630,12 +629,12 @@ case class ThetaIntersectionAgg(
   }
 
   /**
-   * Returns an Compact Sketch derived from the merged sketches
+   * Returns an Compact sketch derived from the intersected sketches
    *
    * @param sketchState
-   *   Intersection instance used as an aggregation buffer or a compact sketch
+   *   Intersection instance used as an aggregation buffer, or a Compact sketch
    * @return
-   *   A binary sketch which can be evaluated or merged
+   *   A Compact binary sketch
    */
   override def eval(sketchState: ThetaSketchState): Any = {
     sketchState match {
@@ -645,16 +644,16 @@ case class ThetaIntersectionAgg(
     }
   }
 
-  /** Convert the underlying Intersection into an compact byte array */
+  /** Convert the underlying Intersection into an Compact byte array */
   override def serialize(sketchState: ThetaSketchState): Array[Byte] = {
     sketchState match {
       case IntersectionAggregationBuffer(intersection) => intersection.getResult.toByteArray
-      case FinalizedSketch(s) => s.toByteArray
+      case FinalizedSketch(compact) => compact.toByteArray
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
   }
 
-  /** Wrap the byte array into a compact sketch instance */
+  /** Wrap the byte array into a Compact sketch instance */
   override def deserialize(buffer: Array[Byte]): ThetaSketchState = {
     if (buffer.nonEmpty) {
       FinalizedSketch(CompactSketch.wrap(Memory.wrap(buffer)))
