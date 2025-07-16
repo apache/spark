@@ -197,7 +197,7 @@ class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
     def load_stream(self, stream):
         return ArrowStreamSerializer.load_stream(self, stream)
 
-class ArrowBatchUDFSerializer(ArrowStreamSerializer):
+class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
     """
     Serializer used by Python worker to evaluate Arrow UDFs
     """
@@ -234,44 +234,74 @@ class ArrowBatchUDFSerializer(ArrowStreamSerializer):
                 raise
 
     def load_stream(self, stream):
+        """
+        Load Arrow RecordBatches and yield Arrow arrays.
+        """
         import pyarrow as pa
-        batches = super(ArrowBatchUDFSerializer, self).load_stream(stream)
+
+        batches = ArrowStreamSerializer.load_stream(self, stream)
         for batch in batches:
-            table = pa.Table.from_batches([batch])
-            columns = [
-                self.arrow_to_pandas(c, i)
-                for i, c in enumerate(table.itercolumns())
-            ]
-            yield columns
+            yield [batch.column(i) for i in range(batch.num_columns)]
 
     def dump_stream(self, iterator, stream):
         """
-        Override because Arrow UDFs require a START_ARROW_STREAM before the Arrow stream is sent.
-        This should be sent after creating the first record batch so in case of an error, it can
-        be sent back to the JVM before the Arrow stream starts.
+        Convert UDF output to Arrow RecordBatches.
+        Iterator is expected to yield tuples of the form ``(pa.Array, pa.DataType)``.
         """
         import pyarrow as pa
 
         def wrap_and_init_stream():
             should_write_start_length = True
             for packed in iterator:
-                # Flatten tuple of lists into a single list
-                if isinstance(packed, tuple) and all(isinstance(x, list) for x in packed):
-                    packed = [item for sublist in packed for item in sublist]
+                arrs = []
 
-                if isinstance(packed, tuple) and len(packed) == 2 and isinstance(packed[1], pa.DataType):
-                    # single array UDF in a projection
-                    arrs = [self._create_array(packed[0], packed[1], self._arrow_cast)]
+                if isinstance(packed, list) and len(packed) == 1 and isinstance(packed[0], tuple) and len(packed[0]) == 2:
+                    arr, arrow_type = packed[0]
+                    if isinstance(arr, pa.ChunkedArray):
+                        arr = arr.combine_chunks()
+                    if not isinstance(arr, pa.Array):
+                        raise ValueError(f"Expected pa.Array, got {type(arr)}: {arr}")
+                    arrs = [arr]
+                elif isinstance(packed, tuple) and len(packed) == 2 and not isinstance(packed[0], list):
+                    arr, arrow_type = packed
+                    if isinstance(arrow_type, pa.DataType):
+                        if isinstance(arr, pa.ChunkedArray):
+                            arr = arr.combine_chunks()
+                        arrs = [arr]
+                    else:
+                        try:
+                            if isinstance(arr, pa.ChunkedArray):
+                                arr = arr.combine_chunks()
+                            arrs = [arr]
+                        except Exception as e:
+                            raise ValueError(f"Expected (pa.Array, pa.DataType) but got ({type(arr)}, {type(arrow_type)}). Arrow type value: {arrow_type}") from e
+                elif isinstance(packed, tuple) and all(isinstance(item, list) and len(item) == 1 for item in packed):
+                    # Multiple UDF results: ([(<pa.Array>, <DataType>)], [(<pa.Array>, <DataType>)], ...)
+                    for item_list in packed:
+                        arr, arrow_type = item_list[0]
+                        if isinstance(arr, pa.ChunkedArray):
+                            arr = arr.combine_chunks()
+                        arrs.append(arr)
                 elif isinstance(packed, list):
-                    # multiple array UDFs in a projection
-                    arrs = [self._create_array(t[0], t[1], self._arrow_cast) for t in packed]
+                    if all(isinstance(item, tuple) and len(item) == 2 for item in packed):
+                        # Multiple array UDF results: [(pa.Array, pa.DataType), ...]
+                        for arr, arrow_type in packed:
+                            if isinstance(arr, pa.ChunkedArray):
+                                arr = arr.combine_chunks()
+                            arrs.append(arr)
+                    else:
+                        raise ValueError(f"Unexpected list format: {packed}")
                 else:
-                    arr = pa.array([packed], type=pa.int32())
-                    arrs = [self._create_array(arr, pa.int32(), self._arrow_cast)]
+                    raise ValueError(f"Unexpected iterator format: {type(packed)}, content: {packed}")
 
-                batch = pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
+                validated_arrs = []
+                for i, arr in enumerate(arrs):
+                    if not isinstance(arr, pa.Array):
+                        raise ValueError(f"Expected pa.Array, got {type(arr)}: {arr}")
+                    validated_arrs.append(arr)
 
-                # Write the first record batch with initialization.
+                batch = pa.RecordBatch.from_arrays(validated_arrs, ["_%d" % i for i in range(len(validated_arrs))])
+
                 if should_write_start_length:
                     write_int(SpecialLengths.START_ARROW_STREAM, stream)
                     should_write_start_length = False
@@ -1521,7 +1551,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
 
         def generate_data_batches(batches):
             """
-            Deserialize ArrowRecordBatches and return a generator of pandas.Series list.
+            Deserialize ArrowRecordBatches and return a generator of Row.
             The deserialization logic assumes that Arrow RecordBatches contain the data with the
             ordering that data chunks for same grouping key will appear sequentially.
             See `TransformWithStateInPandasPythonInitialStateRunner` for arrow batch schema sent

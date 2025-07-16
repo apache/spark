@@ -77,7 +77,7 @@ from pyspark.sql.types import (
     StructType,
     _create_row,
     _parse_datatype_json_string,
-    ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType
+    ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType, VariantType, VariantVal, UserDefinedType,
 )
 from pyspark.util import fail_on_stopiteration, handle_worker_exception
 from pyspark import shuffle
@@ -213,7 +213,8 @@ def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_co
 def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf, input_types=None):
     import pyarrow as pa
     from pyspark.sql.types import VariantType, VariantVal  # type: ignore
-    from pyspark.sql.conversion import ArrowToUDFConversion
+    from pyspark.sql.conversion import ArrowTableToRowsConversion, LocalDataToArrowConversion
+    from pyspark.sql.pandas.types import from_arrow_schema
 
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
 
@@ -225,15 +226,31 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
     arrow_return_type = to_arrow_type(
         return_type, prefers_large_types=use_large_var_types(runner_conf)
     )
+    prefers_large_var_types = use_large_var_types(runner_conf)
 
     result_func = lambda pdf: pdf  # noqa: E731
     if type(return_type) == StringType:
         result_func = lambda r: str(r) if r is not None else r  # noqa: E731
     elif type(return_type) == BinaryType:
         result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
+    elif isinstance(return_type, (ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)):
+        def numeric_result_func(r):
+            if r is None:
+                return r
+            if isinstance(r, str):
+                try:
+                    if isinstance(return_type, (ByteType, ShortType, IntegerType, LongType)):
+                        return int(r)
+                    elif isinstance(return_type, (FloatType, DoubleType)):
+                        return float(r)
+                except (ValueError, TypeError):
+                    # TODO throw appropriate error
+                    pass
+            return r
+        result_func = numeric_result_func
 
     if zero_arg_exec:
-        def get_args(*args: pa.RecordBatch):
+        def get_args_and_convert(*args: pa.RecordBatch):
             if args:
                 if hasattr(args[0], "num_rows"):
                     batch_size = args[0].num_rows
@@ -243,33 +260,68 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
                 batch_size = 1
             return [() for _ in range(batch_size)]
     else:
-        def get_args(*args: pa.RecordBatch):
+        def get_args_and_convert(*args: pa.RecordBatch):
+            # Convert Arrow arrays to chunked arrays if needed
             arrays = [
                 arg.combine_chunks() if isinstance(arg, pa.ChunkedArray) else arg
                 for arg in args
             ]
 
-            return ArrowToUDFConversion.convert_batch_inputs(arrays, input_types)
+            names = [f"_{n}" for n in range(len(arrays))]
+            table = pa.Table.from_arrays(arrays, names=names)
+            schema = from_arrow_schema(table.schema, prefers_large_var_types)
+            rows = ArrowTableToRowsConversion.convert(table, schema=schema)
+
+            # UDT handling: if input_types contains UDTs, convert lists back to UDT objects
+            # Only apply if input_types length matches row length (no kwargs filtering)
+            if input_types is not None and len(input_types) == len(arrays):
+                def convert_value(value, data_type):
+                    from pyspark.sql.types import UserDefinedType, ArrayType
+
+                    if isinstance(data_type, UserDefinedType):
+                        if value is not None:
+                            return data_type.deserialize(value)
+                    elif isinstance(data_type, ArrayType) and isinstance(data_type.elementType, UserDefinedType):
+                        if isinstance(value, list):
+                            udt = data_type.elementType
+                            return [udt.deserialize(item) if item is not None else item for item in value]
+                    return value
+
+                def convert_udt_inputs(row, input_types):
+                    converted_row = []
+                    for i, (value, input_type) in enumerate(zip(row, input_types)):
+                        converted_value = convert_value(value, input_type)
+                        converted_row.append(converted_value)
+                    return tuple(converted_row)
+
+                converted_rows = []
+                for row in rows:
+                    converted_row = convert_udt_inputs(row, input_types)
+                    converted_rows.append(converted_row)
+                return converted_rows
+            else:
+                return [tuple(row) for row in rows]
 
     @fail_on_stopiteration
     def evaluate(*args: pa.RecordBatch):
+        converted_rows = get_args_and_convert(*args)
+
         udf_results = []
-        for row in get_args(*args):
+        for row in converted_rows:
             udf_result = result_func(func(*row))
             udf_results.append(udf_result)
 
-        results = ArrowToUDFConversion.convert_batch_outputs(udf_results, return_type)
-
-        if len(results) == 0:
+        if len(udf_results) == 0:
             arr = pa.array([], type=arrow_return_type)
         else:
             try:
-                from pyspark.sql.types import StructType, StructField
+                from pyspark.sql.types import StructType, StructField, VariantType, UserDefinedType
+
                 temp_struct_type = StructType([StructField("result", return_type)])
-                temp_data = [{"result": result} for result in results]
+                temp_data = [{"result": result} for result in udf_results]
 
                 arrow_table = LocalDataToArrowConversion.convert(
-                    temp_data, temp_struct_type, use_large_var_types(runner_conf)
+                    temp_data, temp_struct_type, prefers_large_var_types
                 )
 
                 arr = arrow_table.column(0).combine_chunks()
@@ -277,7 +329,7 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
                 raise PySparkRuntimeError(
                     errorClass="UDF_ARROW_TYPE_CONVERSION_ERROR",
                     messageParameters={
-                        "data": str(results),
+                        "data": str(udf_results),
                         "schema": return_type.simpleString(),
                         "arrow_schema": str(arrow_return_type),
                     },
