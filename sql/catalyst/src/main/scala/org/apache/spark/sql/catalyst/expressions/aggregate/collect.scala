@@ -327,7 +327,7 @@ case class ListAgg(
   with SupportsOrderingWithinGroup
   with ImplicitCastInputTypes {
 
-  val orderExpressions: Seq[SortOrder] = orderChildExpressions.zipWithIndex.map {
+  lazy val orderExpressions: Seq[SortOrder] = orderChildExpressions.zipWithIndex.map {
     case (orderChild, i) =>
       SortOrder(
         child = orderChild,
