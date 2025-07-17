@@ -94,6 +94,7 @@ case class ConcatWs(children: Seq[Expression])
 
   override def nullable: Boolean = children.head.nullable
   override def foldable: Boolean = children.forall(_.foldable)
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.isEmpty) {
@@ -440,6 +441,7 @@ trait String2StringExpression extends ImplicitCastInputTypes {
   override def dataType: DataType = child.dataType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(input: Any): Any =
     convert(input.asInstanceOf[UTF8String])
@@ -1264,6 +1266,8 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
       StringTypeWithCollation(supportsTrimCollation = true)
     )
 
+  override def contextIndependentFoldable: Boolean = super.contextIndependentFoldable
+
   override protected def nullSafeEval(word: Any, set: Any): Any = {
     CollationSupport.FindInSet.
       exec(word.asInstanceOf[UTF8String], set.asInstanceOf[UTF8String], collationId)
@@ -1297,6 +1301,7 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   protected def doEval(srcString: UTF8String): UTF8String
   protected def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String
@@ -1678,6 +1683,8 @@ case class StringInstr(str: Expression, substr: Expression)
       StringTypeNonCSAICollation(supportsTrimCollation = true)
     )
 
+  override def contextIndependentFoldable: Boolean = super.contextIndependentFoldable
+
   override def nullSafeEval(string: Any, sub: Any): Any = {
     CollationSupport.StringInstr.
       exec(string.asInstanceOf[UTF8String], sub.asInstanceOf[UTF8String], collationId) + 1
@@ -1729,6 +1736,7 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
       StringTypeNonCSAICollation(supportsTrimCollation = true),
       IntegerType
     )
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
   override def first: Expression = strExpr
   override def second: Expression = delimExpr
   override def third: Expression = countExpr
@@ -2050,6 +2058,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 
 
   override def foldable: Boolean = children.forall(_.foldable)
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
   override def nullable: Boolean = children(0).nullable
   override def dataType: DataType = children(0).dataType
 
@@ -2205,6 +2214,8 @@ case class StringRepeat(str: Expression, times: Expression)
       IntegerType
     )
 
+  override def contextIndependentFoldable: Boolean = super.contextIndependentFoldable
+
   override def nullSafeEval(string: Any, n: Any): Any = {
     string.asInstanceOf[UTF8String].repeat(n.asInstanceOf[Integer])
   }
@@ -2235,6 +2246,7 @@ case class StringSpace(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   override def nullSafeEval(s: Any): Any = {
     val length = s.asInstanceOf[Int]
@@ -2301,6 +2313,8 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
       IntegerType,
       IntegerType
     )
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def first: Expression = str
   override def second: Expression = pos
@@ -2441,6 +2455,7 @@ case class Length(child: Expression)
         BinaryType
       )
     )
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(value: Any): Any = child.dataType match {
     case _: StringType => value.asInstanceOf[UTF8String].numChars
@@ -2482,6 +2497,7 @@ case class BitLength(child: Expression)
         BinaryType
       )
     )
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
   protected override def nullSafeEval(value: Any): Any = child.dataType match {
     case _: StringType => value.asInstanceOf[UTF8String].numBytes * 8
     case BinaryType => value.asInstanceOf[Array[Byte]].length * 8
@@ -2526,6 +2542,7 @@ case class OctetLength(child: Expression)
         BinaryType
       )
     )
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(value: Any): Any = child.dataType match {
     case _: StringType => value.asInstanceOf[UTF8String].numBytes
@@ -2617,6 +2634,7 @@ case class Levenshtein(
   override def nullIntolerant: Boolean = true
 
   override def foldable: Boolean = children.forall(_.foldable)
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def eval(input: InternalRow): Any = {
     val leftEval = left.eval(input)
@@ -2722,6 +2740,8 @@ case class SoundEx(child: Expression)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
   override def nullSafeEval(input: Any): Any = input.asInstanceOf[UTF8String].soundex()
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2811,6 +2831,8 @@ case class Chr(child: Expression)
     }
   }
 
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, lon => {
       s"""
@@ -2852,6 +2874,8 @@ case class Base64(child: Expression, chunkBase64: Boolean)
   def this(expr: Expression) = this(expr, SQLConf.get.chunkBase64StringEnabled)
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[Base64],
@@ -2901,6 +2925,7 @@ case class UnBase64(child: Expression, failOnError: Boolean = false)
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   def this(expr: Expression) = this(expr, false)
 
@@ -3340,6 +3365,7 @@ case class FormatNumber(x: Expression, d: Expression)
   override def right: Expression = d
   override def nullable: Boolean = true
   override def nullIntolerant: Boolean = true
+  override def contextIndependentFoldable: Boolean = super.contextIndependentFoldable
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
@@ -3590,6 +3616,7 @@ case class StringSplitSQL(
   override def left: Expression = str
   override def right: Expression = delimiter
   override def nullIntolerant: Boolean = true
+  override def contextIndependentFoldable: Boolean = super.contextIndependentFoldable
 
   override def nullSafeEval(string: Any, delimiter: Any): Any = {
     val strings = CollationSupport.StringSplitSQL.exec(string.asInstanceOf[UTF8String],
@@ -3751,6 +3778,8 @@ case class Quote(input: Expression)
   override def inputTypes: Seq[AbstractDataType] = {
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
   }
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   override def nodeName: String = "quote"
 
