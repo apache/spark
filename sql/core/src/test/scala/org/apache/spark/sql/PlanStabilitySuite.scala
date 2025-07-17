@@ -78,6 +78,7 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
   }
 
   private val referenceRegex = "#\\d+".r
+  // Do not match `id=#123` like ids as those are actually plan ids in `SubqueryExec` nodes.
   private val exprIdRegexp = "(?<prefix>(?<!id=)#)\\d+L?".r
   private val planIdRegex = "(?<prefix>(plan_id=|id=#))\\d+".r
 
