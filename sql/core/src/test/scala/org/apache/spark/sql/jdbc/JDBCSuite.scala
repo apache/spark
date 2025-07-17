@@ -807,16 +807,19 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     val postgresDialect = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
     val derbyDialect = JdbcDialects.get("jdbc:derby:db")
     val oracleDialect = JdbcDialects.get("jdbc:oracle:thin:@//localhost:1521/orcl")
+    val databricksDialect = JdbcDialects.get("jdbc:databricks://host/db")
 
-    val columns = Seq("abc", "key")
+    val columns = Seq("abc", "key", "double_quote\"", "back`")
     val mySQLColumns = columns.map(mySQLDialect.quoteIdentifier)
     val postgresColumns = columns.map(postgresDialect.quoteIdentifier)
     val derbyColumns = columns.map(derbyDialect.quoteIdentifier)
-    val oracleColumns = (columns :+ "col\"").map(oracleDialect.quoteIdentifier)
-    assert(mySQLColumns === Seq("`abc`", "`key`"))
-    assert(postgresColumns === Seq(""""abc"""", """"key""""))
-    assert(derbyColumns === Seq(""""abc"""", """"key""""))
-    assert(oracleColumns === Seq(""""abc"""", """"key"""", "\"col\"\"\""))
+    val oracleColumns = columns.map(oracleDialect.quoteIdentifier)
+    val databricksColumns = columns.map(databricksDialect.quoteIdentifier)
+    assertResult(Seq("`abc`", "`key`", "`double_quote\"`", "`back```"))(mySQLColumns)
+    assertResult(Seq("\"abc\"", "\"key\"", "\"double_quote\"\"\"", "\"back`\""))(postgresColumns)
+    assertResult(Seq("\"abc\"", "\"key\"", "\"double_quote\"\"\"", "\"back`\""))(derbyColumns)
+    assertResult(Seq("\"abc\"", "\"key\"", "\"double_quote\"\"\"", "\"back`\""))(oracleColumns)
+    assertResult(Seq("`abc`", "`key`", "`double_quote\"`", "`back```"))(databricksColumns)
   }
 
   test("compile filters") {
