@@ -816,7 +816,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(mySQLColumns === Seq("`abc`", "`key`"))
     assert(postgresColumns === Seq(""""abc"""", """"key""""))
     assert(derbyColumns === Seq(""""abc"""", """"key""""))
-    assert(oracleColumns === Seq(""""abc"""", """"key"""", "col\"\""))
+    assert(oracleColumns === Seq(""""abc"""", """"key"""", "\"col\"\"\""))
   }
 
   test("compile filters") {
