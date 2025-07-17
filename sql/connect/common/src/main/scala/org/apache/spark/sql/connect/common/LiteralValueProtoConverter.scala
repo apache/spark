@@ -64,7 +64,7 @@ object LiteralValueProtoConverter {
     def arrayBuilder(array: Array[_]) = {
       val ab = builder.getArrayBuilder
       array.foreach(x => ab.addElements(toLiteralProto(x)))
-      if (ab.getElementsCount == 0) {
+      if (ab.getElementsCount == 0 || getInferredDataType(ab.getElementsList.get(0)).isEmpty) {
         ab.setElementType(toConnectProtoType(toDataType(array.getClass.getComponentType)))
       }
       ab
@@ -129,7 +129,7 @@ object LiteralValueProtoConverter {
           throw new IllegalArgumentException(s"literal $other not supported (yet).")
       }
 
-      if (ab.getElementsCount == 0) {
+      if (ab.getElementsCount == 0 || getInferredDataType(ab.getElementsList.get(0)).isEmpty) {
         ab.setElementType(toConnectProtoType(elementType))
       }
 
@@ -138,8 +138,6 @@ object LiteralValueProtoConverter {
 
     def mapBuilder(scalaValue: Any, keyType: DataType, valueType: DataType) = {
       val mb = builder.getMapBuilder
-        .setKeyType(toConnectProtoType(keyType))
-        .setValueType(toConnectProtoType(valueType))
 
       scalaValue match {
         case map: scala.collection.Map[_, _] =>
@@ -151,11 +149,11 @@ object LiteralValueProtoConverter {
           throw new IllegalArgumentException(s"literal $other not supported (yet).")
       }
 
-      if (mb.getKeysCount == 0) {
+      if (mb.getKeysCount == 0 || getInferredDataType(mb.getKeysList.get(0)).isEmpty) {
         mb.setKeyType(toConnectProtoType(keyType))
       }
 
-      if (mb.getValuesCount == 0) {
+      if (mb.getValuesCount == 0 || getInferredDataType(mb.getValuesList.get(0)).isEmpty) {
         mb.setValueType(toConnectProtoType(valueType))
       }
 
@@ -370,7 +368,11 @@ object LiteralValueProtoConverter {
     }
   }
 
-  private def getOuterDataType(literal: proto.Expression.Literal): proto.DataType = {
+  private def getInferredDataType(literal: proto.Expression.Literal): Option[proto.DataType] = {
+    if (literal.hasNull) {
+      return Some(literal.getNull)
+    }
+
     val builder = proto.DataType.newBuilder()
     literal.getLiteralTypeCase match {
       case proto.Expression.Literal.LiteralTypeCase.BINARY =>
@@ -389,22 +391,14 @@ object LiteralValueProtoConverter {
         builder.setFloat(proto.DataType.Float.newBuilder.build())
       case proto.Expression.Literal.LiteralTypeCase.DOUBLE =>
         builder.setDouble(proto.DataType.Double.newBuilder.build())
-      case proto.Expression.Literal.LiteralTypeCase.STRING =>
-        builder.setString(proto.DataType.String.newBuilder.build())
       case proto.Expression.Literal.LiteralTypeCase.DATE =>
         builder.setDate(proto.DataType.Date.newBuilder.build())
       case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP =>
         builder.setTimestamp(proto.DataType.Timestamp.newBuilder.build())
       case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_NTZ =>
         builder.setTimestampNtz(proto.DataType.TimestampNTZ.newBuilder.build())
-      case proto.Expression.Literal.LiteralTypeCase.YEAR_MONTH_INTERVAL =>
-        builder.setYearMonthInterval(proto.DataType.YearMonthInterval.newBuilder.build())
-      case proto.Expression.Literal.LiteralTypeCase.DECIMAL =>
-        builder.setDecimal(proto.DataType.Decimal.newBuilder.build())
       case proto.Expression.Literal.LiteralTypeCase.CALENDAR_INTERVAL =>
         builder.setCalendarInterval(proto.DataType.CalendarInterval.newBuilder.build())
-      case proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL =>
-        builder.setDayTimeInterval(proto.DataType.DayTimeInterval.newBuilder.build())
       case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
         // Element type will be inferred from the elements in the array.
         builder.setArray(proto.DataType.Array.newBuilder.build())
@@ -413,9 +407,19 @@ object LiteralValueProtoConverter {
         builder.setMap(proto.DataType.Map.newBuilder.build())
       case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
         builder.setStruct(literal.getStruct.getStructType.getStruct)
-      case _ => throw InvalidPlanInput(s"Unsupported Literal Type: ${literal.getLiteralTypeCase}")
+      case _ =>
+        // Not all data types support inferring the data type from the literal at the moment.
+        // e.g. the type of DayTimeInterval contains extra information like start_field and
+        // end_field and cannot be inferred from the literal.
+        return None
     }
-    builder.build()
+    Some(builder.build())
+  }
+
+  private def getInferredDataTypeOrThrow(literal: proto.Expression.Literal): proto.DataType = {
+    getInferredDataType(literal).getOrElse {
+      throw InvalidPlanInput(s"Unsupported Literal Type: ${literal.getLiteralTypeCase}")
+    }
   }
 
   def toCatalystArray(
@@ -437,7 +441,7 @@ object LiteralValueProtoConverter {
         protoArrayType(array.getElementType)
       } else if (iter.hasNext) {
         val firstElement = iter.next()
-        val outerElementType = getOuterDataType(firstElement)
+        val outerElementType = getInferredDataTypeOrThrow(firstElement)
         val (elem, inferredElementType) =
           getConverter(outerElementType, inferDataType = true)(firstElement) match {
             case LiteralValueWithDataType(elem, dataType) => (elem, dataType)
@@ -479,15 +483,23 @@ object LiteralValueProtoConverter {
         protoMapType(map.getKeyType, map.getValueType)
       } else if (iter.hasNext) {
         val (key, value) = iter.next()
-        val outerKeyType = getOuterDataType(key)
+        val (outerKeyType, inferKeyType) = if (map.hasKeyType) {
+          (map.getKeyType, false)
+        } else {
+          (getInferredDataTypeOrThrow(key), true)
+        }
         val (catalystKey, inferredKeyType) =
-          getConverter(outerKeyType, inferDataType = true)(key) match {
+          getConverter(outerKeyType, inferDataType = inferKeyType)(key) match {
             case LiteralValueWithDataType(catalystKey, dataType) => (catalystKey, dataType)
             case catalystKey => (catalystKey, outerKeyType)
           }
-        val outerValueType = getOuterDataType(value)
+        val (outerValueType, inferValueType) = if (map.hasValueType) {
+          (map.getValueType, false)
+        } else {
+          (getInferredDataTypeOrThrow(value), true)
+        }
         val (catalystValue, inferredValueType) =
-          getConverter(outerValueType, inferDataType = true)(value) match {
+          getConverter(outerValueType, inferDataType = inferValueType)(value) match {
             case LiteralValueWithDataType(catalystValue, dataType) => (catalystValue, dataType)
             case catalystValue => (catalystValue, outerValueType)
           }
