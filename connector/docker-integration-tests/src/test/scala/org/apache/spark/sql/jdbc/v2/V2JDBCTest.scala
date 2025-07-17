@@ -33,9 +33,9 @@ import org.apache.spark.tags.DockerTest
 
 @DockerTest
 private[v2] trait V2JDBCTest
-  extends SharedSparkSession
+  extends V2JDBCPushdownTestUtils
   with DockerIntegrationFunSuite
-  with V2JDBCPushdownTestUtils {
+  with SharedSparkSession {
   import testImplicits._
 
   val catalogName: String

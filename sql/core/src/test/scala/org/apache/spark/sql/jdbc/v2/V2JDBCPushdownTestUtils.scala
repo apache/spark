@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.jdbc.v2
 
-import org.apache.spark.sql.{DataFrame}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sample, Sort}
+import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LocalLimit, Offset, Sample, Sort}
 import org.apache.spark.sql.connector.expressions.aggregate.GeneralAggregateFunc
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
+import org.apache.spark.sql.internal.SQLConf
 
-trait V2JDBCPushdownTestUtils {
+trait V2JDBCPushdownTestUtils extends ExplainSuiteHelper {
   protected def checkSamplePushed(df: DataFrame, pushed: Boolean = true): Unit = {
     val sample = df.queryExecution.optimizedPlan.collect {
       case s: Sample => s
@@ -80,7 +81,6 @@ trait V2JDBCPushdownTestUtils {
     assert(aggregates.isEmpty)
   }
 
-
   protected def checkAggregatePushed(df: DataFrame, funcName: String): Unit = {
     df.queryExecution.optimizedPlan.collect {
       case DataSourceV2ScanRelation(_, scan, _, _, _) =>
@@ -89,9 +89,10 @@ trait V2JDBCPushdownTestUtils {
         assert(wrapper.pushedDownOperators.aggregation.isDefined)
         val aggregationExpressions =
           wrapper.pushedDownOperators.aggregation.get.aggregateExpressions()
-        assert(aggregationExpressions.length == 1)
-        assert(aggregationExpressions(0).isInstanceOf[GeneralAggregateFunc])
-        assert(aggregationExpressions(0).asInstanceOf[GeneralAggregateFunc].name() == funcName)
+        assert(aggregationExpressions.exists { expr =>
+          expr.isInstanceOf[GeneralAggregateFunc] &&
+          expr.asInstanceOf[GeneralAggregateFunc].name() == funcName
+        })
     }
   }
 
@@ -124,6 +125,32 @@ trait V2JDBCPushdownTestUtils {
       case relation: DataSourceV2ScanRelation => relation.scan match {
         case v1: V1ScanWrapper =>
           assert(v1.pushedDownOperators.offset == offset)
+      }
+    }
+  }
+
+  protected def checkJoinNotPushed(df: DataFrame): Unit = {
+    val joinNodes = df.queryExecution.optimizedPlan.collect {
+      case j: Join => j
+    }
+    assert(joinNodes.nonEmpty, "Join should not be pushed down")
+  }
+
+  protected def checkJoinPushed(df: DataFrame, expectedTables: String*): Unit = {
+    val joinNodes = df.queryExecution.optimizedPlan.collect {
+      case j: Join => j
+    }
+    assert(joinNodes.isEmpty, "Join should be pushed down")
+    if (expectedTables.nonEmpty) {
+      checkPushedInfo(df, s"PushedJoins: [${expectedTables.mkString(", ")}]")
+    }
+  }
+
+  protected def checkPushedInfo(df: DataFrame, expectedPlanFragment: String*): Unit = {
+    withSQLConf(SQLConf.MAX_METADATA_STRING_LENGTH.key -> "1000") {
+      df.queryExecution.optimizedPlan.collect {
+        case _: DataSourceV2ScanRelation =>
+          checkKeywordsExistsInExplain(df, expectedPlanFragment: _*)
       }
     }
   }
