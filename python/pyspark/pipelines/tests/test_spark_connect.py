@@ -51,7 +51,14 @@ class SparkConnectPipelinesTest(ReusedConnectTestCase):
             def mv():
                 return self.spark.range(1)
 
-        result_iter = start_run(self.spark, dataflow_graph_id, dry=True)
+        result_iter = start_run(
+            self.spark,
+            dataflow_graph_id,
+            full_refresh=None,
+            refresh=None,
+            full_refresh_all=False,
+            dry=True,
+        )
         handle_pipeline_events(result_iter)
 
     def test_dry_run_failure(self):
@@ -65,7 +72,14 @@ class SparkConnectPipelinesTest(ReusedConnectTestCase):
                 # Invalid because a streaming query is expected
                 return self.spark.range(1)
 
-        result_iter = start_run(self.spark, dataflow_graph_id, dry=True)
+        result_iter = start_run(
+            self.spark,
+            dataflow_graph_id,
+            full_refresh=None,
+            refresh=None,
+            full_refresh_all=False,
+            dry=True,
+        )
         with self.assertRaises(AnalysisException) as context:
             handle_pipeline_events(result_iter)
         self.assertIn(
