@@ -234,15 +234,17 @@ def run(
     if full_refresh_all:
         if full_refresh:
             raise PySparkException(
-                errorClass="CONFLICTING_PIPELINE_REFRESH_OPTIONS", messageParameters={
+                errorClass="CONFLICTING_PIPELINE_REFRESH_OPTIONS",
+                messageParameters={
                     "conflicting_option": "--full_refresh",
-                }
+                },
             )
         if refresh:
             raise PySparkException(
-                errorClass="CONFLICTING_PIPELINE_REFRESH_OPTIONS", messageParameters={
+                errorClass="CONFLICTING_PIPELINE_REFRESH_OPTIONS",
+                messageParameters={
                     "conflicting_option": "--refresh",
-                }
+                },
             )
 
     log_with_curr_timestamp(f"Loading pipeline spec from {spec_path}...")
@@ -285,6 +287,7 @@ def parse_table_list(value: str) -> List[str]:
     """Parse a comma-separated list of table names, handling whitespace."""
     return [table.strip() for table in value.split(",") if table.strip()]
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pipeline CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -292,7 +295,8 @@ if __name__ == "__main__":
     # "run" subcommand
     run_parser = subparsers.add_parser(
         "run",
-        help="Run a pipeline. If no refresh options are specified, a default incremental update is performed.",
+        help="Run a pipeline. If no refresh options specified, "
+        "a default incremental update is performed.",
     )
     run_parser.add_argument("--spec", help="Path to the pipeline spec.")
     run_parser.add_argument(

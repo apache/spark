@@ -298,14 +298,14 @@ private[connect] object PipelinesHandler extends Logging {
   }
 
   /**
-   * Creates the table filters for the full refresh and refresh operations based on the
-   * StartRun command user provided. Also validates the command parameters to ensure that they are
+   * Creates the table filters for the full refresh and refresh operations based on the StartRun
+   * command user provided. Also validates the command parameters to ensure that they are
    * consistent and do not conflict with each other.
    *
    * If `fullRefreshAll` is true, create `AllTables` filter for full refresh.
    *
-   * If `fullRefreshTables` and `refreshTables` are both empty,
-   *  create `AllTables` filter for refresh as a default behavior.
+   * If `fullRefreshTables` and `refreshTables` are both empty, create `AllTables` filter for
+   * refresh as a default behavior.
    *
    * If both non-empty, verifies that there is no overlap and creates SomeTables filters for both.
    *
@@ -371,16 +371,12 @@ private[connect] object PipelinesHandler extends Logging {
         // If both are specified, we create filters for both after validation
         TableFilters(
           fullRefresh = SomeTables(fullRefreshTableNames),
-          refresh = SomeTables(refreshTableNames)
-        )
+          refresh = SomeTables(refreshTableNames))
     }
   }
 
   /**
    * A case class to hold the table filters for full refresh and refresh operations.
    */
-  private case class TableFilters(
-   fullRefresh: TableFilter,
-   refresh: TableFilter
- )
+  private case class TableFilters(fullRefresh: TableFilter, refresh: TableFilter)
 }

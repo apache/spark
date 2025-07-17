@@ -128,8 +128,7 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
   def createPlanner(): SparkConnectPlanner =
     new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(spark))
 
-  def startPipelineAndWaitForCompletion(graphId: String)
-  : ArrayBuffer[PipelineEvent] = {
+  def startPipelineAndWaitForCompletion(graphId: String): ArrayBuffer[PipelineEvent] = {
     val defaultStartRunCommand =
       PipelineCommand.StartRun.newBuilder().setDataflowGraphId(graphId).build()
     startPipelineAndWaitForCompletion(defaultStartRunCommand)

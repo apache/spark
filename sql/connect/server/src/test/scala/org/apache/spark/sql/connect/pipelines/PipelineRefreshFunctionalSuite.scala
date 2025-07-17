@@ -90,8 +90,7 @@ class PipelineRefreshFunctionalSuite
       val initialContent = Map(
         "spark_catalog.default.a" -> Set(Map("id" -> 1)),
         "spark_catalog.default.b" -> Set(Map("id" -> 1)),
-        "spark_catalog.default.mv" -> Set(Map("id" -> 1))
-      )
+        "spark_catalog.default.mv" -> Set(Map("id" -> 1)))
       // Verify initial content
       initialContent.foreach { case (tableName, expectedRows) =>
         checkTableContent(tableName, expectedRows)
@@ -337,17 +336,18 @@ class PipelineRefreshFunctionalSuite
   }
 
   private def checkTableContent[A <: Map[String, Any]](
-    name: String,
-    expectedContent: Set[A]
-  ): Unit = {
+      name: String,
+      expectedContent: Set[A]): Unit = {
     spark.catalog.refreshTable(name) // clear cache for the table
     val df = spark.table(name)
     QueryTest.checkAnswer(
       df,
-      expectedContent.map(row => {
-        // Convert each row to a Row object
-        org.apache.spark.sql.Row.fromSeq(row.values.toSeq)
-      }).toSeq.asJava
-    )
+      expectedContent
+        .map(row => {
+          // Convert each row to a Row object
+          org.apache.spark.sql.Row.fromSeq(row.values.toSeq)
+        })
+        .toSeq
+        .asJava)
   }
 }

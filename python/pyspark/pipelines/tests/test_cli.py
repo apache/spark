@@ -379,9 +379,7 @@ class CLIUtilityTests(unittest.TestCase):
                 context.exception.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS"
             )
             self.assertEqual(
-                context.exception.getMessageParameters(), {
-                    "conflicting_option": "--full_refresh"
-                }
+                context.exception.getMessageParameters(), {"conflicting_option": "--full_refresh"}
             )
 
     def test_full_refresh_all_conflicts_with_refresh(self):
@@ -404,9 +402,8 @@ class CLIUtilityTests(unittest.TestCase):
                 context.exception.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS"
             )
             self.assertEqual(
-                context.exception.getMessageParameters(), {
-                    "conflicting_option": "--refresh"
-                },
+                context.exception.getMessageParameters(),
+                {"conflicting_option": "--refresh"},
             )
 
     def test_full_refresh_all_conflicts_with_both(self):
