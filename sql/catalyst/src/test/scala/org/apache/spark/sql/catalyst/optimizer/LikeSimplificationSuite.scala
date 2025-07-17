@@ -168,10 +168,10 @@ class LikeSimplificationSuite extends PlanTest {
   test("SPARK-52817: Spark SQL LIKE expressions show poor performance when using multiple '%'") {
     val originalQuery1 =
       testRelation
-        .where('a like "abc%%")
+        .where($"a" like "abc%%")
     val optimized1 = Optimize.execute(originalQuery1.analyze)
     val correctAnswer1 = testRelation
-      .where(StartsWith('a, "abc"))
+      .where(StartsWith($"a", "abc"))
       .analyze
     comparePlans(optimized1, correctAnswer1)
 
