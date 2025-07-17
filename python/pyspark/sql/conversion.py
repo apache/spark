@@ -348,26 +348,29 @@ class LocalDataToArrowConversion:
 
         rows = [to_row(item) for item in data]
 
-        column_convs = [
-            LocalDataToArrowConversion._create_converter(field.dataType, field.nullable)
-            for field in schema.fields
-        ]
+        if len_column_names > 0:
+            column_convs = [
+                LocalDataToArrowConversion._create_converter(field.dataType, field.nullable)
+                for field in schema.fields
+            ]
 
-        pylist = [[conv(row[i]) for row in rows] for i, conv in enumerate(column_convs)]
+            pylist = [[conv(row[i]) for row in rows] for i, conv in enumerate(column_convs)]
 
-        pa_schema = to_arrow_schema(
-            StructType(
-                [
-                    StructField(
-                        field.name, _deduplicate_field_names(field.dataType), field.nullable
-                    )
-                    for field in schema.fields
-                ]
-            ),
-            prefers_large_types=use_large_var_types,
-        )
+            pa_schema = to_arrow_schema(
+                StructType(
+                    [
+                        StructField(
+                            field.name, _deduplicate_field_names(field.dataType), field.nullable
+                        )
+                        for field in schema.fields
+                    ]
+                ),
+                prefers_large_types=use_large_var_types,
+            )
 
-        return pa.Table.from_arrays(pylist, schema=pa_schema)
+            return pa.Table.from_arrays(pylist, schema=pa_schema)
+        else:
+            return pa.table({"_": [None] * len(rows)}).drop("_")
 
 
 class ArrowTableToRowsConversion:
