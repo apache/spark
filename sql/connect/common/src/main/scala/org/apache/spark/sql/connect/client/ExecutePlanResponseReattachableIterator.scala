@@ -300,6 +300,10 @@ class ExecutePlanResponseReattachableIterator(
       reattach.setClientType(initialRequest.getClientType)
     }
 
+    if (initialRequest.hasClientEnv) {
+      reattach.setClientEnv(initialRequest.getClientEnv)
+    }
+
     if (lastReturnedResponseId.isDefined) {
       reattach.setLastResponseId(lastReturnedResponseId.get)
     }
@@ -315,6 +319,10 @@ class ExecutePlanResponseReattachableIterator(
 
     if (initialRequest.hasClientType) {
       release.setClientType(initialRequest.getClientType)
+    }
+
+    if (initialRequest.hasClientEnv) {
+      release.setClientEnv(initialRequest.getClientEnv)
     }
 
     untilResponseId match {

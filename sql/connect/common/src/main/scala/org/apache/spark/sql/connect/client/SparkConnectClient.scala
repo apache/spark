@@ -51,6 +51,8 @@ private[sql] class SparkConnectClient(
 
   private[client] def userAgent: String = configuration.userAgent
 
+  private[client] def clientEnv: proto.ClientEnv = configuration.clientEnv
+
   /**
    * Placeholder method.
    * @return
@@ -136,6 +138,7 @@ private[sql] class SparkConnectClient(
       .setUserContext(userContext)
       .setSessionId(sessionId)
       .setClientType(userAgent)
+      .setClientEnv(clientEnv)
       .addAllTags(tags.get.toSeq.asJava)
     serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
     operationId.foreach { opId =>
@@ -163,6 +166,7 @@ private[sql] class SparkConnectClient(
       .setOperation(operation)
       .setSessionId(sessionId)
       .setClientType(userAgent)
+      .setClientEnv(clientEnv)
       .setUserContext(userContext)
     serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
     bstub.config(request.build())
@@ -252,6 +256,7 @@ private[sql] class SparkConnectClient(
       .setUserContext(userContext)
       .setSessionId(sessionId)
       .setClientType(userAgent)
+      .setClientEnv(clientEnv)
     serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
     analyze(request.build())
   }
@@ -262,6 +267,7 @@ private[sql] class SparkConnectClient(
       .setUserContext(userContext)
       .setSessionId(sessionId)
       .setClientType(userAgent)
+      .setClientEnv(clientEnv)
       .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL)
     serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
     bstub.interrupt(request.build())
@@ -273,6 +279,7 @@ private[sql] class SparkConnectClient(
       .setUserContext(userContext)
       .setSessionId(sessionId)
       .setClientType(userAgent)
+      .setClientEnv(clientEnv)
       .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_TAG)
       .setOperationTag(tag)
     serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
@@ -285,6 +292,7 @@ private[sql] class SparkConnectClient(
       .setUserContext(userContext)
       .setSessionId(sessionId)
       .setClientType(userAgent)
+      .setClientEnv(clientEnv)
       .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_OPERATION_ID)
       .setOperationId(id)
     serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
@@ -297,6 +305,7 @@ private[sql] class SparkConnectClient(
       .setUserContext(userContext)
       .setSessionId(sessionId)
       .setClientType(userAgent)
+      .setClientEnv(clientEnv)
     bstub.releaseSession(request.build())
   }
 
@@ -702,12 +711,14 @@ object SparkConnectClient {
     def build(): SparkConnectClient = _configuration.toSparkConnectClient
   }
 
+  def javaVersion: String = System.getProperty("java.version").split("_")(0)
+
   /**
    * Appends the Spark, Scala & JVM version, and the used OS to the user-provided user agent.
    */
   private def genUserAgent(value: String): String = {
     val scalaVersion = Properties.versionNumberString
-    val jvmVersion = System.getProperty("java.version").split("_")(0)
+    val jvmVersion = javaVersion
     val osName = {
       val os = System.getProperty("os.name").toLowerCase(Locale.ROOT)
       if (os.contains("mac")) "darwin"
@@ -747,6 +758,19 @@ object SparkConnectClient {
       grpcMaxRecursionLimit: Int = ConnectCommon.CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT) {
 
     private def isLocal = host.equals("localhost")
+
+    lazy val clientEnv: proto.ClientEnv = {
+      val builder = proto.ClientEnv.newBuilder()
+        .setSparkVersion(SPARK_VERSION)
+        // if the map is empty then this will not be set since it is defined as optional
+        .setScalaEnv(
+          proto.ClientEnv.ScalaEnv.newBuilder()
+            .setScalaVersion(Properties.versionNumberString)
+            .setJavaVersion(SparkConnectClient.javaVersion)
+            .build()
+        )
+      builder.build()
+    }
 
     def userContext: proto.UserContext = {
       val builder = proto.UserContext.newBuilder()

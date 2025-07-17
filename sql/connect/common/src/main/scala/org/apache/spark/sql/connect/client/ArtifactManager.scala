@@ -169,6 +169,7 @@ class ArtifactManager(
       .newBuilder()
       .setUserContext(clientConfig.userContext)
       .setClientType(clientConfig.userAgent)
+      .setClientEnv(clientConfig.clientEnv)
       .setSessionId(sessionId)
       .addAllNames(Arrays.asList(artifactName))
       .build()
@@ -318,6 +319,7 @@ class ArtifactManager(
       .newBuilder()
       .setUserContext(clientConfig.userContext)
       .setClientType(clientConfig.userAgent)
+      .setClientEnv(clientConfig.clientEnv)
       .setSessionId(sessionId)
     artifacts.foreach { artifact =>
       val in = new CheckedInputStream(artifact.storage.stream, new CRC32)
@@ -374,6 +376,7 @@ class ArtifactManager(
       .newBuilder()
       .setUserContext(clientConfig.userContext)
       .setClientType(clientConfig.userAgent)
+      .setClientEnv(clientConfig.clientEnv)
       .setSessionId(sessionId)
 
     val in = new CheckedInputStream(artifact.storage.stream, new CRC32)

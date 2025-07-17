@@ -58,6 +58,26 @@ message UserContext {
   repeated google.protobuf.Any extensions = 999;
 }
 
+// Client Env is used to provide information about the client environment with some overlap to
+// client_type but used for server side processed
+message ClientEnv {
+  message ScalaEnv {
+    string scala_version = 1;
+    string java_version = 2;
+  }
+
+  message PythonEnv {
+    string python_version = 1;
+  }
+
+  string spark_version = 1;
+
+  oneof env {
+    ScalaEnv scala_env = 2;
+    PythonEnv python_env = 3;
+  }
+}
+
 // Request to perform plan analyze, optionally to explain the plan.
 message AnalyzePlanRequest {
   // (Required)
@@ -98,6 +118,10 @@ message AnalyzePlanRequest {
     GetStorageLevel get_storage_level = 16;
     JsonToDDL json_to_ddl = 18;
   }
+
+  // Provides optional information about the client environment similar to client_type but is
+  // intended for server side processing
+  optional ClientEnv client_env = 19;
 
   message Schema {
     // (Required) The logical plan to be analyzed.
@@ -342,6 +366,10 @@ message ExecutePlanRequest {
   // Tags cannot contain ',' character and cannot be empty strings.
   // Used by Interrupt with interrupt.tag.
   repeated string tags = 7;
+  
+  // Provides optional information about the client environment similar to client_type but is
+  // intended for server side processing
+  optional ClientEnv client_env = 9;
 }
 
 // The response of a query, can be one or more for each request. Responses belonging to the
@@ -520,6 +548,10 @@ message ConfigRequest {
   // can be used for language or version specific information and is only intended for
   // logging purposes and will not be interpreted by the server.
   optional string client_type = 4;
+  
+  // Provides optional information about the client environment similar to client_type but is
+  // intended for server side processing
+  optional ClientEnv client_env = 5;
 
   message Operation {
     oneof op_type {
@@ -616,7 +648,11 @@ message AddArtifactsRequest {
   // can be used for language or version specific information and is only intended for
   // logging purposes and will not be interpreted by the server.
   optional string client_type = 6;
-
+  
+  // Provides optional information about the client environment similar to client_type but is
+  // intended for server side processing
+  optional ClientEnv client_env = 8;
+  
   // A chunk of an Artifact.
   message ArtifactChunk {
     // Data chunk.
@@ -727,6 +763,10 @@ message ArtifactStatusesRequest {
   // The relative path of the file on the server's filesystem will be the same as the name of
   // the provided artifact)
   repeated string names = 4;
+  
+  // Provides optional information about the client environment similar to client_type but is
+  // intended for server side processing
+  optional ClientEnv client_env = 6;
 }
 
 // Response to checking artifact statuses.
@@ -792,6 +832,10 @@ message InterruptRequest {
     // if interrupt_tag == INTERRUPT_TYPE_OPERATION_ID, interrupt operation with this operation_id.
     string operation_id = 6;
   }
+  
+  // Provides optional information about the client environment similar to client_type but is
+  // intended for server side processing
+  optional ClientEnv client_env = 8;
 }
 
 // Next ID: 4
@@ -857,6 +901,10 @@ message ReattachExecuteRequest {
   // that are far behind the latest returned response, so this can't be used to arbitrarily
   // scroll back the cursor. If the response is no longer available, this will result in an error.
   optional string last_response_id = 5;
+  
+  // Provides optional information about the client environment similar to client_type but is
+  // intended for server side processing
+  optional ClientEnv client_env = 7;
 }
 
 message ReleaseExecuteRequest {
@@ -952,6 +1000,10 @@ message ReleaseSessionRequest {
   // reconnecting to a released session. The client must ensure that any queries executed do not
   // rely on the session state prior to its release.
   bool allow_reconnect = 4;
+
+  // Provides optional information about the client environment similar to client_type but is
+  // intended for server side processing
+  optional ClientEnv client_env = 5;
 }
 
 // Next ID: 3
@@ -987,6 +1039,10 @@ message FetchErrorDetailsRequest {
   // can be used for language or version specific information and is only intended for
   // logging purposes and will not be interpreted by the server.
   optional string client_type = 4;
+
+  // Provides optional information about the client environment similar to client_type but is
+  // intended for server side processing
+  optional ClientEnv client_env = 6;
 }
 
 // Next ID: 5
