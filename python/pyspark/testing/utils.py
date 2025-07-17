@@ -216,7 +216,7 @@ def eventually(
                 print(f"\nAttempt #{numTries} failed!\n{lastValue}")
                 sleep(0.01)
 
-            if isinstance(lastValue, AssertionError):
+            if isinstance(lastValue, (AssertionError, TimeoutError)):
                 raise lastValue
             else:
                 raise AssertionError(
