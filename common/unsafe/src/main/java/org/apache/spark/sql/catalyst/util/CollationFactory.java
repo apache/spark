@@ -22,7 +22,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.BiFunction;
-import java.util.function.ToLongFunction;
 import java.util.stream.Stream;
 
 import com.ibm.icu.text.CollationKey;
@@ -129,12 +128,13 @@ public final class CollationFactory {
      * sort keys are equal (compared as byte arrays).
      * The sort key is defined as follows for collations without the RTRIM modifier:
      * - UTF8_BINARY: It is the bytes of the string.
-     * - UTF8_LCASE: It is byte array we get by replacing all invalid UTF8 sequences with the Unicode
-     *   replacement character and then converting all characters of the replaced string with their
-     *   lowercase equivalents (the Greek capital and Greek small sigma both map to the Greek final sigma).
+     * - UTF8_LCASE: It is byte array we get by replacing all invalid UTF8 sequences with the
+     *   Unicode replacement character and then converting all characters of the replaced string
+     *   with their lowercase equivalents (the Greek capital and Greek small sigma both map to
+     *   the Greek final sigma).
      * - ICU collations: It is the byte array returned by the ICU library for the collated string.
-     * For strings with the RTRIM modifier, we right-trim the string and return the collation key of the
-     * resulting right-trimmed string.
+     *   For strings with the RTRIM modifier, we right-trim the string and return the collation key
+     *   of the resulting right-trimmed string.
      */
     public final Function<UTF8String, byte[]> sortKeyFunction;
 
