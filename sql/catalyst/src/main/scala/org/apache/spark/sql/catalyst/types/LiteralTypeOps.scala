@@ -27,10 +27,10 @@ trait LiteralTypeOps {
 }
 
 object LiteralTypeOps {
-  def supports(dt: DataType): Boolean = dt match {
-    case _: TimeType => true
-    case _ => false
-  }
+  private val supportedDataTypes: Set[DataType] =
+    Set(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*)
+
+  def supports(dt: DataType): Boolean = supportedDataTypes.contains(dt)
 
   def apply(dt: DataType): LiteralTypeOps = TypeOps(dt).asInstanceOf[LiteralTypeOps]
 }
