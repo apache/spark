@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.python.{PythonArrowInput, PythonArrowOutput, PythonUDFRunner}
+import org.apache.spark.sql.execution.python.{ArrowPythonRunner, PythonArrowInput, PythonArrowOutput, PythonUDFRunner}
 import org.apache.spark.sql.execution.python.streaming.ApplyInPandasWithStatePythonRunner.{COUNT_COLUMN_SCHEMA_FROM_PYTHON_WORKER, InType, OutType, OutTypeForState, STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER}
 import org.apache.spark.sql.execution.python.streaming.ApplyInPandasWithStateWriter.STATE_METADATA_SCHEMA
 import org.apache.spark.sql.execution.streaming.GroupStateImpl
@@ -111,7 +111,8 @@ class ApplyInPandasWithStatePythonRunner(
   // applyInPandasWithState has its own mechanism to construct the Arrow RecordBatch instance.
   // Configurations are both applied to executor and Python worker, set them to the worker conf
   // to let Python worker read the config properly.
-  override protected val workerConf: Map[String, String] = initialWorkerConf +
+  override protected val workerConf: Map[String, String] = initialWorkerConf ++
+    ArrowPythonRunner.getPythonRunnerConfMap(sqlConf) +
     (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString)
 
   private val stateRowDeserializer = stateEncoder.createDeserializer()

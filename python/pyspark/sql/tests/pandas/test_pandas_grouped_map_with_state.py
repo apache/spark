@@ -359,11 +359,11 @@ class GroupedApplyInPandasWithStateTestsMixin:
             if should_succeed:
                 results = batch_df.sort("key").collect()
                 for row in results:
-                    self.assertIsInstance(row["decimal_sum"], Decimal)
+                    assert isinstance(row["decimal_sum"], Decimal)
                     if row["key"] == "group1":
-                        self.assertEqual(row["decimal_sum"], Decimal("912.00"))
+                        assert row["decimal_sum"] == Decimal("912.00")
                     elif row["key"] == "group2":
-                        self.assertEqual(row["decimal_sum"], Decimal("456.00"))
+                        assert row["decimal_sum"] == Decimal("456.00")
 
         with self.sql_conf(
             {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": coercion_enabled}
