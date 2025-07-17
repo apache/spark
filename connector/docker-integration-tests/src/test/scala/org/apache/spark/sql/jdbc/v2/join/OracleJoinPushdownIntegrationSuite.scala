@@ -23,7 +23,7 @@ import java.util.Locale
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.{DockerJDBCIntegrationSuite, JdbcDialect, OracleDatabaseOnDocker, OracleDialect}
-import org.apache.spark.sql.jdbc.v2.JDBCJoinPushdownIntegrationSuite
+import org.apache.spark.sql.jdbc.v2.JDBCV2JoinPushdownIntegrationSuiteBase
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -56,10 +56,10 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class OracleJoinPushdownIntegrationSuite
   extends DockerJDBCIntegrationSuite
-  with JDBCJoinPushdownIntegrationSuite {
+  with JDBCV2JoinPushdownIntegrationSuiteBase {
   override val catalogName: String = "oracle"
 
-  override def namespaceOpt: Option[String] = Some("SYSTEM")
+  override val namespaceOpt: Option[String] = Some("SYSTEM")
 
   override val db = new OracleDatabaseOnDocker
 

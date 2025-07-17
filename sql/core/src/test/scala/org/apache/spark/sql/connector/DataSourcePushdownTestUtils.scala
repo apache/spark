@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.jdbc.v2
+package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LocalLimit, Offset, Sample, Sort}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.expressions.aggregate.GeneralAggregateFunc
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.internal.SQLConf
 
-trait V2JDBCPushdownTestUtils extends ExplainSuiteHelper {
+trait DataSourcePushdownTestUtils extends ExplainSuiteHelper {
   protected def checkSamplePushed(df: DataFrame, pushed: Boolean = true): Unit = {
     val sample = df.queryExecution.optimizedPlan.collect {
       case s: Sample => s

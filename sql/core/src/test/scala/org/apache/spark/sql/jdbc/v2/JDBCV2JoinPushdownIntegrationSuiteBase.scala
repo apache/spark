@@ -21,18 +21,19 @@ import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.connector.DataSourcePushdownTestUtils
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialect
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, DataTypes}
 
-trait JDBCJoinPushdownIntegrationSuite
+trait JDBCV2JoinPushdownIntegrationSuiteBase
   extends QueryTest
   with SharedSparkSession
-  with V2JDBCPushdownTestUtils {
+  with DataSourcePushdownTestUtils {
   val catalogName: String
-  def namespaceOpt: Option[String] = None
+  val namespaceOpt: Option[String] = None
   val url: String
 
   val joinTableName1: String = "join_table_1"
@@ -46,9 +47,9 @@ trait JDBCJoinPushdownIntegrationSuite
   def qualifyTableName(tableName: String): String = namespaceOpt
     .map(namespace => s"$namespace.$tableName").getOrElse(tableName)
 
-  private val fullyQualifiedTableName1: String = qualifyTableName(joinTableName1)
+  private lazy val fullyQualifiedTableName1: String = qualifyTableName(joinTableName1)
 
-  private val fullyQualifiedTableName2: String = qualifyTableName(joinTableName2)
+  private lazy val fullyQualifiedTableName2: String = qualifyTableName(joinTableName2)
 
   protected def getJDBCTypeString(dt: DataType): String = {
     JdbcUtils.getJdbcType(dt, jdbcDialect).databaseTypeDefinition.toUpperCase()

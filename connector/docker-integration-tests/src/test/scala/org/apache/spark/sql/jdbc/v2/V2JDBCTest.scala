@@ -22,6 +22,7 @@ import org.apache.logging.log4j.Level
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
+import org.apache.spark.sql.connector.DataSourcePushdownTestUtils
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.NullOrdering
@@ -33,7 +34,7 @@ import org.apache.spark.tags.DockerTest
 
 @DockerTest
 private[v2] trait V2JDBCTest
-  extends V2JDBCPushdownTestUtils
+  extends DataSourcePushdownTestUtils
   with DockerIntegrationFunSuite
   with SharedSparkSession {
   import testImplicits._

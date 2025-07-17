@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.jdbc
+package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{ExplainSuiteHelper, QueryTest}
+import org.apache.spark.sql.connector.DataSourcePushdownTestUtils
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.jdbc.v2.{JDBCJoinPushdownIntegrationSuite, V2JDBCPushdownTestUtils}
+import org.apache.spark.sql.jdbc.{H2Dialect, JdbcDialect}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -30,13 +31,13 @@ class JDBCV2JoinPushdownSuite
   extends QueryTest
   with SharedSparkSession
   with ExplainSuiteHelper
-  with V2JDBCPushdownTestUtils
-  with JDBCJoinPushdownIntegrationSuite {
+  with DataSourcePushdownTestUtils
+  with JDBCV2JoinPushdownIntegrationSuiteBase {
   val tempDir = Utils.createTempDir()
   override val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
 
   override val catalogName: String = "h2"
-  override def namespaceOpt: Option[String] = Some("test")
+  override val namespaceOpt: Option[String] = Some("test")
 
   override val jdbcDialect: JdbcDialect = H2Dialect()
 
