@@ -373,6 +373,7 @@ class CLIUtilityTests(unittest.TestCase):
                     full_refresh=["table1", "table2"],
                     full_refresh_all=True,
                     refresh=[],
+                    dry=False,
                 )
 
             self.assertEqual(
@@ -396,6 +397,7 @@ class CLIUtilityTests(unittest.TestCase):
                     full_refresh=[],
                     full_refresh_all=True,
                     refresh=["table1", "table2"],
+                    dry=False,
                 )
 
             self.assertEqual(
@@ -421,6 +423,7 @@ class CLIUtilityTests(unittest.TestCase):
                     full_refresh=["table1"],
                     full_refresh_all=True,
                     refresh=["table2"],
+                    dry=False,
                 )
 
             self.assertEqual(
