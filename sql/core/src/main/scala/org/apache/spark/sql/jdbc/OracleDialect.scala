@@ -288,8 +288,8 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   }
 
   override def quoteIdentifier(colName: String): String = {
-    val escapedString = colName.replace("\"", "\"\"")
-    '"' + escapedString + '"'
+    val escapedColName = colName.replace("\"", "\"\"")
+    s""""$escapedColName""""
   }
 }
 
