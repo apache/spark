@@ -355,13 +355,17 @@ class PandasUDFTestsMixin:
             values = [123, 456, 789]
             return pd.Series([values[int(val) % len(values)] for val in column])
 
-        with self.sql_conf({"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": True}):
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": True}
+        ):
             result = df.withColumn("decimal_val", int_to_decimal_udf("id")).collect()
             self.assertEqual(result[0]["decimal_val"], 123.00)
             self.assertEqual(result[1]["decimal_val"], 456.00)
             self.assertEqual(result[2]["decimal_val"], 789.00)
 
-        with self.sql_conf({"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}):
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
+        ):
             self.assertRaisesRegex(
                 PythonException,
                 "Exception thrown when converting pandas.Series",
@@ -373,14 +377,18 @@ class PandasUDFTestsMixin:
             values = [1, 2, 3]
             return pd.Series([values[int(val) % len(values)] for val in column])
 
-        with self.sql_conf({"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": True}):
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": True}
+        ):
             result = df.withColumn("decimal_val", high_precision_udf("id")).collect()
             self.assertEqual(len(result), 3)
             self.assertEqual(result[0]["decimal_val"], Decimal("1.0"))
             self.assertEqual(result[1]["decimal_val"], Decimal("2.0"))
             self.assertEqual(result[2]["decimal_val"], Decimal("3.0"))
 
-        with self.sql_conf({"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}):
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
+        ):
             # Also not supported.
             # This can be fixed by enabling arrow_cast
             # This is currently not the case for SQL_SCALAR_PANDAS_UDF and SQL_SCALAR_PANDAS_ITER_UDF.

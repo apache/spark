@@ -1734,10 +1734,10 @@ class TransformWithStateTestsMixin:
                 self.count_state.update((count,))
 
                 import pandas as pd
-                yield pd.DataFrame({
-                    "id": [key[0]],
-                    "decimal_result": [12345]  # Integer to be coerced to decimal
-                })
+
+                yield pd.DataFrame(
+                    {"id": [key[0]], "decimal_result": [12345]}  # Integer to be coerced to decimal
+                )
 
             def close(self):
                 pass
@@ -1745,33 +1745,41 @@ class TransformWithStateTestsMixin:
         data = [("1", "a"), ("1", "b"), ("2", "c")]
         df = self.spark.createDataFrame(data, ["id", "value"])
 
-        output_schema = StructType([
-            StructField("id", StringType(), True),
-            StructField("decimal_result", DecimalType(10, 2), True)
-        ])
+        output_schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("decimal_result", DecimalType(10, 2), True),
+            ]
+        )
 
-        with self.sql_conf({"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": True}):
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": True}
+        ):
             result = (
                 df.groupBy("id")
                 .transformWithStateInPandas(
                     statefulProcessor=IntToDecimalProcessor(),
                     outputStructType=output_schema,
                     outputMode="Update",
-                    timeMode="None"
+                    timeMode="None",
                 )
                 .collect()
             )
             self.assertTrue(len(result) > 0)
 
-        with self.sql_conf({"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}):
-            with self.assertRaisesRegex(Exception, "Exception thrown when converting pandas.Series"):
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
+        ):
+            with self.assertRaisesRegex(
+                Exception, "Exception thrown when converting pandas.Series"
+            ):
                 (
                     df.groupBy("id")
                     .transformWithStateInPandas(
                         statefulProcessor=IntToDecimalProcessor(),
                         outputStructType=output_schema,
                         outputMode="Update",
-                        timeMode="None"
+                        timeMode="None",
                     )
                     .collect()
                 )

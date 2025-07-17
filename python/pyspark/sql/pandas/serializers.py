@@ -288,9 +288,11 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         from decimal import Decimal
 
         # Convert integer series to Decimal objects
-        if (types.is_decimal(arrow_type) and
-            series.dtype.kind in ['i', 'u'] and  # integer types (signed/unsigned)
-            not series.empty):
+        if (
+            types.is_decimal(arrow_type)
+            and series.dtype.kind in ["i", "u"]
+            and not series.empty  # integer types (signed/unsigned)
+        ):
             series = series.apply(lambda x: Decimal(x) if pd.notna(x) else None)
 
         return series
@@ -486,7 +488,9 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         input_types=None,
         int_to_decimal_coercion_enabled=False,
     ):
-        super(ArrowStreamPandasUDFSerializer, self).__init__(timezone, safecheck, int_to_decimal_coercion_enabled)
+        super(ArrowStreamPandasUDFSerializer, self).__init__(
+            timezone, safecheck, int_to_decimal_coercion_enabled
+        )
         self._assign_cols_by_name = assign_cols_by_name
         self._df_for_struct = df_for_struct
         self._struct_in_pandas = struct_in_pandas
@@ -987,7 +991,10 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         int_to_decimal_coercion_enabled,
     ):
         super(ApplyInPandasWithStateSerializer, self).__init__(
-            timezone, safecheck, assign_cols_by_name, int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled
+            timezone,
+            safecheck,
+            assign_cols_by_name,
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
         )
         self.pickleSer = CPickleSerializer()
         self.utf8_deserializer = UTF8Deserializer()
@@ -1355,9 +1362,19 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         Limit of the number of records that can be written to a single ArrowRecordBatch in memory.
     """
 
-    def __init__(self, timezone, safecheck, assign_cols_by_name, arrow_max_records_per_batch, int_to_decimal_coercion_enabled):
+    def __init__(
+        self,
+        timezone,
+        safecheck,
+        assign_cols_by_name,
+        arrow_max_records_per_batch,
+        int_to_decimal_coercion_enabled,
+    ):
         super(TransformWithStateInPandasSerializer, self).__init__(
-            timezone, safecheck, assign_cols_by_name, int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled
+            timezone,
+            safecheck,
+            assign_cols_by_name,
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
         )
         self.arrow_max_records_per_batch = arrow_max_records_per_batch
         self.key_offsets = None
@@ -1431,9 +1448,20 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
     Same as input parameters in TransformWithStateInPandasSerializer.
     """
 
-    def __init__(self, timezone, safecheck, assign_cols_by_name, arrow_max_records_per_batch, int_to_decimal_coercion_enabled):
+    def __init__(
+        self,
+        timezone,
+        safecheck,
+        assign_cols_by_name,
+        arrow_max_records_per_batch,
+        int_to_decimal_coercion_enabled,
+    ):
         super(TransformWithStateInPandasInitStateSerializer, self).__init__(
-            timezone, safecheck, assign_cols_by_name, arrow_max_records_per_batch, int_to_decimal_coercion_enabled
+            timezone,
+            safecheck,
+            assign_cols_by_name,
+            arrow_max_records_per_batch,
+            int_to_decimal_coercion_enabled,
         )
         self.init_key_offsets = None
 

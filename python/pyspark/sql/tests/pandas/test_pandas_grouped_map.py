@@ -389,12 +389,11 @@ class GroupedApplyInPandasTestsMixin:
 
     def test_apply_in_pandas_int_to_decimal_coercion(self):
         def int_to_decimal_func(key, pdf):
-            return pd.DataFrame([{
-                "id": key[0],
-                "decimal_result": 12345
-            }])
+            return pd.DataFrame([{"id": key[0], "decimal_result": 12345}])
 
-        with self.sql_conf({"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": True}):
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": True}
+        ):
             result = (
                 self.data.groupby("id")
                 .applyInPandas(int_to_decimal_func, schema="id long, decimal_result decimal(10,2)")
@@ -405,11 +404,17 @@ class GroupedApplyInPandasTestsMixin:
             for row in result:
                 self.assertEqual(row.decimal_result, 12345.00)
 
-        with self.sql_conf({"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}):
-            with self.assertRaisesRegex(PythonException, "Exception thrown when converting pandas.Series"):
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
+        ):
+            with self.assertRaisesRegex(
+                PythonException, "Exception thrown when converting pandas.Series"
+            ):
                 (
                     self.data.groupby("id")
-                    .applyInPandas(int_to_decimal_func, schema="id long, decimal_result decimal(10,2)")
+                    .applyInPandas(
+                        int_to_decimal_func, schema="id long, decimal_result decimal(10,2)"
+                    )
                     .collect()
                 )
 

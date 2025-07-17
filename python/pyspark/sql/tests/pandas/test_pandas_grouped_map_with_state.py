@@ -322,17 +322,24 @@ class GroupedApplyInPandasWithStateTestsMixin:
         with open(input_path + "/numeric-test.txt", "w") as fw:
             fw.write("group1,123\ngroup2,456\ngroup1,789\n")
 
-        df = self.spark.readStream.format("csv").option("header", "false").schema("key string, value int").load(input_path)
+        df = (
+            self.spark.readStream.format("csv")
+            .option("header", "false")
+            .schema("key string, value int")
+            .load(input_path)
+        )
 
         for q in self.spark.streams.active:
             q.stop()
         self.assertTrue(df.isStreaming)
 
-        output_type = StructType([
-            StructField("key", StringType()),
-            StructField("decimal_sum", DecimalType(10, 2)),
-            StructField("count", LongType())
-        ])
+        output_type = StructType(
+            [
+                StructField("key", StringType()),
+                StructField("decimal_sum", DecimalType(10, 2)),
+                StructField("count", LongType()),
+            ]
+        )
         state_type = StructType([StructField("sum", LongType()), StructField("count", LongType())])
 
         def stateful_func(key, pdf_iter, state):
@@ -340,11 +347,13 @@ class GroupedApplyInPandasWithStateTestsMixin:
             current_count = state.get[1] if state.exists else 0
 
             for pdf in pdf_iter:
-                current_sum += pdf['value'].sum()
+                current_sum += pdf["value"].sum()
                 current_count += len(pdf)
 
             state.update((current_sum, current_count))
-            yield pd.DataFrame({"key": [key[0]], "decimal_sum": [current_sum], "count": [current_count]})
+            yield pd.DataFrame(
+                {"key": [key[0]], "decimal_sum": [current_sum], "count": [current_count]}
+            )
 
         def check_results(batch_df, _):
             if should_succeed:
@@ -356,13 +365,19 @@ class GroupedApplyInPandasWithStateTestsMixin:
                     elif row["key"] == "group2":
                         self.assertEqual(row["decimal_sum"], Decimal("456.00"))
 
-        with self.sql_conf({"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": coercion_enabled}):
-            q = (df.groupBy(df["key"])
-                .applyInPandasWithState(stateful_func, output_type, state_type, "Update", GroupStateTimeout.NoTimeout)
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": coercion_enabled}
+        ):
+            q = (
+                df.groupBy(df["key"])
+                .applyInPandasWithState(
+                    stateful_func, output_type, state_type, "Update", GroupStateTimeout.NoTimeout
+                )
                 .writeStream.queryName(f"test_coercion_{coercion_enabled}")
                 .foreachBatch(check_results)
                 .outputMode("update")
-                .start())
+                .start()
+            )
 
             self.assertTrue(q.isActive)
 
@@ -377,9 +392,13 @@ class GroupedApplyInPandasWithStateTestsMixin:
             q.stop()
 
     def test_apply_in_pandas_with_state_int_to_decimal_coercion(self):
-        self._test_apply_in_pandas_with_state_decimal_coercion(coercion_enabled=True, should_succeed=True)
+        self._test_apply_in_pandas_with_state_decimal_coercion(
+            coercion_enabled=True, should_succeed=True
+        )
 
-        self._test_apply_in_pandas_with_state_decimal_coercion(coercion_enabled=False, should_succeed=False)
+        self._test_apply_in_pandas_with_state_decimal_coercion(
+            coercion_enabled=False, should_succeed=False
+        )
 
 
 class GroupedApplyInPandasWithStateTests(
