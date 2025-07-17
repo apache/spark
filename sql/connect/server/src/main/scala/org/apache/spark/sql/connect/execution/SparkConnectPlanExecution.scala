@@ -41,7 +41,6 @@ import org.apache.spark.sql.execution.{DoNotCleanup, LocalTableScanExec, QueryEx
 import org.apache.spark.sql.execution.{LocalTableScanExec, QueryExecution, SQLExecution}
 >>>>>>> af1b66ffe8f (SPARK-52777: Enable shuffle cleanup mode configuration in Spark SQL)
 import org.apache.spark.sql.execution.arrow.ArrowConverters
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ThreadUtils
 
