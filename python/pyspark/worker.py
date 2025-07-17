@@ -1238,8 +1238,16 @@ def read_udtf(pickleSer, infile, eval_type):
                 ).lower()
                 == "true"
             )
+            int_to_decimal_coercion_enabled = (
+                runner_conf.get(
+                    "spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled", "false"
+                ).lower()
+                == "true"
+            )
             timezone = runner_conf.get("spark.sql.session.timeZone", None)
-            ser = ArrowStreamPandasUDTFSerializer(timezone, safecheck)
+            ser = ArrowStreamPandasUDTFSerializer(
+                timezone, safecheck, int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled
+            )
         else:
             ser = ArrowStreamUDTFSerializer()
 
@@ -1960,12 +1968,23 @@ def read_udfs(pickleSer, infile, eval_type):
             runner_conf.get("spark.sql.execution.pandas.convertToArrowArraySafely", "false").lower()
             == "true"
         )
+        int_to_decimal_coercion_enabled = (
+            runner_conf.get(
+                "spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled", "false"
+            ).lower()
+            == "true"
+        )
         _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
         if eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
             ser = CogroupArrowUDFSerializer(_assign_cols_by_name)
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
-            ser = CogroupPandasUDFSerializer(timezone, safecheck, _assign_cols_by_name)
+            ser = CogroupPandasUDFSerializer(
+                timezone,
+                safecheck,
+                _assign_cols_by_name,
+                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+            )
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
             arrow_max_records_per_batch = runner_conf.get(
                 "spark.sql.execution.arrow.maxRecordsPerBatch", 10000
@@ -1979,6 +1998,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 state_object_schema,
                 arrow_max_records_per_batch,
                 prefers_large_var_types,
+                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )
         elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
             arrow_max_records_per_batch = runner_conf.get(
@@ -1987,7 +2007,11 @@ def read_udfs(pickleSer, infile, eval_type):
             arrow_max_records_per_batch = int(arrow_max_records_per_batch)
 
             ser = TransformWithStateInPandasSerializer(
-                timezone, safecheck, _assign_cols_by_name, arrow_max_records_per_batch
+                timezone,
+                safecheck,
+                _assign_cols_by_name,
+                arrow_max_records_per_batch,
+                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )
         elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF:
             arrow_max_records_per_batch = runner_conf.get(
@@ -1996,7 +2020,11 @@ def read_udfs(pickleSer, infile, eval_type):
             arrow_max_records_per_batch = int(arrow_max_records_per_batch)
 
             ser = TransformWithStateInPandasInitStateSerializer(
-                timezone, safecheck, _assign_cols_by_name, arrow_max_records_per_batch
+                timezone,
+                safecheck,
+                _assign_cols_by_name,
+                arrow_max_records_per_batch,
+                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )
         elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF:
             arrow_max_records_per_batch = runner_conf.get(
@@ -2062,6 +2090,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 ndarray_as_list,
                 arrow_cast,
                 input_types,
+                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )
     else:
         batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))

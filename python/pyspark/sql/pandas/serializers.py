@@ -19,6 +19,7 @@
 Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for more details.
 """
 
+from decimal import Decimal
 from itertools import groupby
 from typing import TYPE_CHECKING, Optional
 
@@ -251,12 +252,50 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         If True, conversion from Arrow to Pandas checks for overflow/truncation
     assign_cols_by_name : bool
         If True, then Pandas DataFrames will get columns by name
+    int_to_decimal_coercion_enabled : bool
+        If True, applies additional coercions in Python before converting to Arrow
+        This has performance penalties.
     """
 
-    def __init__(self, timezone, safecheck):
+    def __init__(self, timezone, safecheck, int_to_decimal_coercion_enabled):
         super(ArrowStreamPandasSerializer, self).__init__()
         self._timezone = timezone
         self._safecheck = safecheck
+        self._int_to_decimal_coercion_enabled = int_to_decimal_coercion_enabled
+
+    @staticmethod
+    def _apply_python_coercions(series, arrow_type):
+        """
+        Apply additional coercions to the series in Python before converting to Arrow:
+        - Convert integer series to decimal type.
+          When we have a pandas series of integers that needs to be converted to
+          pyarrow.decimal128 (with precision < 20), PyArrow fails with precision errors.
+          Explicitly cast to Decimal first.
+
+        Parameters
+        ----------
+        series : pandas.Series
+            The series to potentially convert
+        arrow_type : pyarrow.DataType
+            The target arrow type
+
+        Returns
+        -------
+        pandas.Series
+            The potentially converted pandas series
+        """
+        import pyarrow.types as types
+        import pandas as pd
+
+        # Convert integer series to Decimal objects
+        if (
+            types.is_decimal(arrow_type)
+            and series.dtype.kind in ["i", "u"]  # integer types (signed/unsigned)
+            and not series.empty
+        ):
+            series = series.apply(lambda x: Decimal(x) if pd.notna(x) else None)
+
+        return series
 
     def arrow_to_pandas(
         self, arrow_column, idx, struct_in_pandas="dict", ndarray_as_list=False, spark_type=None
@@ -325,6 +364,9 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 dt, timezone=self._timezone, error_on_duplicated_field_names=False
             )
             series = conv(series)
+
+            if self._int_to_decimal_coercion_enabled:
+                series = self._apply_python_coercions(series, arrow_type)
 
         if hasattr(series.array, "__arrow_array__"):
             mask = None
@@ -444,8 +486,11 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         ndarray_as_list=False,
         arrow_cast=False,
         input_types=None,
+        int_to_decimal_coercion_enabled=False,
     ):
-        super(ArrowStreamPandasUDFSerializer, self).__init__(timezone, safecheck)
+        super(ArrowStreamPandasUDFSerializer, self).__init__(
+            timezone, safecheck, int_to_decimal_coercion_enabled
+        )
         self._assign_cols_by_name = assign_cols_by_name
         self._df_for_struct = df_for_struct
         self._struct_in_pandas = struct_in_pandas
@@ -799,7 +844,7 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
     Serializer used by Python worker to evaluate Arrow-optimized Python UDTFs.
     """
 
-    def __init__(self, timezone, safecheck):
+    def __init__(self, timezone, safecheck, int_to_decimal_coercion_enabled):
         super(ArrowStreamPandasUDTFSerializer, self).__init__(
             timezone=timezone,
             safecheck=safecheck,
@@ -819,6 +864,8 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
             ndarray_as_list=True,
             # Enables explicit casting for mismatched return types of Arrow Python UDTFs.
             arrow_cast=True,
+            # Enable additional coercions for UDTF serialization
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
         )
         self._converter_map = dict()
 
@@ -904,6 +951,9 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
             dt = spark_type or from_arrow_type(arrow_type, prefer_timestamp_ntz=True)
             conv = self._get_or_create_converter_from_pandas(dt)
             series = conv(series)
+
+            if self._int_to_decimal_coercion_enabled:
+                series = self._apply_python_coercions(series, arrow_type)
 
         if hasattr(series.array, "__arrow_array__"):
             mask = None
@@ -1036,9 +1086,13 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         state_object_schema,
         arrow_max_records_per_batch,
         prefers_large_var_types,
+        int_to_decimal_coercion_enabled,
     ):
         super(ApplyInPandasWithStateSerializer, self).__init__(
-            timezone, safecheck, assign_cols_by_name
+            timezone,
+            safecheck,
+            assign_cols_by_name,
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
         )
         self.pickleSer = CPickleSerializer()
         self.utf8_deserializer = UTF8Deserializer()
@@ -1406,9 +1460,19 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         Limit of the number of records that can be written to a single ArrowRecordBatch in memory.
     """
 
-    def __init__(self, timezone, safecheck, assign_cols_by_name, arrow_max_records_per_batch):
+    def __init__(
+        self,
+        timezone,
+        safecheck,
+        assign_cols_by_name,
+        arrow_max_records_per_batch,
+        int_to_decimal_coercion_enabled,
+    ):
         super(TransformWithStateInPandasSerializer, self).__init__(
-            timezone, safecheck, assign_cols_by_name
+            timezone,
+            safecheck,
+            assign_cols_by_name,
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
         )
         self.arrow_max_records_per_batch = arrow_max_records_per_batch
         self.key_offsets = None
@@ -1482,9 +1546,20 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
     Same as input parameters in TransformWithStateInPandasSerializer.
     """
 
-    def __init__(self, timezone, safecheck, assign_cols_by_name, arrow_max_records_per_batch):
+    def __init__(
+        self,
+        timezone,
+        safecheck,
+        assign_cols_by_name,
+        arrow_max_records_per_batch,
+        int_to_decimal_coercion_enabled,
+    ):
         super(TransformWithStateInPandasInitStateSerializer, self).__init__(
-            timezone, safecheck, assign_cols_by_name, arrow_max_records_per_batch
+            timezone,
+            safecheck,
+            assign_cols_by_name,
+            arrow_max_records_per_batch,
+            int_to_decimal_coercion_enabled,
         )
         self.init_key_offsets = None
 

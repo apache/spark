@@ -136,8 +136,12 @@ object ArrowPythonRunner {
     val legacyPandasConversionUDF = Seq(
       SQLConf.PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED.key ->
       conf.legacyPandasConversionUDF.toString)
+    val intToDecimalCoercion = Seq(
+      SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED.key ->
+      conf.getConf(SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED, false).toString)
     Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++
       arrowAyncParallelism ++ useLargeVarTypes ++
+      intToDecimalCoercion ++
       legacyPandasConversion ++ legacyPandasConversionUDF: _*)
   }
 }
