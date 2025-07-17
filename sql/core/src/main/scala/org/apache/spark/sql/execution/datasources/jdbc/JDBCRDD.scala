@@ -189,6 +189,17 @@ class JDBCRDD(
     sparkContext,
     name = "JDBC query execution time")
 
+  /**
+   * Time needed to fetch the data and transform it into Spark's InternalRow format.
+   *
+   * Usually this is spent in network transfer time, but it can be spent in transformation time
+   * as well if we are transforming some more complex datatype such as structs.
+   */
+  val fetchAndTransformToInternalRowsMetric: SQLMetric = SQLMetrics.createNanoTimingMetric(
+    sparkContext,
+    // Message that user sees does not have to leak details about conversion
+    name = "Remote data fetch time over JDBC connection")
+
   private lazy val dialect = JdbcDialects.get(url)
 
   def generateJdbcQuery(partition: Option[JDBCPartition]): String = {
@@ -314,7 +325,12 @@ class JDBCRDD(
     }
 
     val rowsIterator =
-      JdbcUtils.resultSetToSparkInternalRows(rs, dialect, schema, inputMetrics)
+      JdbcUtils.resultSetToSparkInternalRows(
+        rs,
+        dialect,
+        schema,
+        inputMetrics,
+        Some(fetchAndTransformToInternalRowsMetric))
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](
       new InterruptibleIterator(context, rowsIterator), close())
@@ -322,6 +338,7 @@ class JDBCRDD(
 
   override def getMetrics: Seq[(String, SQLMetric)] = {
     Seq(
+      "fetchAndTransformToInternalRowsNs" -> fetchAndTransformToInternalRowsMetric,
       "queryExecutionTime" -> queryExecutionTimeMetric
     )
   }
