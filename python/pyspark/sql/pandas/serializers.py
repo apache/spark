@@ -33,7 +33,12 @@ from pyspark.serializers import (
     CPickleSerializer,
 )
 from pyspark.sql import Row
+from pyspark.sql.conversion import (
+    LocalDataToArrowConversion,
+    ArrowTableToRowsConversion
+)
 from pyspark.sql.pandas.types import (
+    from_arrow_schema,
     from_arrow_type,
     is_variant,
     to_arrow_type,
@@ -48,6 +53,14 @@ from pyspark.sql.types import (
     StructField,
     LongType,
     IntegerType,
+    ArrayType,
+    ByteType,
+    ShortType,
+    FloatType,
+    DoubleType,
+    UserDefinedType,
+    VariantVal,
+    MapType,
 )
 
 if TYPE_CHECKING:
@@ -175,8 +188,11 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
                     # an empty batch with the number of rows set.
                     struct = pa.array([{}] * batch.num_rows)
                 else:
+                    # Create struct type with metadata to mark it as packed UDF arguments
+                    struct_type = pa.struct(list(batch.schema))
+                    struct_type_with_metadata = struct_type.with_metadata({b'__packed_udf_args__': b'true'})
                     struct = pa.StructArray.from_arrays(
-                        batch.columns, fields=pa.struct(list(batch.schema))
+                        batch.columns, type=struct_type_with_metadata
                     )
                 batch = pa.RecordBatch.from_arrays([struct], ["_0"])
 
@@ -208,93 +224,133 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
         safecheck,
         assign_cols_by_name,
         arrow_cast,
+        input_types,
         struct_in_pandas="row",
         ndarray_as_list=False,
+        return_type=None,
+        prefers_large_var_types=False,
     ):
         super(ArrowBatchUDFSerializer, self).__init__()
         self._timezone = timezone
         self._safecheck = safecheck
         self._assign_cols_by_name = assign_cols_by_name
         self._arrow_cast = arrow_cast
+        self._input_types = input_types
         self._struct_in_pandas = struct_in_pandas
         self._ndarray_as_list = True
+        self._return_type = return_type
+        self._prefers_large_var_types = prefers_large_var_types
 
-    def _create_array(self, arr, arrow_type, arrow_cast):
+    def _create_type_coercion_func(self, return_type):
+        """Create type coercion function based on return type"""
+
+        if type(return_type) == StringType:
+            return lambda r: str(r) if r is not None else r
+        elif type(return_type) == BinaryType:
+            return lambda r: bytes(r) if r is not None else r
+        elif isinstance(return_type, (ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)):
+            def numeric_result_func(r):
+                if r is None:
+                    return r
+                if isinstance(r, str):
+                    try:
+                        if isinstance(return_type, (ByteType, ShortType, IntegerType, LongType)):
+                            return int(r)
+                        elif isinstance(return_type, (FloatType, DoubleType)):
+                            return float(r)
+                    except (ValueError, TypeError):
+                        pass
+                return r
+            return numeric_result_func
+        else:
+            return lambda pdf: pdf  # Default: no conversion
+
+    def convert_arrow_to_rows(self, *args):
+        """
+        Convert Arrow arrays to rows
+        """
         import pyarrow as pa
 
-        assert(isinstance(arr, pa.Array), arr)
-        assert(isinstance(arrow_type, pa.DataType), arrow_type)
+        arrays = [
+            arg.combine_chunks() if isinstance(arg, pa.ChunkedArray) else arg
+            for arg in args
+        ]
 
-        try:
-            return arr
-        except pa.lib.ArrowException:
-            if arrow_cast:
-                return arr.cast(target_type=arrow_type, safe=self._safecheck)
-            else:
-                raise
+        names = [f"_{n}" for n in range(len(arrays))]
+        table = pa.Table.from_arrays(arrays, names=names)
+        schema = StructType([
+            StructField(f"_{i}", data_type, True)
+            for i, data_type in enumerate(self._input_types)
+        ])
+
+        rows = ArrowTableToRowsConversion.convert(table, schema=schema)
+
+        return [tuple(row) for row in rows]
+
+    def apply_type_coercion(self, udf_results):
+        """Type coercion util to match legacy behavior (see PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED)."""
+        if self._return_type is not None:
+            coercion_func = self._create_type_coercion_func(self._return_type)
+            return [coercion_func(result) for result in udf_results]
+        return udf_results
 
     def load_stream(self, stream):
         """
-        Load Arrow RecordBatches and yield Arrow arrays.
+        Load Arrow RecordBatches and convert to Python objects.
         """
         import pyarrow as pa
+        import pyarrow.types as types
+
+        def is_packed_udf_arguments(struct_type):
+            return (hasattr(struct_type, 'metadata') and
+                    struct_type.metadata is not None and
+                    b'__packed_udf_args__' in struct_type.metadata)
 
         batches = ArrowStreamSerializer.load_stream(self, stream)
         for batch in batches:
-            yield [batch.column(i) for i in range(batch.num_columns)]
+            if (batch.num_columns == 1 and
+                types.is_struct(batch.column(0).type) and
+                is_packed_udf_arguments(batch.column(0).type)):
+                # Packed UDF arguments from ArrowStreamUDFSerializer
+                # Flatten them back to individual arrays
+                first_column = batch.column(0)
+                flattened_batch = pa.RecordBatch.from_arrays(first_column.flatten(), schema=pa.schema(first_column.type))
+                arrays = [flattened_batch.column(i) for i in range(flattened_batch.num_columns)]
+            else:
+                # Else data from JVM, preserve structure
+                arrays = [batch.column(i) for i in range(batch.num_columns)]
+
+            if len(arrays) == 0:
+                # Zero-arg case: create empty tuples for each row in the batch
+                converted_rows = [() for _ in range(batch.num_rows)]
+            else:
+                converted_rows = self.convert_arrow_to_rows(*arrays)
+
+            yield converted_rows
 
     def dump_stream(self, iterator, stream):
         """
-        Convert UDF output to Arrow RecordBatches.
-        Iterator is expected to yield tuples of the form ``(pa.Array, pa.DataType)``.
+        Convert Python UDF results to Arrow RecordBatches and serialize.
         """
         import pyarrow as pa
 
         def wrap_and_init_stream():
             should_write_start_length = True
-            for packed in iterator:
-                arrs = []
 
-                if isinstance(packed, tuple) and len(packed) == 2 and not isinstance(packed[0], list):
-                    # Single UDF result case
-                    arr, arrow_type = packed
-                    if isinstance(arrow_type, pa.DataType):
-                        if isinstance(arr, pa.ChunkedArray):
-                            arr = arr.combine_chunks()
-                        arrs = [arr]
-                    else:
-                        try:
-                            if isinstance(arr, pa.ChunkedArray):
-                                arr = arr.combine_chunks()
-                            arrs = [arr]
-                        except Exception as e:
-                            raise ValueError(f"Expected (pa.Array, pa.DataType) but got ({type(arr)}, {type(arrow_type)}). Arrow type value: {arrow_type}") from e
-                elif isinstance(packed, tuple) and all(isinstance(item, list) and len(item) == 1 for item in packed):
-                    # Multiple UDF results: ([(<pa.Array>, <DataType>)], [(<pa.Array>, <DataType>)], ...)
-                    for item_list in packed:
-                        arr, arrow_type = item_list[0]
-                        if isinstance(arr, pa.ChunkedArray):
-                            arr = arr.combine_chunks()
-                        arrs.append(arr)
-                elif isinstance(packed, list):
-                    if all(isinstance(item, tuple) and len(item) == 2 for item in packed):
-                        # Multiple array UDF results: [(pa.Array, pa.DataType), ...]
-                        for arr, arrow_type in packed:
-                            if isinstance(arr, pa.ChunkedArray):
-                                arr = arr.combine_chunks()
-                            arrs.append(arr)
-                    else:
-                        raise ValueError(f"Unexpected list format: {packed}")
+            for i, batch_data in enumerate(iterator):
+                if isinstance(batch_data, tuple) and len(batch_data) == 3:
+                    # Single UDF case with type information
+                    udf_results, arrow_return_type, return_type = batch_data
+                    arr = self._convert_udf_results_to_arrow(udf_results, return_type)
+                    batch = pa.RecordBatch.from_arrays([arr], ["_0"])
                 else:
-                    raise ValueError(f"Unexpected iterator format: {type(packed)}, content: {packed}")
+                    # Multiple UDFs case
+                    arrs = []
+                    for j, (udf_results, arrow_return_type, return_type) in enumerate(batch_data):             
+                        arr = self._convert_udf_results_to_arrow(udf_results, return_type)
+                        arrs.append(arr)
 
-                validated_arrs = []
-                for i, arr in enumerate(arrs):
-                    if not isinstance(arr, pa.Array):
-                        raise ValueError(f"Expected pa.Array, got {type(arr)}: {arr}")
-                    validated_arrs.append(arr)
-
-                batch = pa.RecordBatch.from_arrays(validated_arrs, ["_%d" % i for i in range(len(validated_arrs))])
+                    batch = pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
 
                 if should_write_start_length:
                     write_int(SpecialLengths.START_ARROW_STREAM, stream)
@@ -302,6 +358,42 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
                 yield batch
 
         return ArrowStreamSerializer.dump_stream(self, wrap_and_init_stream(), stream)
+
+    def _convert_udf_results_to_arrow(self, udf_results, return_type):
+        """
+        Convert UDF data to Arrow with LocalDataToArrowConversion.
+        """
+
+        coerced_results = self._apply_type_coercion_for_type(udf_results, return_type)
+
+        temp_struct_type = StructType([StructField("result", return_type)])
+        temp_data = [{"result": result} for result in coerced_results]
+        arrow_table = LocalDataToArrowConversion.convert(
+            temp_data, temp_struct_type, self._prefers_large_var_types
+        )
+        return arrow_table.column(0).combine_chunks()
+
+    def _apply_type_coercion_for_type(self, udf_results, return_type):
+        if type(return_type) == StringType:
+            return [str(r) if r is not None else r for r in udf_results]
+        elif type(return_type) == BinaryType:
+            return [bytes(r) if r is not None else r for r in udf_results]
+        elif isinstance(return_type, (ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)):
+            def numeric_result_func(r):
+                if r is None:
+                    return r
+                if isinstance(r, str):
+                    try:
+                        if isinstance(return_type, (ByteType, ShortType, IntegerType, LongType)):
+                            return int(r)
+                        elif isinstance(return_type, (FloatType, DoubleType)):
+                            return float(r)
+                    except (ValueError, TypeError):
+                        pass
+                return r
+            return [numeric_result_func(r) for r in udf_results]
+        else:
+            return udf_results
 
     def __repr__(self):
         return "ArrowBatchUDFSerializer"
