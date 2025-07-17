@@ -671,7 +671,7 @@ abstract class TypeCoercionHelper {
         case (e, _: DateType) => e
         case (e, _: TimestampType) => e
         case (e: Expression, t) if e.dataType != t && canCast(e.dataType, t) =>
-          Cast(e, t)
+          Cast(child = e, dataType = t).withTimeZone(conf.sessionLocalTimeZone)
         case _ => boundary
       }
     }

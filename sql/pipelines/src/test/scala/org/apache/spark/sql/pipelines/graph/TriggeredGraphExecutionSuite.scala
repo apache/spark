@@ -28,9 +28,10 @@ import org.apache.spark.sql.pipelines.common.{FlowStatus, RunState}
 import org.apache.spark.sql.pipelines.graph.TriggeredGraphExecution.StreamState
 import org.apache.spark.sql.pipelines.logging.EventLevel
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
-class TriggeredGraphExecutionSuite extends ExecutionTest {
+class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession {
 
   /** Returns a Dataset of Longs from the table with the given identifier. */
   private def getTable(identifier: TableIdentifier): Dataset[Long] = {

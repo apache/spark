@@ -18,7 +18,7 @@ package org.apache.spark.sql.connect
 
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
-import java.time.DateTimeException
+import java.time.{DateTimeException, LocalTime}
 import java.util.Properties
 
 import scala.collection.mutable
@@ -1669,6 +1669,12 @@ class ClientE2ETestSuite
       df = df.union(spark.sql("SELECT :key", args = Map("key" -> (2 * i + 1))))
     }
     checkAnswer(df, (0 until 6).map(i => Row(i)))
+  }
+
+  test("SPARK-52770: Support Time type") {
+    val df = spark.sql("SELECT TIME '12:13:14'")
+
+    checkAnswer(df, Row(LocalTime.of(12, 13, 14)))
   }
 }
 

@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.Union
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -30,7 +31,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * examples are all semantically correct and logically correct and connect should not result in any
  * errors.
  */
-class ConnectValidPipelineSuite extends PipelineTest {
+class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
   test("Extra simple") {
     val session = spark
     import session.implicits._

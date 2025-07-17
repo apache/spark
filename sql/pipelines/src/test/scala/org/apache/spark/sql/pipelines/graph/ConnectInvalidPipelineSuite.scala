@@ -20,6 +20,7 @@ package org.apache.spark.sql.pipelines.graph
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
 /**
@@ -27,7 +28,7 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
  * examples are all semantically correct but contain logical errors which should be found
  * when connect is called and thrown when validate() is called.
  */
-class ConnectInvalidPipelineSuite extends PipelineTest {
+class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
 
   test("Missing source") {
     class P extends TestGraphRegistrationContext(spark) {
