@@ -68,7 +68,6 @@ abstract class BaseConstraint implements Constraint {
         name,
         definition(),
         enforced ? "ENFORCED" : "NOT ENFORCED",
-        validationStatus,
         rely ? "RELY" : "NORELY");
   }
 

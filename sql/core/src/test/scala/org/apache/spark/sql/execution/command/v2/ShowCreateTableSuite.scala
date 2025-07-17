@@ -181,4 +181,47 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
       )
     }
   }
+
+  test("show table constraints") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      withTable("other_table") {
+        sql(
+          s"""
+             |CREATE TABLE other_table (
+             |  id STRING PRIMARY KEY
+             |)
+             |USING parquet
+        """.stripMargin)
+        sql(
+          s"""
+             |CREATE TABLE $t (
+             |  a INT,
+             |  b STRING,
+             |  c STRING,
+             |  PRIMARY KEY (a),
+             |  CONSTRAINT uk_b UNIQUE (b),
+             |  CONSTRAINT fk_c FOREIGN KEY (c) REFERENCES other_table(id),
+             |  CONSTRAINT c1 CHECK (c IS NOT NULL),
+             |  CONSTRAINT c2 CHECK (a > 0)
+             |)
+             |$defaultUsing
+        """.stripMargin)
+        val showDDL = getShowCreateDDL(t)
+        assert(
+          showDDL === Array(
+            s"CREATE TABLE $nonPartitionCatalog.ns.tbl (",
+            "a INT,",
+            "b STRING,",
+            "c STRING,",
+            "PRIMARY KEY (a) ENFORCED NORELY,",
+            "CONSTRAINT uk_b UNIQUE (b),",
+            "CONSTRAINT fk_c FOREIGN KEY (c) REFERENCES other_table(id),",
+            "CONSTRAINT c1 CHECK (c IS NOT NULL),",
+            "CONSTRAINT c2 CHECK (a > 0))",
+            defaultUsing
+          )
+        )
+      }
+    }
+  }
 }
