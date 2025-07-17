@@ -1344,6 +1344,11 @@ class FunctionsTestsMixin:
             )
         ).collect()
 
+    def test_lit_time(self):
+        t = datetime.time(12, 34, 56)
+        actual = self.spark.range(1).select(F.lit(t)).first()[0]
+        self.assertEqual(actual, t)
+
     def test_lit_day_time_interval(self):
         td = datetime.timedelta(days=1, hours=12, milliseconds=123)
         actual = self.spark.range(1).select(F.lit(td)).first()[0]
