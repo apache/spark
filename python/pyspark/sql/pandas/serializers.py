@@ -53,14 +53,10 @@ from pyspark.sql.types import (
     StructField,
     LongType,
     IntegerType,
-    ArrayType,
     ByteType,
     ShortType,
     FloatType,
     DoubleType,
-    UserDefinedType,
-    VariantVal,
-    MapType,
 )
 
 if TYPE_CHECKING:
@@ -185,7 +181,7 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
                     # an empty batch with the number of rows set.
                     struct = pa.array([{}] * batch.num_rows)
                 else:
-                    # Create struct type with metadata to mark it as packed UDF arguments
+                    # Include metadata to indicate packed UDF args
                     struct_type = pa.struct(list(batch.schema))
                     struct_type_with_metadata = struct_type.with_metadata({b'__packed_udf_args__': b'true'})
                     struct = pa.StructArray.from_arrays(
@@ -1553,7 +1549,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
 
         def generate_data_batches(batches):
             """
-            Deserialize ArrowRecordBatches and return a generator of pandas.Series list.
+            Deserialize ArrowRecordBatches and return a generator generator of Rows.
 
             The deserialization logic assumes that Arrow RecordBatches contain the data with the
             ordering that data chunks for same grouping key will appear sequentially.
@@ -1621,7 +1617,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
 
         def generate_data_batches(batches):
             """
-            Deserialize ArrowRecordBatches and return a generator of Row.
+            Deserialize ArrowRecordBatches and return a generator of pandas.Series list.
             The deserialization logic assumes that Arrow RecordBatches contain the data with the
             ordering that data chunks for same grouping key will appear sequentially.
             See `TransformWithStateInPandasPythonInitialStateRunner` for arrow batch schema sent

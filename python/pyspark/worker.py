@@ -77,7 +77,6 @@ from pyspark.sql.types import (
     StructType,
     _create_row,
     _parse_datatype_json_string,
-    ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType, VariantType, VariantVal, UserDefinedType,
 )
 from pyspark.util import fail_on_stopiteration, handle_worker_exception
 from pyspark import shuffle
@@ -1865,7 +1864,6 @@ def read_udfs(pickleSer, infile, eval_type):
 
     state_server_port = None
     key_schema = None
-    input_types = None
     
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
@@ -2141,7 +2139,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # See FlatMapGroupsInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
         arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler, input_types=None
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
         )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
@@ -2160,7 +2158,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
         arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler, input_types=None
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
         )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
         ser.key_offsets = parsed_offsets[0][0]
@@ -2191,7 +2189,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
         arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler, input_types=None
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
         )
         # parsed offsets:
         # [
@@ -2229,7 +2227,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # See TransformWithStateInPySparkExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
         arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler, input_types=None
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
         )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
         ser.key_offsets = parsed_offsets[0][0]
@@ -2256,7 +2254,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
         arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler, input_types=None
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
         )
         # parsed offsets:
         # [
@@ -2291,7 +2289,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # See FlatMapGroupsInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
         arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler, input_types=None
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
         )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
@@ -2317,7 +2315,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # See FlatMapGroupsInPandas(WithState)Exec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
         arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler, input_types=None
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
         )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
@@ -2353,7 +2351,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # support combining multiple UDFs.
         assert num_udfs == 1
         arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler, input_types=None
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
         )
 
         parsed_offsets = extract_key_value_indexes(arg_offsets)
@@ -2372,7 +2370,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # support combining multiple UDFs.
         assert num_udfs == 1
         arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler, input_types=None
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
         )
 
         parsed_offsets = extract_key_value_indexes(arg_offsets)
