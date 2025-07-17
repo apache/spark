@@ -37,7 +37,6 @@ import org.apache.spark.sql.connect.service.ExecuteHolder
 import org.apache.spark.sql.connect.utils.MetricGenerator
 import org.apache.spark.sql.execution.{LocalTableScanExec, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ThreadUtils
 
