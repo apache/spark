@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
@@ -391,6 +391,8 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
   test("round trip conversion of math functions") {
     val intCol = $"cint".int
     val intColRef = FieldReference("cint")
+    val doubleCol = $"cdouble".double
+    val doubleColRef = FieldReference("cdouble")
     checkRoundTripConversion(
       catalystExpr = Log10(intCol),
       v2Expr = new GeneralScalarExpression("LOG10", Array(intColRef)))
@@ -404,219 +406,222 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
       v2Expr = new GeneralScalarExpression("RAND", Array(intColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Abs(Literal(-5), failOnError = true),
-      v2Expr = new GeneralScalarExpression("ABS", Array(LiteralValue(-5, IntegerType))))
+      catalystExpr = Abs(intCol, failOnError = true),
+      v2Expr = new GeneralScalarExpression("ABS", Array(intColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = UnaryMinus(Literal(5), failOnError = true),
-      v2Expr = new GeneralScalarExpression("-", Array(LiteralValue(5, IntegerType))))
+      catalystExpr = UnaryMinus(intCol, failOnError = true),
+      v2Expr = new GeneralScalarExpression("-", Array(intColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Log2(Literal(8)),
-      v2Expr = new GeneralScalarExpression("LOG2", Array(LiteralValue(8, IntegerType))))
+      catalystExpr = Log2(intCol),
+      v2Expr = new GeneralScalarExpression("LOG2", Array(intColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Log(Literal(100)),
-      v2Expr = new GeneralScalarExpression("LN", Array(LiteralValue(100, IntegerType))))
+      catalystExpr = Log(intCol),
+      v2Expr = new GeneralScalarExpression("LN", Array(intColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Exp(Literal(1.0)),
-      v2Expr = new GeneralScalarExpression("EXP", Array(LiteralValue(1.0, DoubleType))))
+      catalystExpr = Exp(doubleCol),
+      v2Expr = new GeneralScalarExpression("EXP", Array(doubleColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Sqrt(Literal(4.0)),
-      v2Expr = new GeneralScalarExpression("SQRT", Array(LiteralValue(4.0, DoubleType))))
+      catalystExpr = Sqrt(doubleCol),
+      v2Expr = new GeneralScalarExpression("SQRT", Array(doubleColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Floor(Literal(4.7)),
-      v2Expr = new GeneralScalarExpression("FLOOR", Array(LiteralValue(4.7, DoubleType))))
+      catalystExpr = Floor(doubleCol),
+      v2Expr = new GeneralScalarExpression("FLOOR", Array(doubleColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Ceil(Literal(4.3)),
-      v2Expr = new GeneralScalarExpression("CEIL", Array(LiteralValue(4.3, DoubleType))))
+      catalystExpr = Ceil(doubleCol),
+      v2Expr = new GeneralScalarExpression("CEIL", Array(doubleColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Sin(Literal(0)),
-      v2Expr = new GeneralScalarExpression("SIN", Array(LiteralValue(0, IntegerType))))
+      catalystExpr = Sin(intCol),
+      v2Expr = new GeneralScalarExpression("SIN", Array(intColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Sinh(Literal(0)),
-      v2Expr = new GeneralScalarExpression("SINH", Array(LiteralValue(0, IntegerType))))
+      catalystExpr = Sinh(intCol),
+      v2Expr = new GeneralScalarExpression("SINH", Array(intColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Cos(Literal(0)),
-      v2Expr = new GeneralScalarExpression("COS", Array(LiteralValue(0, IntegerType))))
+      catalystExpr = Cos(intCol),
+      v2Expr = new GeneralScalarExpression("COS", Array(intColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Cosh(Literal(0)),
-      v2Expr = new GeneralScalarExpression("COSH", Array(LiteralValue(0, IntegerType))))
+      catalystExpr = Cosh(intCol),
+      v2Expr = new GeneralScalarExpression("COSH", Array(intColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Tan(Literal(0)),
-      v2Expr = new GeneralScalarExpression("TAN", Array(LiteralValue(0, IntegerType))))
+      catalystExpr = Tan(intCol),
+      v2Expr = new GeneralScalarExpression("TAN", Array(intColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Tanh(Literal(0)),
-      v2Expr = new GeneralScalarExpression("TANH", Array(LiteralValue(0, IntegerType))))
+      catalystExpr = Tanh(intCol),
+      v2Expr = new GeneralScalarExpression("TANH", Array(intColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Cot(Literal(1)),
-      v2Expr = new GeneralScalarExpression("COT", Array(LiteralValue(1, IntegerType))))
+      catalystExpr = Cot(intCol),
+      v2Expr = new GeneralScalarExpression("COT", Array(intColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Asin(Literal(1.0)),
-      v2Expr = new GeneralScalarExpression("ASIN", Array(LiteralValue(1.0, DoubleType))))
+      catalystExpr = Asin(doubleCol),
+      v2Expr = new GeneralScalarExpression("ASIN", Array(doubleColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Asinh(Literal(1.0)),
-      v2Expr = new GeneralScalarExpression("ASINH", Array(LiteralValue(1.0, DoubleType))))
+      catalystExpr = Asinh(doubleCol),
+      v2Expr = new GeneralScalarExpression("ASINH", Array(doubleColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Acos(Literal(1.0)),
-      v2Expr = new GeneralScalarExpression("ACOS", Array(LiteralValue(1.0, DoubleType))))
+      catalystExpr = Acos(doubleCol),
+      v2Expr = new GeneralScalarExpression("ACOS", Array(doubleColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Acosh(Literal(1.0)),
-      v2Expr = new GeneralScalarExpression("ACOSH", Array(LiteralValue(1.0, DoubleType))))
+      catalystExpr = Acosh(doubleCol),
+      v2Expr = new GeneralScalarExpression("ACOSH", Array(doubleColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Atan(Literal(1.0)),
-      v2Expr = new GeneralScalarExpression("ATAN", Array(LiteralValue(1.0, DoubleType))))
+      catalystExpr = Atan(doubleCol),
+      v2Expr = new GeneralScalarExpression("ATAN", Array(doubleColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Atanh(Literal(0.5)),
-      v2Expr = new GeneralScalarExpression("ATANH", Array(LiteralValue(0.5, DoubleType))))
+      catalystExpr = Atanh(doubleCol),
+      v2Expr = new GeneralScalarExpression("ATANH", Array(doubleColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Cbrt(Literal(8.0)),
-      v2Expr = new GeneralScalarExpression("CBRT", Array(LiteralValue(8.0, DoubleType))))
+      catalystExpr = Cbrt(doubleCol),
+      v2Expr = new GeneralScalarExpression("CBRT", Array(doubleColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = ToDegrees(Literal(3.14)),
-      v2Expr = new GeneralScalarExpression("DEGREES", Array(LiteralValue(3.14, DoubleType))))
+      catalystExpr = ToDegrees(doubleCol),
+      v2Expr = new GeneralScalarExpression("DEGREES", Array(doubleColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = ToRadians(Literal(180.0)),
-      v2Expr = new GeneralScalarExpression("RADIANS", Array(LiteralValue(180.0, DoubleType))))
+      catalystExpr = ToRadians(doubleCol),
+      v2Expr = new GeneralScalarExpression("RADIANS", Array(doubleColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Signum(Literal(-42)),
-      v2Expr = new GeneralScalarExpression("SIGN", Array(LiteralValue(-42, IntegerType))))
+      catalystExpr = Signum(intCol),
+      v2Expr = new GeneralScalarExpression("SIGN", Array(intColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Add(Literal(1), Literal(2), EvalMode.ANSI),
+      catalystExpr = Add(intCol, Literal(2), EvalMode.ANSI),
       v2Expr = new GeneralScalarExpression(
         "+",
-        Array(LiteralValue(1, IntegerType), LiteralValue(2, IntegerType))))
+        Array(intColRef, LiteralValue(2, IntegerType))))
 
     checkRoundTripConversion(
-      catalystExpr = Subtract(Literal(5), Literal(3), EvalMode.ANSI),
+      catalystExpr = Subtract(intCol, Literal(3), EvalMode.ANSI),
       v2Expr = new GeneralScalarExpression(
         "-",
-        Array(LiteralValue(5, IntegerType), LiteralValue(3, IntegerType))))
+        Array(intColRef, LiteralValue(3, IntegerType))))
 
     checkRoundTripConversion(
-      catalystExpr = Multiply(Literal(2), Literal(4), EvalMode.ANSI),
+      catalystExpr = Multiply(intCol, Literal(4), EvalMode.ANSI),
       v2Expr = new GeneralScalarExpression(
         "*",
-        Array(LiteralValue(2, IntegerType), LiteralValue(4, IntegerType))))
+        Array(intColRef, LiteralValue(4, IntegerType))))
 
     checkRoundTripConversion(
-      catalystExpr = Divide(Literal(10), Literal(2), EvalMode.ANSI),
+      catalystExpr = Divide(intCol, Literal(2), EvalMode.ANSI),
       v2Expr = new GeneralScalarExpression(
         "/",
-        Array(LiteralValue(10, IntegerType), LiteralValue(2, IntegerType))))
+        Array(intColRef, LiteralValue(2, IntegerType))))
 
     checkRoundTripConversion(
-      catalystExpr = Remainder(Literal(7), Literal(3), EvalMode.ANSI),
+      catalystExpr = Remainder(intCol, Literal(3), EvalMode.ANSI),
       v2Expr = new GeneralScalarExpression(
         "%",
-        Array(LiteralValue(7, IntegerType), LiteralValue(3, IntegerType))))
+        Array(intColRef, LiteralValue(3, IntegerType))))
 
     checkRoundTripConversion(
-      catalystExpr = Logarithm(Literal(10), Literal(100)),
+      catalystExpr = Logarithm(Literal(10), intCol),
       v2Expr = new GeneralScalarExpression(
         "LOG",
-        Array(LiteralValue(10, IntegerType), LiteralValue(100, IntegerType))))
+        Array(LiteralValue(10, IntegerType), intColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Pow(Literal(2), Literal(3)),
+      catalystExpr = Pow(intCol, Literal(3)),
       v2Expr = new GeneralScalarExpression(
         "POWER",
-        Array(LiteralValue(2, IntegerType), LiteralValue(3, IntegerType))))
+        Array(intColRef, LiteralValue(3, IntegerType))))
 
     checkRoundTripConversion(
-      catalystExpr = Round(Literal(123.456), Literal(2), ansiEnabled = true),
+      catalystExpr = Round(doubleCol, Literal(2), ansiEnabled = true),
       v2Expr = new GeneralScalarExpression(
         "ROUND",
-        Array(LiteralValue(123.456, DoubleType), LiteralValue(2, IntegerType))))
+        Array(doubleColRef, LiteralValue(2, IntegerType))))
 
     checkRoundTripConversion(
-      catalystExpr = Atan2(Literal(1.0), Literal(1.0)),
+      catalystExpr = Atan2(doubleCol, Literal(1.0)),
       v2Expr = new GeneralScalarExpression(
         "ATAN2",
-        Array(LiteralValue(1.0, DoubleType), LiteralValue(1.0, DoubleType))))
+        Array(doubleColRef, LiteralValue(1.0, DoubleType))))
 
     checkRoundTripConversion(
-      catalystExpr = Coalesce(Seq(Literal(null, IntegerType), Literal(5))),
+      catalystExpr = Coalesce(Seq(Literal(null, IntegerType), intCol)),
       v2Expr = new GeneralScalarExpression(
         "COALESCE",
-        Array(LiteralValue(null, IntegerType), LiteralValue(5, IntegerType))))
+        Array(LiteralValue(null, IntegerType), intColRef)))
 
     checkRoundTripConversion(
-      catalystExpr = Greatest(Seq(Literal(1), Literal(2))),
+      catalystExpr = Greatest(Seq(intCol, Literal(2))),
       v2Expr = new GeneralScalarExpression(
         "GREATEST",
-        Array(LiteralValue(1, IntegerType), LiteralValue(2, IntegerType))))
+        Array(intColRef, LiteralValue(2, IntegerType))))
 
     checkRoundTripConversion(
-      catalystExpr = Least(Seq(Literal(1), Literal(2))),
+      catalystExpr = Least(Seq(intCol, Literal(2))),
       v2Expr = new GeneralScalarExpression(
         "LEAST",
-        Array(LiteralValue(1, IntegerType), LiteralValue(2, IntegerType))))
+        Array(intColRef, LiteralValue(2, IntegerType))))
 
     checkRoundTripConversion(
-      catalystExpr = WidthBucket(Literal(5), Literal(0), Literal(10), Literal(5)),
+      catalystExpr = WidthBucket(intCol, Literal(0), Literal(10), Literal(5)),
       v2Expr = new GeneralScalarExpression(
         "WIDTH_BUCKET",
         Array(
-          LiteralValue(5, IntegerType),
+          intColRef,
           LiteralValue(0, IntegerType),
           LiteralValue(10, IntegerType),
           LiteralValue(5, IntegerType))))
 
     checkRoundTripConversion(
-      catalystExpr = Sqrt(Pow(Abs(Literal(-3), failOnError = true), Literal(2))),
+      catalystExpr = Sqrt(Pow(Abs(intCol, failOnError = true), Literal(2))),
       v2Expr = new GeneralScalarExpression(
         "SQRT",
         Array(
           new GeneralScalarExpression(
             "POWER",
-            Array(new GeneralScalarExpression("ABS", Array(LiteralValue(-3, IntegerType))),
-          LiteralValue(2, IntegerType))))))
+            Array(new GeneralScalarExpression("ABS", Array(intColRef)),
+              LiteralValue(2, IntegerType))))))
   }
 
   test("round trip conversion of bitwise functions") {
-    checkRoundTripConversion(
-      catalystExpr = BitwiseNot(Literal(5)),
-      v2Expr = new GeneralScalarExpression("~", Array(LiteralValue(5, IntegerType))))
+    val intCol = $"cint".int
+    val intColRef = FieldReference("cint")
 
     checkRoundTripConversion(
-      catalystExpr = BitwiseAnd(Literal(6), Literal(3)),
+      catalystExpr = BitwiseNot(intCol),
+      v2Expr = new GeneralScalarExpression("~", Array(intColRef)))
+
+    checkRoundTripConversion(
+      catalystExpr = BitwiseAnd(intCol, Literal(3)),
       v2Expr = new GeneralScalarExpression("&", Array(
-        LiteralValue(6, IntegerType),
+        intColRef,
         LiteralValue(3, IntegerType))))
 
     checkRoundTripConversion(
-      catalystExpr = BitwiseOr(Literal(4), Literal(1)),
+      catalystExpr = BitwiseOr(intCol, Literal(1)),
       v2Expr = new GeneralScalarExpression("|", Array(
-        LiteralValue(4, IntegerType),
+        intColRef,
         LiteralValue(1, IntegerType))))
 
     checkRoundTripConversion(
-      catalystExpr = BitwiseXor(Literal(12), Literal(5)),
+      catalystExpr = BitwiseXor(intCol, Literal(5)),
       v2Expr = new GeneralScalarExpression("^", Array(
-        LiteralValue(12, IntegerType),
+        intColRef,
         LiteralValue(5, IntegerType))))
   }
 
