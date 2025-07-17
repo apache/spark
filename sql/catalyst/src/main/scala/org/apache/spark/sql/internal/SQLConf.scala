@@ -984,8 +984,8 @@ object SQLConf {
 
   lazy val COLLATION_AWARE_HASHING_ENABLED =
     buildConf("spark.sql.legacy.collationAwareHashFunctions")
-      .doc("Enables collation aware hashing for collated strings in Murmur3Hash and XxHash64" +
-        " user-facing expressions.")
+      .doc("Enables collation aware hashing (legacy behavior) for collated strings in " +
+        "Murmur3Hash and XxHash64 user-facing expressions.")
       .version("4.0.1")
       .booleanConf
       .createWithDefault(false)

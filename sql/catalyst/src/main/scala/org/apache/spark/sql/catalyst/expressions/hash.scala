@@ -424,7 +424,7 @@ abstract class HashExpression[E] extends Expression {
     s"$result = $hasherClassName.hashInt($input.months, $microsecondsHash);"
   }
 
-  private def isAlwaysCollationAwareBug: Boolean =
+  private def legacyCollationAwareHashing: Boolean =
     SQLConf.get.getConf(SQLConf.COLLATION_AWARE_HASHING_ENABLED)
 
   protected def genHashString(
@@ -435,7 +435,15 @@ abstract class HashExpression[E] extends Expression {
       val numBytes = s"$input.numBytes()"
       s"$result = $hasherClassName.hashUnsafeBytes($baseObject, $baseOffset, $numBytes, $result);"
     } else {
-      if (isAlwaysCollationAwareBug && !isCollationAware) {
+      if (isCollationAware) {
+        val key = ctx.freshName("key")
+        val offset = "Platform.BYTE_ARRAY_OFFSET"
+        s"""
+          byte[] $key = (byte[]) CollationFactory.fetchCollation(${stringType.collationId})
+            .sortKeyFunction.apply($input);
+          $result = $hasherClassName.hashUnsafeBytes($key, $offset, $key.length, $result);
+        """
+      } else if (legacyCollationAwareHashing) {
         val collation = CollationFactory.fetchCollation(stringType.collationId)
         val stringHash = ctx.freshName("stringHash")
         if (collation.isUtf8BinaryType || collation.isUtf8LcaseType) {
@@ -457,14 +465,6 @@ abstract class HashExpression[E] extends Expression {
             $result = $hasherClassName.hashLong($stringHash, $result);
           """
         }
-      } else if (isCollationAware) {
-        val key = ctx.freshName("key")
-        val offset = "Platform.BYTE_ARRAY_OFFSET"
-        s"""
-          byte[] $key = (byte[]) CollationFactory.fetchCollation(${stringType.collationId})
-            .sortKeyFunction.apply($input);
-          $result = $hasherClassName.hashUnsafeBytes($key, $offset, $key.length, $result);
-        """
       } else {
         val baseObject = s"$input.getBaseObject()"
         val baseOffset = s"$input.getBaseOffset()"
@@ -580,7 +580,7 @@ abstract class InterpretedHashFunction {
 
   protected def hashUnsafeBytes(base: AnyRef, offset: Long, length: Int, seed: Long): Long
 
-  private def isAlwaysCollationAwareBug: Boolean =
+  private def legacyCollationAwareHashing: Boolean =
     SQLConf.get.getConf(SQLConf.COLLATION_AWARE_HASHING_ENABLED)
 
   /**
@@ -633,7 +633,11 @@ abstract class InterpretedHashFunction {
         if (st.supportsBinaryEquality) {
           hashUnsafeBytes(s.getBaseObject, s.getBaseOffset, s.numBytes, seed)
         } else {
-          if (isAlwaysCollationAwareBug && !isCollationAware) {
+          if (isCollationAware) {
+            val key = CollationFactory.fetchCollation(st.collationId).sortKeyFunction.apply(s)
+              .asInstanceOf[Array[Byte]]
+            hashUnsafeBytes(key, Platform.BYTE_ARRAY_OFFSET, key.length, seed)
+          } else if (legacyCollationAwareHashing) {
             val collation = CollationFactory.fetchCollation(st.collationId)
             val stringHash = if (collation.isUtf8BinaryType || collation.isUtf8LcaseType) {
               UTF8String.fromBytes(collation.sortKeyFunction.apply(s)).hashCode
@@ -644,13 +648,7 @@ abstract class InterpretedHashFunction {
             }
             hashLong(stringHash, seed)
           } else {
-            if (isCollationAware) {
-              val key = CollationFactory.fetchCollation(st.collationId).sortKeyFunction.apply(s)
-                .asInstanceOf[Array[Byte]]
-              hashUnsafeBytes(key, Platform.BYTE_ARRAY_OFFSET, key.length, seed)
-            } else {
-              hashUnsafeBytes(s.getBaseObject, s.getBaseOffset, s.numBytes, seed)
-            }
+            hashUnsafeBytes(s.getBaseObject, s.getBaseOffset, s.numBytes, seed)
           }
         }
 
