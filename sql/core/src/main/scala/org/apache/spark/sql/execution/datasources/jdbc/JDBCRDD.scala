@@ -301,20 +301,17 @@ class JDBCRDD(
     stmt.setFetchSize(options.fetchSize)
     stmt.setQueryTimeout(options.queryTimeout)
 
-    val startTime = System.nanoTime
-    rs = try {
-      stmt.executeQuery()
-    } catch {
-      case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
-        throw new SparkException(
-          errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_QUERY_EXECUTION",
-          messageParameters = Map("jdbcQuery" -> sqlText),
-          cause = e)
+    rs = SQLMetrics.withTimingNs(queryExecutionTimeMetric) {
+      try {
+        stmt.executeQuery()
+      } catch {
+        case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
+          throw new SparkException(
+            errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_QUERY_EXECUTION",
+            messageParameters = Map("jdbcQuery" -> sqlText),
+            cause = e)
+      }
     }
-    val endTime = System.nanoTime
-
-    val executionTime = endTime - startTime
-    queryExecutionTimeMetric.add(executionTime)
 
     val rowsIterator =
       JdbcUtils.resultSetToSparkInternalRows(rs, dialect, schema, inputMetrics)
