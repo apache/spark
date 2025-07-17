@@ -148,7 +148,7 @@ class UtilTests(PySparkTestCase):
         with self.assertRaisesRegex(ValueError, "invalid format"):
             _parse_memory("2gs")
 
-    @eventually(timeout=180, catch_assertions=True, catch_timeout=True)
+    @eventually(timeout=180, catch_timeout=True)
     @timeout(timeout=1)
     def test_retry_timeout_test(self):
         import random
