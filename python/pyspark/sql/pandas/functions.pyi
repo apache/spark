@@ -39,6 +39,7 @@ from pyspark.sql.pandas._typing import (
     ArrowScalarUDFType,
     ArrowScalarIterFunction,
     ArrowScalarIterUDFType,
+    ArrowGroupedAggUDFType,
 )
 
 from pyspark import since as since  # noqa: F401
@@ -54,6 +55,7 @@ class PandasUDFType:
 class ArrowUDFType:
     SCALAR: ArrowScalarUDFType
     SCALAR_ITER: ArrowScalarIterUDFType
+    GROUPED_AGG: ArrowGroupedAggUDFType
 
 @overload
 def arrow_udf(
