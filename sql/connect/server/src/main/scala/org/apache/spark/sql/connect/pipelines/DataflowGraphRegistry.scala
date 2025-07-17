@@ -31,7 +31,7 @@ import org.apache.spark.sql.pipelines.graph.GraphRegistrationContext
 // TODO(SPARK-51727): Currently DataflowGraphRegistry is a singleton, but it should instead be
 //  scoped to a single SparkSession for proper isolation between pipelines that are run on the
 //  same cluster.
-object DataflowGraphRegistry {
+class DataflowGraphRegistry {
 
   private val dataflowGraphs = new ConcurrentHashMap[String, GraphRegistrationContext]()
 
@@ -55,7 +55,7 @@ object DataflowGraphRegistry {
 
   /** Retrieves the graph for a given id, and throws if the id could not be found. */
   def getDataflowGraphOrThrow(dataflowGraphId: String): GraphRegistrationContext =
-    DataflowGraphRegistry.getDataflowGraph(dataflowGraphId).getOrElse {
+    getDataflowGraph(dataflowGraphId).getOrElse {
       throw new SparkException(
         errorClass = "DATAFLOW_GRAPH_NOT_FOUND",
         messageParameters = Map("graphId" -> dataflowGraphId),

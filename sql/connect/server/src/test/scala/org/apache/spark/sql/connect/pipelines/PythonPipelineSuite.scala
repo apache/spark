@@ -79,7 +79,7 @@ class PythonPipelineSuite
         s"Python process failed with exit code $exitCode. Output: ${output.mkString("\n")}")
     }
 
-    val dataflowGraphContexts = DataflowGraphRegistry.getAllDataflowGraphs
+    val dataflowGraphContexts = getSessionHolder.getAllDataflowGraphs
     assert(dataflowGraphContexts.size == 1)
 
     dataflowGraphContexts.head.toDataflowGraph

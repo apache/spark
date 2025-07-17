@@ -38,10 +38,11 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.ml.MLCache
+import org.apache.spark.sql.connect.pipelines.DataflowGraphRegistry
 import org.apache.spark.sql.connect.planner.PythonStreamingQueryListener
 import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper
 import org.apache.spark.sql.connect.service.SessionHolder.{ERROR_CACHE_SIZE, ERROR_CACHE_TIMEOUT_SEC}
-import org.apache.spark.sql.pipelines.graph.PipelineUpdateContext
+import org.apache.spark.sql.pipelines.graph.{GraphRegistrationContext, PipelineUpdateContext}
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.{SystemClock, Utils}
 
@@ -124,6 +125,9 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // pipeline executions.
   private lazy val pipelineExecutions =
     new ConcurrentHashMap[String, PipelineUpdateContext]()
+
+  // Registry for dataflow graphs specific to this session
+  private lazy val dataflowGraphRegistry: DataflowGraphRegistry = new DataflowGraphRegistry()
 
   // Handles Python process clean up for streaming queries. Initialized on first use in a query.
   private[connect] lazy val streamingForeachBatchRunnerCleanerCache =
@@ -320,6 +324,9 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     // Stops all pipeline execution and clears the pipeline execution cache
     removeAllPipelineExecutions()
 
+    // Clean up dataflow graphs
+    dropAllDataflowGraphs()
+
     // if there is a server side listener, clean up related resources
     if (streamingServersideListenerHolder.isServerSideListenerRegistered) {
       streamingServersideListenerHolder.cleanUp()
@@ -484,6 +491,49 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   private[connect] def getPipelineExecution(graphId: String): Option[PipelineUpdateContext] = {
     Option(pipelineExecutions.get(graphId))
+  }
+
+  private[connect] def createDataflowGraph(
+       defaultCatalog: String,
+       defaultDatabase: String,
+       defaultSqlConf: Map[String, String]): String = {
+    dataflowGraphRegistry.createDataflowGraph(defaultCatalog, defaultDatabase, defaultSqlConf)
+  }
+
+  /**
+   * Retrieves the dataflow graph for the given graph ID.
+   */
+  private[connect] def getDataflowGraph(graphId: String): Option[GraphRegistrationContext] = {
+    dataflowGraphRegistry.getDataflowGraph(graphId)
+  }
+
+  /**
+   * Retrieves the dataflow graph for the given graph ID, throwing if not found.
+   */
+  private[connect] def getDataflowGraphOrThrow(graphId: String): GraphRegistrationContext = {
+    dataflowGraphRegistry.getDataflowGraphOrThrow(graphId)
+  }
+
+  /**
+   * Removes the dataflow graph with the given ID.
+   */
+  private[connect] def dropDataflowGraph(graphId: String): Unit = {
+    dataflowGraphRegistry.dropDataflowGraph(graphId)
+  }
+
+  /**
+   * Returns all dataflow graphs in this session.
+   */
+  private[connect] def getAllDataflowGraphs: Seq[GraphRegistrationContext] = {
+    dataflowGraphRegistry.getAllDataflowGraphs
+  }
+
+  /**
+   * Removes all dataflow graphs from this session.
+   * Called during session cleanup.
+   */
+  private[connect] def dropAllDataflowGraphs(): Unit = {
+    dataflowGraphRegistry.dropAllDataflowGraphs()
   }
 
   /**

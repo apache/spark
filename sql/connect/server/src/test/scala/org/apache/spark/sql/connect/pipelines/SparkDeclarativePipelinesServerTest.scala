@@ -23,18 +23,23 @@ import org.apache.spark.connect.{proto => sc}
 import org.apache.spark.connect.proto.{PipelineCommand, PipelineEvent}
 import org.apache.spark.sql.connect.{SparkConnectServerTest, SparkConnectTestUtils}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
+import org.apache.spark.sql.connect.service.{SessionHolder, SessionKey, SparkConnectService}
 import org.apache.spark.sql.pipelines.utils.PipelineTest
 
 class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
 
   override def afterEach(): Unit = {
-    SparkConnectService.sessionManager
-      .getIsolatedSessionIfPresent(SessionKey(defaultUserId, defaultSessionId))
-      .foreach(_.removeAllPipelineExecutions())
-    DataflowGraphRegistry.dropAllDataflowGraphs()
+    getSessionHolder.removeAllPipelineExecutions()
+    getSessionHolder.dropAllDataflowGraphs()
     PipelineTest.cleanupMetastore(spark)
     super.afterEach()
+  }
+
+  // Helper method to get the session holder
+  protected def getSessionHolder: SessionHolder = {
+    SparkConnectService.sessionManager
+      .getIsolatedSessionIfPresent(SessionKey(defaultUserId, defaultSessionId))
+      .getOrElse(throw new RuntimeException("Session not found"))
   }
 
   def buildPlanFromPipelineCommand(command: sc.PipelineCommand): sc.Plan = {
