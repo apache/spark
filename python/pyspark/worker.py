@@ -1980,9 +1980,6 @@ def read_udfs(pickleSer, infile, eval_type):
         elif eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF and not use_legacy_pandas_udf_conversion(runner_conf):
             input_types = ([f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))])
             ser = ArrowBatchUDFSerializer(
-                timezone,
-                safecheck,
-                _assign_cols_by_name,
                 False,
                 input_types,
                 "row",
