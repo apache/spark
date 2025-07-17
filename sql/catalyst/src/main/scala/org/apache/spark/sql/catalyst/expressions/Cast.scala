@@ -727,9 +727,6 @@ case class Cast(
   private[this] def timestampToDouble(ts: Long): Double = {
     ts / MICROS_PER_SECOND.toDouble
   }
-  private[this] def timeToDouble(timeNanos: Long): Double = {
-    timeNanos / NANOS_PER_SECOND.toDouble
-  }
   private[this] def timeToLong(timeNanos: Long): Long = {
     Math.floorDiv(timeNanos, NANOS_PER_SECOND)
   }
@@ -1047,7 +1044,7 @@ case class Cast(
       // Note that we lose precision here.
       buildCast[Long](_, t => changePrecision(Decimal(timestampToDouble(t)), target))
     case _: TimeType =>
-      buildCast[Long](_, t => changePrecision(Decimal(timeToDouble(t)), target))
+      buildCast[Long](_, t => changePrecision(Decimal.apply(t, 14, 9), target))
     case dt: DecimalType =>
       b => toPrecision(b.asInstanceOf[Decimal], target, getContextOrNull())
     case t: IntegralType =>
@@ -1516,8 +1513,7 @@ case class Cast(
       case _: TimeType =>
         (c, evPrim, evNull) =>
           code"""
-            Decimal $tmp = Decimal.apply(
-              scala.math.BigDecimal.valueOf(${timeToDoubleCode(c)}));
+            Decimal $tmp = Decimal.apply($c, 14, 9);
             ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
       case DecimalType() =>
@@ -1767,8 +1763,6 @@ case class Cast(
   private[this] def timestampToDoubleCode(ts: ExprValue): Block =
     code"$ts / (double)$MICROS_PER_SECOND"
 
-  private[this] def timeToDoubleCode(ts: ExprValue): Block =
-    code"$ts / (double)$NANOS_PER_SECOND"
   private[this] def timeToLongCode(timeValue: ExprValue): Block =
     code"Math.floorDiv($timeValue, ${NANOS_PER_SECOND}L)"
 
