@@ -1864,7 +1864,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
     state_server_port = None
     key_schema = None
-    
+    input_types = None
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
@@ -2046,7 +2046,7 @@ def read_udfs(pickleSer, infile, eval_type):
             assert num_udfs == 1, "One MAP_ARROW_ITER UDF expected here."
 
         arg_offsets, udf = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler, input_types=input_types
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
         )
 
         def func(_, iterator):
