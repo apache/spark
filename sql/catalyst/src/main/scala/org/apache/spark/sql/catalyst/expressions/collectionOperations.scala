@@ -116,6 +116,7 @@ case class Size(child: Expression, legacySizeOfNull: Boolean)
   def this(child: Expression) = this(child, SQLConf.get.legacySizeOfNull)
 
   override def dataType: DataType = IntegerType
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
   override def nullable: Boolean = if (legacySizeOfNull) false else super.nullable
 
@@ -1267,6 +1268,9 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None) extends U
 
   override def withNewSeed(seed: Long): Shuffle = copy(randomSeed = Some(seed))
 
+  override def withShiftedSeed(shift: Long): Shuffle =
+    copy(randomSeed = randomSeed.map(_ + shift))
+
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && randomSeed.isDefined
 
@@ -2155,6 +2159,8 @@ case class ArrayJoin(
 
   override def foldable: Boolean = children.forall(_.foldable)
 
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
+
   override def eval(input: InternalRow): Any = {
     val arrayEval = array.eval(input)
     if (arrayEval == null) return null
@@ -2893,6 +2899,8 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   override def nullable: Boolean = children.exists(_.nullable)
 
   override def foldable: Boolean = children.forall(_.foldable)
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def eval(input: InternalRow): Any = doConcat(input)
 

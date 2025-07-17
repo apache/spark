@@ -185,7 +185,7 @@ private[columnar] object ColumnBuilder {
       case ByteType => new ByteColumnBuilder
       case ShortType => new ShortColumnBuilder
       case IntegerType | DateType | _: YearMonthIntervalType => new IntColumnBuilder
-      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
         new LongColumnBuilder
       case FloatType => new FloatColumnBuilder
       case DoubleType => new DoubleColumnBuilder

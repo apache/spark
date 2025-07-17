@@ -104,6 +104,18 @@ abstract class Expression extends TreeNode[Expression] {
   def foldable: Boolean = false
 
   /**
+   * Returns true if the expression can be folded without relying on external context,
+   * such as current time zone, session configurations, or catalogs.
+   *
+   * When an expression is context-independent foldable, it can be safely evaluated during DDL
+   * operations like creating tables, views, or constraints. This allows systems to store the
+   * computed value rather than the expression itself, improving both simplicity and performance.
+   *
+   * Default is false to ensure explicit marking of context independence.
+   */
+  def contextIndependentFoldable: Boolean = false
+
+  /**
    * Returns true when the current expression always return the same result for fixed inputs from
    * children. The non-deterministic expressions should not change in number and order. They should
    * not be evaluated during the query planning.
@@ -403,12 +415,16 @@ object ExpressionPatternBitMask {
   }
 }
 
+
 /**
- * An expression that cannot be evaluated but is guaranteed to be replaced with a foldable value
- * by query optimizer (e.g. CurrentDate).
+ * An expression that cannot be evaluated. These expressions don't live past analysis or
+ * optimization time (e.g. Star) and should not be evaluated during query planning and
+ * execution.
  */
-trait FoldableUnevaluable extends Expression {
-  override def foldable: Boolean = true
+trait Unevaluable extends Expression {
+
+  /** Unevaluable is not foldable because we don't have an eval for it. */
+  final override def foldable: Boolean = false
 
   override def eval(input: InternalRow = null): Any =
     throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
@@ -417,19 +433,6 @@ trait FoldableUnevaluable extends Expression {
     throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
 
-/**
- * An expression that cannot be evaluated. These expressions don't live past analysis or
- * optimization time (e.g. Star) and should not be evaluated during query planning and
- * execution.
- */
-trait Unevaluable extends Expression with FoldableUnevaluable {
-
-  /** Unevaluable is not foldable by default because we don't have an eval for it.
-   * Exception are expressions that will be replaced by a literal by Optimizer (e.g. CurrentDate).
-   * Hence we allow overriding overriding of this field in special cases.
-   */
-  final override def foldable: Boolean = false
-}
 
 /**
  * An expression that gets replaced at runtime (currently by the optimizer) into a different

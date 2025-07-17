@@ -20,6 +20,7 @@ package org.apache.spark.benchmark
 import java.io.{File, FileOutputStream, OutputStream}
 
 import org.apache.spark.internal.config.Tests.IS_TESTING
+import org.apache.spark.util.Utils
 
 /**
  * A base class for generate benchmark results to a file.
@@ -60,7 +61,7 @@ abstract class BenchmarkBase {
         // scalastyle:off println
         println(s"Creating ${dir.getAbsolutePath} for benchmark results.")
         // scalastyle:on println
-        dir.mkdirs()
+        Utils.createDirectory(dir)
       }
       val file = new File(dir, resultFileName)
       if (!file.exists()) {

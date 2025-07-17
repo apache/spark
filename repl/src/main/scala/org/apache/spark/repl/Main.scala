@@ -57,7 +57,9 @@ object Main extends Logging {
 
   def main(args: Array[String]): Unit = {
     isShellSession = true
-    doMain(args, new SparkILoop)
+    val settings = new GenericRunnerSettings(scalaOptionError)
+    settings.processArguments(args.toList, true)
+    doMain(args, new SparkILoop(settings))
   }
 
   // Visible for testing

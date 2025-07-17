@@ -201,6 +201,19 @@ class HybridAnalyzerSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("Fixed-point analyzer passes, single-pass analyzer fails with Stack Overflow") {
+    intercept[StackOverflowError](
+      new HybridAnalyzer(
+        new ValidatingAnalyzer(bridgeRelations = true),
+        new ResolverGuard(spark.sessionState.catalogManager),
+        new BrokenResolver(
+          new StackOverflowError("Stack Overflow"),
+          bridgeRelations = true
+        )
+      ).apply(unresolvedPlan, new QueryPlanningTracker)
+    )
+  }
+
   test("Fixed-point analyzer fails, single-pass analyzer passes") {
     checkError(
       exception = intercept[AnalysisException](

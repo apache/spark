@@ -260,6 +260,8 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Non
 
   override def withNewSeed(seed: Long): Uuid = Uuid(Some(seed))
 
+  override def withShiftedSeed(shift: Long): Uuid = Uuid(randomSeed.map(_ + shift))
+
   override lazy val resolved: Boolean = randomSeed.isDefined
 
   override def nullable: Boolean = false
@@ -325,6 +327,7 @@ case class SparkVersion()
 case class TypeOf(child: Expression) extends UnaryExpression with DefaultStringProducingExpression {
   override def nullable: Boolean = false
   override def foldable: Boolean = true
+  override def contextIndependentFoldable: Boolean = true
   override def eval(input: InternalRow): Any = UTF8String.fromString(child.dataType.catalogString)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

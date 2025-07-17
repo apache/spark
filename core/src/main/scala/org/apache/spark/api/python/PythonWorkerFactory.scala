@@ -95,7 +95,7 @@ private[spark] class PythonWorkerFactory(
   // so we can also fall back to launching workers, pyspark/worker.py (by default) directly.
   private val useDaemon = {
     // This flag is ignored on Windows as it's unable to fork.
-    !System.getProperty("os.name").startsWith("Windows") && useDaemonEnabled
+    !Utils.isWindows && useDaemonEnabled
   }
 
   private val authHelper = new SocketAuthHelper(SparkEnv.get.conf)
@@ -130,12 +130,13 @@ private[spark] class PythonWorkerFactory(
         // Pull from idle workers until we one that is alive, otherwise create a new one.
         while (idleWorkers.nonEmpty) {
           val worker = idleWorkers.dequeue()
-          val workerHandle = daemonWorkers(worker)
-          if (workerHandle.isAlive()) {
-            try {
-              return (worker.refresh(), Some(workerHandle))
-            } catch {
-              case c: CancelledKeyException => /* pass */
+          daemonWorkers.get(worker).foreach { workerHandle =>
+            if (workerHandle.isAlive()) {
+              try {
+                return (worker.refresh(), Some(workerHandle))
+              } catch {
+                case _: CancelledKeyException => /* pass */
+              }
             }
           }
           logWarning(log"Worker ${MDC(WORKER, worker)} " +

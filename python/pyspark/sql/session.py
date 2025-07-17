@@ -54,6 +54,7 @@ from pyspark.sql.types import (
     DataType,
     StructField,
     StructType,
+    VariantVal,
     _make_type_verifier,
     _infer_schema,
     _has_nulltype,
@@ -1194,10 +1195,14 @@ class SparkSession(SparkConversionMixin):
         if not isinstance(data, list):
             data = list(data)
 
+        if any(isinstance(d, VariantVal) for d in data):
+            raise PySparkValueError("Rows cannot be of type VariantVal")
+
+        tupled_data: Iterable[Tuple]
         if schema is None or isinstance(schema, (list, tuple)):
             struct = self._inferSchemaFromList(data, names=schema)
             converter = _create_converter(struct)
-            tupled_data: Iterable[Tuple] = map(converter, data)
+            tupled_data = map(converter, data)
             if isinstance(schema, (list, tuple)):
                 for i, name in enumerate(schema):
                     struct.fields[i].name = name
@@ -1205,7 +1210,8 @@ class SparkSession(SparkConversionMixin):
 
         elif isinstance(schema, StructType):
             struct = schema
-            tupled_data = data
+            converter = _create_converter(struct)
+            tupled_data = map(converter, data)
 
         else:
             raise PySparkTypeError(

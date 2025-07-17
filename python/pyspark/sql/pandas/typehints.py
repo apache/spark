@@ -26,6 +26,8 @@ if TYPE_CHECKING:
         PandasScalarIterUDFType,
         PandasGroupedAggUDFType,
         ArrowScalarUDFType,
+        ArrowScalarIterUDFType,
+        ArrowGroupedAggUDFType,
     )
 
 
@@ -36,6 +38,8 @@ def infer_eval_type(
     "PandasScalarIterUDFType",
     "PandasGroupedAggUDFType",
     "ArrowScalarUDFType",
+    "ArrowScalarIterUDFType",
+    "ArrowGroupedAggUDFType",
 ]:
     """
     Infers the evaluation type in :class:`pyspark.util.PythonEvalType` from
@@ -110,6 +114,21 @@ def infer_eval_type(
         )
     )
 
+    # Iterator[Tuple[pa.Array, ...] -> Iterator[pa.Array]
+    is_iterator_tuple_array = (
+        len(parameters_sig) == 1
+        and check_iterator_annotation(  # Iterator
+            parameters_sig[0],
+            parameter_check_func=lambda a: check_tuple_annotation(  # Tuple
+                a,
+                parameter_check_func=lambda ta: (ta == Ellipsis or ta == pa.Array),
+            ),
+        )
+        and check_iterator_annotation(
+            return_annotation, parameter_check_func=lambda a: a == pa.Array
+        )
+    )
+
     # Iterator[Series, Frame or Union[DataFrame, Series]] -> Iterator[Series or Frame]
     is_iterator_series_or_frame = (
         len(parameters_sig) == 1
@@ -125,6 +144,18 @@ def infer_eval_type(
         )
         and check_iterator_annotation(
             return_annotation, parameter_check_func=lambda a: a == pd.DataFrame or a == pd.Series
+        )
+    )
+
+    # Iterator[pa.Array] -> Iterator[pa.Array]
+    is_iterator_array = (
+        len(parameters_sig) == 1
+        and check_iterator_annotation(
+            parameters_sig[0],
+            parameter_check_func=lambda a: (a == pd.Series or a == pa.Array),
+        )
+        and check_iterator_annotation(
+            return_annotation, parameter_check_func=lambda a: a == pa.Array
         )
     )
 
@@ -146,14 +177,25 @@ def infer_eval_type(
         and not check_tuple_annotation(return_annotation)
     )
 
+    # pa.Array, ... -> Any
+    is_array_agg = all(a == pa.Array for a in parameters_sig) and (
+        return_annotation != pa.Array
+        and not check_iterator_annotation(return_annotation)
+        and not check_tuple_annotation(return_annotation)
+    )
+
     if is_series_or_frame:
         return PandasUDFType.SCALAR
     elif is_arrow_array:
         return ArrowUDFType.SCALAR
     elif is_iterator_tuple_series_or_frame or is_iterator_series_or_frame:
         return PandasUDFType.SCALAR_ITER
+    elif is_iterator_tuple_array or is_iterator_array:
+        return ArrowUDFType.SCALAR_ITER
     elif is_series_or_frame_agg:
         return PandasUDFType.GROUPED_AGG
+    elif is_array_agg:
+        return ArrowUDFType.GROUPED_AGG
     else:
         raise PySparkNotImplementedError(
             errorClass="UNSUPPORTED_SIGNATURE",

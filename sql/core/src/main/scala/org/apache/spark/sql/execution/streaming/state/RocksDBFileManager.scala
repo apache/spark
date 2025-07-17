@@ -38,6 +38,7 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
+import org.apache.spark.internal.LogKeys.{DFS_FILE, VERSION_NUM}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
@@ -335,7 +336,7 @@ class RocksDBFileManager(
     versionToRocksDBFiles.keySet().removeIf(_._1 >= version)
     val metadata = if (version == 0) {
       if (localDir.exists) Utils.deleteRecursively(localDir)
-      localDir.mkdirs()
+      Utils.createDirectory(localDir)
       // Since we cleared the local dir, we should also clear the local file mapping
       rocksDBFileMapping.clear()
       RocksDBCheckpointMetadata(Seq.empty, 0)
@@ -785,6 +786,17 @@ class RocksDBFileManager(
       }
     }
 
+    // Delete remaining unnecessary local immutable file mappings.
+    // Files present in the file mapping but not the filesystem may lead to
+    // versionID mismatch error (SPARK-52637), so we should explicitly delete
+    // them.
+    rocksDBFileMapping.purgeIncompatibleMappingsForLoad(version).foreach {
+      case (_, (dfsFileMappedVersion, dfsFile)) =>
+        logInfo(log"Deleted local fileMapping to ${MDC(DFS_FILE, dfsFile)} because " +
+          log"mapped file version ${MDC(VERSION_NUM, dfsFileMappedVersion)} was " +
+          log"incompatible with versionToLoad ${MDC(VERSION_NUM, version)}")
+    }
+
     var filesCopied = 0L
     var bytesCopied = 0L
     var filesReused = 0L
@@ -828,7 +840,7 @@ class RocksDBFileManager(
   private def getImmutableFilesFromVersionZip(
       version: Long, checkpointUniqueId: Option[String] = None): Seq[RocksDBImmutableFile] = {
     Utils.deleteRecursively(localTempDir)
-    localTempDir.mkdirs()
+    Utils.createDirectory(localTempDir)
     Utils.unzipFilesFromFile(fs, dfsBatchZipFile(version, checkpointUniqueId), localTempDir)
     val metadataFile = localMetadataFile(localTempDir)
     val metadata = RocksDBCheckpointMetadata.readFromFile(metadataFile)

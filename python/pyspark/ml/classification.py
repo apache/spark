@@ -889,15 +889,14 @@ class LinearSVCModel(
         Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
-        if self.hasSummary:
-            s = LinearSVCTrainingSummary(super(LinearSVCModel, self).summary)
-            if is_remote():
-                s.__source_transformer__ = self  # type: ignore[attr-defined]
-            return s
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
+        return super().summary
+
+    @property
+    def _summaryCls(self) -> type:
+        return LinearSVCTrainingSummary
+
+    def _summary_dataset(self, train_dataset: DataFrame) -> DataFrame:
+        return train_dataset
 
     def evaluate(self, dataset: DataFrame) -> "LinearSVCSummary":
         """
@@ -1577,29 +1576,6 @@ class LogisticRegressionModel(
         """
         return self._call_java("interceptVector")
 
-    @property
-    @since("2.0.0")
-    def summary(self) -> "LogisticRegressionTrainingSummary":
-        """
-        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
-        trained on the training set. An exception is thrown if `trainingSummary is None`.
-        """
-        if self.hasSummary:
-            s: LogisticRegressionTrainingSummary
-            if self.numClasses <= 2:
-                s = BinaryLogisticRegressionTrainingSummary(
-                    super(LogisticRegressionModel, self).summary
-                )
-            else:
-                s = LogisticRegressionTrainingSummary(super(LogisticRegressionModel, self).summary)
-            if is_remote():
-                s.__source_transformer__ = self  # type: ignore[attr-defined]
-            return s
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
-
     def evaluate(self, dataset: DataFrame) -> "LogisticRegressionSummary":
         """
         Evaluates the model on a test dataset.
@@ -1622,6 +1598,15 @@ class LogisticRegressionModel(
         if is_remote():
             s.__source_transformer__ = self  # type: ignore[attr-defined]
         return s
+
+    @property
+    def _summaryCls(self) -> type:
+        if self.numClasses <= 2:
+            return BinaryLogisticRegressionTrainingSummary
+        return LogisticRegressionTrainingSummary
+
+    def _summary_dataset(self, train_dataset: DataFrame) -> DataFrame:
+        return train_dataset
 
 
 class LogisticRegressionSummary(_ClassificationSummary):
@@ -2315,29 +2300,13 @@ class RandomForestClassificationModel(
         return [DecisionTreeClassificationModel(m) for m in list(self._call_java("trees"))]
 
     @property
-    @since("3.1.0")
-    def summary(self) -> "RandomForestClassificationTrainingSummary":
-        """
-        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
-        trained on the training set. An exception is thrown if `trainingSummary is None`.
-        """
-        if self.hasSummary:
-            s: RandomForestClassificationTrainingSummary
-            if self.numClasses <= 2:
-                s = BinaryRandomForestClassificationTrainingSummary(
-                    super(RandomForestClassificationModel, self).summary
-                )
-            else:
-                s = RandomForestClassificationTrainingSummary(
-                    super(RandomForestClassificationModel, self).summary
-                )
-            if is_remote():
-                s.__source_transformer__ = self  # type: ignore[attr-defined]
-            return s
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
+    def _summaryCls(self) -> type:
+        if self.numClasses <= 2:
+            return BinaryRandomForestClassificationTrainingSummary
+        return RandomForestClassificationTrainingSummary
+
+    def _summary_dataset(self, train_dataset: DataFrame) -> DataFrame:
+        return train_dataset
 
     def evaluate(self, dataset: DataFrame) -> "RandomForestClassificationSummary":
         """
@@ -3372,17 +3341,14 @@ class MultilayerPerceptronClassificationModel(
         Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
-        if self.hasSummary:
-            s = MultilayerPerceptronClassificationTrainingSummary(
-                super(MultilayerPerceptronClassificationModel, self).summary
-            )
-            if is_remote():
-                s.__source_transformer__ = self  # type: ignore[attr-defined]
-            return s
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
+        return super().summary
+
+    @property
+    def _summaryCls(self) -> type:
+        return MultilayerPerceptronClassificationTrainingSummary
+
+    def _summary_dataset(self, train_dataset: DataFrame) -> DataFrame:
+        return train_dataset
 
     def evaluate(self, dataset: DataFrame) -> "MultilayerPerceptronClassificationSummary":
         """
@@ -4321,22 +4287,6 @@ class FMClassificationModel(
         """
         return self._call_java("factors")
 
-    @since("3.1.0")
-    def summary(self) -> "FMClassificationTrainingSummary":
-        """
-        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
-        trained on the training set. An exception is thrown if `trainingSummary is None`.
-        """
-        if self.hasSummary:
-            s = FMClassificationTrainingSummary(super(FMClassificationModel, self).summary)
-            if is_remote():
-                s.__source_transformer__ = self  # type: ignore[attr-defined]
-            return s
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
-
     def evaluate(self, dataset: DataFrame) -> "FMClassificationSummary":
         """
         Evaluates the model on a test dataset.
@@ -4355,6 +4305,21 @@ class FMClassificationModel(
         if is_remote():
             s.__source_transformer__ = self  # type: ignore[attr-defined]
         return s
+
+    @since("3.1.0")
+    def summary(self) -> "FMClassificationTrainingSummary":
+        """
+        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
+        trained on the training set. An exception is thrown if `trainingSummary is None`.
+        """
+        return super().summary
+
+    @property
+    def _summaryCls(self) -> type:
+        return FMClassificationTrainingSummary
+
+    def _summary_dataset(self, train_dataset: DataFrame) -> DataFrame:
+        return train_dataset
 
 
 class FMClassificationSummary(_BinaryClassificationSummary):

@@ -46,3 +46,20 @@ class HiveTableRelationResolver(hiveCatalog: HiveSessionCatalog) extends Resolve
     }
   }
 }
+
+/**
+ * This is a [[ResolverExtension]] component that just passes through [[HiveTableRelation]] so that
+ * [[Resolver]] can consider it being handled by an extension.
+ */
+class HiveTableRelationNoopResolver extends ResolverExtension {
+  override def resolveOperator(
+      operator: LogicalPlan,
+      resolver: LogicalPlanResolver): Option[LogicalPlan] = {
+    operator match {
+      case hiveTableRelation: HiveTableRelation =>
+        Some(hiveTableRelation)
+      case _ =>
+        None
+    }
+  }
+}

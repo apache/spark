@@ -145,7 +145,7 @@ private[deploy] class DriverRunner(
    */
   private def createWorkingDirectory(): File = {
     val driverDir = new File(workDir, driverId)
-    if (!driverDir.exists() && !driverDir.mkdirs()) {
+    if (!driverDir.exists() && !Utils.createDirectory(driverDir)) {
       throw new IOException("Failed to create directory " + driverDir)
     }
     driverDir

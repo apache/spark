@@ -664,7 +664,7 @@ object StateStoreProvider extends Logging {
   }
 
   /**
-   * Get the runId from the provided hadoopConf. If it is not found, generate a random UUID.
+   * Get the runId from the provided hadoopConf. If it is not found, an error will be thrown.
    *
    * @param hadoopConf Hadoop configuration used by the StateStore to save state data
    */
@@ -759,7 +759,11 @@ trait SupportsFineGrainedReplay {
  * Note that `queryRunId` is used uniquely identify a provider, so that the same provider
  * instance is not reused across query restarts.
  */
-case class StateStoreProviderId(storeId: StateStoreId, queryRunId: UUID)
+case class StateStoreProviderId(storeId: StateStoreId, queryRunId: UUID) {
+  override def toString: String = {
+    s"StateStoreProviderId[ storeId=$storeId, queryRunId=$queryRunId ]"
+  }
+}
 
 object StateStoreProviderId {
   private[sql] def apply(
@@ -802,9 +806,7 @@ case class StateStoreId(
   }
 
   override def toString: String = {
-    s"""StateStoreId[ checkpointRootLocation=$checkpointRootLocation, operatorId=$operatorId,
-       | partitionId=$partitionId, storeName=$storeName ]
-       |""".stripMargin.replaceAll("\n", "")
+    s"StateStoreId[ operatorId=$operatorId, partitionId=$partitionId, storeName=$storeName ]"
   }
 }
 
