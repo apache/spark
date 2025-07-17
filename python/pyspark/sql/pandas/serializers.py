@@ -144,9 +144,6 @@ class ArrowStreamSerializer(Serializer):
         reader = pa.ipc.open_stream(stream)
         for batch in reader:
             yield batch
-    
-    def arrow_to_pandas(self, arrow_column, idx, struct_in_pandas="dict", ndarray_as_list=False, spark_type=None):
-        return arrow_column.to_pylist()
 
     def __repr__(self):
         return "ArrowStreamSerializer"
@@ -257,7 +254,7 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
                 return r
             return numeric_result_func
         else:
-            return lambda pdf: pdf  # Default: no conversion
+            return lambda df: df  # Default: no conversion
 
     def convert_arrow_to_rows(self, *args):
         """
@@ -385,7 +382,7 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
     def __repr__(self):
         return "ArrowBatchUDFSerializer"
 
-    def arrow_to_pandas(self, arrow_column, idx, ndarray_as_list=False, spark_type=None):
+    def arrow_to_python(self, arrow_column, idx, ndarray_as_list=False, spark_type=None):
         import pyarrow.types as types
         from pyspark.sql import Row
         
@@ -396,7 +393,7 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
         ):
             series = [
                 super(ArrowBatchUDFSerializer, self)
-                .arrow_to_pandas(
+                .arrow_to_python(
                     column,
                     i,
                     self._struct_in_pandas,
@@ -410,7 +407,7 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
                 row_cls(*vals) for vals in zip(*series)
             ])
         else:
-            result = super(ArrowBatchUDFSerializer, self).arrow_to_pandas(
+            result = super(ArrowBatchUDFSerializer, self).arrow_to_python(
                 arrow_column,
                 idx,
                 struct_in_pandas=self._struct_in_pandas,
