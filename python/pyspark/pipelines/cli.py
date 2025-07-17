@@ -28,7 +28,7 @@ import os
 import yaml
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Generator, Mapping, Optional, Sequence, List
+from typing import Any, Generator, List, Mapping, Optional, Sequence
 
 from pyspark.errors import PySparkException, PySparkTypeError
 from pyspark.sql import SparkSession
