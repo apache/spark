@@ -78,11 +78,11 @@ abstract class ConstraintParseSuiteBase extends AnalysisTest with SharedSparkSes
   }
 
   protected def verifyConstraints(
-    sql: String,
-    constraints: Seq[TableConstraint],
-    isCreateTable: Boolean = true,
-    columnANullable: Boolean = true,
-    columnBNullable: Boolean = true): Unit = {
+      sql: String,
+      constraints: Seq[TableConstraint],
+      isCreateTable: Boolean = true,
+      columnANullable: Boolean = true,
+      columnBNullable: Boolean = true): Unit = {
     val parsed = parsePlan(sql)
     val columns = Seq(
       ColumnDefinition("a", IntegerType, nullable = columnANullable),

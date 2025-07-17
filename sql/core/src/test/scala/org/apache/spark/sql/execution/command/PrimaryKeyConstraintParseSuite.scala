@@ -136,7 +136,7 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       columnBNullable = false)
   }
 
-  test("Replace table with composite primary key - case insensitive") {
+  test("Replace table with composite primary key - case insensitivity") {
     val sql = "REPLACE TABLE t (a INT, b STRING, PRIMARY KEY (A, B)) USING parquet"
     val constraint = PrimaryKeyConstraint(
       columns = Seq("A", "B"),
