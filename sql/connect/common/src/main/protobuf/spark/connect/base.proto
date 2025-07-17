@@ -953,6 +953,10 @@ message ReleaseExecuteRequest {
     ReleaseAll release_all = 5;
     ReleaseUntil release_until = 6;
   }
+
+  // Provides optional information about the client environment similar to client_type but is
+  // intended for server side processing
+  optional ClientEnv client_env = 8;
 }
 
 // Next ID: 4

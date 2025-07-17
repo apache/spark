@@ -58,7 +58,8 @@ private[connect] class CustomSparkConnectBlockingStub(
     grpcExceptionConverter.convert(
       request.getSessionId,
       request.getUserContext,
-      request.getClientType) {
+      request.getClientType,
+      request.getClientEnv) {
       grpcExceptionConverter.convertIterator[ExecutePlanResponse](
         request.getSessionId,
         request.getUserContext,
