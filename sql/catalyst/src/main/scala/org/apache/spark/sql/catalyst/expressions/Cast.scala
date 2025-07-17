@@ -504,6 +504,10 @@ case class Cast(
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CAST)
 
+  override def contextIndependentFoldable: Boolean = {
+    child.contextIndependentFoldable && !Cast.needsTimeZone(child.dataType, dataType)
+  }
+
   def ansiEnabled: Boolean = {
     evalMode == EvalMode.ANSI || (evalMode == EvalMode.TRY && !canUseLegacyCastForTryCast)
   }
@@ -2312,6 +2316,10 @@ case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: S
   def dataType: DataType = target match {
     case DecimalType => DecimalType.SYSTEM_DEFAULT
     case _ => target.asInstanceOf[DataType]
+  }
+
+  override def contextIndependentFoldable: Boolean = {
+    child.contextIndependentFoldable && !Cast.needsTimeZone(child.dataType, dataType)
   }
 
   override protected def withNewChildInternal(newChild: Expression): UpCast = copy(child = newChild)
