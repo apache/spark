@@ -115,6 +115,8 @@ object Cast extends QueryErrorsBase {
     case (_: AnsiIntervalType, _: IntegralType | _: DecimalType) => true
     case (_: IntegralType | _: DecimalType, _: AnsiIntervalType) => true
 
+    case (_: TimeType, _: DecimalType) => true
+
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
 
@@ -230,6 +232,8 @@ object Cast extends QueryErrorsBase {
     case (_: StringType, _: TimeType) => true
     case (TimestampType, DateType) => true
     case (TimestampNTZType, DateType) => true
+
+    case (_: TimeType, _: DecimalType) => true
 
     case (_: StringType, CalendarIntervalType) => true
     case (_: StringType, _: DayTimeIntervalType) => true
@@ -723,6 +727,9 @@ case class Cast(
   private[this] def timestampToDouble(ts: Long): Double = {
     ts / MICROS_PER_SECOND.toDouble
   }
+  private[this] def timeToDouble(timeNanos: Long): Double = {
+    timeNanos / NANOS_PER_SECOND.toDouble
+  }
   private[this] def timeToLong(timeNanos: Long): Long = {
     Math.floorDiv(timeNanos, NANOS_PER_SECOND)
   }
@@ -1039,6 +1046,8 @@ case class Cast(
     case TimestampType =>
       // Note that we lose precision here.
       buildCast[Long](_, t => changePrecision(Decimal(timestampToDouble(t)), target))
+    case _: TimeType =>
+      buildCast[Long](_, t => changePrecision(Decimal(timeToDouble(t)), target))
     case dt: DecimalType =>
       b => toPrecision(b.asInstanceOf[Decimal], target, getContextOrNull())
     case t: IntegralType =>
@@ -1504,6 +1513,13 @@ case class Cast(
               scala.math.BigDecimal.valueOf(${timestampToDoubleCode(c)}));
             ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
+      case _: TimeType =>
+        (c, evPrim, evNull) =>
+          code"""
+            Decimal $tmp = Decimal.apply(
+              scala.math.BigDecimal.valueOf(${timeToDoubleCode(c)}));
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
+          """
       case DecimalType() =>
         (c, evPrim, evNull) =>
           code"""
@@ -1751,6 +1767,8 @@ case class Cast(
   private[this] def timestampToDoubleCode(ts: ExprValue): Block =
     code"$ts / (double)$MICROS_PER_SECOND"
 
+  private[this] def timeToDoubleCode(ts: ExprValue): Block =
+    code"$ts / (double)$NANOS_PER_SECOND"
   private[this] def timeToLongCode(timeValue: ExprValue): Block =
     code"Math.floorDiv($timeValue, ${NANOS_PER_SECOND}L)"
 

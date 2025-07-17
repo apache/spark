@@ -908,6 +908,13 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     }
   }
 
+  test("SPARK-52620: cast time to decimal with insufficient precision (ANSI off)") {
+    // Create a time that will overflow Decimal(2, 0): 23:59:59 = 86399 seconds.
+    val largeTime = Literal.create(LocalTime.of(23, 59, 59, 123456000), TimeType(6))
+    // Decimal(2, 0) cannot hold 86399.123456, so it should return null in non-ANSI mode.
+    checkEvaluation(cast(largeTime, DecimalType(2, 0)), null)
+  }
+
   test("SPARK-52619: cast time to integral types with overflow with ansi off") {
     // Create a time that will overflow Byte and Short: 23:59:59 = 86399 seconds
     val largeTime6 = Literal.create(LocalTime.of(23, 59, 59, 123456000), TimeType(6))
