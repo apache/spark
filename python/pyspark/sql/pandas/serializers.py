@@ -181,11 +181,8 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
                     # an empty batch with the number of rows set.
                     struct = pa.array([{}] * batch.num_rows)
                 else:
-                    # Include metadata to indicate packed UDF args
-                    struct_type = pa.struct(list(batch.schema))
-                    struct_type_with_metadata = struct_type.with_metadata({b'__packed_udf_args__': b'true'})
                     struct = pa.StructArray.from_arrays(
-                        batch.columns, type=struct_type_with_metadata
+                        batch.columns, fields=pa.struct(list(batch.schema))
                     )
                 batch = pa.RecordBatch.from_arrays([struct], ["_0"])
 
@@ -295,7 +292,7 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
 
             for i, batch_data in enumerate(iterator):
                 if isinstance(batch_data, tuple) and len(batch_data) == 3:
-                    # Single UDF case with type information
+                    # Single UDF case
                     udf_results, arrow_return_type, return_type = batch_data
                     arr = self._convert_udf_results_to_arrow(udf_results, return_type)
                     batch = pa.RecordBatch.from_arrays([arr], ["_0"])
@@ -351,9 +348,6 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
         else:
             return udf_results
 
-    def __repr__(self):
-        return "ArrowBatchUDFSerializer"
-
     def arrow_to_python(self, arrow_column, idx, ndarray_as_list=False, spark_type=None):
         import pyarrow.types as types
         from pyspark.sql import Row
@@ -389,6 +383,9 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
         if spark_type is not None and hasattr(spark_type, "fromInternal"):
             return result.apply(lambda v: spark_type.fromInternal(v) if v is not None else v)
         return result
+    
+    def __repr__(self):
+        return "ArrowBatchUDFSerializer"
 
 
 class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
