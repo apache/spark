@@ -287,13 +287,6 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
 
         return [tuple(row) for row in rows]
 
-    def apply_type_coercion(self, udf_results):
-        """Type coercion util to match legacy behavior (see PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED)."""
-        if self._return_type is not None:
-            coercion_func = self._create_type_coercion_func(self._return_type)
-            return [coercion_func(result) for result in udf_results]
-        return udf_results
-
     def load_stream(self, stream):
         """
         Load Arrow RecordBatches and convert to Python objects.
