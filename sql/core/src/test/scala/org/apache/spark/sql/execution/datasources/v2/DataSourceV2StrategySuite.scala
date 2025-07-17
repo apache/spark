@@ -328,42 +328,44 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
   }
 
   test("round trip conversion of CASE_WHEN expression") {
+    val intCol = $"cint".int
+    val intColRef = FieldReference("cint")
     // CASE WHEN cond1 THEN value1 WHEN cond2 THEN value2
     checkRoundTripConversion(
       catalystExpr = CaseWhen(
         Seq(
-          (EqualTo(Literal(1), Literal(2)), Literal("a")),
-          (EqualTo(Literal(3), Literal(4)), Literal("b"))),
+          (EqualTo(intCol, Literal(2)), Literal("a")),
+          (EqualTo(intCol, Literal(4)), Literal("b"))),
         None),
       v2Expr = new GeneralScalarExpression(
         "CASE_WHEN",
         Array(
-          new Predicate("=", Array(LiteralValue(1, IntegerType), LiteralValue(2, IntegerType))),
+          new Predicate("=", Array(intColRef, LiteralValue(2, IntegerType))),
           LiteralValue(UTF8String.fromString("a"), StringType),
-          new Predicate("=", Array(LiteralValue(3, IntegerType), LiteralValue(4, IntegerType))),
+          new Predicate("=", Array(intColRef, LiteralValue(4, IntegerType))),
           LiteralValue(UTF8String.fromString("b"), StringType))))
 
     // CASE WHEN cond1 THEN value1 ELSE elseValue
     checkRoundTripConversion(
       catalystExpr = CaseWhen(
-        Seq((EqualTo(Literal(1), Literal(2)), Literal("yes"))),
+        Seq((EqualTo(intCol, Literal(2)), Literal("yes"))),
         Some(Literal("no"))),
       v2Expr = new GeneralScalarExpression(
         "CASE_WHEN",
         Array(
-          new Predicate("=", Array(LiteralValue(1, IntegerType), LiteralValue(2, IntegerType))),
+          new Predicate("=", Array(intColRef, LiteralValue(2, IntegerType))),
           LiteralValue(UTF8String.fromString("yes"), StringType),
           LiteralValue(UTF8String.fromString("no"), StringType))))
 
     // CASE WHEN cond1 THEN true ELSE false
     checkRoundTripConversion(
       catalystExpr = CaseWhen(
-        Seq((EqualTo(Literal(1), Literal(2)), Literal(true))),
+        Seq((EqualTo(intCol, Literal(2)), Literal(true))),
         Some(Literal(false))),
       v2Expr = new Predicate(
         "CASE_WHEN",
         Array(
-          new Predicate("=", Array(LiteralValue(1, IntegerType), LiteralValue(2, IntegerType))),
+          new Predicate("=", Array(intColRef, LiteralValue(2, IntegerType))),
           new AlwaysTrue,
           new AlwaysFalse)),
       isPredicate = true)
@@ -372,32 +374,34 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
     checkRoundTripConversion(
       catalystExpr = CaseWhen(
         Seq(
-          (EqualTo(Literal(1), Literal(2)), Literal(true)),
-          (EqualTo(Literal(3), Literal(4)), Literal(false))),
+          (EqualTo(intCol, Literal(2)), Literal(true)),
+          (EqualTo(intCol, Literal(4)), Literal(false))),
         Some(Literal(true))),
       v2Expr = new Predicate(
         "CASE_WHEN",
         Array(
-          new Predicate("=", Array(LiteralValue(1, IntegerType), LiteralValue(2, IntegerType))),
+          new Predicate("=", Array(intColRef, LiteralValue(2, IntegerType))),
           new AlwaysTrue,
-          new Predicate("=", Array(LiteralValue(3, IntegerType), LiteralValue(4, IntegerType))),
+          new Predicate("=", Array(intColRef, LiteralValue(4, IntegerType))),
           new AlwaysFalse,
           new AlwaysTrue)),
       isPredicate = true)
   }
 
   test("round trip conversion of math functions") {
+    val intCol = $"cint".int
+    val intColRef = FieldReference("cint")
     checkRoundTripConversion(
-      catalystExpr = Log10(Literal(100)),
-      v2Expr = new GeneralScalarExpression("LOG10", Array(LiteralValue(100, IntegerType))))
+      catalystExpr = Log10(intCol),
+      v2Expr = new GeneralScalarExpression("LOG10", Array(intColRef)))
 
     checkRoundTripConversion(
       catalystExpr = new Rand(),
       v2Expr = new GeneralScalarExpression("RAND", Array()))
 
     checkRoundTripConversion(
-      catalystExpr = new Rand(Literal(17L)),
-      v2Expr = new GeneralScalarExpression("RAND", Array(LiteralValue(17L, LongType))))
+      catalystExpr = new Rand(intCol),
+      v2Expr = new GeneralScalarExpression("RAND", Array(intColRef)))
 
     checkRoundTripConversion(
       catalystExpr = Abs(Literal(-5), failOnError = true),
