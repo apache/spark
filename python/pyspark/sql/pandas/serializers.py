@@ -228,30 +228,6 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
         self._return_type = return_type
         self._prefers_large_var_types = prefers_large_var_types
 
-    def _create_type_coercion_func(self, return_type):
-        """Create type coercion function based on return type"""
-
-        if type(return_type) == StringType:
-            return lambda r: str(r) if r is not None else r
-        elif type(return_type) == BinaryType:
-            return lambda r: bytes(r) if r is not None else r
-        elif isinstance(return_type, (ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)):
-            def numeric_result_func(r):
-                if r is None:
-                    return r
-                if isinstance(r, str):
-                    try:
-                        if isinstance(return_type, (ByteType, ShortType, IntegerType, LongType)):
-                            return int(r)
-                        elif isinstance(return_type, (FloatType, DoubleType)):
-                            return float(r)
-                    except (ValueError, TypeError):
-                        pass
-                return r
-            return numeric_result_func
-        else:
-            return lambda df: df  # Default: no conversion
-
     def convert_arrow_to_rows(self, *args):
         """
         Convert Arrow arrays to rows
