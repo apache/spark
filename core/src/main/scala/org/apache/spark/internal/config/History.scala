@@ -227,6 +227,7 @@ private[spark] object History {
       "exceeded, then the oldest applications will be removed from the cache. If an application " +
       "is not in the cache, it will have to be loaded from disk if it is accessed from the UI.")
     .intConf
+    .checkValue(v => v > 0, "The number of applications to retain should be a positive integer.")
     .createWithDefault(50)
 
   val PROVIDER = ConfigBuilder("spark.history.provider")

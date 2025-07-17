@@ -644,7 +644,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
           if aggExpressions.forall(_.aggregateFunction.isInstanceOf[PythonUDAF]) =>
-        Seq(execution.python.AggregateInPandasExec(
+        Seq(execution.python.ArrowAggregatePythonExec(
           groupingExpressions,
           aggExpressions,
           resultExpressions,

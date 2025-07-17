@@ -236,7 +236,7 @@ case class StreamingSymmetricHashJoinExec(
     case _ => throwBadJoinTypeException()
   }
 
-  override def shortName: String = "symmetricHashJoin"
+  override def shortName: String = StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME
 
   override val stateStoreNames: Seq[String] = _stateStoreNames
 
