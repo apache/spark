@@ -24,28 +24,29 @@ import scala.collection.mutable
 import org.apache.spark.connect.proto
 
 /**
- * Optimizer for Spark Connect plans. This optimizer moves all duplicate subtrees from a query tree
- * (Relation) into a top level WithRelations node, the duplicates in the plan are replaced by
+ * Optimizer for Spark Connect plans. This optimizer moves all duplicate subtrees from a query
+ * tree (Relation) into a top level WithRelations node, the duplicates in the plan are replaced by
  * references. This has a couple of advantages: it reduces the number of nodes in the plan, it
  * reduces the plan size, it avoids redundant work on the server side (both during planning, and -
  * if supported - analysis).
  *
  * This optimization assumes that nodes with the same plan_id are structurally equivalent.
  *
- * The optimization will retain all plan_ids in the input plan. This is needed because plan_ids can
- * be referenced by UnresolvedAttribute, UnresolvedStar, UnresolvedRegex, and SubqueryExpression
- * expressions. If the plan can be optimized, the new plan will contain an additional plan_id: the
- * plan_id of the top-level WithRelations node.
+ * The optimization will retain all plan_ids in the input plan. This is needed because plan_ids
+ * can be referenced by UnresolvedAttribute, UnresolvedStar, UnresolvedRegex, and
+ * SubqueryExpression expressions. If the plan can be optimized, the new plan will contain an
+ * additional plan_id: the plan_id of the top-level WithRelations node.
  *
  * The current optimization uses a 2-pass approach. The first step identifies duplicate subtrees.
- * This has a runtime and space complexity of O(num_unique_relations). The second step rewrites the
- * plan. This has a runtime and space complexity of O(num_unique_relations).
+ * This has a runtime and space complexity of O(num_unique_relations). The second step rewrites
+ * the plan. This has a runtime and space complexity of O(num_unique_relations).
  *
  * In theory this can be implemented as a single pass algorithm by replace duplicates with a
  * reference once we identify them. This has two downsides: it requires that the client and the
  * server have exactly the same traversal order, and it makes the plans much harder to read.
  *
- * @param nextPlanId generator for new plan_ids.
+ * @param nextPlanId
+ *   generator for new plan_ids.
  */
 class PlanOptimizer(nextPlanId: () => Long) {
   def this(planIdGenerator: AtomicLong) =
@@ -57,8 +58,8 @@ class PlanOptimizer(nextPlanId: () => Long) {
    * @param plan
    *   The plan to optimize.
    * @return
-   *   The optimized plan with deduplicated subtrees. If the plan cannot be optimized, this returns
-   *   the original plan.
+   *   The optimized plan with deduplicated subtrees. If the plan cannot be optimized, this
+   *   returns the original plan.
    */
   def optimize(plan: proto.Plan): proto.Plan =
     PlanOptimizer.optimize(plan, nextPlanId)
@@ -69,8 +70,8 @@ class PlanOptimizer(nextPlanId: () => Long) {
    * @param relation
    *   The relation to optimize.
    * @return
-   *   The optimized relation with deduplicated subtrees. If the relation cannot be optimized, this
-   *   returns the original relation.
+   *   The optimized relation with deduplicated subtrees. If the relation cannot be optimized,
+   *   this returns the original relation.
    */
   def optimize(relation: proto.Relation): proto.Relation =
     PlanOptimizer.optimize(relation, nextPlanId)
@@ -105,8 +106,10 @@ private[connect] object PlanOptimizer {
   /**
    * Find all repeated (duplicate) query fragments in a query tree.
    *
-   * @param root node of the query tree
-   * @return a map that contains all repeated query fragments, keyed by their plan id.
+   * @param root
+   *   node of the query tree
+   * @return
+   *   a map that contains all repeated query fragments, keyed by their plan id.
    */
   def analyze(root: proto.Relation): SeqMap[Long, proto.Relation] = {
     // We can reduce memory consumption by using a bitset that tracks the planIds of nodes with a
@@ -136,16 +139,20 @@ private[connect] object PlanOptimizer {
   }
 
   /**
-   * Rewrite the query tree using the map of reference relations. This transform moves all reference
-   * relations to a top-level WithRelations node, and replaces all instances of these relations with
-   * a reference.
+   * Rewrite the query tree using the map of reference relations. This transform moves all
+   * reference relations to a top-level WithRelations node, and replaces all instances of these
+   * relations with a reference.
    *
-   * @param root relation to rewrite.
-   * @param referenceMap a map of relations that will be moved to the top-level withRelations node.
-   * @param nextPlanId function to generate the plan_id of the new root node.
-   * @return the rewritten plan.
+   * @param root
+   *   relation to rewrite.
+   * @param referenceMap
+   *   a map of relations that will be moved to the top-level withRelations node.
+   * @param nextPlanId
+   *   function to generate the plan_id of the new root node.
+   * @return
+   *   the rewritten plan.
    */
-  def rewriteRelation(
+  private def rewriteRelation(
       root: proto.Relation,
       referenceMap: SeqMap[Long, proto.Relation],
       nextPlanId: () => Long): proto.Relation = {
@@ -153,11 +160,9 @@ private[connect] object PlanOptimizer {
     builder.getCommonBuilder.setPlanId(nextPlanId())
     val withRelationsBuilder = builder.getWithRelationsBuilder
     val referencePlanIds = referenceMap.keySet
-    referenceMap.foreach {
-      case (id, reference) =>
-        withRelationsBuilder.addReferences(rewriteSingleRelation(
-          reference,
-          referencePlanIds.filterNot(_ == id)))
+    referenceMap.foreach { case (id, reference) =>
+      withRelationsBuilder.addReferences(
+        rewriteSingleRelation(reference, referencePlanIds.filterNot(_ == id)))
     }
     withRelationsBuilder.setRoot(rewriteSingleRelation(root, referencePlanIds))
     builder.build()
@@ -215,5 +220,3 @@ private[connect] object PlanOptimizer {
     }
   }
 }
-
-

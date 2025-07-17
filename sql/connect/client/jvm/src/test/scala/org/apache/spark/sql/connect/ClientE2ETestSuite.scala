@@ -1680,10 +1680,11 @@ class ClientE2ETestSuite
       id -> rng.nextBytes(1024)
     }
     val input = data.toDF("key", "value")
-    val unions = Iterator.range(0, 5).foldLeft(input) {
-      case (current, _) => current.union(current)
+    val unions = Iterator.range(0, 5).foldLeft(input) { case (current, _) =>
+      current.union(current)
     }
-    val df = unions.filter($"key".isin(input.select($"key").filter($"key" < 5)))
+    val df = unions
+      .filter($"key".isin(input.select($"key").filter($"key" < 5)))
       .groupBy($"key", $"value")
       .count()
     val compressionRatio =

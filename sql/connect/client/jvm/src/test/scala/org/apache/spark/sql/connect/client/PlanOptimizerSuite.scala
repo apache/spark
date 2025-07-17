@@ -41,7 +41,7 @@ import org.apache.spark.sql.types.StructType
 /**
  * Test suite for the [[PlanOptimizer]].
  */
-class PlanOptimizerSuite extends ConnectFunSuite  with BeforeAndAfterEach {
+class PlanOptimizerSuite extends ConnectFunSuite with BeforeAndAfterEach {
   import PlanOptimizer.PlanId
 
   private implicit val longEncoder: Encoder[Long] = Encoders.scalaLong
@@ -96,8 +96,7 @@ class PlanOptimizerSuite extends ConnectFunSuite  with BeforeAndAfterEach {
       numRelations,
       plansIdCounts.keySet.toSet,
       plansIdCounts.map(_._2.intValue()).count(_ > 1),
-      plansIdCounts.map(_._2.intValue()).filter(_ > 1).sum
-    )
+      plansIdCounts.map(_._2.intValue()).filter(_ > 1).sum)
   }
 
   private def checkNoDeduplication(df: Dataset[_]): Unit = {
@@ -136,7 +135,8 @@ class PlanOptimizerSuite extends ConnectFunSuite  with BeforeAndAfterEach {
 
     // Size reduction.
     val actualSizeReduction = plan.getSerializedSize - optimizedPlan.getSerializedSize
-    assert(actualSizeReduction == sizeReduction,
+    assert(
+      actualSizeReduction == sizeReduction,
       s"Actual reduction in plan size does not match expected reduction in plan: " +
         s"$actualSizeReduction != $sizeReduction")
   }
@@ -149,7 +149,8 @@ class PlanOptimizerSuite extends ConnectFunSuite  with BeforeAndAfterEach {
     checkNoDeduplication(spark.newDataFrame(_ => ()))
     checkNoDeduplication(spark.newDataFrame(_.getUnknownBuilder))
     checkNoDeduplication(spark.newDataFrame(_.getCachedLocalRelationBuilder.setHash("1234")))
-    checkNoDeduplication(spark.newDataFrame(_.getCachedRemoteRelationBuilder.setRelationId("rel1")))
+    checkNoDeduplication(
+      spark.newDataFrame(_.getCachedRemoteRelationBuilder.setRelationId("rel1")))
     checkNoDeduplication(spark.newDataFrame(_.setReferencedPlanId(1)))
     checkNoDeduplication(spark.newDataFrame(_.setExtension(PAny.pack(spark.range(10).plan))))
     checkNoDeduplication(spark.newDataFrame {
@@ -186,8 +187,10 @@ class PlanOptimizerSuite extends ConnectFunSuite  with BeforeAndAfterEach {
     checkNoDeduplication(input.hint("broadcast"))
     checkNoDeduplication(input.to(new StructType().add("id", "string")))
     checkNoDeduplication(input.mapPartitions(_.map(_.toLong)))
-    checkNoDeduplication(input.select(id, (id / 2).as("d2"), (id * 2).as("m2"))
-      .unpivot(Array(id), Array(col("d2"), col("m2")), "var", "val"))
+    checkNoDeduplication(
+      input
+        .select(id, (id / 2).as("d2"), (id * 2).as("m2"))
+        .unpivot(Array(id), Array(col("d2"), col("m2")), "var", "val"))
     checkNoDeduplication(input.withColumn("grp", id % 2).transpose(col("grp")))
     checkNoDeduplication(input.observe("simple", min(id), max(id)))
     checkNoDeduplication(spark.read.csv(input.map(i => s"$i,$i")(Encoders.STRING)))
@@ -203,7 +206,8 @@ class PlanOptimizerSuite extends ConnectFunSuite  with BeforeAndAfterEach {
 
     // Manual ones...
     checkNoDeduplication(spark.newDataFrame {
-      _.getShowStringBuilder.setInput(input.plan.getRoot)
+      _.getShowStringBuilder
+        .setInput(input.plan.getRoot)
         .setNumRows(10)
         .setTruncate(20)
         .setVertical(false)
@@ -221,13 +225,16 @@ class PlanOptimizerSuite extends ConnectFunSuite  with BeforeAndAfterEach {
       _.getCorrBuilder.setInput(input.plan.getRoot).setCol1("a").setCol2("b")
     })
     checkNoDeduplication(spark.newDataFrame {
-      _.getApplyInPandasWithStateBuilder.setInput(input.plan.getRoot)
+      _.getApplyInPandasWithStateBuilder
+        .setInput(input.plan.getRoot)
         .addGroupingExpressions(toExpr(id))
     })
     checkNoDeduplication(spark.newDataFrame {
-      _.getApproxQuantileBuilder.setInput(input.plan.getRoot)
+      _.getApproxQuantileBuilder
+        .setInput(input.plan.getRoot)
         .addCols("id")
-        .addProbabilities(0.1).addProbabilities(0.2)
+        .addProbabilities(0.1)
+        .addProbabilities(0.2)
         .setRelativeError(0.01)
     })
     checkNoDeduplication(spark.newDataFrame { builder =>
@@ -242,8 +249,7 @@ class PlanOptimizerSuite extends ConnectFunSuite  with BeforeAndAfterEach {
   private def testBinaryOperationDeduplication(
       name: String,
       sizeReduction1: Int,
-      sizeReduction2: Int)(
-      f: ((DataFrame, Column), (DataFrame, Column)) => Dataset[_]): Unit = {
+      sizeReduction2: Int)(f: ((DataFrame, Column), (DataFrame, Column)) => Dataset[_]): Unit = {
     test("optimize plan with duplicated relations - " + name) {
       val left = spark.range(10).as("a").toDF()
       val right = spark.range(11).as("b").toDF()
@@ -259,9 +265,8 @@ class PlanOptimizerSuite extends ConnectFunSuite  with BeforeAndAfterEach {
     }
   }
 
-  testBinaryOperationDeduplication("join", 5, 26) {
-    case ((left, leftKey), (right, rightKey)) =>
-      left.join(right, leftKey === rightKey)
+  testBinaryOperationDeduplication("join", 5, 26) { case ((left, leftKey), (right, rightKey)) =>
+    left.join(right, leftKey === rightKey)
   }
 
   testBinaryOperationDeduplication("lateralJoin", 5, 26) {
@@ -269,19 +274,16 @@ class PlanOptimizerSuite extends ConnectFunSuite  with BeforeAndAfterEach {
       left.lateralJoin(right, leftKey === rightKey)
   }
 
-  testBinaryOperationDeduplication("union", 7, 28) {
-    case ((left, _), (right, _)) =>
-      left.union(right)
+  testBinaryOperationDeduplication("union", 7, 28) { case ((left, _), (right, _)) =>
+    left.union(right)
   }
 
-  testBinaryOperationDeduplication("intersect", 7, 28) {
-    case ((left, _), (right, _)) =>
-      left.intersect(right)
+  testBinaryOperationDeduplication("intersect", 7, 28) { case ((left, _), (right, _)) =>
+    left.intersect(right)
   }
 
-  testBinaryOperationDeduplication("except", 7, 28) {
-    case ((left, _), (right, _)) =>
-      left.except(right)
+  testBinaryOperationDeduplication("except", 7, 28) { case ((left, _), (right, _)) =>
+    left.except(right)
   }
 
   testBinaryOperationDeduplication("subquery - exists", 5, 26) {
@@ -294,15 +296,16 @@ class PlanOptimizerSuite extends ConnectFunSuite  with BeforeAndAfterEach {
       left.select(right.agg(min(rightKey)).scalar())
   }
 
-  testBinaryOperationDeduplication("subquery - in", 5, 26) {
-    case ((left, leftKey), (right, _)) =>
-      left.filter(!leftKey.isin(right))
+  testBinaryOperationDeduplication("subquery - in", 5, 26) { case ((left, leftKey), (right, _)) =>
+    left.filter(!leftKey.isin(right))
   }
 
   testBinaryOperationDeduplication("groupMap", 5, 24) {
     case ((left, leftKey), (right, rightKey)) =>
       val initialState = right.groupBy(rightKey).as[Long, Long]
-      left.groupBy(leftKey).as[Long, Long]
+      left
+        .groupBy(leftKey)
+        .as[Long, Long]
         .mapGroupsWithState(GroupStateTimeout.EventTimeTimeout(), initialState) {
           (key: Long, values: Iterator[Long], state: GroupState[Long]) =>
             (key, values.sum + state.get)
@@ -344,10 +347,14 @@ class PlanOptimizerSuite extends ConnectFunSuite  with BeforeAndAfterEach {
     val df = spark.newDataFrame { builder =>
       val fetch = builder.getMlRelationBuilder.getFetchBuilder
       fetch.getObjRefBuilder.setId("21345")
-      fetch.addMethodsBuilder().setMethod("discombobulate")
+      fetch
+        .addMethodsBuilder()
+        .setMethod("discombobulate")
         .addArgs(proto.Fetch.Method.Args.newBuilder().setParam(lit))
         .addArgs(proto.Fetch.Method.Args.newBuilder().setInput(input.plan.getRoot))
-      fetch.addMethodsBuilder().setMethod("fluster")
+      fetch
+        .addMethodsBuilder()
+        .setMethod("fluster")
         .addArgs(proto.Fetch.Method.Args.newBuilder().setInput(other.plan.getRoot))
         .addArgs(proto.Fetch.Method.Args.newBuilder().setInput(input.plan.getRoot))
     }
@@ -358,10 +365,12 @@ class PlanOptimizerSuite extends ConnectFunSuite  with BeforeAndAfterEach {
     val input1 = spark.range(10)
     val input2 = spark.emptyDataset[Long]
     val input3 = spark.range(1, 1, 1).as("ref")
-    val df = input1.union(input3).filter(
-      col("id").isin(input1) &&
-        col("id").isin(input2) &&
-        col("id").isin(input3))
+    val df = input1
+      .union(input3)
+      .filter(
+        col("id").isin(input1) &&
+          col("id").isin(input2) &&
+          col("id").isin(input3))
     checkDeduplication(df, numRelationsReduction = -1, sizeReduction = 16)
 
     // Check if the original WithRelations node is retained and has the proper references.
@@ -387,24 +396,25 @@ class PlanOptimizerSuite extends ConnectFunSuite  with BeforeAndAfterEach {
         .add("value", "binary")
       val rng = new Random(61209389765L)
       val allocator = new RootAllocator()
-      val byteString = try {
-        ArrowSerializer.serialize(
-          Iterator.tabulate(128) { i =>
-            i.toLong -> rng.nextBytes(1024)
-          },
-          agnosticEncoderFor(Encoders.tuple(longEncoder, Encoders.BINARY)),
-          allocator,
-          timeZoneId = TimeZone.getDefault.toString,
-          largeVarTypes = false)
-      } finally {
-        allocator.close()
-      }
+      val byteString =
+        try {
+          ArrowSerializer.serialize(
+            Iterator.tabulate(128) { i =>
+              i.toLong -> rng.nextBytes(1024)
+            },
+            agnosticEncoderFor(Encoders.tuple(longEncoder, Encoders.BINARY)),
+            allocator,
+            timeZoneId = TimeZone.getDefault.toString,
+            largeVarTypes = false)
+        } finally {
+          allocator.close()
+        }
       builder.getLocalRelationBuilder.setSchema(schema.json).setData(byteString)
     }
 
     // Build a tree with massive duplication. It will contain 64 duplicate local relations.
-    val df = Iterator.range(0, 6).foldLeft(input) {
-      case (current, _) => current.union(current)
+    val df = Iterator.range(0, 6).foldLeft(input) { case (current, _) =>
+      current.union(current)
     }
     // Optimization reduces size by 98.4%
     checkDeduplication(df, numRelationsReduction = 107, sizeReduction = 8396068)

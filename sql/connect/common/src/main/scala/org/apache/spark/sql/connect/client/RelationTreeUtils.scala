@@ -62,21 +62,18 @@ private[connect] object RelationTreeUtils {
   /**
    * Visit all [[proto.Relation relations]] in a tree.
    *
-   * @param relation root of the tree.
-   * @param f        visit callback. The children of a relation will be visited when this function
-   *                 returns true.
+   * @param relation
+   *   root of the tree.
+   * @param f
+   *   visit callback. The children of a relation will be visited when this function returns true.
    */
-  def visit[T](
-      relation: proto.Relation, context: T)(
+  def visit[T](relation: proto.Relation, context: T)(
       f: (proto.Relation, T) => (Boolean, T)): Unit = {
     val messages = new util.ArrayDeque[(Message, T)]
     messages.push(relation -> context)
     while (!messages.isEmpty) {
       val (message, context) = messages.pop()
-      visitSingleMessage(
-        message,
-        context, (m, c: T) => messages.push(m -> c),
-        f)
+      visitSingleMessage(message, context, (m, c: T) => messages.push(m -> c), f)
     }
   }
 
@@ -94,7 +91,6 @@ private[connect] object RelationTreeUtils {
           }
         }
         if (continue) {
-          // TODO check that this is compiled into a table switch...
           relation.getRelTypeCase match {
             // Relations without inputs.
             case relTypeCase if NO_INPUT_REL_TYPE_CASES.contains(relTypeCase) =>
@@ -223,8 +219,7 @@ private[connect] object RelationTreeUtils {
 
             // Unhandled relation type. Fall back to proto reflection.
             case relTypeCase =>
-              assert(!SparkEnvUtils.isTesting,
-                "Unhandled relTypeCase: " + relTypeCase)
+              assert(!SparkEnvUtils.isTesting, "Unhandled relTypeCase: " + relTypeCase)
               val descriptor = relation.getDescriptorForType
                 .findFieldByNumber(relTypeCase.getNumber)
               if (descriptor != null && descriptor.getType == FieldDescriptor.Type.MESSAGE) {
@@ -235,7 +230,8 @@ private[connect] object RelationTreeUtils {
 
       case message =>
         // Unknown message. Fall back to proto reflection.
-        assert(!SparkEnvUtils.isTesting,
+        assert(
+          !SparkEnvUtils.isTesting,
           "Unhandled Message type: " + message.getDescriptorForType.getName)
         message.getAllFields.forEach { (desc, value) =>
           if (desc.getType == FieldDescriptor.Type.MESSAGE) {
@@ -253,13 +249,16 @@ private[connect] object RelationTreeUtils {
   /**
    * Recursively transform a [[proto.Relation relation]].
    *
-   * @param message entry point.
-   * @param pf      transformation to apply to all relations.
-   * @tparam M type of the current message.
-   * @return the transformed relation.
+   * @param message
+   *   entry point.
+   * @param pf
+   *   transformation to apply to all relations.
+   * @tparam M
+   *   type of the current message.
+   * @return
+   *   the transformed relation.
    */
-  private[connect] def transform[M <: Message](
-      message: M)(
+  private[connect] def transform[M <: Message](message: M)(
       pf: PartialFunction[proto.Relation, proto.Relation]): M = {
     def transformRelation(relation: proto.Relation, set: proto.Relation => Any): Unit = {
       if (relation ne proto.Relation.getDefaultInstance) {
@@ -476,9 +475,8 @@ private[connect] object RelationTreeUtils {
           if (desc.getType == FieldDescriptor.Type.MESSAGE) {
             value match {
               case list: util.List[Message @unchecked] =>
-                list.asScala.zipWithIndex.foreach {
-                  case (element, i) =>
-                    builder.setRepeatedField(desc, i, transform(element)(pf))
+                list.asScala.zipWithIndex.foreach { case (element, i) =>
+                  builder.setRepeatedField(desc, i, transform(element)(pf))
                 }
               case item: Message =>
                 transformMessage(item, desc, builder)

@@ -44,7 +44,7 @@ import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Column, Encoders, ForeachWriter, Observation, Row}
-import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
+import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
@@ -2809,7 +2809,10 @@ class SparkConnectPlanner(
       !(relation.hasWithRelations && relation.getWithRelations.getRoot.hasSql)) {
       throw InvalidInputErrors.sqlCommandExpectsSqlOrWithRelations(relation.getRelTypeCase)
     }
-    val df = Dataset.ofRows(session, transformRelation(relation), tracker)
+    val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
+      transformRelation(relation)
+    }
+    val df = Dataset.ofRows(session, plan, tracker)
 
     // Check if command or SQL Script has been executed.
     val isCommand = df.queryExecution.commandExecuted.isInstanceOf[CommandResult]
@@ -4046,15 +4049,14 @@ class SparkConnectPlanner(
       // If WithRelations contains named references we create a CTE. This is needed because it is
       // allowed to nest WithRelations nodes and names used in a parent node can be reused
       // (overwritten) by a child node.
-      val ctes = namedReferences.map {
-        case (name, relation) =>
-          assert(relation.hasSubqueryAlias)
-          val plan = if (relation.getCommon.hasPlanId) {
-            getCachedRelation(relation.getCommon.getPlanId)
-          } else {
-            transformRelation(relation)
-          }
-          (name, plan.asInstanceOf[SubqueryAlias], None)
+      val ctes = namedReferences.map { case (name, relation) =>
+        assert(relation.hasSubqueryAlias)
+        val plan = if (relation.getCommon.hasPlanId) {
+          getCachedRelation(relation.getCommon.getPlanId)
+        } else {
+          transformRelation(relation)
+        }
+        (name, plan.asInstanceOf[SubqueryAlias], None)
       }
       UnresolvedWith(root, ctes.toSeq)
     } else {
