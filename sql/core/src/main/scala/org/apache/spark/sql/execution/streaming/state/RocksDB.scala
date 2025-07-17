@@ -644,6 +644,18 @@ class RocksDB(
       workingDir, rocksDBFileMapping)
     loadedVersion = snapshotVersion
     lastSnapshotVersion = snapshotVersion
+
+    setInitialCFInfo()
+    metadata.columnFamilyMapping.foreach { mapping =>
+      mapping.foreach { case (colFamilyName, cfId) =>
+        addToColFamilyMaps(colFamilyName, cfId, isInternalColFamily(colFamilyName, metadata))
+      }
+    }
+
+    metadata.maxColumnFamilyId.foreach { maxId =>
+      maxColumnFamilyId.set(maxId)
+    }
+
     openDB()
 
     val (numKeys, numInternalKeys) = if (!conf.trackTotalNumberOfRows) {
