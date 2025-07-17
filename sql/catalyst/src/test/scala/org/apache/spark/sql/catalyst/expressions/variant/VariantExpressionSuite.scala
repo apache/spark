@@ -908,6 +908,9 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     check(Array[Byte](1, 2, 3), "\"AQID\"")
     check(Literal(0, DateType), "\"1970-01-01\"")
 
+    val floatArray = Array.tabulate(25) { i => i.toFloat }
+    check(floatArray, floatArray.mkString("[", ",", "]"))
+
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       check(Literal(0L, TimestampType), "\"1970-01-01 00:00:00+00:00\"")
       check(Literal(0L, TimestampNTZType), "\"1970-01-01 00:00:00\"")
