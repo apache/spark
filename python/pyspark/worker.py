@@ -203,18 +203,15 @@ def wrap_scalar_arrow_udf(f, args_offsets, kwargs_offsets, return_type, runner_c
     )
 
 
-def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf, input_types=None):
+def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf, input_types=None, serializer=None):
     if use_legacy_pandas_udf_conversion(runner_conf):
         return wrap_arrow_batch_udf_legacy(f, args_offsets, kwargs_offsets, return_type, runner_conf)
     else:
-        return wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf, input_types)
+        return wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf, input_types, serializer)
 
 
-def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf, input_types=None):
-    import pyarrow as pa
-    from pyspark.sql.types import VariantType, VariantVal  # type: ignore
-    from pyspark.sql.conversion import ArrowTableToRowsConversion, LocalDataToArrowConversion
-    from pyspark.sql.pandas.types import from_arrow_schema
+def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf, input_types=None, serializer=None):
+    from pyspark.sql.pandas.types import to_arrow_type
 
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
 
@@ -226,123 +223,33 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
     arrow_return_type = to_arrow_type(
         return_type, prefers_large_types=use_large_var_types(runner_conf)
     )
-    prefers_large_var_types = use_large_var_types(runner_conf)
-
-    result_func = lambda pdf: pdf  # noqa: E731
-    if type(return_type) == StringType:
-        result_func = lambda r: str(r) if r is not None else r  # noqa: E731
-    elif type(return_type) == BinaryType:
-        result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
-    elif isinstance(return_type, (ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)):
-        def numeric_result_func(r):
-            if r is None:
-                return r
-            if isinstance(r, str):
-                try:
-                    if isinstance(return_type, (ByteType, ShortType, IntegerType, LongType)):
-                        return int(r)
-                    elif isinstance(return_type, (FloatType, DoubleType)):
-                        return float(r)
-                except (ValueError, TypeError):
-                    # TODO throw appropriate error
-                    pass
-            return r
-        result_func = numeric_result_func
-
-    if zero_arg_exec:
-        def get_args_and_convert(*args: pa.RecordBatch):
-            if args:
-                if hasattr(args[0], "num_rows"):
-                    batch_size = args[0].num_rows
-                else:
-                    batch_size = len(args[0])
-            else:
-                batch_size = 1
-            return [() for _ in range(batch_size)]
-    else:
-        def get_args_and_convert(*args: pa.RecordBatch):
-            # Convert Arrow arrays to chunked arrays if needed
-            arrays = [
-                arg.combine_chunks() if isinstance(arg, pa.ChunkedArray) else arg
-                for arg in args
-            ]
-
-            names = [f"_{n}" for n in range(len(arrays))]
-            table = pa.Table.from_arrays(arrays, names=names)
-            schema = from_arrow_schema(table.schema, prefers_large_var_types)
-            rows = ArrowTableToRowsConversion.convert(table, schema=schema)
-
-            # UDT handling: if input_types contains UDTs, convert lists back to UDT objects
-            # Only apply if input_types length matches row length (no kwargs filtering)
-            if input_types is not None and len(input_types) == len(arrays):
-                def convert_value(value, data_type):
-                    from pyspark.sql.types import UserDefinedType, ArrayType
-
-                    if isinstance(data_type, UserDefinedType):
-                        if value is not None:
-                            return data_type.deserialize(value)
-                    elif isinstance(data_type, ArrayType) and isinstance(data_type.elementType, UserDefinedType):
-                        if isinstance(value, list):
-                            udt = data_type.elementType
-                            return [udt.deserialize(item) if item is not None else item for item in value]
-                    return value
-
-                def convert_udt_inputs(row, input_types):
-                    converted_row = []
-                    for i, (value, input_type) in enumerate(zip(row, input_types)):
-                        converted_value = convert_value(value, input_type)
-                        converted_row.append(converted_value)
-                    return tuple(converted_row)
-
-                converted_rows = []
-                for row in rows:
-                    converted_row = convert_udt_inputs(row, input_types)
-                    converted_rows.append(converted_row)
-                return converted_rows
-            else:
-                return [tuple(row) for row in rows]
 
     @fail_on_stopiteration
-    def evaluate(*args: pa.RecordBatch):
-        converted_rows = get_args_and_convert(*args)
+    def evaluate(*args):
+        """
+        Takes list of Python objects and returns tuple of (results, arrow_return_type, return_type).
+        """
+        converted_rows = args[0] if args else []
 
-        udf_results = []
-        for row in converted_rows:
-            udf_result = result_func(func(*row))
-            udf_results.append(udf_result)
-
-        if len(udf_results) == 0:
-            arr = pa.array([], type=arrow_return_type)
+        # Extract args using args_kwargs_offsets
+        if zero_arg_exec:
+            # Zero-arg UDF: call with no arguments
+            results = [func() for _ in converted_rows]
         else:
-            try:
-                from pyspark.sql.types import StructType, StructField, VariantType, UserDefinedType
+            udf_args_per_row = []
+            for row in converted_rows:
+                if isinstance(row, tuple):
+                    udf_args = tuple(row[offset] for offset in args_kwargs_offsets)
+                else:
+                    udf_args = (row,) if len(args_kwargs_offsets) == 1 else row
+                udf_args_per_row.append(udf_args)
 
-                temp_struct_type = StructType([StructField("result", return_type)])
-                temp_data = [{"result": result} for result in udf_results]
+            results = [func(*udf_args) for udf_args in udf_args_per_row]
 
-                arrow_table = LocalDataToArrowConversion.convert(
-                    temp_data, temp_struct_type, prefers_large_var_types
-                )
-
-                arr = arrow_table.column(0).combine_chunks()
-            except Exception as e:
-                raise PySparkRuntimeError(
-                    errorClass="UDF_ARROW_TYPE_CONVERSION_ERROR",
-                    messageParameters={
-                        "data": str(udf_results),
-                        "schema": return_type.simpleString(),
-                        "arrow_schema": str(arrow_return_type),
-                    },
-                ) from e
-
-        return (arr, arrow_return_type)
+        return results, arrow_return_type, return_type
 
     def make_output(*a):
-        out = evaluate(*a)
-        if isinstance(out, list):
-            return out
-        else:
-            return [out]
+        return evaluate(*a)
 
     return (
         args_kwargs_offsets,
@@ -1109,7 +1016,7 @@ def wrap_memory_profiler(f, result_id):
     return profiling_func
 
 
-def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profiler, input_types=None):
+def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profiler, input_types=None, serializer=None):
     num_arg = read_int(infile)
 
     if eval_type in (
@@ -1180,7 +1087,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         narrowed_input_types = None
         if input_types is not None:
             narrowed_input_types = [input_types[o] for o in args_offsets]
-        return wrap_arrow_batch_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf, narrowed_input_types)
+        return wrap_arrow_batch_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf, narrowed_input_types, serializer)
     elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
         return args_offsets, wrap_pandas_batch_iter_udf(func, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF:
@@ -2071,12 +1978,18 @@ def read_udfs(pickleSer, infile, eval_type):
             # Arrow cast for type coercion is disabled by default
             ser = ArrowStreamArrowUDFSerializer(timezone, safecheck, _assign_cols_by_name, False)
         elif eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF and not use_legacy_pandas_udf_conversion(runner_conf):
-            input_types = (
-                [f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))]
-                if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
-                else None
+            input_types = ([f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))])
+            ser = ArrowBatchUDFSerializer(
+                timezone,
+                safecheck,
+                _assign_cols_by_name,
+                False,
+                input_types,
+                "row",
+                True,
+                None,
+                use_large_var_types(runner_conf)
             )
-            ser = ArrowBatchUDFSerializer(timezone, safecheck, _assign_cols_by_name, False, "row")
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
             # pandas Series. See SPARK-27240.
@@ -2482,41 +2395,36 @@ def read_udfs(pickleSer, infile, eval_type):
             df2_keys = table_from_batches(a[1], parsed_offsets[1][0])
             df2_vals = table_from_batches(a[1], parsed_offsets[1][1])
             return f(df1_keys, df1_vals, df2_keys, df2_vals)
-
     else:
         udfs = []
         for i in range(num_udfs):
             udfs.append(
                 read_single_udf(
-                    pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler, input_types=input_types
+                    pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler, input_types=input_types, serializer=ser
                 )
             )
 
         def mapper(a):
-            if hasattr(a, 'num_columns') and a.num_columns == 0:
-                return None
+            if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF and not use_legacy_pandas_udf_conversion(runner_conf):
+                udf_result_tuples = []
+                for arg_offsets, f in udfs:
+                    result_tuple = f(a)
+                    udf_result_tuples.append(result_tuple)
 
-            result = []
-            for arg_offsets, f in udfs:
-                # handle zero-arg UDFs
-                is_zero_arg = (
-                    len(arg_offsets) == 1
-                    and arg_offsets[0] == 0
-                    and (not hasattr(a, "__len__") or len(a) == 0)
-                )
-
-                if is_zero_arg:
-                    result.append(f())
+                if len(udf_result_tuples) == 1:
+                    # Single UDF case: return the result tuple directly
+                    return udf_result_tuples[0]
                 else:
-                    result.append(f(*[a[o] for o in arg_offsets]))
-
-            result = tuple(result)
-            # In the special case of a single UDF this will return a single result rather
-            # than a tuple of results; this is the format that the JVM side expects.
-            if len(result) == 1:
-                return result[0]
+                    # Multiple UDFs: transpose results and yield each UDF separately
+                    return udf_result_tuples
             else:
-                return result
+                result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
+                # In the special case of a single UDF this will return a single result rather
+                # than a tuple of results; this is the format that the JVM side expects.
+                if len(result) == 1:
+                    return result[0]
+                else:
+                    return result
 
     def func(_, it):
         return map(mapper, it)
