@@ -258,11 +258,11 @@ if __name__ == "__main__":
     run_parser.add_argument("--spec", help="Path to the pipeline spec.")
 
     # "dry-run" subcommand
-    run_parser = subparsers.add_parser(
+    dry_run_parser = subparsers.add_parser(
         "dry-run",
         help="Launch a run that just validates the graph and checks for errors.",
     )
-    run_parser.add_argument("--spec", help="Path to the pipeline spec.")
+    dry_run_parser.add_argument("--spec", help="Path to the pipeline spec.")
 
     # "init" subcommand
     init_parser = subparsers.add_parser(
