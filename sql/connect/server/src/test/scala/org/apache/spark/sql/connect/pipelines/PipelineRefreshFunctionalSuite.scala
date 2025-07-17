@@ -129,7 +129,7 @@ class PipelineRefreshFunctionalSuite
           PipelineCommand.StartRun
             .newBuilder()
             .setDataflowGraphId(graphId)
-            .addAllFullRefresh(List("a").asJava)
+            .addAllFullRefreshSelection(List("a").asJava)
             .build())
       },
       expectedContentAfterRefresh = Map(
@@ -167,8 +167,8 @@ class PipelineRefreshFunctionalSuite
           PipelineCommand.StartRun
             .newBuilder()
             .setDataflowGraphId(graphId)
-            .addAllFullRefresh(Seq("a", "mv").asJava)
-            .addRefresh("b")
+            .addAllFullRefreshSelection(Seq("a", "mv").asJava)
+            .addRefreshSelection("b")
             .build())
       },
       expectedContentAfterRefresh = Map(
@@ -233,7 +233,7 @@ class PipelineRefreshFunctionalSuite
         .newBuilder()
         .setDataflowGraphId(graphId)
         .setFullRefreshAll(true)
-        .addRefresh("a")
+        .addRefreshSelection("a")
         .build()
 
       val exception = intercept[IllegalArgumentException] {
@@ -255,7 +255,7 @@ class PipelineRefreshFunctionalSuite
         .newBuilder()
         .setDataflowGraphId(graphId)
         .setFullRefreshAll(true)
-        .addFullRefresh("a")
+        .addFullRefreshSelection("a")
         .build()
 
       val exception = intercept[IllegalArgumentException] {
@@ -276,8 +276,8 @@ class PipelineRefreshFunctionalSuite
       val startRun = PipelineCommand.StartRun
         .newBuilder()
         .setDataflowGraphId(graphId)
-        .addRefresh("a")
-        .addFullRefresh("a")
+        .addRefreshSelection("a")
+        .addFullRefreshSelection("a")
         .build()
 
       val exception = intercept[IllegalArgumentException] {
@@ -299,9 +299,9 @@ class PipelineRefreshFunctionalSuite
       val startRun = PipelineCommand.StartRun
         .newBuilder()
         .setDataflowGraphId(graphId)
-        .addRefresh("a")
-        .addRefresh("b")
-        .addFullRefresh("a")
+        .addRefreshSelection("a")
+        .addRefreshSelection("b")
+        .addFullRefreshSelection("a")
         .build()
 
       val exception = intercept[IllegalArgumentException] {
@@ -323,8 +323,8 @@ class PipelineRefreshFunctionalSuite
       val startRun = PipelineCommand.StartRun
         .newBuilder()
         .setDataflowGraphId(graphId)
-        .addRefresh("spark_catalog.default.a")
-        .addFullRefresh("a") // This should be treated as the same table
+        .addRefreshSelection("spark_catalog.default.a")
+        .addFullRefreshSelection("a") // This should be treated as the same table
         .build()
 
       val exception = intercept[IllegalArgumentException] {

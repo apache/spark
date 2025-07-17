@@ -81,9 +81,9 @@ def start_run(
     """
     inner_command = pb2.PipelineCommand.StartRun(
         dataflow_graph_id=dataflow_graph_id,
-        full_refresh=full_refresh or [],
+        full_refresh_selection=full_refresh or [],
         full_refresh_all=full_refresh_all,
-        refresh=refresh or [],
+        refresh_selection=refresh or [],
     )
     command = pb2.Command()
     command.pipeline_command.start_run.CopyFrom(inner_command)

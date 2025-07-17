@@ -329,9 +329,9 @@ private[connect] object PipelinesHandler extends Logging {
       }.toSet
     }
 
-    val fullRefreshTables = startRunCommand.getFullRefreshList.asScala.toSeq
+    val fullRefreshTables = startRunCommand.getFullRefreshSelectionList.asScala.toSeq
     val fullRefreshAll = startRunCommand.getFullRefreshAll
-    val refreshTables = startRunCommand.getRefreshList.asScala.toSeq
+    val refreshTables = startRunCommand.getRefreshSelectionList.asScala.toSeq
 
     if (refreshTables.nonEmpty && fullRefreshAll) {
       throw new IllegalArgumentException(

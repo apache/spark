@@ -117,14 +117,14 @@ message PipelineCommand {
     // The graph to start.
     optional string dataflow_graph_id = 1;
     
-    // List of tables to reset and recompute.
-    repeated string full_refresh = 2;
+    // List of dataset to reset and recompute.
+    repeated string full_refresh_selection = 2;
     
     // Perform a full graph reset and recompute.
     optional bool full_refresh_all = 3;
     
-    // List of tables to update.
-    repeated string refresh = 4;
+    // List of dataset to update.
+    repeated string refresh_selection = 4;
   }
 
   // Parses the SQL file and registers all datasets and flows.

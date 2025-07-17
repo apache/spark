@@ -300,6 +300,7 @@ if __name__ == "__main__":
         type=parse_table_list,
         action="extend",
         help="List of datasets to reset and recompute (comma-separated).",
+        default=[],
     )
     run_parser.add_argument(
         "--full-refresh-all", action="store_true", help="Perform a full graph reset and recompute."
@@ -309,6 +310,7 @@ if __name__ == "__main__":
         type=parse_table_list,
         action="extend",
         help="List of datasets to update (comma-separated).",
+        default=[],
     )
 
     # "init" subcommand

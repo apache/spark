@@ -530,30 +530,30 @@ class PipelineCommand(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         DATAFLOW_GRAPH_ID_FIELD_NUMBER: builtins.int
-        FULL_REFRESH_FIELD_NUMBER: builtins.int
+        FULL_REFRESH_SELECTION_FIELD_NUMBER: builtins.int
         FULL_REFRESH_ALL_FIELD_NUMBER: builtins.int
-        REFRESH_FIELD_NUMBER: builtins.int
+        REFRESH_SELECTION_FIELD_NUMBER: builtins.int
         dataflow_graph_id: builtins.str
         """The graph to start."""
         @property
-        def full_refresh(
+        def full_refresh_selection(
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-            """List of tables to reset and recompute."""
+            """List of dataset to reset and recompute."""
         full_refresh_all: builtins.bool
         """Perform a full graph reset and recompute."""
         @property
-        def refresh(
+        def refresh_selection(
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-            """List of tables to update."""
+            """List of dataset to update."""
         def __init__(
             self,
             *,
             dataflow_graph_id: builtins.str | None = ...,
-            full_refresh: collections.abc.Iterable[builtins.str] | None = ...,
+            full_refresh_selection: collections.abc.Iterable[builtins.str] | None = ...,
             full_refresh_all: builtins.bool | None = ...,
-            refresh: collections.abc.Iterable[builtins.str] | None = ...,
+            refresh_selection: collections.abc.Iterable[builtins.str] | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -577,12 +577,12 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"_full_refresh_all",
                 "dataflow_graph_id",
                 b"dataflow_graph_id",
-                "full_refresh",
-                b"full_refresh",
                 "full_refresh_all",
                 b"full_refresh_all",
-                "refresh",
-                b"refresh",
+                "full_refresh_selection",
+                b"full_refresh_selection",
+                "refresh_selection",
+                b"refresh_selection",
             ],
         ) -> None: ...
         @typing.overload
