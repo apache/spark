@@ -63,6 +63,8 @@ abstract class BaseConstraint implements Constraint {
 
   @Override
   public String toDDL() {
+    // The validation status is not included in the DDL output as it's not part of
+    // the Spark SQL syntax for constraints.
     return String.format(
         "CONSTRAINT %s %s %s %s",
         name,
