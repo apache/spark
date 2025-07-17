@@ -982,13 +982,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  lazy val COLLATION_AGNOSTIC_HASHING_ENABLED =
-    buildConf("spark.sql.collation.collationAgnosticHashing.enabled")
-      .doc("Enables collation agnostic hashing for collated strings for Murmur3Hash and XxHash64" +
+  lazy val COLLATION_AWARE_HASHING_ENABLED =
+    buildConf("spark.sql.legacy.collationAwareHashFunctions")
+      .doc("Enables collation aware hashing for collated strings in Murmur3Hash and XxHash64" +
         " user-facing expressions.")
       .version("4.0.1")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val ICU_CASE_MAPPINGS_ENABLED =
     buildConf("spark.sql.icu.caseMappings.enabled")

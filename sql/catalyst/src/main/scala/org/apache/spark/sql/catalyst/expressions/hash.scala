@@ -425,7 +425,7 @@ abstract class HashExpression[E] extends Expression {
   }
 
   private def isAlwaysCollationAwareBug: Boolean =
-    !SQLConf.get.getConf (SQLConf.COLLATION_AGNOSTIC_HASHING_ENABLED)
+    SQLConf.get.getConf(SQLConf.COLLATION_AWARE_HASHING_ENABLED)
 
   protected def genHashString(
       ctx: CodegenContext, stringType: StringType, input: String, result: String): String = {
@@ -581,7 +581,7 @@ abstract class InterpretedHashFunction {
   protected def hashUnsafeBytes(base: AnyRef, offset: Long, length: Int, seed: Long): Long
 
   private def isAlwaysCollationAwareBug: Boolean =
-    !SQLConf.get.getConf (SQLConf.COLLATION_AGNOSTIC_HASHING_ENABLED)
+    SQLConf.get.getConf(SQLConf.COLLATION_AWARE_HASHING_ENABLED)
 
   /**
    * This method is intended for callers using the old hash API and preserves compatibility for

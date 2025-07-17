@@ -686,7 +686,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   // Below we test the `Murmur3Hash` and `XxHash64` expressions for the old behavior before the fix.
   // The expected values have been computed using the old implementation of the expression.
   test("SPARK-52828: always collation aware hash expression") {
-    withSQLConf(SQLConf.COLLATION_AGNOSTIC_HASHING_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.COLLATION_AWARE_HASHING_ENABLED.key -> "true") {
       val testCases = Seq[(String, String, Int, Long)](
         // UTF8_BINARY
         ("AAA", "UTF8_BINARY", 22125783, 3965631622972380050L),
