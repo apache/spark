@@ -213,11 +213,11 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
             "a INT,",
             "b STRING,",
             "c STRING,",
-            "PRIMARY KEY (a) ENFORCED NORELY,",
-            "CONSTRAINT uk_b UNIQUE (b),",
-            "CONSTRAINT fk_c FOREIGN KEY (c) REFERENCES other_table(id),",
-            "CONSTRAINT c1 CHECK (c IS NOT NULL),",
-            "CONSTRAINT c2 CHECK (a > 0))",
+            "CONSTRAINT tbl_pk PRIMARY KEY (a) NOT ENFORCED NORELY,",
+            "CONSTRAINT uk_b UNIQUE (b) NOT ENFORCED NORELY,",
+            "CONSTRAINT fk_c FOREIGN KEY (c) REFERENCES other_table (id) NOT ENFORCED NORELY,",
+            "CONSTRAINT c1 CHECK (c IS NOT NULL) ENFORCED NORELY,",
+            "CONSTRAINT c2 CHECK (a > 0) ENFORCED NORELY)",
             defaultUsing
           )
         )

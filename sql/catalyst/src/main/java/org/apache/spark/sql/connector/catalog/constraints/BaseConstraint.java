@@ -64,7 +64,7 @@ abstract class BaseConstraint implements Constraint {
   @Override
   public String toDDL() {
     return String.format(
-        "CONSTRAINT %s %s %s %s %s",
+        "CONSTRAINT %s %s %s %s",
         name,
         definition(),
         enforced ? "ENFORCED" : "NOT ENFORCED",
