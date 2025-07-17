@@ -31,21 +31,18 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
         createTable(
           name = "a",
           datasetType = proto.DatasetType.MATERIALIZED_VIEW,
-          sql = Some("SELECT * FROM RANGE(5)")
-        )
+          sql = Some("SELECT * FROM RANGE(5)"))
         createTable(
           name = "b",
           datasetType = proto.DatasetType.TABLE,
-          sql = Some("SELECT * FROM STREAM a")
-        )
+          sql = Some("SELECT * FROM STREAM a"))
       }
       registerPipelineDatasets(pipeline)
 
       val capturedEvents = new ArrayBuffer[PipelineEvent]()
       withClient { client =>
         val startRunRequest = buildStartRunPlan(
-          proto.PipelineCommand.StartRun.newBuilder().setDataflowGraphId(graphId).build()
-        )
+          proto.PipelineCommand.StartRun.newBuilder().setDataflowGraphId(graphId).build())
         val responseIterator = client.execute(startRunRequest)
         while (responseIterator.hasNext) {
           val response = responseIterator.next()
@@ -63,13 +60,11 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
           "Flow spark_catalog.default.b is STARTING",
           "Flow spark_catalog.default.b is RUNNING",
           "Flow spark_catalog.default.b has COMPLETED",
-          "Run is COMPLETED"
-        )
+          "Run is COMPLETED")
         expectedEventMessages.foreach { eventMessage =>
           assert(
             capturedEvents.exists(e => e.getMessage.contains(eventMessage)),
-            s"Did not receive expected event: $eventMessage"
-          )
+            s"Did not receive expected event: $eventMessage")
         }
       }
     }
@@ -85,13 +80,11 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
           createTable(
             name = "a",
             datasetType = proto.DatasetType.MATERIALIZED_VIEW,
-            sql = Some("SELECT * FROM unknown_table")
-          )
+            sql = Some("SELECT * FROM unknown_table"))
           createTable(
             name = "b",
             datasetType = proto.DatasetType.TABLE,
-            sql = Some("SELECT * FROM STREAM a")
-          )
+            sql = Some("SELECT * FROM STREAM a"))
         }
         registerPipelineDatasets(pipeline)
 
@@ -102,8 +95,7 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
               .newBuilder()
               .setDataflowGraphId(graphId)
               .setDry(dry)
-              .build()
-          )
+              .build())
           val ex = intercept[AnalysisException] {
             val responseIterator = client.execute(startRunRequest)
             while (responseIterator.hasNext) {
@@ -118,13 +110,11 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
           assert(runFailureErrorMsg.matches(ex.getMessage))
           val expectedLogPatterns = Set(
             "(?s).*Failed to resolve flow.*Failed to read dataset 'spark_catalog.default.a'.*".r,
-            "(?s).*Failed to resolve flow.*[TABLE_OR_VIEW_NOT_FOUND].*".r
-          )
+            "(?s).*Failed to resolve flow.*[TABLE_OR_VIEW_NOT_FOUND].*".r)
           expectedLogPatterns.foreach { logPattern =>
             assert(
               capturedEvents.exists(e => logPattern.matches(e.getMessage)),
-              s"Did not receive expected event matching pattern: $logPattern"
-            )
+              s"Did not receive expected event matching pattern: $logPattern")
           }
           // Ensure that the error causing the run failure is not surfaced to the user twice
           assert(capturedEvents.forall(e => !runFailureErrorMsg.matches(e.getMessage)))
@@ -140,13 +130,11 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
         createTable(
           name = "a",
           datasetType = proto.DatasetType.MATERIALIZED_VIEW,
-          sql = Some("SELECT * FROM RANGE(5)")
-        )
+          sql = Some("SELECT * FROM RANGE(5)"))
         createTable(
           name = "b",
           datasetType = proto.DatasetType.TABLE,
-          sql = Some("SELECT * FROM STREAM a")
-        )
+          sql = Some("SELECT * FROM STREAM a"))
       }
       registerPipelineDatasets(pipeline)
 
@@ -157,8 +145,7 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
             .newBuilder()
             .setDataflowGraphId(graphId)
             .setDry(true)
-            .build()
-        )
+            .build())
         val responseIterator = client.execute(startRunRequest)
         while (responseIterator.hasNext) {
           val response = responseIterator.next()
@@ -170,8 +157,7 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
         expectedEventMessages.foreach { eventMessage =>
           assert(
             capturedEvents.exists(e => e.getMessage.contains(eventMessage)),
-            s"Did not receive expected event: $eventMessage"
-          )
+            s"Did not receive expected event: $eventMessage")
         }
       }
 
