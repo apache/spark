@@ -685,7 +685,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   // Below we test the `Murmur3Hash` and `XxHash64` expressions for the old behavior before the fix.
   // The expected values have been computed using the old implementation of the expression.
-  test("always collation aware hash expression") {
+  test("SPARK-52828: always collation aware hash expression") {
     withSQLConf(SQLConf.COLLATION_AGNOSTIC_HASHING_ENABLED.key -> "false") {
       val testCases = Seq[(String, String, Int, Long)](
         // UTF8_BINARY
@@ -709,25 +709,25 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         ("aaa", "UTF8_LCASE_RTRIM", 2132077201, -4940759280126763524L),
         ("aaa   ", "UTF8_LCASE_RTRIM", 2132077201, -4940759280126763524L),
         // UNICODE
-        ("AAA", "UNICODE", -1327180905, 16805125465392203L),
-        ("AAA  ", "UNICODE", -350461590, 5544233715607598421L),
-        ("aaa", "UNICODE", -273694131, 3658327516500833011L),
-        ("aaa   ", "UNICODE", 2066032879, 8855535431863588476L),
+        ("AAA", "UNICODE", 128537619, 49663227161197117L),
+        ("AAA  ", "UNICODE", 82814175, 3618364417906061797L),
+        ("aaa", "UNICODE", -1822783942, 290910714161494507L),
+        ("aaa   ", "UNICODE", -896289340, 1025563887784400925L),
         // UNICODE_RTRIM
-        ("AAA", "UNICODE_RTRIM", -1327180905, 16805125465392203L),
-        ("AAA  ", "UNICODE_RTRIM", -1327180905, 16805125465392203L),
-        ("aaa", "UNICODE_RTRIM", -273694131, 3658327516500833011L),
-        ("aaa   ", "UNICODE_RTRIM", -273694131, 3658327516500833011L),
+        ("AAA", "UNICODE_RTRIM", 128537619, 49663227161197117L),
+        ("AAA  ", "UNICODE_RTRIM", 128537619, 49663227161197117L),
+        ("aaa", "UNICODE_RTRIM", -1822783942, 290910714161494507L),
+        ("aaa   ", "UNICODE_RTRIM", -1822783942, 290910714161494507L),
         // UNICODE_CI
-        ("AAA", "UNICODE_CI", 916306139, 8904561200245968094L),
-        ("AAA  ", "UNICODE_CI", -553252967, -1748848902857348313L),
-        ("aaa", "UNICODE_CI", 916306139, 8904561200245968094L),
-        ("aaa   ", "UNICODE_CI", -1236999165, -3290967075179141112L),
+        ("AAA", "UNICODE_CI", -443043098, -6629915645815515868L),
+        ("AAA  ", "UNICODE_CI", 667473856, -3263604567598338200L),
+        ("aaa", "UNICODE_CI", -443043098, -6629915645815515868L),
+        ("aaa   ", "UNICODE_CI", -390983808, -5159733933636691741L),
         // UNICODE_CI_RTRIM
-        ("AAA", "UNICODE_CI_RTRIM", 916306139, 8904561200245968094L),
-        ("AAA  ", "UNICODE_CI_RTRIM", 916306139, 8904561200245968094L),
-        ("aaa", "UNICODE_CI_RTRIM", 916306139, 8904561200245968094L),
-        ("aaa   ", "UNICODE_CI_RTRIM", 916306139, 8904561200245968094L)
+        ("AAA", "UNICODE_CI_RTRIM", -443043098, -6629915645815515868L),
+        ("AAA  ", "UNICODE_CI_RTRIM", -443043098, -6629915645815515868L),
+        ("aaa", "UNICODE_CI_RTRIM", -443043098, -6629915645815515868L),
+        ("aaa   ", "UNICODE_CI_RTRIM", -443043098, -6629915645815515868L)
       )
       testCases.foreach { case (str, collationName, expectedMurmur3, expectedXxHash64) =>
         val stringExpr = Collate(Literal(str), ResolvedCollation(collationName))
@@ -737,6 +737,27 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(xxHash64Expr, expectedXxHash64)
       }
     }
+  }
+
+  test("SPARK-52828: backward-compatible hash API should reject UTF8_LCASE collation") {
+    // This test verifies that the legacy hash API throws an exception when used with
+    // collation-aware strings such as UTF8_LCASE. The assertion ensures we catch unsupported
+    // usage early via the internal assertion (SchemaUtils.hasNonUTF8BinaryCollation).
+    val expr_lcase = Collate(Literal("AAA"), ResolvedCollation("UTF8_LCASE"))
+    intercept[IllegalArgumentException] {
+      Murmur3HashFunction.hash(expr_lcase.eval(null), expr_lcase.dataType, 42)
+    }
+    intercept[IllegalArgumentException] {
+      XxHash64Function.hash(expr_lcase.eval(null), expr_lcase.dataType, 42)
+    }
+    intercept[IllegalArgumentException] {
+      HiveHashFunction.hash(expr_lcase.eval(null), expr_lcase.dataType, 42)
+    }
+
+    val expr_utf8bin = Collate(Literal("AAA"), ResolvedCollation("UTF8_BINARY"))
+    Murmur3HashFunction.hash(expr_utf8bin.eval(null), expr_utf8bin.dataType, 42)
+    XxHash64Function.hash(expr_utf8bin.eval(null), expr_utf8bin.dataType, 42)
+    HiveHashFunction.hash(expr_utf8bin.eval(null), expr_utf8bin.dataType, 42)
   }
 
   test("SPARK-18207: Compute hash for a lot of expressions") {

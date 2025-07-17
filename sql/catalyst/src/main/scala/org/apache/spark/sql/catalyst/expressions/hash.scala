@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -581,6 +582,22 @@ abstract class InterpretedHashFunction {
 
   private def isAlwaysCollationAwareBug: Boolean =
     !SQLConf.get.getConf (SQLConf.COLLATION_AGNOSTIC_HASHING_ENABLED)
+
+  /**
+   * This method is intended for callers using the old hash API and preserves compatibility for
+   * supported data types. It must only be used for data types that do not include collated strings
+   * or complex types (e.g., structs, arrays, maps) that may contain collated strings.
+   *
+   * The caller is responsible for ensuring that `dataType` does not involve collation-aware fields.
+   * This is validated via an internal assertion.
+   *
+   * @throws IllegalArgumentException if `dataType` contains non-UTF8 binary collation.
+   */
+  def hash(value: Any, dataType: DataType, seed: Long): Long = {
+    require(!SchemaUtils.hasNonUTF8BinaryCollation(dataType))
+    // For UTF8_BINARY, hashing behavior is the same regardless of the isCollationAware flag.
+    hash(value = value, dataType = dataType, seed = seed, isCollationAware = false)
+  }
 
   /**
    * Computes hash of a given `value` of type `dataType`. The caller needs to check the validity
