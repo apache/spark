@@ -344,8 +344,7 @@ abstract class InMemoryBaseTable(
     TableCapability.STREAMING_WRITE,
     TableCapability.OVERWRITE_BY_FILTER,
     TableCapability.OVERWRITE_DYNAMIC,
-    TableCapability.TRUNCATE,
-    TableCapability.ACCEPT_ANY_SCHEMA)
+    TableCapability.TRUNCATE)
 
   override def capabilities(): util.Set[TableCapability] = {
     if (acceptAnySchema) {
