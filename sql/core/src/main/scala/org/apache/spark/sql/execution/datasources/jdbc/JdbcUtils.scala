@@ -390,13 +390,14 @@ object JdbcUtils extends Logging with SQLConfHelper {
         }
       }
 
-    override protected def getNext(): InternalRow = {
-      if (fetchAndTransformToInternalRowsMetric.isDefined) {
-        SQLMetrics.withTimingNs(fetchAndTransformToInternalRowsMetric.get) {
+      override protected def getNext(): InternalRow = {
+        if (fetchAndTransformToInternalRowsMetric.isDefined) {
+          SQLMetrics.withTimingNs(fetchAndTransformToInternalRowsMetric.get) {
+            getNextWithoutTiming
+          }
+        } else {
           getNextWithoutTiming
         }
-      } else {
-        getNextWithoutTiming
       }
     }
   }
