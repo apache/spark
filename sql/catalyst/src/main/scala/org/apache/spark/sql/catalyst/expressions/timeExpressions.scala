@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, ObjectType, TimeType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, ObjectType, StringType, TimeType, TypeCollection}
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -629,4 +629,78 @@ case class SubtractTimes(left: Expression, right: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): SubtractTimes =
     copy(left = newLeft, right = newRight)
+}
+
+/**
+ * Returns time truncated to the unit specified by the unit.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(unit, expr) - Returns time `expr` truncated to the unit specified by the unit `unit`.
+  """,
+  arguments = """
+    Arguments:
+      * unit - the unit representing the unit to be truncated to
+          - "HOUR" - zero out the minutes and seconds with fraction part
+          - "MINUTE" - zero out the seconds with fraction part
+          - "SECOND" - zero out the seconds with fraction part
+          - "MILLISECOND" - zero out the microseconds
+          - "MICROSECOND" - zero out the nanoseconds
+      * expr - a TIME or STRING with a valid time format
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('HOUR', '09:32:05.359');
+       09:00:00
+      > SELECT _FUNC_('MILLISECOND', '09:32:05.123456');
+       09:32:05.123
+      > SELECT _FUNC_('MS', '09:32:05.123456');
+       NULL
+  """,
+  group = "datetime_funcs",
+  since = "4.1.0")
+// scalastyle:on line.size.limit
+case class TimeTrunc(unit: Expression, time: Expression)
+  extends BinaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
+
+  override def nullIntolerant: Boolean = true
+
+  override def left: Expression = unit
+  override def right: Expression = time
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(
+      StringTypeWithCollation(supportsTrimCollation = true),
+      TypeCollection(AnyTimeType, StringTypeWithCollation(supportsTrimCollation = true))
+    )
+
+  override def dataType: DataType = {
+    time.dataType match {
+      case TimeType(precision) => TimeType(precision)
+      case _ => TimeType()
+    }
+  }
+
+  override def prettyName: String = "time_trunc"
+
+  override protected def withNewChildrenInternal(
+      newUnit: Expression, newTime: Expression): TimeTrunc =
+    copy(unit = newUnit, time = newTime)
+
+  override def replacement: Expression = {
+    val castedTime = if (time.dataType.isInstanceOf[StringType]) {
+      Cast(time, TimeType())
+    } else {
+      time
+    }
+    StaticInvoke(
+      classOf[DateTimeUtils.type],
+      dataType,
+      "timeTrunc",
+      Seq(unit, castedTime),
+      Seq(unit.dataType, castedTime.dataType),
+      propagateNull = nullIntolerant
+    )
+  }
 }

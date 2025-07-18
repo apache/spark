@@ -2,6 +2,8 @@
 
 create temporary view time_view as select '11:53:26.038344' time_str, 'HH:mm:ss.SSSSSS' fmt_str;
 
+create temporary view trunc_time_view as select time'11:53:26.038344' time_val, 'MINUTE' unit;
+
 select time '16:39:45\t';
 
 select to_time(null), to_time('01:02:03'), to_time('23-59-59.999999', 'HH-mm-ss.SSSSSS');
@@ -72,6 +74,76 @@ select extract(SECOND FROM cast('09:08:01.987654' as time(6)));
 SELECT cast(cast('12:00' as time(0)) as time(2));
 SELECT cast(('23:59:59.001001' :: time(6)) as time(4));
 SELECT cast(time'11:59:59.999999' as time without time zone);
+
+-- SPARK-51554: time truncation.
+SELECT time_trunc('HOUR', time'12:34:56');
+SELECT time_trunc('MINUTE', time'12:34:56');
+SELECT time_trunc('SECOND', time'12:34:56');
+SELECT time_trunc('MILLISECOND', time'12:34:56');
+SELECT time_trunc('MICROSECOND', time'12:34:56');
+SELECT time_trunc('HOUR', time'12:34:56.123456');
+SELECT time_trunc('MINUTE', time'12:34:56.123456');
+SELECT time_trunc('SECOND', time'12:34:56.123456');
+SELECT time_trunc('MILLISECOND', time'12:34:56.123456');
+SELECT time_trunc('MICROSECOND', time'12:34:56.123456');
+SELECT time_trunc('HOUR', time'12:34:56.123456789');
+SELECT time_trunc('MINUTE', time'12:34:56.123456789');
+SELECT time_trunc('SECOND', time'12:34:56.123456789');
+SELECT time_trunc('MILLISECOND', time'12:34:56.123456789');
+SELECT time_trunc('MICROSECOND', time'12:34:56.123456789');
+-- SPARK-51554: time truncation with string overload for time.
+SELECT time_trunc('HOUR', '12:34:56.123456789');
+SELECT time_trunc('MINUTE', '12:34:56.123456789');
+SELECT time_trunc('SECOND', '12:34:56.123456789');
+SELECT time_trunc('MILLISECOND', '12:34:56.123456789');
+SELECT time_trunc('MICROSECOND', '12:34:56.123456789');
+
+-- SPARK-51554: time truncation with zero time.
+SELECT time_trunc('HOUR', time'00:00:00');
+SELECT time_trunc('MINUTE', time'00:00:00');
+SELECT time_trunc('SECOND', time'00:00:00');
+SELECT time_trunc('MILLISECOND', time'00:00:00');
+SELECT time_trunc('MICROSECOND', time'00:00:00');
+-- SPARK-51554: time truncation with small time.
+SELECT time_trunc('HOUR', time'00:00:00.000000001');
+SELECT time_trunc('MINUTE', time'00:00:00.000000001');
+SELECT time_trunc('SECOND', time'00:00:00.000000001');
+SELECT time_trunc('MILLISECOND', time'00:00:00.000000001');
+SELECT time_trunc('MICROSECOND', time'00:00:00.000000001');
+-- SPARK-51554: time truncation with max time.
+SELECT time_trunc('HOUR', time'23:59:59.999999999');
+SELECT time_trunc('MINUTE', time'23:59:59.999999999');
+SELECT time_trunc('SECOND', time'23:59:59.999999999');
+SELECT time_trunc('MILLISECOND', time'23:59:59.999999999');
+SELECT time_trunc('MICROSECOND', time'23:59:59.999999999');
+
+-- SPARK-51554: time truncation with invalid unit.
+SELECT time_trunc('', time'12:34:56');
+SELECT time_trunc(' ', time'12:34:56');
+SELECT time_trunc('MS', time'12:34:56');
+SELECT time_trunc('DAY', time'12:34:56');
+SELECT time_trunc('WEEK', time'12:34:56');
+SELECT time_trunc('ABCD', time'12:34:56');
+SELECT time_trunc('QUARTER', time'12:34:56');
+SELECT time_trunc('INVALID', time'12:34:56');
+SELECT time_trunc('INVALID_UNIT', time'12:34:56');
+
+-- SPARK-51554: time truncation with invalid time.
+SELECT time_trunc('HOUR', time'24:00:00');
+SELECT time_trunc('MINUTE', time'23:78:00');
+SELECT time_trunc('SECOND', time'12:00:97');
+SELECT time_trunc('MILLISECOND', time'24:00:00.1');
+SELECT time_trunc('MICROSECOND', time'00:00:00.1234567890');
+
+-- SPARK-51554: time truncation with null inputs.
+SELECT time_trunc('HOUR', NULL);
+SELECT time_trunc(NULL, time'12:34:56');
+SELECT time_trunc(NULL, NULL);
+
+-- SPARK-51554: time truncation with table columns.
+SELECT time_trunc('HOUR', time_val) FROM trunc_time_view;
+SELECT time_trunc(unit, time'12:34:56') FROM trunc_time_view;
+SELECT time_trunc(unit, time_val) FROM trunc_time_view;
 
 -- +/- ANSI day-time intervals
 SELECT '12:43:33.1234' :: TIME(4) + INTERVAL '01:04:05.56' HOUR TO SECOND;
