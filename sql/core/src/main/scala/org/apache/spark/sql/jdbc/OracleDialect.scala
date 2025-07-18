@@ -286,11 +286,6 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
       case _ => super.classifyException(e, condition, messageParameters, description, isRuntime)
     }
   }
-
-  override def quoteIdentifier(colName: String): String = {
-    val escapedColName = colName.replace("\"", "\"\"")
-    s""""$escapedColName""""
-  }
 }
 
 private[jdbc] object OracleDialect {
