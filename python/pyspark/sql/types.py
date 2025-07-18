@@ -369,13 +369,17 @@ class BooleanType(AtomicType, metaclass=DataTypeSingleton):
     pass
 
 
-class DateType(AtomicType, metaclass=DataTypeSingleton):
-    """Date (datetime.date) data type."""
-
-    EPOCH_ORDINAL = datetime.datetime(1970, 1, 1).toordinal()
+class DatetimeType(AtomicType):
+    """Super class of all datetime data type."""
 
     def needConversion(self) -> bool:
         return True
+
+
+class DateType(DatetimeType, metaclass=DataTypeSingleton):
+    """Date (datetime.date) data type."""
+
+    EPOCH_ORDINAL = datetime.datetime(1970, 1, 1).toordinal()
 
     def toInternal(self, d: datetime.date) -> int:
         if d is not None:
@@ -386,14 +390,17 @@ class DateType(AtomicType, metaclass=DataTypeSingleton):
             return datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
 
 
-class TimeType(AtomicType):
+class AnyTimeType(DatetimeType):
+    """A TIME type of any valid precision."""
+
+    pass
+
+
+class TimeType(AnyTimeType):
     """Time (datetime.time) data type."""
 
     def __init__(self, precision: int = 6):
         self.precision = precision
-
-    def needConversion(self) -> bool:
-        return True
 
     def toInternal(self, t: datetime.time) -> int:
         if t is not None:
@@ -422,11 +429,8 @@ class TimeType(AtomicType):
         return "TimeType(%d)" % (self.precision)
 
 
-class TimestampType(AtomicType, metaclass=DataTypeSingleton):
+class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
     """Timestamp (datetime.datetime) data type."""
-
-    def needConversion(self) -> bool:
-        return True
 
     def toInternal(self, dt: datetime.datetime) -> int:
         if dt is not None:
@@ -441,11 +445,8 @@ class TimestampType(AtomicType, metaclass=DataTypeSingleton):
             return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
 
 
-class TimestampNTZType(AtomicType, metaclass=DataTypeSingleton):
+class TimestampNTZType(DatetimeType, metaclass=DataTypeSingleton):
     """Timestamp (datetime.datetime) data type without timezone information."""
-
-    def needConversion(self) -> bool:
-        return True
 
     @classmethod
     def typeName(cls) -> str:
