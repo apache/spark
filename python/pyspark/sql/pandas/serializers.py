@@ -243,7 +243,7 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
             for i, data_type in enumerate(self._input_types)
         ])
 
-        rows = ArrowTableToRowsConversion.convert(table, schema=schema)
+        rows = ArrowTableToRowsConversion.convert(table, schema=schema, return_as_tuples=True)
 
         return [tuple(row) for row in rows]
 
