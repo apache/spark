@@ -92,8 +92,7 @@ class SignalingStateStoreProvider extends StateStoreProvider with Logging {
    */
   override def getStore(
       version: Long,
-      uniqueId: Option[String],
-      createEmptyIfNotExists: Boolean): StateStore = null
+      uniqueId: Option[String]): StateStore = null
 
   /**
    * Simulates a maintenance operation that blocks until a signal is received.
@@ -172,8 +171,7 @@ class FakeStateStoreProviderTracksCloseThread extends StateStoreProvider {
 
   override def getStore(
       version: Long,
-      uniqueId: Option[String],
-      createEmptyIfNotExists: Boolean): StateStore = null
+      uniqueId: Option[String]): StateStore = null
 
   override def doMaintenance(): Unit = {}
 }
