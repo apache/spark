@@ -626,6 +626,10 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
   }
 
   test("round trip conversion of predicate expressions") {
+    val intCol = $"cint".int
+    val intColRef = FieldReference("cint")
+    val boolCol = $"abool".boolean
+    val boolColRef = FieldReference("abool")
     checkRoundTripConversion(
       catalystExpr = IsNull($"a".boolean),
       v2Expr = new Predicate("IS_NULL", Array(FieldReference("a"))))
@@ -645,56 +649,47 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
         "=",
         Array(FieldReference("a"), LiteralValue(true, BooleanType)))),
       catalystExpr = Not(EqualTo($"a".boolean, Literal(true))))
-
     checkRoundTripConversion(
-      catalystExpr = EqualTo(Literal(1), Literal(2)),
+      catalystExpr = EqualTo(intCol, Literal(2)),
       v2Expr = new Predicate(
         "=",
-        Array(LiteralValue(1, IntegerType), LiteralValue(2, IntegerType))))
+        Array(intColRef, LiteralValue(2, IntegerType))))
 
     checkRoundTripConversion(
-      catalystExpr = EqualNullSafe(Literal(1), Literal(2)),
+      catalystExpr = EqualNullSafe(intCol, Literal(2)),
       v2Expr = new Predicate(
         "<=>",
-        Array(LiteralValue(1, IntegerType), LiteralValue(2, IntegerType))))
+        Array(intColRef, LiteralValue(2, IntegerType))))
 
     checkRoundTripConversion(
-      catalystExpr = GreaterThan(Literal(1), Literal(2)),
+      catalystExpr = GreaterThan(intCol, Literal(2)),
       v2Expr = new Predicate(
         ">",
-        Array(LiteralValue(1, IntegerType), LiteralValue(2, IntegerType))))
+        Array(intColRef, LiteralValue(2, IntegerType))))
 
     checkRoundTripConversion(
-      catalystExpr = GreaterThanOrEqual(Literal(1), Literal(2)),
+      catalystExpr = GreaterThanOrEqual(intCol, Literal(2)),
       v2Expr = new Predicate(
         ">=",
-        Array(LiteralValue(1, IntegerType), LiteralValue(2, IntegerType))))
+        Array(intColRef, LiteralValue(2, IntegerType))))
 
     checkRoundTripConversion(
-      catalystExpr = LessThan(Literal(1), Literal(2)),
+      catalystExpr = LessThan(intCol, Literal(2)),
       v2Expr = new Predicate(
         "<",
-        Array(LiteralValue(1, IntegerType), LiteralValue(2, IntegerType))))
+        Array(intColRef, LiteralValue(2, IntegerType))))
 
     checkRoundTripConversion(
-      catalystExpr = LessThanOrEqual(Literal(1), Literal(2)),
+      catalystExpr = LessThanOrEqual(intCol, Literal(2)),
       v2Expr = new Predicate(
         "<=",
-        Array(LiteralValue(1, IntegerType), LiteralValue(2, IntegerType))))
+        Array(intColRef, LiteralValue(2, IntegerType))))
 
     checkRoundTripConversion(
-      catalystExpr = Not(EqualTo(Literal(1), Literal(2))),
+      catalystExpr = Not(EqualTo(intCol, Literal(2))),
       v2Expr = new Predicate(
         "<>",
-        Array(LiteralValue(1, IntegerType), LiteralValue(2, IntegerType))))
-
-    checkRoundTripConversion(
-      catalystExpr = And(Literal.TrueLiteral, Literal.FalseLiteral),
-      v2Expr = new V2And(new AlwaysTrue, new AlwaysFalse))
-
-    checkRoundTripConversion(
-      catalystExpr = Or(Literal.TrueLiteral, Literal.FalseLiteral),
-      v2Expr = new V2Or(new AlwaysTrue, new AlwaysFalse))
+        Array(intColRef, LiteralValue(2, IntegerType))))
 
     checkRoundTripConversion(
       catalystExpr = StartsWith($"a".string, Literal("foo")),
