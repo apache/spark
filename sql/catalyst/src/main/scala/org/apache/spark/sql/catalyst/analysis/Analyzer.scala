@@ -4184,29 +4184,38 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
 
   private def updateOuterReferenceInSubquery(
       plan: LogicalPlan,
-      refExprs: Seq[Expression]): LogicalPlan = {
+      refExprs: Seq[Expression],
+      targetOuterAttributes: Seq[Expression]): LogicalPlan = {
+    val targetOuterAttributesExprIdLookup = new util.HashSet[ExprId](targetOuterAttributes.size)
+    targetOuterAttributes.foreach {
+      case namedExpression: NamedExpression =>
+        targetOuterAttributesExprIdLookup.add(namedExpression.exprId)
+      case _ =>
+    }
     plan resolveExpressions {
       case e if e.containsPattern(OUTER_REFERENCE) =>
         val outerAlias =
-          refExprs.find(stripAlias(_).semanticEquals(stripOuterReference(e)))
-        outerAlias match {
-          case Some(a: Alias) => OuterReference(a.toAttribute)
-          case _ => e
-        }
+          refExprs.collect{
+            case t if stripAlias(t).semanticEquals(stripOuterReference(e)) => t
+          }
+        outerAlias.collectFirst {
+          case a: Alias if targetOuterAttributesExprIdLookup.contains(a.exprId) =>
+            OuterReference(a.toAttribute)
+        }.getOrElse(e)
     }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(
       _.containsAllPatterns(PLAN_EXPRESSION, FILTER, AGGREGATE), ruleId) {
-      case f @ Filter(_, a: Aggregate) if f.resolved =>
+      case f@Filter(_, a: Aggregate) if f.resolved =>
         f.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
           case s: SubqueryExpression if s.children.nonEmpty =>
             // Collect the aliases from output of aggregate.
             val outerAliases = a.aggregateExpressions collect { case a: Alias => a }
             // Update the subquery plan to record the OuterReference to point to outer query plan.
-            s.withNewPlan(updateOuterReferenceInSubquery(s.plan, outerAliases))
-      }
+            s.withNewPlan(updateOuterReferenceInSubquery(s.plan, outerAliases, s.getOuterAttrs))
+        }
     }
   }
 }

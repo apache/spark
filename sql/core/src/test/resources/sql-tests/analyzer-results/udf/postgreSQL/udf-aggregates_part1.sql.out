@@ -456,7 +456,7 @@ having exists (select 1 from onek b where udf(sum(distinct a.four)) = b.four)
 Project [ten#x, udf(sum(DISTINCT four))#xL]
 +- Filter exists#x [sum(DISTINCT four)#xL]
    :  +- Project [1 AS 1#x]
-   :     +- Filter (outer(udf(sum(DISTINCT four))#xL) = cast(four#x as bigint))
+   :     +- Filter (cast(udf(cast(outer(sum(DISTINCT four)#xL) as string)) as bigint) = cast(four#x as bigint))
    :        +- SubqueryAlias b
    :           +- SubqueryAlias spark_catalog.default.onek
    :              +- Relation spark_catalog.default.onek[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
