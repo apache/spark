@@ -690,14 +690,90 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-52621: variant_get with TimeType") {
+    // TimeType - simple types.
+
     // Default TimeType.
     testVariantGet("0", "$", TimeType(), 0L) // 00:00:00
     testVariantGet("3723000000000", "$", TimeType(), 3723000000000L) // 01:02:03
     testVariantGet("43200000000", "$", TimeType(), 43200000000L) // 12:00:00
     testVariantGet("86399000000", "$", TimeType(), 86399000000L) // 23:59:59
+
     // Parameterized TimeType.
     testVariantGet("0", "$", TimeType(6), 0L) // 00:00:00.000000
     testVariantGet("3723000000000", "$", TimeType(6), 3723000000000L) // 01:02:03.000000
+
+    // TimeType - complex types.
+
+    // Array of TimeType.
+    testVariantGet(
+      "[0, 3723000000000, 43200000000, 86399000000]",
+      "$",
+      ArrayType(TimeType()),
+      Array(0L, 3723000000000L, 43200000000L, 86399000000L)
+    )
+    // Map with TimeType.
+    testVariantGet(
+      """{"noon": 43200000000}""",
+      "$",
+      DataType.fromDDL("map<string, time>"),
+      Map("noon" -> 43200000000L)
+    )
+    // Struct with TimeType.
+    testVariantGet(
+      """{"start": 32400000000, "end": 61200000000, "ind": "timeslot"}""",
+      "$",
+      DataType.fromDDL("struct<start time, end time, ind string>"),
+      Row(32400000000L, 61200000000L, "timeslot")
+    )
+
+    // Array of structs with TimeType.
+    testVariantGet(
+      """[{"time": 0, "activity": "sleep"}, {"time": 28800000000, "activity": "work"}]""",
+      "$",
+      DataType.fromDDL("array<struct<time time, activity string>>"),
+      Array(Row(0L, "sleep"), Row(28800000000L, "work"))
+    )
+    // Struct with array of TimeType.
+    testVariantGet(
+      """{"break_times": [36000000000, 39600000000, 46800000000], "employee_id": 123}""",
+      "$",
+      DataType.fromDDL("struct<break_times array<time>, employee_id int>"),
+      Row(Array(36000000000L, 39600000000L, 46800000000L), 123)
+    )
+    // Map with array of TimeType.
+    testVariantGet(
+      """{"monday": [32400000000, 61200000000]}""",
+      "$",
+      DataType.fromDDL("map<string, array<time>>"),
+      Map("monday" -> Array(32400000000L, 61200000000L))
+    )
+    // Complex nested structure with TimeType.
+    testVariantGet(
+      """{"schedule": {"days": [{"day": "Monday", "noon": 43200000000}]}}""",
+      "$",
+      DataType.fromDDL("struct<schedule struct<days array<struct<day string, noon time>>>>"),
+      Row(Row(Array(Row("Monday", 43200000000L))))
+    )
+
+    // Path extraction with TimeType in complex types.
+    testVariantGet(
+      """{"shifts": [{"morning": 28800000000}, {"evening": 64800000000}]}""",
+      "$.shifts[0].morning",
+      TimeType(),
+      28800000000L
+    )
+    testVariantGet(
+      """{"daily_schedule": {"lunch_time": 43200000000, "meetings": [32400000000, 50400000000]}}""",
+      "$.daily_schedule.lunch_time",
+      TimeType(),
+      43200000000L
+    )
+    testVariantGet(
+      """{"daily_schedule": {"lunch_time": 43200000000, "meetings": [32400000000, 50400000000]}}""",
+      "$.daily_schedule.meetings[1]",
+      TimeType(),
+      50400000000L
+    )
   }
 
   test("cast from variant") {
@@ -727,9 +803,12 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(parseJson("null"), StringType, null)
     checkCast(parseJson("\"1\""), IntegerType, 1)
 
-    // SPARK-52621: Test TIME casting.
+    // SPARK-52621: Test TIME casting - simple types.
     checkCast(parseJson("0"), TimeType(), 0L) // 00:00:00
     checkCast(parseJson("3723000000000"), TimeType(), 3723000000000L) // 01:02:03
+    // SPARK-52621: Test TIME casting - complex types.
+    checkCast(parseJson("[0, 3723000000000, 43200000000]"), ArrayType(TimeType()),
+      Array(0L, 3723000000000L, 43200000000L))
 
     checkInvalidCast(parseJson("2147483648"), IntegerType, null)
     checkInvalidCast(parseJson("[2147483648, 1]"), ArrayType(IntegerType), Array(null, 1))
@@ -935,9 +1014,12 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       check(Literal(0L, TimestampNTZType), "\"1970-01-01 00:00:00\"")
     }
 
-    // SPARK-52621: TimeType is stored as nanoseconds since midnight, in Long format.
+    // SPARK-52621: TimeType - simple types.
     check(Literal(0L, TimeType()), "0") // 00:00:00
     check(Literal(3723000000000L, TimeType()), "3723000000000") // 01:02:03
+    // SPARK-52621: TimeType - complex types.
+    val timeArray = Array(0L, 3723000000000L, 43200000000L)
+    check(Literal.create(timeArray, ArrayType(TimeType())), "[0,3723000000000,43200000000]")
 
     check(Array(null, "a", "b", "c"), """[null,"a","b","c"]""")
     check(Array(parseJson("""{"a": 1,"b": [1, 2, 3]}"""),
