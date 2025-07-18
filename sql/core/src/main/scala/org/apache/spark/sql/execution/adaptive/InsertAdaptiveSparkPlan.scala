@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningSubquery, ListQuery, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -58,11 +57,16 @@ case class InsertAdaptiveSparkPlan(
           // Plan sub-queries recursively and pass in the shared stage cache for exchange reuse.
           // Fall back to non-AQE mode if AQE is not supported in any of the sub-queries.
           val subqueryMap = buildSubqueryMap(plan)
-          val planSubqueriesRule = PlanAdaptiveSubqueries(subqueryMap)
+          val planSubqueriesRule = PlanAdaptiveSubqueries(adaptiveExecutionContext, subqueryMap)
+
+          val processingRules = Seq(
+            planSubqueriesRule)
+
           val preprocessingRules = Seq(
+            PlanPreDynamicPruningFilters(adaptiveExecutionContext.session),
             planSubqueriesRule)
           // Run pre-processing rules.
-          val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(plan, preprocessingRules)
+          val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(plan, processingRules)
           logDebug(s"Adaptive execution enabled for plan: $plan")
           AdaptiveSparkPlanExec(newPlan, adaptiveExecutionContext, preprocessingRules, isSubquery)
         } catch {
