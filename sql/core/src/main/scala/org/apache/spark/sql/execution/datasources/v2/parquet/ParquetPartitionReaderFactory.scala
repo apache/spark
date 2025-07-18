@@ -359,18 +359,18 @@ private class ParquetReaderCallback extends Serializable {
 
   def initIfNotAlready(taskContext: TaskContext): Unit = {
     if (!init) {
-      taskContext.addTaskCompletionListener[Unit](_ => execute())
+      taskContext.addTaskCompletionListener[Unit](_ => closeCurrent())
       init = true
     }
   }
 
   def advanceFile(iter: RecordReaderIterator[_]): Unit = {
-    execute()
+    closeCurrent()
 
     this.iter = iter
   }
 
-  def execute(): Unit = {
+  def closeCurrent(): Unit = {
     if (iter != null) {
       iter.close()
     }
