@@ -68,9 +68,10 @@ def handle_pipeline_events(iter: Iterator[Dict[str, Any]]) -> None:
 def start_run(
     spark: SparkSession,
     dataflow_graph_id: str,
-    full_refresh: Optional[Sequence[str]] = None,
-    full_refresh_all: bool = False,
-    refresh: Optional[Sequence[str]] = None,
+    full_refresh: Optional[Sequence[str]],
+    full_refresh_all: bool,
+    refresh: Optional[Sequence[str]],
+    dry: bool,
 ) -> Iterator[Dict[str, Any]]:
     """Start a run of the dataflow graph in the Spark Connect server.
 
@@ -84,6 +85,7 @@ def start_run(
         full_refresh_selection=full_refresh or [],
         full_refresh_all=full_refresh_all,
         refresh_selection=refresh or [],
+        dry=dry,
     )
     command = pb2.Command()
     command.pipeline_command.start_run.CopyFrom(inner_command)
