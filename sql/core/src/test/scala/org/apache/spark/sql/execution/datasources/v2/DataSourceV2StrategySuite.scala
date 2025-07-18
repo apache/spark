@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
@@ -628,8 +628,6 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
   test("round trip conversion of predicate expressions") {
     val intCol = $"cint".int
     val intColRef = FieldReference("cint")
-    val boolCol = $"abool".boolean
-    val boolColRef = FieldReference("abool")
     checkRoundTripConversion(
       catalystExpr = IsNull($"a".boolean),
       v2Expr = new Predicate("IS_NULL", Array(FieldReference("a"))))
@@ -716,6 +714,61 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
         LiteralValue(1, IntegerType),
         LiteralValue(2, IntegerType),
         LiteralValue(3, IntegerType))))
+  }
+
+  test("Constant foldable CASE_WHEN expression") {
+    checkV2Conversion(
+      catalystExpr = CaseWhen(
+        Seq(
+          (EqualTo(Literal(1), Literal(2)), Literal("a")),
+          (EqualTo(Literal(3), Literal(3)), Literal("b"))),
+        None),
+      v2Expr = LiteralValue(UTF8String.fromString("b"), StringType)
+    )
+
+    checkV2Conversion(
+      catalystExpr = CaseWhen(
+        Seq((EqualTo(Literal(1), Literal(1)), Literal("yes"))),
+        Some(Literal("no"))),
+      v2Expr = LiteralValue(UTF8String.fromString("yes"), StringType)
+    )
+  }
+
+  test("Constant foldable math functions") {
+    checkV2Conversion(
+      catalystExpr = Log10(Literal(100.0)),
+      v2Expr = LiteralValue(2.0, DoubleType)
+    )
+
+    checkV2Conversion(
+      catalystExpr = Abs(Literal(-5), failOnError = true),
+      v2Expr = LiteralValue(5, IntegerType)
+    )
+
+    checkV2Conversion(
+      catalystExpr = UnaryMinus(Literal(5), failOnError = true),
+      v2Expr = LiteralValue(-5, IntegerType)
+    )
+
+    checkV2Conversion(
+      catalystExpr = Log2(Literal(8.0)),
+      v2Expr = LiteralValue(3.0, DoubleType)
+    )
+
+    checkV2Conversion(
+      catalystExpr = Sqrt(Literal(4.0)),
+      v2Expr = LiteralValue(2.0, DoubleType)
+    )
+
+    checkV2Conversion(
+      catalystExpr = Floor(Literal(3.7)),
+      v2Expr = LiteralValue(3L, LongType)
+    )
+
+    checkV2Conversion(
+      catalystExpr = Ceil(Literal(3.1)),
+      v2Expr = LiteralValue(4L, LongType)
+    )
   }
 
   /**
