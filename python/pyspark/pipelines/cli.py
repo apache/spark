@@ -222,6 +222,7 @@ def run(
     full_refresh: Sequence[str],
     full_refresh_all: bool,
     refresh: Sequence[str],
+    dry: bool,
 ) -> None:
     """Run the pipeline defined with the given spec.
 
@@ -276,6 +277,7 @@ def run(
         full_refresh=full_refresh,
         full_refresh_all=full_refresh_all,
         refresh=refresh,
+        dry=dry,
     )
     try:
         handle_pipeline_events(result_iter)
@@ -317,6 +319,13 @@ if __name__ == "__main__":
         default=[],
     )
 
+    # "dry-run" subcommand
+    dry_run_parser = subparsers.add_parser(
+        "dry-run",
+        help="Launch a run that just validates the graph and checks for errors.",
+    )
+    dry_run_parser.add_argument("--spec", help="Path to the pipeline spec.")
+
     # "init" subcommand
     init_parser = subparsers.add_parser(
         "init",
@@ -330,9 +339,9 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    assert args.command in ["run", "init"]
+    assert args.command in ["run", "dry-run", "init"]
 
-    if args.command == "run":
+    if args.command in ["run", "dry-run"]:
         if args.spec is not None:
             spec_path = Path(args.spec)
             if not spec_path.is_file():
@@ -343,11 +352,22 @@ if __name__ == "__main__":
         else:
             spec_path = find_pipeline_spec(Path.cwd())
 
-        run(
-            spec_path=spec_path,
-            full_refresh=args.full_refresh,
-            full_refresh_all=args.full_refresh_all,
-            refresh=args.refresh,
-        )
+        if args.command == "run":
+            run(
+                spec_path=spec_path,
+                full_refresh=args.full_refresh,
+                full_refresh_all=args.full_refresh_all,
+                refresh=args.refresh,
+                dry=args.command == "dry-run",
+            )
+        else:
+            assert args.command == "dry-run"
+            run(
+                spec_path=spec_path,
+                full_refresh=[],
+                full_refresh_all=False,
+                refresh=[],
+                dry=True,
+            )
     elif args.command == "init":
         init(args.name)

@@ -29,12 +29,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.commons.lang3.SystemUtils;
-
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
+import org.apache.spark.util.SparkSystemUtils$;
 
 /**
  * General utilities available in the network package. Many of these are sourced from Spark's
@@ -110,8 +109,9 @@ public class JavaUtils {
     // On Unix systems, use operating system command to run faster
     // If that does not work out, fallback to the Java IO way
     // We exclude Apple Silicon test environment due to the limited resource issues.
-    if (SystemUtils.IS_OS_UNIX && filter == null && !(SystemUtils.IS_OS_MAC_OSX &&
-        (System.getenv("SPARK_TESTING") != null || System.getProperty("spark.testing") != null))) {
+    if (SparkSystemUtils$.MODULE$.isUnix() && filter == null &&
+        !(SparkSystemUtils$.MODULE$.isMac() && (System.getenv("SPARK_TESTING") != null ||
+        System.getProperty("spark.testing") != null))) {
       try {
         deleteRecursivelyUsingUnixNative(file);
         return;

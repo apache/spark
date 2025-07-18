@@ -148,6 +148,17 @@ class UtilTests(PySparkTestCase):
         with self.assertRaisesRegex(ValueError, "invalid format"):
             _parse_memory("2gs")
 
+    @eventually(timeout=180, catch_timeout=True)
+    @timeout(timeout=1)
+    def test_retry_timeout_test(self):
+        import random
+
+        if random.random() < 0.5:
+            print("hanging for 1 hour")
+            time.sleep(3600)  # Simulate a long-running operation
+        else:
+            print("succeeding immediately")
+
 
 class HandleWorkerExceptionTests(unittest.TestCase):
     exception_bytes = b"ValueError: test_message"

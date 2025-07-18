@@ -1717,6 +1717,24 @@ class RocksDBFileMapping {
     }.getOrElse(None)
   }
 
+  /**
+   * Remove all local file mappings that are incompatible with the current version we are
+   * trying to load.
+   *
+   * @return seq of purged mappings
+   */
+  def purgeIncompatibleMappingsForLoad(versionToLoad: Long):
+  Seq[(String, (Long, RocksDBImmutableFile))] = {
+    val filesToRemove = localFileMappings.filter {
+      case (_, (dfsFileMappedVersion, _)) =>
+        dfsFileMappedVersion >= versionToLoad
+    }.toSeq
+    filesToRemove.foreach { case (localFileName, _) =>
+      remove(localFileName)
+    }
+    filesToRemove
+  }
+
   def mapToDfsFile(
       localFileName: String,
       dfsFile: RocksDBImmutableFile,

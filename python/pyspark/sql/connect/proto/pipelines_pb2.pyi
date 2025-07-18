@@ -533,6 +533,7 @@ class PipelineCommand(google.protobuf.message.Message):
         FULL_REFRESH_SELECTION_FIELD_NUMBER: builtins.int
         FULL_REFRESH_ALL_FIELD_NUMBER: builtins.int
         REFRESH_SELECTION_FIELD_NUMBER: builtins.int
+        DRY_FIELD_NUMBER: builtins.int
         dataflow_graph_id: builtins.str
         """The graph to start."""
         @property
@@ -547,6 +548,10 @@ class PipelineCommand(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """List of dataset to update."""
+        dry: builtins.bool
+        """If true, the run will not actually execute any flows, but will only validate the graph and
+        check for any errors. This is useful for testing and validation purposes.
+        """
         def __init__(
             self,
             *,
@@ -554,16 +559,21 @@ class PipelineCommand(google.protobuf.message.Message):
             full_refresh_selection: collections.abc.Iterable[builtins.str] | None = ...,
             full_refresh_all: builtins.bool | None = ...,
             refresh_selection: collections.abc.Iterable[builtins.str] | None = ...,
+            dry: builtins.bool | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
                 "_dataflow_graph_id",
                 b"_dataflow_graph_id",
+                "_dry",
+                b"_dry",
                 "_full_refresh_all",
                 b"_full_refresh_all",
                 "dataflow_graph_id",
                 b"dataflow_graph_id",
+                "dry",
+                b"dry",
                 "full_refresh_all",
                 b"full_refresh_all",
             ],
@@ -573,10 +583,14 @@ class PipelineCommand(google.protobuf.message.Message):
             field_name: typing_extensions.Literal[
                 "_dataflow_graph_id",
                 b"_dataflow_graph_id",
+                "_dry",
+                b"_dry",
                 "_full_refresh_all",
                 b"_full_refresh_all",
                 "dataflow_graph_id",
                 b"dataflow_graph_id",
+                "dry",
+                b"dry",
                 "full_refresh_all",
                 b"full_refresh_all",
                 "full_refresh_selection",
@@ -590,6 +604,10 @@ class PipelineCommand(google.protobuf.message.Message):
             self,
             oneof_group: typing_extensions.Literal["_dataflow_graph_id", b"_dataflow_graph_id"],
         ) -> typing_extensions.Literal["dataflow_graph_id"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_dry", b"_dry"]
+        ) -> typing_extensions.Literal["dry"] | None: ...
         @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_full_refresh_all", b"_full_refresh_all"]
