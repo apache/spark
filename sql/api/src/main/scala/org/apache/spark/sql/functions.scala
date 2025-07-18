@@ -8345,6 +8345,29 @@ object functions {
     Column.fn("make_timestamp", years, months, days, hours, mins, secs)
 
   /**
+   * Create timestamp from date and time fields. The result data type is consistent with the value
+   * of configuration `spark.sql.timestampType`. If the configuration `spark.sql.ansi.enabled` is
+   * false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def make_timestamp(date: Column, time: Column): Column =
+    Column.fn("make_timestamp", date, time)
+
+  /**
+   * Create timestamp from date, time and timezone fields. The result data type is consistent with
+   * the value of configuration `spark.sql.timestampType`. If the configuration
+   * `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it
+   * will throw an error instead.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def make_timestamp(date: Column, time: Column, timezone: Column): Column =
+    Column.fn("make_timestamp", date, time, timezone)
+
+  /**
    * Try to create a timestamp from years, months, days, hours, mins, secs and timezone fields.
    * The result data type is consistent with the value of configuration `spark.sql.timestampType`.
    * The function returns NULL on invalid inputs.

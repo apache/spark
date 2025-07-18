@@ -1338,6 +1338,43 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(result3, result4)
   }
 
+  test("SPARK-51415: make_timestamp with date and time") {
+    // Test date + time overload: make_timestamp(date, time).
+    val dateTimeDF = Seq(
+      (
+        "2014-12-28",
+        "06:30:45"
+      )
+    ).toDF("date", "time")
+
+    val result1 = dateTimeDF.selectExpr(
+      "make_timestamp(CAST(date AS DATE), CAST(time AS TIME))"
+    )
+    val result2 = dateTimeDF.select(
+      make_timestamp(col("date").cast("date"), col("time").cast("time"))
+    )
+    checkAnswer(result1, result2)
+  }
+
+  test("SPARK-51415: make_timestamp with date, time, and timezone") {
+    // Test date + time + timezone overload: make_timestamp(date, time, timezone).
+    val dateTimeTimezoneDF = Seq(
+      (
+        "2014-12-28",
+        "06:30:45",
+        "CET"
+      )
+    ).toDF("date", "time", "timezone")
+
+    val result1 = dateTimeTimezoneDF.selectExpr(
+      "make_timestamp(CAST(date AS DATE), CAST(time AS TIME), timezone)"
+    )
+    val result2 = dateTimeTimezoneDF.select(
+      make_timestamp(col("date").cast("date"), col("time").cast("time"), col("timezone"))
+    )
+    checkAnswer(result1, result2)
+  }
+
   test("make_timestamp_ltz") {
     val df = Seq((100, 11, 1, 12, 30, 01.001001, "UTC")).
       toDF("year", "month", "day", "hour", "min", "sec", "timezone")

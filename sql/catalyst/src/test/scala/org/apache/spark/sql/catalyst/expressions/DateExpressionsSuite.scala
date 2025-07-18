@@ -2142,14 +2142,127 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("make timestamp_ntz from date and time") {
-    def dateLit(d: String): Expression = Literal(LocalDate.parse(d))
-    def timeLit(t: String): Expression = Literal(LocalTime.parse(t))
-    def tsNtz(s: String): Long = localDateTimeToMicros(LocalDateTime.parse(s), UTC)
+  /**
+   * Helper method to create a DATE literal from a string in date format.
+   */
+  private def dateLit(date: String): Expression = Literal(LocalDate.parse(date))
 
+  /**
+   * Helper method to create a TIME literal from a string in time format.
+   */
+  private def timeLit(time: String): Expression = Literal(LocalTime.parse(time))
+
+  /**
+   * Helper method to get the microseconds from a timestamp represented as a string.
+   */
+  private def timestampToMicros(timestamp: String, zoneId: ZoneId): Long = {
+    localDateTimeToMicros(LocalDateTime.parse(timestamp), zoneId)
+  }
+
+  test("SPARK-51415: make timestamp from date and time") {
+    // Test with valid date and time.
+    checkEvaluation(
+      MakeTimestampFromDateTime(dateLit("2023-10-01"), timeLit("12:34:56.123456")),
+      timestampToMicros("2023-10-01T12:34:56.123456", UTC)
+    )
+
+    // Test with null date.
+    checkEvaluation(
+      MakeTimestampFromDateTime(Literal(null, DateType), timeLit("12:34:56.123456")),
+      null
+    )
+
+    // Test with null time.
+    checkEvaluation(
+      MakeTimestampFromDateTime(dateLit("2023-10-01"), Literal(null, TimeType())),
+      null
+    )
+
+    // Test with both date and time as null.
+    checkEvaluation(
+      MakeTimestampFromDateTime(Literal(null, DateType), Literal(null, TimeType())),
+      null
+    )
+  }
+
+  test("SPARK-51415: make timestamp from date, time, and timezone") {
+    // Test with valid date, time, and timezone.
+    checkEvaluation(
+      MakeTimestampFromDateTime(
+        dateLit("2023-10-01"),
+        timeLit("12:34:56.123456"),
+        Some(Literal("-09:30"))
+      ),
+      timestampToMicros("2023-10-01T12:34:56.123456", MIT)
+    )
+    checkEvaluation(
+      MakeTimestampFromDateTime(
+        dateLit("2023-10-01"),
+        timeLit("12:34:56.123456"),
+        Some(Literal("-08:00"))
+      ),
+      timestampToMicros("2023-10-01T12:34:56.123456", PST)
+    )
+    checkEvaluation(
+      MakeTimestampFromDateTime(
+        dateLit("2023-10-01"),
+        timeLit("12:34:56.123456"),
+        Some(Literal("+00:00"))
+      ),
+      timestampToMicros("2023-10-01T12:34:56.123456", UTC)
+    )
+    checkEvaluation(
+      MakeTimestampFromDateTime(
+        dateLit("2023-10-01"),
+        timeLit("12:34:56.123456"),
+        Some(Literal("+01:00"))
+      ),
+      timestampToMicros("2023-10-01T12:34:56.123456", CET)
+    )
+    checkEvaluation(
+      MakeTimestampFromDateTime(
+        dateLit("2023-10-01"),
+        timeLit("12:34:56.123456"),
+        Some(Literal("+09:00"))
+      ),
+      timestampToMicros("2023-10-01T12:34:56.123456", JST)
+    )
+
+    // Test with null date.
+    checkEvaluation(
+      MakeTimestampFromDateTime(
+        Literal(null, DateType),
+        timeLit("12:34:56.123456"),
+        Some(Literal("+00:00"))
+      ),
+      null
+    )
+
+    // Test with null time.
+    checkEvaluation(
+      MakeTimestampFromDateTime(
+        dateLit("2023-10-01"),
+        Literal(null, TimeType()),
+        Some(Literal("+00:00"))
+      ),
+      null
+    )
+
+    // Test with both date and time as null.
+    checkEvaluation(
+      MakeTimestampFromDateTime(
+        Literal(null, DateType),
+        Literal(null, TimeType()),
+        Some(Literal("+00:00"))
+      ),
+      null
+    )
+  }
+
+  test("make timestamp_ntz from date and time") {
     checkEvaluation(MakeTimestampNTZ(dateLit("1970-01-01"), timeLit("00:00:00")), 0L)
     checkEvaluation(MakeTimestampNTZ(dateLit("2025-06-20"), timeLit("15:20:30.123456")),
-      tsNtz("2025-06-20T15:20:30.123456"))
+      timestampToMicros("2025-06-20T15:20:30.123456", UTC))
     checkEvaluation(MakeTimestampNTZ(Literal(null, DateType), timeLit("15:20:30.123456")),
       null)
     checkEvaluation(MakeTimestampNTZ(dateLit("2025-06-20"), Literal(null, TimeType())),
