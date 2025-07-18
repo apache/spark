@@ -259,6 +259,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val CORRELATE_OUTER_REFERENCES_TO_EXPOSED_OUTER_ATTRIBUTES =
+    buildConf("spark.sql.analyzer.correlateOuterReferencesToExposedOuterAttributes")
+    .internal()
+    .version("4.1.0")
+    .doc(
+      "When true, attributes in outer references must have same expression IDs as outer " +
+      "attributes exposed by subquery expression."
+    )
+    .booleanConf
+    .createWithDefault(true)
+
   val BLOCK_CREATE_TEMP_TABLE_USING_PROVIDER =
     buildConf("spark.sql.legacy.blockCreateTempTableUsingProvider")
       .doc("If enabled, we fail legacy CREATE TEMPORARY TABLE ... USING provider during parsing.")

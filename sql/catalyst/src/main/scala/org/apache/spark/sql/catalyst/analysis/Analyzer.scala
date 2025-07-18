@@ -4184,15 +4184,29 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
 
   private def updateOuterReferenceInSubquery(
       plan: LogicalPlan,
-      refExprs: Seq[Expression]): LogicalPlan = {
+      outerAliases: Seq[Expression],
+      targetOuterAttributes: Seq[Expression]): LogicalPlan = {
+    val targetOuterAttributesExprIdLookup = new util.HashSet[ExprId](targetOuterAttributes.size)
+    targetOuterAttributes.foreach {
+      case namedExpression: NamedExpression =>
+        targetOuterAttributesExprIdLookup.add(namedExpression.exprId)
+      case _ =>
+    }
+    val mustMatchOuterAttributeExprIds =
+      conf.getConf(SQLConf.CORRELATE_OUTER_REFERENCES_TO_EXPOSED_OUTER_ATTRIBUTES)
+
     plan resolveExpressions {
       case e if e.containsPattern(OUTER_REFERENCE) =>
-        val outerAlias =
-          refExprs.find(stripAlias(_).semanticEquals(stripOuterReference(e)))
-        outerAlias match {
-          case Some(a: Alias) => OuterReference(a.toAttribute)
-          case _ => e
-        }
+        outerAliases
+          .collectFirst {
+            case alias: Alias
+              if stripAlias(alias).semanticEquals(stripOuterReference(e)) && (
+                !mustMatchOuterAttributeExprIds
+                  || targetOuterAttributesExprIdLookup.contains(alias.exprId)
+                ) =>
+              OuterReference(alias.toAttribute)
+          }
+          .getOrElse(e)
     }
   }
 
@@ -4205,7 +4219,12 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
             // Collect the aliases from output of aggregate.
             val outerAliases = a.aggregateExpressions collect { case a: Alias => a }
             // Update the subquery plan to record the OuterReference to point to outer query plan.
-            s.withNewPlan(updateOuterReferenceInSubquery(s.plan, outerAliases))
+            val newPlan = updateOuterReferenceInSubquery(
+              plan = s.plan,
+              outerAliases = outerAliases,
+              targetOuterAttributes = s.getOuterAttrs
+            )
+            s.withNewPlan(newPlan)
       }
     }
   }
