@@ -2176,7 +2176,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       MakeTimestampFromDateTime(dateLit("2023-10-01"), Literal(null, TimeType())),
       null
     )
-    // Test with both date and time as null.
+    // Test with null date and null time.
     checkEvaluation(
       MakeTimestampFromDateTime(Literal(null, DateType), Literal(null, TimeType())),
       null
@@ -2253,7 +2253,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ),
       null
     )
-    // Test with both date and time as null.
+    // Test with null date and null time.
     checkEvaluation(
       MakeTimestampFromDateTime(
         Literal(null, DateType),

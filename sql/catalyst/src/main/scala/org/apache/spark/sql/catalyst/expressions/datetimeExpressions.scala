@@ -3099,9 +3099,9 @@ case class TryMakeTimestamp(
   examples = """
     Examples:
       > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887');
-       2014-12-28 06:30:45.887
+       2014-12-27 22:30:45.887
       > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887', 'CET');
-       2014-12-28 06:30:45.887
+       2014-12-27 21:30:45.887
   """,
   group = "datetime_funcs",
   since = "4.1.0")
@@ -3122,24 +3122,16 @@ case class MakeTimestampFromDateTime(
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, AnyTimeType) ++
     timezone.map(_ => StringTypeWithCollation(supportsTrimCollation = true))
 
-  override def replacement: Expression = timezone match {
-    case Some(tz) =>
-      StaticInvoke(
-        classOf[DateTimeUtils.type],
-        TimestampType,
-        "makeTimestamp",
-        Seq(date, time, tz),
-        Seq(date.dataType, time.dataType, tz.dataType),
-        returnNullable = children.exists(_.nullable))
-    case None =>
-      val defaultZoneIdExpr = Literal("+00:00")
-      StaticInvoke(
-        classOf[DateTimeUtils.type],
-        TimestampType,
-        "makeTimestamp",
-        Seq(date, time, defaultZoneIdExpr),
-        Seq(date.dataType, time.dataType, defaultZoneIdExpr.dataType),
-        returnNullable = children.exists(_.nullable))
+  override def replacement: Expression = {
+    // If timezone is not provided, we use UTC, i.e. +00:00.
+    val zoneIdExpr = timezone.getOrElse(Literal("+00:00"))
+    StaticInvoke(
+      classOf[DateTimeUtils.type],
+      TimestampType,
+      "makeTimestamp",
+      Seq(date, time, zoneIdExpr),
+      Seq(date.dataType, time.dataType, zoneIdExpr.dataType),
+      returnNullable = children.exists(_.nullable))
   }
 
   override def prettyName: String = "make_timestamp"
@@ -3184,9 +3176,9 @@ case class MakeTimestampFromDateTime(
       > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887, 'CET');
        2014-12-27 21:30:45.887
       > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887');
-       2014-12-28 06:30:45.887
-      > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887', 'CET');
        2014-12-27 22:30:45.887
+      > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887', 'CET');
+       2014-12-27 21:30:45.887
   """,
   group = "datetime_funcs",
   since = "4.1.0")
@@ -3195,19 +3187,30 @@ object MakeTimestampExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (numArgs == 2) {
-      MakeTimestampFromDateTime(expressions(0), expressions(1))
-    } else if (numArgs == 3 && expressions(0).dataType == DateType) {
-      // This is date, time, timezone
-      MakeTimestampFromDateTime(expressions(0), expressions(1), Some(expressions(2)))
+      // date, time
+      MakeTimestampFromDateTime(
+        expressions(0),
+        expressions(1)
+      )
+    } else if (numArgs == 3) {
+      // date, time, timezone
+      MakeTimestampFromDateTime(
+        expressions(0),
+        expressions(1),
+        Some(expressions(2))
+      )
     } else if (numArgs == 6) {
+      // year, month, day, hour, min, sec
       MakeTimestamp(
         expressions(0),
         expressions(1),
         expressions(2),
         expressions(3),
         expressions(4),
-        expressions(5))
+        expressions(5)
+      )
     } else if (numArgs == 7) {
+      // year, month, day, hour, min, sec, timezone
       MakeTimestamp(
         expressions(0),
         expressions(1),
