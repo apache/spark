@@ -718,18 +718,22 @@ trait SparkDateTimeUtils {
   def stringToTime(s: UTF8String): Option[Long] = {
     try {
       // Check for the AM/PM suffix.
-      val trimmedString = s.toString.trim
-      val strLength = trimmedString.length
-      val suffix = trimmedString.substring(strLength - 2, strLength).toUpperCase()
-      val (isAM, isPM) = (suffix.equals("AM"), suffix.equals("PM"))
+      val trimmed = s.trimRight
+      val numChars = trimmed.numChars()
+      var (isAM, isPM) = (false, false)
+      val (lc, slc) = (trimmed.getChar(numChars - 1), trimmed.getChar(numChars - 2))
+      if (numChars > 2 && lc == 'M' || lc == 'm') {
+        isAM = slc == 'A' || slc == 'a'
+        isPM = slc == 'P' || slc == 'p'
+      }
       val hasSuffix = isAM || isPM
       val timeString = if (hasSuffix) {
-        trimmedString.substring(0, strLength - 2).trim
+        trimmed.substring(0, numChars - 2)
       } else {
-        trimmedString
+        trimmed
       }
 
-      val (segments, zoneIdOpt, justTime) = parseTimestampString(UTF8String.fromString(timeString))
+      val (segments, zoneIdOpt, justTime) = parseTimestampString(timeString)
 
       // If the input string can't be parsed as a time, or it contains not only
       // the time part or has time zone information, return None.

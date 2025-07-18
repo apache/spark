@@ -1156,6 +1156,13 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkStringToTime("1:2:3.0", Some(localTime(hour = 1, minute = 2, sec = 3)))
     checkStringToTime("T1:02:3.04", Some(localTime(hour = 1, minute = 2, sec = 3, micros = 40000)))
 
+    checkStringToTime("00:00 ", Some(localTime()))
+    checkStringToTime(" 00:00", Some(localTime()))
+    checkStringToTime(" 00:00 ", Some(localTime()))
+    checkStringToTime("1:2:3.0 ", Some(localTime(hour = 1, minute = 2, sec = 3)))
+    checkStringToTime(" 1:2:3.0", Some(localTime(hour = 1, minute = 2, sec = 3)))
+    checkStringToTime(" 1:2:3.0 ", Some(localTime(hour = 1, minute = 2, sec = 3)))
+
     // Invalid 24-hour format tests (out of range).
     Seq("24:00:00", "25:00:00", "-1:00:00", "23:60:00", "23:00:60", "99:99:99").foreach {
       invalidTime =>
@@ -1211,8 +1218,10 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkStringToTime("9:15:20PM", Some(localTime(hour = 21, minute = 15, sec = 20)))
 
     // Test case insensitive.
+    checkStringToTime("10:30:00Am ", Some(localTime(hour = 10, minute = 30, sec = 0)))
     checkStringToTime("10:30:00 am", Some(localTime(hour = 10, minute = 30, sec = 0)))
-    checkStringToTime("2:45:30 pm", Some(localTime(hour = 14, minute = 45, sec = 30)))
+    checkStringToTime("2:45:30 Pm", Some(localTime(hour = 14, minute = 45, sec = 30)))
+    checkStringToTime("2:45:30pm ", Some(localTime(hour = 14, minute = 45, sec = 30)))
     checkStringToTime("7:00:00aM", Some(localTime(hour = 7, minute = 0, sec = 0)))
     checkStringToTime("8:00:00Pm", Some(localTime(hour = 20, minute = 0, sec = 0)))
 
