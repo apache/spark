@@ -109,6 +109,7 @@ object VariantExpressionEvalUtils {
       case DateType => builder.appendDate(input.asInstanceOf[Int])
       case TimestampType => builder.appendTimestamp(input.asInstanceOf[Long])
       case TimestampNTZType => builder.appendTimestampNtz(input.asInstanceOf[Long])
+      case _: TimeType => builder.appendLong(input.asInstanceOf[Long])
       case VariantType =>
         val v = input.asInstanceOf[VariantVal]
         builder.appendVariant(new Variant(v.getValue, v.getMetadata))

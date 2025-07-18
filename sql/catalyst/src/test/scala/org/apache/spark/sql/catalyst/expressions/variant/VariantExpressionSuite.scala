@@ -716,6 +716,20 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(parseJson("null"), StringType, null)
     checkCast(parseJson("\"1\""), IntegerType, 1)
 
+    // SPARK-52621: Test TIME casting.
+    checkCast(parseJson("0"), TimeType(), 0L) // 00:00:00
+    checkCast(parseJson("3723000000000"), TimeType(), 3723000000000L) // 01:02:03
+    
+    // Test variant to TIME casting - the key functionality that was missing
+    testVariantGet("0", "$", TimeType(), 0L) // 00:00:00
+    testVariantGet("3723000000000", "$", TimeType(), 3723000000000L) // 01:02:03
+    testVariantGet("43200000000", "$", TimeType(), 43200000000L) // 12:00:00
+    testVariantGet("86399000000", "$", TimeType(), 86399000000L) // 23:59:59
+    
+    // Test TIME with different precisions
+    testVariantGet("0", "$", TimeType(6), 0L) // 00:00:00.000000
+    testVariantGet("3723000000000", "$", TimeType(6), 3723000000000L) // 01:02:03.000000
+
     checkInvalidCast(parseJson("2147483648"), IntegerType, null)
     checkInvalidCast(parseJson("[2147483648, 1]"), ArrayType(IntegerType), Array(null, 1))
 
@@ -919,6 +933,10 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       check(Literal(0L, TimestampType), "\"1969-12-31 16:00:00-08:00\"")
       check(Literal(0L, TimestampNTZType), "\"1970-01-01 00:00:00\"")
     }
+
+    // SPARK-52621: TimeType is stored as nanoseconds since midnight.
+    check(Literal(0L, TimeType()), "0") // 00:00:00
+    check(Literal(3723000000000L, TimeType()), "3723000000000") // 01:02:03
 
     check(Array(null, "a", "b", "c"), """[null,"a","b","c"]""")
     check(Array(parseJson("""{"a": 1,"b": [1, 2, 3]}"""),
