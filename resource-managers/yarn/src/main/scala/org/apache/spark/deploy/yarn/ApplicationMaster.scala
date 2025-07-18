@@ -31,7 +31,6 @@ import scala.util.control.NonFatal
 import org.apache.commons.lang3.{StringUtils => ComStrUtils}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -272,7 +271,7 @@ private[spark] class ApplicationMaster(
         logError("Uncaught exception: ", e)
         finish(FinalApplicationStatus.FAILED,
           ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
-          "Uncaught exception: " + StringUtils.stringifyException(e))
+          "Uncaught exception: " + Utils.stringifyException(e))
     } finally {
       try {
         metricsSystem.foreach { ms =>
@@ -315,7 +314,7 @@ private[spark] class ApplicationMaster(
         logError("Uncaught exception: ", e)
         finish(FinalApplicationStatus.FAILED,
           ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
-          "Uncaught exception: " + StringUtils.stringifyException(e))
+          "Uncaught exception: " + Utils.stringifyException(e))
         if (!unregistered) {
           // It's ok to clean staging dir first because unmanaged AM can't be retried.
           cleanupStagingDir(stagingDir)
@@ -592,7 +591,7 @@ private[spark] class ApplicationMaster(
           if (!NonFatal(e)) {
             finish(FinalApplicationStatus.FAILED,
               ApplicationMaster.EXIT_REPORTER_FAILURE,
-              "Fatal exception: " + StringUtils.stringifyException(e))
+              "Fatal exception: " + Utils.stringifyException(e))
           } else if (failureCount >= reporterMaxFailures) {
             finish(FinalApplicationStatus.FAILED,
               ApplicationMaster.EXIT_REPORTER_FAILURE, "Exception was thrown " +
@@ -758,7 +757,7 @@ private[spark] class ApplicationMaster(
                 logError("User class threw exception: ", cause)
                 finish(FinalApplicationStatus.FAILED,
                   ApplicationMaster.EXIT_EXCEPTION_USER_CLASS,
-                  "User class threw exception: " + StringUtils.stringifyException(cause))
+                  "User class threw exception: " + Utils.stringifyException(cause))
             }
             sparkContextPromise.tryFailure(e.getCause())
         } finally {

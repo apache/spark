@@ -17,28 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.LinkedHashMap
-
-import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 
 /**
- * Pull out nondeterministic expressions in an expression tree and replace them with the
- * corresponding attributes in the `nondeterministicToAttributes` map.
+ * [[CandidatesForResolution]] is used by the [[NameScope]] during multipart name resolution to
+ * prioritize attributes from different types of operator output (main, hidden, metadata).
  */
-object PullOutNondeterministicExpressionInExpressionTree {
-  def apply[ExpressionType <: Expression](
-      expression: ExpressionType,
-      nondeterministicToAttributes: LinkedHashMap[Expression, NamedExpression]): ExpressionType = {
-    expression
-      .transform {
-        case childExpression =>
-          nondeterministicToAttributes.get(childExpression) match {
-            case null =>
-              childExpression
-            case namedExpression =>
-              namedExpression.toAttribute
-          }
-      }
-      .asInstanceOf[ExpressionType]
-  }
-}
+case class CandidatesForResolution(attributes: Seq[Attribute], outputType: OutputType.OutputType)

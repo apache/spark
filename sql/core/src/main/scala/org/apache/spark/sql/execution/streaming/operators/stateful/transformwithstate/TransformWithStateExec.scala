@@ -84,7 +84,7 @@ case class TransformWithStateExec(
     initialState)
   with ObjectProducerExec {
 
-  override def shortName: String = "transformWithStateExec"
+  override def shortName: String = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
 
   // We need to just initialize key and value deserializer once per partition.
   // The deserializers need to be lazily created on the executor since they

@@ -115,6 +115,8 @@ object Cast extends QueryErrorsBase {
     case (_: AnsiIntervalType, _: IntegralType | _: DecimalType) => true
     case (_: IntegralType | _: DecimalType, _: AnsiIntervalType) => true
 
+    case (_: TimeType, _: DecimalType) => true
+
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
 
@@ -230,6 +232,8 @@ object Cast extends QueryErrorsBase {
     case (_: StringType, _: TimeType) => true
     case (TimestampType, DateType) => true
     case (TimestampNTZType, DateType) => true
+
+    case (_: TimeType, _: DecimalType) => true
 
     case (_: StringType, CalendarIntervalType) => true
     case (_: StringType, _: DayTimeIntervalType) => true
@@ -499,6 +503,10 @@ case class Cast(
   override protected def withNewChildInternal(newChild: Expression): Cast = copy(child = newChild)
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CAST)
+
+  override def contextIndependentFoldable: Boolean = {
+    child.contextIndependentFoldable && !Cast.needsTimeZone(child.dataType, dataType)
+  }
 
   def ansiEnabled: Boolean = {
     evalMode == EvalMode.ANSI || (evalMode == EvalMode.TRY && !canUseLegacyCastForTryCast)
@@ -856,14 +864,7 @@ case class Cast(
         }
       })
     case _: TimeType =>
-      buildCast[Long](_, t => {
-        val longValue = timeToLong(t)
-        if (longValue == longValue.toInt) {
-          longValue.toInt
-        } else {
-          errorOrNull(t, from, IntegerType)
-        }
-      })
+      buildCast[Long](_, t => timeToLong(t).toInt)
     case x: NumericType if ansiEnabled =>
       val exactNumeric = PhysicalNumericType.exactNumeric(x)
       b => exactNumeric.toInt(b)
@@ -1043,9 +1044,15 @@ case class Cast(
         b => toPrecision(if (b) Decimal.ONE else Decimal.ZERO, target, getContextOrNull()))
     case DateType =>
       buildCast[Int](_, d => null) // date can't cast to decimal in Hive
-    case TimestampType =>
-      // Note that we lose precision here.
-      buildCast[Long](_, t => changePrecision(Decimal(timestampToDouble(t)), target))
+    case TimestampType => buildCast[Long](_, t => changePrecision(
+        // 19 digits is enough to represent any TIMESTAMP value in Long.
+        // 6 digits of scale is for microseconds precision of TIMESTAMP values.
+        Decimal.apply(t, 19, 6), target))
+    case _: TimeType => buildCast[Long](_, t => changePrecision(
+      // 14 digits is enough to cover the full range of TIME value [0, 24:00) which is
+      // [0, 24 * 60 * 60 * 1000 * 1000 * 1000) = [0, 86400000000000).
+      // 9 digits of scale is for nanoseconds precision of TIME values.
+      Decimal.apply(t, precision = 14, scale = 9), target))
     case dt: DecimalType =>
       b => toPrecision(b.asInstanceOf[Decimal], target, getContextOrNull())
     case t: IntegralType =>
@@ -1504,11 +1511,15 @@ case class Cast(
         // date can't cast to decimal in Hive
         (c, evPrim, evNull) => code"$evNull = true;"
       case TimestampType =>
-        // Note that we lose precision here.
         (c, evPrim, evNull) =>
           code"""
-            Decimal $tmp = Decimal.apply(
-              scala.math.BigDecimal.valueOf(${timestampToDoubleCode(c)}));
+            Decimal $tmp = Decimal.apply($c, 19, 6);
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
+          """
+      case _: TimeType =>
+        (c, evPrim, evNull) =>
+          code"""
+            Decimal $tmp = Decimal.apply($c, 14, 9);
             ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
       case DecimalType() =>
@@ -2027,7 +2038,8 @@ case class Cast(
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType => castTimestampToIntegralTypeCode(ctx, "int", from, IntegerType)
-    case _: TimeType => castTimeToIntegralTypeCode(ctx, "int", from, IntegerType)
+    case _: TimeType =>
+      (c, evPrim, _) => code"$evPrim = (int) ${timeToLongCode(c)};"
     case DecimalType() => castDecimalToIntegralTypeCode("int")
     case LongType if ansiEnabled =>
       castIntegralTypeToIntegralTypeExactCode(ctx, "int", from, IntegerType)
@@ -2300,6 +2312,10 @@ case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: S
   def dataType: DataType = target match {
     case DecimalType => DecimalType.SYSTEM_DEFAULT
     case _ => target.asInstanceOf[DataType]
+  }
+
+  override def contextIndependentFoldable: Boolean = {
+    child.contextIndependentFoldable && !Cast.needsTimeZone(child.dataType, dataType)
   }
 
   override protected def withNewChildInternal(newChild: Expression): UpCast = copy(child = newChild)

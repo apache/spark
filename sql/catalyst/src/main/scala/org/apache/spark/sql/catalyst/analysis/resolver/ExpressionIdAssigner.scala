@@ -326,9 +326,17 @@ class ExpressionIdAssigner {
    * child mappings will have collisions during this merge operation. We need to decide which of
    * the new IDs get the priority for the old ID. This is done based on the IDs that are actually
    * outputted into the multi-child operator. This information is provided with `newOutputIds`.
-   * If the new ID is present in that set, we treat it as a P0 over the IDs that are hidden in the
-   * branch. Also, we iterate over child mappings from right to left, prioritizing IDs from the
-   * left, because that's how operators like [[Union]] propagate IDs upwards.
+   *
+   * The principles:
+   * 1. If the destination ID is present in `newOutputIds`, we treat it as a higher priority over
+   *   the ID that is "hidden" in the logical plan branch.
+   * 2. If both destination IDs are present in `newOutputIds`, we prioritize the identity mapping -
+   *   the new ID which is equal to the old ID, and not the "remapping". This is valid in SQL
+   *   because we are dealing with a fully unresolved plan and the remapping is not needed.
+   *   DataFrame queries that contain a self-join or a self-union and are referencing the same
+   *   attribute from both branches will fail (which is expected).
+   * 3. We iterate over child mappings from right to left, prioritizing IDs from the left, because
+   *   that's how multi-child operators like [[Join]] or [[Union]] propagate IDs upwards.
    *
    * Example 1:
    * {{{
@@ -360,8 +368,19 @@ class ExpressionIdAssigner {
    * df2.join(df1, df2("b") === df1("a"))
    * }}}
    *
-   * This is used by multi child operators like [[Join]] or [[Union]] to propagate mapped
-   * expression IDs upwards.
+   * Example 3:
+   * {{{
+   * -- In this query CTE references a table which is also present in a JOIN. First, CTE definition
+   * -- is analyzed with `t1` inside. Let's say it outputs col1#0. Once we get to a left JOIN child,
+   * -- which is also `t1`, we know that expression IDs in `t1` have to be regenerated to col#1
+   * -- because it's a duplicate relation. After resolving the JOIN, we are left with (#0 -> #0),
+   * -- (#1 -> #1) and (#0 -> #1) mappings. Also, JOIN outputs both #0 and #1. This is an example
+   * -- of principle 2. when identity (#0 -> #0) and (#1 -> #1) mappings have to be prioritized,
+   * -- because (#0 -> #1) is a remapping and not needed in SQL.
+   * SELECT * FROM (
+   *   WITH cte1 AS (SELECT * FROM t1) SELECT t1.col1 FROM t1 JOIN cte1 USING (col1)
+   * );
+   * }}}
    *
    * When `mergeIntoExisting` is true, we merge child mappings into an existing mapping entry
    * instead of creating a new one. This setting is used when resolving [[LateralJoin]]s.
@@ -380,31 +399,24 @@ class ExpressionIdAssigner {
       throw SparkException.internalError("No child mappings to create new current mapping")
     }
 
-    val priorityMapping = new ExpressionIdAssigner.PriorityMapping(newOutputIds.size)
-
-    while (!currentStackEntry.childMappings.isEmpty) {
-      val nextMapping = currentStackEntry.childMappings.pop()
-
-      nextMapping.forEach {
-        case (oldId, remappedId) =>
-          updatePriorityMapping(
-            priorityMapping = priorityMapping,
-            oldId = oldId,
-            remappedId = remappedId,
-            newOutputIds = newOutputIds
-          )
-      }
-    }
-
     val newMapping = if (mergeIntoExisting) {
       currentStackEntry.mapping.get
     } else {
       new ExpressionIdAssigner.Mapping
     }
 
-    priorityMapping.forEach {
-      case (oldId, priority) =>
-        newMapping.put(oldId, priority.pick())
+    while (!currentStackEntry.childMappings.isEmpty) {
+      val nextMapping = currentStackEntry.childMappings.pop()
+
+      nextMapping.forEach {
+        case (oldId, remappedId) =>
+          updateNewMapping(
+            newMapping = newMapping,
+            oldId = oldId,
+            remappedId = remappedId,
+            newOutputIds = newOutputIds
+          )
+      }
     }
 
     setCurrentMapping(newMapping)
@@ -606,27 +618,31 @@ class ExpressionIdAssigner {
   }
 
   /**
-   * Update the priority mapping for the given `oldId` and `remappedId`. If the `remappedId` is
-   * contained in the `newOutputIds`, we treat it as a P0 over the IDs that are not exposed from
-   * the operator branch. Otherwise, we treat it as a P1.
+   * Update `newMapping` with the `oldId -> remappedId` mapping, based on the principles described
+   * in [[createMappingFromChildMappings]]:
+   * 1. If no mapping from `oldId` exists, we create it
+   * 2. If the mapping from `oldId` already exists but is not present in `newOutputIds`, we
+   *   deprioritize old mapping in favor of new one
+   * 3. If the mapping from `oldId` already exists and is present in `newOutputIds` and the new
+   *   mapping is the identity one, we deprioritize old mapping in favor of new one
+   * 4. Otherwise we keep the existing mapping
    */
-  private def updatePriorityMapping(
-      priorityMapping: ExpressionIdAssigner.PriorityMapping,
+  private def updateNewMapping(
+      newMapping: ExpressionIdAssigner.Mapping,
       oldId: ExprId,
       remappedId: ExprId,
       newOutputIds: Set[ExprId]): Unit = {
-    if (newOutputIds.contains(remappedId)) {
-      priorityMapping.merge(
-        oldId,
-        ExpressionIdPriority(p0 = Some(remappedId)),
-        (priority, _) => priority.copy(p0 = Some(remappedId))
-      )
-    } else {
-      priorityMapping.merge(
-        oldId,
-        ExpressionIdPriority(p1 = Some(remappedId)),
-        (priority, _) => priority.copy(p1 = Some(remappedId))
-      )
+    newMapping.get(oldId) match {
+      case null =>
+        newMapping.put(oldId, remappedId)
+
+      case knownRemappedId if !newOutputIds.contains(knownRemappedId) =>
+        newMapping.put(oldId, remappedId)
+
+      case knownRemappedId if newOutputIds.contains(remappedId) && remappedId == oldId =>
+        newMapping.put(oldId, remappedId)
+
+      case _ =>
     }
   }
 }
@@ -640,8 +656,6 @@ object ExpressionIdAssigner {
       childMappings: ArrayDeque[Mapping] = new ArrayDeque[Mapping])
 
   type Stack = ArrayDeque[StackEntry]
-
-  type PriorityMapping = HashMap[ExprId, ExpressionIdPriority]
 
   /**
    * Assert that `outputs` don't have conflicting expression IDs.
@@ -693,18 +707,6 @@ object ExpressionIdAssigner {
 
         hasConflicting
       }
-    }
-  }
-}
-
-/**
- * [[ExpressionIdPriority]] is used by the [[ExpressionIdAssigner]] when merging child mappings
- * of a multi-child operator to determine which new ID gets picked in case of an old ID collision.
- */
-case class ExpressionIdPriority(p0: Option[ExprId] = None, p1: Option[ExprId] = None) {
-  def pick(): ExprId = p0.getOrElse {
-    p1.getOrElse {
-      throw SparkException.internalError("No expression ID to pick")
     }
   }
 }
