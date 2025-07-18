@@ -34,7 +34,7 @@ WholeStageCodegen (12)
                                             InputAdapter
                                               Exchange [cs_order_number] #3
                                                 WholeStageCodegen (3)
-                                                  Project [cs_warehouse_sk,cs_order_number]
+                                                  Project [cs_order_number,cs_warehouse_sk]
                                                     ColumnarToRow
                                                       InputAdapter
                                                         Scan parquet spark_catalog.default.catalog_sales [cs_warehouse_sk,cs_order_number,cs_sold_date_sk]
