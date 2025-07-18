@@ -19,7 +19,8 @@ package org.apache.spark.util;
 
 /**
  * An immutable pair of values. Note that the fields are intentionally designed to be `getLeft` and
- * `getRight` instead of `left` and `right` in order to mitigate the migration burden.
+ * `getRight` instead of `left` and `right` in order to mitigate the migration burden
+ * from `org.apache.commons.lang3.tuple.Pair`.
  */
 public record Pair<L, R>(L getLeft, R getRight) {
   public static <L, R> Pair<L, R> of(L left, R right) {
