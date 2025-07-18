@@ -1275,6 +1275,11 @@ class FunctionsTestsMixin:
         parse_result = df.select(F.to_date(F.col("dateCol"))).first()
         self.assertEqual(datetime.date(2017, 1, 22), parse_result["to_date(dateCol)"])
 
+    def test_try_datetime_functions(self):
+        df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
+        parse_result = df.select(F.try_to_date(F.col("dateCol"))).first()
+        self.assertEqual(datetime.date(2017, 1, 22), parse_result["try_to_date(dateCol)"])
+
     def test_assert_true(self):
         self.check_assert_true(SparkRuntimeException)
 

@@ -11345,6 +11345,62 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
 
 @_try_remote_functions
+def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
+    """This is a special version of `try_to_date` that performs the same operation, but returns a
+    NULL value instead of raising an error if date cannot be created.
+
+    .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        input column of values to convert.
+    format: literal string, optional
+        format to use to convert date values.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        date value as :class:`pyspark.sql.types.DateType` type.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_timestamp`
+    :meth:`pyspark.sql.functions.to_timestamp_ltz`
+    :meth:`pyspark.sql.functions.to_timestamp_ntz`
+    :meth:`pyspark.sql.functions.to_utc_timestamp`
+    :meth:`pyspark.sql.functions.try_to_timestamp`
+    :meth:`pyspark.sql.functions.date_format`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['ts'])
+    >>> df.select('*', sf.try_to_date(df.ts)).show()
+    +-------------------+---------------+
+    |                 ts|try_to_date(ts)|
+    +-------------------+---------------+
+    |1997-02-28 10:30:00|     1997-02-28|
+    +-------------------+---------------+
+
+    >>> df.select('*', sf.try_to_date('ts', 'yyyy-MM-dd HH:mm:ss')).show()
+    +-------------------+------------------------------------+
+    |                 ts|try_to_date(ts, yyyy-MM-dd HH:mm:ss)|
+    +-------------------+------------------------------------+
+    |1997-02-28 10:30:00|                          1997-02-28|
+    +-------------------+------------------------------------+
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    if format is None:
+        return _invoke_function_over_columns("try_to_date", col)
+    else:
+        return _invoke_function("try_to_date", _to_java_column(col), _enum_to_value(format))
+
+
+@_try_remote_functions
 def unix_date(col: "ColumnOrName") -> Column:
     """Returns the number of days since 1970-01-01.
 
