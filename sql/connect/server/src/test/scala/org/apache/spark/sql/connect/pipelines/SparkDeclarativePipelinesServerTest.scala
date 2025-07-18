@@ -30,6 +30,12 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
 
   override def afterEach(): Unit = {
     PipelineTest.cleanupMetastore(spark)
+    SparkConnectService.sessionManager
+      .getIsolatedSessionIfPresent(SessionKey(defaultUserId, defaultSessionId))
+      .foreach(s => {
+        s.removeAllPipelineExecutions()
+        s.dropAllDataflowGraphs()
+      })
     super.afterEach()
   }
 
