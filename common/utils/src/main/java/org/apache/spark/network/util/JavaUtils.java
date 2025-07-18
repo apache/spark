@@ -33,6 +33,7 @@ import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
+import org.apache.spark.util.SparkSystemUtils$;
 
 /**
  * General utilities available in the network package. Many of these are sourced from Spark's
@@ -108,15 +109,7 @@ public class JavaUtils {
     // On Unix systems, use operating system command to run faster
     // If that does not work out, fallback to the Java IO way
     // We exclude Apple Silicon test environment due to the limited resource issues.
-    String osName = System.getProperty("os.name");
-    boolean isMac = osName.regionMatches(true, 0, "Mac OS X", 0, 8);
-    String[] prefixes = {
-        "AIX", "HP-UX", "Irix", "Linux", "Mac OS X", "Solaris", "SunOS", "FreeBSD",
-        "OpenBSD", "NetBSD"
-    };
-    boolean isUnix = Arrays.stream(prefixes)
-        .anyMatch(prefix -> osName.regionMatches(true, 0, prefix, 0, prefix.length()));
-    if (isUnix && filter == null && !(isMac &&
+    if (SparkSystemUtils$.MODULE$.isUnix() && filter == null && !(SparkSystemUtils$.MODULE$.isMac() &&
         (System.getenv("SPARK_TESTING") != null || System.getProperty("spark.testing") != null))) {
       try {
         deleteRecursivelyUsingUnixNative(file);
