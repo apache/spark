@@ -43,6 +43,11 @@ private[spark] trait SparkSystemUtils {
   val isMacOnAppleSilicon = isMac && osArch.equals("aarch64")
 
   /**
+   * Whether the underlying operating system is Linux.
+   */
+  val isLinux = osName.regionMatches(true, 0, "Linux", 0, 5)
+
+  /**
    * Whether the underlying operating system is UNIX.
    */
   val isUnix = Seq("AIX", "HP-UX", "Irix", "Linux", "Mac OS X", "Solaris", "SunOS", "FreeBSD",
