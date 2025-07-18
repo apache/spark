@@ -53,9 +53,13 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
   private def catalogAndNamespace = s"$catalogName.$namespace"
 
-  def qualifyTableName(tableName: String): String = s"$namespace.$tableName"
+  def qualifyTableName(tableName: String): String = {
+    val fullyQualifiedCasedNamespace = jdbcDialect.quoteIdentifier(caseConvert(namespace))
+    val fullyQualifiedCasedTableName = jdbcDialect.quoteIdentifier(caseConvert(tableName))
+    s"$fullyQualifiedCasedNamespace.$fullyQualifiedCasedTableName"
+  }
 
-  def qualifySchemaName(schemaName: String): String = namespace
+  def quoteSchemaName(schemaName: String): String = jdbcDialect.quoteIdentifier(namespace)
 
   private lazy val fullyQualifiedTableName1: String = qualifyTableName(joinTableName1)
 
@@ -100,7 +104,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   def schemaPreparation(): Unit = {
     withConnection {conn =>
       conn
-        .prepareStatement(s"CREATE SCHEMA IF NOT EXISTS ${qualifySchemaName(namespace)}")
+        .prepareStatement(s"CREATE SCHEMA IF NOT EXISTS ${quoteSchemaName(namespace)}")
         .executeUpdate()
     }
   }
