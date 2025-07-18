@@ -44,6 +44,7 @@ from pyspark.sql.pandas.types import (
     to_arrow_type,
     _create_converter_from_pandas,
     _create_converter_to_pandas,
+    _deduplicate_field_names,
 )
 from pyspark.sql.types import (
     DataType,
@@ -316,15 +317,27 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
         """
         Convert UDF data to Arrow with LocalDataToArrowConversion.
         """
+        import pyarrow as pa
 
         coerced_results = self._apply_type_coercion_for_type(udf_results, return_type)
-
-        temp_struct_type = StructType([StructField("result", return_type)])
-        temp_data = [{"result": result} for result in coerced_results]
-        arrow_table = LocalDataToArrowConversion.convert(
-            temp_data, temp_struct_type, self._prefers_large_var_types
+        arrow_type = to_arrow_type(
+            return_type,
+            prefers_large_types=self._prefers_large_var_types
         )
-        return arrow_table.column(0).combine_chunks()
+        converter = LocalDataToArrowConversion._create_converter(
+            return_type, nullable=True, none_on_identity=True
+        )
+
+        pylist = []
+        for result in coerced_results:
+            pylist.append(result if converter is None else converter(result))
+
+        arr = pa.array(pylist, type=arrow_type)
+
+        batch = pa.RecordBatch.from_arrays([arr], ["result"])
+        table = pa.Table.from_batches([batch])
+
+        return table.column(0).combine_chunks()
 
     def _apply_type_coercion_for_type(self, udf_results, return_type):
         if type(return_type) == StringType:
