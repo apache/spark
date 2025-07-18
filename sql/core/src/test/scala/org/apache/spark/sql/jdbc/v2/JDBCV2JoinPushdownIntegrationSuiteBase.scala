@@ -50,12 +50,20 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     .set(s"spark.sql.catalog.$catalogName.pushDownAggregate", "true")
     .set(s"spark.sql.catalog.$catalogName.pushDownLimit", "true")
     .set(s"spark.sql.catalog.$catalogName.pushDownOffset", "true")
+    .set(s"spark.sql.catalog.$catalogName.caseSensitive", "false")
 
-  private def catalogAndNamespace = s"$catalogName.$namespace"
+  private def catalogAndNamespace = s"$catalogName.${caseConvert(namespace)}"
+  private def casedJoinTableName1 = caseConvert(joinTableName1)
+  private def casedJoinTableName2 = caseConvert(joinTableName2)
 
-  def qualifyTableName(tableName: String): String = s"$namespace.$tableName"
+  def qualifyTableName(tableName: String): String = {
+    val fullyQualifiedCasedNamespace = jdbcDialect.quoteIdentifier(caseConvert(namespace))
+    val fullyQualifiedCasedTableName = jdbcDialect.quoteIdentifier(caseConvert(tableName))
+    s"$fullyQualifiedCasedNamespace.$fullyQualifiedCasedTableName"
+  }
 
-  def qualifySchemaName(schemaName: String): String = namespace
+  def quoteSchemaName(schemaName: String): String =
+    jdbcDialect.quoteIdentifier(caseConvert(namespace))
 
   private lazy val fullyQualifiedTableName1: String = qualifyTableName(joinTableName1)
 
@@ -65,7 +73,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     JdbcUtils.getJdbcType(dt, jdbcDialect).databaseTypeDefinition.toUpperCase()
   }
 
-  protected def caseConvert(tableName: String): String = tableName
+  protected def caseConvert(identifier: String): String = identifier
 
   protected def withConnection[T](f: Connection => T): T = {
     val conn = DriverManager.getConnection(url, new Properties())
@@ -100,7 +108,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   def schemaPreparation(): Unit = {
     withConnection {conn =>
       conn
-        .prepareStatement(s"CREATE SCHEMA IF NOT EXISTS ${qualifySchemaName(namespace)}")
+        .prepareStatement(s"CREATE SCHEMA IF NOT EXISTS ${quoteSchemaName(namespace)}")
         .executeUpdate()
     }
   }
@@ -180,8 +188,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     val sqlQuery =
       s"""
          |SELECT * FROM
-         |$catalogAndNamespace.${caseConvert(joinTableName1)} a,
-         |$catalogAndNamespace.${caseConvert(joinTableName1)} b
+         |$catalogAndNamespace.$casedJoinTableName1 a,
+         |$catalogAndNamespace.$casedJoinTableName1 b
          |""".stripMargin
 
     val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
@@ -200,9 +208,9 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   test("Test that multi-way join without condition should not have join pushed down") {
     val sqlQuery = s"""
       |SELECT * FROM
-      |$catalogAndNamespace.${caseConvert(joinTableName1)} a,
-      |$catalogAndNamespace.${caseConvert(joinTableName1)} b,
-      |$catalogAndNamespace.${caseConvert(joinTableName1)} c
+      |$catalogAndNamespace.$casedJoinTableName1 a,
+      |$catalogAndNamespace.$casedJoinTableName1 b,
+      |$catalogAndNamespace.$casedJoinTableName1 c
       |""".stripMargin
 
     val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
@@ -219,8 +227,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
   test("Test self join with condition") {
     val sqlQuery = s"""
-      |SELECT * FROM $catalogAndNamespace.${caseConvert(joinTableName1)} a
-      |JOIN $catalogAndNamespace.${caseConvert(joinTableName1)} b
+      |SELECT * FROM $catalogAndNamespace.$casedJoinTableName1 a
+      |JOIN $catalogAndNamespace.$casedJoinTableName1 b
       |ON a.id = b.id + 1""".stripMargin
 
     val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
@@ -242,9 +250,9 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   test("Test multi-way self join with conditions") {
     val sqlQuery = s"""
       |SELECT * FROM
-      |$catalogAndNamespace.${caseConvert(joinTableName1)} a
-      |JOIN $catalogAndNamespace.${caseConvert(joinTableName1)} b ON b.id = a.id + 1
-      |JOIN $catalogAndNamespace.${caseConvert(joinTableName1)} c ON c.id = b.id - 1
+      |$catalogAndNamespace.$casedJoinTableName1 a
+      |JOIN $catalogAndNamespace.$casedJoinTableName1 b ON b.id = a.id + 1
+      |JOIN $catalogAndNamespace.$casedJoinTableName1 c ON c.id = b.id - 1
       |""".stripMargin
 
     val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
@@ -269,8 +277,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   test("Test self join with column pruning") {
     val sqlQuery = s"""
       |SELECT a.id + 2, b.id, b.amount FROM
-      |$catalogAndNamespace.${caseConvert(joinTableName1)} a
-      |JOIN $catalogAndNamespace.${caseConvert(joinTableName1)} b
+      |$catalogAndNamespace.$casedJoinTableName1 a
+      |JOIN $catalogAndNamespace.$casedJoinTableName1 b
       |ON a.id = b.id + 1
       |""".stripMargin
 
@@ -285,7 +293,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
         Seq(
           StructField("", integerType), // ID
           StructField("", integerType), // NEXT_ID
-          StructField("AMOUNT", decimalType) // AMOUNT
+          StructField(caseConvert("amount"), decimalType) // AMOUNT
         )
       )
       checkPrunedColumnsDataTypeAndNullability(df, expectedSchemaWithoutNames)
@@ -301,8 +309,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   test("Test 2-way join with column pruning - different tables") {
     val sqlQuery = s"""
       |SELECT a.id, b.next_id FROM
-      |$catalogAndNamespace.${caseConvert(joinTableName1)} a
-      |JOIN $catalogAndNamespace.${caseConvert(joinTableName2)} b
+      |$catalogAndNamespace.$casedJoinTableName1 a
+      |JOIN $catalogAndNamespace.$casedJoinTableName2 b
       |ON a.id = b.next_id
       |""".stripMargin
 
@@ -315,8 +323,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
       val expectedSchemaWithoutNames = StructType(
         Seq(
-          StructField("ID", integerType), // ID
-          StructField("NEXT_ID", integerType) // NEXT_ID
+          StructField(caseConvert("id"), integerType), // ID
+          StructField(caseConvert("next_id"), integerType) // NEXT_ID
         )
       )
       checkPrunedColumnsDataTypeAndNullability(df, expectedSchemaWithoutNames)
@@ -326,7 +334,9 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
           s"$catalogAndNamespace.${caseConvert(joinTableName2)}"
       )
       checkPushedInfo(df,
-        "PushedFilters: [ID IS NOT NULL, NEXT_ID IS NOT NULL, ID = NEXT_ID]")
+        s"PushedFilters: [${caseConvert("id")} IS NOT NULL, " +
+          s"${caseConvert("next_id")} IS NOT NULL, " +
+          s"${caseConvert("id")} = ${caseConvert("next_id")}]")
       checkAnswer(df, rows)
     }
   }
@@ -334,9 +344,9 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   test("Test multi-way self join with column pruning") {
     val sqlQuery = s"""
       |SELECT a.id, b.*, c.id, c.amount + a.amount
-      |FROM $catalogAndNamespace.${caseConvert(joinTableName1)} a
-      |JOIN $catalogAndNamespace.${caseConvert(joinTableName1)} b ON b.id = a.id + 1
-      |JOIN $catalogAndNamespace.${caseConvert(joinTableName1)} c ON c.id = b.id - 1
+      |FROM $catalogAndNamespace.$casedJoinTableName1 a
+      |JOIN $catalogAndNamespace.$casedJoinTableName1 b ON b.id = a.id + 1
+      |JOIN $catalogAndNamespace.$casedJoinTableName1 c ON c.id = b.id - 1
       |""".stripMargin
 
     val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
@@ -352,9 +362,9 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
           StructField("", decimalType), // AMOUNT_UUID
           StructField("", integerType), // ID_UUID
           StructField("", decimalType), // AMOUNT_UUID
-          StructField("ADDRESS", stringType), // ADDRESS
-          StructField("ID", integerType), // ID
-          StructField("AMOUNT", decimalType) // AMOUNT
+          StructField(caseConvert("address"), stringType), // ADDRESS
+          StructField(caseConvert("id"), integerType), // ID
+          StructField(caseConvert("amount"), decimalType) // AMOUNT
         )
       )
       checkPrunedColumnsDataTypeAndNullability(df, expectedSchemaWithoutNames)
@@ -370,11 +380,11 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   test("Test aliases not supported in join pushdown") {
     val sqlQuery = s"""
       |SELECT a.id, bc.*
-      |FROM $catalogAndNamespace.${caseConvert(joinTableName1)} a
+      |FROM $catalogAndNamespace.$casedJoinTableName1 a
       |JOIN (
       |  SELECT b.*, c.id AS c_id, c.amount AS c_amount
-      |  FROM $catalogAndNamespace.${caseConvert(joinTableName1)} b
-      |  JOIN $catalogAndNamespace.${caseConvert(joinTableName1)} c ON c.id = b.id - 1
+      |  FROM $catalogAndNamespace.$casedJoinTableName1 b
+      |  JOIN $catalogAndNamespace.$casedJoinTableName1 c ON c.id = b.id - 1
       |) bc ON bc.id = a.id + 1
       |""".stripMargin
 
@@ -391,8 +401,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   }
 
   test("Test join with dataframe with duplicated columns") {
-    val df1 = sql(s"SELECT id FROM $catalogAndNamespace.${caseConvert(joinTableName1)}")
-    val df2 = sql(s"SELECT id, id FROM $catalogAndNamespace.${caseConvert(joinTableName1)}")
+    val df1 = sql(s"SELECT id FROM $catalogAndNamespace.$casedJoinTableName1")
+    val df2 = sql(s"SELECT id, id FROM $catalogAndNamespace.$casedJoinTableName1")
 
     val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
       df1.join(df2, "id").collect().toSeq
@@ -413,8 +423,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   test("Test aggregate on top of 2-way self join") {
     val sqlQuery = s"""
       |SELECT min(a.id + b.id), min(a.id)
-      |FROM $catalogAndNamespace.${caseConvert(joinTableName1)} a
-      |JOIN $catalogAndNamespace.${caseConvert(joinTableName1)} b ON a.id = b.id + 1
+      |FROM $catalogAndNamespace.$casedJoinTableName1 a
+      |JOIN $catalogAndNamespace.$casedJoinTableName1 b ON a.id = b.id + 1
       |""".stripMargin
 
     val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
@@ -438,9 +448,9 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   test("Test aggregate on top of multi-way self join") {
     val sqlQuery = s"""
       |SELECT min(a.id + b.id), min(a.id), min(c.id - 2)
-      |FROM $catalogAndNamespace.${caseConvert(joinTableName1)} a
-      |JOIN $catalogAndNamespace.${caseConvert(joinTableName1)} b ON b.id = a.id + 1
-      |JOIN $catalogAndNamespace.${caseConvert(joinTableName1)} c ON c.id = b.id - 1
+      |FROM $catalogAndNamespace.$casedJoinTableName1 a
+      |JOIN $catalogAndNamespace.$casedJoinTableName1 b ON b.id = a.id + 1
+      |JOIN $catalogAndNamespace.$casedJoinTableName1 c ON c.id = b.id - 1
       |""".stripMargin
 
     val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
@@ -462,8 +472,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   test("Test sort limit on top of join is pushed down") {
     val sqlQuery = s"""
       |SELECT min(a.id + b.id), a.id, b.id
-      |FROM $catalogAndNamespace.${caseConvert(joinTableName1)} a
-      |JOIN $catalogAndNamespace.${caseConvert(joinTableName1)} b ON b.id = a.id + 1
+      |FROM $catalogAndNamespace.$casedJoinTableName1 a
+      |JOIN $catalogAndNamespace.$casedJoinTableName1 b ON b.id = a.id + 1
       |GROUP BY a.id, b.id
       |ORDER BY a.id
       |LIMIT 1
@@ -493,8 +503,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     val sqlQuery =
       s"""
          |SELECT t1.id, t1.address, t2.surname, t1.amount, t2.salary
-         |FROM $catalogAndNamespace.${caseConvert(joinTableName1)} t1
-         |JOIN $catalogAndNamespace.${caseConvert(joinTableName2)} t2 ON t1.id = t2.id
+         |FROM $catalogAndNamespace.$casedJoinTableName1 t1
+         |JOIN $catalogAndNamespace.$casedJoinTableName2 t2 ON t1.id = t2.id
          |WHERE t1.amount > 5000 AND t2.salary > 25000
          |""".stripMargin
 
@@ -518,8 +528,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     val sqlQuery =
       s"""
          |SELECT t1.id, t1.address, t2.surname, t1.amount + t2.salary as total
-         |FROM $catalogAndNamespace.${caseConvert(joinTableName1)} t1
-         |JOIN $catalogAndNamespace.${caseConvert(joinTableName2)} t2
+         |FROM $catalogAndNamespace.$casedJoinTableName1 t1
+         |JOIN $catalogAndNamespace.$casedJoinTableName2 t2
          |ON t1.id = t2.id AND t1.amount > 1000
          |""".stripMargin
 
@@ -542,8 +552,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     val sqlQuery =
       s"""
          |SELECT t1.id, t1.address, t2.surname
-         |FROM $catalogAndNamespace.${caseConvert(joinTableName1)} t1
-         |LEFT JOIN $catalogAndNamespace.${caseConvert(joinTableName2)} t2 ON t1.id = t2.id
+         |FROM $catalogAndNamespace.$casedJoinTableName1 t1
+         |LEFT JOIN $catalogAndNamespace.$casedJoinTableName2 t2 ON t1.id = t2.id
          |""".stripMargin
 
     val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
@@ -561,8 +571,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     val sqlQuery =
       s"""
          |SELECT t1.id, t1.address, t2.surname
-         |FROM $catalogAndNamespace.${caseConvert(joinTableName1)} t1
-         |RIGHT JOIN $catalogAndNamespace.${caseConvert(joinTableName2)} t2 ON t1.id = t2.id
+         |FROM $catalogAndNamespace.$casedJoinTableName1 t1
+         |RIGHT JOIN $catalogAndNamespace.$casedJoinTableName2 t2 ON t1.id = t2.id
          |""".stripMargin
 
     val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {

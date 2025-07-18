@@ -66,7 +66,7 @@ class OracleJoinPushdownIntegrationSuite
 
   override val integerType = DataTypes.createDecimalType(10, 0)
 
-  override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
+  override def caseConvert(identifier: String): String = identifier.toUpperCase(Locale.ROOT)
 
   override def schemaPreparation(): Unit = {}
 

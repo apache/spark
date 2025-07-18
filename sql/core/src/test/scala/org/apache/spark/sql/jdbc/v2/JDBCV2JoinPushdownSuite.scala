@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.jdbc.v2
 
+import java.util.Locale
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{ExplainSuiteHelper, QueryTest}
 import org.apache.spark.sql.connector.DataSourcePushdownTestUtils
@@ -36,11 +38,9 @@ class JDBCV2JoinPushdownSuite
   override val jdbcDialect: JdbcDialect = H2Dialect()
 
   override def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.catalog.h2.driver", "org.h2.Driver")
+    .set(s"spark.sql.catalog.$catalogName.driver", "org.h2.Driver")
 
-  override def qualifyTableName(tableName: String): String = s""""$namespace"."$tableName""""
-
-  override def qualifySchemaName(schemaName: String): String = s""""$namespace""""
+  override def caseConvert(identifier: String): String = identifier.toUpperCase(Locale.ROOT)
 
   override def beforeAll(): Unit = {
     Utils.classForName("org.h2.Driver")
