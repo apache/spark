@@ -29,8 +29,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.commons.lang3.SystemUtils;
-
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
@@ -110,7 +108,15 @@ public class JavaUtils {
     // On Unix systems, use operating system command to run faster
     // If that does not work out, fallback to the Java IO way
     // We exclude Apple Silicon test environment due to the limited resource issues.
-    if (SystemUtils.IS_OS_UNIX && filter == null && !(SystemUtils.IS_OS_MAC_OSX &&
+    String osName = System.getProperty("os.name");
+    boolean isMac = osName.regionMatches(true, 0, "Mac OS X", 0, 8);
+    String[] prefixes = {
+        "AIX", "HP-UX", "Irix", "Linux", "Mac OS X", "Solaris", "SunOS", "FreeBSD",
+        "OpenBSD", "NetBSD"
+    };
+    boolean isUnix = Arrays.stream(prefixes)
+        .anyMatch(prefix -> osName.regionMatches(true, 0, prefix, 0, prefix.length()));
+    if (isUnix && filter == null && !(isMac &&
         (System.getenv("SPARK_TESTING") != null || System.getProperty("spark.testing") != null))) {
       try {
         deleteRecursivelyUsingUnixNative(file);
