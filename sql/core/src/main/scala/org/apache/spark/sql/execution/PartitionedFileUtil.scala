@@ -48,8 +48,8 @@ object PartitionedFileUtil {
       start: Long,
       length: Long): PartitionedFile = {
     val hosts = getBlockHosts(getBlockLocations(file.fileStatus), start, length)
-    PartitionedFile(partitionValues, SparkPath.fromPath(filePath), start, length, hosts,
-      file.getModificationTime, file.getLen, file.metadata)
+    PartitionedFile(partitionValues, SparkPath.fromPath(filePath), start, length,
+      file.fileStatus, hosts, file.getModificationTime, file.getLen, file.metadata)
   }
 
   private def getBlockLocations(file: FileStatus): Array[BlockLocation] = file match {
