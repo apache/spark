@@ -198,7 +198,7 @@ class JDBCRDD(
   val fetchAndTransformToInternalRowsMetric: SQLMetric = SQLMetrics.createNanoTimingMetric(
     sparkContext,
     // Message that user sees does not have to leak details about conversion
-    name = "Remote data fetch time over JDBC connection")
+    name = "JDBC remote data fetch and translation time")
 
   private lazy val dialect = JdbcDialects.get(url)
 
