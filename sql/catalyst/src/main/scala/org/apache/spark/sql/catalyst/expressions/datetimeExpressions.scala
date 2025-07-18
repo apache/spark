@@ -2155,9 +2155,6 @@ case class ParseToDate(
   }
 }
 
-/**
- * * Parses a column to a timestamp based on the supplied format.
- */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
