@@ -552,31 +552,127 @@ class Expression(google.protobuf.message.Message):
         class Struct(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+            class StructField(google.protobuf.message.Message):
+                DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+                NAME_FIELD_NUMBER: builtins.int
+                VALUE_FIELD_NUMBER: builtins.int
+                DATA_TYPE_FIELD_NUMBER: builtins.int
+                NULLABLE_FIELD_NUMBER: builtins.int
+                METADATA_FIELD_NUMBER: builtins.int
+                name: builtins.str
+                @property
+                def value(self) -> global___Expression.Literal: ...
+                @property
+                def data_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+                    """(Optional) The type of the value. Only need to set this when the type of value is
+                    not inferrable.
+                    """
+                nullable: builtins.bool
+                metadata: builtins.str
+                def __init__(
+                    self,
+                    *,
+                    name: builtins.str = ...,
+                    value: global___Expression.Literal | None = ...,
+                    data_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+                    nullable: builtins.bool = ...,
+                    metadata: builtins.str | None = ...,
+                ) -> None: ...
+                def HasField(
+                    self,
+                    field_name: typing_extensions.Literal[
+                        "_data_type",
+                        b"_data_type",
+                        "_metadata",
+                        b"_metadata",
+                        "data_type",
+                        b"data_type",
+                        "metadata",
+                        b"metadata",
+                        "value",
+                        b"value",
+                    ],
+                ) -> builtins.bool: ...
+                def ClearField(
+                    self,
+                    field_name: typing_extensions.Literal[
+                        "_data_type",
+                        b"_data_type",
+                        "_metadata",
+                        b"_metadata",
+                        "data_type",
+                        b"data_type",
+                        "metadata",
+                        b"metadata",
+                        "name",
+                        b"name",
+                        "nullable",
+                        b"nullable",
+                        "value",
+                        b"value",
+                    ],
+                ) -> None: ...
+                @typing.overload
+                def WhichOneof(
+                    self, oneof_group: typing_extensions.Literal["_data_type", b"_data_type"]
+                ) -> typing_extensions.Literal["data_type"] | None: ...
+                @typing.overload
+                def WhichOneof(
+                    self, oneof_group: typing_extensions.Literal["_metadata", b"_metadata"]
+                ) -> typing_extensions.Literal["metadata"] | None: ...
+
             STRUCT_TYPE_FIELD_NUMBER: builtins.int
             ELEMENTS_FIELD_NUMBER: builtins.int
+            FIELDS_FIELD_NUMBER: builtins.int
             @property
-            def struct_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            def struct_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+                """(Deprecated) The data type of the struct. Only needs to be set if elements field is used.
+                Consider using fields instead.
+                """
             @property
             def elements(
                 self,
             ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
                 global___Expression.Literal
+            ]:
+                """(Deprecated) The elements of the struct. Consider using fields instead."""
+            @property
+            def fields(
+                self,
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                global___Expression.Literal.Struct.StructField
             ]: ...
             def __init__(
                 self,
                 *,
                 struct_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
                 elements: collections.abc.Iterable[global___Expression.Literal] | None = ...,
+                fields: collections.abc.Iterable[global___Expression.Literal.Struct.StructField]
+                | None = ...,
             ) -> None: ...
             def HasField(
-                self, field_name: typing_extensions.Literal["struct_type", b"struct_type"]
+                self,
+                field_name: typing_extensions.Literal[
+                    "_struct_type", b"_struct_type", "struct_type", b"struct_type"
+                ],
             ) -> builtins.bool: ...
             def ClearField(
                 self,
                 field_name: typing_extensions.Literal[
-                    "elements", b"elements", "struct_type", b"struct_type"
+                    "_struct_type",
+                    b"_struct_type",
+                    "elements",
+                    b"elements",
+                    "fields",
+                    b"fields",
+                    "struct_type",
+                    b"struct_type",
                 ],
             ) -> None: ...
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["_struct_type", b"_struct_type"]
+            ) -> typing_extensions.Literal["struct_type"] | None: ...
 
         class SpecializedArray(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor

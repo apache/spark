@@ -227,8 +227,24 @@ message Expression {
     }
 
     message Struct {
-      DataType struct_type = 1;
-      repeated Literal elements = 2;
+      // (Deprecated) The data type of the struct. Only needs to be set if elements field is used.
+      // Consider using fields instead.
+      optional DataType struct_type = 1 [deprecated = true];
+
+      // (Deprecated) The elements of the struct. Consider using fields instead.
+      repeated Literal elements = 2 [deprecated = true];
+
+      repeated StructField fields = 3;
+
+      message StructField {
+        string name = 1;
+        Literal value = 2;
+        // (Optional) The type of the value. Only need to set this when the type of value is
+        // not inferrable.
+        optional DataType data_type = 3;
+        bool nullable = 4;
+        optional string metadata = 5;
+      }
     }
 
     message SpecializedArray {
