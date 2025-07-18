@@ -59,7 +59,7 @@ import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompres
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.hadoop.ipc.CallerContext.{Builder => HadoopCallerContextBuilder}
 import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hadoop.util.{RunJar, StringUtils}
+import org.apache.hadoop.util.RunJar
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.LoggerContext
@@ -435,7 +435,7 @@ private[spark] object Utils
     if (!source.exists()) {
       throw new FileNotFoundException(source.getAbsolutePath)
     }
-    val lowerSrc = StringUtils.toLowerCase(source.getName)
+    val lowerSrc = source.getName.toLowerCase(Locale.ENGLISH)
     if (lowerSrc.endsWith(".jar")) {
       RunJar.unJar(source, dest, RunJar.MATCH_ANY)
     } else if (lowerSrc.endsWith(".zip")) {
@@ -3165,6 +3165,17 @@ private[spark] object Utils
       val useG1GC = valueMethod.invoke(useG1GCObject).asInstanceOf[String]
       "true".equals(useG1GC)
     }.getOrElse(false)
+  }
+
+  /**
+   * Return a string of printStackTrace result.
+   */
+  def stringifyException(e: Throwable): String = {
+    val stm = new StringWriter()
+    val wrt = new PrintWriter(stm)
+    e.printStackTrace(wrt)
+    wrt.close()
+    stm.toString()
   }
 }
 

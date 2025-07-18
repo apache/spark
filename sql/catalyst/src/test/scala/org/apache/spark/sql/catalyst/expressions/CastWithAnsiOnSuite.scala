@@ -798,6 +798,31 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     }
   }
 
+  test("SPARK-52620: cast time to decimal with insufficient precision (ANSI on)") {
+    // Create a time that will overflow Decimal(2, 0): 23:59:59 = 86399 seconds.
+    val largeTime = Literal.create(LocalTime.of(23, 59, 59, 123456000), TimeType(6))
+    // Decimal(2, 0) cannot hold 86399, so it should throw an exception in ANSI mode.
+    if (!isTryCast) {
+      // In ANSI mode, a NUMERIC_VALUE_OUT_OF_RANGE exception is thrown.
+      checkError(
+        exception = intercept[SparkArithmeticException](
+          cast(largeTime, DecimalType(2, 0)).eval()
+        ),
+        condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+        parameters = Map(
+          "value" -> "86399.123456",
+          "precision" -> "2",
+          "scale" -> "0",
+          "config" -> """"spark.sql.ansi.enabled""""
+        ),
+        queryContext = Array(ExpectedContext(fragment = "", start = -1, stop = -1))
+      )
+    } else {
+      // In TRY_CAST mode, null is returned instead of throwing an exception.
+      checkEvaluation(cast(largeTime, DecimalType(2, 0)), null)
+    }
+  }
+
   test("SPARK-52619: cast time to integral types with overflow with ansi on") {
     // Test overflow cases: 23:59:59 = 86399 seconds
     val largeTime6 = Literal.create(LocalTime.of(23, 59, 59, 123456000), TimeType(6))

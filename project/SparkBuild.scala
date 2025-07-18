@@ -16,6 +16,7 @@
  */
 
 import java.io._
+import java.lang.{Runtime => JRuntime}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.util.Locale
@@ -98,6 +99,30 @@ object SparkBuild extends PomBuild {
   import sbtunidoc.GenJavadocPlugin
   import sbtunidoc.GenJavadocPlugin.autoImport._
   import scala.collection.mutable.Map
+
+  lazy val checkJavaVersion = taskKey[Unit]("Check Java Version")
+  lazy val checkJavaVersionSettings: Seq[Setting[?]] = Seq(
+    checkJavaVersion := {
+      val currentVersion = JRuntime.version()
+      val currentVersionFeature = currentVersion.feature()
+      val currentVersionUpdate = currentVersion.update()
+      val minimumVersion = JRuntime.Version.parse(
+        SbtPomKeys.effectivePom.value.getProperties
+          .get("java.minimum.version").asInstanceOf[String])
+      val minimumVersionFeature = minimumVersion.feature()
+      val minimumVersionUpdate = minimumVersion.update()
+      val isCompatible = currentVersionFeature > minimumVersionFeature ||
+        (currentVersionFeature == minimumVersionFeature &&
+          currentVersionUpdate >= minimumVersionUpdate)
+      if (!isCompatible) {
+        throw new MessageOnlyException(
+          "The Java version used to build the project is outdated. " +
+            s"Please use Java $minimumVersion or later.")
+      }
+    },
+    (Compile / compile) := ((Compile / compile) dependsOn checkJavaVersion).value,
+    (Test / compile) := ((Test / compile) dependsOn checkJavaVersion).value
+  )
 
   val projectsMap: Map[String, Seq[Setting[_]]] = Map.empty
 
@@ -261,7 +286,8 @@ object SparkBuild extends PomBuild {
 
   val noLintOnCompile = sys.env.contains("NOLINT_ON_COMPILE") &&
       !sys.env.get("NOLINT_ON_COMPILE").contains("false")
-  lazy val sharedSettings = sparkGenjavadocSettings ++
+  lazy val sharedSettings = checkJavaVersionSettings ++
+                            sparkGenjavadocSettings ++
                             compilerWarningSettings ++
       (if (noLintOnCompile) Nil else enableScalaStyle) ++ Seq(
     (Compile / exportJars) := true,

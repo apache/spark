@@ -52,6 +52,15 @@ class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
     AttributeReference(name = "unresolvedChild", dataType = StringType)()
   private val resolvedChild = AttributeReference(name = "resolvedChild", dataType = IntegerType)()
   private val castExpression = Cast(child = unresolvedChild, dataType = IntegerType)
+  private val nestedCasts = Cast(
+    child = Cast(
+      child = Cast(child = unresolvedChild, dataType = IntegerType, timeZoneId = Some("UTC")),
+      dataType = IntegerType,
+      timeZoneId = None
+    ),
+    dataType = IntegerType,
+    timeZoneId = None
+  )
   private val expressionResolver = new HardCodedExpressionResolver(
     catalogManager = mock[CatalogManager],
     resolvedExpression = resolvedChild
@@ -100,5 +109,15 @@ class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
     val makeTs = resolvedExpr.asInstanceOf[MakeTimestampNTZ]
     assert(makeTs.left.isInstanceOf[CurrentDate])
     assert(makeTs.right.semanticEquals(timeExpr))
+  }
+
+  test("Timezone is applied recursively") {
+    val expressionWithTimezone =
+      TimezoneAwareExpressionResolver.resolveTimezone(nestedCasts, "UTC")
+
+    assert(expressionWithTimezone.asInstanceOf[Cast].timeZoneId.get == "UTC")
+    assert(
+      expressionWithTimezone.asInstanceOf[Cast].child.asInstanceOf[Cast].timeZoneId.get == "UTC"
+    )
   }
 }

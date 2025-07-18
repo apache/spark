@@ -324,6 +324,7 @@ case class DateAdd(startDate: Expression, days: Expression)
   override def nullIntolerant: Boolean = true
   override def left: Expression = startDate
   override def right: Expression = days
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(DateType, TypeCollection(IntegerType, ShortType, ByteType))
@@ -363,6 +364,7 @@ case class DateSub(startDate: Expression, days: Expression)
   override def nullIntolerant: Boolean = true
   override def left: Expression = startDate
   override def right: Expression = days
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(DateType, TypeCollection(IntegerType, ShortType, ByteType))
@@ -3340,6 +3342,8 @@ case class SubtractDates(
   override def dataType: DataType = {
     if (legacyInterval) CalendarIntervalType else DayTimeIntervalType(DAY)
   }
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   @transient
   private lazy val evalFunc: (Int, Int) => Any = if (legacyInterval) {

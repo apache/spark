@@ -40,6 +40,8 @@ abstract class PodBuilderSuite extends SparkFunSuite {
 
   protected def roleSpecificSchedulerNameConf: ConfigEntry[_]
 
+  protected def excludedFeatureStepsConf: ConfigEntry[_]
+
   protected def userFeatureStepsConf: ConfigEntry[_]
 
   protected def userFeatureStepWithExpectedAnnotation: (String, String)
@@ -89,6 +91,21 @@ abstract class PodBuilderSuite extends SparkFunSuite {
     verifyPod(pod)
     assert(pod.container.getVolumeMounts.asScala.exists(_.getName == "so_long"))
     assert(pod.container.getVolumeMounts.asScala.exists(_.getName == "so_long_two"))
+  }
+
+  test("SPARK-52830: exclude a feature step") {
+    val client = mockKubernetesClient()
+    val sparkConf = baseConf.clone()
+      .set(excludedFeatureStepsConf.key,
+        "org.apache.spark.deploy.k8s.TestStepTwo")
+      .set(userFeatureStepsConf.key,
+        "org.apache.spark.deploy.k8s.TestStepTwo," +
+        "org.apache.spark.deploy.k8s.TestStep")
+      .set(templateFileConf.key, "template-file.yaml")
+    val pod = buildPod(sparkConf, client)
+    verifyPod(pod)
+    assert(pod.container.getVolumeMounts.asScala.exists(_.getName == "so_long"))
+    assert(!pod.container.getVolumeMounts.asScala.exists(_.getName == "so_long_two"))
   }
 
   test("SPARK-37145: configure a custom test step with base config") {
