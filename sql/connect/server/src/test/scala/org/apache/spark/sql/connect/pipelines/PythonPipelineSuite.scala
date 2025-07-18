@@ -28,6 +28,7 @@ import scala.util.Try
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.connect.service.SparkConnectService
 import org.apache.spark.sql.pipelines.graph.DataflowGraph
 import org.apache.spark.sql.pipelines.utils.{EventVerificationTestHelpers, TestPipelineUpdateContextMixin}
 
@@ -78,8 +79,19 @@ class PythonPipelineSuite
       throw new RuntimeException(
         s"Python process failed with exit code $exitCode. Output: ${output.mkString("\n")}")
     }
+    val activateSessions = SparkConnectService.sessionManager.listActiveSessions
+    // there should be only one active session
+    assert(activateSessions.size == 1)
 
-    val dataflowGraphContexts = getSessionHolder.getAllDataflowGraphs
+    // get the session holder for the active session
+    val sessionHolder =
+      SparkConnectService.sessionManager.getIsolatedSessionIfPresent(activateSessions.head.key)
+        .getOrElse {
+        throw new RuntimeException("Session not found")
+      }
+
+    // get all dataflow graphs from the session holder
+    val dataflowGraphContexts = sessionHolder.getAllDataflowGraphs
     assert(dataflowGraphContexts.size == 1)
 
     dataflowGraphContexts.head.toDataflowGraph

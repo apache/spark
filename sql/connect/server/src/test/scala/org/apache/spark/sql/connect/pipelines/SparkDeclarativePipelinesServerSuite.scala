@@ -41,7 +41,7 @@ class SparkDeclarativePipelinesServerSuite
             .newBuilder()
             .build())).getPipelineCommandResult.getCreateDataflowGraphResult.getDataflowGraphId
       val definition =
-        getSessionHolder.getDataflowGraphOrThrow(graphId)
+        getDefaultSessionHolder.getDataflowGraphOrThrow(graphId)
       assert(definition.defaultDatabase == "test_db")
     }
   }
@@ -114,7 +114,7 @@ class SparkDeclarativePipelinesServerSuite
                 |""".stripMargin)
 
       val definition =
-        getSessionHolder.getDataflowGraphOrThrow(graphId)
+        getDefaultSessionHolder.getDataflowGraphOrThrow(graphId)
 
       val graph = definition.toDataflowGraph.resolve()
 
@@ -159,7 +159,7 @@ class SparkDeclarativePipelinesServerSuite
       }
 
       val definition =
-        getSessionHolder.getDataflowGraphOrThrow(graphId)
+        getDefaultSessionHolder.getDataflowGraphOrThrow(graphId)
 
       registerPipelineDatasets(pipeline)
       val graph = definition.toDataflowGraph

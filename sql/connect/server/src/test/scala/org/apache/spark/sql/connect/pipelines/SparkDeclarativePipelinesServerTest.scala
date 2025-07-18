@@ -29,14 +29,12 @@ import org.apache.spark.sql.pipelines.utils.PipelineTest
 class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
 
   override def afterEach(): Unit = {
-    getSessionHolder.removeAllPipelineExecutions()
-    getSessionHolder.dropAllDataflowGraphs()
     PipelineTest.cleanupMetastore(spark)
     super.afterEach()
   }
 
   // Helper method to get the session holder
-  protected def getSessionHolder: SessionHolder = {
+  protected def getDefaultSessionHolder: SessionHolder = {
     SparkConnectService.sessionManager
       .getIsolatedSessionIfPresent(SessionKey(defaultUserId, defaultSessionId))
       .getOrElse(throw new RuntimeException("Session not found"))
