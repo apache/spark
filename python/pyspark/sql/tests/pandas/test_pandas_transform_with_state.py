@@ -21,7 +21,6 @@ import json
 import os
 import time
 import tempfile
-from decimal import Decimal
 from pyspark.sql.streaming import StatefulProcessor
 
 import unittest

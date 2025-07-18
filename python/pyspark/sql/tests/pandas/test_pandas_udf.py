@@ -345,7 +345,6 @@ class PandasUDFTestsMixin:
 
     def test_pandas_udf_int_to_decimal_coercion(self):
         import pandas as pd
-        import numpy as np
         from decimal import Decimal
 
         df = self.spark.range(0, 3)
@@ -391,7 +390,8 @@ class PandasUDFTestsMixin:
         ):
             # Also not supported.
             # This can be fixed by enabling arrow_cast
-            # This is currently not the case for SQL_SCALAR_PANDAS_UDF and SQL_SCALAR_PANDAS_ITER_UDF.
+            # This is currently not the case for SQL_SCALAR_PANDAS_UDF and
+            # SQL_SCALAR_PANDAS_ITER_UDF.
             self.assertRaisesRegex(
                 PythonException,
                 "Exception thrown when converting pandas.Series",

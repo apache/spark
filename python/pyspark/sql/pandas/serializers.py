@@ -285,13 +285,12 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         """
         import pyarrow.types as types
         import pandas as pd
-        from decimal import Decimal
 
         # Convert integer series to Decimal objects
         if (
             types.is_decimal(arrow_type)
-            and series.dtype.kind in ["i", "u"]
-            and not series.empty  # integer types (signed/unsigned)
+            and series.dtype.kind in ["i", "u"]  # integer types (signed/unsigned)
+            and not series.empty
         ):
             series = series.apply(lambda x: Decimal(x) if pd.notna(x) else None)
 
