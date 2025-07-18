@@ -526,6 +526,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_dataframe",
         "pyspark.sql.tests.test_collection",
         "pyspark.sql.tests.test_creation",
+        "pyspark.sql.tests.test_conversion",
         "pyspark.sql.tests.test_listener",
         "pyspark.sql.tests.test_observation",
         "pyspark.sql.tests.test_repartition",
