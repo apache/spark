@@ -20,9 +20,11 @@ package org.apache.spark.sql.jdbc.v2
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.connector.DataSourcePushdownTestUtils
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialect
 import org.apache.spark.sql.test.SharedSparkSession
@@ -32,7 +34,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   extends QueryTest
   with SharedSparkSession
   with DataSourcePushdownTestUtils {
-  val catalogName: String
+  val catalogName: String = "join_pushdown_catalog"
   val namespaceOpt: Option[String] = None
   val url: String
 
@@ -40,6 +42,14 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   val joinTableName2: String = "join_table_2"
 
   val jdbcDialect: JdbcDialect
+
+  override def sparkConf: SparkConf = super.sparkConf
+    .set(s"spark.sql.catalog.$catalogName", classOf[JDBCTableCatalog].getName)
+    .set(s"spark.sql.catalog.$catalogName.url", url)
+    .set(s"spark.sql.catalog.$catalogName.pushDownJoin", "true")
+    .set(s"spark.sql.catalog.$catalogName.pushDownAggregate", "true")
+    .set(s"spark.sql.catalog.$catalogName.pushDownLimit", "true")
+    .set(s"spark.sql.catalog.$catalogName.pushDownOffset", "true")
 
   private def catalogAndNamespace =
     namespaceOpt.map(namespace => s"$catalogName.$namespace").getOrElse(catalogName)

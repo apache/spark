@@ -20,8 +20,6 @@ package org.apache.spark.sql.jdbc.v2.join
 import java.sql.Connection
 import java.util.Locale
 
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.{DockerJDBCIntegrationSuite, JdbcDialect, OracleDatabaseOnDocker, OracleDialect}
 import org.apache.spark.sql.jdbc.v2.JDBCV2JoinPushdownIntegrationSuiteBase
 import org.apache.spark.tags.DockerTest
@@ -57,21 +55,11 @@ import org.apache.spark.tags.DockerTest
 class OracleJoinPushdownIntegrationSuite
   extends DockerJDBCIntegrationSuite
   with JDBCV2JoinPushdownIntegrationSuiteBase {
-  override val catalogName: String = "oracle"
-
   override val namespaceOpt: Option[String] = Some("SYSTEM")
 
   override val db = new OracleDatabaseOnDocker
 
   override val url = db.getJdbcUrl(dockerIp, externalPort)
-
-  override def sparkConf: SparkConf = super.sparkConf
-    .set(s"spark.sql.catalog.$catalogName", classOf[JDBCTableCatalog].getName)
-    .set(s"spark.sql.catalog.$catalogName.url", url)
-    .set(s"spark.sql.catalog.$catalogName.pushDownJoin", "true")
-    .set(s"spark.sql.catalog.$catalogName.pushDownAggregate", "true")
-    .set(s"spark.sql.catalog.$catalogName.pushDownLimit", "true")
-    .set(s"spark.sql.catalog.$catalogName.pushDownOffset", "true")
 
   override val jdbcDialect: JdbcDialect = OracleDialect()
 
