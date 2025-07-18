@@ -338,6 +338,7 @@ class GroupedApplyInPandasWithStateTestsMixin:
         ):
             self._test_apply_in_pandas_with_state_basic(func, check_results, output_type)
 
+
 class GroupedApplyInPandasWithStateTests(
     GroupedApplyInPandasWithStateTestsMixin, ReusedSQLTestCase
 ):
