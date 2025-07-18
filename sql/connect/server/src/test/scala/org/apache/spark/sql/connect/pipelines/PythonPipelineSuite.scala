@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.pipelines
 import java.io.{BufferedReader, InputStreamReader}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Paths
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuffer
@@ -43,6 +44,8 @@ class PythonPipelineSuite
 
   def buildGraph(pythonText: String): DataflowGraph = {
     val indentedPythonText = pythonText.linesIterator.map("    " + _).mkString("\n")
+    // create a unique identifier to allow identifying the session and dataflow graph
+    val identifier = UUID.randomUUID().toString
     val pythonCode =
       s"""
          |from pyspark.sql import SparkSession
@@ -58,6 +61,7 @@ class PythonPipelineSuite
          |spark = SparkSession.builder \\
          |    .remote("sc://localhost:$serverPort") \\
          |    .config("spark.connect.grpc.channel.timeout", "5s") \\
+         |    .config("spark.custom.identifier", "$identifier") \\
          |    .create()
          |
          |dataflow_graph_id = create_dataflow_graph(
@@ -80,16 +84,12 @@ class PythonPipelineSuite
         s"Python process failed with exit code $exitCode. Output: ${output.mkString("\n")}")
     }
     val activateSessions = SparkConnectService.sessionManager.listActiveSessions
-    // there should be only one active session
-    assert(activateSessions.size == 1)
 
-    // get the session holder for the active session
-    val sessionHolder =
-      SparkConnectService.sessionManager
-        .getIsolatedSessionIfPresent(activateSessions.head.key)
-        .getOrElse {
-          throw new RuntimeException("Session not found")
-        }
+    // get the session holder by finding the session with the custom UUID set in the conf
+    val sessionHolder = activateSessions
+      .map(info => SparkConnectService.sessionManager.getIsolatedSessionIfPresent(info.key).get)
+      .find(_.session.conf.get("spark.custom.identifier") == identifier)
+      .getOrElse(throw new RuntimeException(s"Session with app name $identifier not found"))
 
     // get all dataflow graphs from the session holder
     val dataflowGraphContexts = sessionHolder.getAllDataflowGraphs
