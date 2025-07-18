@@ -69,7 +69,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
       val path = Utils.createDirectory(tempDir, Random.nextFloat().toString).toString
 
       // Create initial data in the state store (version 0)
-      val initialData = makeRDD(spark.sparkContext, Array(("a", 0), ("b", 0)))
+      val initialData = makeRDD(spark.sparkContext, Seq(("a", 0), ("b", 0)))
       val setupRDD = initialData.mapPartitionsWithStateStore(
         sqlContext,
         operatorStateInfo(path, version = 0),
@@ -88,7 +88,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
       setupRDD.count() // Force evaluation
 
       // Create input data for our chained operations
-      val inputData = makeRDD(spark.sparkContext, Array(("a", 0), ("b", 0), ("c", 0)))
+      val inputData = makeRDD(spark.sparkContext, Seq(("a", 0), ("b", 0), ("c", 0)))
 
       var mappedReadStore: ReadStateStore = null
       var mappedWriteStore: StateStore = null
@@ -104,19 +104,19 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
           spark.sessionState,
           Some(castToImpl(spark).streams.stateStoreCoordinator)
         ) { (readStore, iter) =>
-          // Read values and store them for later verification
           mappedReadStore = readStore
-          val inputItems = iter.toArray // Materialize the input data
 
-          // Read values for all keys - including those not in this partition
-          val readValues = Array(
-            (("a", 0), Option(readStore.get(dataToKeyRow("a", 0))).map(valueRowToData)),
-            (("b", 0), Option(readStore.get(dataToKeyRow("b", 0))).map(valueRowToData)),
-            (("c", 0), Option(readStore.get(dataToKeyRow("c", 0))).map(valueRowToData))
-          )
+          // Read values and store them for later verification
+          val inputItems = iter.toSeq // Materialize the input data
+
+          val readValues = inputItems.map { case (s, i) =>
+            val key = dataToKeyRow(s, i)
+            val value = Option(readStore.get(key)).map(valueRowToData)
+            ((s, i), value)
+          }
 
           // Also capture all state store entries
-          val allValues = readStore.iterator().map(rowPairToDataPair).toArray
+          val allValues = readStore.iterator().map(rowPairToDataPair).toSeq
 
           // Return everything as a single tuple - only create one element in the iterator
           Iterator((readValues, allValues, inputItems))
@@ -131,10 +131,10 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
           Some(castToImpl(spark).streams.stateStoreCoordinator)
         ) { (writeStore, writeIter) =>
           if (writeIter.hasNext) {
-            mappedWriteStore = writeStore
             val (readValues, allStoreValues, originalItems) = writeIter.next()
+            mappedWriteStore = writeStore
             // Get all existing values from the write store to verify reuse
-            val storeValues = writeStore.iterator().map(rowPairToDataPair).toArray
+            val storeValues = writeStore.iterator().map(rowPairToDataPair).toSeq
 
             // Update values for a and c from the original items
             originalItems.filter(p => p._1 == "a" || p._1 == "c").foreach { case (s, i) =>
@@ -145,58 +145,35 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
             }
             writeStore.commit()
 
-            // Return all collected information for verification with explicit types
-            Iterator((readValues: Array[((String, Int), Option[Int])],
-              allStoreValues: Array[((String, Int), Int)],
-              storeValues: Array[((String, Int), Int)]))
+            // Return all collected information for verification
+            Iterator((readValues, allStoreValues, storeValues))
           } else {
             Iterator.empty
           }
         }
 
-      // Collect the results and combine from all partitions to ensure we have a complete view
-      val allResults = chainedResults.collect()
-
-      // Ensure we have at least one result
-      assert(allResults.nonEmpty, "No results were collected from the chainedResults RDD")
-
-      // Combine results from all partitions for validation
-      val combinedReadValues = allResults.flatMap(_._1).groupBy(_._1).map {
-        case (key, values) =>
-          // Take the first non-None value if available, otherwise None
-          (key, values.flatMap(_._2).headOption)
-      }
-
-      val combinedInitialState = allResults.flatMap(_._2).toMap
-      val combinedWriteStoreValues = allResults.flatMap(_._3).toMap
+      // Collect the results
+      val (readValues, initialStoreState, writeStoreValues) = chainedResults.collect().head
 
       // Verify read results
-      val expectedReadValues = Map(
+      assert(readValues.toSet === Set(
         ("a", 0) -> Some(1),
         ("b", 0) -> Some(2),
         ("c", 0) -> None
-      )
-
-      assert(combinedReadValues === expectedReadValues,
-        s"Expected read values: $expectedReadValues, but got: $combinedReadValues")
+      ))
 
       // Verify store state matches expected values
-      val expectedInitialState = Map(("a", 0) -> 1, ("b", 0) -> 2)
-      assert(combinedInitialState === expectedInitialState,
-        s"Expected initial store state: $expectedInitialState, but got: $combinedInitialState")
+      assert(initialStoreState.toSet === Set((("a", 0), 1), (("b", 0), 2)))
 
       // Verify the existing values in the write store (should be the same as initial state)
-      val expectedWriteStoreValues = Map(("a", 0) -> 1, ("b", 0) -> 2)
-      assert(combinedWriteStoreValues === expectedWriteStoreValues,
-        s"Expected write store values: $expectedWriteStoreValues," +
-          s" but got: $combinedWriteStoreValues")
+      assert(writeStoreValues.toSet === Set((("a", 0), 1), (("b", 0), 2)))
 
       // Verify that the same store was used for both read and write operations
       assert(mappedReadStore == mappedWriteStore,
         "StateStoreThreadLocalTracker should indicate the read store was reused")
 
       // Create another ReadStateStoreRDD to verify the final state (version 2)
-      val verifyData = makeRDD(spark.sparkContext, Array(("a", 0), ("b", 0), ("c", 0)))
+      val verifyData = makeRDD(spark.sparkContext, Seq(("a", 0), ("b", 0), ("c", 0)))
       val verifyRDD = verifyData.mapPartitionsWithReadStateStore(
         operatorStateInfo(path, version = 2),
         keySchema,
@@ -212,18 +189,14 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
         }
       }
 
-      // Collect all results and combine them for verification
-      val finalResultsByKey = verifyRDD.collect().toMap
-
       // Verify the final state has the expected values
       // a: 1 + 10 = 11, b: 2 (unchanged), c: 0 + 10 = 10
-      val expectedFinalResults = Map(
+      val finalResults = verifyRDD.collect().toSet
+      assert(finalResults === Set(
         ("a", 0) -> Some(11),
         ("b", 0) -> Some(2),
         ("c", 0) -> Some(10)
-      )
-      assert(finalResultsByKey === expectedFinalResults,
-        s"Expected final results: $expectedFinalResults, but got: $finalResultsByKey")
+      ))
     }
   }
 
