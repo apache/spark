@@ -24,6 +24,7 @@ from typing import cast
 from pyspark.sql import Row
 import pyspark.sql.functions as F
 from pyspark.sql.types import (
+    DecimalType,
     StructType,
     StructField,
     StringType,
@@ -144,6 +145,12 @@ class DataFrameCreationTestsMixin:
             self.spark.createDataFrame(data=[Decimal("NaN")], schema="decimal").collect(),
             [Row(value=None)],
         )
+
+    def test_check_decimal_nan(self):
+        data = [Row(dec=Decimal("NaN"))]
+        schema = StructType([StructField("dec", DecimalType(), False)])
+        with self.assertRaises(PySparkValueError):
+            self.spark.createDataFrame(data=data, schema=schema)
 
     def test_invalid_argument_create_dataframe(self):
         with self.assertRaises(PySparkTypeError) as pe:
