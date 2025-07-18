@@ -22,6 +22,7 @@ import java.util.concurrent.{ConcurrentLinkedQueue, ScheduledFuture, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -1186,6 +1187,31 @@ object StateStore extends Logging {
     if (SparkEnv.get == null) {
       throw new IllegalStateException("SparkEnv not active, cannot do maintenance on StateStores")
     }
+
+    // Providers that couldn't be processed now and need to be added back to the queue
+    val providersToRequeue = new ArrayBuffer[(StateStoreProviderId, StateStoreProvider)]()
+
+    // unloadedProvidersToClose are StateStoreProviders that have been removed from
+    // loadedProviders, and can now be processed for maintenance. This queue contains
+    // providers for which we weren't able to process for maintenance on the previous iteration
+    while (!unloadedProvidersToClose.isEmpty) {
+      val (providerId, provider) = unloadedProvidersToClose.poll()
+
+      if (processThisPartition(providerId)) {
+        submitMaintenanceWorkForProvider(
+          providerId, provider, storeConf, MaintenanceTaskType.FromUnloadedProvidersQueue)
+      } else {
+        providersToRequeue += ((providerId, provider))
+      }
+    }
+
+    if (providersToRequeue.nonEmpty) {
+      logInfo(log"Had to requeue ${MDC(LogKeys.SIZE, providersToRequeue.size)} providers " +
+        log"for maintenance in doMaintenance")
+    }
+
+    providersToRequeue.foreach(unloadedProvidersToClose.offer)
+
     loadedProviders.synchronized {
       loadedProviders.toSeq
     }.foreach { case (id, provider) =>
