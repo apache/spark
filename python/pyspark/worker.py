@@ -2003,14 +2003,7 @@ def read_udfs(pickleSer, infile, eval_type):
             ser = ArrowStreamArrowUDFSerializer(timezone, safecheck, _assign_cols_by_name, False)
         elif eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF and not use_legacy_pandas_udf_conversion(runner_conf):
             input_types = ([f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))])
-            ser = ArrowBatchUDFSerializer(
-                False,
-                input_types,
-                "row",
-                True,
-                None,
-                use_large_var_types(runner_conf)
-            )
+            ser = ArrowBatchUDFSerializer(input_types, use_large_var_types(runner_conf))
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
             # pandas Series. See SPARK-27240.
@@ -2388,7 +2381,6 @@ def read_udfs(pickleSer, infile, eval_type):
             df2_keys = [a[1][o] for o in parsed_offsets[1][0]]
             df2_vals = [a[1][o] for o in parsed_offsets[1][1]]
             return f(df1_keys, df1_vals, df2_keys, df2_vals)
-
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
         import pyarrow as pa
 

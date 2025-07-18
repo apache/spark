@@ -211,20 +211,16 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
 
     def __init__(
         self,
-        assign_cols_by_name,
         input_types,
-        struct_in_pandas="row",
-        ndarray_as_list=True,
-        return_type=None,
         prefers_large_var_types=False,
     ):
         super(ArrowBatchUDFSerializer, self).__init__()
-        self._assign_cols_by_name = assign_cols_by_name
         self._input_types = input_types
-        self._struct_in_pandas = struct_in_pandas
-        self._ndarray_as_list = ndarray_as_list
-        self._return_type = return_type
         self._prefers_large_var_types = prefers_large_var_types
+        self._assign_cols_by_name = False
+        self._struct_in_pandas = "row"
+        self._ndarray_as_list = True
+        self._return_type = None
 
     def convert_arrow_to_rows(self, *args):
         """
