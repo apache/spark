@@ -424,7 +424,7 @@ abstract class HashExpression[E] extends Expression {
     s"$result = $hasherClassName.hashInt($input.months, $microsecondsHash);"
   }
 
-  private def legacyCollationAwareHashing: Boolean =
+  private lazy val legacyCollationAwareHashing: Boolean =
     SQLConf.get.getConf(SQLConf.COLLATION_AWARE_HASHING_ENABLED)
 
   protected def genHashString(
@@ -580,7 +580,7 @@ abstract class InterpretedHashFunction {
 
   protected def hashUnsafeBytes(base: AnyRef, offset: Long, length: Int, seed: Long): Long
 
-  private def legacyCollationAwareHashing: Boolean =
+  private lazy val legacyCollationAwareHashing: Boolean =
     SQLConf.get.getConf(SQLConf.COLLATION_AWARE_HASHING_ENABLED)
 
   /**
