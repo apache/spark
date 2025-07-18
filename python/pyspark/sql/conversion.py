@@ -18,7 +18,7 @@
 import array
 import datetime
 import decimal
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, overload
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Union, overload
 
 from pyspark.errors import PySparkValueError
 from pyspark.sql.pandas.types import _dedup_names, _deduplicate_field_names, to_arrow_schema
@@ -446,7 +446,7 @@ class LocalDataToArrowConversion:
 
             return pa.Table.from_arrays(pylist, schema=pa_schema)
         else:
-            return pa.table({"_": [None] * len(rows)}).drop("_")
+            return pa.Table.from_struct_array(pa.array([{}] * len(rows)))
 
 
 class ArrowTableToRowsConversion:
@@ -687,8 +687,24 @@ class ArrowTableToRowsConversion:
             else:
                 return lambda value: value
 
+    @overload
     @staticmethod
-    def convert(table: "pa.Table", schema: StructType) -> List[Row]:
+    def convert(  # type: ignore[overload-overlap]
+        table: "pa.Table", schema: StructType
+    ) -> List[Row]:
+        pass
+
+    @overload
+    @staticmethod
+    def convert(
+        table: "pa.Table", schema: StructType, *, return_as_tuples: bool = True
+    ) -> List[tuple]:
+        pass
+
+    @staticmethod  # type: ignore[misc]
+    def convert(
+        table: "pa.Table", schema: StructType, *, return_as_tuples: bool = False
+    ) -> List[Union[Row, tuple]]:
         require_minimum_pyarrow_version()
         import pyarrow as pa
 
@@ -709,8 +725,14 @@ class ArrowTableToRowsConversion:
                 for column, conv in zip(table.columns, field_converters)
             ]
 
-            rows = [_create_row(fields, tuple(cols)) for cols in zip(*columnar_data)]
+            if return_as_tuples:
+                rows = [tuple(cols) for cols in zip(*columnar_data)]
+            else:
+                rows = [_create_row(fields, tuple(cols)) for cols in zip(*columnar_data)]
             assert len(rows) == table.num_rows, f"{len(rows)}, {table.num_rows}"
             return rows
         else:
-            return [_create_row(fields, tuple())] * table.num_rows
+            if return_as_tuples:
+                return [tuple()] * table.num_rows
+            else:
+                return [_create_row(fields, tuple())] * table.num_rows
