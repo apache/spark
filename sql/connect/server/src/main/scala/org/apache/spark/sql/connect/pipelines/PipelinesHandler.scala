@@ -77,7 +77,8 @@ private[connect] object PipelinesHandler extends Logging {
           .build()
       case proto.PipelineCommand.CommandTypeCase.DROP_DATAFLOW_GRAPH =>
         logInfo(s"Drop pipeline cmd received: $cmd")
-        sessionHolder.dropDataflowGraph(cmd.getDropDataflowGraph.getDataflowGraphId)
+        sessionHolder.dataflowGraphRegistry
+          .dropDataflowGraph(cmd.getDropDataflowGraph.getDataflowGraphId)
         defaultResponse
       case proto.PipelineCommand.CommandTypeCase.DEFINE_DATASET =>
         logInfo(s"Define pipelines dataset cmd received: $cmd")
@@ -118,7 +119,7 @@ private[connect] object PipelinesHandler extends Logging {
 
     val defaultSqlConf = cmd.getSqlConfMap.asScala.toMap
 
-    sessionHolder.createDataflowGraph(
+    sessionHolder.dataflowGraphRegistry.createDataflowGraph(
       defaultCatalog = defaultCatalog,
       defaultDatabase = defaultDatabase,
       defaultSqlConf = defaultSqlConf)
@@ -129,7 +130,8 @@ private[connect] object PipelinesHandler extends Logging {
       sessionHolder: SessionHolder): Unit = {
     val dataflowGraphId = cmd.getDataflowGraphId
 
-    val graphElementRegistry = sessionHolder.getDataflowGraphOrThrow(dataflowGraphId)
+    val graphElementRegistry =
+      sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
     val sqlGraphElementRegistrationContext = new SqlGraphRegistrationContext(graphElementRegistry)
     sqlGraphElementRegistrationContext.processSqlFile(
       cmd.getSqlText,
@@ -141,7 +143,8 @@ private[connect] object PipelinesHandler extends Logging {
       dataset: proto.PipelineCommand.DefineDataset,
       sessionHolder: SessionHolder): Unit = {
     val dataflowGraphId = dataset.getDataflowGraphId
-    val graphElementRegistry = sessionHolder.getDataflowGraphOrThrow(dataflowGraphId)
+    val graphElementRegistry =
+      sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
 
     dataset.getDatasetType match {
       case proto.DatasetType.MATERIALIZED_VIEW | proto.DatasetType.TABLE =>
@@ -192,7 +195,8 @@ private[connect] object PipelinesHandler extends Logging {
       transformRelationFunc: Relation => LogicalPlan,
       sessionHolder: SessionHolder): Unit = {
     val dataflowGraphId = flow.getDataflowGraphId
-    val graphElementRegistry = sessionHolder.getDataflowGraphOrThrow(dataflowGraphId)
+    val graphElementRegistry =
+      sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
 
     val isImplicitFlow = flow.getFlowName == flow.getTargetDatasetName
 
@@ -230,7 +234,8 @@ private[connect] object PipelinesHandler extends Logging {
       responseObserver: StreamObserver[ExecutePlanResponse],
       sessionHolder: SessionHolder): Unit = {
     val dataflowGraphId = cmd.getDataflowGraphId
-    val graphElementRegistry = sessionHolder.getDataflowGraphOrThrow(dataflowGraphId)
+    val graphElementRegistry =
+      sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
     val tableFiltersResult = createTableFilters(cmd, graphElementRegistry, sessionHolder)
 
     // We will use this variable to store the run failure event if it occurs. This will be set

@@ -45,7 +45,7 @@ class PythonPipelineSuite
   def buildGraph(pythonText: String): DataflowGraph = {
     val indentedPythonText = pythonText.linesIterator.map("    " + _).mkString("\n")
     // create a unique identifier to allow identifying the session and dataflow graph
-    val identifier = UUID.randomUUID().toString
+    val customSessionIdentifier = UUID.randomUUID().toString
     val pythonCode =
       s"""
          |from pyspark.sql import SparkSession
@@ -61,7 +61,7 @@ class PythonPipelineSuite
          |spark = SparkSession.builder \\
          |    .remote("sc://localhost:$serverPort") \\
          |    .config("spark.connect.grpc.channel.timeout", "5s") \\
-         |    .config("spark.custom.identifier", "$identifier") \\
+         |    .config("spark.custom.identifier", "$customSessionIdentifier") \\
          |    .create()
          |
          |dataflow_graph_id = create_dataflow_graph(
@@ -83,16 +83,17 @@ class PythonPipelineSuite
       throw new RuntimeException(
         s"Python process failed with exit code $exitCode. Output: ${output.mkString("\n")}")
     }
-    val activateSessions = SparkConnectService.sessionManager.listActiveSessions
+    val activeSessions = SparkConnectService.sessionManager.listActiveSessions
 
     // get the session holder by finding the session with the custom UUID set in the conf
-    val sessionHolder = activateSessions
-      .map(info => SparkConnectService.sessionManager.getIsolatedSessionIfPresent(info.key).get)
-      .find(_.session.conf.get("spark.custom.identifier") == identifier)
-      .getOrElse(throw new RuntimeException(s"Session with app name $identifier not found"))
+    val sessionHolder = activeSessions
+      .map(info => SparkConnectService.sessionManager.getIsolatedSession(info.key, None))
+      .find(_.session.conf.get("spark.custom.identifier") == customSessionIdentifier)
+      .getOrElse(
+        throw new RuntimeException(s"Session with identifier $customSessionIdentifier not found"))
 
     // get all dataflow graphs from the session holder
-    val dataflowGraphContexts = sessionHolder.getAllDataflowGraphs
+    val dataflowGraphContexts = sessionHolder.dataflowGraphRegistry.getAllDataflowGraphs
     assert(dataflowGraphContexts.size == 1)
 
     dataflowGraphContexts.head.toDataflowGraph

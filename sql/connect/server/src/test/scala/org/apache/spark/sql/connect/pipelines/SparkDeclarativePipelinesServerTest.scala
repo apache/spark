@@ -33,7 +33,7 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
       .getIsolatedSessionIfPresent(SessionKey(defaultUserId, defaultSessionId))
       .foreach(s => {
         s.removeAllPipelineExecutions()
-        s.dropAllDataflowGraphs()
+        s.dataflowGraphRegistry.dropAllDataflowGraphs()
       })
     PipelineTest.cleanupMetastore(spark)
     super.afterEach()
@@ -42,8 +42,7 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
   // Helper method to get the session holder
   protected def getDefaultSessionHolder: SessionHolder = {
     SparkConnectService.sessionManager
-      .getIsolatedSessionIfPresent(SessionKey(defaultUserId, defaultSessionId))
-      .getOrElse(throw new RuntimeException("Session not found"))
+      .getIsolatedSession(SessionKey(defaultUserId, defaultSessionId), None)
   }
 
   def buildPlanFromPipelineCommand(command: sc.PipelineCommand): sc.Plan = {
