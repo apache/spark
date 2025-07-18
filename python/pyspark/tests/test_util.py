@@ -38,6 +38,9 @@ class KeywordOnlyTests(unittest.TestCase):
                 self._y = self._input_kwargs["y"]
             return x, y
 
+    def test_job_retry(self):
+        self.assertEqual(1, 2)
+
     def test_keywords(self):
         w = self.Wrapped()
         x, y = w.set(y=1)
