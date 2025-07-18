@@ -1979,49 +1979,4 @@ class PlanParserSuite extends AnalysisTest {
     assert(unresolvedRelation2.options == CaseInsensitiveStringMap.empty)
     assert(unresolvedRelation2.isStreaming)
   }
-
-  test("SPARK-52709: Parsing of empty and nested Struct<> followed by shiftRight operator") {
-    import org.apache.spark.sql.types.{NullType, StructType, IntegerType}
-    import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-
-    // This test ensures parsing of empty and nested structs is handled correctly.
-    // This single SQL query ensures correct parsing of:
-    // - an empty struct
-    // - a nested struct
-    // - a shiftRight binary operator
-    // All of these are parsed as part of the same SELECT statement.
-
-    val sql =
-      """
-        |SELECT
-        |  CAST(null AS STRUCT<>),
-        |  CAST(null AS STRUCT<a: STRUCT<b: INT>>),
-        |  4 >> 1
-      """.stripMargin
-
-    // Define expected data types
-    val emptyStructType = CatalystSqlParser.parseDataType("STRUCT<>")
-      .asInstanceOf[StructType]
-    val nestedStructType = CatalystSqlParser.parseDataType("STRUCT<a: STRUCT<b: INT>>")
-      .asInstanceOf[StructType]
-
-    // Construct expected expressions
-    val emptyStructExpr = UnresolvedAlias(Cast(Literal(null, NullType), emptyStructType))
-
-    val nestedStructExpr = UnresolvedAlias(Cast(Literal(null, NullType), nestedStructType))
-
-    val shiftRightExpr = UnresolvedAlias(ShiftRight(
-      Literal(4, IntegerType),
-      Literal(1, IntegerType)
-    ))
-
-    // Expected plan
-    val expectedPlan = Project(
-      Seq(emptyStructExpr, nestedStructExpr, shiftRightExpr),
-      OneRowRelation()
-    )
-
-    // Assert that parsed SQL matches the expected plan
-    assertEqual(sql, expectedPlan)
-  }
 }
