@@ -3374,6 +3374,7 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
 to_date.__doc__ = pysparkfuncs.to_date.__doc__
 
+
 def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     if format is None:
         return _invoke_function_over_columns("try_to_date", col)
