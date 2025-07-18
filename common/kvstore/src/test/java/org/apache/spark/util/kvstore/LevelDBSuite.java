@@ -31,11 +31,12 @@ import java.util.stream.StreamSupport;
 
 import com.google.common.collect.ImmutableSet;
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang3.SystemUtils;
 import org.iq80.leveldb.DBIterator;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import org.apache.spark.util.SparkSystemUtils$;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
@@ -57,7 +58,7 @@ public class LevelDBSuite {
 
   @BeforeEach
   public void setup() throws Exception {
-    assumeFalse(SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64"));
+    assumeFalse(SparkSystemUtils$.MODULE$.isMacOnAppleSilicon());
     dbpath = File.createTempFile("test.", ".ldb");
     dbpath.delete();
     db = new LevelDB(dbpath);
