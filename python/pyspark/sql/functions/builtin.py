@@ -11377,7 +11377,7 @@ def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     Examples
     --------
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['ts'])
+    >>> df = spark.createDataFrame([('1997-02-28',)], ['ts'])
     >>> df.select('*', sf.try_to_date(df.ts)).show()
     +-------------------+---------------+
     |                 ts|try_to_date(ts)|
@@ -11385,14 +11385,14 @@ def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     |1997-02-28 10:30:00|     1997-02-28|
     +-------------------+---------------+
 
-    >>> df.select('*', sf.try_to_date('ts', 'yyyy-MM-dd HH:mm:ss')).show()
-    +-------------------+------------------------------------+
-    |                 ts|try_to_date(ts, yyyy-MM-dd HH:mm:ss)|
-    +-------------------+------------------------------------+
-    |1997-02-28 10:30:00|                          1997-02-28|
-    +-------------------+------------------------------------+
+    >>> df.select('*', sf.try_to_date('ts', 'yyyy-MM-dd')).show()
+    +-------------------+---------------------------+
+    |                 ts|try_to_date(ts, yyyy-MM-dd)|
+    +-------------------+---------------------------+
+    |1997-02-28 10:30:00|                 1997-02-28|
+    +-------------------+---------------------------+
 
-    >>> df = spark.createDataFrame([('malformed',)], ['ts'])
+    >>> df = spark.createDataFrame([('foo',)], ['ts'])
     >>> df.select(sf.try_to_date(df.ts)).show()
     +--------------+
     |try_to_date(t)|
