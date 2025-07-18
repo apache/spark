@@ -433,7 +433,7 @@ class DenseVector(Vector):
         if isinstance(other, SparseVector):
             return other.squared_distance(self)
         elif _have_scipy and scipy.sparse.issparse(other):
-            return _convert_to_vector(other).squared_distance(self)  # type: ignore[attr-defined]
+            return _convert_to_vector(other).squared_distance(self)  # type: ignore
 
         if isinstance(other, Vector):
             other = other.toArray()
@@ -456,12 +456,10 @@ class DenseVector(Vector):
         return self.array
 
     @overload
-    def __getitem__(self, item: int) -> np.float64:
-        ...
+    def __getitem__(self, item: int) -> np.float64: ...
 
     @overload
-    def __getitem__(self, item: slice) -> np.ndarray:
-        ...
+    def __getitem__(self, item: slice) -> np.ndarray: ...
 
     def __getitem__(self, item: Union[int, slice]) -> Union[np.float64, np.ndarray]:
         return self.array[item]
@@ -536,24 +534,19 @@ class SparseVector(Vector):
     """
 
     @overload
-    def __init__(self, size: int, __indices: bytes, __values: bytes):
-        ...
+    def __init__(self, size: int, __indices: bytes, __values: bytes): ...
 
     @overload
-    def __init__(self, size: int, *args: Tuple[int, float]):
-        ...
+    def __init__(self, size: int, *args: Tuple[int, float]): ...
 
     @overload
-    def __init__(self, size: int, __indices: Iterable[int], __values: Iterable[float]):
-        ...
+    def __init__(self, size: int, __indices: Iterable[int], __values: Iterable[float]): ...
 
     @overload
-    def __init__(self, size: int, __pairs: Iterable[Tuple[int, float]]):
-        ...
+    def __init__(self, size: int, __pairs: Iterable[Tuple[int, float]]): ...
 
     @overload
-    def __init__(self, size: int, __map: Dict[int, float]):
-        ...
+    def __init__(self, size: int, __map: Dict[int, float]): ...
 
     def __init__(
         self,
@@ -862,7 +855,6 @@ class SparseVector(Vector):
 
 
 class Vectors:
-
     """
     Factory methods for working with vectors.
 
@@ -876,28 +868,23 @@ class Vectors:
 
     @staticmethod
     @overload
-    def sparse(size: int, __indices: bytes, __values: bytes) -> SparseVector:
-        ...
+    def sparse(size: int, __indices: bytes, __values: bytes) -> SparseVector: ...
 
     @staticmethod
     @overload
-    def sparse(size: int, *args: Tuple[int, float]) -> SparseVector:
-        ...
+    def sparse(size: int, *args: Tuple[int, float]) -> SparseVector: ...
 
     @staticmethod
     @overload
-    def sparse(size: int, __indices: Iterable[int], __values: Iterable[float]) -> SparseVector:
-        ...
+    def sparse(size: int, __indices: Iterable[int], __values: Iterable[float]) -> SparseVector: ...
 
     @staticmethod
     @overload
-    def sparse(size: int, __pairs: Iterable[Tuple[int, float]]) -> SparseVector:
-        ...
+    def sparse(size: int, __pairs: Iterable[Tuple[int, float]]) -> SparseVector: ...
 
     @staticmethod
     @overload
-    def sparse(size: int, __map: Dict[int, float]) -> SparseVector:
-        ...
+    def sparse(size: int, __map: Dict[int, float]) -> SparseVector: ...
 
     @staticmethod
     def sparse(
@@ -932,18 +919,15 @@ class Vectors:
 
     @overload
     @staticmethod
-    def dense(*elements: float) -> DenseVector:
-        ...
+    def dense(*elements: float) -> DenseVector: ...
 
     @overload
     @staticmethod
-    def dense(__arr: bytes) -> DenseVector:
-        ...
+    def dense(__arr: bytes) -> DenseVector: ...
 
     @overload
     @staticmethod
-    def dense(__arr: Iterable[float]) -> DenseVector:
-        ...
+    def dense(__arr: Iterable[float]) -> DenseVector: ...
 
     @staticmethod
     def dense(*elements: Union[float, bytes, np.ndarray, Iterable[float]]) -> DenseVector:

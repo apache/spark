@@ -113,6 +113,7 @@ class Expression(google.protobuf.message.Message):
                 @property
                 def value(self) -> global___Expression:
                     """This is an expression for future proofing. We are expecting literals on the server side."""
+
                 def __init__(
                     self,
                     *,
@@ -158,9 +159,11 @@ class Expression(google.protobuf.message.Message):
             @property
             def lower(self) -> global___Expression.Window.WindowFrame.FrameBoundary:
                 """(Required) The lower bound of the frame."""
+
             @property
             def upper(self) -> global___Expression.Window.WindowFrame.FrameBoundary:
                 """(Required) The upper bound of the frame."""
+
             def __init__(
                 self,
                 *,
@@ -185,6 +188,7 @@ class Expression(google.protobuf.message.Message):
         @property
         def window_function(self) -> global___Expression:
             """(Required) The window function."""
+
         @property
         def partition_spec(
             self,
@@ -192,6 +196,7 @@ class Expression(google.protobuf.message.Message):
             global___Expression
         ]:
             """(Optional) The way that input rows are partitioned."""
+
         @property
         def order_spec(
             self,
@@ -199,12 +204,14 @@ class Expression(google.protobuf.message.Message):
             global___Expression.SortOrder
         ]:
             """(Optional) Ordering of rows in a partition."""
+
         @property
         def frame_spec(self) -> global___Expression.Window.WindowFrame:
             """(Optional) Window frame in a partition.
 
             If not set, it will be treated as 'UnspecifiedFrame'.
             """
+
         def __init__(
             self,
             *,
@@ -339,6 +346,7 @@ class Expression(google.protobuf.message.Message):
         @property
         def expr(self) -> global___Expression:
             """(Required) the expression to be casted."""
+
         @property
         def type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
         type_str: builtins.str
@@ -1172,11 +1180,13 @@ class Expression(google.protobuf.message.Message):
             """(Required) The expression to extract value from, can be
             Map, Array, Struct or array of Structs.
             """
+
         @property
         def extraction(self) -> global___Expression:
             """(Required) The expression to describe the extraction, can be
             key of Map, index of Array, field name of Struct.
             """
+
         def __init__(
             self,
             *,
@@ -1211,6 +1221,7 @@ class Expression(google.protobuf.message.Message):
 
             When not set, it means this field will be dropped.
             """
+
         def __init__(
             self,
             *,
@@ -1245,6 +1256,7 @@ class Expression(google.protobuf.message.Message):
         @property
         def expr(self) -> global___Expression:
             """(Required) The expression that alias will be added on."""
+
         @property
         def name(
             self,
@@ -1290,6 +1302,7 @@ class Expression(google.protobuf.message.Message):
             The function body should use 'UnresolvedAttribute' as arguments, the sever side will
             replace 'UnresolvedAttribute' with 'UnresolvedNamedLambdaVariable'.
             """
+
         @property
         def arguments(
             self,
@@ -1297,12 +1310,14 @@ class Expression(google.protobuf.message.Message):
             global___Expression.UnresolvedNamedLambdaVariable
         ]:
             """(Required) Function variables. Must contains 1 ~ 3 variables."""
+
         def __init__(
             self,
             *,
             function: global___Expression | None = ...,
-            arguments: collections.abc.Iterable[global___Expression.UnresolvedNamedLambdaVariable]
-            | None = ...,
+            arguments: (
+                collections.abc.Iterable[global___Expression.UnresolvedNamedLambdaVariable] | None
+            ) = ...,
         ) -> None: ...
         def HasField(
             self, field_name: typing_extensions.Literal["function", b"function"]
@@ -1323,6 +1338,7 @@ class Expression(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """(Required) a list of name parts for the variable. Must not be empty."""
+
         def __init__(
             self,
             *,
@@ -1403,6 +1419,7 @@ class Expression(google.protobuf.message.Message):
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         relations they can add them here. During the planning the correct resolution is done.
         """
+
     def __init__(
         self,
         *,
@@ -1420,8 +1437,9 @@ class Expression(google.protobuf.message.Message):
         window: global___Expression.Window | None = ...,
         unresolved_extract_value: global___Expression.UnresolvedExtractValue | None = ...,
         update_fields: global___Expression.UpdateFields | None = ...,
-        unresolved_named_lambda_variable: global___Expression.UnresolvedNamedLambdaVariable
-        | None = ...,
+        unresolved_named_lambda_variable: (
+            global___Expression.UnresolvedNamedLambdaVariable | None
+        ) = ...,
         common_inline_user_defined_function: global___CommonInlineUserDefinedFunction | None = ...,
         call_function: global___CallFunction | None = ...,
         named_argument_expression: global___NamedArgumentExpression | None = ...,
@@ -1532,9 +1550,7 @@ class Expression(google.protobuf.message.Message):
             b"window",
         ],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["expr_type", b"expr_type"]
-    ) -> (
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["expr_type", b"expr_type"]) -> (
         typing_extensions.Literal[
             "literal",
             "unresolved_attribute",
@@ -1570,6 +1586,7 @@ class ExpressionCommon(google.protobuf.message.Message):
     @property
     def origin(self) -> pyspark.sql.connect.proto.common_pb2.Origin:
         """(Required) Keep the information of the origin for this expression such as stacktrace."""
+
     def __init__(
         self,
         *,
@@ -1601,6 +1618,7 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Expression]:
         """(Optional) Function arguments. Empty arguments are allowed."""
+
     @property
     def python_udf(self) -> global___PythonUDF: ...
     @property
@@ -1682,6 +1700,7 @@ class PythonUDF(google.protobuf.message.Message):
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Optional) Additional includes for the Python UDF."""
+
     def __init__(
         self,
         *,
@@ -1729,6 +1748,7 @@ class ScalarScalaUDF(google.protobuf.message.Message):
         pyspark.sql.connect.proto.types_pb2.DataType
     ]:
         """(Optional) Input type(s) of the UDF"""
+
     @property
     def outputType(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Required) Output type of the UDF"""
@@ -1740,8 +1760,9 @@ class ScalarScalaUDF(google.protobuf.message.Message):
         self,
         *,
         payload: builtins.bytes = ...,
-        inputTypes: collections.abc.Iterable[pyspark.sql.connect.proto.types_pb2.DataType]
-        | None = ...,
+        inputTypes: (
+            collections.abc.Iterable[pyspark.sql.connect.proto.types_pb2.DataType] | None
+        ) = ...,
         outputType: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
         nullable: builtins.bool = ...,
         aggregate: builtins.bool = ...,
@@ -1819,6 +1840,7 @@ class TypedAggregateExpression(google.protobuf.message.Message):
     @property
     def scalar_scala_udf(self) -> global___ScalarScalaUDF:
         """(Required) The aggregate function object packed into bytes."""
+
     def __init__(
         self,
         *,
@@ -1845,6 +1867,7 @@ class CallFunction(google.protobuf.message.Message):
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Expression]:
         """(Optional) Function arguments. Empty arguments are allowed."""
+
     def __init__(
         self,
         *,
@@ -1870,6 +1893,7 @@ class NamedArgumentExpression(google.protobuf.message.Message):
     @property
     def value(self) -> global___Expression:
         """(Required) The value expression of the named argument."""
+
     def __init__(
         self,
         *,
@@ -1922,9 +1946,11 @@ class MergeAction(google.protobuf.message.Message):
         @property
         def key(self) -> global___Expression:
             """(Required) The key of the assignment."""
+
         @property
         def value(self) -> global___Expression:
             """(Required) The value of the assignment."""
+
         def __init__(
             self,
             *,
@@ -1946,6 +1972,7 @@ class MergeAction(google.protobuf.message.Message):
     @property
     def condition(self) -> global___Expression:
         """(Optional) The condition expression of the merge action."""
+
     @property
     def assignments(
         self,
@@ -1953,6 +1980,7 @@ class MergeAction(google.protobuf.message.Message):
         global___MergeAction.Assignment
     ]:
         """(Optional) The assignments of the merge action. Required for ActionTypes INSERT and UPDATE."""
+
     def __init__(
         self,
         *,
@@ -2027,6 +2055,7 @@ class SubqueryExpression(google.protobuf.message.Message):
             global___Expression
         ]:
             """(Optional) The way that input rows are partitioned."""
+
         @property
         def order_spec(
             self,
@@ -2083,11 +2112,13 @@ class SubqueryExpression(google.protobuf.message.Message):
     @property
     def table_arg_options(self) -> global___SubqueryExpression.TableArgOptions:
         """(Optional) Options specific to table arguments."""
+
     @property
     def in_subquery_values(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Expression]:
         """(Optional) IN subquery values."""
+
     def __init__(
         self,
         *,

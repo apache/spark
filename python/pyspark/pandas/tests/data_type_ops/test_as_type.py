@@ -69,16 +69,18 @@ class AsTypeTestsMixin:
 
     def test_astype_eager_check(self):
         psser = self.psdf["float_nan"]
-        with ps.option_context("compute.eager_check", True), self.assertRaisesRegex(
-            ValueError, "Cannot convert"
+        with (
+            ps.option_context("compute.eager_check", True),
+            self.assertRaisesRegex(ValueError, "Cannot convert"),
         ):
             psser.astype(int)
         with ps.option_context("compute.eager_check", False):
             psser.astype(int)
 
         psser = self.psdf["decimal_nan"]
-        with ps.option_context("compute.eager_check", True), self.assertRaisesRegex(
-            ValueError, "Cannot convert"
+        with (
+            ps.option_context("compute.eager_check", True),
+            self.assertRaisesRegex(ValueError, "Cannot convert"),
         ):
             psser.astype(int)
         with ps.option_context("compute.eager_check", False):

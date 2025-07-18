@@ -55,7 +55,6 @@ class Rating(NamedTuple):
 class MatrixFactorizationModel(
     JavaModelWrapper, JavaSaveable, JavaLoader["MatrixFactorizationModel"]
 ):
-
     """A matrix factorisation model trained by regularized alternating
     least-squares.
 

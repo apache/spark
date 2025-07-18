@@ -225,12 +225,10 @@ class DataFrame(ParentDataFrame):
         return len(self.select().take(1)) == 0
 
     @overload
-    def select(self, *cols: "ColumnOrName") -> ParentDataFrame:
-        ...
+    def select(self, *cols: "ColumnOrName") -> ParentDataFrame: ...
 
     @overload
-    def select(self, __cols: Union[List[Column], List[str]]) -> ParentDataFrame:
-        ...
+    def select(self, __cols: Union[List[Column], List[str]]) -> ParentDataFrame: ...
 
     def select(self, *cols: "ColumnOrName") -> ParentDataFrame:  # type: ignore[misc]
         if len(cols) == 1 and isinstance(cols[0], list):
@@ -344,12 +342,10 @@ class DataFrame(ParentDataFrame):
         return res
 
     @overload
-    def repartition(self, numPartitions: int, *cols: "ColumnOrName") -> ParentDataFrame:
-        ...
+    def repartition(self, numPartitions: int, *cols: "ColumnOrName") -> ParentDataFrame: ...
 
     @overload
-    def repartition(self, *cols: "ColumnOrName") -> ParentDataFrame:
-        ...
+    def repartition(self, *cols: "ColumnOrName") -> ParentDataFrame: ...
 
     def repartition(  # type: ignore[misc]
         self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
@@ -394,12 +390,10 @@ class DataFrame(ParentDataFrame):
         return res
 
     @overload
-    def repartitionByRange(self, numPartitions: int, *cols: "ColumnOrName") -> ParentDataFrame:
-        ...
+    def repartitionByRange(self, numPartitions: int, *cols: "ColumnOrName") -> ParentDataFrame: ...
 
     @overload
-    def repartitionByRange(self, *cols: "ColumnOrName") -> ParentDataFrame:
-        ...
+    def repartitionByRange(self, *cols: "ColumnOrName") -> ParentDataFrame: ...
 
     def repartitionByRange(  # type: ignore[misc]
         self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
@@ -502,12 +496,10 @@ class DataFrame(ParentDataFrame):
         return res
 
     @overload
-    def drop(self, cols: "ColumnOrName") -> ParentDataFrame:
-        ...
+    def drop(self, cols: "ColumnOrName") -> ParentDataFrame: ...
 
     @overload
-    def drop(self, *cols: str) -> ParentDataFrame:
-        ...
+    def drop(self, *cols: str) -> ParentDataFrame: ...
 
     def drop(self, *cols: "ColumnOrName") -> ParentDataFrame:  # type: ignore[misc]
         _cols = list(cols)
@@ -538,12 +530,10 @@ class DataFrame(ParentDataFrame):
         return self.head()
 
     @overload  # type: ignore[no-overload-impl]
-    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
-        ...
+    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData": ...
 
     @overload
-    def groupby(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
-        ...
+    def groupby(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData": ...
 
     def groupBy(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
         if len(cols) == 1 and isinstance(cols[0], list):
@@ -573,12 +563,10 @@ class DataFrame(ParentDataFrame):
     groupby = groupBy  # type: ignore[assignment]
 
     @overload
-    def rollup(self, *cols: "ColumnOrName") -> "GroupedData":
-        ...
+    def rollup(self, *cols: "ColumnOrName") -> "GroupedData": ...
 
     @overload
-    def rollup(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
-        ...
+    def rollup(self, __cols: Union[List[Column], List[str]]) -> "GroupedData": ...
 
     def rollup(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
         _cols: List[Column] = []
@@ -603,12 +591,10 @@ class DataFrame(ParentDataFrame):
         return GroupedData(df=self, group_type="rollup", grouping_cols=_cols)
 
     @overload
-    def cube(self, *cols: "ColumnOrName") -> "GroupedData":
-        ...
+    def cube(self, *cols: "ColumnOrName") -> "GroupedData": ...
 
     @overload
-    def cube(self, __cols: Union[List[Column], List[str]]) -> "GroupedData":
-        ...
+    def cube(self, __cols: Union[List[Column], List[str]]) -> "GroupedData": ...
 
     def cube(self, *cols: "ColumnOrName") -> "GroupedData":  # type: ignore[misc]
         _cols: List[Column] = []
@@ -670,12 +656,10 @@ class DataFrame(ParentDataFrame):
         )
 
     @overload
-    def head(self) -> Optional[Row]:
-        ...
+    def head(self) -> Optional[Row]: ...
 
     @overload
-    def head(self, n: int) -> List[Row]:
-        ...
+    def head(self, n: int) -> List[Row]: ...
 
     def head(self, n: Optional[int] = None) -> Union[Optional[Row], List[Row]]:
         if n is None:
@@ -1712,12 +1696,10 @@ class DataFrame(ParentDataFrame):
         return self._col(name)
 
     @overload
-    def __getitem__(self, item: Union[int, str]) -> Column:
-        ...
+    def __getitem__(self, item: Union[int, str]) -> Column: ...
 
     @overload
-    def __getitem__(self, item: Union[Column, List, Tuple]) -> ParentDataFrame:
-        ...
+    def __getitem__(self, item: Union[Column, List, Tuple]) -> ParentDataFrame: ...
 
     def __getitem__(
         self, item: Union[int, str, Column, List, Tuple]

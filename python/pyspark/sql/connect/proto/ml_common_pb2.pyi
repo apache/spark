@@ -84,13 +84,16 @@ class MlParams(google.protobuf.message.Message):
         builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
     ]:
         """User-supplied params"""
+
     def __init__(
         self,
         *,
-        params: collections.abc.Mapping[
-            builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-        ]
-        | None = ...,
+        params: (
+            collections.abc.Mapping[
+                builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+            ]
+            | None
+        ) = ...,
     ) -> None: ...
     def ClearField(self, field_name: typing_extensions.Literal["params", b"params"]) -> None: ...
 

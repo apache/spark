@@ -53,20 +53,20 @@ _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "pyspark.sql.connect.proto.base_pb2", _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
     _globals["DESCRIPTOR"]._loaded_options = None
-    _globals[
-        "DESCRIPTOR"
-    ]._serialized_options = b"\n\036org.apache.spark.connect.protoP\001Z\022internal/generated"
-    _globals[
-        "_EXECUTEPLANRESPONSE_METRICS_METRICOBJECT_EXECUTIONMETRICSENTRY"
-    ]._loaded_options = None
+    _globals["DESCRIPTOR"]._serialized_options = (
+        b"\n\036org.apache.spark.connect.protoP\001Z\022internal/generated"
+    )
+    _globals["_EXECUTEPLANRESPONSE_METRICS_METRICOBJECT_EXECUTIONMETRICSENTRY"]._loaded_options = (
+        None
+    )
     _globals[
         "_EXECUTEPLANRESPONSE_METRICS_METRICOBJECT_EXECUTIONMETRICSENTRY"
     ]._serialized_options = b"8\001"
     _globals["_ARTIFACTSTATUSESRESPONSE_STATUSESENTRY"]._loaded_options = None
     _globals["_ARTIFACTSTATUSESRESPONSE_STATUSESENTRY"]._serialized_options = b"8\001"
-    _globals[
-        "_FETCHERRORDETAILSRESPONSE_SPARKTHROWABLE_MESSAGEPARAMETERSENTRY"
-    ]._loaded_options = None
+    _globals["_FETCHERRORDETAILSRESPONSE_SPARKTHROWABLE_MESSAGEPARAMETERSENTRY"]._loaded_options = (
+        None
+    )
     _globals[
         "_FETCHERRORDETAILSRESPONSE_SPARKTHROWABLE_MESSAGEPARAMETERSENTRY"
     ]._serialized_options = b"8\001"
@@ -153,9 +153,9 @@ if not _descriptor._USE_C_DESCRIPTORS:
     _globals[
         "_EXECUTEPLANRESPONSE_METRICS_METRICOBJECT_EXECUTIONMETRICSENTRY"
     ]._serialized_start = 8198
-    _globals[
-        "_EXECUTEPLANRESPONSE_METRICS_METRICOBJECT_EXECUTIONMETRICSENTRY"
-    ]._serialized_end = 8321
+    _globals["_EXECUTEPLANRESPONSE_METRICS_METRICOBJECT_EXECUTIONMETRICSENTRY"]._serialized_end = (
+        8321
+    )
     _globals["_EXECUTEPLANRESPONSE_METRICS_METRICVALUE"]._serialized_start = 8323
     _globals["_EXECUTEPLANRESPONSE_METRICS_METRICVALUE"]._serialized_end = 8411
     _globals["_EXECUTEPLANRESPONSE_OBSERVEDMETRICS"]._serialized_start = 8414
@@ -247,9 +247,9 @@ if not _descriptor._USE_C_DESCRIPTORS:
     _globals[
         "_FETCHERRORDETAILSRESPONSE_SPARKTHROWABLE_MESSAGEPARAMETERSENTRY"
     ]._serialized_start = 16061
-    _globals[
-        "_FETCHERRORDETAILSRESPONSE_SPARKTHROWABLE_MESSAGEPARAMETERSENTRY"
-    ]._serialized_end = 16129
+    _globals["_FETCHERRORDETAILSRESPONSE_SPARKTHROWABLE_MESSAGEPARAMETERSENTRY"]._serialized_end = (
+        16129
+    )
     _globals["_FETCHERRORDETAILSRESPONSE_ERROR"]._serialized_start = 16162
     _globals["_FETCHERRORDETAILSRESPONSE_ERROR"]._serialized_end = 16509
     _globals["_CHECKPOINTCOMMANDRESULT"]._serialized_start = 16530
