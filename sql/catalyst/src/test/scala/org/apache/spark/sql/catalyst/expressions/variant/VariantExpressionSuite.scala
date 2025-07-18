@@ -689,6 +689,17 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInvalidPath("$[\"\\\"\"]")
   }
 
+  test("SPARK-52621: variant_get with TimeType") {
+    // Default TimeType.
+    testVariantGet("0", "$", TimeType(), 0L) // 00:00:00
+    testVariantGet("3723000000000", "$", TimeType(), 3723000000000L) // 01:02:03
+    testVariantGet("43200000000", "$", TimeType(), 43200000000L) // 12:00:00
+    testVariantGet("86399000000", "$", TimeType(), 86399000000L) // 23:59:59
+    // Parameterized TimeType.
+    testVariantGet("0", "$", TimeType(6), 0L) // 00:00:00.000000
+    testVariantGet("3723000000000", "$", TimeType(6), 3723000000000L) // 01:02:03.000000
+  }
+
   test("cast from variant") {
     // We do not test too many type combinations, as the cast implementation is mostly the same as
     // variant_get.
@@ -719,16 +730,6 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // SPARK-52621: Test TIME casting.
     checkCast(parseJson("0"), TimeType(), 0L) // 00:00:00
     checkCast(parseJson("3723000000000"), TimeType(), 3723000000000L) // 01:02:03
-    
-    // Test variant to TIME casting - the key functionality that was missing
-    testVariantGet("0", "$", TimeType(), 0L) // 00:00:00
-    testVariantGet("3723000000000", "$", TimeType(), 3723000000000L) // 01:02:03
-    testVariantGet("43200000000", "$", TimeType(), 43200000000L) // 12:00:00
-    testVariantGet("86399000000", "$", TimeType(), 86399000000L) // 23:59:59
-    
-    // Test TIME with different precisions
-    testVariantGet("0", "$", TimeType(6), 0L) // 00:00:00.000000
-    testVariantGet("3723000000000", "$", TimeType(6), 3723000000000L) // 01:02:03.000000
 
     checkInvalidCast(parseJson("2147483648"), IntegerType, null)
     checkInvalidCast(parseJson("[2147483648, 1]"), ArrayType(IntegerType), Array(null, 1))
@@ -934,7 +935,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       check(Literal(0L, TimestampNTZType), "\"1970-01-01 00:00:00\"")
     }
 
-    // SPARK-52621: TimeType is stored as nanoseconds since midnight.
+    // SPARK-52621: TimeType is stored as nanoseconds since midnight, in Long format.
     check(Literal(0L, TimeType()), "0") // 00:00:00
     check(Literal(3723000000000L, TimeType()), "3723000000000") // 01:02:03
 
