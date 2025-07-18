@@ -33,18 +33,13 @@ from pyspark.serializers import (
     CPickleSerializer,
 )
 from pyspark.sql import Row
-from pyspark.sql.conversion import (
-    LocalDataToArrowConversion,
-    ArrowTableToRowsConversion
-)
+from pyspark.sql.conversion import LocalDataToArrowConversion, ArrowTableToRowsConversion
 from pyspark.sql.pandas.types import (
-    from_arrow_schema,
     from_arrow_type,
     is_variant,
     to_arrow_type,
     _create_converter_from_pandas,
     _create_converter_to_pandas,
-    _deduplicate_field_names,
 )
 from pyspark.sql.types import (
     DataType,
@@ -204,6 +199,7 @@ class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
     def load_stream(self, stream):
         return ArrowStreamSerializer.load_stream(self, stream)
 
+
 class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
     """
     Serializer used by Python worker to evaluate Arrow UDFs
@@ -228,15 +224,11 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
         """
         import pyarrow as pa
 
-        arrays = [
-            arg.combine_chunks() if isinstance(arg, pa.ChunkedArray) else arg
-            for arg in args
-        ]
+        arrays = [arg.combine_chunks() if isinstance(arg, pa.ChunkedArray) else arg for arg in args]
 
         converters = [
-            ArrowTableToRowsConversion._create_converter(
-                data_type, none_on_identity=True
-            ) for data_type in self._input_types
+            ArrowTableToRowsConversion._create_converter(data_type, none_on_identity=True)
+            for data_type in self._input_types
         ]
         converted_cols = []
         for arr, conv in zip(arrays, converters):
@@ -284,7 +276,7 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
                 else:
                     # Multiple UDFs case
                     arrs = []
-                    for j, (udf_results, arrow_return_type, return_type) in enumerate(batch_data):             
+                    for j, (udf_results, arrow_return_type, return_type) in enumerate(batch_data):
                         arr = self._convert_udf_results_to_arrow(udf_results, return_type)
                         arrs.append(arr)
 
@@ -304,10 +296,7 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
         import pyarrow as pa
 
         coerced_results = self._apply_type_coercion_for_type(udf_results, return_type)
-        arrow_type = to_arrow_type(
-            return_type,
-            prefers_large_types=self._prefers_large_var_types
-        )
+        arrow_type = to_arrow_type(return_type, prefers_large_types=self._prefers_large_var_types)
         converter = LocalDataToArrowConversion._create_converter(
             return_type, nullable=True, none_on_identity=True
         )
@@ -328,7 +317,10 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
             return [str(r) if r is not None else r for r in udf_results]
         elif type(return_type) == BinaryType:
             return [bytes(r) if r is not None else r for r in udf_results]
-        elif isinstance(return_type, (ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)):
+        elif isinstance(
+            return_type, (ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)
+        ):
+
             def numeric_result_func(r):
                 if r is None:
                     return r
@@ -341,10 +333,11 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
                     except (ValueError, TypeError):
                         pass
                 return r
+
             return [numeric_result_func(r) for r in udf_results]
         else:
             return udf_results
-    
+
     def __repr__(self):
         return "ArrowBatchUDFSerializer"
 

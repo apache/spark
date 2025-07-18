@@ -202,9 +202,13 @@ def wrap_scalar_arrow_udf(f, args_offsets, kwargs_offsets, return_type, runner_c
     )
 
 
-def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf, input_types=None, serializer=None):
+def wrap_arrow_batch_udf(
+    f, args_offsets, kwargs_offsets, return_type, runner_conf, input_types=None, serializer=None
+):
     if use_legacy_pandas_udf_conversion(runner_conf):
-        return wrap_arrow_batch_udf_legacy(f, args_offsets, kwargs_offsets, return_type, runner_conf)
+        return wrap_arrow_batch_udf_legacy(
+            f, args_offsets, kwargs_offsets, return_type, runner_conf
+        )
     else:
         return wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf)
 
@@ -254,6 +258,7 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
         args_kwargs_offsets,
         make_output,
     )
+
 
 def wrap_arrow_batch_udf_legacy(f, args_offsets, kwargs_offsets, return_type, runner_conf):
     import pandas as pd
@@ -1034,7 +1039,16 @@ def wrap_memory_profiler(f, result_id):
     return profiling_func
 
 
-def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profiler, input_types=None, serializer=None):
+def read_single_udf(
+    pickleSer,
+    infile,
+    eval_type,
+    runner_conf,
+    udf_index,
+    profiler,
+    input_types=None,
+    serializer=None,
+):
     num_arg = read_int(infile)
 
     if eval_type in (
@@ -1106,7 +1120,15 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         narrowed_input_types = None
         if input_types is not None:
             narrowed_input_types = [input_types[o] for o in args_offsets]
-        return wrap_arrow_batch_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf, narrowed_input_types, serializer)
+        return wrap_arrow_batch_udf(
+            func,
+            args_offsets,
+            kwargs_offsets,
+            return_type,
+            runner_conf,
+            narrowed_input_types,
+            serializer,
+        )
     elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
         return args_offsets, wrap_pandas_batch_iter_udf(func, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF:
@@ -1178,8 +1200,14 @@ def assign_cols_by_name(runner_conf):
 def use_large_var_types(runner_conf):
     return runner_conf.get("spark.sql.execution.arrow.useLargeVarTypes", "false").lower() == "true"
 
+
 def use_legacy_pandas_udf_conversion(runner_conf):
-    return runner_conf.get("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "false").lower() == "true"
+    return (
+        runner_conf.get(
+            "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "false"
+        ).lower()
+        == "true"
+    )
 
 
 # Read and process a serialized user-defined table function (UDTF) from a socket.
@@ -2002,8 +2030,13 @@ def read_udfs(pickleSer, infile, eval_type):
         ):
             # Arrow cast for type coercion is disabled by default
             ser = ArrowStreamArrowUDFSerializer(timezone, safecheck, _assign_cols_by_name, False)
-        elif eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF and not use_legacy_pandas_udf_conversion(runner_conf):
-            input_types = ([f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))])
+        elif (
+            eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
+            and not use_legacy_pandas_udf_conversion(runner_conf)
+        ):
+            input_types = [
+                f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))
+            ]
             ser = ArrowBatchUDFSerializer(input_types, use_large_var_types(runner_conf))
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
@@ -2382,6 +2415,7 @@ def read_udfs(pickleSer, infile, eval_type):
             df2_keys = [a[1][o] for o in parsed_offsets[1][0]]
             df2_vals = [a[1][o] for o in parsed_offsets[1][1]]
             return f(df1_keys, df1_vals, df2_keys, df2_vals)
+
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
         import pyarrow as pa
 
@@ -2409,17 +2443,28 @@ def read_udfs(pickleSer, infile, eval_type):
             df2_keys = table_from_batches(a[1], parsed_offsets[1][0])
             df2_vals = table_from_batches(a[1], parsed_offsets[1][1])
             return f(df1_keys, df1_vals, df2_keys, df2_vals)
+
     else:
         udfs = []
         for i in range(num_udfs):
             udfs.append(
                 read_single_udf(
-                    pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler, input_types=input_types, serializer=ser
+                    pickleSer,
+                    infile,
+                    eval_type,
+                    runner_conf,
+                    udf_index=i,
+                    profiler=profiler,
+                    input_types=input_types,
+                    serializer=ser,
                 )
             )
 
         def mapper(a):
-            if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF and not use_legacy_pandas_udf_conversion(runner_conf):
+            if (
+                eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
+                and not use_legacy_pandas_udf_conversion(runner_conf)
+            ):
                 udf_result_tuples = []
                 for arg_offsets, f in udfs:
                     result_tuple = f(a)

@@ -265,7 +265,9 @@ class ArrowPythonUDFNonLegacyTestsMixin(ArrowPythonUDFTestsMixin):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.spark.conf.set("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "false")
+        cls.spark.conf.set(
+            "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "false"
+        )
 
     @classmethod
     def tearDownClass(cls):
