@@ -8350,7 +8350,7 @@ object functions {
    * false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.
    *
    * @group datetime_funcs
-   * @since 4.0.0
+   * @since 4.1.0
    */
   def make_timestamp(date: Column, time: Column): Column =
     Column.fn("make_timestamp", date, time)
@@ -8362,7 +8362,7 @@ object functions {
    * will throw an error instead.
    *
    * @group datetime_funcs
-   * @since 4.0.0
+   * @since 4.1.0
    */
   def make_timestamp(date: Column, time: Column, timezone: Column): Column =
     Column.fn("make_timestamp", date, time, timezone)
