@@ -582,8 +582,9 @@ case class Union(
   override def maxRows: Option[Long] = {
     var sum = BigInt(0)
     children.foreach { child =>
-      if (child.maxRows.isDefined) {
-        sum += child.maxRows.get
+      val childMaxRows = child.maxRows
+      if (childMaxRows.isDefined) {
+        sum += childMaxRows.get
         if (!sum.isValidLong) {
           return None
         }
@@ -602,8 +603,9 @@ case class Union(
   override def maxRowsPerPartition: Option[Long] = {
     var sum = BigInt(0)
     children.foreach { child =>
-      if (child.maxRowsPerPartition.isDefined) {
-        sum += child.maxRowsPerPartition.get
+      val childMaxRowsPerPartition = child.maxRowsPerPartition
+      if (childMaxRowsPerPartition.isDefined) {
+        sum += childMaxRowsPerPartition.get
         if (!sum.isValidLong) {
           return None
         }
