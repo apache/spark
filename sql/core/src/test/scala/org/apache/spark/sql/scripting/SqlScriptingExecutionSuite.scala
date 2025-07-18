@@ -2940,22 +2940,45 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Integer literal column in FOR query") {
-    val sqlScript =
+    val sqlScript1 =
       """
         |BEGIN
         |  FOR SELECT 1 DO
-        |    SELECT 5;
+        |    SELECT 1;
         |  END FOR;
         |END
         |""".stripMargin
-    val expected = Seq(Seq(Row(5)))
-    verifySqlScriptResult(sqlScript, expected)
+    val expected = Seq(Seq(Row(1)))
+    verifySqlScriptResult(sqlScript1, expected)
 
     val sqlScript2 =
       """
         |BEGIN
         |  FOR x AS SELECT 1 DO
-        |    SELECT 5;
+        |    SELECT x.`1`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+    verifySqlScriptResult(sqlScript2, expected)
+  }
+
+  test("Column with space in FOR query") {
+    val sqlScript1 =
+      """
+        |BEGIN
+        |  FOR SELECT 1 AS `Space Column` DO
+        |    SELECT `Space Column`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(1)))
+    verifySqlScriptResult(sqlScript1, expected)
+
+    val sqlScript2 =
+      """
+        |BEGIN
+        |  FOR x AS SELECT 1 AS `Space Column` DO
+        |    SELECT x.`Space Column`;
         |  END FOR;
         |END
         |""".stripMargin
