@@ -1485,6 +1485,33 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       TimeType(6)), localTime(23, 59, 59, 1))
   }
 
+  test("SPARK-51562: cast alias - time function") {
+    import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+    import org.apache.spark.sql.catalyst.FunctionIdentifier
+    // Test that time() function is registered and works correctly.
+    val registry = FunctionRegistry.builtin
+    val timeFunction = registry.lookupFunctionBuilder(FunctionIdentifier("time"))
+    assert(timeFunction.isDefined, "time function should be registered in FunctionRegistry")
+    // Test that time() function creates a proper Cast expression.
+    val stringInput = Literal("12:34:56")
+    val timeExpr = timeFunction.get(Seq(stringInput))
+    assert(timeExpr.isInstanceOf[Cast])
+    // The return type of the cast expression should be TimeType().
+    val castExpr = timeExpr.asInstanceOf[Cast]
+    assert(castExpr.dataType === TimeType())
+
+    // Test basic string to time conversions using the alias.
+    checkEvaluation(timeExpr, localTime(12, 34, 56))
+    val timeExprWithMillis = timeFunction.get(Seq(Literal("12:34:56.789")))
+    checkEvaluation(timeExprWithMillis, localTime(12, 34, 56, 789000))
+    val timeExprWithMicros = timeFunction.get(Seq(Literal("12:34:56.789012")))
+    checkEvaluation(timeExprWithMicros, localTime(12, 34, 56, 789012))
+
+    // Test null inputs.
+    val timeExprNull = timeFunction.get(Seq(Literal.create(null, StringType)))
+    checkEvaluation(timeExprNull, null)
+  }
+
   test("cast time to time") {
     checkEvaluation(cast(Literal(localTime(), TimeType(0)), TimeType(0)), 0L)
     checkEvaluation(cast(Literal(localTime(0, 0, 0, 1), TimeType(6)), TimeType(6)),
