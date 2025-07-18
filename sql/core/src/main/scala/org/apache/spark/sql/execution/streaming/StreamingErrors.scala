@@ -14,21 +14,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.execution.streaming
 
-package org.apache.spark.sql.catalyst.analysis.resolver
-
-import org.apache.spark.sql.catalyst.expressions.{Expression, IntegerLiteral}
+import org.apache.spark.SparkException
 
 /**
- * Try to extract ordinal from an expression. Return `Some(ordinal)` if the type of the expression
- * is [[IntegerLitera]], `None` otherwise.
+ * Object for grouping error messages from streaming query exceptions
  */
-object TryExtractOrdinal {
-  def apply(expression: Expression): Option[Int] = {
-    expression match {
-      case IntegerLiteral(literal) =>
-        Some(literal)
-      case other => None
-    }
+object StreamingErrors {
+  def cannotLoadCheckpointFileManagerClass(path: String, className: String, err: Throwable):
+  Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_CHECKPOINT_FILE_MANAGER.ERROR_LOADING_CLASS",
+      messageParameters = Map("path" -> path, "className" -> className, "msg" -> err.toString),
+      cause = err
+    )
+  }
+
+  def cannotLoadCheckpointFileManager(path: String, err: Throwable):
+  Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_CHECKPOINT_FILE_MANAGER.UNCATEGORIZED",
+      messageParameters = Map("path" -> path),
+      cause = err
+    )
   }
 }

@@ -644,6 +644,18 @@ class RocksDB(
       workingDir, rocksDBFileMapping)
     loadedVersion = snapshotVersion
     lastSnapshotVersion = snapshotVersion
+
+    setInitialCFInfo()
+    metadata.columnFamilyMapping.foreach { mapping =>
+      mapping.foreach { case (colFamilyName, cfId) =>
+        addToColFamilyMaps(colFamilyName, cfId, isInternalColFamily(colFamilyName, metadata))
+      }
+    }
+
+    metadata.maxColumnFamilyId.foreach { maxId =>
+      maxColumnFamilyId.set(maxId)
+    }
+
     openDB()
 
     val (numKeys, numInternalKeys) = if (!conf.trackTotalNumberOfRows) {
@@ -1703,6 +1715,24 @@ class RocksDBFileMapping {
         Some(dfsFile)
       }
     }.getOrElse(None)
+  }
+
+  /**
+   * Remove all local file mappings that are incompatible with the current version we are
+   * trying to load.
+   *
+   * @return seq of purged mappings
+   */
+  def purgeIncompatibleMappingsForLoad(versionToLoad: Long):
+  Seq[(String, (Long, RocksDBImmutableFile))] = {
+    val filesToRemove = localFileMappings.filter {
+      case (_, (dfsFileMappedVersion, _)) =>
+        dfsFileMappedVersion >= versionToLoad
+    }.toSeq
+    filesToRemove.foreach { case (localFileName, _) =>
+      remove(localFileName)
+    }
+    filesToRemove
   }
 
   def mapToDfsFile(

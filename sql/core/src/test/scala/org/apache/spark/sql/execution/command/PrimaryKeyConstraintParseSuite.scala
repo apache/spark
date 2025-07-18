@@ -21,7 +21,8 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedTable
 import org.apache.spark.sql.catalyst.expressions.PrimaryKeyConstraint
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.AddConstraint
+import org.apache.spark.sql.catalyst.plans.logical.{AddConstraint, ColumnDefinition}
+import org.apache.spark.sql.types.StringType
 
 class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
   override val validConstraintCharacteristics =
@@ -34,7 +35,7 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       tableName = "t",
       userProvidedName = null)
     val constraints = Seq(constraint)
-    verifyConstraints(sql, constraints)
+    verifyConstraints(sql, constraints, columnANullable = false)
   }
 
   test("Create table with named primary key - table level") {
@@ -45,7 +46,7 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       userProvidedName = "pk1"
     )
     val constraints = Seq(constraint)
-    verifyConstraints(sql, constraints)
+    verifyConstraints(sql, constraints, columnANullable = false)
   }
 
   test("Create table with composite primary key - table level") {
@@ -55,7 +56,24 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       tableName = "t",
       userProvidedName = null)
     val constraints = Seq(constraint)
-    verifyConstraints(sql, constraints)
+    verifyConstraints(sql, constraints, columnANullable = false, columnBNullable = false)
+  }
+
+  test("Create table with composite primary key - case insensitivity") {
+    val sql = "CREATE TABLE t (FirstName STRING, LastName STRING," +
+      " PRIMARY KEY (firstName, LASTNAME)) USING parquet"
+    val constraint = PrimaryKeyConstraint(
+      columns = Seq("firstName", "LASTNAME"),
+      tableName = "t",
+      userProvidedName = null)
+    val expectedPlan = createExpectedPlan(
+      columns = Seq(
+        ColumnDefinition("FirstName", StringType, nullable = false),
+        ColumnDefinition("LastName", StringType, nullable = false)),
+      tableConstraints = Seq(constraint),
+      isCreateTable = true)
+    val parsed = parsePlan(sql)
+    comparePlans(parsed, expectedPlan)
   }
 
   test("Create table with primary key - column level") {
@@ -65,7 +83,7 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       tableName = "t",
       userProvidedName = null)
     val constraints = Seq(constraint)
-    verifyConstraints(sql, constraints)
+    verifyConstraints(sql, constraints, columnANullable = false)
   }
 
   test("Create table with named primary key - column level") {
@@ -76,7 +94,7 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       userProvidedName = "pk1"
     )
     val constraints = Seq(constraint)
-    verifyConstraints(sql, constraints)
+    verifyConstraints(sql, constraints, columnANullable = false)
   }
 
   test("Create table with multiple primary keys should fail") {
@@ -101,7 +119,7 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       tableName = "t",
       userProvidedName = null)
     val constraints = Seq(constraint)
-    verifyConstraints(sql, constraints, isCreateTable = false)
+    verifyConstraints(sql, constraints, isCreateTable = false, columnANullable = false)
   }
 
   test("Replace table with named primary key - table level") {
@@ -112,7 +130,7 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       userProvidedName = "pk1"
     )
     val constraints = Seq(constraint)
-    verifyConstraints(sql, constraints, isCreateTable = false)
+    verifyConstraints(sql, constraints, isCreateTable = false, columnANullable = false)
   }
 
   test("Replace table with composite primary key - table level") {
@@ -122,7 +140,25 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       tableName = "t",
       userProvidedName = null)
     val constraints = Seq(constraint)
-    verifyConstraints(sql, constraints, isCreateTable = false)
+    verifyConstraints(sql, constraints, isCreateTable = false, columnANullable = false,
+      columnBNullable = false)
+  }
+
+  test("Replace table with composite primary key - case insensitivity") {
+    val sql = "REPLACE TABLE t (FirstName STRING, LastName STRING," +
+      " PRIMARY KEY (firstName, LASTNAME)) USING parquet"
+    val constraint = PrimaryKeyConstraint(
+      columns = Seq("firstName", "LASTNAME"),
+      tableName = "t",
+      userProvidedName = null)
+    val expectedPlan = createExpectedPlan(
+      columns = Seq(
+        ColumnDefinition("FirstName", StringType, nullable = false),
+        ColumnDefinition("LastName", StringType, nullable = false)),
+      tableConstraints = Seq(constraint),
+      isCreateTable = false)
+    val parsed = parsePlan(sql)
+    comparePlans(parsed, expectedPlan)
   }
 
   test("Replace table with primary key - column level") {
@@ -132,7 +168,7 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       tableName = "t",
       userProvidedName = null)
     val constraints = Seq(constraint)
-    verifyConstraints(sql, constraints, isCreateTable = false)
+    verifyConstraints(sql, constraints, isCreateTable = false, columnANullable = false)
   }
 
   test("Replace table with named primary key - column level") {
@@ -143,7 +179,7 @@ class PrimaryKeyConstraintParseSuite extends ConstraintParseSuiteBase {
       userProvidedName = "pk1"
     )
     val constraints = Seq(constraint)
-    verifyConstraints(sql, constraints, isCreateTable = false)
+    verifyConstraints(sql, constraints, isCreateTable = false, columnANullable = false)
   }
 
   test("Replace table with multiple primary keys should fail") {

@@ -346,6 +346,31 @@ object SQLConf {
       .doubleConf
       .createWithDefault(if (Utils.isTesting) 1.0 else 0.001)
 
+  val ANALYZER_SINGLE_PASS_RESOLVER_EXPOSE_RESOLVER_GUARD_FAILURE =
+    buildConf("spark.sql.analyzer.singlePassResolver.exposeResolverGuardFailure")
+      .internal()
+      .doc(
+        "When true, any failure thrown from ResolverGuard will be exposed as a query failure. " +
+        "Otherwise we just assume that the ResolverGuard returned false and the query is not " +
+        "supported by the single-pass Analyzer. This is important to make dual-runs unnoticeable " +
+        "in production.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_PREVENT_USING_ALIASES_FROM_NON_DIRECT_CHILDREN =
+    buildConf("spark.sql.analyzer.singlePassResolver.preventUsingAliasesFromNonDirectChildren")
+      .internal()
+      .doc("When true, in Sort/Having/Filter expressions allow replacing of these expressions " +
+        "only with semantically equal aliased expressions from direct children. This is " +
+        "necessary in order to stay compatible with fixed-point, but the functionality and " +
+        "correctness remain the same. Because enabling this case would break some cases that " +
+        "are supported in single-pass but not in fixed-point, this flag should only be used to " +
+        "hide false positive logical plan mismatches during testing.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED =
     buildConf("spark.sql.analyzer.singlePassResolver.validationEnabled")
       .internal()
