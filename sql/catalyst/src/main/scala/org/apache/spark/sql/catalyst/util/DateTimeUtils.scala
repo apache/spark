@@ -509,6 +509,57 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Returns time truncated to the unit specified by the level.
+   */
+  private def timeTrunc(level: Int, nanos: Long): Long = {
+    level match {
+      case TRUNC_TO_HOUR =>
+        val truncatedTime = nanosToLocalTime(nanos).
+          withMinute(0).
+          withSecond(0).
+          withNano(0)
+        localTimeToNanos(truncatedTime)
+      case TRUNC_TO_MINUTE =>
+        val localTime = nanosToLocalTime(nanos)
+        val truncatedTime = localTime.withSecond(0).withNano(0)
+        localTimeToNanos(truncatedTime)
+      case TRUNC_TO_SECOND =>
+        nanos - Math.floorMod(nanos, NANOS_PER_SECOND)
+      case TRUNC_TO_MILLISECOND =>
+        nanos - Math.floorMod(nanos, NANOS_PER_MILLIS)
+      case TRUNC_TO_MICROSECOND =>
+        nanos - Math.floorMod(nanos, NANOS_PER_MICROS)
+      case _ =>
+        throw new IllegalArgumentException(s"Unsupported time truncation level: $level")
+    }
+  }
+
+  /**
+   * Set of supported time truncation levels for TIME values.
+   */
+  private val supportedTimeTruncLevels = Set(
+    TRUNC_TO_HOUR,
+    TRUNC_TO_MINUTE,
+    TRUNC_TO_SECOND,
+    TRUNC_TO_MILLISECOND,
+    TRUNC_TO_MICROSECOND
+  )
+
+  /**
+   * Returns time truncated to the unit specified by the level. Trunc level should be generated
+   * using `parseTruncLevel()`, and should be between TRUNC_TO_HOUR and TRUNC_TO_MICROSECOND.
+   */
+  def timeTrunc(level: UTF8String, nanos: Long): Long = {
+    require(level != null, "Truncation level must not be null.")
+    require(nanos >= 0, "Nanoseconds must be non-negative.")
+    val truncLevel = parseTruncLevel(level)
+    if (!supportedTimeTruncLevels.contains(truncLevel)) {
+      throw QueryExecutionErrors.invalidTimeTruncUnitError("time_trunc", level.toString)
+    }
+    timeTrunc(truncLevel, nanos)
+  }
+
+  /**
    * Returns the truncate level, could be from TRUNC_TO_MICROSECOND to TRUNC_TO_YEAR,
    * or TRUNC_INVALID, TRUNC_INVALID means unsupported truncate level.
    */
