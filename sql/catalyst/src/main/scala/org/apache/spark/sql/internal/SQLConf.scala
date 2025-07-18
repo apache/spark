@@ -346,6 +346,31 @@ object SQLConf {
       .doubleConf
       .createWithDefault(if (Utils.isTesting) 1.0 else 0.001)
 
+  val ANALYZER_SINGLE_PASS_RESOLVER_EXPOSE_RESOLVER_GUARD_FAILURE =
+    buildConf("spark.sql.analyzer.singlePassResolver.exposeResolverGuardFailure")
+      .internal()
+      .doc(
+        "When true, any failure thrown from ResolverGuard will be exposed as a query failure. " +
+        "Otherwise we just assume that the ResolverGuard returned false and the query is not " +
+        "supported by the single-pass Analyzer. This is important to make dual-runs unnoticeable " +
+        "in production.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_PREVENT_USING_ALIASES_FROM_NON_DIRECT_CHILDREN =
+    buildConf("spark.sql.analyzer.singlePassResolver.preventUsingAliasesFromNonDirectChildren")
+      .internal()
+      .doc("When true, in Sort/Having/Filter expressions allow replacing of these expressions " +
+        "only with semantically equal aliased expressions from direct children. This is " +
+        "necessary in order to stay compatible with fixed-point, but the functionality and " +
+        "correctness remain the same. Because enabling this case would break some cases that " +
+        "are supported in single-pass but not in fixed-point, this flag should only be used to " +
+        "hide false positive logical plan mismatches during testing.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED =
     buildConf("spark.sql.analyzer.singlePassResolver.validationEnabled")
       .internal()
@@ -1197,6 +1222,63 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val PARSER_DFA_CACHE_FLUSH_RATIO =
+    buildConf("spark.sql.parser.parserDfaCacheFlushRatio")
+      .internal()
+      .doc(
+        """Like `spark.sql.parser.parserDfaCacheFlushThreshold`, but uses a threshold that is a
+          |linear function of the memory allocated to the driver process. Represents the percentage
+          |of the driver memory that the DFA cache can consume before it is flushed.
+          |
+          |Estimates the memory used by the DFA cache, assuming each state consumes
+          |`AbstractParser.BYTES_PER_DFA_STATE` bytes. If this value exceeds the product of the
+          |driver memory with the config value (interpreted as a percentage), the cache is flushed.
+          |
+          |Active values should be in the range 0-100, and a negative value disables the feature.
+          |If both this config and `spark.sql.parser.parserDfaCacheFlushThreshold` are set, the
+          |cache is flushed if either condition is met.
+          |Requires `spark.sql.parser.manageParserCaches` to be true to take effect.
+          |""".stripMargin)
+      .version("4.1.0")
+      .doubleConf
+      .checkValue(_ <= 100.0, "The ratio must be less than 100%")
+      .createWithDefault(-1.0)
+
+  val PARSER_DFA_CACHE_FLUSH_THRESHOLD =
+    buildConf("spark.sql.parser.parserDfaCacheFlushThreshold")
+      .internal()
+      .doc(
+        """When positive, release ANTLR caches after parsing a SQL query when the number of states
+          |in the DFA cache exceeds the value of the config. DFA states empirically consume about
+          |`AbstractParser.BYTES_PER_DFA_STATE` bytes of memory each.
+          |
+          |ANTLR parsers retain a DFA cache designed to speed up parsing future input. However,
+          |there is no limit to how large this cache can become. Parsing large SQL statements can
+          |lead to an accumulation of objects in the cache that are unlikely to be reused, causing
+          |high GC overhead and eventually OOMs.
+          |
+          |If this config is set to a negative value, it is ignored.
+          |If both this config and `spark.sql.parser.parserDfaCacheFlushRatio` are set, the
+          |cache is flushed if either condition is met.
+          |Requires `spark.sql.parser.manageParserCaches` to be true to take effect.
+          |
+          |Can significantly slow down parsing in exchange for better memory stability.
+          |""".stripMargin)
+      .version("4.1.0")
+      .intConf
+      .createWithDefault(-1)
+
+  val MANAGE_PARSER_CACHES =
+    buildConf("spark.sql.parser.manageParserCaches")
+      .internal()
+      .doc(
+        """When true, we install our own ANTLR caches to manage memory usage. When false, we use the
+          |default ANTLR caches. Dependency for
+          |`spark.sql.parser.parserDfaCacheFlushThreshold`.""".stripMargin)
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val FILE_COMPRESSION_FACTOR = buildConf("spark.sql.sources.fileCompressionFactor")
     .internal()
     .doc("When estimating the output data size of a table scan, multiply the file size with this " +
@@ -1716,6 +1798,14 @@ object SQLConf {
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  val DATA_SOURCE_V2_JOIN_PUSHDOWN =
+    buildConf("spark.sql.optimizer.datasourceV2JoinPushdown")
+      .internal()
+      .doc("When this config is set to true, join is tried to be pushed down" +
+        "for DSv2 data sources in V2ScanRelationPushdown optimization rule.")
+      .booleanConf
+      .createWithDefault(false)
 
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
@@ -6038,6 +6128,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PRIORITIZE_ORDINAL_RESOLUTION_IN_SORT =
+    buildConf("spark.sql.prioritizeOrdinalResolutionInSort.enabled")
+      .internal()
+      .doc(
+        "When set to true, we prioritize ordinal resolution in Sort over other expressions. " +
+        "Otherwise, no order is enforced."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -6209,6 +6310,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def expressionTreeChangeLogLevel: Level = getConf(EXPRESSION_TREE_CHANGE_LOG_LEVEL)
 
   def nameResolutionLogLevel: Level = getConf(NAME_RESOLUTION_LOG_LEVEL)
+
+  def dataSourceV2JoinPushdown: Boolean = getConf(DATA_SOURCE_V2_JOIN_PUSHDOWN)
 
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
 
@@ -6486,6 +6589,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
+
+  def parserDfaCacheFlushRatio: Double = getConf(PARSER_DFA_CACHE_FLUSH_RATIO)
+
+  def parserDfaCacheFlushThreshold: Int = getConf(PARSER_DFA_CACHE_FLUSH_THRESHOLD)
+
+  def manageParserCaches: Boolean = getConf(MANAGE_PARSER_CACHES)
 
   def fileCompressionFactor: Double = getConf(FILE_COMPRESSION_FACTOR)
 

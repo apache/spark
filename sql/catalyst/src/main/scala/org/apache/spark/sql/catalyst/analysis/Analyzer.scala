@@ -31,9 +31,7 @@ import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   AnalyzerBridgeState,
   HybridAnalyzer,
-  Resolver => OperatorResolver,
-  ResolverExtension,
-  ResolverGuard
+  ResolverExtension
 }
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
@@ -297,17 +295,17 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   def getRelationResolution: RelationResolution = relationResolution
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
-    if (plan.analyzed) return plan
-    AnalysisHelper.markInAnalyzer {
-      new HybridAnalyzer(
-        this,
-        new ResolverGuard(catalogManager),
-        new OperatorResolver(
-          catalogManager,
-          singlePassResolverExtensions,
-          singlePassMetadataResolverExtensions
-        )
-      ).apply(plan, tracker)
+    if (plan.analyzed) {
+      plan
+    } else {
+      AnalysisContext.reset()
+      try {
+        AnalysisHelper.markInAnalyzer {
+          HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this).apply(plan, tracker)
+        }
+      } finally {
+        AnalysisContext.reset()
+      }
     }
   }
 

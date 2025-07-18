@@ -17,16 +17,17 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.{Collection, HashMap, Iterator}
+import java.util.{Collection, Iterator, LinkedHashMap}
 import java.util.Map.Entry
 import java.util.function.Function
 
 /**
  * The [[KeyTransformingMap]] is a partial implementation of [[mutable.Map]] that transforms input
  * keys with a custom [[mapKey]] method.
+ * It preserves the order of insertion by using the [[LinkedHashMap]] as an underlying map.
  */
 private abstract class KeyTransformingMap[K, V] {
-  private val impl = new HashMap[K, V]
+  private val impl = new LinkedHashMap[K, V]
 
   def get(key: K): Option[V] = Option(impl.get(mapKey(key)))
 

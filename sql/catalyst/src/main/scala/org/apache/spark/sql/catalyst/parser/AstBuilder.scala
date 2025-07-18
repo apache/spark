@@ -4894,8 +4894,23 @@ class AstBuilder extends DataTypeAstBuilder
             .mkString(", ")
         throw QueryParsingErrors.multiplePrimaryKeysError(ctx, primaryKeyColumns)
       }
+      // If there is a primary key constraint, all the columns in the primary key are not null.
+      val updatedColumns = if (primaryKeys.nonEmpty) {
+        val lowerCasePkColumns = primaryKeys.head.asInstanceOf[PrimaryKeyConstraint].columns
+            .map(_.toLowerCase(Locale.ROOT))
+        columnDefs.map { colDef =>
+          if (colDef.nullable &&
+            lowerCasePkColumns.contains(colDef.name.toLowerCase(Locale.ROOT))) {
+            colDef.copy(nullable = false)
+          } else {
+            colDef
+          }
+        }
+      } else {
+        columnDefs
+      }
 
-      (columnDefs.toSeq, constraints.toSeq)
+      (updatedColumns.toSeq, constraints.toSeq)
     }
   }
 
