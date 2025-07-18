@@ -1114,6 +1114,188 @@ Project [make_timestamp(1, 1, 1, 1, 1, cast(999.999999 as decimal(16,6)), None, 
 
 
 -- !query
+SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678))
+-- !query analysis
+Project [make_timestamp(make_date(2021, 7, 11, true), make_time(6, 30, cast(45.678 as decimal(16,6))), None) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', TIME'00:00:00')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(NULL, TIME'00:00:00')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', NULL)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(NULL, NULL)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'MIT')
+-- !query analysis
+Project [make_timestamp(make_date(2021, 7, 11, true), make_time(6, 30, cast(45.678 as decimal(16,6))), Some(MIT)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), MIT)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'PST')
+-- !query analysis
+Project [make_timestamp(make_date(2021, 7, 11, true), make_time(6, 30, cast(45.678 as decimal(16,6))), Some(PST)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), PST)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'UTC')
+-- !query analysis
+Project [make_timestamp(make_date(2021, 7, 11, true), make_time(6, 30, cast(45.678 as decimal(16,6))), Some(UTC)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), UTC)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'CET')
+-- !query analysis
+Project [make_timestamp(make_date(2021, 7, 11, true), make_time(6, 30, cast(45.678 as decimal(16,6))), Some(CET)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), CET)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'JST')
+-- !query analysis
+Project [make_timestamp(make_date(2021, 7, 11, true), make_time(6, 30, cast(45.678 as decimal(16,6))), Some(JST)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), JST)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', TIME'00:00:00', 'UTC')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(NULL, TIME'00:00:00', 'UTC')
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "3",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "[2, 3, 6, 7]",
+    "functionName" : "`make_timestamp`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 50,
+    "fragment" : "make_timestamp(NULL, TIME'00:00:00', 'UTC')"
+  } ]
+}
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', NULL, 'UTC')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', TIME'00:00:00', NULL)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(NULL, NULL, 'UTC')
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "3",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "[2, 3, 6, 7]",
+    "functionName" : "`make_timestamp`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 40,
+    "fragment" : "make_timestamp(NULL, NULL, 'UTC')"
+  } ]
+}
+
+
+-- !query
+SELECT make_timestamp(NULL, TIME'00:00:00', NULL)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "3",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "[2, 3, 6, 7]",
+    "functionName" : "`make_timestamp`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 49,
+    "fragment" : "make_timestamp(NULL, TIME'00:00:00', NULL)"
+  } ]
+}
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', NULL, NULL)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp(NULL, NULL, NULL)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "3",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "[2, 3, 6, 7]",
+    "functionName" : "`make_timestamp`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 39,
+    "fragment" : "make_timestamp(NULL, NULL, NULL)"
+  } ]
+}
+
+
+-- !query
 select TIMESTAMP_SECONDS(1230219000),TIMESTAMP_SECONDS(-1230219000),TIMESTAMP_SECONDS(null)
 -- !query analysis
 Project [timestamp_seconds(1230219000) AS timestamp_seconds(1230219000)#x, timestamp_seconds(-1230219000) AS timestamp_seconds(-1230219000)#x, timestamp_seconds(null) AS timestamp_seconds(NULL)#x]

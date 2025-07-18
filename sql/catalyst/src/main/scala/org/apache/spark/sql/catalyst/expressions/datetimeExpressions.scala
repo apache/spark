@@ -3186,7 +3186,7 @@ case class MakeTimestampFromDateTime(
       > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887');
        2014-12-28 06:30:45.887
       > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887', 'CET');
-       2014-12-28 06:30:45.887
+       2014-12-27 22:30:45.887
   """,
   group = "datetime_funcs",
   since = "4.1.0")

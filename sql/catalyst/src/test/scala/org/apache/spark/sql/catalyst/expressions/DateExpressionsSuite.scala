@@ -2171,13 +2171,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       MakeTimestampFromDateTime(Literal(null, DateType), timeLit("12:34:56.123456")),
       null
     )
-
     // Test with null time.
     checkEvaluation(
       MakeTimestampFromDateTime(dateLit("2023-10-01"), Literal(null, TimeType())),
       null
     )
-
     // Test with both date and time as null.
     checkEvaluation(
       MakeTimestampFromDateTime(Literal(null, DateType), Literal(null, TimeType())),
@@ -2237,7 +2235,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ),
       null
     )
-
     // Test with null time.
     checkEvaluation(
       MakeTimestampFromDateTime(
@@ -2247,7 +2244,15 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ),
       null
     )
-
+    // Test with null timezone.
+    checkEvaluation(
+      MakeTimestampFromDateTime(
+        dateLit("2023-10-01"),
+        timeLit("12:34:56.123456"),
+        Some(Literal(null, StringType))
+      ),
+      null
+    )
     // Test with both date and time as null.
     checkEvaluation(
       MakeTimestampFromDateTime(
