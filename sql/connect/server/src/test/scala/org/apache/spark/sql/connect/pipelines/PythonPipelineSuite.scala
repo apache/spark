@@ -85,10 +85,11 @@ class PythonPipelineSuite
 
     // get the session holder for the active session
     val sessionHolder =
-      SparkConnectService.sessionManager.getIsolatedSessionIfPresent(activateSessions.head.key)
+      SparkConnectService.sessionManager
+        .getIsolatedSessionIfPresent(activateSessions.head.key)
         .getOrElse {
-        throw new RuntimeException("Session not found")
-      }
+          throw new RuntimeException("Session not found")
+        }
 
     // get all dataflow graphs from the session holder
     val dataflowGraphContexts = sessionHolder.getAllDataflowGraphs

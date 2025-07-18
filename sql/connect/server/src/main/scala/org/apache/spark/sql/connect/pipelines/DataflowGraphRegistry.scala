@@ -28,9 +28,6 @@ import org.apache.spark.sql.pipelines.graph.GraphRegistrationContext
  * PipelinesHandler when CreateDataflowGraph is called, and the PipelinesHandler also supports
  * attaching flows/datasets to a graph.
  */
-// TODO(SPARK-51727): Currently DataflowGraphRegistry is a singleton, but it should instead be
-//  scoped to a single SparkSession for proper isolation between pipelines that are run on the
-//  same cluster.
 class DataflowGraphRegistry {
 
   private val dataflowGraphs = new ConcurrentHashMap[String, GraphRegistrationContext]()

@@ -132,7 +132,9 @@ private[connect] object PipelinesHandler extends Logging {
     val graphElementRegistry = sessionHolder.getDataflowGraphOrThrow(dataflowGraphId)
     val sqlGraphElementRegistrationContext = new SqlGraphRegistrationContext(graphElementRegistry)
     sqlGraphElementRegistrationContext.processSqlFile(
-      cmd.getSqlText, cmd.getSqlFilePath, sessionHolder.session)
+      cmd.getSqlText,
+      cmd.getSqlFilePath,
+      sessionHolder.session)
   }
 
   private def defineDataset(
@@ -144,7 +146,9 @@ private[connect] object PipelinesHandler extends Logging {
     dataset.getDatasetType match {
       case proto.DatasetType.MATERIALIZED_VIEW | proto.DatasetType.TABLE =>
         val tableIdentifier =
-          GraphIdentifierManager.parseTableIdentifier(dataset.getDatasetName, sessionHolder.session)
+          GraphIdentifierManager.parseTableIdentifier(
+            dataset.getDatasetName,
+            sessionHolder.session)
         graphElementRegistry.registerTable(
           Table(
             identifier = tableIdentifier,
@@ -165,7 +169,9 @@ private[connect] object PipelinesHandler extends Logging {
             isStreamingTable = dataset.getDatasetType == proto.DatasetType.TABLE))
       case proto.DatasetType.TEMPORARY_VIEW =>
         val viewIdentifier =
-          GraphIdentifierManager.parseTableIdentifier(dataset.getDatasetName, sessionHolder.session)
+          GraphIdentifierManager.parseTableIdentifier(
+            dataset.getDatasetName,
+            sessionHolder.session)
 
         graphElementRegistry.registerView(
           TemporaryView(

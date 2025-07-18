@@ -494,9 +494,9 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   private[connect] def createDataflowGraph(
-       defaultCatalog: String,
-       defaultDatabase: String,
-       defaultSqlConf: Map[String, String]): String = {
+      defaultCatalog: String,
+      defaultDatabase: String,
+      defaultSqlConf: Map[String, String]): String = {
     dataflowGraphRegistry.createDataflowGraph(defaultCatalog, defaultDatabase, defaultSqlConf)
   }
 
@@ -529,8 +529,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   /**
-   * Removes all dataflow graphs from this session.
-   * Called during session cleanup.
+   * Removes all dataflow graphs from this session. Called during session cleanup.
    */
   private[connect] def dropAllDataflowGraphs(): Unit = {
     dataflowGraphRegistry.dropAllDataflowGraphs()
