@@ -2938,4 +2938,27 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     )
     verifySqlScriptResult(sqlScript, expected = expected)
   }
+
+  test("Integer literal column in FOR query") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  FOR SELECT 1 DO
+        |    SELECT 5;
+        |  END FOR;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(5)))
+    verifySqlScriptResult(sqlScript, expected)
+
+    val sqlScript2 =
+      """
+        |BEGIN
+        |  FOR x AS SELECT 1 DO
+        |    SELECT 5;
+        |  END FOR;
+        |END
+        |""".stripMargin
+    verifySqlScriptResult(sqlScript2, expected)
+  }
 }
