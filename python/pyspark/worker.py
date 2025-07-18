@@ -206,10 +206,10 @@ def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_co
     if use_legacy_pandas_udf_conversion(runner_conf):
         return wrap_arrow_batch_udf_legacy(f, args_offsets, kwargs_offsets, return_type, runner_conf)
     else:
-        return wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf, input_types, serializer)
+        return wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf)
 
 
-def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf, input_types=None, serializer=None):
+def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf):
     from pyspark.sql.pandas.types import to_arrow_type
 
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
@@ -2432,12 +2432,7 @@ def read_udfs(pickleSer, infile, eval_type):
                     result_tuple = f(a)
                     udf_result_tuples.append(result_tuple)
 
-                if len(udf_result_tuples) == 1:
-                    # Single UDF case: return the result tuple directly
-                    return udf_result_tuples[0]
-                else:
-                    # Multiple UDFs: transpose results and yield each UDF separately
-                    return udf_result_tuples
+                return udf_result_tuples
             else:
                 result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
                 # In the special case of a single UDF this will return a single result rather

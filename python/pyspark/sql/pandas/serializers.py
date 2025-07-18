@@ -237,16 +237,19 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
             for arg in args
         ]
 
-        names = [f"_{n}" for n in range(len(arrays))]
-        table = pa.Table.from_arrays(arrays, names=names)
-        schema = StructType([
-            StructField(f"_{i}", data_type, True)
-            for i, data_type in enumerate(self._input_types)
-        ])
+        converters = [
+            ArrowTableToRowsConversion._create_converter(
+                data_type, none_on_identity=True
+            ) for data_type in self._input_types
+        ]
+        converted_cols = []
+        for arr, conv in zip(arrays, converters):
+            if conv is None:
+                converted_cols.append(arr.to_pylist())
+            else:
+                converted_cols.append([conv(v) for v in arr.to_pylist()])
 
-        rows = ArrowTableToRowsConversion.convert(table, schema=schema, return_as_tuples=True)
-
-        return [tuple(row) for row in rows]
+        return [tuple(col[i] for col in converted_cols) for i in range(len(arrays[0]))]
 
     def load_stream(self, stream):
         """
@@ -255,24 +258,9 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
         import pyarrow as pa
         import pyarrow.types as types
 
-        def is_packed_udf_arguments(struct_type):
-            return (hasattr(struct_type, 'metadata') and
-                    struct_type.metadata is not None and
-                    b'__packed_udf_args__' in struct_type.metadata)
-
         batches = ArrowStreamSerializer.load_stream(self, stream)
         for batch in batches:
-            if (batch.num_columns == 1 and
-                types.is_struct(batch.column(0).type) and
-                is_packed_udf_arguments(batch.column(0).type)):
-                # Packed UDF arguments from ArrowStreamUDFSerializer
-                # Flatten them back to individual arrays
-                first_column = batch.column(0)
-                flattened_batch = pa.RecordBatch.from_arrays(first_column.flatten(), schema=pa.schema(first_column.type))
-                arrays = [flattened_batch.column(i) for i in range(flattened_batch.num_columns)]
-            else:
-                # Else data from JVM, preserve structure
-                arrays = [batch.column(i) for i in range(batch.num_columns)]
+            arrays = [batch.column(i) for i in range(batch.num_columns)]
 
             if len(arrays) == 0:
                 # Zero-arg case: create empty tuples for each row in the batch
@@ -360,42 +348,6 @@ class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
             return [numeric_result_func(r) for r in udf_results]
         else:
             return udf_results
-
-    def arrow_to_python(self, arrow_column, idx, ndarray_as_list=False, spark_type=None):
-        import pyarrow.types as types
-        from pyspark.sql import Row
-        
-        if (
-            self._struct_in_pandas == "row"
-            and types.is_struct(arrow_column.type)
-            and not is_variant(arrow_column.type)
-        ):
-            series = [
-                super(ArrowBatchUDFSerializer, self)
-                .arrow_to_python(
-                    column,
-                    i,
-                    self._struct_in_pandas,
-                    self._ndarray_as_list,
-                    spark_type=None,
-                )
-                for i, (column, field) in enumerate(zip(arrow_column.flatten(), arrow_column.type))
-            ]
-            row_cls = Row(*[field.name for field in arrow_column.type])
-            result = series[0].__class__([
-                row_cls(*vals) for vals in zip(*series)
-            ])
-        else:
-            result = super(ArrowBatchUDFSerializer, self).arrow_to_python(
-                arrow_column,
-                idx,
-                struct_in_pandas=self._struct_in_pandas,
-                ndarray_as_list=ndarray_as_list,
-                spark_type=spark_type,
-            )
-        if spark_type is not None and hasattr(spark_type, "fromInternal"):
-            return result.apply(lambda v: spark_type.fromInternal(v) if v is not None else v)
-        return result
     
     def __repr__(self):
         return "ArrowBatchUDFSerializer"
