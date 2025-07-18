@@ -2110,11 +2110,12 @@ case class ParseToDate(
   extends RuntimeReplaceable with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
   override lazy val replacement: Expression = withOrigin(origin) {
-    format.map { f =>
-      Cast(GetTimestamp(left, f, TimestampType, "try_to_date", timeZoneId, ansiEnabled), DateType,
-        timeZoneId, EvalMode.fromBoolean(ansiEnabled))
-    }.getOrElse(Cast(left, DateType, timeZoneId,
-      EvalMode.fromBoolean(ansiEnabled))) // backwards compatibility
+    if (left.dataType == TimestampType || format.isEmpty) {
+      Cast(left, DateType, timeZoneId, EvalMode.fromBoolean(ansiEnabled))
+    } else {
+      Cast(GetTimestamp(left, format.get, TimestampType, "try_to_date", timeZoneId, ansiEnabled),
+        DateType, timeZoneId, EvalMode.fromBoolean(ansiEnabled))
+    }
   }
 
   def this(left: Expression, format: Expression) = {
@@ -2191,9 +2192,13 @@ case class ParseToTimestamp(
   extends RuntimeReplaceable with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
   override lazy val replacement: Expression = withOrigin(origin) {
-    format.map { f =>
-      GetTimestamp(left, f, dataType, "try_to_timestamp", timeZoneId, failOnError = failOnError)
-    }.getOrElse(Cast(left, dataType, timeZoneId, ansiEnabled = failOnError))
+    if (left.dataType == dataType) {
+      left
+    } else {
+      format.map { f =>
+        GetTimestamp(left, f, dataType, "try_to_timestamp", timeZoneId, failOnError = failOnError)
+      }.getOrElse(Cast(left, dataType, timeZoneId, ansiEnabled = failOnError))
+    }
   }
 
   def this(left: Expression, format: Expression) = {
