@@ -209,7 +209,7 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
         var showDDL = getShowCreateDDL(t)
         val expectedDDLPrefix = Array(
           s"CREATE TABLE $nonPartitionCatalog.ns.tbl (",
-          "a INT,",
+          "a INT NOT NULL,",
           "b STRING,",
           "c STRING,",
           "CONSTRAINT tbl_pk PRIMARY KEY (a) NOT ENFORCED NORELY,",
