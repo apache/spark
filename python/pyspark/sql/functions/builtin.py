@@ -11391,6 +11391,14 @@ def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     +-------------------+------------------------------------+
     |1997-02-28 10:30:00|                          1997-02-28|
     +-------------------+------------------------------------+
+
+    >>> df = spark.createDataFrame([('malformed',)], ['ts'])
+    >>> df.select(sf.try_to_date(df.ts)).show()
+    +--------------+
+    |try_to_date(t)|
+    +--------------+
+    |          NULL|
+    +--------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
