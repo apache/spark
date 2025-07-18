@@ -22,6 +22,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.jdbc.{DockerJDBCIntegrationSuite, JdbcDialect, OracleDatabaseOnDocker, OracleDialect}
 import org.apache.spark.sql.jdbc.v2.JDBCV2JoinPushdownIntegrationSuiteBase
+import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -55,7 +56,7 @@ import org.apache.spark.tags.DockerTest
 class OracleJoinPushdownIntegrationSuite
   extends DockerJDBCIntegrationSuite
   with JDBCV2JoinPushdownIntegrationSuiteBase {
-  override val namespaceOpt: Option[String] = Some("SYSTEM")
+  override val namespace: String = "SYSTEM"
 
   override val db = new OracleDatabaseOnDocker
 
@@ -63,7 +64,14 @@ class OracleJoinPushdownIntegrationSuite
 
   override val jdbcDialect: JdbcDialect = OracleDialect()
 
+  override val integerType = DataTypes.createDecimalType(10, 0)
+
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
 
-  override def schemaPreparation(connection: Connection): Unit = {}
+  override def schemaPreparation(): Unit = {}
+
+  // This method comes from DockerJDBCIntegrationSuite
+  override def dataPreparation(connection: Connection): Unit = {
+    super.dataPreparation()
+  }
 }

@@ -28,14 +28,14 @@ import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialect
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, DataTypes}
+import org.apache.spark.sql.types.{DataType, DataTypes, StructField, StructType}
 
 trait JDBCV2JoinPushdownIntegrationSuiteBase
   extends QueryTest
   with SharedSparkSession
   with DataSourcePushdownTestUtils {
   val catalogName: String = "join_pushdown_catalog"
-  val namespaceOpt: Option[String] = None
+  val namespace: String = "join_schema"
   val url: String
 
   val joinTableName1: String = "join_table_1"
@@ -51,11 +51,11 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     .set(s"spark.sql.catalog.$catalogName.pushDownLimit", "true")
     .set(s"spark.sql.catalog.$catalogName.pushDownOffset", "true")
 
-  private def catalogAndNamespace =
-    namespaceOpt.map(namespace => s"$catalogName.$namespace").getOrElse(catalogName)
+  private def catalogAndNamespace = s"$catalogName.$namespace"
 
-  def qualifyTableName(tableName: String): String = namespaceOpt
-    .map(namespace => s"$namespace.$tableName").getOrElse(tableName)
+  def qualifyTableName(tableName: String): String = s"$namespace.$tableName"
+
+  def qualifySchemaName(schemaName: String): String = namespace
 
   private lazy val fullyQualifiedTableName1: String = qualifyTableName(joinTableName1)
 
@@ -76,75 +76,103 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     }
   }
 
-  def dataPreparation(connection: Connection): Unit = {
-    schemaPreparation(connection)
-    tablePreparation(connection)
-    fillJoinTables(connection)
+  protected val integerType = DataTypes.IntegerType
+
+  protected val stringType = DataTypes.StringType
+
+  protected val decimalType = DataTypes.createDecimalType(10, 2)
+
+  /**
+   * This method should cover the following:
+   * <ul>
+   *   <li>Create the schema where testing tables will be stored.
+   *   <li>Create the testing tables {@code joinTableName1} and {@code joinTableName2}
+   *   in above schema.
+   *   <li>Populate the tables with the data.
+   * </ul>
+   */
+  def dataPreparation(): Unit = {
+    schemaPreparation()
+    tablePreparation()
+    fillJoinTables()
   }
 
-  def schemaPreparation(connection: Connection): Unit = {
-    connection.prepareStatement(s"CREATE SCHEMA IF NOT EXISTS ${namespaceOpt.get}").executeUpdate()
+  def schemaPreparation(): Unit = {
+    withConnection {conn =>
+      conn
+        .prepareStatement(s"CREATE SCHEMA IF NOT EXISTS ${qualifySchemaName(namespace)}")
+        .executeUpdate()
+    }
   }
 
-  def tablePreparation(connection: Connection): Unit = {
-    connection.prepareStatement(
-      s"""CREATE TABLE $fullyQualifiedTableName1 (
-         |  ID ${getJDBCTypeString(DataTypes.IntegerType)},
-         |  AMOUNT ${getJDBCTypeString(DataTypes.createDecimalType(10, 2))},
-         |  ADDRESS ${getJDBCTypeString(DataTypes.StringType)}
-         |)""".stripMargin
-    ).executeUpdate()
+  def tablePreparation(): Unit = {
+    withConnection{ conn =>
+      conn.prepareStatement(
+        s"""CREATE TABLE $fullyQualifiedTableName1 (
+           |  ID ${getJDBCTypeString(integerType)},
+           |  AMOUNT ${getJDBCTypeString(decimalType)},
+           |  ADDRESS ${getJDBCTypeString(stringType)}
+           |)""".stripMargin
+      ).executeUpdate()
 
-    connection.prepareStatement(
-      s"""CREATE TABLE $fullyQualifiedTableName2 (
-         |  ID ${getJDBCTypeString(DataTypes.IntegerType)},
-         |  NEXT_ID ${getJDBCTypeString(DataTypes.IntegerType)},
-         |  SALARY ${getJDBCTypeString(DataTypes.createDecimalType(10, 2))},
-         |  SURNAME ${getJDBCTypeString(DataTypes.StringType)}
-         |)""".stripMargin
-    ).executeUpdate()
+      conn.prepareStatement(
+        s"""CREATE TABLE $fullyQualifiedTableName2 (
+           |  ID ${getJDBCTypeString(integerType)},
+           |  NEXT_ID ${getJDBCTypeString(integerType)},
+           |  SALARY ${getJDBCTypeString(decimalType)},
+           |  SURNAME ${getJDBCTypeString(stringType)}
+           |)""".stripMargin
+      ).executeUpdate()
+    }
   }
 
-  def fillJoinTables(connection: Connection): Unit = {
-    val random = new java.util.Random(42)
-    val table1Data = (1 to 100).map { i =>
-      val id = i % 11
-      val amount = BigDecimal.valueOf(random.nextDouble() * 10000)
-        .setScale(2, BigDecimal.RoundingMode.HALF_UP)
-      val address = s"address_$i"
-      (id, amount, address)
-    }
-    val table2Data = (1 to 100).map { i =>
-      val id = (i % 17)
-      val next_id = (id + 1) % 17
-      val salary = BigDecimal.valueOf(random.nextDouble() * 50000)
-        .setScale(2, BigDecimal.RoundingMode.HALF_UP)
-      val surname = s"surname_$i"
-      (id, next_id, salary, surname)
-    }
+  private val random = new java.util.Random(42)
 
-    val insertStmt1 = connection.prepareStatement(
-      s"INSERT INTO $fullyQualifiedTableName1 (id, amount, address) VALUES (?, ?, ?)"
-    )
-    table1Data.foreach { case (id, amount, address) =>
-      insertStmt1.setInt(1, id)
-      insertStmt1.setBigDecimal(2, amount.bigDecimal)
-      insertStmt1.setString(3, address)
-      insertStmt1.executeUpdate()
-    }
-    insertStmt1.close()
+  private val table1Data = (1 to 100).map { i =>
+    val id = i % 11
+    val amount = BigDecimal.valueOf(random.nextDouble() * 10000)
+      .setScale(2, BigDecimal.RoundingMode.HALF_UP)
+    val address = s"address_$i"
+    (id, amount, address)
+  }
 
-    val insertStmt2 = connection.prepareStatement(
-      s"INSERT INTO $fullyQualifiedTableName2 (id, next_id, salary, surname) VALUES (?, ?, ?, ?)"
-    )
-    table2Data.foreach { case (id, next_id, salary, surname) =>
-      insertStmt2.setInt(1, id)
-      insertStmt2.setInt(2, next_id)
-      insertStmt2.setBigDecimal(3, salary.bigDecimal)
-      insertStmt2.setString(4, surname)
-      insertStmt2.executeUpdate()
+  private val table2Data = (1 to 100).map { i =>
+    val id = (i % 17)
+    val next_id = (id + 1) % 17
+    val salary = BigDecimal.valueOf(random.nextDouble() * 50000)
+      .setScale(2, BigDecimal.RoundingMode.HALF_UP)
+    val surname = s"surname_$i"
+    (id, next_id, salary, surname)
+  }
+
+  def fillJoinTables(): Unit = {
+    withConnection { conn =>
+      val insertStmt1 = conn.prepareStatement(
+        s"INSERT INTO $fullyQualifiedTableName1 (id, amount, address) VALUES (?, ?, ?)"
+      )
+      table1Data.foreach { case (id, amount, address) =>
+        insertStmt1.setInt(1, id)
+        insertStmt1.setBigDecimal(2, amount.bigDecimal)
+        insertStmt1.setString(3, address)
+        insertStmt1.addBatch()
+      }
+      insertStmt1.executeBatch()
+      insertStmt1.close()
+
+      val insertStmt2 = conn.prepareStatement(
+        s"INSERT INTO $fullyQualifiedTableName2 (id, next_id, salary, surname) VALUES (?, ?, ?, ?)"
+      )
+      table2Data.foreach { case (id, next_id, salary, surname) =>
+        insertStmt2.setInt(1, id)
+        insertStmt2.setInt(2, next_id)
+        insertStmt2.setBigDecimal(3, salary.bigDecimal)
+        insertStmt2.setString(4, surname)
+        insertStmt2.addBatch()
+      }
+      insertStmt2.executeBatch()
+      insertStmt2.close()
+
     }
-    insertStmt2.close()
   }
 
   // Condition-less joins are not supported in join pushdown
@@ -204,7 +232,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
       checkJoinPushed(
         df,
-        s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
+        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
           s"$catalogAndNamespace.${caseConvert(joinTableName1)}"
       )
       checkAnswer(df, rows)
@@ -228,8 +256,9 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
 
-      checkJoinPushed(df,
-        s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
+      checkJoinPushed(
+        df,
+        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
           s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
           s"$catalogAndNamespace.${caseConvert(joinTableName1)}"
       )
@@ -252,9 +281,17 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
 
+      val expectedSchemaWithoutNames = StructType(
+        Seq(
+          StructField("", integerType), // ID
+          StructField("", integerType), // NEXT_ID
+          StructField("AMOUNT", decimalType) // AMOUNT
+        )
+      )
+      checkPrunedColumnsDataTypeAndNullability(df, expectedSchemaWithoutNames)
       checkJoinPushed(
         df,
-        s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
+        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
           s"$catalogAndNamespace.${caseConvert(joinTableName1)}"
       )
       checkAnswer(df, rows)
@@ -276,10 +313,17 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
 
+      val expectedSchemaWithoutNames = StructType(
+        Seq(
+          StructField("ID", integerType), // ID
+          StructField("NEXT_ID", integerType) // NEXT_ID
+        )
+      )
+      checkPrunedColumnsDataTypeAndNullability(df, expectedSchemaWithoutNames)
       checkJoinPushed(
         df,
-        s"$catalogAndNamespace.${caseConvert(joinTableName1)}," +
-          s" $catalogAndNamespace.${caseConvert(joinTableName2)}"
+        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}",
+          s"$catalogAndNamespace.${caseConvert(joinTableName2)}"
       )
       checkPushedInfo(df,
         "PushedFilters: [ID IS NOT NULL, NEXT_ID IS NOT NULL, ID = NEXT_ID]")
@@ -302,9 +346,21 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
 
+      val expectedSchemaWithoutNames = StructType(
+        Seq(
+          StructField("", integerType), // ID_UUID
+          StructField("", decimalType), // AMOUNT_UUID
+          StructField("", integerType), // ID_UUID
+          StructField("", decimalType), // AMOUNT_UUID
+          StructField("ADDRESS", stringType), // ADDRESS
+          StructField("ID", integerType), // ID
+          StructField("AMOUNT", decimalType) // AMOUNT
+        )
+      )
+      checkPrunedColumnsDataTypeAndNullability(df, expectedSchemaWithoutNames)
       checkJoinPushed(
         df,
-        s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
+        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
           s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
           s"$catalogAndNamespace.${caseConvert(joinTableName1)}")
       checkAnswer(df, rows)
@@ -347,7 +403,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
       checkJoinPushed(
         joinDf,
-        s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
+        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
           s"$catalogAndNamespace.${caseConvert(joinTableName1)}"
       )
       checkAnswer(joinDf, rows)
@@ -371,7 +427,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       checkAggregateRemoved(df)
       checkJoinPushed(
         df,
-        s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
+        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
           s"$catalogAndNamespace.${caseConvert(joinTableName1)}"
       )
 
@@ -396,7 +452,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
       checkJoinPushed(
         df,
-        s"$catalogAndNamespace.${caseConvert(joinTableName1)}," +
+        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}," +
           s" $catalogAndNamespace.${caseConvert(joinTableName1)}, " +
           s"$catalogAndNamespace.${caseConvert(joinTableName1)}")
       checkAnswer(df, rows)
@@ -426,7 +482,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
       checkJoinPushed(
         df,
-        s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
+        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
           s"$catalogAndNamespace.${caseConvert(joinTableName1)}"
       )
       checkAnswer(df, rows)
@@ -450,8 +506,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       val df = sql(sqlQuery)
       checkJoinPushed(
         df,
-        s"$catalogAndNamespace.${caseConvert(joinTableName1)}",
-        s"$catalogAndNamespace.${caseConvert(joinTableName2)}"
+        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}",
+          s"$catalogAndNamespace.${caseConvert(joinTableName2)}"
       )
       checkFilterPushed(df)
       checkAnswer(df, rows)
@@ -475,8 +531,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       val df = sql(sqlQuery)
       checkJoinPushed(
         df,
-        s"$catalogAndNamespace.${caseConvert(joinTableName1)}",
-        s"$catalogAndNamespace.${caseConvert(joinTableName2)}"
+        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}",
+          s"$catalogAndNamespace.${caseConvert(joinTableName2)}"
       )
       checkAnswer(df, rows)
     }

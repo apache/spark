@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.jdbc.v2
 
-import java.sql.Connection
-
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{ExplainSuiteHelper, QueryTest}
 import org.apache.spark.sql.connector.DataSourcePushdownTestUtils
@@ -35,26 +33,19 @@ class JDBCV2JoinPushdownSuite
   val tempDir = Utils.createTempDir()
   override val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
 
-  override val namespaceOpt: Option[String] = Some("test")
-
   override val jdbcDialect: JdbcDialect = H2Dialect()
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.h2.driver", "org.h2.Driver")
 
-  override def qualifyTableName(tableName: String): String = namespaceOpt
-    .map(namespace => s""""$namespace"."$tableName"""").getOrElse(s""""$tableName"""")
+  override def qualifyTableName(tableName: String): String = s""""$namespace"."$tableName""""
 
-  override def schemaPreparation(connection: Connection): Unit = {
-    connection
-      .prepareStatement(s"""CREATE SCHEMA IF NOT EXISTS "${namespaceOpt.get}"""")
-      .executeUpdate()
-  }
+  override def qualifySchemaName(schemaName: String): String = s""""$namespace""""
 
   override def beforeAll(): Unit = {
     Utils.classForName("org.h2.Driver")
     super.beforeAll()
-    withConnection(dataPreparation)
+    dataPreparation()
   }
 
   override def afterAll(): Unit = {
