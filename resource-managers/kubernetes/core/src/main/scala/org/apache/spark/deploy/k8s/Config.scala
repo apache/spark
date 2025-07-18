@@ -404,6 +404,14 @@ private[spark] object Config extends Logging {
       .toSequence
       .createWithDefault(Nil)
 
+  val KUBERNETES_DRIVER_POD_EXCLUDED_FEATURE_STEPS =
+    ConfigBuilder("spark.kubernetes.driver.pod.excludedFeatureSteps")
+      .doc("Class names to exclude from driver pod feature steps. Comma separated.")
+      .version("4.1.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   val KUBERNETES_EXECUTOR_POD_FEATURE_STEPS =
     ConfigBuilder("spark.kubernetes.executor.pod.featureSteps")
       .doc("Class name of an extra executor pod feature step implementing " +
@@ -412,6 +420,14 @@ private[spark] object Config extends Logging {
         "step can implement `KubernetesExecutorCustomFeatureConfigStep` where the executor " +
         "config is also available.")
       .version("3.2.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
+  val KUBERNETES_EXECUTOR_POD_EXCLUDED_FEATURE_STEPS =
+    ConfigBuilder("spark.kubernetes.executor.pod.excludedFeatureSteps")
+      .doc("Class name to exclude from executor pod feature steps. Comma separated.")
+      .version("4.1.0")
       .stringConf
       .toSequence
       .createWithDefault(Nil)

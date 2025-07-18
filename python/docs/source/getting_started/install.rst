@@ -225,7 +225,7 @@ Installable with ``pip install "pyspark[connect]"``.
 ========================== ================= ==========================
 Package                    Supported version Note
 ========================== ================= ==========================
-`pandas`                   >=2.0.0           Required for Spark Connect
+`pandas`                   >=2.2.0           Required for Spark Connect
 `pyarrow`                  >=11.0.0          Required for Spark Connect
 `grpcio`                   >=1.67.0          Required for Spark Connect
 `grpcio-status`            >=1.67.0          Required for Spark Connect
@@ -241,7 +241,7 @@ Installable with ``pip install "pyspark[sql]"``.
 ========= ================= ======================
 Package   Supported version Note
 ========= ================= ======================
-`pandas`  >=2.0.0           Required for Spark SQL
+`pandas`  >=2.2.0           Required for Spark SQL
 `pyarrow` >=11.0.0          Required for Spark SQL
 ========= ================= ======================
 
@@ -308,7 +308,7 @@ Installable with ``pip install "pyspark[pipelines]"``. Includes all dependencies
 ========================== ================= ===================================================
 Package                    Supported version Note
 ========================== ================= ===================================================
-`pandas`                   >=2.0.0           Required for Spark Connect and Spark SQL
+`pandas`                   >=2.2.0           Required for Spark Connect and Spark SQL
 `pyarrow`                  >=11.0.0          Required for Spark Connect and Spark SQL
 `grpcio`                   >=1.67.0          Required for Spark Connect
 `grpcio-status`            >=1.67.0          Required for Spark Connect
