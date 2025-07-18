@@ -109,8 +109,9 @@ public class JavaUtils {
     // On Unix systems, use operating system command to run faster
     // If that does not work out, fallback to the Java IO way
     // We exclude Apple Silicon test environment due to the limited resource issues.
-    if (SparkSystemUtils$.MODULE$.isUnix() && filter == null && !(SparkSystemUtils$.MODULE$.isMac() &&
-        (System.getenv("SPARK_TESTING") != null || System.getProperty("spark.testing") != null))) {
+    if (SparkSystemUtils$.MODULE$.isUnix() && filter == null &&
+        !(SparkSystemUtils$.MODULE$.isMac() && (System.getenv("SPARK_TESTING") != null ||
+        System.getProperty("spark.testing") != null))) {
       try {
         deleteRecursivelyUsingUnixNative(file);
         return;
