@@ -848,27 +848,42 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("insert with schema evolution") {
+  test("SPARK-52860: insert with schema evolution") {
     val tableName = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
-    withTable(tableName) {
-      val tableInfo = new TableInfo.Builder().
-        withColumns(
-          Array(Column.create("c1", IntegerType)))
-        .withProperties(
-          Map("accept-any-schema" -> "true").asJava)
-        .build()
-      catalog("testcat").createTable(ident, tableInfo)
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        withTable(tableName) {
+          val tableInfo = new TableInfo.Builder().
+            withColumns(
+              Array(Column.create("c1", IntegerType)))
+            .withProperties(
+              Map("accept-any-schema" -> "true").asJava)
+            .build()
+          catalog("testcat").createTable(ident, tableInfo)
 
-      val data = Seq((1, "a"), (2, "b"), (3, "c")).toDF("c1", "c2")
-      data.writeTo(tableName).append()
+          val data = Seq((1, "a"), (2, "b"), (3, "c"))
+          val df = if (caseSensitive) {
+            data.toDF("c1", "C1")
+          } else {
+            data.toDF("c1", "c2")
+          }
+          df.writeTo(tableName).append()
+          checkAnswer(spark.table(tableName), df)
 
-      checkAnswer(spark.table(tableName), data)
-      val cols = catalog("testcat").loadTable(ident).columns()
-      val expectedCols = Array(
-        Column.create("c1", IntegerType),
-        Column.create("c2", StringType))
-      assert(cols === expectedCols)
+          val cols = catalog("testcat").loadTable(ident).columns()
+          val expectedCols = if (caseSensitive) {
+            Array(
+              Column.create("c1", IntegerType),
+              Column.create("C1", StringType))
+          } else {
+            Array(
+              Column.create("c1", IntegerType),
+              Column.create("c2", StringType))
+          }
+          assert(cols === expectedCols)
+        }
+      }
     }
   }
 

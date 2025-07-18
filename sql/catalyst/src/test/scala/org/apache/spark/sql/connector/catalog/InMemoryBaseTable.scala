@@ -29,7 +29,7 @@ import com.google.common.base.Objects
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, MetadataStructFieldWithLogicalName}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, ResolveDefaultColumns}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
@@ -39,6 +39,7 @@ import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -596,11 +597,20 @@ abstract class InMemoryBaseTable(
         val (oldFields, newFields) = (oldType.fields, newType.fields)
 
         // this does not override the old field with the new field with same name for now
-        val nameToFieldMap = oldFields.map (f => f.name -> f).toMap
+        val nameToFieldMap = toFieldMap(oldFields)
         val remainingNewFields = newFields.filterNot (f => nameToFieldMap.contains (f.name) )
 
         // Create the merged struct with the new fields are appended at the end of the struct.
         StructType (oldFields ++ remainingNewFields)
+      }
+
+      def toFieldMap(fields: Array[StructField]): Map[String, StructField] = {
+        val fieldMap = fields.map(field => field.name -> field).toMap
+        if (SQLConf.get.caseSensitiveAnalysis) {
+          fieldMap
+        } else {
+          CaseInsensitiveMap(fieldMap)
+        }
       }
     }
   }
