@@ -655,16 +655,12 @@ case class SubtractTimes(left: Expression, right: Expression)
        09:00:00
       > SELECT _FUNC_('MILLISECOND', '09:32:05.123456');
        09:32:05.123
-      > SELECT _FUNC_('MS', '09:32:05.123456');
-       NULL
   """,
   group = "datetime_funcs",
   since = "4.1.0")
 // scalastyle:on line.size.limit
 case class TimeTrunc(unit: Expression, time: Expression)
   extends BinaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
-
-  override def nullIntolerant: Boolean = true
 
   override def left: Expression = unit
   override def right: Expression = time
@@ -699,8 +695,7 @@ case class TimeTrunc(unit: Expression, time: Expression)
       dataType,
       "timeTrunc",
       Seq(unit, castedTime),
-      Seq(unit.dataType, castedTime.dataType),
-      propagateNull = nullIntolerant
+      Seq(unit.dataType, castedTime.dataType)
     )
   }
 }
