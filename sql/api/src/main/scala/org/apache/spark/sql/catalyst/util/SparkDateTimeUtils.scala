@@ -730,7 +730,7 @@ trait SparkDateTimeUtils {
       }
 
       val (segments, zoneIdOpt, justTime) = parseTimestampString(UTF8String.fromString(timeString))
-      
+
       // If the input string can't be parsed as a time, or it contains not only
       // the time part or has time zone information, return None.
       if (segments.isEmpty || !justTime || zoneIdOpt.isDefined) {
