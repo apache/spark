@@ -156,6 +156,7 @@ class PipelineCommand(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
             """SQL configurations for all flows in this graph."""
+
         def __init__(
             self,
             *,
@@ -279,6 +280,7 @@ class PipelineCommand(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
             """Optional table properties. Only applies to dataset_type == TABLE and dataset_type == MATERIALIZED_VIEW."""
+
         @property
         def partition_cols(
             self,
@@ -286,6 +288,7 @@ class PipelineCommand(google.protobuf.message.Message):
             """Optional partition columns for the dataset. Only applies to dataset_type == TABLE and
             dataset_type == MATERIALIZED_VIEW.
             """
+
         @property
         def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
             """Schema for the dataset. If unset, this will be inferred from incoming flows."""
@@ -429,6 +432,7 @@ class PipelineCommand(google.protobuf.message.Message):
         @property
         def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
             """An unresolved relation that defines the dataset's flow."""
+
         @property
         def sql_conf(
             self,
@@ -795,8 +799,9 @@ class PipelineCommandResult(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        create_dataflow_graph_result: global___PipelineCommandResult.CreateDataflowGraphResult
-        | None = ...,
+        create_dataflow_graph_result: (
+            global___PipelineCommandResult.CreateDataflowGraphResult | None
+        ) = ...,
     ) -> None: ...
     def HasField(
         self,

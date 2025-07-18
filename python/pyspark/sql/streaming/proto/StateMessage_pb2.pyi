@@ -141,9 +141,7 @@ class StateRequest(google.protobuf.message.Message):
             b"version",
         ],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["method", b"method"]
-    ) -> (
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["method", b"method"]) -> (
         typing_extensions.Literal[
             "statefulProcessorCall",
             "stateVariableRequest",
@@ -503,9 +501,7 @@ class StatefulProcessorCall(google.protobuf.message.Message):
             b"timerStateCall",
         ],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["method", b"method"]
-    ) -> (
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["method", b"method"]) -> (
         typing_extensions.Literal[
             "setHandleState",
             "getValueState",
@@ -1103,9 +1099,7 @@ class MapStateCall(google.protobuf.message.Message):
             b"values",
         ],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["method", b"method"]
-    ) -> (
+    def WhichOneof(self, oneof_group: typing_extensions.Literal["method", b"method"]) -> (
         typing_extensions.Literal[
             "exists",
             "getValue",

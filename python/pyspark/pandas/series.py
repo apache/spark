@@ -5891,12 +5891,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             F.max_by(
                 spark_column,
                 F.when(
-                    (index_scol <= F.lit(index).cast(index_type)) & spark_column.isNotNull()
-                    if pd.notna(index)
-                    # If index is nan and the value of the col is not null
-                    # then return monotonically_increasing_id. This will let max by
-                    # to return last index value, which is the behaviour of pandas
-                    else spark_column.isNotNull(),
+                    (
+                        (index_scol <= F.lit(index).cast(index_type)) & spark_column.isNotNull()
+                        if pd.notna(index)
+                        # If index is nan and the value of the col is not null
+                        # then return monotonically_increasing_id. This will let max by
+                        # to return last index value, which is the behaviour of pandas
+                        else spark_column.isNotNull()
+                    ),
                     F.col(monotonically_increasing_id_column),
                 ),
             )
@@ -7335,13 +7337,11 @@ def unpack_scalar(sdf: SparkDataFrame) -> Any:
 
 
 @overload
-def first_series(df: DataFrame) -> Series:
-    ...
+def first_series(df: DataFrame) -> Series: ...
 
 
 @overload
-def first_series(df: pd.DataFrame) -> pd.Series:
-    ...
+def first_series(df: pd.DataFrame) -> pd.Series: ...
 
 
 def first_series(df: Union[DataFrame, pd.DataFrame]) -> Union[Series, pd.Series]:

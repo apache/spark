@@ -813,13 +813,11 @@ def validate_mode(mode: str) -> str:
 
 
 @overload
-def verify_temp_column_name(df: PySparkDataFrame, column_name_or_label: str) -> str:
-    ...
+def verify_temp_column_name(df: PySparkDataFrame, column_name_or_label: str) -> str: ...
 
 
 @overload
-def verify_temp_column_name(df: "DataFrame", column_name_or_label: Name) -> Label:
-    ...
+def verify_temp_column_name(df: "DataFrame", column_name_or_label: Name) -> Label: ...
 
 
 def verify_temp_column_name(

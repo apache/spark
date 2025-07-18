@@ -40,12 +40,10 @@ if have_pandas:
 
 class StatefulProcessorFactory:
     @abstractmethod
-    def pandas(self):
-        ...
+    def pandas(self): ...
 
     @abstractmethod
-    def row(self):
-        ...
+    def row(self): ...
 
 
 # StatefulProcessor factory implementations

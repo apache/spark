@@ -41,7 +41,6 @@ if TYPE_CHECKING:
 
 
 class MLUtils:
-
     """
     Helper methods to load, save and pre-process data used in MLlib.
 

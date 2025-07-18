@@ -68,7 +68,6 @@ def _from_id(bid: int) -> "Broadcast[Any]":
 
 
 class Broadcast(Generic[T]):
-
     """
     A broadcast variable created with :meth:`SparkContext.broadcast`.
     Access its value through :attr:`value`.
@@ -91,16 +90,13 @@ class Broadcast(Generic[T]):
         sc: "SparkContext",
         value: T,
         pickle_registry: "BroadcastPickleRegistry",
-    ):
-        ...
+    ): ...
 
     @overload  # On worker without decryption server
-    def __init__(self: "Broadcast[Any]", *, path: str):
-        ...
+    def __init__(self: "Broadcast[Any]", *, path: str): ...
 
     @overload  # On worker with decryption server
-    def __init__(self: "Broadcast[Any]", *, sock_file: str):
-        ...
+    def __init__(self: "Broadcast[Any]", *, sock_file: str): ...
 
     def __init__(  # type: ignore[misc]
         self,
