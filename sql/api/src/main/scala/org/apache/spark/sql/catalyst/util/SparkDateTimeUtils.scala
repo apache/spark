@@ -717,14 +717,55 @@ trait SparkDateTimeUtils {
    */
   def stringToTime(s: UTF8String): Option[Long] = {
     try {
-      val (segments, zoneIdOpt, justTime) = parseTimestampString(s)
+      // Check for the AM/PM suffix.
+      val trimmedString = s.toString.trim
+      val strLength = trimmedString.length
+      val suffix = trimmedString.substring(strLength - 2, strLength).toUpperCase()
+      val (isAM, isPM) = (suffix.equals("AM"), suffix.equals("PM"))
+      val hasSuffix = isAM || isPM
+      val timeString = if (hasSuffix) {
+        trimmedString.substring(0, strLength - 2).trim
+      } else {
+        trimmedString
+      }
+
+      val (segments, zoneIdOpt, justTime) = parseTimestampString(UTF8String.fromString(timeString))
+      
       // If the input string can't be parsed as a time, or it contains not only
       // the time part or has time zone information, return None.
       if (segments.isEmpty || !justTime || zoneIdOpt.isDefined) {
         return None
       }
-      val nanoseconds = MICROSECONDS.toNanos(segments(6))
-      val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
+
+      // Unpack the segments.
+      var (hr, min, sec, ms) = (segments(3), segments(4), segments(5), segments(6))
+
+      // Handle AM/PM conversion in separate cases.
+      if (!hasSuffix) {
+        // For 24-hour format, validate hour range: 0-23.
+        if (hr < 0 || hr > 23) {
+          return None
+        }
+      } else {
+        // For 12-hour format, validate hour range: 1-12.
+        if (hr < 1 || hr > 12) {
+          return None
+        }
+        // For 12-hour format, convert to 24-hour format.
+        if (isAM) {
+          // AM: 12:xx:xx becomes 00:xx:xx, 1-11:xx:xx stays the same.
+          if (hr == 12) {
+            hr = 0
+          }
+        } else {
+          // PM: 12:xx:xx stays 12:xx:xx, 1-11:xx:xx becomes 13-23:xx:xx.
+          if (hr != 12) {
+            hr += 12
+          }
+        }
+      }
+
+      val localTime = LocalTime.of(hr, min, sec, MICROSECONDS.toNanos(ms).toInt)
       Some(localTimeToNanos(localTime))
     } catch {
       case NonFatal(_) => None
