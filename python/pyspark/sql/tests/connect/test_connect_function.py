@@ -551,8 +551,6 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
             (CF.approx_count_distinct, SF.approx_count_distinct),
             (CF.approxCountDistinct, SF.approxCountDistinct),
             (CF.avg, SF.avg),
-            (CF.collect_list, SF.collect_list),
-            (CF.collect_set, SF.collect_set),
             (CF.listagg, SF.listagg),
             (CF.listagg_distinct, SF.listagg_distinct),
             (CF.string_agg, SF.string_agg),
@@ -586,6 +584,25 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
             self.assert_eq(
                 cdf.groupBy("a").agg(cfunc("b"), cfunc(cdf.c)).toPandas(),
                 sdf.groupBy("a").agg(sfunc("b"), sfunc(sdf.c)).toPandas(),
+                check_exact=False,
+            )
+
+        for cfunc, sfunc in [
+            (CF.collect_list, SF.collect_list),
+            (CF.collect_set, SF.collect_set),
+        ]:
+            self.assert_eq(
+                cdf.select(CF.sort_array(cfunc("b")), CF.sort_array(cfunc(cdf.c))).toPandas(),
+                sdf.select(SF.sort_array(sfunc("b")), SF.sort_array(sfunc(sdf.c))).toPandas(),
+                check_exact=False,
+            )
+            self.assert_eq(
+                cdf.groupBy("a")
+                .agg(CF.sort_array(cfunc("b")), CF.sort_array(cfunc(cdf.c)))
+                .toPandas(),
+                sdf.groupBy("a")
+                .agg(SF.sort_array(sfunc("b")), SF.sort_array(sfunc(sdf.c)))
+                .toPandas(),
                 check_exact=False,
             )
 

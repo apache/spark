@@ -38,6 +38,7 @@ import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -198,7 +199,9 @@ class ProtoToParsedPlanTestSuite
         }
         Helper.execute(catalystPlan)
       }
-      val actual = removeMemoryAddress(normalizeExprIds(finalAnalyzedPlan).treeString)
+      val actual = withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> Int.MaxValue.toString) {
+        removeMemoryAddress(normalizeExprIds(finalAnalyzedPlan).treeString)
+      }
       val goldenFile = goldenFilePath.resolve(relativePath).getParent.resolve(name + ".explain")
       Try(readGoldenFile(goldenFile)) match {
         case Success(expected) if expected == actual => // Test passes.

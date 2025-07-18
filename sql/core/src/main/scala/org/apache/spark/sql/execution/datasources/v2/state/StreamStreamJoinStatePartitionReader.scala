@@ -80,8 +80,18 @@ class StreamStreamJoinStatePartitionReader(
   private val (inputAttributes, formatVersion) = {
     val maybeMatchedColumn = valueSchema.last
     val (fields, version) = {
+      // If there is a matched column, version is either 2 or 3. We need to drop the matched
+      // column from the value schema to get the actual fields.
       if (maybeMatchedColumn.name == "matched" && maybeMatchedColumn.dataType == BooleanType) {
-        (valueSchema.dropRight(1), 2)
+        // If checkpoint is using one store and virtual column families, version is 3
+        if (StreamStreamJoinStateHelper.usesVirtualColumnFamilies(
+          hadoopConf.value,
+          partition.sourceOptions.stateCheckpointLocation.toString,
+          partition.sourceOptions.operatorId)) {
+          (valueSchema.dropRight(1), 3)
+        } else {
+          (valueSchema.dropRight(1), 2)
+        }
       } else {
         (valueSchema, 1)
       }
@@ -137,7 +147,7 @@ class StreamStreamJoinStatePartitionReader(
       inputAttributes)
 
     joinStateManager.iterator.map { pair =>
-      if (formatVersion == 2) {
+      if (formatVersion >= 2) {
         val row = valueWithMatchedRowGenerator(pair.value)
         row.setBoolean(indexOrdinalInValueWithMatchedRow, pair.matched)
         unifyStateRowPair(pair.key, row)

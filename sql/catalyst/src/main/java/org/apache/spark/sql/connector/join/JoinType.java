@@ -15,20 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.analysis.resolver
+package org.apache.spark.sql.connector.join;
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, IntegerLiteral}
+import org.apache.spark.annotation.Evolving;
 
 /**
- * Try to extract ordinal from an expression. Return `Some(ordinal)` if the type of the expression
- * is [[IntegerLitera]], `None` otherwise.
+ * Enum representing the join type in public API.
+ *
+ * @since 4.1.0
  */
-object TryExtractOrdinal {
-  def apply(expression: Expression): Option[Int] = {
-    expression match {
-      case IntegerLiteral(literal) =>
-        Some(literal)
-      case other => None
-    }
-  }
+@Evolving
+public enum JoinType {
+    INNER_JOIN,
 }

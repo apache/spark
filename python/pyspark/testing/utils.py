@@ -132,15 +132,15 @@ def write_int(i):
     return struct.pack("!i", i)
 
 
-def timeout(seconds):
+def timeout(timeout):
     def decorator(func):
         def handler(signum, frame):
-            raise TimeoutError(f"Function {func.__name__} timed out after {seconds} seconds")
+            raise TimeoutError(f"Function {func.__name__} timed out after {timeout} seconds")
 
         def wrapper(*args, **kwargs):
             signal.alarm(0)
             signal.signal(signal.SIGALRM, handler)
-            signal.alarm(seconds)
+            signal.alarm(timeout)
             try:
                 result = func(*args, **kwargs)
             finally:
@@ -155,6 +155,7 @@ def timeout(seconds):
 def eventually(
     timeout=30.0,
     catch_assertions=False,
+    catch_timeout=False,
 ):
     """
     Wait a given amount of time for a condition to pass, else fail with an error.
@@ -176,9 +177,14 @@ def eventually(
         If False (default), do not catch AssertionErrors.
         If True, catch AssertionErrors; continue, but save
         error to throw upon timeout.
+    catch_timeout : bool
+        If False (default), do not catch TimeoutError.
+        If True, catch TimeoutError; continue, but save
+        error to throw upon timeout.
     """
     assert timeout > 0
     assert isinstance(catch_assertions, bool)
+    assert isinstance(catch_timeout, bool)
 
     def decorator(condition: Callable) -> Callable:
         assert isinstance(condition, Callable)
@@ -191,13 +197,18 @@ def eventually(
             while time() - start_time < timeout:
                 numTries += 1
 
-                if catch_assertions:
-                    try:
-                        lastValue = condition(*args, **kwargs)
-                    except AssertionError as e:
-                        lastValue = e
-                else:
+                try:
                     lastValue = condition(*args, **kwargs)
+                except AssertionError as e:
+                    if catch_assertions:
+                        lastValue = e
+                    else:
+                        raise e
+                except TimeoutError as e:
+                    if catch_timeout:
+                        lastValue = e
+                    else:
+                        raise e
 
                 if lastValue is True or lastValue is None:
                     return
@@ -205,7 +216,7 @@ def eventually(
                 print(f"\nAttempt #{numTries} failed!\n{lastValue}")
                 sleep(0.01)
 
-            if isinstance(lastValue, AssertionError):
+            if isinstance(lastValue, (AssertionError, TimeoutError)):
                 raise lastValue
             else:
                 raise AssertionError(
