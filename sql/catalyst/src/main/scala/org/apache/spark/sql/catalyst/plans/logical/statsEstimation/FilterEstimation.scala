@@ -343,8 +343,12 @@ case class FilterEstimation(plan: Filter) extends Logging {
         Some(computeEqualityPossibilityByHistogram(literal, colStat))
       }
 
-    } else {  // not in interval
-      Some(0.0)
+    } else {
+      // for NullInterval, the selectivity is indefinite
+      statsInterval match {
+        case _: NullValueInterval => None
+        case _ => Some(0.0)
+      }
     }
   }
 
@@ -397,8 +401,10 @@ case class FilterEstimation(plan: Filter) extends Logging {
     // use [min, max] to filter the original hSet
     dataType match {
       case _: NumericType | BooleanType | DateType | TimestampType =>
-        if (ndv.toDouble == 0 || colStat.min.isEmpty || colStat.max.isEmpty)  {
+        if (ndv.toDouble == 0)  {
           return Some(0.0)
+        } else if (colStat.min.isEmpty || colStat.max.isEmpty)  {
+          return None
         }
 
         val statsInterval =
