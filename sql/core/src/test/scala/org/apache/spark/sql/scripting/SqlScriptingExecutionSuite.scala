@@ -2944,12 +2944,11 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       """
         |BEGIN
         |  FOR SELECT 1 DO
-        |    SELECT 1;
+        |    SELECT 2;
         |  END FOR;
         |END
         |""".stripMargin
-    val expected = Seq(Seq(Row(1)))
-    verifySqlScriptResult(sqlScript1, expected)
+    verifySqlScriptResult(sqlScript1, Seq(Seq(Row(2))))
 
     val sqlScript2 =
       """
@@ -2959,7 +2958,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |  END FOR;
         |END
         |""".stripMargin
-    verifySqlScriptResult(sqlScript2, expected)
+    verifySqlScriptResult(sqlScript2, Seq(Seq(Row(1))))
   }
 
   test("Column with space in FOR query") {
@@ -2983,5 +2982,32 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |END
         |""".stripMargin
     verifySqlScriptResult(sqlScript2, expected)
+  }
+
+  test("FOR query referencing table with space") {
+    withTable("test_tbl") {
+      sql("CREATE TABLE test_tbl (`Space Column` INT) USING parquet")
+      sql("INSERT INTO test_tbl VALUES (1)")
+      val sqlScript1 =
+      """
+        |BEGIN
+        |  FOR SELECT * FROM test_tbl DO
+        |    SELECT `Space Column`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+      val expected = Seq(Seq(Row(1)))
+      verifySqlScriptResult(sqlScript1, expected)
+
+      val sqlScript2 =
+      """
+        |BEGIN
+        |  FOR x AS SELECT * FROM test_tbl DO
+        |    SELECT x.`Space Column`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+      verifySqlScriptResult(sqlScript2, expected)
+    }
   }
 }
