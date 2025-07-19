@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.connect.planner
 
-import java.util.Properties
-import java.util.UUID
+import java.util.{Properties, UUID}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -45,24 +44,23 @@ import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Column, Encoders, ForeachWriter, Observation, Row}
-import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
+import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
-import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
-import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, CompoundBody, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
+import org.apache.spark.sql.catalyst.plans.{logical, Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, CompoundBody, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UnresolvedWith, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.classic.{Catalog, Dataset, MergeIntoWriter, RelationalGroupedDataset, SparkSession, TypedAggUtils, UserDefinedFunctionUtils}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.pipelines.PipelinesHandler
@@ -119,6 +117,24 @@ class SparkConnectPlanner(
 
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
+
+  private val RELATION_COMPUTATION_IN_PROGRESS = new AnyRef
+  private val relationCache = mutable.Map.empty[Long, AnyRef]
+
+  private def getCachedRelation(planId: Long): LogicalPlan = {
+    relationCache.get(planId) match {
+      case Some(plan: LogicalPlan) => plan
+      case Some(RELATION_COMPUTATION_IN_PROGRESS) =>
+        throw InvalidPlanInput(s"Cyclic plan reference for plan ID: $planId")
+      case Some(relation: proto.Relation) =>
+        relationCache.put(planId, RELATION_COMPUTATION_IN_PROGRESS)
+        val plan = transformRelation(relation)
+        relationCache.update(planId, plan)
+        plan
+      case _ =>
+        throw InvalidInputErrors.invalidWithRelationReference()
+    }
+  }
 
   /**
    * The root of the query plan is a relation and we apply the transformations to it. The resolved
@@ -221,6 +237,8 @@ class SparkConnectPlanner(
         case proto.Relation.RelTypeCase.COLLECT_METRICS =>
           transformCollectMetrics(rel.getCollectMetrics, rel.getCommon.getPlanId)
         case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
+        case proto.Relation.RelTypeCase.REFERENCED_PLAN_ID =>
+          getCachedRelation(rel.getReferencedPlanId)
 
         // Catalog API (internal-only)
         case proto.Relation.RelTypeCase.CATALOG => transformCatalog(rel.getCatalog)
@@ -342,13 +360,6 @@ class SparkConnectPlanner(
     } else {
       parsedPlan
     }
-  }
-
-  private def transformSqlWithRefs(query: proto.WithRelations): LogicalPlan = {
-    if (!isValidSQLWithRefs(query)) {
-      throw InvalidInputErrors.invalidSQLWithReferences(query)
-    }
-    executeSQLWithRefs(query).logicalPlan
   }
 
   private def transformSubqueryAlias(alias: proto.SubqueryAlias): LogicalPlan = {
@@ -2793,14 +2804,12 @@ class SparkConnectPlanner(
         .build()
     }
 
-    val df = relation.getRelTypeCase match {
-      case proto.Relation.RelTypeCase.SQL =>
-        executeSQL(relation.getSql, tracker)
-      case proto.Relation.RelTypeCase.WITH_RELATIONS =>
-        executeSQLWithRefs(relation.getWithRelations, tracker)
-      case other =>
-        throw InvalidInputErrors.sqlCommandExpectsSqlOrWithRelations(other)
+    // Only allow a SQL relation or a SQL relation nested in a WithRelations relation.
+    if (!relation.hasSql &&
+      !(relation.hasWithRelations && relation.getWithRelations.getRoot.hasSql)) {
+      throw InvalidInputErrors.sqlCommandExpectsSqlOrWithRelations(relation.getRelTypeCase)
     }
+    val df = Dataset.ofRows(session, transformRelation(relation), tracker)
 
     // Check if command or SQL Script has been executed.
     val isCommand = df.queryExecution.commandExecuted.isInstanceOf[CommandResult]
@@ -2878,79 +2887,6 @@ class SparkConnectPlanner(
           .setServerSideSessionId(sessionHolder.serverSessionId)
           .setMetrics(metrics.build)
           .build)
-    }
-  }
-
-  private def isValidSQLWithRefs(query: proto.WithRelations): Boolean = {
-    query.getRoot.getRelTypeCase match {
-      case proto.Relation.RelTypeCase.SQL =>
-      case _ => return false
-    }
-    if (query.getReferencesCount == 0) {
-      return false
-    }
-    query.getReferencesList.iterator().asScala.foreach { ref =>
-      ref.getRelTypeCase match {
-        case proto.Relation.RelTypeCase.SUBQUERY_ALIAS =>
-        case _ => return false
-      }
-    }
-    true
-  }
-
-  private def executeSQLWithRefs(
-      query: proto.WithRelations,
-      tracker: QueryPlanningTracker = new QueryPlanningTracker) = {
-    if (!isValidSQLWithRefs(query)) {
-      throw InvalidInputErrors.invalidSQLWithReferences(query)
-    }
-
-    // Eagerly execute commands of the provided SQL string, with given references.
-    val sql = query.getRoot.getSql
-    this.synchronized {
-      try {
-        query.getReferencesList.asScala.foreach { ref =>
-          Dataset
-            .ofRows(session, transformRelation(ref.getSubqueryAlias.getInput))
-            .createOrReplaceTempView(ref.getSubqueryAlias.getAlias)
-        }
-        executeSQL(sql, tracker)
-      } finally {
-        // drop all temporary views
-        query.getReferencesList.asScala.foreach { ref =>
-          session.catalog.dropTempView(ref.getSubqueryAlias.getAlias)
-        }
-      }
-    }
-  }
-
-  private def executeSQL(
-      sql: proto.SQL,
-      tracker: QueryPlanningTracker = new QueryPlanningTracker) = {
-    // Eagerly execute commands of the provided SQL string.
-    val args = sql.getArgsMap
-    val namedArguments = sql.getNamedArgumentsMap
-    val posArgs = sql.getPosArgsList
-    val posArguments = sql.getPosArgumentsList
-    if (!namedArguments.isEmpty) {
-      session.sql(
-        sql.getQuery,
-        namedArguments.asScala.toMap.transform((_, e) => Column(transformExpression(e))),
-        tracker)
-    } else if (!posArguments.isEmpty) {
-      session.sql(
-        sql.getQuery,
-        posArguments.asScala.map(e => Column(transformExpression(e))).toArray,
-        tracker)
-    } else if (!args.isEmpty) {
-      session.sql(
-        sql.getQuery,
-        args.asScala.toMap.transform((_, v) => transformLiteral(v)),
-        tracker)
-    } else if (!posArgs.isEmpty) {
-      session.sql(sql.getQuery, posArgs.asScala.map(transformLiteral).toArray, tracker)
-    } else {
-      session.sql(sql.getQuery, Map.empty[String, Any], tracker)
     }
   }
 
@@ -4057,72 +3993,73 @@ class SparkConnectPlanner(
 
   private def transformSubqueryExpression(
       getSubqueryExpression: proto.SubqueryExpression): Expression = {
-    val planId = getSubqueryExpression.getPlanId
+    val plan = getCachedRelation(getSubqueryExpression.getPlanId)
     getSubqueryExpression.getSubqueryType match {
       case proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_SCALAR =>
-        UnresolvedScalarSubqueryPlanId(planId)
+        ScalarSubquery(plan)
       case proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_EXISTS =>
-        UnresolvedExistsPlanId(planId)
+        Exists(plan)
       case proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_TABLE_ARG =>
         if (getSubqueryExpression.hasTableArgOptions) {
           val options = getSubqueryExpression.getTableArgOptions
-          UnresolvedTableArgPlanId(
-            planId,
-            partitionSpec = options.getPartitionSpecList.asScala
+          FunctionTableSubqueryArgumentExpression(
+            plan,
+            partitionByExpressions = options.getPartitionSpecList.asScala
               .map(transformExpression)
               .toSeq,
-            orderSpec = options.getOrderSpecList.asScala
+            orderByExpressions = options.getOrderSpecList.asScala
               .map(transformSortOrder)
               .toSeq,
             withSinglePartition =
               options.hasWithSinglePartition && options.getWithSinglePartition)
         } else {
-          UnresolvedTableArgPlanId(planId)
+          FunctionTableSubqueryArgumentExpression(plan)
         }
       case proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_IN =>
-        UnresolvedInSubqueryPlanId(
-          getSubqueryExpression.getInSubqueryValuesList.asScala.map { value =>
-            transformExpression(value)
-          }.toSeq,
-          planId)
+        val values = getSubqueryExpression.getInSubqueryValuesList.asScala.map { value =>
+          transformExpression(value)
+        }.toSeq
+        InSubquery(values, ListQuery(plan))
       case other => throw InvalidInputErrors.invalidEnum(other)
     }
   }
 
   private def transformWithRelations(getWithRelations: proto.WithRelations): LogicalPlan = {
-    if (isValidSQLWithRefs(getWithRelations)) {
-      transformSqlWithRefs(getWithRelations)
+    // Register the plans in the relation cache, so they can be resolved while
+    // transforming the root relation into a LogicalPlan.
+    val namedReferences = mutable.Buffer.empty[(String, proto.Relation)]
+    getWithRelations.getReferencesList.forEach { ref =>
+      val common = ref.getCommon
+      if (!common.hasPlanId && !ref.hasSubqueryAlias) {
+        throw InvalidInputErrors.invalidWithRelationReference()
+      }
+      if (common.hasPlanId) {
+        relationCache.put(common.getPlanId, ref)
+      }
+      if (ref.hasSubqueryAlias) {
+        namedReferences += ref.getSubqueryAlias.getAlias -> ref
+      }
+    }
+
+    val root = transformRelation(getWithRelations.getRoot)
+    if (namedReferences.nonEmpty) {
+      // If WithRelations contains named references we create a CTE. This is needed because it is
+      // allowed to nest WithRelations nodes and names used in a parent node can be reused
+      // (overwritten) by a child node.
+      val ctes = namedReferences.map {
+        case (name, relation) =>
+          assert(relation.hasSubqueryAlias)
+          val plan = if (relation.getCommon.hasPlanId) {
+            getCachedRelation(relation.getCommon.getPlanId)
+          } else {
+            transformRelation(relation)
+          }
+          (name, plan.asInstanceOf[SubqueryAlias], None)
+      }
+      UnresolvedWith(root, ctes.toSeq)
     } else {
       // Wrap the plan to keep the original planId.
-      val plan = Project(Seq(UnresolvedStar(None)), transformRelation(getWithRelations.getRoot))
-
-      val relations = getWithRelations.getReferencesList.asScala.map { ref =>
-        if (ref.hasCommon && ref.getCommon.hasPlanId) {
-          val planId = ref.getCommon.getPlanId
-          val plan = transformRelation(ref)
-          planId -> plan
-        } else {
-          throw InvalidInputErrors.invalidWithRelationReference()
-        }
-      }.toMap
-
-      val missingPlanIds = mutable.Set.empty[Long]
-      val withRelations = plan
-        .transformAllExpressionsWithPruning(_.containsPattern(TreePattern.UNRESOLVED_PLAN_ID)) {
-          case u: UnresolvedPlanId =>
-            if (relations.contains(u.planId)) {
-              u.withPlan(relations(u.planId))
-            } else {
-              missingPlanIds += u.planId
-              u
-            }
-        }
-      assertPlan(
-        missingPlanIds.isEmpty,
-        "Missing relation in WithRelations: " +
-          s"${missingPlanIds.mkString("(", ", ", ")")} not in " +
-          s"${relations.keys.mkString("(", ", ", ")")}")
-      withRelations
+      Project(Seq(UnresolvedStar(None)), root)
     }
   }
 
