@@ -31,6 +31,7 @@ import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, Relation, SparkConnectServiceGrpc, SQL}
 import org.apache.spark.sql.connect.SparkSession
@@ -78,6 +79,28 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
   test("Placeholder test: Create SparkConnectClient") {
     client = SparkConnectClient.builder().userId("abc123").build()
     assert(client.userId == "abc123")
+  }
+
+  test("Pass client env details in request") {
+    startDummyServer(0)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}/;use_ssl=true")
+      .retryPolicy(RetryPolicy(maxRetries = Some(0), canRetry = _ => false, name = "TestPolicy"))
+      .build()
+
+    val request = AnalyzePlanRequest.newBuilder().setSessionId("abc123").build()
+
+    // Failed the ssl handshake as the dummy server does not have any server credentials installed.
+    assertThrows[SparkException] {
+      client.analyze(request)
+    }
+
+    // Verify the request sent included these details
+    val env = request.getClientEnv()
+    assert(env.getSparkVersion == SPARK_VERSION)
+    assert(env.getScalaEnv.getScalaVersion == util.Properties.versionString)
+
   }
 
   // Use 0 to start the server at a random port
