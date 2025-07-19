@@ -720,13 +720,16 @@ trait SparkDateTimeUtils {
       // Check for the AM/PM suffix.
       val trimmed = s.trimRight
       val numChars = trimmed.numChars()
-      var (isAM, isPM) = (false, false)
-      val (lc, slc) = (trimmed.getChar(numChars - 1), trimmed.getChar(numChars - 2))
-      if (numChars > 2 && lc == 'M' || lc == 'm') {
-        isAM = slc == 'A' || slc == 'a'
-        isPM = slc == 'P' || slc == 'p'
+      var (isAM, isPM, hasSuffix) = (false, false, false)
+      if (numChars > 2) {
+        val lc = trimmed.getChar(numChars - 1)
+        if (lc == 'M' || lc == 'm') {
+          val slc = trimmed.getChar(numChars - 2)
+          isAM = slc == 'A' || slc == 'a'
+          isPM = slc == 'P' || slc == 'p'
+          hasSuffix = isAM || isPM
+        }
       }
-      val hasSuffix = isAM || isPM
       val timeString = if (hasSuffix) {
         trimmed.substring(0, numChars - 2)
       } else {
