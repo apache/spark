@@ -663,6 +663,7 @@ object FunctionRegistry {
     expressionBuilder("to_timestamp_ltz", ParseToTimestampLTZExpressionBuilder, setAlias = true),
     expression[TruncDate]("trunc"),
     expression[TruncTimestamp]("date_trunc"),
+    expression[TruncateTime]("time_trunc"),
     expression[UnixTimestamp]("unix_timestamp"),
     expression[DayOfWeek]("dayofweek"),
     expression[WeekDay]("weekday"),

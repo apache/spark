@@ -450,10 +450,12 @@ object DateTimeUtils extends SparkDateTimeUtils {
   // of TIMESTAMP values only.
   private[sql] val TRUNC_TO_MICROSECOND = 0
   private[sql] val MIN_LEVEL_OF_TIMESTAMP_TRUNC = TRUNC_TO_MICROSECOND
+  private[sql] val MIN_LEVEL_OF_TIME_TRUNC = TRUNC_TO_MICROSECOND
   private[sql] val TRUNC_TO_MILLISECOND = 1
   private[sql] val TRUNC_TO_SECOND = 2
   private[sql] val TRUNC_TO_MINUTE = 3
   private[sql] val TRUNC_TO_HOUR = 4
+  private[sql] val MAX_LEVEL_OF_TIME_TRUNC = TRUNC_TO_HOUR
   private[sql] val TRUNC_TO_DAY = 5
   // The levels from TRUNC_TO_WEEK to TRUNC_TO_YEAR are used in truncations
   // of DATE and TIMESTAMP values.
@@ -529,6 +531,51 @@ object DateTimeUtils extends SparkDateTimeUtils {
         case "YEAR" | "YYYY" | "YY" => TRUNC_TO_YEAR
         case _ => TRUNC_INVALID
       }
+    }
+  }
+
+  /**
+   * Truncate a TIME-of-day value given as nanoseconds from midnight.
+   *
+   * @param unitUtf8  the requested unit ('HOUR', 'MINUTE', ...) or null
+   * @param micros nanoseconds since 00:00:00
+   * @return truncated value as nanoseconds-of-day, or -1L if the unit is invalid
+   */
+  def truncateTime(unitUtf8: UTF8String, nanos: Long): Long = {
+    val level = parseTruncLevelForTime(unitUtf8)
+    if (level < MIN_LEVEL_OF_TIME_TRUNC || level > MAX_LEVEL_OF_TIME_TRUNC) {  // unknown unit
+      -1L
+    } else {
+      level match {
+        case TRUNC_TO_MICROSECOND =>
+          nanos - Math.floorMod(nanos, NANOS_PER_MICROS) // no truncation
+        case TRUNC_TO_MILLISECOND =>
+          nanos - Math.floorMod(nanos, NANOS_PER_MILLIS)
+        case TRUNC_TO_SECOND =>
+          nanos - Math.floorMod(nanos, NANOS_PER_SECOND)
+        case TRUNC_TO_MINUTE =>
+          nanos - Math.floorMod(nanos, NANOS_PER_MINUTE)
+        case TRUNC_TO_HOUR =>
+          nanos - Math.floorMod(nanos, NANOS_PER_HOUR)
+        case _ =>
+          -1L
+      }
+    }
+  }
+
+  /**
+   * Returns the truncate level, could be from TRUNC_TO_MICROSECOND to TRUNC_TO_HOUR,
+   * or TRUNC_INVALID, TRUNC_INVALID means unsupported truncate level.
+   */
+  def parseTruncLevelForTime(unit: UTF8String): Int = {
+    if (unit == null) return TRUNC_INVALID
+    unit.toString.toUpperCase(Locale.ROOT) match {
+      case "MICROSECOND" => TRUNC_TO_MICROSECOND
+      case "MILLISECOND" => TRUNC_TO_MILLISECOND
+      case "SECOND" => TRUNC_TO_SECOND
+      case "MINUTE" => TRUNC_TO_MINUTE
+      case "HOUR" => TRUNC_TO_HOUR
+      case _ => TRUNC_INVALID
     }
   }
 
