@@ -489,6 +489,26 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
     )
   }
 
+  test("external sink") {
+    val session = spark
+    import session.implicits._
+
+    val P = new TestGraphRegistrationContext(spark) {
+      val mem = MemoryStream[Int]
+      mem.addData(1, 2)
+      registerTemporaryView("a", query = dfFlowFunc(mem.toDF().select($"value" as "x")))
+      registerSink("sink_a", format = "memory")
+      registerFlow("sink_a", "sink_flow", query = readStreamFlowFunc("a"))
+    }
+    val g = P.resolveToDataflowGraph()
+    g.validate()
+    assert(g.resolved)
+    assert(g.sink(fullyQualifiedIdentifier("sink_a")).isInstanceOf[Sink])
+    val sink = g.sink(fullyQualifiedIdentifier("sink_a"))
+    assert(sink.format == "memory")
+    assert(g.flow(fullyQualifiedIdentifier("sink_flow")).isInstanceOf[StreamingFlow])
+  }
+
   /** Verifies the [[DataflowGraph]] has the specified [[Flow]] with the specified schema. */
   private def verifyFlowSchema(
       pipeline: DataflowGraph,
@@ -497,7 +517,7 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
     assert(
       pipeline.flow.contains(identifier),
       s"Flow ${identifier.unquotedString} not found," +
-        s" all flow names: ${pipeline.flow.keys.map(_.unquotedString)}"
+      s" all flow names: ${pipeline.flow.keys.map(_.unquotedString)}"
     )
     assert(
       pipeline.resolvedFlow.contains(identifier),

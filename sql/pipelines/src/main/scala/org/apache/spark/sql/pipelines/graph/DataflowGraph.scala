@@ -27,15 +27,15 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * DataflowGraph represents the core graph structure for Spark declarative pipelines.
- * It manages the relationships between logical flows, tables, and views, providing
+ * It manages the relationships between logical flows, tables, sinks, and views, providing
  * operations for graph traversal, validation, and transformation.
  */
-case class DataflowGraph(flows: Seq[Flow], tables: Seq[Table], views: Seq[View])
+case class DataflowGraph(flows: Seq[Flow], tables: Seq[Table], sinks: Seq[Sink], views: Seq[View])
     extends GraphOperations
     with GraphValidations {
 
   /** Map of [[Output]]s by their identifiers */
-  lazy val output: Map[TableIdentifier, Output] = mapUnique(tables, "output")(_.identifier)
+  lazy val output: Map[TableIdentifier, Output] = mapUnique(sinks ++ tables, "output")(_.identifier)
 
   /**
    * [[Flow]]s in this graph that need to get planned and potentially executed when
@@ -53,6 +53,10 @@ case class DataflowGraph(flows: Seq[Flow], tables: Seq[Table], views: Seq[View])
   /** Map of [[Table]]s by their identifiers */
   lazy val table: Map[TableIdentifier, Table] =
     mapUnique(tables, "table")(_.identifier)
+
+  /** Map of [[Sink]]s by their identifiers */
+  lazy val sink: Map[TableIdentifier, Sink] =
+    mapUnique(sinks, "sink")(_.identifier)
 
   /** Map of [[Flow]]s by their identifier */
   lazy val flow: Map[TableIdentifier, Flow] = {
@@ -109,6 +113,9 @@ case class DataflowGraph(flows: Seq[Flow], tables: Seq[Table], views: Seq[View])
     flows.collect { case f: ResolvedFlow => f }
   }
 
+  lazy val resolvedFlowsTo: Map[TableIdentifier, Seq[ResolvedFlow]] =
+    resolvedFlows.groupBy(_.destinationIdentifier)
+
   lazy val resolvedFlow: Map[TableIdentifier, ResolvedFlow] = {
     resolvedFlows.map { f =>
       f.identifier -> f
@@ -126,7 +133,7 @@ case class DataflowGraph(flows: Seq[Flow], tables: Seq[Table], views: Seq[View])
   }
 
   /**
-   * Used to reanalyze the flow's DF for a given table. This is done by finding all upstream
+   * Used to reanalyze the flow's DF for a given table or sink. This is done by finding all upstream
    * flows (until a table is reached) for the specified source and reanalyzing all upstream
    * flows.
    *
@@ -149,7 +156,8 @@ case class DataflowGraph(flows: Seq[Flow], tables: Seq[Table], views: Seq[View])
     val subgraph = new DataflowGraph(
       flows = upstreamFlows,
       views = upstreamViews,
-      tables = Seq(table(srcFlow.destinationIdentifier))
+      tables = table.get(srcFlow.destinationIdentifier).toSeq,
+      sinks = sink.get(srcFlow.destinationIdentifier).toSeq
     )
     subgraph.resolve().resolvedFlow(srcFlow.identifier)
   }

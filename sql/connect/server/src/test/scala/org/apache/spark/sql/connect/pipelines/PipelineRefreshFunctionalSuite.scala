@@ -81,7 +81,7 @@ class PipelineRefreshFunctionalSuite
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       val pipeline = createTestPipeline(graphId)
-      registerPipelineDatasets(pipeline)
+      registerGraphElements(pipeline)
 
       // First run to populate tables
       startPipelineAndWaitForCompletion(graphId)
@@ -226,7 +226,7 @@ class PipelineRefreshFunctionalSuite
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       val pipeline = createTestPipeline(graphId)
-      registerPipelineDatasets(pipeline)
+      registerGraphElements(pipeline)
 
       val startRun = PipelineCommand.StartRun
         .newBuilder()
@@ -248,7 +248,7 @@ class PipelineRefreshFunctionalSuite
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       val pipeline = createTestPipeline(graphId)
-      registerPipelineDatasets(pipeline)
+      registerGraphElements(pipeline)
 
       val startRun = PipelineCommand.StartRun
         .newBuilder()
@@ -270,7 +270,7 @@ class PipelineRefreshFunctionalSuite
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       val pipeline = createTestPipeline(graphId)
-      registerPipelineDatasets(pipeline)
+      registerGraphElements(pipeline)
 
       val startRun = PipelineCommand.StartRun
         .newBuilder()
@@ -293,7 +293,7 @@ class PipelineRefreshFunctionalSuite
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       val pipeline = createTestPipeline(graphId)
-      registerPipelineDatasets(pipeline)
+      registerGraphElements(pipeline)
 
       val startRun = PipelineCommand.StartRun
         .newBuilder()
@@ -317,7 +317,7 @@ class PipelineRefreshFunctionalSuite
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       val pipeline = createTestPipeline(graphId)
-      registerPipelineDatasets(pipeline)
+      registerGraphElements(pipeline)
 
       val startRun = PipelineCommand.StartRun
         .newBuilder()
