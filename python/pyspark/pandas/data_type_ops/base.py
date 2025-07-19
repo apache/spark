@@ -35,6 +35,7 @@ from pyspark.sql.types import (
     DecimalType,
     FractionalType,
     IntegralType,
+    LongType,
     MapType,
     NullType,
     NumericType,
@@ -52,6 +53,7 @@ from pyspark.pandas.typedef.typehints import (
     extension_object_dtypes_available,
     spark_type_to_pandas_dtype,
 )
+from pyspark.pandas.utils import is_ansi_mode_enabled
 
 if extension_dtypes_available:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
@@ -392,10 +394,12 @@ class DataTypeOps(object, metaclass=ABCMeta):
         raise TypeError(">= can not be applied to %s." % self.pretty_name)
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.internal import InternalField
+
         if isinstance(right, (list, tuple)):
             from pyspark.pandas.series import first_series, scol_for
             from pyspark.pandas.frame import DataFrame
-            from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, InternalField
+            from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME
 
             if len(left) != len(right):
                 raise ValueError("Lengths must be equal")
@@ -481,6 +485,25 @@ class DataTypeOps(object, metaclass=ABCMeta):
             return first_series(DataFrame(internal))
         else:
             from pyspark.pandas.base import column_op
+
+            if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession):
+                from pyspark.pandas.base import IndexOpsMixin
+
+                def are_both_numeric(left_dtype, right_dtype):
+                    return pd.api.types.is_numeric_dtype(
+                        left_dtype
+                    ) and pd.api.types.is_numeric_dtype(right_dtype)
+
+                left = transform_boolean_operand_to_numeric(left, spark_type=LongType())
+                right = transform_boolean_operand_to_numeric(right, spark_type=LongType())
+                left_dtype = left.dtype
+                if isinstance(right, (IndexOpsMixin, np.ndarray)):
+                    right_dtype = right.dtype
+                else:
+                    right_dtype = pd.Series([right]).dtype
+
+                if left_dtype != right_dtype and not are_both_numeric(left_dtype, right_dtype):
+                    return left._with_new_scol(F.lit(False))
 
             return column_op(PySparkColumn.__eq__)(left, right)
 
