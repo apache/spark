@@ -747,7 +747,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     assert(rows12(5).getString(0) === "special_character_underscorenot_present")
   }
 
-  val partitioningEnabledTestCase = Seq(true, false)
+  private val partitioningEnabledTestCase = Seq(
+    GridTestCase(true, testNameSuffix = "partitioning enabled"),
+    GridTestCase(false, testNameSuffix = "partitioning disabled")
+  )
+
   gridTest(
     "SPARK-37038: Test TABLESAMPLE"
   )(partitioningEnabledTestCase) { partitioningEnabled =>
