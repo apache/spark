@@ -50,10 +50,12 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
       sc.PipelineCommand
         .newBuilder()
         .setCreateDataflowGraph(createDataflowGraph)
-        .build())
+        .build()
+    )
   }
 
-  def createDataflowGraph(implicit
+  def createDataflowGraph(
+      implicit
       stub: sc.SparkConnectServiceGrpc.SparkConnectServiceBlockingStub): String = {
     sendPlan(
       buildCreateDataflowGraphPlan(
@@ -63,8 +65,9 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
           // support streaming.
           .setDefaultCatalog("spark_catalog")
           .setDefaultDatabase("default")
-          .build()))(
-      stub).getPipelineCommandResult.getCreateDataflowGraphResult.getDataflowGraphId
+          .build()
+      )
+    )(stub).getPipelineCommandResult.getCreateDataflowGraphResult.getDataflowGraphId
   }
 
   def buildStartRunPlan(startRun: sc.PipelineCommand.StartRun): sc.Plan = {
@@ -72,12 +75,13 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
       sc.PipelineCommand
         .newBuilder()
         .setStartRun(startRun)
-        .build())
+        .build()
+    )
   }
 
-  def sendPlan(plan: sc.Plan)(implicit
-      stub: sc.SparkConnectServiceGrpc.SparkConnectServiceBlockingStub)
-      : sc.ExecutePlanResponse = {
+  def sendPlan(plan: sc.Plan)(
+      implicit
+      stub: sc.SparkConnectServiceGrpc.SparkConnectServiceBlockingStub): sc.ExecutePlanResponse = {
     val iter = stub.executePlan(buildExecutePlanRequest(plan))
     if (iter.hasNext) {
       iter.next()
@@ -86,7 +90,8 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
     }
   }
 
-  def registerPipelineDatasets(testPipelineDefinition: TestPipelineDefinition)(implicit
+  def registerGraphElements(testPipelineDefinition: TestPipelineDefinition)(
+      implicit
       stub: sc.SparkConnectServiceGrpc.SparkConnectServiceBlockingStub): Unit = {
     (testPipelineDefinition.viewDefs ++ testPipelineDefinition.tableDefs).foreach { tv =>
       sendPlan(
@@ -94,7 +99,9 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
           sc.PipelineCommand
             .newBuilder()
             .setDefineDataset(tv)
-            .build()))
+            .build()
+        )
+      )
     }
 
     testPipelineDefinition.flowDefs.foreach { flow =>
@@ -103,14 +110,14 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
           sc.PipelineCommand
             .newBuilder()
             .setDefineFlow(flow)
-            .build()))
+            .build()
+        )
+      )
     }
   }
 
-  def registerGraphElementsFromSql(
-      graphId: String,
-      sql: String,
-      sqlFileName: String = "table.sql")(implicit
+  def registerGraphElementsFromSql(graphId: String, sql: String, sqlFileName: String = "table.sql")(
+      implicit
       stub: sc.SparkConnectServiceGrpc.SparkConnectServiceBlockingStub): Unit = {
     sendPlan(
       buildPlanFromPipelineCommand(
@@ -121,8 +128,11 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
               .newBuilder()
               .setDataflowGraphId(graphId)
               .setSqlFilePath(sqlFileName)
-              .setSqlText(sql))
-          .build()))
+              .setSqlText(sql)
+          )
+          .build()
+      )
+    )
   }
 
   def createPlanner(): SparkConnectPlanner =

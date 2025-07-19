@@ -62,6 +62,17 @@ class FlowPlanner(
               trigger = triggerFor(sf),
               checkpointPath = output.path
             )
+          case s: Sink =>
+            new SinkWrite(
+              graph = graph,
+              flow = flow,
+              identifier = sf.identifier,
+              destination = s,
+              updateContext = updateContext,
+              sqlConf = sf.sqlConf,
+              trigger = triggerFor(sf),
+              checkpointPath = output.path
+            )
           case _ =>
             throw new UnsupportedOperationException(
               s"Streaming flow ${sf.identifier} cannot write to non-table destination: " +

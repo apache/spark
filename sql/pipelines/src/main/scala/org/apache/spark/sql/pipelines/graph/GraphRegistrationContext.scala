@@ -35,6 +35,7 @@ class GraphRegistrationContext(
 
   protected val tables = new mutable.ListBuffer[Table]
   protected val views = new mutable.ListBuffer[View]
+  protected val sinks = new mutable.ListBuffer[Sink]
   protected val flows = new mutable.ListBuffer[UnresolvedFlow]
 
   def registerTable(tableDef: Table): Unit = {
@@ -45,17 +46,20 @@ class GraphRegistrationContext(
     views += viewDef
   }
 
+  def registerSink(sinkDef: Sink): Unit = {
+    sinks += sinkDef
+  }
+
   def registerFlow(flowDef: UnresolvedFlow): Unit = {
     flows += flowDef.copy(sqlConf = defaultSqlConf ++ flowDef.sqlConf)
   }
 
   def toDataflowGraph: DataflowGraph = {
-    if (tables.isEmpty && views.collect { case v: PersistedView =>
-        v
-      }.isEmpty) {
-      throw new AnalysisException(
-        errorClass = "RUN_EMPTY_PIPELINE",
-        messageParameters = Map.empty)
+    if (tables.isEmpty && views.collect {
+        case v: PersistedView =>
+          v
+      }.isEmpty && sinks.isEmpty) {
+      throw new AnalysisException(errorClass = "RUN_EMPTY_PIPELINE", messageParameters = Map.empty)
     }
     val qualifiedTables = tables.toSeq.map { t =>
       t.copy(
@@ -84,6 +88,16 @@ class GraphRegistrationContext(
               rawViewIdentifier = v.identifier,
               currentCatalog = Some(defaultCatalog),
               currentDatabase = Some(defaultDatabase)
+            )
+        )
+    }
+
+    val validatedSinks = sinks.toSeq.collect {
+      case s: SinkImpl =>
+        s.copy(
+          identifier = GraphIdentifierManager
+            .parseAndValidateSinkIdentifier(
+              rawSinkIdentifier = s.identifier
             )
         )
     }
@@ -123,12 +137,14 @@ class GraphRegistrationContext(
     assertNoDuplicates(
       qualifiedTables = qualifiedTables,
       validatedViews = validatedViews,
+      validatedSinks = validatedSinks,
       qualifiedFlows = qualifiedFlows
     )
 
     new DataflowGraph(
       tables = qualifiedTables,
       views = validatedViews,
+      sinks = validatedSinks,
       flows = qualifiedFlows
     )
   }
@@ -136,13 +152,15 @@ class GraphRegistrationContext(
   private def assertNoDuplicates(
       qualifiedTables: Seq[Table],
       validatedViews: Seq[View],
+      validatedSinks: Seq[Sink],
       qualifiedFlows: Seq[UnresolvedFlow]): Unit = {
 
     (qualifiedTables.map(_.identifier) ++ validatedViews.map(_.identifier))
       .foreach { identifier =>
-        assertDatasetIdentifierIsUnique(
+        assertOutputIdentifierIsUnique(
           identifier = identifier,
           tables = qualifiedTables,
+          sinks = validatedSinks,
           views = validatedViews
         )
       }
@@ -150,23 +168,24 @@ class GraphRegistrationContext(
     qualifiedFlows.foreach { flow =>
       assertFlowIdentifierIsUnique(
         flow = flow,
-        datasetType = TableType,
+        outputType = TableType,
         flows = qualifiedFlows
       )
     }
   }
 
-  private def assertDatasetIdentifierIsUnique(
+  private def assertOutputIdentifierIsUnique(
       identifier: TableIdentifier,
       tables: Seq[Table],
-      views: Seq[View]): Unit = {
+      views: Seq[View],
+      sinks: Seq[Sink]): Unit = {
 
     // We need to check for duplicates in both tables and views, as they can have the same name.
-    val allDatasets = tables.map(t => t.identifier -> TableType) ++ views.map(
+    val allOutputs = tables.map(t => t.identifier -> TableType) ++ views.map(
         v => v.identifier -> ViewType
-      )
+      ) ++ sinks.map(s => s.identifier -> SinkType)
 
-    val grouped = allDatasets.groupBy { case (id, _) => id }
+    val grouped = allOutputs.groupBy { case (id, _) => id }
 
     grouped(identifier).toList match {
       case (_, firstType) :: (_, secondType) :: _ =>
@@ -186,7 +205,7 @@ class GraphRegistrationContext(
 
   private def assertFlowIdentifierIsUnique(
       flow: UnresolvedFlow,
-      datasetType: DatasetType,
+      outputType: OutputType,
       flows: Seq[UnresolvedFlow]): Unit = {
     flows.groupBy(i => i.identifier).get(flow.identifier).filter(_.size > 1).foreach {
       duplicateFlows =>
@@ -206,13 +225,17 @@ class GraphRegistrationContext(
 }
 
 object GraphRegistrationContext {
-  sealed trait DatasetType
+  sealed trait OutputType
 
-  private object TableType extends DatasetType {
+  private object TableType extends OutputType {
     override def toString: String = "TABLE"
   }
 
-  private object ViewType extends DatasetType {
+  private object ViewType extends OutputType {
     override def toString: String = "VIEW"
+  }
+
+  private object SinkType extends OutputType {
+    override def toString: String = "SINK"
   }
 }
