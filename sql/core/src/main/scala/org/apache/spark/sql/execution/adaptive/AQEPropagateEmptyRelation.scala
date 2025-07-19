@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import scala.collection.concurrent.TrieMap
+
 import org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelationBase
 import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJoin
 import org.apache.spark.sql.catalyst.plans.logical.EmptyRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, LOGICAL_QUERY_STAGE, TRUE_OR_FALSE_LITERAL}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This rule runs in the AQE optimizer and optimizes more cases
@@ -33,7 +37,10 @@ import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
  *    Broadcasted [[HashedRelation]] is [[HashedRelationWithAllNullKeys]]. Eliminate join to an
  *    empty [[LocalRelation]].
  */
-object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
+case class AQEPropagateEmptyRelation(
+  stageReuse: TrieMap[SparkPlan, Unit],
+  stagesToCancel: collection.mutable.Map[Int, (String, ExchangeQueryStageExec)])
+  extends PropagateEmptyRelationBase {
   override protected def isEmpty(plan: LogicalPlan): Boolean =
     super.isEmpty(plan) || (!isRootRepartition(plan) && getEstimatedRowCount(plan).contains(0))
 
@@ -41,6 +48,18 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
     super.nonEmpty(plan) || getEstimatedRowCount(plan).exists(_ > 0)
 
   override protected def empty(plan: LogicalPlan): LogicalPlan = EmptyRelation(plan)
+
+  override protected def collectCancelableCandidates(candidates: LogicalPlan*): Unit = {
+    if (!conf.getConf(SQLConf.ADAPTIVE_EMPTY_TRIGGER_CANCEL_ENABLED)) return
+    candidates.foreach(_.foreach {
+      case LogicalQueryStage(_, physicalPlan: SparkPlan) =>
+        physicalPlan.collect {
+          case s: ShuffleQueryStageExec if !s.isMaterialized &&
+          !stageReuse.contains(s.plan.canonicalized) => s
+        }.foreach(s => stagesToCancel(s.id) = ("empty relation", s))
+      case _ =>
+    })
+  }
 
   private def isRootRepartition(plan: LogicalPlan): Boolean = plan match {
     case l: LogicalQueryStage if l.getTagValue(ROOT_REPARTITION).isDefined => true
@@ -77,6 +96,7 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
 
   private def eliminateSingleColumnNullAwareAntiJoin: PartialFunction[LogicalPlan, LogicalPlan] = {
     case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) if isRelationWithAllNullKeys(j.right) =>
+      collectCancelableCandidates(j.left)
       empty(j)
   }
 
