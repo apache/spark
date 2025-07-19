@@ -528,6 +528,7 @@ object FunctionRegistry {
     expression[HllSketchAgg]("hll_sketch_agg"),
     expression[HllUnionAgg]("hll_union_agg"),
     expression[ApproxTopK]("approx_top_k"),
+    expression[ApproxTopKAccumulate]("approx_top_k_accumulate"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -786,6 +787,7 @@ object FunctionRegistry {
     expression[EqualNull]("equal_null"),
     expression[HllSketchEstimate]("hll_sketch_estimate"),
     expression[HllUnion]("hll_union"),
+    expression[ApproxTopKEstimate]("approx_top_k_estimate"),
 
     // grouping sets
     expression[Grouping]("grouping"),
@@ -871,6 +873,7 @@ object FunctionRegistry {
     castAlias("decimal", DecimalType.USER_DEFAULT),
     castAlias("date", DateType),
     castAlias("timestamp", TimestampType),
+    castAlias("time", TimeType()),
     castAlias("binary", BinaryType),
     castAlias("string", StringType),
 

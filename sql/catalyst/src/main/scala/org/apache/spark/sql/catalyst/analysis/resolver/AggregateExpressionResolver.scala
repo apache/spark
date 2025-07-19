@@ -18,11 +18,6 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{
-  AnsiTypeCoercion,
-  CollationTypeCoercion,
-  TypeCoercion
-}
 import org.apache.spark.sql.catalyst.expressions.{Expression, OuterReference, SubExprUtils}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, ListAgg}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
@@ -41,11 +36,6 @@ class AggregateExpressionResolver(
 
   private val traversals = expressionResolver.getExpressionTreeTraversals
 
-  protected override val ansiTransformations: CoercesExpressionTypes.Transformations =
-    AggregateExpressionResolver.ANSI_TYPE_COERCION_TRANSFORMATIONS
-  protected override val nonAnsiTransformations: CoercesExpressionTypes.Transformations =
-    AggregateExpressionResolver.TYPE_COERCION_TRANSFORMATIONS
-
   private val expressionResolutionContextStack =
     expressionResolver.getExpressionResolutionContextStack
   private val subqueryRegistry = operatorResolver.getSubqueryRegistry
@@ -58,6 +48,7 @@ class AggregateExpressionResolver(
    * resolving its children recursively and validating the resolved expression.
    */
   override def resolve(aggregateExpression: AggregateExpression): Expression = {
+    expressionResolutionContextStack.peek().resolvingTreeUnderAggregateExpression = true
     val aggregateExpressionWithChildrenResolved =
       withResolvedChildren(aggregateExpression, expressionResolver.resolve _)
         .asInstanceOf[AggregateExpression]
@@ -132,15 +123,13 @@ class AggregateExpressionResolver(
           throwNestedAggregateFunction(aggregateExpression)
         }
 
-        val nonDeterministicChild =
-          aggregateExpression.aggregateFunction.children.collectFirst {
-            case child if !child.deterministic => child
+        aggregateExpression.aggregateFunction.children.foreach { child =>
+          if (!child.deterministic) {
+            throwAggregateFunctionWithNondeterministicExpression(
+              aggregateExpression,
+              child
+            )
           }
-        if (nonDeterministicChild.nonEmpty) {
-          throwAggregateFunctionWithNondeterministicExpression(
-            aggregateExpression,
-            nonDeterministicChild.get
-          )
         }
     }
 
@@ -248,24 +237,4 @@ class AggregateExpressionResolver(
       origin = nonDeterministicChild.origin
     )
   }
-}
-
-object AggregateExpressionResolver {
-  // Ordering in the list of type coercions should be in sync with the list in [[TypeCoercion]].
-  private val TYPE_COERCION_TRANSFORMATIONS: Seq[Expression => Expression] = Seq(
-    CollationTypeCoercion.apply,
-    TypeCoercion.InTypeCoercion.apply,
-    TypeCoercion.FunctionArgumentTypeCoercion.apply,
-    TypeCoercion.IfTypeCoercion.apply,
-    TypeCoercion.ImplicitTypeCoercion.apply
-  )
-
-  // Ordering in the list of type coercions should be in sync with the list in [[AnsiTypeCoercion]].
-  private val ANSI_TYPE_COERCION_TRANSFORMATIONS: Seq[Expression => Expression] = Seq(
-    CollationTypeCoercion.apply,
-    AnsiTypeCoercion.InTypeCoercion.apply,
-    AnsiTypeCoercion.FunctionArgumentTypeCoercion.apply,
-    AnsiTypeCoercion.IfTypeCoercion.apply,
-    AnsiTypeCoercion.ImplicitTypeCoercion.apply
-  )
 }

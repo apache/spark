@@ -174,6 +174,13 @@
       "`<func_name>` does not allow a Column in a list."
     ]
   },
+  "CONFLICTING_PIPELINE_REFRESH_OPTIONS" : {
+    "message" : [
+      "--full-refresh-all option conflicts with <conflicting_option>",
+      "The --full-refresh-all option performs a full refresh of all datasets, ",
+      "so specifying individual datasets with <conflicting_option> is not allowed."
+    ]
+  },
   "CONNECT_URL_ALREADY_DEFINED": {
     "message": [
       "Only one Spark Connect client URL can be set; however, got a different URL [<new_url>] from the existing [<existing_url>]."

@@ -696,9 +696,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
       })
   }
 
-  // This does not need to be run with virtual column family joins as it restores the state store
-  // provider to HDFS and join version to 1, effectively disabling the virtual column family join.
-  testWithoutVirtualColumnFamilyJoins(
+  test(
     "SPARK-26187 restore the stream-stream inner join query from Spark 2.4") {
     val inputStream = MemoryStream[(Int, Long)]
     val df = inputStream.toDS()
@@ -1524,9 +1522,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
     )
   }
 
-  // This does not need to be run with virtual column family joins as it restores the state store
-  // provider to HDFS and join version to 1, effectively disabling the virtual column family join.
-  testWithoutVirtualColumnFamilyJoins(
+  test(
     "SPARK-26187 restore the stream-stream outer join query from Spark 2.4") {
     val inputStream = MemoryStream[(Int, Long)]
     val df = inputStream.toDS()
