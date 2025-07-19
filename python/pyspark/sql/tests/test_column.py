@@ -361,6 +361,9 @@ class ColumnTestsMixin:
         ts = datetime.datetime(2021, 3, 4, 12, 34, 56, 1234)
         self.assertEqual(str(sf.lit(ts)), "Column<'2021-03-04 12:34:56.001234'>")
 
+        ts = datetime.time(12, 34, 56, 1234)
+        self.assertEqual(str(sf.lit(ts)), "Column<'12:34:56.001234'>")
+
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_lit_delta_representation(self):
         for delta in [
