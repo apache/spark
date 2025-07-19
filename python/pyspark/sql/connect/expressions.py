@@ -54,6 +54,7 @@ from pyspark.sql.types import (
     DecimalType,
     StringType,
     DataType,
+    TimeType,
     TimestampType,
     TimestampNTZType,
     DayTimeIntervalType,
@@ -248,6 +249,7 @@ class LiteralExpression(Expression):
                 DecimalType,
                 StringType,
                 DateType,
+                TimeType,
                 TimestampType,
                 TimestampNTZType,
                 DayTimeIntervalType,
@@ -298,6 +300,9 @@ class LiteralExpression(Expression):
                     value = DateType().toInternal(value)
                 else:
                     value = DateType().toInternal(value.date())
+            elif isinstance(dataType, TimeType):
+                assert isinstance(value, datetime.time)
+                value = TimeType().toInternal(value)
             elif isinstance(dataType, TimestampType):
                 assert isinstance(value, datetime.datetime)
                 value = TimestampType().toInternal(value)
@@ -352,6 +357,8 @@ class LiteralExpression(Expression):
             return TimestampNTZType() if is_timestamp_ntz_preferred() else TimestampType()
         elif isinstance(value, datetime.date):
             return DateType()
+        elif isinstance(value, datetime.time):
+            return TimeType()
         elif isinstance(value, datetime.timedelta):
             return DayTimeIntervalType()
         elif isinstance(value, np.generic):
@@ -416,6 +423,9 @@ class LiteralExpression(Expression):
         elif literal.HasField("date"):
             assert dataType is None or isinstance(dataType, DataType)
             return DateType().fromInternal(literal.date)
+        elif literal.HasField("time"):
+            assert dataType is None or isinstance(dataType, TimeType)
+            return TimeType().fromInternal(literal.time.nano)
         elif literal.HasField("timestamp"):
             assert dataType is None or isinstance(dataType, TimestampType)
             return TimestampType().fromInternal(literal.timestamp)
@@ -468,6 +478,9 @@ class LiteralExpression(Expression):
             expr.literal.string = str(self._value)
         elif isinstance(self._dataType, DateType):
             expr.literal.date = int(self._value)
+        elif isinstance(self._dataType, TimeType):
+            expr.literal.time.precision = self._dataType.precision
+            expr.literal.time.nano = int(self._value)
         elif isinstance(self._dataType, TimestampType):
             expr.literal.timestamp = int(self._value)
         elif isinstance(self._dataType, TimestampNTZType):
@@ -496,6 +509,10 @@ class LiteralExpression(Expression):
             dt = DateType().fromInternal(self._value)
             if dt is not None and isinstance(dt, datetime.date):
                 return dt.strftime("%Y-%m-%d")
+        elif isinstance(self._dataType, TimeType):
+            t = TimeType().fromInternal(self._value)
+            if t is not None and isinstance(t, datetime.time):
+                return t.strftime("%H:%M:%S.%f")
         elif isinstance(self._dataType, TimestampType):
             ts = TimestampType().fromInternal(self._value)
             if ts is not None and isinstance(ts, datetime.datetime):

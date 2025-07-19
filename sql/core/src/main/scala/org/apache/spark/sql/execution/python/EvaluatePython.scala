@@ -36,7 +36,8 @@ import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 object EvaluatePython {
 
   def needConversionInPython(dt: DataType): Boolean = dt match {
-    case DateType | TimestampType | TimestampNTZType | VariantType | _: DayTimeIntervalType => true
+    case DateType | TimestampType | TimestampNTZType | VariantType | _: DayTimeIntervalType
+         | _: TimeType => true
     case _: StructType => true
     case _: UserDefinedType[_] => true
     case ArrayType(elementType, _) => needConversionInPython(elementType)
@@ -138,7 +139,7 @@ object EvaluatePython {
       case c: Int => c
     }
 
-    case TimestampType | TimestampNTZType | _: DayTimeIntervalType => (obj: Any) =>
+    case TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType => (obj: Any) =>
       nullSafeConvert(obj) {
         case c: Long => c
         // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs
