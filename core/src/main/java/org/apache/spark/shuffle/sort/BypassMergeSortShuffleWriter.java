@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.channels.FileChannel;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.zip.Checksum;
 import javax.annotation.Nullable;
 
@@ -232,7 +233,8 @@ final class BypassMergeSortShuffleWriter<K, V>
           }
         }
       } finally {
-        writeMetrics.incWriteTime(System.nanoTime() - writeStartTime);
+        long writeTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - writeStartTime);
+        writeMetrics.incWriteTime(writeTime);
       }
       partitionWriters = null;
     }
