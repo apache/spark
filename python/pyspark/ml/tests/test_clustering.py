@@ -403,8 +403,6 @@ class ClusteringTestsMixin:
             self.assertEqual(str(model), str(model2))
 
     def test_distributed_lda(self):
-        if is_remote():
-            self.skipTest("Do not support Spark Connect.")
         spark = self.spark
         df = (
             spark.createDataFrame(
