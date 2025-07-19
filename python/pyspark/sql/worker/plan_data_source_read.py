@@ -369,6 +369,7 @@ def main(infile: IO, outfile: IO) -> None:
                         "actual": f"'{type(reader).__name__}'",
                     },
                 )
+
             is_pushdown_implemented = (
                 getattr(reader.pushFilters, "__func__", None) is not DataSourceReader.pushFilters
             )
@@ -377,6 +378,18 @@ def main(infile: IO, outfile: IO) -> None:
                 # Raise an error to ask the user to enable pushdown.
                 raise PySparkAssertionError(
                     errorClass="DATA_SOURCE_PUSHDOWN_DISABLED",
+                    messageParameters={
+                        "type": type(reader).__name__,
+                        "conf": "spark.sql.python.filterPushdown.enabled",
+                    },
+                )
+
+            is_column_pruning_implemented = (
+                getattr(reader.pruneColumns, "__func__", None) is not DataSourceReader.pruneColumns
+            )
+            if is_column_pruning_implemented and not enable_pushdown:
+                raise PySparkAssertionError(
+                    errorClass="DATA_SOURCE_COLUMN_PRUNING_DISABLED",
                     messageParameters={
                         "type": type(reader).__name__,
                         "conf": "spark.sql.python.filterPushdown.enabled",
