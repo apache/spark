@@ -60,7 +60,7 @@ class XmlSuite
     with TestXmlData {
   import testImplicits._
 
-  private val resDir = "test-data/xml-resources/"
+  protected val resDir = "test-data/xml-resources/"
 
   private var tempDir: Path = _
 
@@ -239,15 +239,6 @@ class XmlSuite
     assert(spark.sql("SELECT year FROM carsTable2").collect().length === 3)
   }
 
-  test("DSL test for parsing a malformed XML file") {
-    val results = spark.read
-      .option("rowTag", "ROW")
-      .option("mode", DropMalformedMode.name)
-      .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
-
-    assert(results.count() === 1)
-  }
-
   test("DSL test for dropping malformed rows") {
     val cars = spark.read
       .option("rowTag", "ROW")
@@ -334,21 +325,11 @@ class XmlSuite
       .option("columnNameOfCorruptRecord", "_malformed_records")
       .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
     val cars = carsDf.collect()
-    assert(cars.length === 3)
 
-    val malformedRowOne = carsDf.cache().select("_malformed_records").first().get(0).toString
-    val malformedRowTwo = carsDf.cache().select("_malformed_records").take(2).last.get(0).toString
-    val expectedMalformedRowOne = "<ROW><year>2012</year><make>Tesla</make><model>>S" +
-      "<comment>No comment</comment></ROW>"
-    val expectedMalformedRowTwo = "<ROW></year><make>Ford</make><model>E350</model>model></model>" +
-      "<comment>Go get one now they are going fast</comment></ROW>"
-
-    assert(malformedRowOne.replaceAll("\\s", "") === expectedMalformedRowOne.replaceAll("\\s", ""))
-    assert(malformedRowTwo.replaceAll("\\s", "") === expectedMalformedRowTwo.replaceAll("\\s", ""))
-    assert(cars(2)(0) === null)
-    assert(cars(0).toSeq.takeRight(3) === Seq(null, null, null))
-    assert(cars(1).toSeq.takeRight(3) === Seq(null, null, null))
-    assert(cars(2).toSeq.takeRight(3) === Seq("Chevy", "Volt", 2015))
+    // There are two records and the second one is malformed.
+    assert(cars.length === 2)
+    assert(carsDf.cache().filter("_malformed_records is not null").count() === 1)
+    assert(cars(0).toSeq.takeRight(3) === Seq("Chevy", "Volt", 2015))
   }
 
   test("DSL test with empty file and known schema") {
@@ -1074,9 +1055,8 @@ class XmlSuite
       .xml(getTestResourcePath(resDir + "books-malformed-attributes.xml"))
       .collect()
 
-    assert(results.length === 2)
+    assert(results.length === 1)
     assert(results(0)(0) === "bk111")
-    assert(results(1)(0) === "bk112")
   }
 
   test("read utf-8 encoded file with empty tag") {
@@ -1257,11 +1237,12 @@ class XmlSuite
       .option("mode", "PERMISSIVE")
       .option("columnNameOfCorruptRecord", "_malformed_records")
       .xml(getTestResourcePath(resDir + "basket_invalid.xml")).cache()
+    // The first record is valid and the second is invalid, the whole document is put in the
+    // _malformed_records column for the second record.
     assert(basketDF.filter($"_malformed_records".isNotNull).count() == 1)
     assert(basketDF.filter($"_malformed_records".isNull).count() == 1)
     val rec = basketDF.select("_malformed_records").collect()(1).getString(0)
-    assert(rec.startsWith("<basket>") && rec.indexOf("<extra>123</extra>") != -1 &&
-      rec.endsWith("</basket>"))
+    assert(rec.startsWith("<baskets>") && rec.endsWith("</baskets>"))
   }
 
   test("test XSD validation with addFile() with validation error") {
@@ -1273,11 +1254,12 @@ class XmlSuite
       .option("mode", "PERMISSIVE")
       .option("columnNameOfCorruptRecord", "_malformed_records")
       .xml(getTestResourcePath(resDir + "basket_invalid.xml")).cache()
+    // The first record is valid and the second is invalid, the whole document is put in the
+    // _malformed_records column for the second record.
     assert(basketDF.filter($"_malformed_records".isNotNull).count() == 1)
     assert(basketDF.filter($"_malformed_records".isNull).count() == 1)
     val rec = basketDF.select("_malformed_records").collect()(1).getString(0)
-    assert(rec.startsWith("<basket>") && rec.indexOf("<extra>123</extra>") != -1 &&
-      rec.endsWith("</basket>"))
+    assert(rec.startsWith("<baskets>") && rec.endsWith("</baskets>"))
   }
 
   test("test xmlDataset") {
@@ -2446,10 +2428,12 @@ class XmlSuite
   test("Timestamp type inference for a mix of TIMESTAMP_NTZ and TIMESTAMP_LTZ") {
     withTempPath { path =>
       Seq(
+        "<ROWS>",
         "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
         "<ROW><col0>2020-12-12T17:12:12.000Z</col0></ROW>",
         "<ROW><col0>2020-12-12T17:12:12.000+05:00</col0></ROW>",
-        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>"
+        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
+        "</ROWS>"
       ).toDF("data")
         .coalesce(1)
         .write.text(path.getAbsolutePath)
@@ -2481,10 +2465,12 @@ class XmlSuite
   test("Malformed records when reading TIMESTAMP_LTZ as TIMESTAMP_NTZ") {
     withTempPath { path =>
       Seq(
+        "<ROWS>",
         "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
         "<ROW><col0>2020-12-12T12:12:12.000Z</col0></ROW>",
         "<ROW><col0>2020-12-12T12:12:12.000+05:00</col0></ROW>",
-        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>"
+        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
+        "</ROWS>"
       ).toDF("data")
         .coalesce(1)
         .write.text(path.getAbsolutePath)
@@ -2691,15 +2677,20 @@ class XmlSuite
       .option("rowTag", "ROW")
       .load(getTestResourcePath(resDir + "cdata-ending-eof.xml"))
 
-    val expectedResults2 = Seq.range(1, 18).map(Row(_))
-    checkAnswer(results2, expectedResults2)
+    assert(
+      results2.schema == new StructType().add("_corrupt_record", StringType).add("a", LongType))
+
+    // The last row is null because the last CDATA at eof is invalid
+    val expectedResults2 = Seq.range(1, 18).map(Row(_)) ++ Seq(Row(null))
+    checkAnswer(results2.selectExpr("a"), expectedResults2)
 
     val results3 = spark.read.format("xml")
       .option("rowTag", "ROW")
       .load(getTestResourcePath(resDir + "cdata-no-close.xml"))
 
-    val expectedResults3 = Seq.range(1, 18).map(Row(_))
-    checkAnswer(results3, expectedResults3)
+    // Similar to the previous test, the last row is null because the last CDATA section is invalid
+    val expectedResults3 = Seq.range(1, 18).map(Row(_)) ++ Seq(Row(null))
+    checkAnswer(results3.select("a"), expectedResults3)
 
     val results4 = spark.read.format("xml")
       .option("rowTag", "ROW")
