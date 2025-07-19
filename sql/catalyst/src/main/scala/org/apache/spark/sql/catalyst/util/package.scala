@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.connector.catalog.MetadataColumn
 import org.apache.spark.sql.types.{MetadataBuilder, NumericType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.{SparkErrorUtils, Utils}
+import org.apache.spark.util.{SparkErrorUtils, SparkStringUtils, Utils}
 
 package object util extends Logging {
 

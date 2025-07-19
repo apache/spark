@@ -26,6 +26,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, PipelineCommandResult, Relation}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
@@ -33,7 +34,7 @@ import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.pipelines.Language.Python
 import org.apache.spark.sql.pipelines.QueryOriginType
 import org.apache.spark.sql.pipelines.common.RunState.{CANCELED, FAILED}
-import org.apache.spark.sql.pipelines.graph.{FlowAnalysis, GraphIdentifierManager, IdentifierHelper, PipelineUpdateContextImpl, QueryContext, QueryOrigin, SqlGraphRegistrationContext, Table, TemporaryView, UnresolvedFlow}
+import org.apache.spark.sql.pipelines.graph.{AllTables, FlowAnalysis, GraphIdentifierManager, GraphRegistrationContext, IdentifierHelper, NoTables, PipelineUpdateContextImpl, QueryContext, QueryOrigin, SomeTables, SqlGraphRegistrationContext, Table, TableFilter, TemporaryView, UnresolvedFlow}
 import org.apache.spark.sql.pipelines.logging.{PipelineEvent, RunProgress}
 import org.apache.spark.sql.types.StructType
 
@@ -224,6 +225,8 @@ private[connect] object PipelinesHandler extends Logging {
       sessionHolder: SessionHolder): Unit = {
     val dataflowGraphId = cmd.getDataflowGraphId
     val graphElementRegistry = DataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
+    val tableFiltersResult = createTableFilters(cmd, graphElementRegistry, sessionHolder)
+
     // We will use this variable to store the run failure event if it occurs. This will be set
     // by the event callback.
     @volatile var runFailureEvent = Option.empty[PipelineEvent]
@@ -279,10 +282,17 @@ private[connect] object PipelinesHandler extends Logging {
               .build())
       }
     }
-    val pipelineUpdateContext =
-      new PipelineUpdateContextImpl(graphElementRegistry.toDataflowGraph, eventCallback)
+    val pipelineUpdateContext = new PipelineUpdateContextImpl(
+      graphElementRegistry.toDataflowGraph,
+      eventCallback,
+      tableFiltersResult.refresh,
+      tableFiltersResult.fullRefresh)
     sessionHolder.cachePipelineExecution(dataflowGraphId, pipelineUpdateContext)
-    pipelineUpdateContext.pipelineExecution.runPipeline()
+    if (cmd.getDry) {
+      pipelineUpdateContext.pipelineExecution.dryRunPipeline()
+    } else {
+      pipelineUpdateContext.pipelineExecution.runPipeline()
+    }
 
     // Rethrow any exceptions that caused the pipeline run to fail so that the exception is
     // propagated back to the SC client / CLI.
@@ -290,4 +300,87 @@ private[connect] object PipelinesHandler extends Logging {
       throw event.error.get
     }
   }
+
+  /**
+   * Creates the table filters for the full refresh and refresh operations based on the StartRun
+   * command user provided. Also validates the command parameters to ensure that they are
+   * consistent and do not conflict with each other.
+   *
+   * If `fullRefreshAll` is true, create `AllTables` filter for full refresh.
+   *
+   * If `fullRefreshTables` and `refreshTables` are both empty, create `AllTables` filter for
+   * refresh as a default behavior.
+   *
+   * If both non-empty, verifies that there is no overlap and creates SomeTables filters for both.
+   *
+   * If one non-empty and the other empty, create `SomeTables` filter for the non-empty one, and
+   * `NoTables` filter for the empty one.
+   */
+  private def createTableFilters(
+      startRunCommand: proto.PipelineCommand.StartRun,
+      graphElementRegistry: GraphRegistrationContext,
+      sessionHolder: SessionHolder): TableFilters = {
+    // Convert table names to fully qualified TableIdentifier objects
+    def parseTableNames(tableNames: Seq[String]): Set[TableIdentifier] = {
+      tableNames.map { name =>
+        GraphIdentifierManager
+          .parseAndQualifyTableIdentifier(
+            rawTableIdentifier =
+              GraphIdentifierManager.parseTableIdentifier(name, sessionHolder.session),
+            currentCatalog = Some(graphElementRegistry.defaultCatalog),
+            currentDatabase = Some(graphElementRegistry.defaultDatabase))
+          .identifier
+      }.toSet
+    }
+
+    val fullRefreshTables = startRunCommand.getFullRefreshSelectionList.asScala.toSeq
+    val fullRefreshAll = startRunCommand.getFullRefreshAll
+    val refreshTables = startRunCommand.getRefreshSelectionList.asScala.toSeq
+
+    if (refreshTables.nonEmpty && fullRefreshAll) {
+      throw new IllegalArgumentException(
+        "Cannot specify a subset to refresh when full refresh all is set to true.")
+    }
+
+    if (fullRefreshTables.nonEmpty && fullRefreshAll) {
+      throw new IllegalArgumentException(
+        "Cannot specify a subset to full refresh when full refresh all is set to true.")
+    }
+    val refreshTableNames = parseTableNames(refreshTables)
+    val fullRefreshTableNames = parseTableNames(fullRefreshTables)
+
+    if (refreshTables.nonEmpty && fullRefreshTables.nonEmpty) {
+      // check if there is an intersection between the subset
+      val intersection = refreshTableNames.intersect(fullRefreshTableNames)
+      if (intersection.nonEmpty) {
+        throw new IllegalArgumentException(
+          "Datasets specified for refresh and full refresh cannot overlap: " +
+            s"${intersection.mkString(", ")}")
+      }
+    }
+
+    if (fullRefreshAll) {
+      return TableFilters(fullRefresh = AllTables, refresh = NoTables)
+    }
+
+    (fullRefreshTables, refreshTables) match {
+      case (Nil, Nil) =>
+        // If both are empty, we default to refreshing all tables
+        TableFilters(fullRefresh = NoTables, refresh = AllTables)
+      case (_, Nil) =>
+        TableFilters(fullRefresh = SomeTables(fullRefreshTableNames), refresh = NoTables)
+      case (Nil, _) =>
+        TableFilters(fullRefresh = NoTables, refresh = SomeTables(refreshTableNames))
+      case (_, _) =>
+        // If both are specified, we create filters for both after validation
+        TableFilters(
+          fullRefresh = SomeTables(fullRefreshTableNames),
+          refresh = SomeTables(refreshTableNames))
+    }
+  }
+
+  /**
+   * A case class to hold the table filters for full refresh and refresh operations.
+   */
+  private case class TableFilters(fullRefresh: TableFilter, refresh: TableFilter)
 }

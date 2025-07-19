@@ -116,8 +116,9 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <java.version>17</java.version>
+    <java.minimum.version>17.0.11</java.minimum.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
-    <maven.version>3.9.10</maven.version>
+    <maven.version>3.9.11</maven.version>
     <exec-maven-plugin.version>3.5.1</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.8</asm.version>
@@ -338,7 +339,7 @@
     </extraJavaTestArgs>
     <mariadb.java.client.version>2.7.12</mariadb.java.client.version>
     <mysql.connector.version>9.2.0</mysql.connector.version>
-    <postgresql.version>42.7.5</postgresql.version>
+    <postgresql.version>42.7.7</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>12.8.1.jre11</mssql.jdbc.version>
     <ojdbc17.version>23.6.0.24.10</ojdbc17.version>
@@ -872,7 +873,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.7-3</version>
+        <version>1.5.7-4</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -2629,7 +2630,8 @@
                     <version>${maven.version}</version>
                   </requireMavenVersion>
                   <requireJavaVersion>
-                    <version>${java.version}</version>
+                    <version>[${java.minimum.version},)</version>
+                    <message>The Java version used to build the project is outdated. Please use ${java.minimum.version} or later.</message>
                   </requireJavaVersion>
                   <bannedDependencies>
                     <excludes>

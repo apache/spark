@@ -1138,6 +1138,9 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       assert(stringToTime(UTF8String.fromString(str)) === expected)
     }
 
+    // Existing 24-hour format tests.
+
+    // Various valid 24-hour format tests.
     checkStringToTime("00:00", Some(localTime()))
     checkStringToTime("00:00:00", Some(localTime()))
     checkStringToTime("00:00:00.1", Some(localTime(micros = 100000)))
@@ -1153,9 +1156,98 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkStringToTime("1:2:3.0", Some(localTime(hour = 1, minute = 2, sec = 3)))
     checkStringToTime("T1:02:3.04", Some(localTime(hour = 1, minute = 2, sec = 3, micros = 40000)))
 
-    // Negative tests
-    Seq("2025-03-09 00:00:00", "00", "00:01:02 UTC").foreach { invalidTime =>
-      checkStringToTime(invalidTime, None)
+    checkStringToTime("00:00 ", Some(localTime()))
+    checkStringToTime(" 00:00", Some(localTime()))
+    checkStringToTime(" 00:00 ", Some(localTime()))
+    checkStringToTime("1:2:3.0 ", Some(localTime(hour = 1, minute = 2, sec = 3)))
+    checkStringToTime(" 1:2:3.0", Some(localTime(hour = 1, minute = 2, sec = 3)))
+    checkStringToTime(" 1:2:3.0 ", Some(localTime(hour = 1, minute = 2, sec = 3)))
+
+    // Invalid 24-hour format tests (out of range).
+    Seq("24:00:00", "25:00:00", "-1:00:00", "23:60:00", "23:00:60", "99:99:99").foreach {
+      invalidTime =>
+        checkStringToTime(invalidTime, None)
+    }
+
+    // 12-hour format tests (with AM/PM).
+
+    // Midnight hour [12 AM, 1 AM).
+    checkStringToTime("12:00:00 AM",
+      Some(localTime(0, 0, 0, 0)))
+    checkStringToTime("12:30:45 AM",
+      Some(localTime(0, 30, 45, 0)))
+    checkStringToTime("12:59:59.999 AM",
+      Some(localTime(0, 59, 59, 999000)))
+    checkStringToTime("12:59:59.999999 AM",
+      Some(localTime(0, 59, 59, 999999)))
+
+    // Morning hours [1AM, 12PM).
+    checkStringToTime("1:00:00 AM",
+      Some(localTime(hour = 1, minute = 0, sec = 0)))
+    checkStringToTime("11:59:59 AM",
+      Some(localTime(hour = 11, minute = 59, sec = 59)))
+    checkStringToTime("5:30:15.123456 AM",
+      Some(localTime(hour = 5, minute = 30, sec = 15, micros = 123456)))
+
+    // Noon hour [12 PM, 1PM).
+    checkStringToTime("12:00:00 PM",
+      Some(localTime(hour = 12, minute = 0, sec = 0)))
+    checkStringToTime("12:30:45 PM",
+      Some(localTime(hour = 12, minute = 30, sec = 45)))
+    checkStringToTime("12:59:59.999 PM",
+      Some(localTime(hour = 12, minute = 59, sec = 59, micros = 999000)))
+    checkStringToTime("12:59:59.999999 PM",
+      Some(localTime(hour = 12, minute = 59, sec = 59, micros = 999999)))
+
+    // Afternoon hours [1PM, 12AM).
+    checkStringToTime("1:00:00 PM",
+      Some(localTime(hour = 13, minute = 0, sec = 0)))
+    checkStringToTime("11:59:59 PM",
+      Some(localTime(hour = 23, minute = 59, sec = 59)))
+    checkStringToTime("6:45:30.987654 PM",
+      Some(localTime(hour = 18, minute = 45, sec = 30, micros = 987654)))
+    checkStringToTime("11:59:59.999 PM",
+      Some(localTime(hour = 23, minute = 59, sec = 59, micros = 999000)))
+    checkStringToTime("11:59:59.999999 PM",
+      Some(localTime(hour = 23, minute = 59, sec = 59, micros = 999999)))
+
+    // Test without space before AM/PM.
+    checkStringToTime("12:00:00AM", Some(localTime(hour = 0, minute = 0, sec = 0)))
+    checkStringToTime("12:00:00PM", Some(localTime(hour = 12, minute = 0, sec = 0)))
+    checkStringToTime("3:30:45AM", Some(localTime(hour = 3, minute = 30, sec = 45)))
+    checkStringToTime("9:15:20PM", Some(localTime(hour = 21, minute = 15, sec = 20)))
+
+    // Test case insensitive.
+    checkStringToTime("10:30:00Am ", Some(localTime(hour = 10, minute = 30, sec = 0)))
+    checkStringToTime("10:30:00 am", Some(localTime(hour = 10, minute = 30, sec = 0)))
+    checkStringToTime("2:45:30 Pm", Some(localTime(hour = 14, minute = 45, sec = 30)))
+    checkStringToTime("2:45:30pm ", Some(localTime(hour = 14, minute = 45, sec = 30)))
+    checkStringToTime("7:00:00aM", Some(localTime(hour = 7, minute = 0, sec = 0)))
+    checkStringToTime("8:00:00Pm", Some(localTime(hour = 20, minute = 0, sec = 0)))
+
+    // Invalid 12-hour format tests (out of range).
+    Seq(
+      "0:00:00 AM",
+      "0:00:00 PM",
+      "13:00:00 AM",
+      "13:00:00 PM",
+      "24:00:00 AM",
+      "24:00:00 PM",
+      "12:60:00 AM",
+      "12:60:00 PM",
+      "12:00:60 AM",
+      "12:00:60 PM",
+      "99:99:99 AM",
+      "99:99:99 PM"
+    ).foreach {
+      invalidTime =>
+        checkStringToTime(invalidTime, None)
+    }
+
+    // Negative tests (invalid time string).
+    Seq("2025-03-09 00:00:00", "00", "00:01:02 UTC", "XYZ", "ABCD", " ", "").foreach {
+      invalidTime =>
+        checkStringToTime(invalidTime, None)
     }
   }
 

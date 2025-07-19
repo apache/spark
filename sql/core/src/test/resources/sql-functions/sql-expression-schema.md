@@ -74,6 +74,7 @@
 | org.apache.spark.sql.catalyst.expressions.Cast | int | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.Cast | smallint | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.Cast | string | N/A | N/A |
+| org.apache.spark.sql.catalyst.expressions.Cast | time | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.Cast | timestamp | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.Cast | tinyint | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.Cbrt | cbrt | SELECT cbrt(27.0) | struct<CBRT(27.0):double> |
