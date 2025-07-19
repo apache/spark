@@ -59,140 +59,114 @@ class SinkExecutionSuite extends ExecutionTest with SharedSparkSession {
     }
   }
 
-
-
   test("update to external sink - memory sink") {
-    SparkSessionUtils.withSQLConf(
-      spark,
-      ("pipelines.externalSink.enabled", true.toString)
-    ) {
-      val ints = MemoryStream[Int]
-      val rootDirectory = pipelineStorageRoot
-      class P extends Pipeline {
-        createExternalSink("mem_sink", "memory")
-        createSinkForTopLevelFlow("mem_sink").query(
-          name = "flow_to_sink",
-          // APPEND output mode doesn't support aggregation without watermark
-          ints.toDS().toDF("id").groupBy("id").count(),
-          outputMode = Some("update")
-        )
-      }
-      val graphExecution = createContinuousGraphExecution(
-        DataflowGraph(new P)
-      )._2
-
-      graphExecution.start()
-      ints.addData(1, 2, 2, 3)
-      graphExecution.processAllAvailable("flow_to_sink")
-
-      verifyCheckpointLocation(
-        rootDirectory,
-        graphExecution,
-        "mem_sink",
-        "flow_to_sink"
+    val ints = MemoryStream[Int]
+    val rootDirectory = pipelineStorageRoot
+    class P extends Pipeline {
+      createExternalSink("mem_sink", "memory")
+      createSinkForTopLevelFlow("mem_sink").query(
+        name = "flow_to_sink",
+        // APPEND output mode doesn't support aggregation without watermark
+        ints.toDS().toDF("id").groupBy("id").count(),
+        outputMode = Some("update")
       )
-      checkAnswer(spark.read.format("memory").table("mem_sink"), Seq((1, 1), (2, 2), (3, 1)).toDF())
-      graphExecution.stop()
     }
+    val graphExecution = createContinuousGraphExecution(
+      DataflowGraph(new P)
+    )._2
+
+    graphExecution.start()
+    ints.addData(1, 2, 2, 3)
+    graphExecution.processAllAvailable("flow_to_sink")
+
+    verifyCheckpointLocation(
+      rootDirectory,
+      graphExecution,
+      "mem_sink",
+      "flow_to_sink"
+    )
+    checkAnswer(spark.read.format("memory").table("mem_sink"), Seq((1, 1), (2, 2), (3, 1)).toDF())
+    graphExecution.stop()
   }
 
   test("writing to external sink - memory sink") {
-    SparkSessionUtils.withSQLConf(
-      spark,
-      ("pipelines.externalSink.enabled", true.toString)
-    ) {
+    val ints = MemoryStream[Int]
+    val rootDirectory = pipelineStorageRoot
+
+    val pipeline =
+      new ExternalSinkPipeline(rootDirectory, ints.toDF(), "sink_a", "flow_to_sink_a", "memory")
+    val graphExecution = createContinuousGraphExecution(
+      DataflowGraph(pipeline)
+    )._2
+
+    graphExecution.start()
+    ints.addData(1, 2, 3, 4)
+    graphExecution.processAllAvailable("flow_to_sink_a")
+    verifyCheckpointLocation(rootDirectory, graphExecution, "sink_a", "flow_to_sink_a")
+
+    checkAnswer(spark.sql("SELECT * FROM sink_a"), Seq(1, 2, 3, 4).toDF())
+    graphExecution.stop()
+  }
+
+  test("writing to external sink - delta sink with path") {
+    withTempDir { externalDeltaPath =>
       val ints = MemoryStream[Int]
       val rootDirectory = pipelineStorageRoot
-
-      val pipeline =
-        new ExternalSinkPipeline(rootDirectory, ints.toDF(), "sink_a", "flow_to_sink_a", "memory")
+      val pipeline = new ExternalSinkPipeline(
+        rootDirectory,
+        ints.toDF(),
+        "delta_sink",
+        "flow_to_delta_sink",
+        "delta",
+        Map(
+          "path" -> externalDeltaPath
+        )
+      )
       val graphExecution = createContinuousGraphExecution(
         DataflowGraph(pipeline)
       )._2
 
       graphExecution.start()
       ints.addData(1, 2, 3, 4)
-      graphExecution.processAllAvailable("flow_to_sink_a")
-      verifyCheckpointLocation(rootDirectory, graphExecution, "sink_a", "flow_to_sink_a")
+      graphExecution.processAllAvailable("flow_to_delta_sink")
 
-      checkAnswer(spark.sql("SELECT * FROM sink_a"), Seq(1, 2, 3, 4).toDF())
+      verifyCheckpointLocation(
+        rootDirectory,
+        graphExecution,
+        "delta_sink",
+        "flow_to_delta_sink"
+      )
+
+      checkAnswer(spark.read.format("delta").load(externalDeltaPath), Seq(1, 2, 3, 4).toDF())
       graphExecution.stop()
-    }
-  }
-
-  test("writing to external sink - delta sink with path") {
-    SparkSessionUtils.withSQLConf(
-      spark,
-      ("pipelines.externalSink.enabled", true.toString)
-    ) {
-      withTempDir { externalDeltaPath =>
-        val ints = MemoryStream[Int]
-        val rootDirectory = pipelineStorageRoot
-        val pipeline = new ExternalSinkPipeline(
-          rootDirectory,
-          ints.toDF(),
-          "delta_sink",
-          "flow_to_delta_sink",
-          "delta",
-          Map(
-            "path" -> externalDeltaPath
-          )
-        )
-        val graphExecution = createContinuousGraphExecution(
-          DataflowGraph(pipeline)
-        )._2
-
-        graphExecution.start()
-        ints.addData(1, 2, 3, 4)
-        graphExecution.processAllAvailable("flow_to_delta_sink")
-
-        verifyCheckpointLocation(
-          rootDirectory,
-          graphExecution,
-          "delta_sink",
-          "flow_to_delta_sink"
-        )
-
-        checkAnswer(spark.read.format("delta").load(externalDeltaPath), Seq(1, 2, 3, 4).toDF())
-        graphExecution.stop()
-      }
     }
   }
 
   test("writing to external sink - sink name has upper case characters") {
-    SparkSessionUtils.withSQLConf(
-      spark,
-      ("pipelines.externalSink.enabled", true.toString)
-    ) {
-      val ints = MemoryStream[Int]
-      val rootDirectory = pipelineStorageRoot
+    val ints = MemoryStream[Int]
+    val rootDirectory = pipelineStorageRoot
 
-      val pipeline =
-        new ExternalSinkPipeline(rootDirectory, ints.toDF(), "mySink", "flow_to_sink_a", "memory")
-      val graphExecution = createContinuousGraphExecution(
-        pipeline.toDataflowGraph(shouldLowerCaseNames = updateContext.isUCPipeline)
-      )._2
+    val pipeline =
+      new ExternalSinkPipeline(rootDirectory, ints.toDF(), "mySink", "flow_to_sink_a", "memory")
+    val graphExecution = createContinuousGraphExecution(
+      pipeline.toDataflowGraph(shouldLowerCaseNames = updateContext.isUCPipeline)
+    )._2
 
-      graphExecution.start()
-      ints.addData(1, 2, 3, 4)
-      graphExecution.processAllAvailable("flow_to_sink_a")
+    graphExecution.start()
+    ints.addData(1, 2, 3, 4)
+    graphExecution.processAllAvailable("flow_to_sink_a")
 
-      val sinkName = if (updateContext.isUCPipeline) {
-        "mysink"
-      } else {
-        "mySink"
-      }
-
-      verifyCheckpointLocation(rootDirectory, graphExecution, sinkName, "flow_to_sink_a")
-
-      checkAnswer(spark.sql(s"SELECT * FROM $sinkName"), Seq(1, 2, 3, 4).toDF())
-      graphExecution.stop()
+    val sinkName = if (updateContext.isUCPipeline) {
+      "mysink"
+    } else {
+      "mySink"
     }
+
+    verifyCheckpointLocation(rootDirectory, graphExecution, sinkName, "flow_to_sink_a")
+
+    checkAnswer(spark.sql(s"SELECT * FROM $sinkName"), Seq(1, 2, 3, 4).toDF())
+    graphExecution.stop()
   }
-
-
-
-
 
   def testOnlyAllowFullyQualifiedTableId(tableId: String, isFullyQualified: Boolean) = {
     test(
@@ -200,18 +174,12 @@ class SinkExecutionSuite extends ExecutionTest with SharedSparkSession {
       s" only fully qualified table name is allowed -" +
       s" tableId=$tableId,isFullyQualified=$isFullyQualified"
     ) {
-      SparkSessionUtils.withSQLConf(
-        spark,
-        ("pipelines.externalSink.enabled", true.toString),
-        ("pipelines.ucManagedDeltaSink.enabled", true.toString)
-      ) {
-        val errorMsg = if (updateContext.isUCPipeline) {
-          "UC pipeline expect a fully qualified table name <catalog>.<schema>.<table>."
-        } else {
-          "HMS pipeline expect a two-part-name <schema>.<table>."
-        }
-        runDeltaTableTest(tableId, Map("tableName" -> tableId), isFullyQualified == true, errorMsg)
+      val errorMsg = if (updateContext.isUCPipeline) {
+        "UC pipeline expect a fully qualified table name <catalog>.<schema>.<table>."
+      } else {
+        "HMS pipeline expect a two-part-name <schema>.<table>."
       }
+      runDeltaTableTest(tableId, Map("tableName" -> tableId), isFullyQualified == true, errorMsg)
     }
   }
 
@@ -328,19 +296,13 @@ class ExternalSinkExecutionWithUCSuite
         spark.sql(s"DESC TABLE $testTableName")
       }
 
-      SparkSessionUtils.withSQLConf(
-        spark,
-        ("pipelines.externalSink.enabled", true.toString),
-        ("pipelines.ucManagedDeltaSink.enabled", allowUCManagedTable.toString)
-      ) {
-        runDeltaTableTest(
-          s"$catalog.$schema.$testTableName",
-          Map("tableName" -> s"$catalog.$schema.$testTableName"),
-          allowUCManagedTable == true,
-          errMsgIfFail = "Only UC External Table is supported for UC pipeline."
-        )
-        spark.sql(s"DROP CATALOG $catalog CASCADE")
-      }
+      runDeltaTableTest(
+        s"$catalog.$schema.$testTableName",
+        Map("tableName" -> s"$catalog.$schema.$testTableName"),
+        allowUCManagedTable == true,
+        errMsgIfFail = "Only UC External Table is supported for UC pipeline."
+      )
+      spark.sql(s"DROP CATALOG $catalog CASCADE")
     }
   }
 
@@ -350,33 +312,28 @@ class ExternalSinkExecutionWithUCSuite
       s"UC external delta sink with table name is allowed - tableNameExists: $tableNameExists",
       UCHiFiOnly
     ) {
-      SparkSessionUtils.withSQLConf(
-        spark,
-        ("pipelines.externalSink.enabled", true.toString)
-      ) {
-        withTempDir { externalLocation =>
-          val catalog =
-            spark.sql("select current_catalog()").collect().head.getString(0)
-          val schema =
-            spark.sql("select current_schema()").collect().head.getString(0)
-          val time = System.currentTimeMillis()
-          val testTableName = s"${catalog}.${schema}.test_table_$time"
-          if (tableNameExists) {
-            spark.sql(
-              s"CREATE TABLE $testTableName (value int) USING delta LOCATION '$externalLocation'"
-            )
-          }
-
-          runDeltaTableTest(
-            testTableName,
-            Map(
-              "tableName" -> testTableName,
-              "path" -> externalLocation
-            ),
-            expectSuccess = true,
-            errMsgIfFail = ""
+      withTempDir { externalLocation =>
+        val catalog =
+          spark.sql("select current_catalog()").collect().head.getString(0)
+        val schema =
+          spark.sql("select current_schema()").collect().head.getString(0)
+        val time = System.currentTimeMillis()
+        val testTableName = s"${catalog}.${schema}.test_table_$time"
+        if (tableNameExists) {
+          spark.sql(
+            s"CREATE TABLE $testTableName (value int) USING delta LOCATION '$externalLocation'"
           )
         }
+
+        runDeltaTableTest(
+          testTableName,
+          Map(
+            "tableName" -> testTableName,
+            "path" -> externalLocation
+          ),
+          expectSuccess = true,
+          errMsgIfFail = ""
+        )
       }
     }
   }
@@ -384,26 +341,20 @@ class ExternalSinkExecutionWithUCSuite
   test(
     s"writing to external sink - table name with special characters"
   ) {
-    SparkSessionUtils.withSQLConf(
-      spark,
-      ("pipelines.externalSink.enabled", true.toString),
-      ("pipelines.ucManagedDeltaSink.enabled", true.toString)
-    ) {
-      val time = System.currentTimeMillis()
-      val testTableName = s"main.default.`中文_test_table_$time`"
-      spark.sql(
-        s"CREATE TABLE $testTableName (value int) USING delta"
-      )
+    val time = System.currentTimeMillis()
+    val testTableName = s"main.default.`中文_test_table_$time`"
+    spark.sql(
+      s"CREATE TABLE $testTableName (value int) USING delta"
+    )
 
-      runDeltaTableTest(
-        testTableName,
-        Map(
-          "tableName" -> testTableName
-        ),
-        expectSuccess = true,
-        errMsgIfFail = ""
-      )
-    }
+    runDeltaTableTest(
+      testTableName,
+      Map(
+        "tableName" -> testTableName
+      ),
+      expectSuccess = true,
+      errMsgIfFail = ""
+    )
   }
 
   Seq("test_table", "default.test_table", "main.default.test_table")
