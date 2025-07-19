@@ -21,7 +21,7 @@ import java.util.regex.Pattern
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 import org.apache.hive.service.cli._
-import org.apache.hive.service.cli.operation.GetSchemasOperation
+import org.apache.hive.service.cli.operation.{GetSchemasOperation, OperationManager}
 import org.apache.hive.service.cli.operation.MetadataOperation.DEFAULT_HIVE_CATALOG
 import org.apache.hive.service.cli.session.HiveSession
 
@@ -40,9 +40,10 @@ import org.apache.spark.sql.SparkSession
 private[hive] class SparkGetSchemasOperation(
     val session: SparkSession,
     parentSession: HiveSession,
+    operationManager: OperationManager,
     catalogName: String,
     schemaName: String)
-  extends GetSchemasOperation(parentSession, catalogName, schemaName)
+  extends GetSchemasOperation(parentSession, operationManager, catalogName, schemaName)
   with SparkOperation
   with Logging {
 
