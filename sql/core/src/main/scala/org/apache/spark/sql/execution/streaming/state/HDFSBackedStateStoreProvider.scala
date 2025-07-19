@@ -31,8 +31,8 @@ import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkException}
-import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
+import org.apache.spark.{SparkConf, SparkEnv, SparkException, TaskContext}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -89,8 +89,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def abort(): Unit = {}
 
+    override def release(): Unit = {}
+
     override def toString(): String = {
-      s"HDFSReadStateStore[id=(op=${id.operatorId},part=${id.partitionId}),dir=$baseDir]"
+      s"HDFSReadStateStore[stateStoreId=$stateStoreId_, version=$version]"
     }
 
     override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
@@ -112,6 +114,15 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     case object UPDATING extends STATE
     case object COMMITTED extends STATE
     case object ABORTED extends STATE
+    case object RELEASED extends STATE
+
+    Option(TaskContext.get()).foreach { ctxt =>
+      ctxt.addTaskCompletionListener[Unit](ctx => {
+        if (state == UPDATING) {
+          abort()
+        }
+      })
+    }
 
     private val newVersion = version + 1
     @volatile private var state: STATE = UPDATING
@@ -244,7 +255,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
 
     override def toString(): String = {
-      s"HDFSStateStore[id=(op=${id.operatorId},part=${id.partitionId}),dir=$baseDir]"
+      s"HDFSStateStore[stateStoreId=$stateStoreId_, version=$version]"
     }
 
     override def removeColFamilyIfExists(colFamilyName: String): Boolean = {
@@ -360,6 +371,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     this.hadoopConf = hadoopConf
     this.numberOfVersionsToRetainInMemory = storeConf.maxVersionsToRetainInMemory
 
+    val queryRunId = UUID.fromString(StateStoreProvider.getRunId(hadoopConf))
+    this.stateStoreProviderId = StateStoreProviderId(stateStoreId, queryRunId)
+
     // run a bunch of validation checks for this state store provider
     runValidation(useColumnFamilies, useMultipleValuesPerKey, keyStateEncoderSpec)
 
@@ -370,6 +384,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
   override def stateStoreId: StateStoreId = stateStoreId_
 
+  override protected def logName: String = s"${super.logName} ${stateStoreProviderId}"
+
   /** Do maintenance backing data files, including creating snapshots and cleaning up old files */
   override def doMaintenance(): Unit = {
     try {
@@ -377,7 +393,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       cleanup()
     } catch {
       case NonFatal(e) =>
-        logWarning(log"Error performing snapshot and cleaning up " + toMessageWithContext)
+        logWarning(log"Error performing snapshot and cleaning up")
     }
   }
 
@@ -396,14 +412,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   override def supportedInstanceMetrics: Seq[StateStoreInstanceMetric] =
     Seq(instanceMetricSnapshotLastUpload)
 
-  private def toMessageWithContext: MessageWithContext = {
-    log"HDFSStateStoreProvider[id = (op=${MDC(LogKeys.OP_ID, stateStoreId.operatorId)}," +
-      log"part=${MDC(LogKeys.PARTITION_ID, stateStoreId.partitionId)})," +
-      log"dir = ${MDC(LogKeys.PATH, baseDir)}]"
-  }
-
   override def toString(): String = {
-    toMessageWithContext.message
+    s"HDFSStateStoreProvider[stateStoreProviderId=$stateStoreProviderId]"
   }
 
   /* Internal fields and methods */
@@ -415,6 +425,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   @volatile private var hadoopConf: Configuration = _
   @volatile private var numberOfVersionsToRetainInMemory: Int = _
   @volatile private var numColsPrefixKey: Int = 0
+  @volatile private var stateStoreProviderId: StateStoreProviderId = _
 
   // TODO: The validation should be moved to a higher level so that it works for all state store
   // implementations
@@ -821,7 +832,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       }
     } catch {
       case NonFatal(e) =>
-        logWarning(log"Error doing snapshots for " + toMessageWithContext, e)
+        logWarning(log"Error doing snapshots", e)
     }
   }
 
@@ -854,7 +865,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       }
     } catch {
       case NonFatal(e) =>
-        logWarning(log"Error cleaning up files for " + toMessageWithContext, e)
+        logWarning(log"Error cleaning up files", e)
     }
   }
 
@@ -908,7 +919,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
           case "snapshot" =>
             versionToFiles.put(version, StoreFile(version, path, isSnapshot = true))
           case _ => logWarning(
-            log"Could not identify file ${MDC(LogKeys.PATH, path)} for " + toMessageWithContext)
+            log"Could not identify file ${MDC(LogKeys.PATH, path)}")
         }
       }
     }
@@ -953,7 +964,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
    * @param endVersion   checkpoint version to end with
    * @return [[HDFSBackedStateStore]]
    */
-  override def replayStateFromSnapshot(snapshotVersion: Long, endVersion: Long): StateStore = {
+  override def replayStateFromSnapshot(
+      snapshotVersion: Long, endVersion: Long, readOnly: Boolean): StateStore = {
     val newMap = replayLoadedMapFromSnapshot(snapshotVersion, endVersion)
     logInfo(log"Retrieved snapshot at version " +
       log"${MDC(LogKeys.STATE_STORE_VERSION, snapshotVersion)} and apply delta files to version " +
@@ -1057,11 +1069,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   /** Reports to the coordinator the store's latest snapshot version */
   private def reportSnapshotUploadToCoordinator(version: Long): Unit = {
     if (storeConf.reportSnapshotUploadLag) {
-      // Attach the query run ID and current timestamp to the RPC message
-      val runId = UUID.fromString(StateStoreProvider.getRunId(hadoopConf))
       val currentTimestamp = System.currentTimeMillis()
       StateStoreProvider.coordinatorRef.foreach(
-        _.snapshotUploaded(StateStoreProviderId(stateStoreId, runId), version, currentTimestamp)
+        _.snapshotUploaded(stateStoreProviderId, version, currentTimestamp)
       )
     }
   }

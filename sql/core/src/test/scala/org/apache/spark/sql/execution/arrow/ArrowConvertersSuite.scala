@@ -20,6 +20,7 @@ import java.io.{ByteArrayOutputStream, DataOutputStream, File}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
+import java.time.LocalTime
 import java.util.Locale
 
 import com.google.common.io.Files
@@ -729,6 +730,43 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
       collectAndValidate(df, json, "timestampData.json", "America/Los_Angeles")
     }
+  }
+
+  test("time type conversion") {
+    val json =
+      s"""
+         |{
+         |  "schema" : {
+         |    "fields" : [ {
+         |      "name" : "time",
+         |      "type" : {
+         |        "name" : "time",
+         |        "unit" : "NANOSECOND",
+         |        "bitWidth" : 64
+         |      },
+         |      "nullable" : true,
+         |      "children" : [ ]
+         |    } ]
+         |  },
+         |  "batches" : [ {
+         |    "count" : 3,
+         |    "columns" : [ {
+         |      "name" : "time",
+         |      "count" : 3,
+         |      "VALIDITY" : [ 1, 1, 1 ],
+         |      "DATA" : [ 0, 43200000000000, 3723123456789 ]
+         |    } ]
+         |  } ]
+         |}
+       """.stripMargin
+
+    val t1 = LocalTime.of(0, 0, 0)
+    val t2 = LocalTime.of(12, 0, 0)
+    val t3 = LocalTime.of(1, 2, 3, 123456789)
+
+    val df = Seq(t1, t2, t3).toDF("time")
+
+    collectAndValidate(df, json, "timeData.json")
   }
 
   test("floating-point NaN") {

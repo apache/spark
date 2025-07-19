@@ -142,6 +142,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     .set("spark.sql.catalog.h2.pushDownAggregate", "true")
     .set("spark.sql.catalog.h2.pushDownLimit", "true")
     .set("spark.sql.catalog.h2.pushDownOffset", "true")
+    .set("spark.sql.catalog.h2.pushDownJoin", "true")
 
   private def withConnection[T](f: Connection => T): T = {
     val conn = DriverManager.getConnection(url, new Properties())

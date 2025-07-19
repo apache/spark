@@ -45,22 +45,6 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends QueryTest with SharedSpa
     }
   }
 
-  test("Unsupported star expansion") {
-    checkResolution("SELECT * FROM VALUES (1, 2) WHERE 3 IN (*)")
-  }
-
-  test("Lateral column alias in Aggregate below a Sort") {
-    checkResolution(
-      "SELECT dept AS d, d, 10 AS d FROM VALUES(1) AS t(dept) GROUP BY dept ORDER BY dept"
-    )
-  }
-
-  test("Unsupported lambda") {
-    checkResolution(
-      "SELECT array_sort(array(2, 1), (p1, p2) -> CASE WHEN p1 > p2 THEN 1 ELSE 0 END)"
-    )
-  }
-
   private def checkResolution(sqlText: String, shouldPass: Boolean = false): Unit = {
     val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(sqlText)
     checkResolution(unresolvedPlan, shouldPass)

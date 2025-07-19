@@ -244,7 +244,9 @@ abstract class JdbcDialect extends Serializable with Logging {
    * name is a reserved keyword, or in case it contains characters that require quotes (e.g. space).
    */
   def quoteIdentifier(colName: String): String = {
-    s""""$colName""""
+    // By ANSI standard, quotes are escaped with another quotes.
+    val escapedColName = colName.replace("\"", "\"\"")
+    s""""$escapedColName""""
   }
 
   /**
@@ -852,6 +854,11 @@ abstract class JdbcDialect extends Serializable with Logging {
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3183")
 
   def supportsHint: Boolean = false
+
+  /**
+   * Returns true if dialect supports JOIN operator.
+   */
+  def supportsJoin: Boolean = false
 
   /**
    * Return the DB-specific quoted and fully qualified table name

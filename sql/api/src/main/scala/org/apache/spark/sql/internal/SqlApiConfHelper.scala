@@ -33,6 +33,10 @@ private[sql] object SqlApiConfHelper {
   val SESSION_LOCAL_TIMEZONE_KEY: String = "spark.sql.session.timeZone"
   val LOCAL_RELATION_CACHE_THRESHOLD_KEY: String = "spark.sql.session.localRelationCacheThreshold"
   val ARROW_EXECUTION_USE_LARGE_VAR_TYPES = "spark.sql.execution.arrow.useLargeVarTypes"
+  val PARSER_DFA_CACHE_FLUSH_THRESHOLD_KEY: String =
+    "spark.sql.parser.parserDfaCacheFlushThreshold"
+  val PARSER_DFA_CACHE_FLUSH_RATIO_KEY: String = "spark.sql.parser.parserDfaCacheFlushRatio"
+  val MANAGE_PARSER_CACHES_KEY: String = "spark.sql.parser.manageParserCaches"
 
   val confGetter: AtomicReference[() => SqlApiConf] = {
     new AtomicReference[() => SqlApiConf](() => DefaultSqlApiConf)

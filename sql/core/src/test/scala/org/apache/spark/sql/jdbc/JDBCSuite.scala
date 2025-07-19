@@ -803,17 +803,23 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   }
 
   test("quote column names by jdbc dialect") {
-    val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
-    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
-    val Derby = JdbcDialects.get("jdbc:derby:db")
+    val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val postgresDialect = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val derbyDialect = JdbcDialects.get("jdbc:derby:db")
+    val oracleDialect = JdbcDialects.get("jdbc:oracle:thin:@//localhost:1521/orcl")
+    val databricksDialect = JdbcDialects.get("jdbc:databricks://host/db")
 
-    val columns = Seq("abc", "key")
-    val MySQLColumns = columns.map(MySQL.quoteIdentifier(_))
-    val PostgresColumns = columns.map(Postgres.quoteIdentifier(_))
-    val DerbyColumns = columns.map(Derby.quoteIdentifier(_))
-    assert(MySQLColumns === Seq("`abc`", "`key`"))
-    assert(PostgresColumns === Seq(""""abc"""", """"key""""))
-    assert(DerbyColumns === Seq(""""abc"""", """"key""""))
+    val columns = Seq("abc", "key", "double_quote\"", "back`")
+    val mySQLColumns = columns.map(mySQLDialect.quoteIdentifier)
+    val postgresColumns = columns.map(postgresDialect.quoteIdentifier)
+    val derbyColumns = columns.map(derbyDialect.quoteIdentifier)
+    val oracleColumns = columns.map(oracleDialect.quoteIdentifier)
+    val databricksColumns = columns.map(databricksDialect.quoteIdentifier)
+    assertResult(Seq("`abc`", "`key`", "`double_quote\"`", "`back```"))(mySQLColumns)
+    assertResult(Seq("\"abc\"", "\"key\"", "\"double_quote\"\"\"", "\"back`\""))(postgresColumns)
+    assertResult(Seq("\"abc\"", "\"key\"", "\"double_quote\"\"\"", "\"back`\""))(derbyColumns)
+    assertResult(Seq("\"abc\"", "\"key\"", "\"double_quote\"\"\"", "\"back`\""))(oracleColumns)
+    assertResult(Seq("`abc`", "`key`", "`double_quote\"`", "`back```"))(databricksColumns)
   }
 
   test("compile filters") {

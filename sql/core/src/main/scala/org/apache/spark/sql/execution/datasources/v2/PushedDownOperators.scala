@@ -30,6 +30,7 @@ case class PushedDownOperators(
     limit: Option[Int],
     offset: Option[Int],
     sortValues: Seq[SortOrder],
-    pushedPredicates: Seq[Predicate]) {
+    pushedPredicates: Seq[Predicate],
+    joinedRelations: Seq[String]) {
   assert((limit.isEmpty && sortValues.isEmpty) || limit.isDefined)
 }

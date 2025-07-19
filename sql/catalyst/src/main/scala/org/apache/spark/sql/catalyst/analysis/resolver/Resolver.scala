@@ -42,8 +42,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   ExprId
 }
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNodeTag}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
@@ -112,7 +111,6 @@ class Resolver(
   private var relationMetadataProvider: RelationMetadataProvider = new MetadataResolver(
     catalogManager,
     relationResolution,
-    functionResolution,
     metadataResolverExtensions
   )
 
@@ -257,6 +255,8 @@ class Resolver(
             resolveSupervisingCommand(supervisingCommand)
           case repartition: Repartition =>
             resolveRepartition(repartition)
+          case sample: Sample =>
+            resolveSample(sample)
           case _ =>
             tryDelegateResolutionToExtension(unresolvedPlan).getOrElse {
               handleUnmatchedOperator(unresolvedPlan)
@@ -476,12 +476,18 @@ class Resolver(
 
   /**
    * [[Distinct]] operator doesn't require any special resolution.
+   * We validate results of the resolution using the [[OperatorWithUncomparableTypeValidator]]
+   * ([[MapType]], [[VariantType]], [[GeometryType]] and [[GeographyType]] are not supported
+   * under [[Distinct]] operator).
    *
    * `hiddenOutput` and `availableAliases` are reset when [[Distinct]] is reached during tree
    * traversal.
    */
   private def resolveDistinct(unresolvedDistinct: Distinct): LogicalPlan = {
     val resolvedDistinct = unresolvedDistinct.copy(child = resolve(unresolvedDistinct.child))
+
+    OperatorWithUncomparableTypeValidator.validate(resolvedDistinct, scopes.current.output)
+
     scopes.overwriteCurrent(
       hiddenOutput = Some(scopes.current.output),
       availableAliases = Some(new HashSet[ExprId])
@@ -658,6 +664,14 @@ class Resolver(
    */
   private def resolveRepartition(repartition: Repartition): LogicalPlan = {
     repartition.copy(child = resolve(repartition.child))
+  }
+
+  /**
+   * Resolve [[Sample]] operator. Its resolution doesn't require any specific logic (besides
+   * child resolution).
+   */
+  private def resolveSample(sample: Sample): LogicalPlan = {
+    sample.copy(child = resolve(sample.child))
   }
 
   private def createCteRelationRef(name: String, cteRelationDef: CTERelationDef): LogicalPlan = {

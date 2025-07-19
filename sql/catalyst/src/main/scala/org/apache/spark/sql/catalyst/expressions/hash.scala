@@ -69,6 +69,8 @@ case class Md5(child: Expression)
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.fromString(DigestUtils.md5Hex(input.asInstanceOf[Array[Byte]]))
 
@@ -112,6 +114,8 @@ case class Sha2(left: Expression, right: Expression)
   override def nullable: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType, IntegerType)
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val bitLength = input2.asInstanceOf[Int]
@@ -179,6 +183,8 @@ case class Sha1(child: Expression)
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.fromString(DigestUtils.sha1Hex(input.asInstanceOf[Array[Byte]]))
 
@@ -211,6 +217,8 @@ case class Crc32(child: Expression)
   override def dataType: DataType = LongType
 
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(input: Any): Any = {
     val checksum = new CRC32
@@ -273,6 +281,8 @@ abstract class HashExpression[E] extends Expression {
   val seed: E
 
   override def foldable: Boolean = children.forall(_.foldable)
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def nullable: Boolean = false
 

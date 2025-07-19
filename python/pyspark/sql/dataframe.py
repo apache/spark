@@ -5234,7 +5234,7 @@ class DataFrame:
         |NULL|  NULL|NULL|
         +----+------+----+
 
-        Example 4: Replace 10 to 20 in the 'name' column.
+        Example 4: Replace 10 to 18 in the 'age' column.
 
         >>> df.na.replace(10, 18, 'age').show()
         +----+------+-----+
