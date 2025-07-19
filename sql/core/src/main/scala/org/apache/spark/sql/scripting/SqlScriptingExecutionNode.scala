@@ -1187,7 +1187,7 @@ class ForStatementExec(
       OneRowRelation()
     )
     val setIdentifierToCurrentRow =
-      SetVariable(Seq(UnresolvedAttribute(varName)), projectNamedStruct)
+      SetVariable(Seq(UnresolvedAttribute.quoted(varName)), projectNamedStruct)
     new SingleStatementExec(
       setIdentifierToCurrentRow,
       Origin(),
