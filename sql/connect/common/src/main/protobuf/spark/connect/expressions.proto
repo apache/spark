@@ -215,13 +215,22 @@ message Expression {
     }
 
     message Array {
-      DataType element_type = 1;
+      // (Optional) The element type of the array. Only need to set this when the elements are
+      // empty or the element type is not inferrable, since spark 4.1+ supports
+      // inferring the element type from the elements.
+      optional DataType element_type = 1;
       repeated Literal elements = 2;
     }
 
     message Map {
-      DataType key_type = 1;
-      DataType value_type = 2;
+      // (Optional) The key type of the map. Only need to set this when the keys are
+      // empty or the key type is not inferrable, since spark 4.1+ supports
+      // inferring the key type from the keys
+      optional DataType key_type = 1;
+      // (Optional) The value type of the map. Only need to set this when the values are
+      // empty or the value type is not inferrable, since spark 4.1+ supports
+      // inferring the value type from the values.
+      optional DataType value_type = 2;
       repeated Literal keys = 3;
       repeated Literal values = 4;
     }
