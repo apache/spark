@@ -17,12 +17,9 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.util.Locale
-
 import scala.jdk.CollectionConverters._
-
 import org.antlr.v4.runtime.Token
 import org.antlr.v4.runtime.tree.ParseTree
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.util.CollationFactory
@@ -30,7 +27,7 @@ import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
 import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DefaultCharType, DefaultVarcharType, DoubleType, FloatType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StringType, StructField, StructType, TimeType, TimestampNTZType, TimestampType, VarcharType, VariantType, YearMonthIntervalType}
 
 class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   protected def typedVisit[T](ctx: ParseTree): T = {
@@ -84,13 +81,35 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
               StringType(collationId)
           }
         case CHARACTER | CHAR =>
-          if (currentCtx.length == null) {
-            throw QueryParsingErrors.charVarcharTypeMissingLengthError(typeCtx.getText, ctx)
-          } else CharType(currentCtx.length.getText.toInt)
+          (Option(currentCtx.length), Option(currentCtx.collateClause)) match {
+            case (None, _) =>
+              throw QueryParsingErrors.charVarcharTypeMissingLengthError(typeCtx.getText, ctx)
+            case (_, Some(_)) if !SqlApiConf.get.charVarcharCollationsEnabled =>
+              // TODO: throw correct error
+              throw QueryParsingErrors.charVarcharTypeMissingLengthError(typeCtx.getText, ctx)
+            case (Some(length), None) =>
+              DefaultCharType(length.getText.toInt)
+            case (Some(length), Some(collateClause)) =>
+              val collationNameParts = visitCollateClause(collateClause).toArray
+              val collationId = CollationFactory.collationNameToId(
+                CollationFactory.resolveFullyQualifiedName(collationNameParts))
+              CharType(length.getText.toInt, collationId)
+          }
         case VARCHAR =>
-          if (currentCtx.length == null) {
-            throw QueryParsingErrors.charVarcharTypeMissingLengthError(typeCtx.getText, ctx)
-          } else VarcharType(currentCtx.length.getText.toInt)
+          (Option(currentCtx.length), Option(currentCtx.collateClause)) match {
+            case (None, _) =>
+              throw QueryParsingErrors.charVarcharTypeMissingLengthError(typeCtx.getText, ctx)
+            case (_, Some(_)) if !SqlApiConf.get.charVarcharCollationsEnabled =>
+              // TODO: throw correct error
+              throw QueryParsingErrors.charVarcharTypeMissingLengthError(typeCtx.getText, ctx)
+            case (Some(length), None) =>
+              DefaultVarcharType(length.getText.toInt)
+            case (Some(length), Some(collateClause)) =>
+              val collationNameParts = visitCollateClause(collateClause).toArray
+              val collationId = CollationFactory.collationNameToId(
+                CollationFactory.resolveFullyQualifiedName(collationNameParts))
+              VarcharType(length.getText.toInt, collationId)
+          }
         case DECIMAL | DEC | NUMERIC =>
           if (currentCtx.precision == null) {
             DecimalType.USER_DEFAULT

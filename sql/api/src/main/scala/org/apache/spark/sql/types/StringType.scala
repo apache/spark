@@ -184,8 +184,8 @@ case object StringHelper extends PartialOrdering[StringConstraint] {
   }
 
   def removeCollation(s: StringType): StringType = s match {
-    case CharType(length) => CharType(length)
-    case VarcharType(length) => VarcharType(length)
+    case CharType(length, _) => DefaultCharType(length)
+    case VarcharType(length, _) => DefaultVarcharType(length)
     case _: StringType => StringType
   }
 }
