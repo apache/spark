@@ -807,37 +807,27 @@
     }, {
       "literal": {
         "struct": {
-          "structType": {
-            "struct": {
-              "fields": [{
-                "name": "_1",
-                "dataType": {
-                  "string": {
-                    "collation": "UTF8_BINARY"
-                  }
-                },
-                "nullable": true
-              }, {
-                "name": "_2",
-                "dataType": {
-                  "integer": {
-                  }
-                }
-              }, {
-                "name": "_3",
-                "dataType": {
-                  "double": {
-                  }
-                }
-              }]
+          "fields": [{
+            "name": "_1",
+            "value": {
+              "string": "a"
+            },
+            "dataType": {
+              "string": {
+                "collation": "UTF8_BINARY"
+              }
+            },
+            "nullable": true
+          }, {
+            "name": "_2",
+            "value": {
+              "integer": 2
             }
-          },
-          "elements": [{
-            "string": "a"
           }, {
-            "integer": 2
-          }, {
-            "double": 1.0
+            "name": "_3",
+            "value": {
+              "double": 1.0
+            }
           }]
         }
       },
@@ -1295,165 +1285,95 @@
     }, {
       "literal": {
         "struct": {
-          "structType": {
-            "struct": {
-              "fields": [{
-                "name": "_1",
-                "dataType": {
-                  "array": {
-                    "elementType": {
-                      "integer": {
-                      }
-                    }
+          "fields": [{
+            "name": "_1",
+            "value": {
+              "array": {
+                "elementType": {
+                  "integer": {
                   }
                 },
-                "nullable": true
-              }, {
-                "name": "_2",
-                "dataType": {
-                  "map": {
-                    "keyType": {
-                      "string": {
-                        "collation": "UTF8_BINARY"
-                      }
-                    },
-                    "valueType": {
-                      "integer": {
-                      }
-                    }
-                  }
-                },
-                "nullable": true
-              }, {
-                "name": "_3",
-                "dataType": {
-                  "struct": {
-                    "fields": [{
-                      "name": "_1",
-                      "dataType": {
-                        "string": {
-                          "collation": "UTF8_BINARY"
-                        }
-                      },
-                      "nullable": true
-                    }, {
-                      "name": "_2",
-                      "dataType": {
-                        "map": {
-                          "keyType": {
-                            "integer": {
-                            }
-                          },
-                          "valueType": {
-                            "string": {
-                              "collation": "UTF8_BINARY"
-                            }
-                          },
-                          "valueContainsNull": true
-                        }
-                      },
-                      "nullable": true
-                    }]
-                  }
-                },
-                "nullable": true
-              }]
-            }
-          },
-          "elements": [{
-            "array": {
-              "elementType": {
-                "integer": {
-                }
-              },
-              "elements": [{
-                "integer": 1
-              }, {
-                "integer": 2
-              }, {
-                "integer": 3
-              }]
-            }
+                "elements": [{
+                  "integer": 1
+                }, {
+                  "integer": 2
+                }, {
+                  "integer": 3
+                }]
+              }
+            },
+            "nullable": true
           }, {
-            "map": {
-              "keyType": {
-                "string": {
-                  "collation": "UTF8_BINARY"
-                }
-              },
-              "valueType": {
-                "integer": {
-                }
-              },
-              "keys": [{
-                "string": "a"
-              }, {
-                "string": "b"
-              }],
-              "values": [{
-                "integer": 1
-              }, {
-                "integer": 2
-              }]
-            }
+            "name": "_2",
+            "value": {
+              "map": {
+                "keyType": {
+                  "string": {
+                    "collation": "UTF8_BINARY"
+                  }
+                },
+                "valueType": {
+                  "integer": {
+                  }
+                },
+                "keys": [{
+                  "string": "a"
+                }, {
+                  "string": "b"
+                }],
+                "values": [{
+                  "integer": 1
+                }, {
+                  "integer": 2
+                }]
+              }
+            },
+            "nullable": true
           }, {
-            "struct": {
-              "structType": {
-                "struct": {
-                  "fields": [{
-                    "name": "_1",
-                    "dataType": {
-                      "string": {
-                        "collation": "UTF8_BINARY"
-                      }
-                    },
-                    "nullable": true
-                  }, {
-                    "name": "_2",
-                    "dataType": {
-                      "map": {
-                        "keyType": {
-                          "integer": {
-                          }
-                        },
-                        "valueType": {
-                          "string": {
-                            "collation": "UTF8_BINARY"
-                          }
-                        },
-                        "valueContainsNull": true
-                      }
-                    },
-                    "nullable": true
-                  }]
-                }
-              },
-              "elements": [{
-                "string": "a"
-              }, {
-                "map": {
-                  "keyType": {
-                    "integer": {
-                    }
+            "name": "_3",
+            "value": {
+              "struct": {
+                "fields": [{
+                  "name": "_1",
+                  "value": {
+                    "string": "a"
                   },
-                  "valueType": {
+                  "dataType": {
                     "string": {
                       "collation": "UTF8_BINARY"
                     }
                   },
-                  "keys": [{
-                    "integer": 1
-                  }, {
-                    "integer": 2
-                  }],
-                  "values": [{
-                    "string": "a"
-                  }, {
-                    "string": "b"
-                  }]
-                }
-              }]
-            }
+                  "nullable": true
+                }, {
+                  "name": "_2",
+                  "value": {
+                    "map": {
+                      "keyType": {
+                        "integer": {
+                        }
+                      },
+                      "valueType": {
+                        "string": {
+                          "collation": "UTF8_BINARY"
+                        }
+                      },
+                      "keys": [{
+                        "integer": 1
+                      }, {
+                        "integer": 2
+                      }],
+                      "values": [{
+                        "string": "a"
+                      }, {
+                        "string": "b"
+                      }]
+                    }
+                  },
+                  "nullable": true
+                }]
+              }
+            },
+            "nullable": true
           }]
         }
       },

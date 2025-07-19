@@ -149,15 +149,31 @@ object LiteralValueProtoConverter {
     }
 
     def structBuilder(scalaValue: Any, structType: StructType) = {
-      val sb = builder.getStructBuilder.setStructType(toConnectProtoType(structType))
-      val dataTypes = structType.fields.map(_.dataType)
+      val sb = builder.getStructBuilder
+      val fields = structType.fields
 
       scalaValue match {
         case p: Product =>
           val iter = p.productIterator
           var idx = 0
           while (idx < structType.size) {
-            sb.addElements(toLiteralProto(iter.next(), dataTypes(idx)))
+            val field = fields(idx)
+            val literalProto = toLiteralProto(iter.next(), field.dataType)
+            val fieldBuilder = sb
+              .addFieldsBuilder()
+              .setName(field.name)
+              .setValue(literalProto)
+              .setNullable(field.nullable)
+
+            if (LiteralValueProtoConverter.getInferredDataType(literalProto).isEmpty) {
+              fieldBuilder.setDataType(toConnectProtoType(field.dataType))
+            }
+
+            // Set metadata if available
+            if (field.metadata != Metadata.empty) {
+              fieldBuilder.setMetadata(field.metadata.json)
+            }
+
             idx += 1
           }
         case other =>
@@ -300,54 +316,110 @@ object LiteralValueProtoConverter {
       case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
         toCatalystArray(literal.getArray)
 
+      case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
+        toCatalystStruct(literal.getStruct)._1
+
       case other =>
         throw new UnsupportedOperationException(
           s"Unsupported Literal Type: ${other.getNumber} (${other.name})")
     }
   }
 
-  private def getConverter(dataType: proto.DataType): proto.Expression.Literal => Any = {
-    if (dataType.hasShort) { v =>
-      v.getShort.toShort
-    } else if (dataType.hasInteger) { v =>
-      v.getInteger
-    } else if (dataType.hasLong) { v =>
-      v.getLong
-    } else if (dataType.hasDouble) { v =>
-      v.getDouble
-    } else if (dataType.hasByte) { v =>
-      v.getByte.toByte
-    } else if (dataType.hasFloat) { v =>
-      v.getFloat
-    } else if (dataType.hasBoolean) { v =>
-      v.getBoolean
-    } else if (dataType.hasString) { v =>
-      v.getString
-    } else if (dataType.hasBinary) { v =>
-      v.getBinary.toByteArray
-    } else if (dataType.hasDate) { v =>
-      v.getDate
-    } else if (dataType.hasTimestamp) { v =>
-      v.getTimestamp
-    } else if (dataType.hasTimestampNtz) { v =>
-      v.getTimestampNtz
-    } else if (dataType.hasDayTimeInterval) { v =>
-      v.getDayTimeInterval
-    } else if (dataType.hasYearMonthInterval) { v =>
-      v.getYearMonthInterval
-    } else if (dataType.hasDecimal) { v =>
-      Decimal(v.getDecimal.getValue)
-    } else if (dataType.hasCalendarInterval) { v =>
-      val interval = v.getCalendarInterval
-      new CalendarInterval(interval.getMonths, interval.getDays, interval.getMicroseconds)
-    } else if (dataType.hasArray) { v =>
-      toCatalystArray(v.getArray)
-    } else if (dataType.hasMap) { v =>
-      toCatalystMap(v.getMap)
-    } else if (dataType.hasStruct) { v =>
-      toCatalystStruct(v.getStruct)
-    } else {
-      throw InvalidPlanInput(s"Unsupported Literal Type: $dataType)")
+  private def getConverter(
+      dataType: proto.DataType,
+      inferDataType: Boolean = false): proto.Expression.Literal => Any = {
+    dataType.getKindCase match {
+      case proto.DataType.KindCase.SHORT => v => v.getShort.toShort
+      case proto.DataType.KindCase.INTEGER => v => v.getInteger
+      case proto.DataType.KindCase.LONG => v => v.getLong
+      case proto.DataType.KindCase.DOUBLE => v => v.getDouble
+      case proto.DataType.KindCase.BYTE => v => v.getByte.toByte
+      case proto.DataType.KindCase.FLOAT => v => v.getFloat
+      case proto.DataType.KindCase.BOOLEAN => v => v.getBoolean
+      case proto.DataType.KindCase.STRING => v => v.getString
+      case proto.DataType.KindCase.BINARY => v => v.getBinary.toByteArray
+      case proto.DataType.KindCase.DATE => v => v.getDate
+      case proto.DataType.KindCase.TIMESTAMP => v => v.getTimestamp
+      case proto.DataType.KindCase.TIMESTAMP_NTZ => v => v.getTimestampNtz
+      case proto.DataType.KindCase.DAY_TIME_INTERVAL => v => v.getDayTimeInterval
+      case proto.DataType.KindCase.YEAR_MONTH_INTERVAL => v => v.getYearMonthInterval
+      case proto.DataType.KindCase.DECIMAL => v => Decimal(v.getDecimal.getValue)
+      case proto.DataType.KindCase.CALENDAR_INTERVAL =>
+        v =>
+          val interval = v.getCalendarInterval
+          new CalendarInterval(interval.getMonths, interval.getDays, interval.getMicroseconds)
+      case proto.DataType.KindCase.ARRAY => v => toCatalystArray(v.getArray)
+      case proto.DataType.KindCase.MAP => v => toCatalystMap(v.getMap)
+      case proto.DataType.KindCase.STRUCT =>
+        if (inferDataType) { v =>
+          val (struct, structType) = toCatalystStruct(v.getStruct, None)
+          LiteralValueWithDataType(
+            struct,
+            proto.DataType.newBuilder.setStruct(structType).build())
+        } else { v =>
+          toCatalystStruct(v.getStruct, Some(dataType.getStruct))._1
+        }
+      case _ =>
+        throw InvalidPlanInput(s"Unsupported Literal Type: $dataType)")
+    }
+  }
+
+  private def getInferredDataType(literal: proto.Expression.Literal): Option[proto.DataType] = {
+    if (literal.hasNull) {
+      return Some(literal.getNull)
+    }
+
+    val builder = proto.DataType.newBuilder()
+    literal.getLiteralTypeCase match {
+      case proto.Expression.Literal.LiteralTypeCase.BINARY =>
+        builder.setBinary(proto.DataType.Binary.newBuilder.build())
+      case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
+        builder.setBoolean(proto.DataType.Boolean.newBuilder.build())
+      case proto.Expression.Literal.LiteralTypeCase.BYTE =>
+        builder.setByte(proto.DataType.Byte.newBuilder.build())
+      case proto.Expression.Literal.LiteralTypeCase.SHORT =>
+        builder.setShort(proto.DataType.Short.newBuilder.build())
+      case proto.Expression.Literal.LiteralTypeCase.INTEGER =>
+        builder.setInteger(proto.DataType.Integer.newBuilder.build())
+      case proto.Expression.Literal.LiteralTypeCase.LONG =>
+        builder.setLong(proto.DataType.Long.newBuilder.build())
+      case proto.Expression.Literal.LiteralTypeCase.FLOAT =>
+        builder.setFloat(proto.DataType.Float.newBuilder.build())
+      case proto.Expression.Literal.LiteralTypeCase.DOUBLE =>
+        builder.setDouble(proto.DataType.Double.newBuilder.build())
+      case proto.Expression.Literal.LiteralTypeCase.DATE =>
+        builder.setDate(proto.DataType.Date.newBuilder.build())
+      case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP =>
+        builder.setTimestamp(proto.DataType.Timestamp.newBuilder.build())
+      case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_NTZ =>
+        builder.setTimestampNtz(proto.DataType.TimestampNTZ.newBuilder.build())
+      case proto.Expression.Literal.LiteralTypeCase.CALENDAR_INTERVAL =>
+        builder.setCalendarInterval(proto.DataType.CalendarInterval.newBuilder.build())
+      case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
+        builder.setArray(
+          proto.DataType.Array.newBuilder.setElementType(literal.getArray.getElementType).build())
+      case proto.Expression.Literal.LiteralTypeCase.MAP =>
+        builder.setMap(
+          proto.DataType.Map.newBuilder
+            .setKeyType(literal.getMap.getKeyType)
+            .setValueType(literal.getMap.getValueType)
+            .build())
+      case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
+        // The type of the fields will be inferred from the literals of the fields in the struct.
+        builder.setStruct(proto.DataType.Struct.newBuilder.build())
+      case _ =>
+        // Not all data types support inferring the data type from the literal at the moment.
+        // e.g. the type of DayTimeInterval contains extra information like start_field and
+        // end_field and cannot be inferred from the literal.
+        return None
+    }
+    Some(builder.build())
+  }
+
+  private def getInferredDataTypeOrThrow(literal: proto.Expression.Literal): proto.DataType = {
+    getInferredDataType(literal).getOrElse {
+      throw InvalidPlanInput(
+        s"Unsupported Literal type for data type inference: ${literal.getLiteralTypeCase}")
     }
   }
 
@@ -386,7 +458,9 @@ object LiteralValueProtoConverter {
     makeMapData(getConverter(map.getKeyType), getConverter(map.getValueType))
   }
 
-  def toCatalystStruct(struct: proto.Expression.Literal.Struct): Any = {
+  def toCatalystStruct(
+      struct: proto.Expression.Literal.Struct,
+      structTypeOpt: Option[proto.DataType.Struct] = None): (Any, proto.DataType.Struct) = {
     def toTuple[A <: Object](data: Seq[A]): Product = {
       try {
         val tupleClass = SparkClassUtils.classForName(s"scala.Tuple${data.length}")
@@ -397,16 +471,73 @@ object LiteralValueProtoConverter {
       }
     }
 
-    val elements = struct.getElementsList.asScala
-    val dataTypes = struct.getStructType.getStruct.getFieldsList.asScala.map(_.getDataType)
-    val structData = elements
-      .zip(dataTypes)
-      .map { case (element, dataType) =>
-        getConverter(dataType)(element)
-      }
-      .asInstanceOf[scala.collection.Seq[Object]]
-      .toSeq
+    if (struct.hasStructType) {
+      // For backward compatibility, we still support the old way to define and convert structs.
+      val elements = struct.getElementsList.asScala
+      val dataTypes = struct.getStructType.getStruct.getFieldsList.asScala.map(_.getDataType)
+      val structData = elements
+        .zip(dataTypes)
+        .map { case (element, dataType) =>
+          getConverter(dataType)(element)
+        }
+        .asInstanceOf[scala.collection.Seq[Object]]
+        .toSeq
 
-    toTuple(structData)
+      (toTuple(structData), struct.getStructType.getStruct)
+    } else {
+      def protoStructField(
+          name: String,
+          dataType: proto.DataType,
+          nullable: Boolean,
+          metadata: Option[String]): proto.DataType.StructField = {
+        val builder = proto.DataType.StructField
+          .newBuilder()
+          .setName(name)
+          .setDataType(dataType)
+          .setNullable(nullable)
+        metadata.foreach(builder.setMetadata)
+        builder.build()
+      }
+      val structFieldsOpt = structTypeOpt.map(_.getFieldsList.asScala)
+
+      val structDataAndFields = struct.getFieldsList.asScala.zipWithIndex.map {
+        case (field, index) =>
+          if (structFieldsOpt.isDefined) {
+            val structField = structFieldsOpt.get(index)
+            (getConverter(structField.getDataType)(field.getValue), structField)
+          } else if (field.hasDataType) {
+            (
+              getConverter(field.getDataType)(field.getValue),
+              protoStructField(
+                field.getName,
+                field.getDataType,
+                field.getNullable,
+                if (field.hasMetadata) Some(field.getMetadata) else None))
+          } else {
+            val outerDataType = getInferredDataTypeOrThrow(field.getValue)
+            val (value, dataType) =
+              getConverter(outerDataType, inferDataType = true)(field.getValue) match {
+                case LiteralValueWithDataType(value, dataType) => (value, dataType)
+                case value => (value, outerDataType)
+              }
+            (
+              value,
+              protoStructField(
+                field.getName,
+                dataType,
+                field.getNullable,
+                if (field.hasMetadata) Some(field.getMetadata) else None))
+          }
+      }
+
+      val structType = proto.DataType.Struct
+        .newBuilder()
+        .addAllFields(structDataAndFields.map(_._2).asJava)
+        .build()
+
+      (toTuple(structDataAndFields.map(_._1).toSeq.asInstanceOf[Seq[Object]]), structType)
+    }
   }
+
+  private case class LiteralValueWithDataType(value: Any, dataType: proto.DataType)
 }

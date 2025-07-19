@@ -79,15 +79,28 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
       Literal((12.0, "north", 60.0, "west"), Option(dataType)),
       expr { b =>
         val builder = b.getLiteralBuilder.getStructBuilder
-        builder.getStructTypeBuilder.getStructBuilder
-          .addFields(structField("_1", ProtoDataTypes.DoubleType))
-          .addFields(structField("_2", stringTypeWithCollation))
-          .addFields(structField("_3", ProtoDataTypes.DoubleType))
-          .addFields(structField("_4", stringTypeWithCollation))
-        builder.addElements(proto.Expression.Literal.newBuilder().setDouble(12.0))
-        builder.addElements(proto.Expression.Literal.newBuilder().setString("north"))
-        builder.addElements(proto.Expression.Literal.newBuilder().setDouble(60.0))
-        builder.addElements(proto.Expression.Literal.newBuilder().setString("west"))
+        builder
+          .addFieldsBuilder()
+          .setName("_1")
+          .setValue(proto.Expression.Literal.newBuilder().setDouble(12.0).build())
+          .setNullable(true)
+        builder
+          .addFieldsBuilder()
+          .setName("_2")
+          .setValue(proto.Expression.Literal.newBuilder().setString("north").build())
+          .setDataType(stringTypeWithCollation)
+          .setNullable(true)
+        builder
+          .addFieldsBuilder()
+          .setName("_3")
+          .setValue(proto.Expression.Literal.newBuilder().setDouble(60.0).build())
+          .setNullable(true)
+        builder
+          .addFieldsBuilder()
+          .setName("_4")
+          .setValue(proto.Expression.Literal.newBuilder().setString("west").build())
+          .setDataType(stringTypeWithCollation)
+          .setNullable(true)
       })
   }
 
