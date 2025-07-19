@@ -212,6 +212,7 @@ class HistoryServer(
     provider.getListing()
   }
 
+
   def getEventLogsUnderProcess(): Int = {
     provider.getEventLogsUnderProcess()
   }
@@ -222,6 +223,11 @@ class HistoryServer(
 
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
     getApplicationList()
+  }
+
+  override def getApplicationInfoList(max: Int)(
+      filter: ApplicationInfo => Boolean): Iterator[ApplicationInfo] = {
+    provider.getListing(max)(filter)
   }
 
   def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
