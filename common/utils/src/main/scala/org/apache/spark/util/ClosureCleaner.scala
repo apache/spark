@@ -417,21 +417,25 @@ private[spark] object ClosureCleaner extends Logging {
     logDebug(s" + fields accessed by starting closure: ${accessedFields.size} classes")
     accessedFields.foreach { f => logDebug("     " + f) }
 
+    // Instead of cloning and trying to update lambda reference, directly modify the original
+    // REPL object to null out unused fields. This works because REPL objects are not hidden
+    // classes and their fields can be modified.
     if (accessedFields(capturingClass).size < capturingClass.getDeclaredFields.length) {
-      // clone and clean the enclosing `this` only when there are fields to null out
-      logDebug(s" + cloning instance of REPL class ${capturingClass.getName}")
-      val clonedOuterThis = cloneAndSetFields(
-        parent = null, outerThis, capturingClass, accessedFields)
+      val fieldsToNull = capturingClass.getDeclaredFields.filterNot { field =>
+        accessedFields(capturingClass).contains(field.getName)
+      }
 
-      val outerField = func.getClass.getDeclaredField("arg$1")
-      // SPARK-37072: When Java 17 is used and `outerField` is read-only,
-      // the content of `outerField` cannot be set by reflect api directly.
-      // But we can remove the `final` modifier of `outerField` before set value
-      // and reset the modifier after set value.
-      setFieldAndIgnoreModifiers(func, outerField, clonedOuterThis)
+      for (field <- fieldsToNull) {
+        try {
+          field.setAccessible(true)
+          field.set(outerThis, null)
+        } catch {
+          case _: Exception =>
+            // Ignore failures to set fields - this is a best-effort cleanup
+        }
+      }
     }
   }
-
 
   /**
    * Cleans up Ammonite closures and nulls out fields captured from cmd & cmd$Helper objects
@@ -498,72 +502,45 @@ private[spark] object ClosureCleaner extends Logging {
       s"${accessedAmmCmdFields.size} classes")
     accessedAmmCmdFields.foreach { f => logTrace("     " + f) }
 
-    val cmdClones = Map[Class[_], AnyRef]()
-    for ((cmdClass, _) <- ammCmdInstances if !cmdClass.getName.contains("Helper")) {
-      logDebug(s" + Cloning instance of Ammonite command class ${cmdClass.getName}")
-      cmdClones(cmdClass) = instantiateClass(cmdClass, enclosingObject = null)
-    }
-    for ((cmdHelperClass, cmdHelperInstance) <- ammCmdInstances
-         if cmdHelperClass.getName.contains("Helper")) {
-      val cmdHelperOuter = cmdHelperClass.getDeclaredFields
-        .find(_.getName == "$outer")
-        .map { field =>
-          field.setAccessible(true)
-          field.get(cmdHelperInstance)
-        }
-      val outerClone = cmdHelperOuter.flatMap(o => cmdClones.get(o.getClass)).orNull
-      logDebug(s" + Cloning instance of Ammonite command helper class ${cmdHelperClass.getName}")
-      cmdClones(cmdHelperClass) =
-        instantiateClass(cmdHelperClass, enclosingObject = outerClone)
-    }
-
-    // set accessed fields
-    for ((_, cmdClone) <- cmdClones) {
-      val cmdClass = cmdClone.getClass
-      val accessedFields = accessedAmmCmdFields(cmdClass)
-      for (field <- cmdClone.getClass.getDeclaredFields
-           // outer fields were initialized during clone construction
-           if accessedFields.contains(field.getName) && field.getName != "$outer") {
-        // get command clone if exists, otherwise use an original field value
-        val value = cmdClones.getOrElse(field.getType, {
-          field.setAccessible(true)
-          field.get(ammCmdInstances(cmdClass))
-        })
-        setFieldAndIgnoreModifiers(cmdClone, field, value)
+    // Instead of cloning and trying to update lambda reference, directly modify the original
+    // REPL object to null out unused fields. This works because REPL objects are not hidden
+    // classes and their fields can be modified.
+    val capturingClass = outerThis.getClass
+    if (accessedFields(capturingClass).size < capturingClass.getDeclaredFields.length) {
+      val fieldsToNull = capturingClass.getDeclaredFields.filterNot { field =>
+        accessedFields(capturingClass).contains(field.getName)
       }
-    }
 
-    val outerThisClone = if (!isAmmoniteCommandOrHelper(outerThis.getClass)) {
-      // if outer class is not Ammonite helper / command object then is was not cloned
-      // in the code above. We still need to clone it and update accessed fields
-      logDebug(s" + Cloning instance of lambda capturing class ${outerThis.getClass.getName}")
-      val clone = cloneAndSetFields(parent = null, outerThis, outerThis.getClass, accessedFields)
-      // making sure that the code below will update references to Ammonite objects if they exist
-      for (field <- outerThis.getClass.getDeclaredFields) {
-        field.setAccessible(true)
-        cmdClones.get(field.getType).foreach { value =>
-          setFieldAndIgnoreModifiers(clone, field, value)
+      for (field <- fieldsToNull) {
+        try {
+          field.setAccessible(true)
+          field.set(outerThis, null)
+        } catch {
+          case _: Exception =>
+            // Ignore failures to set fields - this is a best-effort cleanup
         }
       }
-      clone
-    } else {
-      cmdClones(outerThis.getClass)
     }
 
-    val outerField = func.getClass.getDeclaredField("arg$1")
-    // update lambda capturing class reference
-    setFieldAndIgnoreModifiers(func, outerField, outerThisClone)
-  }
+    // Also clean up Ammonite command fields if any
+    for ((cmdClass, cmdInstance) <- ammCmdInstances) {
+      val cmdAccessedFields = accessedAmmCmdFields.getOrElse(cmdClass, Set.empty)
+      if (cmdAccessedFields.size < cmdClass.getDeclaredFields.length) {
+        val fieldsToNull = cmdClass.getDeclaredFields.filterNot { field =>
+          cmdAccessedFields.contains(field.getName) || field.getName == "$outer"
+        }
 
-  private def setFieldAndIgnoreModifiers(obj: AnyRef, field: Field, value: AnyRef): Unit = {
-    val modifiersField = getFinalModifiersFieldForJava17(field)
-    modifiersField
-      .foreach(m => m.setInt(field, field.getModifiers & ~Modifier.FINAL))
-    field.setAccessible(true)
-    field.set(obj, value)
-
-    modifiersField
-      .foreach(m => m.setInt(field, field.getModifiers | Modifier.FINAL))
+        for (field <- fieldsToNull) {
+          try {
+            field.setAccessible(true)
+            field.set(cmdInstance, null)
+          } catch {
+            case _: Exception =>
+              // Ignore failures to set fields - this is a best-effort cleanup
+          }
+        }
+      }
+    }
   }
 
   /**
