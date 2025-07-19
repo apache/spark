@@ -3375,6 +3375,16 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 to_date.__doc__ = pysparkfuncs.to_date.__doc__
 
 
+def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
+    if format is None:
+        return _invoke_function_over_columns("try_to_date", col)
+    else:
+        return _invoke_function("try_to_date", _to_col(col), lit(format))
+
+
+try_to_date.__doc__ = pysparkfuncs.try_to_date.__doc__
+
+
 def unix_date(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("unix_date", col)
 
