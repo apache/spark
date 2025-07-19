@@ -21,8 +21,6 @@ import java.util.Arrays;
 
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 import org.roaringbitmap.RoaringBitmap;
 
 import org.apache.spark.network.protocol.Encoders;
@@ -86,11 +84,8 @@ public class MergeStatuses extends BlockTransferMessage {
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("shuffleId", shuffleId)
-      .append("shuffleMergeId", shuffleMergeId)
-      .append("reduceId size", reduceIds.length)
-      .toString();
+    return "MergeStatuses[shuffleId=" + shuffleId + ",shuffleMergeId=" + shuffleMergeId +
+        ",reduceId size=" + reduceIds.length + "]";
   }
 
   @Override

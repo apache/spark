@@ -19,8 +19,6 @@ package org.apache.spark.network.protocol;
 
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NettyManagedBuffer;
@@ -56,8 +54,7 @@ public class MergedBlockMetaSuccess extends AbstractResponseMessage {
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("requestId", requestId).append("numChunks", numChunks).toString();
+    return "MergedBlockMetaSuccess[requestId=" + requestId + ",numChunks=" + numChunks + "]";
   }
 
   @Override
