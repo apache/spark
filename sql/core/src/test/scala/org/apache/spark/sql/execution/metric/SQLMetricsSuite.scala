@@ -987,6 +987,18 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     assert(SQLMetrics.createSizeMetric(sparkContext, name = "m").toInfoUpdate.update === Some(-1))
     assert(SQLMetrics.createMetric(sparkContext, name = "m").toInfoUpdate.update === Some(0))
   }
+
+  test("withTimingNs should time and return same result") {
+    val metric = SQLMetrics.createTimingMetric(sparkContext, name = "m")
+
+    // Use a simple block that returns a value
+    val result = SQLMetrics.withTimingNs(metric) {
+      42
+    }
+
+    assert(result === 42)
+    assert(!metric.isZero, "Metric was not increased")
+  }
 }
 
 case class CustomFileCommitProtocol(

@@ -189,6 +189,17 @@ class JDBCRDD(
     sparkContext,
     name = "JDBC query execution time")
 
+  /**
+   * Time needed to fetch the data and transform it into Spark's InternalRow format.
+   *
+   * Usually this is spent in network transfer time, but it can be spent in transformation time
+   * as well if we are transforming some more complex datatype such as structs.
+   */
+  val fetchAndTransformToInternalRowsMetric: SQLMetric = SQLMetrics.createNanoTimingMetric(
+    sparkContext,
+    // Message that user sees does not have to leak details about conversion
+    name = "JDBC remote data fetch and translation time")
+
   private lazy val dialect = JdbcDialects.get(url)
 
   def generateJdbcQuery(partition: Option[JDBCPartition]): String = {
@@ -301,23 +312,25 @@ class JDBCRDD(
     stmt.setFetchSize(options.fetchSize)
     stmt.setQueryTimeout(options.queryTimeout)
 
-    val startTime = System.nanoTime
-    rs = try {
-      stmt.executeQuery()
-    } catch {
-      case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
-        throw new SparkException(
-          errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_QUERY_EXECUTION",
-          messageParameters = Map("jdbcQuery" -> sqlText),
-          cause = e)
+    rs = SQLMetrics.withTimingNs(queryExecutionTimeMetric) {
+      try {
+        stmt.executeQuery()
+      } catch {
+        case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
+          throw new SparkException(
+            errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_QUERY_EXECUTION",
+            messageParameters = Map("jdbcQuery" -> sqlText),
+            cause = e)
+      }
     }
-    val endTime = System.nanoTime
-
-    val executionTime = endTime - startTime
-    queryExecutionTimeMetric.add(executionTime)
 
     val rowsIterator =
-      JdbcUtils.resultSetToSparkInternalRows(rs, dialect, schema, inputMetrics)
+      JdbcUtils.resultSetToSparkInternalRows(
+        rs,
+        dialect,
+        schema,
+        inputMetrics,
+        Some(fetchAndTransformToInternalRowsMetric))
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](
       new InterruptibleIterator(context, rowsIterator), close())
@@ -325,6 +338,7 @@ class JDBCRDD(
 
   override def getMetrics: Seq[(String, SQLMetric)] = {
     Seq(
+      "fetchAndTransformToInternalRowsNs" -> fetchAndTransformToInternalRowsMetric,
       "queryExecutionTime" -> queryExecutionTimeMetric
     )
   }
