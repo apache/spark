@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import java.time.Instant
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -24,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, SortDirection, SortOrder, Transform}
+import org.apache.spark.sql.connector.metric.MergeMetrics
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
 import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
@@ -111,7 +113,35 @@ class InMemoryRowLevelOperationTable(
     override def description(): String = "InMemoryPartitionReplaceOperation"
   }
 
-  private case class PartitionBasedReplaceData(scan: InMemoryBatchScan) extends TestBatchWrite {
+  abstract class RowLevelOperationBatchWrite extends TestBatchWrite {
+
+    override def commitMerge(messages: Array[WriterCommitMessage], metrics: MergeMetrics):
+    Unit = {
+      commitProperties += "numTargetRowsCopied" -> metrics.numTargetRowsCopied().orElse(-1).toString
+      commitProperties += "numTargetRowsInserted" ->
+        metrics.numTargetRowsInserted().orElse(-1).toString
+      commitProperties += "numTargetRowsDeleted" ->
+        metrics.numTargetRowsDeleted().orElse(-1).toString
+      commitProperties += "numTargetRowsUpdated" ->
+        metrics.numTargetRowsUpdated().orElse(-1).toString
+      commitProperties += "numTargetRowsInserted" ->
+        metrics.numTargetRowsInserted().orElse(-1).toString
+      commitProperties += ("numTargetRowsMatchedDeleted"
+        -> metrics.numTargetRowsMatchedDeleted().orElse(-1).toString)
+      commitProperties += ("numTargetRowsMatchedUpdated"
+        -> metrics.numTargetRowsMatchedUpdated().orElse(-1).toString)
+      commitProperties += ("numTargetRowsNotMatchedBySourceUpdated"
+        -> metrics.numTargetRowsNotMatchedBySourceUpdated().orElse(-1).toString)
+      commitProperties += ("numTargetRowsNotMatchedBySourceDeleted"
+        -> metrics.numTargetRowsNotMatchedBySourceDeleted().orElse(-1).toString)
+      commit(messages)
+      commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
+      commitProperties.clear()
+    }
+  }
+
+  private case class PartitionBasedReplaceData(scan: InMemoryBatchScan)
+    extends RowLevelOperationBatchWrite {
 
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
@@ -165,7 +195,7 @@ class InMemoryRowLevelOperationTable(
     }
   }
 
-  private object TestDeltaBatchWrite extends DeltaBatchWrite {
+  private object TestDeltaBatchWrite extends RowLevelOperationBatchWrite with DeltaBatchWrite{
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DeltaWriterFactory = {
       DeltaBufferedRowsWriterFactory
     }

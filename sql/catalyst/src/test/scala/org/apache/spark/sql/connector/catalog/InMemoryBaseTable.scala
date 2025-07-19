@@ -23,6 +23,7 @@ import java.util
 import java.util.OptionalLong
 
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 import com.google.common.base.Objects
 
@@ -143,6 +144,8 @@ abstract class InMemoryBaseTable(
 
   // The key `Seq[Any]` is the partition values, value is a set of splits, each with a set of rows.
   val dataMap: mutable.Map[Seq[Any], Seq[BufferedRows]] = mutable.Map.empty
+
+  val commits: ListBuffer[Commit] = ListBuffer[Commit]()
 
   def data: Array[BufferedRows] = dataMap.values.flatten.toArray
 
@@ -575,6 +578,9 @@ abstract class InMemoryBaseTable(
   }
 
   protected abstract class TestBatchWrite extends BatchWrite {
+
+    var commitProperties: mutable.Map[String, String] = mutable.Map.empty[String, String]
+
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
       BufferedRowsWriterFactory
     }
@@ -583,8 +589,11 @@ abstract class InMemoryBaseTable(
   }
 
   class Append(val info: LogicalWriteInfo) extends TestBatchWrite {
+
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       withData(messages.map(_.asInstanceOf[BufferedRows]))
+      commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
+      commitProperties.clear()
     }
   }
 
@@ -593,6 +602,8 @@ abstract class InMemoryBaseTable(
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       dataMap --= newData.flatMap(_.rows.map(getKey))
       withData(newData)
+      commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
+      commitProperties.clear()
     }
   }
 
@@ -600,6 +611,8 @@ abstract class InMemoryBaseTable(
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       dataMap.clear()
       withData(messages.map(_.asInstanceOf[BufferedRows]))
+      commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
+      commitProperties.clear()
     }
   }
 
@@ -840,6 +853,8 @@ class InMemoryCustomDriverTaskMetric(value: Long) extends CustomTaskMetric {
   override def name(): String = "number_of_rows_from_driver"
   override def value(): Long = value
 }
+
+case class Commit(id: Long, properties: Map[String, String])
 
 sealed trait Operation
 case object Write extends Operation
