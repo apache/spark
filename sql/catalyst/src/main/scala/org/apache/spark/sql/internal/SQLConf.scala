@@ -3928,6 +3928,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED =
+    buildConf("spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled")
+      .doc("When true, convert int to Decimal python objects before converting " +
+        "Pandas.Series to Arrow array during serialization." +
+        "Disabled by default, impacts performance.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PYTHON_TABLE_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDTF.arrow.enabled")
       .doc("Enable Arrow optimization for Python UDTFs.")

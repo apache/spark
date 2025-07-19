@@ -35,6 +35,7 @@ from pyspark.sql.types import (
     Row,
     IntegerType,
     TimestampType,
+    DecimalType,
 )
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
@@ -1713,6 +1714,74 @@ class TransformWithStateTestsMixin:
                         "[TRANSFORM_WITH_STATE_SCHEMA_MUST_BE_NULLABLE]" in error_msg
                         and "column family state must be nullable" in error_msg
                     )
+
+    def test_transform_with_state_int_to_decimal_coercion(self):
+        if not self.use_pandas():
+            return
+
+        class IntToDecimalProcessor(StatefulProcessor):
+            def init(self, handle):
+                count_schema = StructType([StructField("value", IntegerType(), True)])
+                self.count_state = handle.getValueState("count", count_schema)
+
+            def handleInputRows(self, key, rows, timerValues):
+                if self.count_state.exists():
+                    count = self.count_state.get()[0]
+                else:
+                    count = 0
+                count += len(list(rows))
+                self.count_state.update((count,))
+
+                import pandas as pd
+
+                yield pd.DataFrame(
+                    {"id": [key[0]], "decimal_result": [12345]}  # Integer to be coerced to decimal
+                )
+
+            def close(self):
+                pass
+
+        data = [("1", "a"), ("1", "b"), ("2", "c")]
+        df = self.spark.createDataFrame(data, ["id", "value"])
+
+        output_schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("decimal_result", DecimalType(10, 2), True),
+            ]
+        )
+
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": True}
+        ):
+            result = (
+                df.groupBy("id")
+                .transformWithStateInPandas(
+                    statefulProcessor=IntToDecimalProcessor(),
+                    outputStructType=output_schema,
+                    outputMode="Update",
+                    timeMode="None",
+                )
+                .collect()
+            )
+            self.assertTrue(len(result) > 0)
+
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
+        ):
+            with self.assertRaisesRegex(
+                Exception, "Exception thrown when converting pandas.Series"
+            ):
+                (
+                    df.groupBy("id")
+                    .transformWithStateInPandas(
+                        statefulProcessor=IntToDecimalProcessor(),
+                        outputStructType=output_schema,
+                        outputMode="Update",
+                        timeMode="None",
+                    )
+                    .collect()
+                )
 
 
 @unittest.skipIf(

@@ -739,7 +739,7 @@ class SparkConversionMixin:
         jsparkSession = self._jsparkSession
 
         safecheck = self._jconf.arrowSafeTypeConversion()
-        ser = ArrowStreamPandasSerializer(timezone, safecheck)
+        ser = ArrowStreamPandasSerializer(timezone, safecheck, False)
 
         @no_type_check
         def reader_func(temp_filename):

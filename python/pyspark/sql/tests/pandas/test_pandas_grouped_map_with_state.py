@@ -23,6 +23,7 @@ import tempfile
 
 import unittest
 from typing import cast
+from decimal import Decimal
 
 from pyspark.sql.streaming.state import GroupStateTimeout, GroupState
 from pyspark.sql.types import (
@@ -31,6 +32,7 @@ from pyspark.sql.types import (
     StructType,
     StructField,
     Row,
+    DecimalType,
 )
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -59,7 +61,12 @@ class GroupedApplyInPandasWithStateTestsMixin:
         cfg.set("spark.sql.shuffle.partitions", "5")
         return cfg
 
-    def _test_apply_in_pandas_with_state_basic(self, func, check_results):
+    def _test_apply_in_pandas_with_state_basic(self, func, check_results, output_type=None):
+        if output_type is None:
+            output_type = StructType(
+                [StructField("key", StringType()), StructField("countAsString", StringType())]
+            )
+
         input_path = tempfile.mkdtemp()
 
         def prepare_test_resource():
@@ -75,9 +82,6 @@ class GroupedApplyInPandasWithStateTestsMixin:
             q.stop()
         self.assertTrue(df.isStreaming)
 
-        output_type = StructType(
-            [StructField("key", StringType()), StructField("countAsString", StringType())]
-        )
         state_type = StructType([StructField("c", LongType())])
 
         q = (
@@ -313,6 +317,26 @@ class GroupedApplyInPandasWithStateTestsMixin:
             eventually(timeout=120)(assert_test)()
         finally:
             q.stop()
+
+    def test_apply_in_pandas_with_state_int_to_decimal_coercion(self):
+        def func(key, pdf_iter, state):
+            assert isinstance(state, GroupState)
+            yield pd.DataFrame({"key": [key[0]], "decimal_sum": [1]})
+
+        def check_results(batch_df, _):
+            assert set(batch_df.sort("key").collect()) == {
+                Row(key="hello", decimal_sum=Decimal("1.00")),
+                Row(key="this", decimal_sum=Decimal("1.00")),
+            }, "Decimal coercion failed: " + str(batch_df.sort("key").collect())
+
+        output_type = StructType(
+            [StructField("key", StringType()), StructField("decimal_sum", DecimalType(10, 2))]
+        )
+
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": True}
+        ):
+            self._test_apply_in_pandas_with_state_basic(func, check_results, output_type)
 
 
 class GroupedApplyInPandasWithStateTests(
