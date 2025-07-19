@@ -33,6 +33,7 @@ from pyspark.serializers import (
     CPickleSerializer,
 )
 from pyspark.sql import Row
+from pyspark.sql.conversion import LocalDataToArrowConversion, ArrowTableToRowsConversion
 from pyspark.sql.pandas.types import (
     from_arrow_type,
     is_variant,
@@ -48,6 +49,10 @@ from pyspark.sql.types import (
     StructField,
     LongType,
     IntegerType,
+    ByteType,
+    ShortType,
+    FloatType,
+    DoubleType,
 )
 
 if TYPE_CHECKING:
@@ -693,6 +698,65 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
 
     def __repr__(self):
         return "ArrowStreamArrowUDFSerializer"
+
+
+class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
+    def __init__(
+        self,
+        timezone,
+        safecheck,
+        input_types,
+    ):
+        super().__init__(
+            timezone=timezone,
+            safecheck=safecheck,
+            assign_cols_by_name=False,
+            arrow_cast=True,
+        )
+        self._input_types = input_types
+
+    def load_stream(self, stream):
+        import pyarrow as pa
+
+        converters = [
+            ArrowTableToRowsConversion._create_converter(dt, none_on_identity=True)
+            for dt in self._input_types
+        ]
+
+        for batch in super().load_stream(stream):
+            columns = [
+                [conv(v) for v in column.to_pylist()] if conv is not None else column.to_pylist()
+                for column, conv in zip(pa.Table.from_batches([batch]).itercolumns(), converters)
+            ]
+            if len(columns) == 0:
+                yield [[pyspark._NoValue] * batch.num_rows]
+            else:
+                yield columns
+
+    def dump_stream(self, iterator, stream):
+        import pyarrow as pa
+
+        def create_array(results, arrow_type, spark_type):
+            conv = LocalDataToArrowConversion._create_converter(spark_type, none_on_identity=True)
+            converted = [conv(res) for res in results] if conv is not None else results
+            try:
+                return pa.array(converted, type=arrow_type)
+            except pa.lib.ArrowInvalid:
+                if self._arrow_cast:
+                    return pa.array(converted).cast(target_type=arrow_type, safe=self._safecheck)
+                else:
+                    raise
+
+        def py_to_batch():
+            for packed in iterator:
+                if len(packed) == 3 and isinstance(packed[1], pa.DataType):
+                    # single array UDF in a projection
+                    yield create_array(packed[0], packed[1], packed[2]), packed[1]
+                else:
+                    # multiple array UDFs in a projection
+                    yield [(create_array(*t), t[1]) for t in packed]
+
+        return super().dump_stream(py_to_batch(), stream)
 
 
 class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
