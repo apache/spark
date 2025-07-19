@@ -302,26 +302,9 @@ struct<make_timestamp(DATE '1970-01-01', TIME '00:00:00', UTC):timestamp>
 -- !query
 SELECT make_timestamp(NULL, TIME'00:00:00', 'UTC')
 -- !query schema
-struct<>
+struct<make_timestamp(NULL, TIME '00:00:00', UTC):timestamp>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-  "sqlState" : "42605",
-  "messageParameters" : {
-    "actualNum" : "3",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "[2, 3, 6, 7]",
-    "functionName" : "`make_timestamp`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 50,
-    "fragment" : "make_timestamp(NULL, TIME'00:00:00', 'UTC')"
-  } ]
-}
+NULL
 
 
 -- !query
@@ -343,51 +326,17 @@ NULL
 -- !query
 SELECT make_timestamp(NULL, NULL, 'UTC')
 -- !query schema
-struct<>
+struct<make_timestamp(NULL, NULL, UTC):timestamp>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-  "sqlState" : "42605",
-  "messageParameters" : {
-    "actualNum" : "3",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "[2, 3, 6, 7]",
-    "functionName" : "`make_timestamp`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 40,
-    "fragment" : "make_timestamp(NULL, NULL, 'UTC')"
-  } ]
-}
+NULL
 
 
 -- !query
 SELECT make_timestamp(NULL, TIME'00:00:00', NULL)
 -- !query schema
-struct<>
+struct<make_timestamp(NULL, TIME '00:00:00', NULL):timestamp>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-  "sqlState" : "42605",
-  "messageParameters" : {
-    "actualNum" : "3",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "[2, 3, 6, 7]",
-    "functionName" : "`make_timestamp`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 49,
-    "fragment" : "make_timestamp(NULL, TIME'00:00:00', NULL)"
-  } ]
-}
+NULL
 
 
 -- !query
@@ -401,26 +350,9 @@ NULL
 -- !query
 SELECT make_timestamp(NULL, NULL, NULL)
 -- !query schema
-struct<>
+struct<make_timestamp(NULL, NULL, NULL):timestamp>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-  "sqlState" : "42605",
-  "messageParameters" : {
-    "actualNum" : "3",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "[2, 3, 6, 7]",
-    "functionName" : "`make_timestamp`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 39,
-    "fragment" : "make_timestamp(NULL, NULL, NULL)"
-  } ]
-}
+NULL
 
 
 -- !query

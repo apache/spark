@@ -233,24 +233,7 @@ SELECT make_timestamp(DATE'1970-01-01', TIME'00:00:00', 'UTC')
 -- !query
 SELECT make_timestamp(NULL, TIME'00:00:00', 'UTC')
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-  "sqlState" : "42605",
-  "messageParameters" : {
-    "actualNum" : "3",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "[2, 3, 6, 7]",
-    "functionName" : "`make_timestamp`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 50,
-    "fragment" : "make_timestamp(NULL, TIME'00:00:00', 'UTC')"
-  } ]
-}
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -268,47 +251,13 @@ SELECT make_timestamp(DATE'1970-01-01', TIME'00:00:00', NULL)
 -- !query
 SELECT make_timestamp(NULL, NULL, 'UTC')
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-  "sqlState" : "42605",
-  "messageParameters" : {
-    "actualNum" : "3",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "[2, 3, 6, 7]",
-    "functionName" : "`make_timestamp`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 40,
-    "fragment" : "make_timestamp(NULL, NULL, 'UTC')"
-  } ]
-}
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT make_timestamp(NULL, TIME'00:00:00', NULL)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-  "sqlState" : "42605",
-  "messageParameters" : {
-    "actualNum" : "3",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "[2, 3, 6, 7]",
-    "functionName" : "`make_timestamp`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 49,
-    "fragment" : "make_timestamp(NULL, TIME'00:00:00', NULL)"
-  } ]
-}
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -320,24 +269,7 @@ SELECT make_timestamp(DATE'1970-01-01', NULL, NULL)
 -- !query
 SELECT make_timestamp(NULL, NULL, NULL)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-  "sqlState" : "42605",
-  "messageParameters" : {
-    "actualNum" : "3",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "[2, 3, 6, 7]",
-    "functionName" : "`make_timestamp`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 39,
-    "fragment" : "make_timestamp(NULL, NULL, NULL)"
-  } ]
-}
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
