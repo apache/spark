@@ -37,7 +37,7 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
           datasetType = proto.DatasetType.TABLE,
           sql = Some("SELECT * FROM STREAM a"))
       }
-      registerPipelineDatasets(pipeline)
+      registerGraphElements(pipeline)
 
       val capturedEvents = new ArrayBuffer[PipelineEvent]()
       withClient { client =>
@@ -86,7 +86,7 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
             datasetType = proto.DatasetType.TABLE,
             sql = Some("SELECT * FROM STREAM a"))
         }
-        registerPipelineDatasets(pipeline)
+        registerGraphElements(pipeline)
 
         val capturedEvents = new ArrayBuffer[PipelineEvent]()
         withClient { client =>
@@ -136,7 +136,7 @@ class PipelineEventStreamSuite extends SparkDeclarativePipelinesServerTest {
           datasetType = proto.DatasetType.TABLE,
           sql = Some("SELECT * FROM STREAM a"))
       }
-      registerPipelineDatasets(pipeline)
+      registerGraphElements(pipeline)
 
       val capturedEvents = new ArrayBuffer[PipelineEvent]()
       withClient { client =>

@@ -191,6 +191,15 @@ trait StreamingFlowExecution extends FlowExecution with Logging {
   /** Starts a stream and returns its streaming query. */
   protected def startStream(): StreamingQuery
 
+  private var _streamingQuery: Option[StreamingQuery] = None
+
+  /** Visible for testing */
+  def getStreamingQuery: StreamingQuery =
+    _streamingQuery.getOrElse(
+      throw new IllegalStateException(s"StreamingPhysicalFlow has not been started")
+    )
+
+
   /**
    * Executes this `StreamingFlowExecution` by starting its stream with the correct scheduling pool
    * and confs.
@@ -201,6 +210,7 @@ trait StreamingFlowExecution extends FlowExecution with Logging {
       log"checkpoint location ${MDC(LogKeys.CHECKPOINT_PATH, checkpointPath)}"
     )
     val streamingQuery = SparkSessionUtils.withSqlConf(spark, sqlConf.toList: _*)(startStream())
+    _streamingQuery = Option(streamingQuery)
     Future(streamingQuery.awaitTermination())
   }
 }
@@ -260,4 +270,31 @@ class BatchTableWrite(
           .saveAsTable(destination.identifier.unquotedString)
       }
     }
+}
+
+/** A `StreamingFlowExecution` that writes a streaming `DataFrame` to a `Table`. */
+class SinkWrite(
+    val identifier: TableIdentifier,
+    val flow: ResolvedFlow,
+    val graph: DataflowGraph,
+    val updateContext: PipelineUpdateContext,
+    val checkpointPath: String,
+    val trigger: Trigger,
+    val destination: Sink,
+    val sqlConf: Map[String, String]
+) extends StreamingFlowExecution {
+
+  override def getOrigin: QueryOrigin = flow.origin
+
+  def startStream(): StreamingQuery = {
+    val data = graph.reanalyzeFlow(flow).df
+    data.writeStream
+      .queryName(displayName)
+      .option("checkpointLocation", checkpointPath)
+      .trigger(trigger)
+      .outputMode(OutputMode.Append())
+      .format(destination.format)
+      .options(destination.options)
+      .start()
+  }
 }

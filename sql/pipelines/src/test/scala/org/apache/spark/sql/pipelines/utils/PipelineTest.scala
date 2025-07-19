@@ -35,7 +35,11 @@ import org.apache.spark.sql.{Column, QueryTest, Row, SQLContext, TypedColumn}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl, SqlGraphRegistrationContext}
+import org.apache.spark.sql.pipelines.graph.{
+  DataflowGraph,
+  PipelineUpdateContextImpl,
+  SqlGraphRegistrationContext
+}
 import org.apache.spark.sql.pipelines.utils.PipelineTest.{cleanupMetastore, createTempDir}
 
 abstract class PipelineTest
@@ -56,9 +60,15 @@ abstract class PipelineTest
 
   def sql(text: String): DataFrame = spark.sql(text)
 
-  protected def startPipelineAndWaitForCompletion(unresolvedDataflowGraph: DataflowGraph): Unit = {
-    val updateContext = new PipelineUpdateContextImpl(
-      unresolvedDataflowGraph, eventCallback = _ => ())
+  protected def startPipelineAndWaitForCompletion(
+      unresolvedDataflowGraph: DataflowGraph,
+      storageRootOpt: Option[String] = None): Unit = {
+    val updateContext =
+      new PipelineUpdateContextImpl(
+        unresolvedDataflowGraph,
+        eventCallback = _ => (),
+        storageRootOpt = storageRootOpt
+      )
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
   }
@@ -106,8 +116,7 @@ abstract class PipelineTest
         spark = spark
       )
     }
-    graphRegistrationContext
-      .toDataflowGraph
+    graphRegistrationContext.toDataflowGraph
   }
 
   /** Construct an unresolved DataflowGraph object from a single SQL file, given the file contents
@@ -376,7 +385,7 @@ object PipelineTest extends Logging {
   )
 
   /** Creates a temporary directory. */
-  protected def createTempDir(): String = {
+  def createTempDir(): String = {
     Files.createTempDirectory(getClass.getSimpleName).normalize.toString
   }
 

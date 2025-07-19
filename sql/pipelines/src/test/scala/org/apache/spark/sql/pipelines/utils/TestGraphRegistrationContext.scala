@@ -18,7 +18,12 @@
 package org.apache.spark.sql.pipelines.utils
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{LocalTempView, PersistedView => PersistedViewType, UnresolvedRelation, ViewType}
+import org.apache.spark.sql.catalyst.analysis.{
+  LocalTempView,
+  PersistedView => PersistedViewType,
+  UnresolvedRelation,
+  ViewType
+}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.pipelines.graph.{
   DataflowGraph,
@@ -29,6 +34,7 @@ import org.apache.spark.sql.pipelines.graph.{
   PersistedView,
   QueryContext,
   QueryOrigin,
+  SinkImpl,
   Table,
   TemporaryView,
   UnresolvedFlow
@@ -41,11 +47,13 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 class TestGraphRegistrationContext(
     val spark: SparkSession,
-    val sqlConf: Map[String, String] = Map.empty)
+    val sqlConf: Map[String, String] = Map.empty,
+    storageRoot: Option[String] = None)
     extends GraphRegistrationContext(
       defaultCatalog = TestGraphRegistrationContext.DEFAULT_CATALOG,
       defaultDatabase = TestGraphRegistrationContext.DEFAULT_DATABASE,
-      defaultSqlConf = sqlConf
+      defaultSqlConf = sqlConf,
+      storageRoot = storageRoot
     ) {
 
   // scalastyle:off
@@ -96,7 +104,7 @@ class TestGraphRegistrationContext(
       format: Option[String] = None,
       catalog: Option[String] = None,
       database: Option[String] = None
-): Unit = registerTable(
+  ): Unit = registerTable(
     name,
     Option(query),
     sqlConf,
@@ -178,7 +186,28 @@ class TestGraphRegistrationContext(
       origin = origin,
       viewType = PersistedViewType,
       catalog = catalog,
-      database = database)
+      database = database
+    )
+  }
+
+  def registerTemporaryView(
+      name: String,
+      query: FlowFunction,
+      sqlConf: Map[String, String] = Map.empty,
+      comment: Option[String] = None,
+      origin: QueryOrigin = QueryOrigin.empty,
+      catalog: Option[String] = None,
+      database: Option[String] = None): Unit = {
+    registerView(
+      name = name,
+      query = query,
+      sqlConf = sqlConf,
+      comment = comment,
+      origin = origin,
+      viewType = LocalTempView,
+      catalog = catalog,
+      database = database
+    )
   }
 
   def registerView(
@@ -226,6 +255,26 @@ class TestGraphRegistrationContext(
         sqlConf = sqlConf,
         once = false,
         origin = origin
+      )
+    )
+  }
+
+  def registerSink(
+      name: String,
+      format: String,
+      options: Map[String, String] = Map.empty,
+      origin: QueryOrigin = QueryOrigin.empty
+  ): Unit = {
+    val sinkIdentifier = GraphIdentifierManager
+      .parseAndValidateSinkIdentifier(rawSinkIdentifier = TableIdentifier(name))
+
+    registerSink(
+      SinkImpl(
+        identifier = sinkIdentifier,
+        format = format,
+        origin = origin,
+        options = options,
+        normalizedPath = None
       )
     )
   }

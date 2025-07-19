@@ -27,6 +27,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.pipelines.common.DatasetType
 import org.apache.spark.sql.pipelines.util.{
@@ -72,6 +73,10 @@ trait Input extends GraphElement {
    * @return Streaming or batch DataFrame of this Input's data.
    */
   def load(readOptions: InputReadOptions): DataFrame
+
+  /** Returns the DSv2 catalog identifier */
+  def catalogV2Identifier: Identifier =
+    Identifier.of(Array(identifier.database.get), identifier.identifier)
 }
 
 /**
@@ -256,3 +261,33 @@ case class PersistedView(
     comment: Option[String],
     origin: QueryOrigin
 ) extends View {}
+
+trait Sink extends GraphElement with Output {
+
+  /** format of the sink */
+  val format: String
+
+  /** options defined for the sink */
+  val options: Map[String, String]
+
+  /** Is only for storing metadata, e.g. checkpoints. */
+  def normalizedPath: Option[String]
+  val origin: QueryOrigin
+}
+
+case class SinkImpl(
+    identifier: TableIdentifier,
+    format: String,
+    options: Map[String, String],
+    normalizedPath: Option[String],
+    origin: QueryOrigin
+) extends Sink {
+
+  /** Returns the normalized storage location for this [[Sink]]. */
+  override def path: String = {
+    if (!normalized) {
+      throw GraphErrors.unresolvedSinkPath(identifier)
+    }
+    normalizedPath.get
+  }
+}

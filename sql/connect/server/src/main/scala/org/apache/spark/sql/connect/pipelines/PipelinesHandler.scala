@@ -246,18 +246,7 @@ private[connect] object PipelinesHandler extends Logging {
     // responseObserver to the pipelines execution code so that the pipelines module does not need
     // to take a dependency on SparkConnect.
     val eventCallback = { event: PipelineEvent =>
-      val message = if (event.error.nonEmpty) {
-        // Returns the message associated with a Throwable and all its causes
-        def getExceptionMessages(throwable: Throwable): Seq[String] = {
-          throwable.getMessage +:
-            Option(throwable.getCause).map(getExceptionMessages).getOrElse(Nil)
-        }
-        val errorMessages = getExceptionMessages(event.error.get)
-        s"""${event.message}
-           |Error: ${errorMessages.mkString("\n")}""".stripMargin
-      } else {
-        event.message
-      }
+      val message = event.messageWithError
       event.details match {
         // Failed runs are recorded in the event log. We do not pass these to the SparkConnect
         // client since the failed run will already result in an unhandled exception that is
