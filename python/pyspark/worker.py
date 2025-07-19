@@ -202,9 +202,7 @@ def wrap_scalar_arrow_udf(f, args_offsets, kwargs_offsets, return_type, runner_c
     )
 
 
-def wrap_arrow_batch_udf(
-    f, args_offsets, kwargs_offsets, return_type, runner_conf, input_types=None, serializer=None
-):
+def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
     if use_legacy_pandas_udf_conversion(runner_conf):
         return wrap_arrow_batch_udf_legacy(
             f, args_offsets, kwargs_offsets, return_type, runner_conf
@@ -227,36 +225,53 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
         return_type, prefers_large_types=use_large_var_types(runner_conf)
     )
 
-    @fail_on_stopiteration
-    def evaluate(*args):
-        """
-        Takes list of Python objects and returns tuple of (results, arrow_return_type, return_type).
-        """
-        converted_rows = args[0] if args else []
+    if zero_arg_exec:
 
-        # Extract args using args_kwargs_offsets
-        if zero_arg_exec:
-            # Zero-arg UDF: call with no arguments
-            results = [func() for _ in converted_rows]
-        else:
-            udf_args_per_row = []
-            for row in converted_rows:
-                if isinstance(row, tuple):
-                    udf_args = tuple(row[offset] for offset in args_kwargs_offsets)
-                else:
-                    udf_args = (row,) if len(args_kwargs_offsets) == 1 else row
-                udf_args_per_row.append(udf_args)
+        def get_args(*args: list):
+            return [() for _ in args[0]]
 
-            results = [func(*udf_args) for udf_args in udf_args_per_row]
+    else:
 
-        return results, arrow_return_type, return_type
+        def get_args(*args: list):
+            return zip(*args)
 
-    def make_output(*a):
-        return evaluate(*a)
+    if "spark.sql.execution.pythonUDF.arrow.concurrency.level" in runner_conf:
+        from concurrent.futures import ThreadPoolExecutor
+
+        c = int(runner_conf["spark.sql.execution.pythonUDF.arrow.concurrency.level"])
+
+        @fail_on_stopiteration
+        def evaluate(*args):
+            with ThreadPoolExecutor(max_workers=c) as pool:
+                """
+                Takes list of Python objects and returns tuple of (results, arrow_return_type, return_type).
+                """
+                return list(pool.map(lambda row: func(*row), get_args(*args)))
+
+    else:
+
+        @fail_on_stopiteration
+        def evaluate(*args):
+            """
+            Takes list of Python objects and returns tuple of (results, arrow_return_type, return_type).
+            """
+            return [func(*row) for row in get_args(*args)]
+
+    def verify_result_length(result, length):
+        if len(result) != length:
+            raise PySparkRuntimeError(
+                errorClass="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
+                messageParameters={
+                    "udf_type": "arrow_batch_udf",
+                    "expected": str(length),
+                    "actual": str(len(result)),
+                },
+            )
+        return result
 
     return (
         args_kwargs_offsets,
-        make_output,
+        lambda *a: (verify_result_length(evaluate(*a), len(a[0])), arrow_return_type, return_type),
     )
 
 
@@ -1039,16 +1054,7 @@ def wrap_memory_profiler(f, result_id):
     return profiling_func
 
 
-def read_single_udf(
-    pickleSer,
-    infile,
-    eval_type,
-    runner_conf,
-    udf_index,
-    profiler,
-    input_types=None,
-    serializer=None,
-):
+def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profiler):
     num_arg = read_int(infile)
 
     if eval_type in (
@@ -1117,18 +1123,7 @@ def read_single_udf(
     elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_UDF:
         return wrap_scalar_arrow_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF:
-        narrowed_input_types = None
-        if input_types is not None:
-            narrowed_input_types = [input_types[o] for o in args_offsets]
-        return wrap_arrow_batch_udf(
-            func,
-            args_offsets,
-            kwargs_offsets,
-            return_type,
-            runner_conf,
-            narrowed_input_types,
-            serializer,
-        )
+        return wrap_arrow_batch_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
         return args_offsets, wrap_pandas_batch_iter_udf(func, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF:
@@ -2037,7 +2032,7 @@ def read_udfs(pickleSer, infile, eval_type):
             input_types = [
                 f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))
             ]
-            ser = ArrowBatchUDFSerializer(input_types, use_large_var_types(runner_conf))
+            ser = ArrowBatchUDFSerializer(timezone, safecheck, input_types)
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
             # pandas Series. See SPARK-27240.
@@ -2449,36 +2444,18 @@ def read_udfs(pickleSer, infile, eval_type):
         for i in range(num_udfs):
             udfs.append(
                 read_single_udf(
-                    pickleSer,
-                    infile,
-                    eval_type,
-                    runner_conf,
-                    udf_index=i,
-                    profiler=profiler,
-                    input_types=input_types,
-                    serializer=ser,
+                    pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler
                 )
             )
 
         def mapper(a):
-            if (
-                eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
-                and not use_legacy_pandas_udf_conversion(runner_conf)
-            ):
-                udf_result_tuples = []
-                for arg_offsets, f in udfs:
-                    result_tuple = f(a)
-                    udf_result_tuples.append(result_tuple)
-
-                return udf_result_tuples
+            result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
+            # In the special case of a single UDF this will return a single result rather
+            # than a tuple of results; this is the format that the JVM side expects.
+            if len(result) == 1:
+                return result[0]
             else:
-                result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
-                # In the special case of a single UDF this will return a single result rather
-                # than a tuple of results; this is the format that the JVM side expects.
-                if len(result) == 1:
-                    return result[0]
-                else:
-                    return result
+                return result
 
     def func(_, it):
         return map(mapper, it)

@@ -200,148 +200,6 @@ class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
         return ArrowStreamSerializer.load_stream(self, stream)
 
 
-class ArrowBatchUDFSerializer(ArrowStreamUDFSerializer):
-    """
-    Serializer used by Python worker to evaluate Arrow UDFs
-    """
-
-    def __init__(
-        self,
-        input_types,
-        prefers_large_var_types=False,
-    ):
-        super(ArrowBatchUDFSerializer, self).__init__()
-        self._input_types = input_types
-        self._prefers_large_var_types = prefers_large_var_types
-        self._assign_cols_by_name = False
-        self._struct_in_pandas = "row"
-        self._ndarray_as_list = True
-        self._return_type = None
-
-    def convert_arrow_to_rows(self, *args):
-        """
-        Convert Arrow arrays to rows
-        """
-        import pyarrow as pa
-
-        arrays = [arg.combine_chunks() if isinstance(arg, pa.ChunkedArray) else arg for arg in args]
-
-        converters = [
-            ArrowTableToRowsConversion._create_converter(data_type, none_on_identity=True)
-            for data_type in self._input_types
-        ]
-        converted_cols = []
-        for arr, conv in zip(arrays, converters):
-            if conv is None:
-                converted_cols.append(arr.to_pylist())
-            else:
-                converted_cols.append([conv(v) for v in arr.to_pylist()])
-
-        return [tuple(col[i] for col in converted_cols) for i in range(len(arrays[0]))]
-
-    def load_stream(self, stream):
-        """
-        Load Arrow RecordBatches and convert to Python objects.
-        """
-        import pyarrow as pa
-        import pyarrow.types as types
-
-        batches = ArrowStreamSerializer.load_stream(self, stream)
-        for batch in batches:
-            arrays = [batch.column(i) for i in range(batch.num_columns)]
-
-            if len(arrays) == 0:
-                # Zero-arg case: create empty tuples for each row in the batch
-                converted_rows = [() for _ in range(batch.num_rows)]
-            else:
-                converted_rows = self.convert_arrow_to_rows(*arrays)
-
-            yield converted_rows
-
-    def dump_stream(self, iterator, stream):
-        """
-        Convert Python UDF results to Arrow RecordBatches and serialize.
-        """
-        import pyarrow as pa
-
-        def wrap_and_init_stream():
-            should_write_start_length = True
-
-            for i, batch_data in enumerate(iterator):
-                if isinstance(batch_data, tuple) and len(batch_data) == 3:
-                    # Single UDF case
-                    udf_results, arrow_return_type, return_type = batch_data
-                    arr = self._convert_udf_results_to_arrow(udf_results, return_type)
-                    batch = pa.RecordBatch.from_arrays([arr], ["_0"])
-                else:
-                    # Multiple UDFs case
-                    arrs = []
-                    for j, (udf_results, arrow_return_type, return_type) in enumerate(batch_data):
-                        arr = self._convert_udf_results_to_arrow(udf_results, return_type)
-                        arrs.append(arr)
-
-                    batch = pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
-
-                if should_write_start_length:
-                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
-                    should_write_start_length = False
-                yield batch
-
-        return ArrowStreamSerializer.dump_stream(self, wrap_and_init_stream(), stream)
-
-    def _convert_udf_results_to_arrow(self, udf_results, return_type):
-        """
-        Convert UDF data to Arrow with LocalDataToArrowConversion.
-        """
-        import pyarrow as pa
-
-        coerced_results = self._apply_type_coercion_for_type(udf_results, return_type)
-        arrow_type = to_arrow_type(return_type, prefers_large_types=self._prefers_large_var_types)
-        converter = LocalDataToArrowConversion._create_converter(
-            return_type, nullable=True, none_on_identity=True
-        )
-
-        pylist = []
-        for result in coerced_results:
-            pylist.append(result if converter is None else converter(result))
-
-        arr = pa.array(pylist, type=arrow_type)
-
-        batch = pa.RecordBatch.from_arrays([arr], ["result"])
-        table = pa.Table.from_batches([batch])
-
-        return table.column(0).combine_chunks()
-
-    def _apply_type_coercion_for_type(self, udf_results, return_type):
-        if type(return_type) == StringType:
-            return [str(r) if r is not None else r for r in udf_results]
-        elif type(return_type) == BinaryType:
-            return [bytes(r) if r is not None else r for r in udf_results]
-        elif isinstance(
-            return_type, (ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)
-        ):
-
-            def numeric_result_func(r):
-                if r is None:
-                    return r
-                if isinstance(r, str):
-                    try:
-                        if isinstance(return_type, (ByteType, ShortType, IntegerType, LongType)):
-                            return int(r)
-                        elif isinstance(return_type, (FloatType, DoubleType)):
-                            return float(r)
-                    except (ValueError, TypeError):
-                        pass
-                return r
-
-            return [numeric_result_func(r) for r in udf_results]
-        else:
-            return udf_results
-
-    def __repr__(self):
-        return "ArrowBatchUDFSerializer"
-
-
 class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
     """
     Serializes pyarrow.RecordBatch data with Arrow streaming format.
@@ -840,6 +698,65 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
 
     def __repr__(self):
         return "ArrowStreamArrowUDFSerializer"
+
+
+class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
+    def __init__(
+        self,
+        timezone,
+        safecheck,
+        input_types,
+    ):
+        super().__init__(
+            timezone=timezone,
+            safecheck=safecheck,
+            assign_cols_by_name=False,
+            arrow_cast=True,
+        )
+        self._input_types = input_types
+
+    def load_stream(self, stream):
+        import pyarrow as pa
+
+        converters = [
+            ArrowTableToRowsConversion._create_converter(dt, none_on_identity=True)
+            for dt in self._input_types
+        ]
+
+        for batch in super().load_stream(stream):
+            columns = [
+                [conv(v) for v in column.to_pylist()] if conv is not None else column.to_pylist()
+                for column, conv in zip(pa.Table.from_batches([batch]).itercolumns(), converters)
+            ]
+            if len(columns) == 0:
+                yield [[pyspark._NoValue] * batch.num_rows]
+            else:
+                yield columns
+
+    def dump_stream(self, iterator, stream):
+        import pyarrow as pa
+
+        def create_array(results, arrow_type, spark_type):
+            conv = LocalDataToArrowConversion._create_converter(spark_type, none_on_identity=True)
+            converted = [conv(res) for res in results] if conv is not None else results
+            try:
+                return pa.array(converted, type=arrow_type)
+            except pa.lib.ArrowInvalid:
+                if self._arrow_cast:
+                    return pa.array(converted).cast(target_type=arrow_type, safe=self._safecheck)
+                else:
+                    raise
+
+        def py_to_batch():
+            for packed in iterator:
+                if len(packed) == 3 and isinstance(packed[1], pa.DataType):
+                    # single array UDF in a projection
+                    yield create_array(packed[0], packed[1], packed[2]), packed[1]
+                else:
+                    # multiple array UDFs in a projection
+                    yield [(create_array(*t), t[1]) for t in packed]
+
+        return super().dump_stream(py_to_batch(), stream)
 
 
 class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
