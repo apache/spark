@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.util
-import java.util.Locale
+import java.util.{LinkedHashSet, Locale}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -2919,7 +2919,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def resolveExprsWithAggregate(
         exprs: Seq[Expression],
         agg: Aggregate): (Seq[NamedExpression], Seq[Expression]) = {
-      val extraAggExprs = ArrayBuffer.empty[NamedExpression]
+      val extraAggExprs = new LinkedHashSet[NamedExpression]
       val transformed = exprs.map { e =>
         if (!e.resolved) {
           e
@@ -2927,13 +2927,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           buildAggExprList(e, agg, extraAggExprs)
         }
       }
-      (extraAggExprs.toSeq, transformed)
+      (extraAggExprs.asScala.toSeq, transformed)
     }
 
     private def buildAggExprList(
         expr: Expression,
         agg: Aggregate,
-        aggExprList: ArrayBuffer[NamedExpression]): Expression = {
+        aggExprSet: LinkedHashSet[NamedExpression]): Expression = {
       // Avoid adding an extra aggregate expression if it's already present in
       // `agg.aggregateExpressions`. Trim inner aliases from aggregate expressions because of
       // expressions like `spark_grouping_id` that can have inner aliases.
@@ -2951,17 +2951,17 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             val cleaned = trimTempResolvedColumn(ae)
             val alias =
               Alias(cleaned, toPrettySQL(e = cleaned, shouldTrimTempResolvedColumn = true))()
-            aggExprList += alias
+            aggExprSet.add(alias)
             alias.toAttribute
           case grouping: Expression if agg.groupingExpressions.exists(grouping.semanticEquals) =>
             trimTempResolvedColumn(grouping) match {
               case ne: NamedExpression =>
-                aggExprList += ne
+                aggExprSet.add(ne)
                 ne.toAttribute
               case other =>
                 val alias =
                   Alias(other, toPrettySQL(e = other, shouldTrimTempResolvedColumn = true))()
-                aggExprList += alias
+                aggExprSet.add(alias)
                 alias.toAttribute
             }
           case t: TempResolvedColumn =>
@@ -2977,7 +2977,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               val childWithTempCol = t.child.transformUp {
                 case a: Attribute => TempResolvedColumn(a, Seq(a.name))
               }
-              val newChild = buildAggExprList(childWithTempCol, agg, aggExprList)
+              val newChild = buildAggExprList(childWithTempCol, agg, aggExprSet)
               if (newChild.containsPattern(TEMP_RESOLVED_COLUMN)) {
                 withOrigin(t.origin)(t.copy(hasTried = true))
               } else {
@@ -2985,7 +2985,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               }
             }
           case other =>
-            other.withNewChildren(other.children.map(buildAggExprList(_, agg, aggExprList)))
+            other.withNewChildren(other.children.map(buildAggExprList(_, agg, aggExprSet)))
         }
       }
     }

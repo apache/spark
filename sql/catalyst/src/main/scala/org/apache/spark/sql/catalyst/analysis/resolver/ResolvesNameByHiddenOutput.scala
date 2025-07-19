@@ -222,6 +222,20 @@ trait ResolvesNameByHiddenOutput extends SQLConfHelper {
       case other => other
     }
 
+  /**
+   * Deduplicates missing expressions by [[ExprId]].
+   */
+  def deduplicateMissingExpressions(
+      missingExpressions: Seq[NamedExpression]): Seq[NamedExpression] = {
+    val duplicateMissingExpressions = new HashSet[ExprId]
+    missingExpressions.collect {
+      case expression: NamedExpression
+        if !duplicateMissingExpressions.contains(expression.exprId) =>
+        duplicateMissingExpressions.add(expression.exprId)
+        expression
+    }
+  }
+
   private def expandOperatorsOutputList(
       operator: UnaryNode,
       operatorOutput: Seq[NamedExpression],
