@@ -27,7 +27,7 @@ import scala.jdk.CollectionConverters._
 import jline.console.ConsoleReader
 import jline.console.completer.{ArgumentCompleter, Completer, StringsCompleter}
 import jline.console.history.FileHistory
-import org.apache.commons.lang3.StringUtils
+import org.apache.commons.lang3.{Strings, StringUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
 import org.apache.hadoop.hive.common.HiveInterruptUtils
@@ -573,7 +573,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       val commands = splitSemiColon(line).asScala
       var command: String = ""
       for (oneCmd <- commands) {
-        if (StringUtils.endsWith(oneCmd, "\\")) {
+        if (Strings.CS.endsWith(oneCmd, "\\")) {
           command += StringUtils.chop(oneCmd) + ";"
         } else {
           command += oneCmd
