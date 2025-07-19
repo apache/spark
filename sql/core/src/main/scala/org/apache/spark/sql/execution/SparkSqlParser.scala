@@ -560,7 +560,6 @@ class SparkSqlAstBuilder extends AstBuilder {
     // values given at CREATE VIEW time, or we would need to store the parameter values alongside
     // the text.
     // The same rule can be found in CACHE TABLE builder.
-    checkInvalidParameter(qPlan, "the query of CREATE VIEW")
     if (viewType == PersistedView) {
       val originalText = source(ctx.query)
       assert(Option(originalText).isDefined,

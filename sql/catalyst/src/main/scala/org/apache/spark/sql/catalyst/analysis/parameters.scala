@@ -19,7 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, LeafExpression, Literal, MapFromArrays, MapFromEntries, SubqueryExpression, Unevaluable, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SupervisingCommand}
+import org.apache.spark.sql.catalyst.parser.{SubstituteParamsParser, SubstitutionRule}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterViewAs, CreateTable, CreateUserDefinedFunction, CreateVariable, CreateView, DefaultValueExpression, LogicalPlan, SupervisingCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
 import org.apache.spark.sql.errors.QueryErrorsBase
@@ -173,35 +174,217 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
     }
   }
 
+  private def substituteSQL(p0: LogicalPlan)(f: PartialFunction[LogicalPlan, LogicalPlan]):
+  LogicalPlan = {
+    var stop = false
+    p0.resolveOperatorsDownWithPruning(_.containsPattern(PARAMETER) && !stop) {
+      case p1 =>
+        stop = p1.isInstanceOf[ParameterizedQuery]
+        p1.resolveOperatorsWithPruning(_.containsPattern(COMMAND)) (f)
+    }
+  }
+
+  /**
+   * Checks if a parameterized query is ready for binding (CTE resolved and args resolved).
+   */
+  private def isReadyForBinding(child: LogicalPlan, args: Seq[Expression]): Boolean = {
+    !child.containsPattern(UNRESOLVED_WITH) && args.forall(_.resolved)
+  }
+
+  /**
+   * Converts expressions to string values for SQL substitution.
+   */
+  private def expressionToSqlValue(expr: Expression): String = expr match {
+    case lit: Literal => lit.sql
+    case _ => expr.toString // fallback for non-literal expressions
+  }
+
+  /**
+   * Performs SQL substitution for CreateVariable and CreateView using the provided
+   * substitution function.
+   */
+  private def performSqlSubstitution(
+      child: LogicalPlan,
+      substitutionFn: (String, SubstitutionRule) => String): LogicalPlan = {
+    child match {
+      /**
+       * DECLARE VARIABLE v INT DEFAULT :parm + 1;
+       */
+      case createVariable: CreateVariable =>
+        val substitutedSQL = substitutionFn(createVariable.defaultExpr.originalSQL,
+          SubstitutionRule.Expression)
+        val newDefaultExpr = createVariable.defaultExpr.copy(originalSQL = substitutedSQL)
+        createVariable.copy(defaultExpr = newDefaultExpr)
+
+      /**
+       * CREATE VIEW v(c1) AS SELECT :parm + 1 AS c1;
+       */
+      case createView: CreateView if createView.originalText.isDefined =>
+      val substitutedSQL = substitutionFn(createView.originalText.get,
+        SubstitutionRule.Query)
+      createView.copy(originalText = Some(substitutedSQL))
+
+      /**
+       * ALTER VIEW v AS SELECT :parm + 1 AS c1;
+       */
+      case alterViewAs: AlterViewAs =>
+        val substitutedSQL = substitutionFn(alterViewAs.originalText,
+          SubstitutionRule.Query)
+        alterViewAs.copy(originalText = substitutedSQL)
+
+      /**
+       * ALTER TABLE t ALTER COLUMN c1 SET DEFAULT :parm + 1;
+       */
+      case alterColumns: AlterColumns =>
+        val specs = alterColumns.specs
+        val substitutedSpecs = specs.map { spec =>
+          spec.newDefaultExpression match {
+            case Some(defExpr: DefaultValueExpression) =>
+              val substitutedSQL = substitutionFn(defExpr.originalSQL, SubstitutionRule.Expression)
+              spec.copy(newDefaultExpression = Some(defExpr.copy(originalSQL = substitutedSQL)))
+            case _ => spec
+          }
+        }
+        alterColumns.copy(specs = substitutedSpecs)
+
+      /**
+       * ALTER TABLE t ADD COLUMN c2  INT DEFAULT :parm + 1;
+       */
+      case addColumns: AddColumns =>
+        val columnsToAdd = addColumns.columnsToAdd
+        val substitutedColumnsToAdd = columnsToAdd.map { col =>
+          col.default match {
+            case Some(defExpr: DefaultValueExpression) =>
+              val substitutedSQL = substitutionFn(defExpr.originalSQL, SubstitutionRule.Expression)
+              col.copy(default = Some(defExpr.copy(originalSQL = substitutedSQL)))
+            case _ => col
+          }
+        }
+        addColumns.copy(columnsToAdd = substitutedColumnsToAdd)
+
+      /**
+       * CREATE FUNCTION foo(a INT DEFAULT :parm1) RETURN a + :parm2;
+       * CREATE FUNCTION foo(a INT DEFAULT :parm1) RETURNS TABLE RETURN SELECT a + :parm2;
+       */
+      case createFunction: CreateUserDefinedFunction =>
+          val inputParamText = createFunction.inputParamText map (p => substitutionFn(p,
+            SubstitutionRule.ColDefinitionList))
+          val exprText = createFunction.exprText map (p => substitutionFn(p,
+            SubstitutionRule.Expression))
+          val queryText = createFunction.queryText map (p => substitutionFn(p,
+            SubstitutionRule.Query))
+          createFunction.copy(
+            inputParamText = inputParamText,
+            exprText = exprText,
+            queryText = queryText)
+
+      /**
+       * CREATE TABLE t (c1 INT DEFAULT :parm1);
+       */
+      case createTable: CreateTable =>
+        val columns = createTable.columns
+        val substitutedColumns = columns.map { col =>
+          val substitutedDefaultValue = col.defaultValue match {
+            case Some(defExpr: DefaultValueExpression) =>
+              val substitutedSQL = substitutionFn(
+                defExpr.originalSQL,
+                SubstitutionRule.Expression
+              )
+              Some(defExpr.copy(originalSQL = substitutedSQL))
+            case _ => col.defaultValue
+          }
+          val substitutedGenerationExpression = col.generationExpression match {
+            case Some(genExpr: String) =>
+              val substitutedSQL = substitutionFn(
+                genExpr,
+                SubstitutionRule.Expression
+              )
+              Some(substitutedSQL)
+            case other => other
+          }
+          col.copy(defaultValue = substitutedDefaultValue,
+            generationExpression = substitutedGenerationExpression)
+        }
+        createTable.copy(columns = substitutedColumns)
+
+      case other => other
+    }
+  }
+
+  /**
+   * Handles named parameter binding including validation, SQL substitution, and parameter binding.
+   */
+  private def bindNamedParameters(
+      child: LogicalPlan,
+      argNames: Seq[String],
+      argValues: Seq[Expression]): LogicalPlan = {
+    if (argNames.length != argValues.length) {
+      throw SparkException.internalError(s"The number of argument names ${argNames.length} " +
+        s"must be equal to the number of argument values ${argValues.length}.")
+    }
+
+    val args = argNames.zip(argValues).toMap
+    checkArgs(args)
+
+    val namedValues = args.map { case (name, expr) =>
+      (name, expressionToSqlValue(expr))
+    }
+
+    val newChild = performSqlSubstitution(child, { (sql, rule) =>
+      val parser = new SubstituteParamsParser()
+      val (substitutedSql, _) = parser.substitute(sql, rule, namedValues)
+      substitutedSql
+    })
+
+    bind(newChild) { case NamedParameter(name) if args.contains(name) => args(name) }
+  }
+
+  /**
+   * Handles positional parameter binding including validation, SQL substitution,
+   * and parameter binding.
+   */
+  private def bindPositionalParameters(
+      child: LogicalPlan,
+      args: Seq[Expression]): LogicalPlan = {
+    val indexedArgs = args.zipWithIndex
+    checkArgs(indexedArgs.map(arg => (s"_${arg._2}", arg._1)))
+
+    val positionalValues = args.map(expressionToSqlValue).toList
+
+    // Track consumed parameters during SQL substitution with a stateful function
+    var totalConsumedParams = 0
+    val statefulSubstitutionFn: (String, SubstitutionRule) => String = { (sql, rule) =>
+      val parser = new SubstituteParamsParser()
+      val availableParams = positionalValues.drop(totalConsumedParams)
+      val (substitutedSql, consumedParams) = parser.substitute(sql, rule,
+        positionalParams = availableParams)
+      totalConsumedParams += consumedParams
+      substitutedSql
+    }
+
+    val newChild = performSqlSubstitution(child, statefulSubstitutionFn)
+
+    val positions = scala.collection.mutable.Set.empty[Int]
+    bind(newChild) { case p @ PosParameter(pos) => positions.add(pos); p }
+    val posToIndex = positions.toSeq.sorted.zipWithIndex.toMap
+
+    bind(newChild) {
+      case PosParameter(pos) if posToIndex.contains(pos) && args.size > posToIndex(pos) =>
+        args(posToIndex(pos))
+    }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(_.containsPattern(PARAMETERIZED_QUERY)) {
       // We should wait for `CTESubstitution` to resolve CTE before binding parameters, as CTE
       // relations are not children of `UnresolvedWith`.
       case NameParameterizedQuery(child, argNames, argValues)
-        if !child.containsPattern(UNRESOLVED_WITH) &&
-          argValues.forall(_.resolved) =>
-        if (argNames.length != argValues.length) {
-          throw SparkException.internalError(s"The number of argument names ${argNames.length} " +
-            s"must be equal to the number of argument values ${argValues.length}.")
-        }
-        val args = argNames.zip(argValues).toMap
-        checkArgs(args)
-        bind(child) { case NamedParameter(name) if args.contains(name) => args(name) }
+        if isReadyForBinding(child, argValues) =>
+        bindNamedParameters(child, argNames, argValues)
 
       case PosParameterizedQuery(child, args)
-        if !child.containsPattern(UNRESOLVED_WITH) &&
-          args.forall(_.resolved) =>
-        val indexedArgs = args.zipWithIndex
-        checkArgs(indexedArgs.map(arg => (s"_${arg._2}", arg._1)))
-
-        val positions = scala.collection.mutable.Set.empty[Int]
-        bind(child) { case p @ PosParameter(pos) => positions.add(pos); p }
-        val posToIndex = positions.toSeq.sorted.zipWithIndex.toMap
-
-        bind(child) {
-          case PosParameter(pos) if posToIndex.contains(pos) && args.size > posToIndex(pos) =>
-            args(posToIndex(pos))
-        }
+        if isReadyForBinding(child, args) =>
+        bindPositionalParameters(child, args)
 
       case other => other
     }
