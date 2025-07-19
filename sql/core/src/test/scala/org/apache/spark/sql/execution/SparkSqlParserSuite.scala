@@ -23,7 +23,7 @@ import org.apache.spark.{SparkConf, SparkThrowable}
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedHaving, UnresolvedRelation, UnresolvedStar}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, GreaterThan, Literal, NullsFirst, SortOrder, UnresolvedWindowExpression, UnspecifiedFrame, WindowSpecDefinition, WindowSpecReference}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Cast, Concat, GreaterThan, Literal, NamedExpression, NullsFirst, ShiftRight, SortOrder, UnresolvedWindowExpression, UnspecifiedFrame, WindowSpecDefinition, WindowSpecReference}
 import org.apache.spark.sql.catalyst.parser.{AbstractParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, RefreshResource}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -1164,4 +1164,75 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-52709: Parsing STRUCT (empty,nested,within complex types) followed by shiftRight") {
+
+    // Test valid complex data types, and their combinations.
+    val typeStringsToTest = Seq(
+      "STRUCT<>",                               // Empty struct
+      "STRUCT<a: STRUCT<b: INT>>",              // Nested struct
+      "STRUCT<c: ARRAY<INT>>",                  // Struct containing an array
+      "MAP<STRING, STRUCT<x: STRING, y: INT>>",  // Map containing a struct
+      "ARRAY<STRUCT<>>",                        // Array containing empty structs
+      "ARRAY<STRUCT<id: INT, name: STRING>>"    // Array containing non-empty structs
+    )
+
+    /**
+    * Helper function to generate a SQL CAST fragment and its corresponding
+    * expected expression for a given type string.
+    */
+    def createCastNullAsTypeExpression(typeString: String): (String, NamedExpression) = {
+      // Use the suite's 'parser' instance to parse the DataType
+      val dataType: DataType = parser.parseDataType(typeString)
+      val castExpr = Cast(Literal(null, NullType), dataType)
+      val expectedExpr = UnresolvedAlias(castExpr) // SparkSqlParserSuite expects UnresolvedAlias
+      val sqlFragment = s"CAST(null AS $typeString)"
+        (sqlFragment, expectedExpr)
+    }
+
+    // Generate the SQL fragments and their corresponding expected expressions for all CASTs
+    val castExpressionsData = typeStringsToTest.map(createCastNullAsTypeExpression)
+
+    // Extract just the SQL fragments for the SELECT statement
+    val selectClauses = castExpressionsData.map(_._1)
+
+    val sql =
+      s"""
+         |SELECT
+         |  ${selectClauses.mkString(",\n  ")},
+         |  4 >> 1
+      """.stripMargin
+
+    // Construct the list of ALL expected expressions for the Project node.
+    // This includes all the CAST expressions generated above, plus the ShiftRight expression.
+    val allExpectedExprs = castExpressionsData.map(_._2) :+
+      UnresolvedAlias(ShiftRight(Literal(4, IntegerType), Literal(1, IntegerType)))
+
+    // Define the expected logical plan
+    val expectedPlan = Project(
+      allExpectedExprs,
+      OneRowRelation()
+    )
+
+    assertEqual(sql, expectedPlan)
+  }
+
+  test("SPARK-52709-Invalid: Parsing should fail for empty ARRAY<> type") {
+    val sql = "SELECT CAST(null AS ARRAY<>)"
+    checkError(
+      exception = parseException(sql),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'<'", "hint" -> ": missing ')'")
+    )
+  }
+
+  test("SPARK-52709-Invalid: Parsing should fail for empty MAP<> type") {
+    val sql = "SELECT CAST(null AS MAP<>)"
+    checkError(
+      exception = parseException(sql),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'<'", "hint" -> ": missing ')'")
+    )
+  }
 }
+
