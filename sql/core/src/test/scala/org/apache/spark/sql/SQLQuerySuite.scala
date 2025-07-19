@@ -80,6 +80,35 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+
+  test("SPARK-51728: SELECT * EXCEPT syntax support") {
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
+      withTempView("star_except_test") {
+        Seq((1, "a", "keep_me")).toDF("x", "y", "z").createOrReplaceTempView("star_except_test")
+
+        checkAnswer(
+          sql("SELECT * EXCEPT(y) FROM star_except_test"),
+          Row(1, "keep_me")
+        )
+
+        checkAnswer(
+          sql("SELECT * EXCEPT(x, z) FROM star_except_test"),
+          Row("a")
+        )
+
+        checkAnswer(
+          sql("SELECT * EXCEPT(x, y, z) FROM star_except_test"),
+          Row()
+        )
+
+        checkAnswer(
+          sql("SELECT * FROM star_except_test"),
+          Row(1, "a", "keep_me")
+        )
+      }
+    }
+  }
+        
   test("describe functions") {
     checkKeywordsExist(sql("describe function extended upper"),
       "Function: upper",
