@@ -31,7 +31,7 @@ import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.{SparkConf, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -89,6 +89,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def abort(): Unit = {}
 
+    override def release(): Unit = {}
+
     override def toString(): String = {
       s"HDFSReadStateStore[stateStoreId=$stateStoreId_, version=$version]"
     }
@@ -112,6 +114,15 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     case object UPDATING extends STATE
     case object COMMITTED extends STATE
     case object ABORTED extends STATE
+    case object RELEASED extends STATE
+
+    Option(TaskContext.get()).foreach { ctxt =>
+      ctxt.addTaskCompletionListener[Unit](ctx => {
+        if (state == UPDATING) {
+          abort()
+        }
+      })
+    }
 
     private val newVersion = version + 1
     @volatile private var state: STATE = UPDATING
@@ -953,7 +964,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
    * @param endVersion   checkpoint version to end with
    * @return [[HDFSBackedStateStore]]
    */
-  override def replayStateFromSnapshot(snapshotVersion: Long, endVersion: Long): StateStore = {
+  override def replayStateFromSnapshot(
+      snapshotVersion: Long, endVersion: Long, readOnly: Boolean): StateStore = {
     val newMap = replayLoadedMapFromSnapshot(snapshotVersion, endVersion)
     logInfo(log"Retrieved snapshot at version " +
       log"${MDC(LogKeys.STATE_STORE_VERSION, snapshotVersion)} and apply delta files to version " +

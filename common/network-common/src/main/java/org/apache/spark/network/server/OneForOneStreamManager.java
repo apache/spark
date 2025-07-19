@@ -26,13 +26,12 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.netty.channel.Channel;
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.lang3.tuple.Pair;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.util.Pair;
 
 /**
  * StreamManager which allows registration of an Iterator&lt;ManagedBuffer&gt;, which are
@@ -127,7 +126,7 @@ public class OneForOneStreamManager extends StreamManager {
       "Stream id and chunk index should be specified.";
     long streamId = Long.valueOf(array[0]);
     int chunkIndex = Integer.valueOf(array[1]);
-    return ImmutablePair.of(streamId, chunkIndex);
+    return Pair.of(streamId, chunkIndex);
   }
 
   @Override
