@@ -127,6 +127,22 @@ trait ReadStateStore {
    * The method name is to respect backward compatibility on [[StateStore]].
    */
   def abort(): Unit
+
+
+  /**
+   * Releases resources associated with this read-only state store.
+   *
+   * This method should be called when the store is no longer needed but has completed
+   * successfully (i.e., no errors occurred during reading). It performs any necessary
+   * cleanup operations without invalidating or rolling back the data that was read.
+   *
+   * In contrast to `abort()`, which is called on error paths to cancel operations,
+   * `release()` is the proper method to call in success scenarios when a read-only
+   * store is no longer needed.
+   *
+   * This method is idempotent and safe to call multiple times.
+   */
+  def release(): Unit
 }
 
 /**
@@ -198,6 +214,10 @@ trait StateStore extends ReadStateStore {
    */
   override def abort(): Unit
 
+  override def release(): Unit = {
+    throw new UnsupportedOperationException("Should only call release() on ReadStateStore")
+  }
+
   /**
    * Return an iterator containing all the key-value pairs in the StateStore. Implementations must
    * ensure that updates (puts, removes) can be made while iterating over this iterator.
@@ -243,6 +263,8 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
     Iterator[UnsafeRowPair] = store.iterator(colFamilyName)
 
   override def abort(): Unit = store.abort()
+
+  override def release(): Unit = store.release()
 
   override def prefixScan(prefixKey: UnsafeRow,
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair] =
@@ -589,6 +611,30 @@ trait StateStoreProvider {
   def getReadStore(version: Long, uniqueId: Option[String] = None): ReadStateStore =
     new WrappedReadStateStore(getStore(version, uniqueId))
 
+  /**
+   * Creates a writable store from an existing read-only store for the specified version.
+   *
+   * This method enables an important optimization pattern for stateful operations where
+   * the same state store needs to be accessed for both reading and writing within a task.
+   * Instead of opening two separate state store instances (which can cause contention issues),
+   * this method converts an existing read-only store to a writable store that can commit changes.
+   *
+   * This approach is particularly beneficial when:
+   * - A stateful operation needs to first read the existing state, then update it
+   * - The state store has locking mechanisms that prevent concurrent access
+   * - Multiple state store connections would cause unnecessary resource duplication
+   *
+   * @param readStore The existing read-only store instance to convert to a writable store
+   * @param version The version of the state store (must match the read store's version)
+   * @param uniqueId Optional unique identifier for checkpointing
+   * @return A writable StateStore instance that can be used to update and commit changes
+   */
+  def upgradeReadStoreToWriteStore(
+      readStore: ReadStateStore,
+      version: Long,
+      uniqueId: Option[String] = None): StateStore = getStore(version, uniqueId)
+
+
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
   def doMaintenance(): Unit = { }
 
@@ -731,7 +777,8 @@ trait SupportsFineGrainedReplay {
    * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
    */
-  def replayStateFromSnapshot(snapshotVersion: Long, endVersion: Long): StateStore
+  def replayStateFromSnapshot(
+      snapshotVersion: Long, endVersion: Long, readOnly: Boolean = false): StateStore
 
   /**
    * Return an instance of [[ReadStateStore]] representing state data of the given version.
@@ -744,7 +791,7 @@ trait SupportsFineGrainedReplay {
    * @param endVersion   checkpoint version to end with
    */
   def replayReadStateFromSnapshot(snapshotVersion: Long, endVersion: Long): ReadStateStore = {
-    new WrappedReadStateStore(replayStateFromSnapshot(snapshotVersion, endVersion))
+    new WrappedReadStateStore(replayStateFromSnapshot(snapshotVersion, endVersion, readOnly = true))
   }
 
   /**
@@ -965,6 +1012,56 @@ object StateStore extends Logging {
       keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
       stateSchemaBroadcast)
     storeProvider.getReadStore(version, stateStoreCkptId)
+  }
+
+  /**
+   * Converts an existing read-only state store to a writable state store.
+   *
+   * This method provides an optimization for stateful operations that need to both read and update
+   * state within the same task. Instead of opening separate read and write instances (which may
+   * cause resource contention or duplication), this method reuses the already loaded read store
+   * and transforms it into a writable store.
+   *
+   * The optimization is particularly valuable for state stores with expensive initialization costs
+   * or limited concurrency capabilities (like RocksDB). It eliminates redundant loading of the same
+   * state data and reduces resource usage.
+   *
+   * @param readStore The existing read-only state store to convert to a writable store
+   * @param storeProviderId Unique identifier for the state store provider
+   * @param keySchema Schema of the state store keys
+   * @param valueSchema Schema of the state store values
+   * @param keyStateEncoderSpec Specification for encoding the state keys
+   * @param version The version of the state store (must match the read store's version)
+   * @param stateStoreCkptId Optional checkpoint identifier for the state store
+   * @param stateSchemaBroadcast Optional broadcast of the state schema
+   * @param useColumnFamilies Whether to use column families in the state store
+   * @param storeConf Configuration for the state store
+   * @param hadoopConf Hadoop configuration
+   * @param useMultipleValuesPerKey Whether the store supports multiple values per key
+   * @return A writable StateStore instance that can be used to update and commit changes
+   * @throws SparkException If the store cannot be loaded or if there's insufficient memory
+   */
+  def getWriteStore(
+      readStore: ReadStateStore,
+      storeProviderId: StateStoreProviderId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      version: Long,
+      stateStoreCkptId: Option[String],
+      stateSchemaBroadcast: Option[StateSchemaBroadcast],
+      useColumnFamilies: Boolean,
+      storeConf: StateStoreConf,
+      hadoopConf: Configuration,
+      useMultipleValuesPerKey: Boolean = false): StateStore = {
+    hadoopConf.set(StreamExecution.RUN_ID_KEY, storeProviderId.queryRunId.toString)
+    if (version < 0) {
+      throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
+    }
+    val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
+      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
+      stateSchemaBroadcast)
+    storeProvider.upgradeReadStoreToWriteStore(readStore, version, stateStoreCkptId)
   }
 
   /** Get or create a store associated with the id. */
