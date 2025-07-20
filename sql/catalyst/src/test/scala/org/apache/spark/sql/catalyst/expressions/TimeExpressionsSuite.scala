@@ -394,6 +394,41 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       TimeType(), DayTimeIntervalType())
   }
 
+  test("SPARK-52898: Add times") {
+    // Test result value.
+    checkEvaluation(
+      AddTimes(
+        Literal(LocalTime.of(0, 0)),
+        Literal(LocalTime.of(1, 2))
+      ),
+      Duration.ofMinutes(62)
+    )
+    // Verify result data type.
+    assert(
+      AddTimes(
+        Literal(0L, TimeType(0)),
+        Literal(0L, TimeType(0))
+      ).dataType == DayTimeIntervalType(HOUR, SECOND)
+    )
+    // Null inputs.
+    checkEvaluation(
+      AddTimes(Literal.create(null, TimeType()), Literal(LocalTime.MIN)),
+      null
+    )
+    checkEvaluation(
+      AddTimes(Literal(LocalTime.MAX), Literal(null, TimeType())),
+      null
+    )
+    // AddTimes with different precisions.
+    for (i <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+      for (j <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+        checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+          (time1: Expression, time2: Expression) => AddTimes(time1, time2).replacement,
+          TimeType(i), TimeType(j))
+      }
+    }
+  }
+
   test("Subtract times") {
     checkEvaluation(
       SubtractTimes(Literal.create(null, TimeType()), Literal(LocalTime.MIN)),

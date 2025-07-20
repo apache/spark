@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{
   Add,
+  AddTimes,
   Cast,
   DateAdd,
   DateAddInterval,
@@ -98,6 +99,7 @@ object BinaryArithmeticWithDatetimeResolver {
           Cast(TimestampAddInterval(r, l), r.dataType)
         case (DateType, dt) if dt != StringType => DateAdd(l, r)
         case (dt, DateType) if dt != StringType => DateAdd(r, l)
+        case (_: TimeType, _: TimeType) => AddTimes(l, r)
         case _ => a
       }
     case s @ Subtract(l, r, mode) =>

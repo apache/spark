@@ -1303,8 +1303,28 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       ) -> 0,
       (
         LocalTime.MIN,
+        LocalTime.MIN
+      ) -> 0,
+      (
+        LocalTime.NOON,
+        LocalTime.NOON
+      ) -> TimeUnit.DAYS.toMicros(1),
+      (
+        LocalTime.MIN,
         LocalTime.MAX
       ) -> (TimeUnit.DAYS.toMicros(1) - 1),
+      (
+        LocalTime.MAX,
+        LocalTime.MAX
+      ) -> (2 * TimeUnit.DAYS.toMicros(1) - 1),
+      (
+        LocalTime.of(1, 2, 3),
+        LocalTime.of(0, 0, 0)
+      ) -> localTime(1, 2, 3) / 1000,
+      (
+        LocalTime.of(1, 2, 3),
+        LocalTime.of(4, 5, 6)
+      ) -> localTime(5, 7, 9) / 1000,
       (
         LocalTime.of(0, 0, 0, 123456789),
         LocalTime.of(0, 0, 0, 123)

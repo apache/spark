@@ -610,6 +610,31 @@ case class TimeAddInterval(time: Expression, interval: Expression)
 /**
  * Returns a day-time interval between time values.
  */
+case class AddTimes(left: Expression, right: Expression)
+  extends BinaryExpression with RuntimeReplaceable with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType, AnyTimeType)
+
+  override def replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    DayTimeIntervalType(HOUR, SECOND),
+    "addTimes",
+    children,
+    inputTypes,
+    propagateNull = nullIntolerant
+  )
+
+  override def toString: String = s"$left + $right"
+  override def sql: String = s"${left.sql} + ${right.sql}"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): AddTimes =
+    copy(left = newLeft, right = newRight)
+}
+
+/**
+ * Returns a day-time interval between time values.
+ */
 case class SubtractTimes(left: Expression, right: Expression)
   extends BinaryExpression with RuntimeReplaceable with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true
