@@ -253,6 +253,7 @@ Date and Timestamp Functions
     convert_timezone
     curdate
     current_date
+    current_time
     current_timestamp
     current_timezone
     date_add
