@@ -459,48 +459,6 @@ Project [cast(11:59:59.999999 as time(6)) AS CAST(TIME '11:59:59.999999' AS TIME
 
 
 -- !query
-SELECT time("12:34:56")
--- !query analysis
-Project [cast(12:34:56 as time(6)) AS 12:34:56#x]
-+- OneRowRelation
-
-
--- !query
-SELECT time("12:34:56.789")
--- !query analysis
-Project [cast(12:34:56.789 as time(6)) AS 12:34:56.789#x]
-+- OneRowRelation
-
-
--- !query
-SELECT time("12:34:56.789012")
--- !query analysis
-Project [cast(12:34:56.789012 as time(6)) AS 12:34:56.789012#x]
-+- OneRowRelation
-
-
--- !query
-SELECT time(cast('12:00' as time(0)))
--- !query analysis
-Project [cast(cast(12:00 as time(0)) as time(6)) AS CAST(12:00 AS TIME(0))#x]
-+- OneRowRelation
-
-
--- !query
-SELECT time(('23:59:59.001001' :: time(6)))
--- !query analysis
-Project [cast(cast(23:59:59.001001 as time(6)) as time(6)) AS CAST(23:59:59.001001 AS TIME(6))#x]
-+- OneRowRelation
-
-
--- !query
-SELECT time(time'11:59:59.999999')
--- !query analysis
-Project [cast(11:59:59.999999 as time(6)) AS TIME '11:59:59.999999'#x]
-+- OneRowRelation
-
-
--- !query
 SELECT time_trunc('HOUR', time'12:34:56')
 -- !query analysis
 Project [time_trunc(HOUR, 12:34:56) AS time_trunc(HOUR, TIME '12:34:56')#x]
@@ -951,6 +909,48 @@ Project [time_trunc(unit#x, time_val#x) AS time_trunc(unit, time_val)#x]
       +- Project [cast(time_val#x as time(6)) AS time_val#x, cast(unit#x as string) AS unit#x]
          +- Project [11:53:26.038344 AS time_val#x, MINUTE AS unit#x]
             +- OneRowRelation
+
+
+-- !query
+SELECT time("12:34:56")
+-- !query analysis
+Project [cast(12:34:56 as time(6)) AS 12:34:56#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time("12:34:56.789")
+-- !query analysis
+Project [cast(12:34:56.789 as time(6)) AS 12:34:56.789#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time("12:34:56.789012")
+-- !query analysis
+Project [cast(12:34:56.789012 as time(6)) AS 12:34:56.789012#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time(cast('12:00' as time(0)))
+-- !query analysis
+Project [cast(cast(12:00 as time(0)) as time(6)) AS CAST(12:00 AS TIME(0))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time(('23:59:59.001001' :: time(6)))
+-- !query analysis
+Project [cast(cast(23:59:59.001001 as time(6)) as time(6)) AS CAST(23:59:59.001001 AS TIME(6))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time(time'11:59:59.999999')
+-- !query analysis
+Project [cast(11:59:59.999999 as time(6)) AS TIME '11:59:59.999999'#x]
++- OneRowRelation
 
 
 -- !query

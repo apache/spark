@@ -565,54 +565,6 @@ struct<CAST(TIME '11:59:59.999999' AS TIME(6)):time(6)>
 
 
 -- !query
-SELECT time("12:34:56")
--- !query schema
-struct<12:34:56:time(6)>
--- !query output
-12:34:56
-
-
--- !query
-SELECT time("12:34:56.789")
--- !query schema
-struct<12:34:56.789:time(6)>
--- !query output
-12:34:56.789
-
-
--- !query
-SELECT time("12:34:56.789012")
--- !query schema
-struct<12:34:56.789012:time(6)>
--- !query output
-12:34:56.789012
-
-
--- !query
-SELECT time(cast('12:00' as time(0)))
--- !query schema
-struct<CAST(12:00 AS TIME(0)):time(6)>
--- !query output
-12:00:00
-
-
--- !query
-SELECT time(('23:59:59.001001' :: time(6)))
--- !query schema
-struct<CAST(23:59:59.001001 AS TIME(6)):time(6)>
--- !query output
-23:59:59.001001
-
-
--- !query
-SELECT time(time'11:59:59.999999')
--- !query schema
-struct<TIME '11:59:59.999999':time(6)>
--- !query output
-11:59:59.999999
-
-
--- !query
 SELECT time_trunc('HOUR', time'12:34:56')
 -- !query schema
 struct<time_trunc(HOUR, TIME '12:34:56'):time(6)>
@@ -1191,6 +1143,54 @@ SELECT time_trunc(unit, time_val) FROM trunc_time_view
 struct<time_trunc(unit, time_val):time(6)>
 -- !query output
 11:53:00
+
+
+-- !query
+SELECT time("12:34:56")
+-- !query schema
+struct<12:34:56:time(6)>
+-- !query output
+12:34:56
+
+
+-- !query
+SELECT time("12:34:56.789")
+-- !query schema
+struct<12:34:56.789:time(6)>
+-- !query output
+12:34:56.789
+
+
+-- !query
+SELECT time("12:34:56.789012")
+-- !query schema
+struct<12:34:56.789012:time(6)>
+-- !query output
+12:34:56.789012
+
+
+-- !query
+SELECT time(cast('12:00' as time(0)))
+-- !query schema
+struct<CAST(12:00 AS TIME(0)):time(6)>
+-- !query output
+12:00:00
+
+
+-- !query
+SELECT time(('23:59:59.001001' :: time(6)))
+-- !query schema
+struct<CAST(23:59:59.001001 AS TIME(6)):time(6)>
+-- !query output
+23:59:59.001001
+
+
+-- !query
+SELECT time(time'11:59:59.999999')
+-- !query schema
+struct<TIME '11:59:59.999999':time(6)>
+-- !query output
+11:59:59.999999
 
 
 -- !query
