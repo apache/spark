@@ -62,7 +62,8 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
   public String toString() {
     return "FetchShuffleBlockChunks[appId=" + appId + ",execId=" + execId +
         ",shuffleId=" + shuffleId + ",shuffleMergeId=" + shuffleMergeId +
-        ",reduceIds=" + Arrays.toString(reduceIds) + ",chunkIds=" + Arrays.toString(chunkIds) + "]";
+        ",reduceIds=" + Arrays.toString(reduceIds) +
+        ",chunkIds=" + Arrays.deepToString(chunkIds) + "]";
   }
 
   @Override

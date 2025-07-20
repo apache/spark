@@ -337,7 +337,7 @@ public class TransportClient implements Closeable {
   @Override
   public String toString() {
     return "TransportClient[remoteAddress=" + channel.remoteAddress() + "clientId=" + clientId +
-        "isActive=" + isActive() + "]";
+        ",isActive=" + isActive() + "]";
   }
 
   private static long requestId() {
