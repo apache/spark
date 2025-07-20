@@ -608,7 +608,7 @@ case class TimeAddInterval(time: Expression, interval: Expression)
 }
 
 /**
- * Returns a day-time interval between time values.
+ * Adds two time values and returns the resulting time as a day-time interval.
  */
 case class AddTimes(left: Expression, right: Expression)
   extends BinaryExpression with RuntimeReplaceable with ExpectsInputTypes {
