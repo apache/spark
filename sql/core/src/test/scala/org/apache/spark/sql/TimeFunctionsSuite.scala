@@ -28,7 +28,7 @@ class TimeFunctionsSuite extends QueryTest with SharedSparkSession {
 
   override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "false")
 
-  test("make_time function") {
+  test("SPARK-52881: make_time function") {
     // Input data for the function.
     val schema = StructType(Seq(
       StructField("hour", IntegerType, nullable = false),

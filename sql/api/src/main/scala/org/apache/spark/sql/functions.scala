@@ -872,8 +872,7 @@ object functions {
     Column.fn("last_value", e, ignoreNulls)
 
   /**
-   * Create time from hour, minute and second fields.
-   * For invalid inputs it will throw an error.
+   * Create time from hour, minute and second fields. For invalid inputs it will throw an error.
    *
    * @param hour
    *   the hour to represent, from 0 to 23
