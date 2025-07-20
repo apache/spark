@@ -3847,6 +3847,17 @@ def make_interval(
 make_interval.__doc__ = pysparkfuncs.make_interval.__doc__
 
 
+def make_time(
+    hour: "ColumnOrName",
+    minute: "ColumnOrName",
+    second: "ColumnOrName"
+) -> Column:
+    return _invoke_function_over_columns("make_time", hour, minute, second)
+
+
+make_time.__doc__ = pysparkfuncs.make_time.__doc__
+
+
 def make_timestamp(
     years: "ColumnOrName",
     months: "ColumnOrName",

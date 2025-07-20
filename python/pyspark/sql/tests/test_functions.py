@@ -628,6 +628,15 @@ class FunctionsTestsMixin:
             )
         )
 
+    def test_make_time(self):
+        # SPARK-52888: test the make_time function.
+        df = self.spark.createDataFrame([(1, 2, 3)], ["hour", "minute", "second"])
+        result = "01:02:03"
+        row_from_col = df.select(F.make_time(df.hour, df.minute, df.second)).first()
+        self.assertEqual(row_from_col[0], result)
+        row_from_name = df.select(F.make_time("hour", "minute", "second")).first()
+        self.assertEqual(row_from_name[0], result)
+
     def test_make_date(self):
         # SPARK-36554: expose make_date expression
         df = self.spark.createDataFrame([(2020, 6, 26)], ["Y", "M", "D"])
