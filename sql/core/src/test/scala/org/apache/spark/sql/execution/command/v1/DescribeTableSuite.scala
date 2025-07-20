@@ -871,4 +871,36 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
         ))
     }
   }
+
+  test("desc table constraints as json") {
+    withNamespaceAndTable("ns", "pk_table") { tbl =>
+      withTable("fk_table") {
+        sql(
+          s"""
+             |CREATE TABLE fk_table (id INT PRIMARY KEY) USING parquet
+        """.stripMargin)
+        sql(
+          s"""
+             |CREATE TABLE $tbl (
+             |  id INT,
+             |  a INT,
+             |  b STRING,
+             |  c STRING,
+             |  PRIMARY KEY (id),
+             |  CONSTRAINT fk_a FOREIGN KEY (a) REFERENCES fk_table(id) RELY,
+             |  CONSTRAINT uk_b UNIQUE (b),
+             |  CONSTRAINT uk_a_c UNIQUE (a, c),
+             |  CONSTRAINT c1 CHECK (c IS NOT NULL),
+             |  CONSTRAINT c2 CHECK (id > 0)
+             |) USING parquet
+        """.stripMargin)
+
+        val information =
+          sql(s"DESCRIBE EXTENDED $tbl AS JSON").collect().map(_.getAs[String](0)).head
+        val parsed = parse(information).extract[Map[String, Any]]
+        // TODO V1 table doesn't support constraints
+        assert(!parsed.contains("constraints"))
+      }
+    }
+  }
 }
