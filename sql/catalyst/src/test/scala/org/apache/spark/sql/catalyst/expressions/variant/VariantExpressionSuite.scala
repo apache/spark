@@ -699,6 +699,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     testVariantGet("86399000000", "$", TimeType(), 86399000000L) // 23:59:59
 
     // Parameterized TimeType.
+    testVariantGet("0", "$", TimeType(3), 0L) // 00:00:00.000
+    testVariantGet("3723000000000", "$", TimeType(3), 3723000000000L) // 01:02:03.000
     testVariantGet("0", "$", TimeType(6), 0L) // 00:00:00.000000
     testVariantGet("3723000000000", "$", TimeType(6), 3723000000000L) // 01:02:03.000000
 
