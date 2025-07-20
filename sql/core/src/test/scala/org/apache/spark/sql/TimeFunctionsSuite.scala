@@ -73,7 +73,7 @@ class TimeFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("current_time function with default precision") {
+  test("SPARK-52882: current_time function with default precision") {
     // Create a dummy DataFrame with a single row to test the current_time() function.
     val df = spark.range(1)
 
@@ -89,7 +89,7 @@ class TimeFunctionsSuite extends QueryTest with SharedSparkSession {
     assertTwoTimesAreApproximatelyEqual(result1, result2)
   }
 
-  test("current_time function with specified precision") {
+  test("SPARK-52882: current_time function with specified precision") {
     (0 to 6).foreach { precision: Int =>
       // Create a dummy DataFrame with a single row to test the current_time(precision) function.
       val df = spark.range(1)

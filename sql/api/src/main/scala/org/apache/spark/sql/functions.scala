@@ -1377,8 +1377,8 @@ object functions {
   def count_if(e: Column): Column = Column.fn("count_if", e)
 
   /**
-   * Returns the current time at the start of query evaluation.
-   * Note that the result will contain 6 fractional digits of seconds.
+   * Returns the current time at the start of query evaluation. Note that the result will contain
+   * 6 fractional digits of seconds.
    *
    * @group datetime_funcs
    * @since 4.1.0
