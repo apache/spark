@@ -42,6 +42,7 @@ case class DescribeTableExec(
     addClustering(rows)
 
     if (isExtended) {
+      addTableConstraints(rows)
       addMetadataColumns(rows)
       addTableDetails(rows)
       addTableStats(rows)
@@ -85,6 +86,16 @@ case class DescribeTableExec(
     rows ++= table.columns().map{ column =>
       toCatalystRow(
         column.name, column.dataType.simpleString, column.comment)
+    }
+  }
+
+  private def addTableConstraints(rows: ArrayBuffer[InternalRow]): Unit = {
+    if (table.constraints.nonEmpty) {
+      rows += emptyRow()
+      rows += toCatalystRow("# Constraint Information", "", "")
+      rows ++= table.constraints().map{ constraint =>
+        toCatalystRow(constraint.name(), constraint.getClass.getSimpleName, constraint.toDDL)
+      }
     }
   }
 

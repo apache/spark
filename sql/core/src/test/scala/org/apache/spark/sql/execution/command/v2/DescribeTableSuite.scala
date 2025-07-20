@@ -213,4 +213,57 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
       assert("""\d+\s+bytes,\s+4\s+rows""".r.matches(stats))
     }
   }
+
+  test("desc table constraints") {
+    withNamespaceAndTable("ns", "pk_table", nonPartitionCatalog) { tbl =>
+      withTable("fk_table") {
+        sql(
+          s"""
+             |CREATE TABLE fk_table (id INT PRIMARY KEY) USING parquet
+        """.stripMargin)
+        sql(
+          s"""
+             |CREATE TABLE $tbl (
+             |  id INT,
+             |  a INT,
+             |  b STRING,
+             |  c STRING,
+             |  PRIMARY KEY (id),
+             |  CONSTRAINT fk_a FOREIGN KEY (a) REFERENCES fk_table(id) RELY,
+             |  CONSTRAINT uk_b UNIQUE (b),
+             |  CONSTRAINT uk_a_c UNIQUE (a, c),
+             |  CONSTRAINT c1 CHECK (c IS NOT NULL),
+             |  CONSTRAINT c2 CHECK (id > 0)
+             |)
+             |$defaultUsing
+        """.stripMargin)
+
+        var expectedConstraintsDdl = Array(
+          "pk_table_pk,PrimaryKey,CONSTRAINT pk_table_pk PRIMARY KEY (id) NOT ENFORCED NORELY",
+          "fk_a,ForeignKey,CONSTRAINT fk_a FOREIGN KEY (a) " +
+            "REFERENCES fk_table (id) NOT ENFORCED RELY",
+          "uk_b,Unique,CONSTRAINT uk_b UNIQUE (b) NOT ENFORCED NORELY",
+          "uk_a_c,Unique,CONSTRAINT uk_a_c UNIQUE (a, c) NOT ENFORCED NORELY",
+          "c1,Check,CONSTRAINT c1 CHECK (c IS NOT NULL) ENFORCED NORELY",
+          "c2,Check,CONSTRAINT c2 CHECK (id > 0) ENFORCED NORELY"
+        )
+        var descDdL = sql(s"DESCRIBE EXTENDED $tbl").collect().map(_.mkString(","))
+          .filter(_.contains("CONSTRAINT"))
+        assert(descDdL === expectedConstraintsDdl)
+
+        sql(s"ALTER TABLE $tbl ADD CONSTRAINT c3 CHECK (b IS NOT NULL) ENFORCED RELY")
+        descDdL = sql(s"DESCRIBE EXTENDED $tbl").collect().map(_.mkString(","))
+          .filter(_.contains("CONSTRAINT"))
+        expectedConstraintsDdl = expectedConstraintsDdl ++
+          Array("c3,Check,CONSTRAINT c3 CHECK (b IS NOT NULL) ENFORCED RELY")
+        assert(descDdL === expectedConstraintsDdl)
+
+        sql(s"ALTER TABLE $tbl DROP CONSTRAINT c1")
+        descDdL = sql(s"DESCRIBE EXTENDED $tbl").collect().map(_.mkString(","))
+          .filter(_.contains("CONSTRAINT"))
+        assert(descDdL === expectedConstraintsDdl
+          .filter(_ != "c1,Check,CONSTRAINT c1 CHECK (c IS NOT NULL) ENFORCED NORELY"))
+      }
+    }
+  }
 }
