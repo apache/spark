@@ -25,7 +25,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class TimeFunctionsSuite extends QueryTest with SharedSparkSession {
+abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("SPARK-52885: hour function") {
@@ -129,11 +129,11 @@ class TimeFunctionsSuite extends QueryTest with SharedSparkSession {
 }
 
 // This class is used to run the same tests with ANSI mode enabled explicitly.
-class TimeFunctionsAnsiOnSuite extends TimeFunctionsSuite {
+class TimeFunctionsAnsiOnSuite extends TimeFunctionsSuiteBase {
   override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "true")
 }
 
 // This class is used to run the same tests with ANSI mode disabled explicitly.
-class TimeFunctionsAnsiOffSuite extends TimeFunctionsSuite {
+class TimeFunctionsAnsiOffSuite extends TimeFunctionsSuiteBase {
   override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "false")
 }
