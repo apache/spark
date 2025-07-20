@@ -28,7 +28,7 @@ class TimeFunctionsSuite extends QueryTest with SharedSparkSession {
 
   override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "false")
 
-  test("to_time function without format") {
+  test("SPARK-52883: to_time function without format") {
     // Input data for the function.
     val schema = StructType(Seq(
       StructField("str", StringType, nullable = false)
@@ -61,7 +61,7 @@ class TimeFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(result2, expected)
   }
 
-  test("to_time function with format") {
+  test("SPARK-52883: to_time function with format") {
     // Input data for the function.
     val schema = StructType(Seq(
       StructField("str", StringType, nullable = false),
@@ -95,7 +95,7 @@ class TimeFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(result2, expected)
   }
 
-  test("try_to_time function without format") {
+  test("SPARK-52884: try_to_time function without format") {
     // Input data for the function.
     val schema = StructType(Seq(
       StructField("str", StringType)
@@ -130,7 +130,7 @@ class TimeFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(result2, expected)
   }
 
-  test("try_to_time function with format") {
+  test("SPARK-52884: try_to_time function with format") {
     // Input data for the function.
     val schema = StructType(Seq(
       StructField("str", StringType),
