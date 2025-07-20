@@ -665,6 +665,18 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Adds two time values expressed as nanoseconds since 00:00:00, and returns
+   * the sum in microseconds.
+   *
+   * @param time1Nanos The first time value as nanoseconds since the midnight
+   * @param time2Nanos The second time value as nanoseconds since the midnight
+   * @return The sum in microseconds between the two input time values.
+   */
+  def addTimes(time1Nanos: Long, time2Nanos: Long): Long = {
+    (time1Nanos + time2Nanos) / NANOS_PER_MICROS
+  }
+
+  /**
    * Subtracts two dates expressed as days since 1970-01-01.
    *
    * @param endDay The end date, exclusive

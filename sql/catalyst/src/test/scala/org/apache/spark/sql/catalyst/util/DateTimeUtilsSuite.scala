@@ -1295,6 +1295,32 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     )
   }
 
+  test("SPARK-52898: add times") {
+    Seq(
+      (
+        LocalTime.MIDNIGHT,
+        LocalTime.MIDNIGHT
+      ) -> 0,
+      (
+        LocalTime.MIN,
+        LocalTime.MAX
+      ) -> (TimeUnit.DAYS.toMicros(1) - 1),
+      (
+        LocalTime.of(0, 0, 0, 123456789),
+        LocalTime.of(0, 0, 0, 123)
+      ) -> (123456789 + 123) / 1000,
+      (
+        LocalTime.of(20, 30, 45, 321000),
+        LocalTime.of(10, 20, 15, 123000)
+      ) -> (localTime(20, 30, 45, 321) + localTime(10, 20, 15, 123)) / 1000
+    ).foreach { case ((time1, time2), expected) =>
+      val time1Nanos = localTimeToNanos(time1)
+      val time2Nanos = localTimeToNanos(time2)
+      assert(addTimes(time1Nanos, time2Nanos) === expected)
+      assert(addTimes(time2Nanos, time1Nanos) === expected)
+    }
+  }
+
   test("subtract times") {
       Seq(
         (LocalTime.MIDNIGHT, LocalTime.MIDNIGHT) -> 0,
