@@ -631,9 +631,6 @@ case class SubtractTimes(left: Expression, right: Expression)
     copy(left = newLeft, right = newRight)
 }
 
-/**
- * Returns time truncated to the unit specified by the unit.
- */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """

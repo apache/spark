@@ -3432,7 +3432,7 @@
       },
       "TIMETRUNC_UNIT" : {
         "message" : [
-          "expects one of the units without quotes HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND, but got the string literal <invalidValue>."
+          "expects one of the units 'HOUR', 'MINUTE', 'SECOND', 'MILLISECOND', 'MICROSECOND', but got the string literal <invalidValue>."
         ]
       },
       "ZERO_INDEX" : {

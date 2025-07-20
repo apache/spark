@@ -3077,7 +3077,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
         "parameter" -> toSQLId("unit"),
-        "invalidValue" -> s"'$invalidValue'")
+        "invalidValue" -> toSQLValue(invalidValue)
+      )
     )
   }
 
