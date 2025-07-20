@@ -2436,6 +2436,13 @@ object SQLConf {
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(300L)
 
+  val STATE_STORE_MAINTENANCE_PROCESSING_TIMEOUT =
+    buildConf("spark.sql.streaming.stateStore.maintenanceProcessingTimeout")
+      .internal()
+      .doc("Timeout in seconds to wait for maintenance to process this partition.")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(30L)
+
   val STATE_SCHEMA_CHECK_ENABLED =
     buildConf("spark.sql.streaming.stateStore.stateSchemaCheck")
       .doc("When true, Spark will validate the state schema against schema on existing state and " +
@@ -6342,6 +6349,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
 
   def stateStoreMaintenanceShutdownTimeout: Long = getConf(STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT)
+
+  def stateStoreMaintenanceProcessingTimeout: Long =
+    getConf(STATE_STORE_MAINTENANCE_PROCESSING_TIMEOUT)
 
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 

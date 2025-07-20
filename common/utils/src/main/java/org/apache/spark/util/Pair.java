@@ -15,38 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util.kvstore;
+package org.apache.spark.util;
 
-import java.io.File;
-
-import org.apache.commons.io.FileUtils;
-import org.junit.jupiter.api.AfterAll;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
-
-import org.apache.spark.util.SparkSystemUtils$;
-
-public class LevelDBIteratorSuite extends DBIteratorSuite {
-
-  private static File dbpath;
-  private static LevelDB db;
-
-  @AfterAll
-  public static void cleanup() throws Exception {
-    if (db != null) {
-      db.close();
-    }
-    if (dbpath != null) {
-      FileUtils.deleteQuietly(dbpath);
-    }
+/**
+ * An immutable pair of values. Note that the fields are intentionally designed to be `getLeft` and
+ * `getRight` instead of `left` and `right` in order to mitigate the migration burden
+ * from `org.apache.commons.lang3.tuple.Pair`.
+ */
+public record Pair<L, R>(L getLeft, R getRight) {
+  public static <L, R> Pair<L, R> of(L left, R right) {
+    return new Pair<>(left, right);
   }
-
-  @Override
-  protected KVStore createStore() throws Exception {
-    assumeFalse(SparkSystemUtils$.MODULE$.isMacOnAppleSilicon());
-    dbpath = File.createTempFile("test.", ".ldb");
-    dbpath.delete();
-    db = new LevelDB(dbpath);
-    return db;
-  }
-
 }
