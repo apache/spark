@@ -23,10 +23,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class TimeFunctionsSuite extends QueryTest with SharedSparkSession {
+abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession {
   import testImplicits._
-
-  override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "false")
 
   test("SPARK-52881: make_time function") {
     // Input data for the function.
@@ -62,4 +60,14 @@ class TimeFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(result1, expected)
     checkAnswer(result2, expected)
   }
+}
+
+// This class is used to run the same tests with ANSI mode enabled explicitly.
+class TimeFunctionsAnsiOnSuite extends TimeFunctionsSuiteBase {
+  override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "true")
+}
+
+// This class is used to run the same tests with ANSI mode disabled explicitly.
+class TimeFunctionsAnsiOffSuite extends TimeFunctionsSuiteBase {
+  override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "false")
 }
