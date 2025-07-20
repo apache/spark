@@ -26,6 +26,11 @@ SELECT make_timestamp(1, 1, 1, 1, 1, 59.999999);
 SELECT make_timestamp(1, 1, 1, 1, 1, 99.999999);
 SELECT make_timestamp(1, 1, 1, 1, 1, 999.999999);
 
+-- SPARK-51415: timestamp date constructor.
+SELECT make_timestamp(make_date(2021, 07, 11));
+SELECT make_timestamp(DATE'1970-01-01');
+SELECT make_timestamp(NULL);
+
 -- SPARK-51415: timestamp date + time constructor.
 SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678));
 SELECT make_timestamp(DATE'1970-01-01', TIME'00:00:00');

@@ -3095,11 +3095,13 @@ case class TryMakeTimestamp(
   arguments = """
     Arguments:
       * date - a date expression
-      * time - a time expression
-      * timezone - the time zone identifier. For example, CET, UTC and etc.
+      * time - a time expression (optional)
+      * timezone - the time zone identifier (optional). For example, CET, UTC and etc.
   """,
   examples = """
     Examples:
+      > SELECT _FUNC_(DATE'2014-12-28');
+       2014-12-27 16:00:00
       > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887');
        2014-12-27 22:30:45.887
       > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887', 'CET');
@@ -3110,38 +3112,46 @@ case class TryMakeTimestamp(
 // scalastyle:on line.size.limit
 case class MakeTimestampFromDateTime(
     date: Expression,
-    time: Expression,
+    time: Option[Expression] = None,
     timezone: Option[Expression] = None)
   extends Expression with RuntimeReplaceable with ExpectsInputTypes {
 
-  def this(date: Expression, time: Expression) =
-    this(date, time, None)
-  def this(date: Expression, time: Expression, timezone: Expression) =
-    this(date, time, Some(timezone))
+  def this(date: Expression) =
+    this(date, None, None)
 
-  override def children: Seq[Expression] = Seq(date, time) ++ timezone
+  def this(date: Expression, time: Expression) =
+    this(date, Some(time), None)
+
+  def this(date: Expression, time: Expression, timezone: Expression) =
+    this(date, Some(time), Some(timezone))
+
+  override def children: Seq[Expression] = Seq(date) ++ time ++ timezone
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, AnyTimeType) ++
     timezone.map(_ => StringTypeWithCollation(supportsTrimCollation = true))
 
   override def replacement: Expression = {
+    // If time is not provided, we use midnight, i.e. 00:00:00.
+    val timeExpr = time.getOrElse(Literal(0L, TimeType(0)))
     // If timezone is not provided, we use UTC, i.e. +00:00.
     val zoneIdExpr = timezone.getOrElse(Literal("+00:00"))
     StaticInvoke(
       classOf[DateTimeUtils.type],
       TimestampType,
       "makeTimestamp",
-      Seq(date, time, zoneIdExpr),
-      Seq(date.dataType, time.dataType, zoneIdExpr.dataType),
-      returnNullable = children.exists(_.nullable))
+      Seq(date, timeExpr, zoneIdExpr),
+      Seq(date.dataType, timeExpr.dataType, zoneIdExpr.dataType),
+      returnNullable = children.exists(_.nullable)
+    )
   }
 
   override def prettyName: String = "make_timestamp"
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
+    val timeOpt = if (time.isDefined) Some(newChildren(1)) else None
     val timezoneOpt = if (timezone.isDefined) Some(newChildren(2)) else None
-    copy(date = newChildren(0), time = newChildren(1), timezone = timezoneOpt)
+    copy(date = newChildren(0), time = timeOpt, timezone = timezoneOpt)
   }
 }
 
@@ -3168,8 +3178,8 @@ case class MakeTimestampFromDateTime(
               0 to 60. If the sec argument equals to 60, the seconds field is set
               to 0 and 1 minute is added to the final timestamp.
       * date - a date expression
-      * time - a time expression
-      * timezone - the time zone identifier. For example, CET, UTC and etc.
+      * time - a time expression (optional)
+      * timezone - the time zone identifier (optional). For example, CET, UTC and etc.
   """,
   examples = """
     Examples:
@@ -3177,6 +3187,8 @@ case class MakeTimestampFromDateTime(
        2014-12-28 06:30:45.887
       > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887, 'CET');
        2014-12-27 21:30:45.887
+      > SELECT _FUNC_(DATE'2014-12-28');
+       2014-12-27 16:00:00
       > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887');
        2014-12-27 22:30:45.887
       > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887', 'CET');
@@ -3188,17 +3200,22 @@ case class MakeTimestampFromDateTime(
 object MakeTimestampExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
-    if (numArgs == 2) {
+    if (numArgs == 1) {
+      // date
+      MakeTimestampFromDateTime(
+        expressions(0)
+      )
+    } else if (numArgs == 2) {
       // date, time
       MakeTimestampFromDateTime(
         expressions(0),
-        expressions(1)
+        Some(expressions(1))
       )
     } else if (numArgs == 3) {
       // date, time, timezone
       MakeTimestampFromDateTime(
         expressions(0),
-        expressions(1),
+        Some(expressions(1)),
         Some(expressions(2))
       )
     } else if (numArgs == 6) {
@@ -3223,7 +3240,7 @@ object MakeTimestampExpressionBuilder extends ExpressionBuilder {
         Some(expressions(6))
       )
     } else {
-      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2, 3, 6, 7), numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2, 3, 6, 7), numArgs)
     }
   }
 }

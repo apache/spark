@@ -2159,26 +2159,52 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     localDateTimeToMicros(LocalDateTime.parse(timestamp), zoneId)
   }
 
+  test("SPARK-51415: make timestamp from date") {
+    // Test with valid date.
+    checkEvaluation(
+      MakeTimestampFromDateTime(dateLit("2023-10-01")),
+      timestampToMicros("2023-10-01T00:00:00", UTC)
+    )
+
+    // Test with null date.
+    checkEvaluation(
+      MakeTimestampFromDateTime(Literal(null, DateType)),
+      null
+    )
+  }
+
   test("SPARK-51415: make timestamp from date and time") {
     // Test with valid date and time.
     checkEvaluation(
-      MakeTimestampFromDateTime(dateLit("2023-10-01"), timeLit("12:34:56.123456")),
+      MakeTimestampFromDateTime(
+        dateLit("2023-10-01"),
+        Some(timeLit("12:34:56.123456"))
+      ),
       timestampToMicros("2023-10-01T12:34:56.123456", UTC)
     )
 
     // Test with null date.
     checkEvaluation(
-      MakeTimestampFromDateTime(Literal(null, DateType), timeLit("12:34:56.123456")),
+      MakeTimestampFromDateTime(
+        Literal(null, DateType),
+        Some(timeLit("12:34:56.123456"))
+      ),
       null
     )
     // Test with null time.
     checkEvaluation(
-      MakeTimestampFromDateTime(dateLit("2023-10-01"), Literal(null, TimeType())),
+      MakeTimestampFromDateTime(
+        dateLit("2023-10-01"),
+        Some(Literal(null, TimeType()))
+      ),
       null
     )
     // Test with null date and null time.
     checkEvaluation(
-      MakeTimestampFromDateTime(Literal(null, DateType), Literal(null, TimeType())),
+      MakeTimestampFromDateTime(
+        Literal(null, DateType),
+        Some(Literal(null, TimeType())
+        )),
       null
     )
   }
@@ -2188,7 +2214,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       MakeTimestampFromDateTime(
         dateLit("2023-10-01"),
-        timeLit("12:34:56.123456"),
+        Some(timeLit("12:34:56.123456")),
         Some(Literal("-09:30"))
       ),
       timestampToMicros("2023-10-01T12:34:56.123456", MIT)
@@ -2196,7 +2222,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       MakeTimestampFromDateTime(
         dateLit("2023-10-01"),
-        timeLit("12:34:56.123456"),
+        Some(timeLit("12:34:56.123456")),
         Some(Literal("-08:00"))
       ),
       timestampToMicros("2023-10-01T12:34:56.123456", PST)
@@ -2204,7 +2230,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       MakeTimestampFromDateTime(
         dateLit("2023-10-01"),
-        timeLit("12:34:56.123456"),
+        Some(timeLit("12:34:56.123456")),
         Some(Literal("+00:00"))
       ),
       timestampToMicros("2023-10-01T12:34:56.123456", UTC)
@@ -2212,7 +2238,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       MakeTimestampFromDateTime(
         dateLit("2023-10-01"),
-        timeLit("12:34:56.123456"),
+        Some(timeLit("12:34:56.123456")),
         Some(Literal("+01:00"))
       ),
       timestampToMicros("2023-10-01T12:34:56.123456", CET)
@@ -2220,7 +2246,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       MakeTimestampFromDateTime(
         dateLit("2023-10-01"),
-        timeLit("12:34:56.123456"),
+        Some(timeLit("12:34:56.123456")),
         Some(Literal("+09:00"))
       ),
       timestampToMicros("2023-10-01T12:34:56.123456", JST)
@@ -2230,7 +2256,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       MakeTimestampFromDateTime(
         Literal(null, DateType),
-        timeLit("12:34:56.123456"),
+        Some(timeLit("12:34:56.123456")),
         Some(Literal("+00:00"))
       ),
       null
@@ -2239,7 +2265,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       MakeTimestampFromDateTime(
         dateLit("2023-10-01"),
-        Literal(null, TimeType()),
+        Some(Literal(null, TimeType())),
         Some(Literal("+00:00"))
       ),
       null
@@ -2248,7 +2274,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       MakeTimestampFromDateTime(
         dateLit("2023-10-01"),
-        timeLit("12:34:56.123456"),
+        Some(timeLit("12:34:56.123456")),
         Some(Literal(null, StringType))
       ),
       null
@@ -2257,7 +2283,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       MakeTimestampFromDateTime(
         Literal(null, DateType),
-        Literal(null, TimeType()),
+        Some(Literal(null, TimeType())),
         Some(Literal("+00:00"))
       ),
       null
