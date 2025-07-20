@@ -629,6 +629,86 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT TIME'08:30' + NULL
+-- !query schema
+struct<TIME '08:30:00' + NULL:time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT NULL + TIME'10:32'
+-- !query schema
+struct<TIME '10:32:00' + NULL:time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT TIME'00:00' + TIME'00:00'
+-- !query schema
+struct<TIME '00:00:00' + TIME '00:00:00':interval hour to second>
+-- !query output
+0 00:00:00.000000000
+
+
+-- !query
+SELECT TIME'12:30:41' + TIME'10:00'
+-- !query schema
+struct<TIME '12:30:41' + TIME '10:00:00':interval hour to second>
+-- !query output
+0 22:30:41.000000000
+
+
+-- !query
+SELECT '12:30:41.123' + TIME'10:00:01'
+-- !query schema
+struct<12:30:41.123 + TIME '10:00:01':interval hour to second>
+-- !query output
+0 22:30:42.123000000
+
+
+-- !query
+SELECT TIME'12:30:41.123' + TIMESTAMP'2025-07-11 10:00:01'
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"TIME(6)\"",
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(TIME '12:30:41.123' + TIMESTAMP '2025-07-11 10:00:01')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 58,
+    "fragment" : "TIME'12:30:41.123' + TIMESTAMP'2025-07-11 10:00:01'"
+  } ]
+}
+
+
+-- !query
+SELECT '23:59:59.999999' :: TIME(6) + '00:00' :: TIME(0)
+-- !query schema
+struct<CAST(23:59:59.999999 AS TIME(6)) + CAST(00:00 AS TIME(0)):interval hour to second>
+-- !query output
+0 23:59:59.999999000
+
+
+-- !query
+SELECT '00:00:00.1234' :: TIME(4) + TIME'23:59:59'
+-- !query schema
+struct<CAST(00:00:00.1234 AS TIME(4)) + TIME '23:59:59':interval hour to second>
+-- !query output
+0 23:59:59.123400000
+
+
+-- !query
 SELECT TIME'12:30:41' - TIME'10:00'
 -- !query schema
 struct<TIME '12:30:41' - TIME '10:00:00':interval hour to second>

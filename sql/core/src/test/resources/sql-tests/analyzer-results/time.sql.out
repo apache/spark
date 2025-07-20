@@ -516,6 +516,77 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT TIME'08:30' + NULL
+-- !query analysis
+Project [08:30:00 + cast(null as interval day to second) AS TIME '08:30:00' + NULL#x]
++- OneRowRelation
+
+
+-- !query
+SELECT NULL + TIME'10:32'
+-- !query analysis
+Project [10:32:00 + cast(null as interval day to second) AS TIME '10:32:00' + NULL#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'00:00' + TIME'00:00'
+-- !query analysis
+Project [00:00:00 + 00:00:00 AS TIME '00:00:00' + TIME '00:00:00'#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'12:30:41' + TIME'10:00'
+-- !query analysis
+Project [12:30:41 + 10:00:00 AS TIME '12:30:41' + TIME '10:00:00'#x]
++- OneRowRelation
+
+
+-- !query
+SELECT '12:30:41.123' + TIME'10:00:01'
+-- !query analysis
+Project [cast(12:30:41.123 as time(6)) + 10:00:01 AS 12:30:41.123 + TIME '10:00:01'#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'12:30:41.123' + TIMESTAMP'2025-07-11 10:00:01'
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"TIME(6)\"",
+    "right" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"(TIME '12:30:41.123' + TIMESTAMP '2025-07-11 10:00:01')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 58,
+    "fragment" : "TIME'12:30:41.123' + TIMESTAMP'2025-07-11 10:00:01'"
+  } ]
+}
+
+
+-- !query
+SELECT '23:59:59.999999' :: TIME(6) + '00:00' :: TIME(0)
+-- !query analysis
+Project [cast(23:59:59.999999 as time(6)) + cast(00:00 as time(0)) AS CAST(23:59:59.999999 AS TIME(6)) + CAST(00:00 AS TIME(0))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT '00:00:00.1234' :: TIME(4) + TIME'23:59:59'
+-- !query analysis
+Project [cast(00:00:00.1234 as time(4)) + 23:59:59 AS CAST(00:00:00.1234 AS TIME(4)) + TIME '23:59:59'#x]
++- OneRowRelation
+
+
+-- !query
 SELECT TIME'12:30:41' - TIME'10:00'
 -- !query analysis
 Project [12:30:41 - 10:00:00 AS TIME '12:30:41' - TIME '10:00:00'#x]
