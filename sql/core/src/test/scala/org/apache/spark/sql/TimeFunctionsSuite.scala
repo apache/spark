@@ -30,7 +30,7 @@ class TimeFunctionsSuite extends QueryTest with SharedSparkSession {
 
   override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "false")
 
-  test("hour function") {
+  test("SPARK-52885: hour function") {
     // Input data for the function.
     val schema = StructType(Seq(
       StructField("time", TimeType(), nullable = false)
@@ -63,7 +63,7 @@ class TimeFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(result2, expected)
   }
 
-  test("minute function") {
+  test("SPARK-52886: minute function") {
     // Input data for the function.
     val schema = StructType(Seq(
       StructField("time", TimeType(), nullable = false)
@@ -96,7 +96,7 @@ class TimeFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(result2, expected)
   }
 
-  test("second function") {
+  test("SPARK-52887: second function") {
     // Input data for the function.
     val schema = StructType(Seq(
       StructField("time", TimeType(), nullable = false)
