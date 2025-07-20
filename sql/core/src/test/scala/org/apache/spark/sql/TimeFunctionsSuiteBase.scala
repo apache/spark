@@ -25,9 +25,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class TimeFunctionsSuite extends QueryTest with SharedSparkSession {
-
-  override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "false")
+abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession {
 
   // Helper method to assert that two DataFrames with TimeType values are approximately equal.
   // This method assumes that the two dataframes (df1 and df2) have the same schemas and sizes.
@@ -110,4 +108,14 @@ class TimeFunctionsSuite extends QueryTest with SharedSparkSession {
       assertTwoTimesAreApproximatelyEqual(result1, result2)
     }
   }
+}
+
+// This class is used to run the same tests with ANSI mode enabled explicitly.
+class TimeFunctionsAnsiOnSuite extends TimeFunctionsSuiteBase {
+  override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "true")
+}
+
+// This class is used to run the same tests with ANSI mode disabled explicitly.
+class TimeFunctionsAnsiOffSuite extends TimeFunctionsSuiteBase {
+  override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "false")
 }
