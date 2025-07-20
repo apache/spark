@@ -28,8 +28,6 @@ import org.apache.spark.sql.types._
 class TimeFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-  override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "false")
-
   test("SPARK-52885: hour function") {
     // Input data for the function.
     val schema = StructType(Seq(
@@ -128,4 +126,14 @@ class TimeFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(result1, expected)
     checkAnswer(result2, expected)
   }
+}
+
+// This class is used to run the same tests with ANSI mode enabled explicitly.
+class TimeFunctionsAnsiOnSuite extends TimeFunctionsSuite {
+  override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "true")
+}
+
+// This class is used to run the same tests with ANSI mode disabled explicitly.
+class TimeFunctionsAnsiOffSuite extends TimeFunctionsSuite {
+  override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "false")
 }
