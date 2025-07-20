@@ -87,6 +87,8 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
 
   override def abort(): Unit = innerStore.abort()
 
+  override def release(): Unit = {}
+
   // Implement methods from StateStore (current trait)
 
   override def removeColFamilyIfExists(colFamilyName: String): Boolean = {

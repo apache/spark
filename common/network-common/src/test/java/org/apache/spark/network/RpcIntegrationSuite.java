@@ -26,8 +26,6 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.Sets;
 import com.google.common.io.Files;
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -41,6 +39,7 @@ import org.apache.spark.network.server.*;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
+import org.apache.spark.util.Pair;
 
 public class RpcIntegrationSuite {
   static TransportConf conf;
@@ -408,7 +407,7 @@ public class RpcIntegrationSuite {
         notFound.add(contain);
       }
     }
-    return new ImmutablePair<>(remainingErrors, notFound);
+    return new Pair<>(remainingErrors, notFound);
   }
 
   private static class VerifyingStreamCallback implements StreamCallbackWithID {
