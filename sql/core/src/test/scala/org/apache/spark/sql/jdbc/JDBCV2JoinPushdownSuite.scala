@@ -35,6 +35,7 @@ class JDBCV2JoinPushdownSuite extends QueryTest with SharedSparkSession with Exp
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.h2", classOf[JDBCTableCatalog].getName)
+    .set(SQLConf.ANSI_ENABLED.key, "true")
     .set("spark.sql.catalog.h2.url", url)
     .set("spark.sql.catalog.h2.driver", "org.h2.Driver")
     .set("spark.sql.catalog.h2.pushDownAggregate", "true")
