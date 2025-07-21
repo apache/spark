@@ -2649,7 +2649,7 @@
                     <searchTransitive>true</searchTransitive>
                   </bannedDependencies>
                   <enforceBytecodeVersion>
-                    <maxJdkVersion>${java.version}</maxJdkVersion>
+                    <maxJdkVersion>${maven.compiler.release}</maxJdkVersion>
                     <ignoredScopes>test</ignoredScopes>
                     <ignoredScopes>provided</ignoredScopes>
                   </enforceBytecodeVersion>
@@ -2754,7 +2754,7 @@
               <arg>-feature</arg>
               <arg>-explaintypes</arg>
               <arg>-release</arg>
-              <arg>17</arg>
+              <arg>${maven.compiler.release}</arg>
               <arg>-Wconf:any:e</arg>
               <arg>-Wconf:cat=deprecation:wv</arg>
               <arg>-Wunused:imports</arg>
@@ -2793,7 +2793,7 @@
             </jvmArgs>
             <javacArgs>
               <javacArg>--release</javacArg>
-              <javacArg>${java.version}</javacArg>
+              <javacArg>${maven.compiler.release}</javacArg>
               <javacArg>-Xlint:all,-serial,-path,-try</javacArg>
               <javacArg>-proc:full</javacArg>
             </javacArgs>
