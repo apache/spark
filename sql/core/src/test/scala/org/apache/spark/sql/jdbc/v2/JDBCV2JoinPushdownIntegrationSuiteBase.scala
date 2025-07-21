@@ -45,6 +45,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
   override def sparkConf: SparkConf = super.sparkConf
     .set(s"spark.sql.catalog.$catalogName", classOf[JDBCTableCatalog].getName)
+    .set(SQLConf.ANSI_ENABLED.key, "true")
     .set(s"spark.sql.catalog.$catalogName.url", url)
     .set(s"spark.sql.catalog.$catalogName.pushDownJoin", "true")
     .set(s"spark.sql.catalog.$catalogName.pushDownAggregate", "true")
