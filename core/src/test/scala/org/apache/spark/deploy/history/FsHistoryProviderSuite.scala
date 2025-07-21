@@ -1640,6 +1640,31 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
+  test("SPARK-52914: Support spark.history.fs.update.onDemandEnabled") {
+    Seq(true, false).foreach { onDemandEnabled =>
+      withTempDir { dir =>
+        val conf = createTestConf(true)
+        conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+        conf.set(ON_DEMAND_ENABLED, onDemandEnabled)
+        val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+        val provider = new FsHistoryProvider(conf)
+
+        val writer1 = new RollingEventLogFilesWriter("app1", None, dir.toURI, conf, hadoopConf)
+        writer1.start()
+        writeEventsToRollingWriter(writer1, Seq(
+          SparkListenerApplicationStart("app1", Some("app1"), 0, "user", None),
+          SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+        writer1.stop()
+
+        assert(provider.getListing().length === 0)
+        assert(dir.listFiles().length === 1)
+        assert(provider.getAppUI("app1", None).isDefined == onDemandEnabled)
+
+        provider.stop()
+      }
+    }
+  }
+
   test("SPARK-36354: EventLogFileReader should skip rolling event log directories with no logs") {
     withTempDir { dir =>
       val conf = createTestConf(true)

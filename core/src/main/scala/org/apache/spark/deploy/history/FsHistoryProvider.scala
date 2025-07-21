@@ -324,6 +324,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val app = try {
       load(appId)
      } catch {
+      case _: NoSuchElementException if this.conf.get(ON_DEMAND_ENABLED) =>
+        val name = Utils.nameForAppAndAttempt(appId, attemptId)
+        loadFromFallbackLocation(appId, attemptId,
+          RollingEventLogFilesWriter.EVENT_LOG_DIR_NAME_PREFIX + name)
       case _: NoSuchElementException =>
         return None
     }
@@ -362,6 +366,16 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     Some(loadedUI)
+  }
+
+  private def loadFromFallbackLocation(appId: String, attemptId: Option[String], logPath: String)
+    : ApplicationInfoWrapper = {
+    val date = new Date(0)
+    val info = ApplicationAttemptInfo(attemptId, date, date, date, 0, "spark", false, "unknown")
+    addListing(new ApplicationInfoWrapper(
+      ApplicationInfo(appId, appId, None, None, None, None, List.empty),
+      List(new AttemptInfoWrapper(info, logPath, 0, Some(1), None, None, None, None))))
+    load(appId)
   }
 
   override def getEmptyListingHtml(): Seq[Node] = {

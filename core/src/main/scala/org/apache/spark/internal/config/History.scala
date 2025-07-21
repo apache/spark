@@ -54,6 +54,12 @@ private[spark] object History {
     .checkValue(v => v > 0, "The update batchSize should be a positive integer.")
     .createWithDefault(Int.MaxValue)
 
+  val ON_DEMAND_ENABLED = ConfigBuilder("spark.history.fs.update.onDemandEnabled")
+    .version("4.1.0")
+    .doc("Whether to look up rolling event log locations on demand manner before listing files.")
+    .booleanConf
+    .createWithDefault(true)
+
   val CLEANER_ENABLED = ConfigBuilder("spark.history.fs.cleaner.enabled")
     .version("1.4.0")
     .doc("Whether the History Server should periodically clean up event logs from storage")
