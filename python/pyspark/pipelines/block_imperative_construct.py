@@ -15,61 +15,63 @@
 # limitations under the License.
 #
 from contextlib import contextmanager
-from typing import Generator, NoReturn, Union
+from typing import Generator, NoReturn, List, Callable
 
 from pyspark.errors import PySparkException
-from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.catalog import Catalog
+from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.udf import UDFRegistration
 
-# pyspark methods that should be blocked from executing in user supplied python pipeline definition files
-BLOCKED_METHODS = [
+# pyspark methods that should be blocked from executing in python pipeline definition files
+BLOCKED_METHODS: List = [
     {
         "class": RuntimeConf,
         "method": "set",
-        "suggestion": "Instead set configuration via the pipeline spec or use the 'spark_conf' argument in various decorators"
+        "suggestion": "Instead set configuration via the pipeline spec "
+        "or use the 'spark_conf' argument in various decorators",
     },
     {
         "class": Catalog,
         "method": "setCurrentCatalog",
-        "suggestion": "Instead set catalog via the pipeline spec or the 'name' argument on the dataset decorators"
+        "suggestion": "Instead set catalog via the pipeline spec "
+        "or the 'name' argument on the dataset decorators",
     },
     {
         "class": Catalog,
         "method": "setCurrentDatabase",
-        "suggestion": "Instead set database via the pipeline spec or the 'name' argument on the dataset decorators"
+        "suggestion": "Instead set database via the pipeline spec "
+        "or the 'name' argument on the dataset decorators",
     },
     {
         "class": Catalog,
         "method": "dropTempView",
-        "suggestion": "Instead remove the temporary view definition directly"
-
+        "suggestion": "Instead remove the temporary view definition directly",
     },
     {
         "class": Catalog,
         "method": "dropGlobalTempView",
-        "suggestion": "Instead remove the temporary view definition directly"
+        "suggestion": "Instead remove the temporary view definition directly",
     },
     {
         "class": DataFrame,
         "method": "createTempView",
-        "suggestion": "Instead use the @temporary_view decorator to define temporary views"
+        "suggestion": "Instead use the @temporary_view decorator to define temporary views",
     },
     {
         "class": DataFrame,
         "method": "createOrReplaceTempView",
-        "suggestion": "Instead use the @temporary_view decorator to define temporary views"
+        "suggestion": "Instead use the @temporary_view decorator to define temporary views",
     },
     {
         "class": DataFrame,
         "method": "createGlobalTempView",
-        "suggestion": "Instead use the @temporary_view decorator to define temporary views"
+        "suggestion": "Instead use the @temporary_view decorator to define temporary views",
     },
     {
         "class": DataFrame,
         "method": "createOrReplaceGlobalTempView",
-        "suggestion": "Instead use the @temporary_view decorator to define temporary views"
+        "suggestion": "Instead use the @temporary_view decorator to define temporary views",
     },
     {
         "class": UDFRegistration,
@@ -88,8 +90,9 @@ BLOCKED_METHODS = [
     },
 ]
 
-def _create_blocked_method(error_method_name: str, suggestion: str):
-    def blocked_method(*args, **kwargs) -> NoReturn:
+
+def _create_blocked_method(error_method_name: str, suggestion: str) -> Callable:
+    def blocked_method(*args: object, **kwargs: object) -> NoReturn:
         raise PySparkException(
             errorClass="IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
             messageParameters={
@@ -97,6 +100,7 @@ def _create_blocked_method(error_method_name: str, suggestion: str):
                 "suggestion": suggestion,
             },
         )
+
     return blocked_method
 
 

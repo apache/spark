@@ -30,23 +30,22 @@ from pyspark.pipelines.block_imperative_construct import block_imperative_constr
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message or "Connect not available")
 class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
-    
     def test_blocks_runtime_conf_set(self):
         """Test that spark.conf.set() is blocked."""
         config = self.spark.conf
-        
+
         test_cases = [
             ("spark.test.string", "string_value"),
             ("spark.test.int", 42),
             ("spark.test.bool", True),
         ]
-        
+
         for key, value in test_cases:
             with self.subTest(key=key, value=value):
                 with block_imperative_construct():
                     with self.assertRaises(PySparkException) as context:
                         config.set(key, value)
-                    
+
                     self.assertEqual(
                         context.exception.getCondition(),
                         "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
@@ -56,11 +55,11 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
     def test_blocks_catalog_set_current_catalog(self):
         """Test that spark.catalog.setCurrentCatalog() is blocked."""
         catalog = self.spark.catalog
-        
+
         with block_imperative_construct():
             with self.assertRaises(PySparkException) as context:
                 catalog.setCurrentCatalog("test_catalog")
-            
+
             self.assertEqual(
                 context.exception.getCondition(),
                 "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
@@ -70,11 +69,11 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
     def test_blocks_catalog_set_current_database(self):
         """Test that spark.catalog.setCurrentDatabase() is blocked."""
         catalog = self.spark.catalog
-        
+
         with block_imperative_construct():
             with self.assertRaises(PySparkException) as context:
                 catalog.setCurrentDatabase("test_db")
-            
+
             self.assertEqual(
                 context.exception.getCondition(),
                 "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
@@ -84,11 +83,11 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
     def test_blocks_catalog_drop_temp_view(self):
         """Test that spark.catalog.dropTempView() is blocked."""
         catalog = self.spark.catalog
-        
+
         with block_imperative_construct():
             with self.assertRaises(PySparkException) as context:
                 catalog.dropTempView("test_view")
-            
+
             self.assertEqual(
                 context.exception.getCondition(),
                 "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
@@ -98,11 +97,11 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
     def test_blocks_catalog_drop_global_temp_view(self):
         """Test that spark.catalog.dropGlobalTempView() is blocked."""
         catalog = self.spark.catalog
-        
+
         with block_imperative_construct():
             with self.assertRaises(PySparkException) as context:
                 catalog.dropGlobalTempView("test_view")
-            
+
             self.assertEqual(
                 context.exception.getCondition(),
                 "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
@@ -112,11 +111,11 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
     def test_blocks_dataframe_create_temp_view(self):
         """Test that DataFrame.createTempView() is blocked."""
         df = self.spark.range(1)
-        
+
         with block_imperative_construct():
             with self.assertRaises(PySparkException) as context:
                 df.createTempView("test_view")
-            
+
             self.assertEqual(
                 context.exception.getCondition(),
                 "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
@@ -126,11 +125,11 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
     def test_blocks_dataframe_create_or_replace_temp_view(self):
         """Test that DataFrame.createOrReplaceTempView() is blocked."""
         df = self.spark.range(1)
-        
+
         with block_imperative_construct():
             with self.assertRaises(PySparkException) as context:
                 df.createOrReplaceTempView("test_view")
-            
+
             self.assertEqual(
                 context.exception.getCondition(),
                 "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
@@ -140,11 +139,11 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
     def test_blocks_dataframe_create_global_temp_view(self):
         """Test that DataFrame.createGlobalTempView() is blocked."""
         df = self.spark.range(1)
-        
+
         with block_imperative_construct():
             with self.assertRaises(PySparkException) as context:
                 df.createGlobalTempView("test_view")
-            
+
             self.assertEqual(
                 context.exception.getCondition(),
                 "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
@@ -154,11 +153,11 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
     def test_blocks_dataframe_create_or_replace_global_temp_view(self):
         """Test that DataFrame.createOrReplaceGlobalTempView() is blocked."""
         df = self.spark.range(1)
-        
+
         with block_imperative_construct():
             with self.assertRaises(PySparkException) as context:
                 df.createOrReplaceGlobalTempView("test_view")
-            
+
             self.assertEqual(
                 context.exception.getCondition(),
                 "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
@@ -168,14 +167,14 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
     def test_blocks_udf_register(self):
         """Test that spark.udf.register() is blocked."""
         udf_registry = self.spark.udf
-        
+
         def test_func(x):
             return x + 1
-        
+
         with block_imperative_construct():
             with self.assertRaises(PySparkException) as context:
                 udf_registry.register("test_udf", test_func, StringType())
-            
+
             self.assertEqual(
                 context.exception.getCondition(),
                 "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
@@ -185,11 +184,13 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
     def test_blocks_udf_register_java_function(self):
         """Test that spark.udf.registerJavaFunction() is blocked."""
         udf_registry = self.spark.udf
-        
+
         with block_imperative_construct():
             with self.assertRaises(PySparkException) as context:
-                udf_registry.registerJavaFunction("test_java_udf", "com.example.TestUDF", StringType())
-            
+                udf_registry.registerJavaFunction(
+                    "test_java_udf", "com.example.TestUDF", StringType()
+                )
+
             self.assertEqual(
                 context.exception.getCondition(),
                 "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
@@ -199,11 +200,11 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
     def test_blocks_udf_register_java_udaf(self):
         """Test that spark.udf.registerJavaUDAF() is blocked."""
         udf_registry = self.spark.udf
-        
+
         with block_imperative_construct():
             with self.assertRaises(PySparkException) as context:
                 udf_registry.registerJavaUDAF("test_java_udaf", "com.example.TestUDAF")
-            
+
             self.assertEqual(
                 context.exception.getCondition(),
                 "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
@@ -232,7 +233,9 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
                 cls = method_info["class"]
                 method_name = method_info["method"]
                 with self.subTest(class_method=f"{cls.__name__}.{method_name}"):
-                    self.assertIsNot(getattr(cls, method_name), original_methods[(cls, method_name)])
+                    self.assertIsNot(
+                        getattr(cls, method_name), original_methods[(cls, method_name)]
+                    )
 
         # Verify methods are restored after context
         for method_info in BLOCKED_METHODS:
