@@ -883,7 +883,7 @@ def wrap_grouped_agg_arrow_udf(f, args_offsets, kwargs_offsets, return_type, run
         import pyarrow as pa
 
         result = func(*series)
-        return pa.array([result])
+        return pa.array(obj=[result], type=arrow_return_type)
 
     return (
         args_kwargs_offsets,
