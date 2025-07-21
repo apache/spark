@@ -172,7 +172,8 @@ class ArtifactManager(
       .addAllNames(Arrays.asList(artifactName))
       .build()
     val response = bstub.artifactStatus(request)
-    if (SparkStringUtils.isNotEmpty(response.getSessionId) && response.getSessionId != sessionId) {
+    if (SparkStringUtils.isNotEmpty(response.getSessionId) &&
+      response.getSessionId != sessionId) {
       // In older versions of the Spark cluster, the session ID is not set in the response.
       // Ignore this check to keep compatibility.
       throw new IllegalStateException(
