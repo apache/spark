@@ -119,6 +119,11 @@ object WindowResolution {
    *   - [[AggregateWindowFunction]]
    */
   def validateResolvedWindowExpression(windowExpression: WindowExpression): Unit = {
+    checkWindowFunctionAndFrameMismatch(windowExpression)
+    checkWindowFunction(windowExpression)
+  }
+
+  def checkWindowFunctionAndFrameMismatch(windowExpression: WindowExpression): Unit = {
     windowExpression match {
       case _ @ WindowExpression(
       windowFunction: FrameLessOffsetWindowFunction,
@@ -133,6 +138,9 @@ object WindowResolution {
         )
       case _ =>
     }
+  }
+
+  def checkWindowFunction(windowExpression: WindowExpression): Unit = {
     windowExpression.windowFunction match {
       case AggregateExpression(_, _, true, _, _) =>
         windowExpression.failAnalysis(
