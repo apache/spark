@@ -182,6 +182,12 @@ object AgnosticEncoders {
     override def clsTag: ClassTag[E] = ClassTag(udt.userClass)
   }
 
+  object UDTEncoder {
+    def apply[E >: Null](udt: UserDefinedType[E]): UDTEncoder[E] = {
+      new UDTEncoder(udt, udt.getClass.asInstanceOf[Class[_ <: UserDefinedType[_]]])
+    }
+  }
+
   // Enums are special leafs because we need to capture the class.
   protected abstract class EnumEncoder[E] extends AgnosticEncoder[E] {
     override def isPrimitive: Boolean = false

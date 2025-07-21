@@ -930,14 +930,19 @@ class AdaptiveQueryExecSuite
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
           SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
           val joined = createJoinedDF()
-          joined.explain(true)
 
           val error = intercept[SparkException] {
             joined.collect()
           }
-          assert((Seq(error) ++ Option(error.getCause) ++ error.getSuppressed()).exists(
-            e => e.getMessage() != null && e.getMessage().contains("coalesce test error")))
+          val errMsgList = (error :: error.getCause :: error.getSuppressed.toList)
+            .filter(e => e != null && e.getMessage != null)
+            .map(_.getMessage)
 
+          assert(errMsgList.exists(_.contains("coalesce test error")),
+            s"""
+               |The error message should contain 'coalesce test error', but got:
+               |${errMsgList.mkString("======\n", "\n", "\n======")}
+               |""".stripMargin)
           val adaptivePlan = joined.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
 
           // All QueryStages should be based on ShuffleQueryStageExec
@@ -1740,7 +1745,8 @@ class AdaptiveQueryExecSuite
       Seq("=== Result of Batch AQE Preparations ===",
           "=== Result of Batch AQE Post Stage Creation ===",
           "=== Result of Batch AQE Replanning ===",
-          "=== Result of Batch AQE Query Stage Optimization ===").foreach { expectedMsg =>
+          "=== Result of Batch AQE Query Stage Optimization ===",
+          "Output Information:").foreach { expectedMsg =>
         assert(testAppender.loggingEvents.exists(
           _.getMessage.getFormattedMessage.contains(expectedMsg)))
       }
@@ -3132,6 +3138,61 @@ class AdaptiveQueryExecSuite
       assert(plan.finalPhysicalPlan.isInstanceOf[WindowExec])
       plan.inputPlan.output.zip(plan.finalPhysicalPlan.output).foreach { case (o1, o2) =>
         assert(o1.semanticEquals(o2), "Different output column order after AQE optimization")
+      }
+    }
+  }
+
+  test("SPARK-42322: STAGE_MATERIALIZATION_MULTIPLE_FAILURES error class validation") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+
+      withTempView("test_table1", "test_table2") {
+        import java.lang.reflect.InvocationTargetException
+
+        // Create datasets
+        spark.range(100).selectExpr("id", "id % 10 as group_col")
+          .createOrReplaceTempView("test_table1")
+        spark.range(100).selectExpr("id", "id % 5 as group_col")
+          .createOrReplaceTempView("test_table2")
+
+        // Create a simple query to get the plan
+        val df = spark.sql("""
+          SELECT t1.group_col, COUNT(*) as cnt
+          FROM test_table1 t1
+          JOIN test_table2 t2 ON t1.group_col = t2.group_col
+          GROUP BY t1.group_col
+        """)
+
+        // Instead of trying to trigger actual failures, let's directly test the error creation
+        val adaptivePlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+
+        // Access the private method to test error creation logic
+        val errors = Seq(
+          new RuntimeException("Stage 1 materialization failed"),
+          new RuntimeException("Stage 2 materialization failed")
+        )
+
+        // Use reflection to access and test the cleanUpAndThrowException method
+        val cleanUpMethod = classOf[AdaptiveSparkPlanExec].getDeclaredMethod(
+          "cleanUpAndThrowException", classOf[Seq[Throwable]], classOf[Option[Int]])
+        cleanUpMethod.setAccessible(true)
+
+        val exception = intercept[InvocationTargetException] {
+          cleanUpMethod.invoke(adaptivePlan, errors, None)
+        }
+
+        // Verify that we get the expected error class for multiple stage failures
+        val cause = exception.getCause.asInstanceOf[SparkException]
+        assert(cause.getCondition == "STAGE_MATERIALIZATION_MULTIPLE_FAILURES",
+          s"Expected STAGE_MATERIALIZATION_MULTIPLE_FAILURES, " +
+            s"got: ${cause.getCondition}")
+        val errorMessage = cause.getMessage
+        assert(errorMessage.contains("Multiple failures (2) in stage materialization:"),
+          s"Error message should contain failure count, got: $errorMessage")
+        assert(errorMessage.contains("1. RuntimeException: Stage 1 materialization failed"),
+          s"Error message should contain first error details, got: $errorMessage")
+        assert(errorMessage.contains("2. RuntimeException: Stage 2 materialization failed"),
+          s"Error message should contain second error details, got: $errorMessage")
       }
     }
   }

@@ -51,16 +51,20 @@ class PlanRewriter(
    */
   def rewriteWithSubqueries(plan: LogicalPlan): LogicalPlan = {
     AnalysisHelper.allowInvokingTransformsInAnalyzer {
-      val planWithRewrittenSubqueries =
-        plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-          case subqueryExpression: SubqueryExpression =>
-            val rewrittenSubqueryPlan = rewrite(subqueryExpression.plan)
-
-            subqueryExpression.withNewPlan(rewrittenSubqueryPlan)
-        }
-
-      rewrite(planWithRewrittenSubqueries)
+      doRewriteWithSubqueries(plan)
     }
+  }
+
+  private def doRewriteWithSubqueries(plan: LogicalPlan): LogicalPlan = {
+    val planWithRewrittenSubqueries =
+      plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+        case subqueryExpression: SubqueryExpression =>
+          val rewrittenSubqueryPlan = doRewriteWithSubqueries(subqueryExpression.plan)
+
+          subqueryExpression.withNewPlan(rewrittenSubqueryPlan)
+      }
+
+    rewrite(planWithRewrittenSubqueries)
   }
 
   /**

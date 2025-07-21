@@ -96,7 +96,7 @@ case class UnionLoopExec(
     "numIterations" -> SQLMetrics.createMetric(sparkContext, "number of recursive iterations"),
     "numAnchorOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of anchor output rows"))
 
-  val localRelationLimit =
+  private val localRelationLimit =
     conf.getConf(SQLConf.CTE_RECURSION_ANCHOR_ROWS_LIMIT_TO_CONVERT_TO_LOCAL_RELATION)
 
   /**
@@ -135,7 +135,8 @@ case class UnionLoopExec(
         // reference any external tables, we are able to calculate everything in the optimizer,
         // using the ConvertToLocalRelation rule, which significantly improves runtime.
         if (count <= localRelationLimit) {
-          val local = LocalRelation.fromExternalRows(anchor.output, df.collect().toIndexedSeq)
+          val local = LocalRelation.fromExternalRows(df.logicalPlan.output,
+            df.collect().toIndexedSeq)
          (Dataset.ofRows(session, local), count)
         } else {
           (materializedDF, count)
@@ -210,7 +211,7 @@ case class UnionLoopExec(
             // SQLConf.CTE_RECURSION_ANCHOR_ROWS_LIMIT_TO_CONVERT_TO_LOCAL_RELATION is set to be
             // anything larger than 0. However, we still handle this case in a special way to
             // optimize the case when the flag is set to 0.
-            case p @ Project(projectList, _: OneRowRelation) =>
+            case p @ Project(projectList, _: OneRowRelation) if p.subqueries.isEmpty =>
               prevPlan = p
               val prevPlanToRefMapping = projectList.zip(r.output).map {
                 case (fa: Alias, ta) => fa.withExprId(ta.exprId).withName(ta.name)
@@ -220,9 +221,9 @@ case class UnionLoopExec(
               val logicalRDD = LogicalRDD.fromDataset(prevDF.queryExecution.toRdd, prevDF,
                   prevDF.isStreaming).newInstance()
               prevPlan = logicalRDD
-              val logicalPlan = prevDF.logicalPlan
               val optimizedPlan = prevDF.queryExecution.optimizedPlan
-              val (stats, constraints) = rewriteStatsAndConstraints(logicalPlan, optimizedPlan)
+              val (stats, constraints) = rewriteStatsAndConstraints(r, optimizedPlan,
+                sameOutput = false)
               logicalRDD.copy(output = r.output)(prevDF.sparkSession, stats, constraints)
           }
       }

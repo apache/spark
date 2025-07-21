@@ -18,7 +18,7 @@
 package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.analysis.{FunctionResolution, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.analysis.resolver.{MetadataResolver, Resolver, ResolverRunner}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -26,10 +26,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class ViewResolverSuite extends QueryTest with SharedSparkSession {
-  private val catalogName =
-    "spark_catalog"
+  private val catalogName = "spark_catalog"
   private val col1Integer = "col1".attr.int.withNullability(false)
   private val col2String = "col2".attr.string.withNullability(false)
   private val testTable = LocalRelation.fromExternalRows(
@@ -143,14 +143,41 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("View with options") {
+    withView("v1") {
+      spark.sql("CREATE VIEW v1 AS SELECT col1, col2 FROM VALUES (1, 'a')")
+
+      val options = new java.util.HashMap[String, String]
+      options.put("foo", "bar")
+      checkViewResolution(
+        "SELECT * FROM v1 WITH ('foo' = 'bar')",
+        expectedChild = testTable
+          .select(col1Integer, col2String)
+          .select(
+            cast(
+              col1Integer,
+              IntegerType,
+              ansiEnabled = conf.ansiEnabled || conf.viewSchemaCompensation
+            ).as("col1"),
+            cast(
+              col2String,
+              StringType,
+              ansiEnabled = conf.ansiEnabled || conf.viewSchemaCompensation
+            ).as("col2")
+          ),
+        expectedOptions = new CaseInsensitiveStringMap(options)
+      )
+    }
+  }
+
   private def checkViewResolution(
       sqlText: String,
-      expectedChild: LogicalPlan = OneRowRelation()) = {
+      expectedChild: LogicalPlan = OneRowRelation(),
+      expectedOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()) = {
     val relationResolution = Resolver.createRelationResolution(spark.sessionState.catalogManager)
     val metadataResolver = new MetadataResolver(
       spark.sessionState.catalogManager,
-      relationResolution,
-      new FunctionResolution(spark.sessionState.catalogManager, relationResolution)
+      relationResolution
     )
 
     val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(sqlText)
@@ -182,6 +209,7 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
     assert(
       normalizeExprIds(resolvedView.child).prettyJson == normalizeExprIds(expectedChild).prettyJson
     )
+    assert(resolvedView.options == expectedOptions)
   }
 
   private def cast(

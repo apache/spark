@@ -29,60 +29,27 @@ import java.util.UUID
 object ConstructPipelineEvent {
 
   /**
-   * Converts an exception that was thrown during a pipeline run to a more structured and standard
-   * internal representation.
-   */
-  private[pipelines] def serializeException(t: Throwable): Seq[SerializedException] = {
-    val className = t.getClass.getName
-    val stacks = Option(t.getStackTrace).map(_.toSeq).getOrElse(Nil).map { f =>
-      StackFrame(declaringClass = f.getClassName, methodName = f.getMethodName)
-    }
-    SerializedException(className = className, message = t.getMessage, stack = stacks) +:
-    Option(t.getCause).map(serializeException).getOrElse(Nil)
-  }
-
-  def constructErrorDetails(t: Throwable): ErrorDetail = ErrorDetail(serializeException(t))
-
-  /**
    * Returns a new event with the current or provided timestamp and the given origin/message.
    */
   def apply(
       origin: PipelineEventOrigin,
+      level: EventLevel,
       message: String,
       details: EventDetails,
-      exception: Throwable = null,
+      exception: Option[Throwable] = None,
       eventTimestamp: Option[Timestamp] = None
   ): PipelineEvent = {
-    ConstructPipelineEvent(
-      origin = origin,
-      message = message,
-      details = details,
-      errorDetails = Option(exception).map(constructErrorDetails),
-      eventTimestamp = eventTimestamp
-    )
-  }
-
-  /**
-   * Returns a new event with the current or given timestamp and the given origin / message.
-   */
-  def apply(
-      origin: PipelineEventOrigin,
-      message: String,
-      details: EventDetails,
-      errorDetails: Option[ErrorDetail],
-      eventTimestamp: Option[Timestamp]
-  ): PipelineEvent = synchronized {
-
     val eventUUID = UUID.randomUUID()
     val timestamp = Timestamp.from(Instant.now())
 
     PipelineEvent(
       id = eventUUID.toString,
-      timestamp = EventHelpers.formatTimestamp(eventTimestamp.getOrElse(timestamp)),
+      timestamp = eventTimestamp.getOrElse(timestamp),
       message = message,
       details = details,
-      error = errorDetails,
-      origin = origin
+      error = exception,
+      origin = origin,
+      level = level
     )
   }
 }

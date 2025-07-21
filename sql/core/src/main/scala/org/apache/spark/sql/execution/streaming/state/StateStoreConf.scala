@@ -22,7 +22,9 @@ import org.apache.spark.sql.internal.SQLConf
 
 /** A class that contains configuration parameters for [[StateStore]]s. */
 class StateStoreConf(
-    @transient private[state] val sqlConf: SQLConf,
+    // Should be private because it could be null under serialization (due to
+    // the transient annotation)
+    @transient private val sqlConf: SQLConf,
     val extraOptions: Map[String, String] = Map.empty)
   extends Serializable {
 
@@ -37,6 +39,8 @@ class StateStoreConf(
    * Timeout for state store maintenance operations to complete on shutdown
    */
   val stateStoreMaintenanceShutdownTimeout: Long = sqlConf.stateStoreMaintenanceShutdownTimeout
+
+  val stateStoreMaintenanceProcessingTimeout: Long = sqlConf.stateStoreMaintenanceProcessingTimeout
 
   /**
    * Minimum number of delta files in a chain after which HDFSBackedStateStore will
@@ -105,6 +109,9 @@ class StateStoreConf(
 
   /** Whether to unload the store on task completion. */
   val unloadOnCommit = sqlConf.stateStoreUnloadOnCommit
+
+  /** The version of the state store checkpoint format. */
+  val stateStoreCheckpointFormatVersion: Int = sqlConf.stateStoreCheckpointFormatVersion
 
   /**
    * Additional configurations related to state store. This will capture all configs in

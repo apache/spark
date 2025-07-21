@@ -183,10 +183,16 @@
         <module name="IllegalImport">
             <property name="illegalPkgs" value="org.apache.log4j" />
             <property name="illegalPkgs" value="org.apache.commons.lang" />
+            <property name="illegalPkgs" value="org.apache.commons.lang3.tuple" />
+            <property name="illegalClasses" value="org.apache.commons.lang3.JavaVersion" />
         </module>
         <module name="RegexpSinglelineJava">
             <property name="format" value="new URL\("/>
             <property name="message" value="Use URI.toURL or URL.of instead of URL constructors." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="new ToStringBuilder\("/>
+            <property name="message" value="Use String concatenation instead." />
         </module>
         <!-- support structured logging -->
         <module name="RegexpSinglelineJava">

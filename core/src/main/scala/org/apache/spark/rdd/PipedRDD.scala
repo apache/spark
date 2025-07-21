@@ -90,7 +90,7 @@ private[spark] class PipedRDD[T: ClassTag](
       val currentDir = new File(".")
       logDebug("currentDir = " + currentDir.getAbsolutePath())
       val taskDirFile = new File(taskDirectory)
-      taskDirFile.mkdirs()
+      Utils.createDirectory(taskDirFile)
 
       try {
         val tasksDirFilter = new NotEqualsFileNameFilter("tasks")

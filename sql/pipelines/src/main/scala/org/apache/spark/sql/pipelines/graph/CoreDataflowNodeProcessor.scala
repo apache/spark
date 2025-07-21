@@ -21,7 +21,6 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.pipelines.graph.DataflowGraphTransformer.{
@@ -81,12 +80,6 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
         val resolvedFlowsToTable = flowsToTable.map { flow =>
           resolvedFlowNodesMap.get(flow.identifier)
         }
-
-        // Assign isStreamingTable (MV or ST) to the table based on the resolvedFlowsToTable
-        val tableWithType = table.copy(
-          isStreamingTableOpt = Option(resolvedFlowsToTable.exists(f => f.df.isStreaming))
-        )
-
         // We mark all tables as virtual to ensure resolution uses incoming flows
         // rather than previously materialized tables.
         val virtualTableInput = VirtualTableInput(
@@ -96,7 +89,7 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
           availableFlows = resolvedFlowsToTable
         )
         resolvedInputs.put(table.identifier, virtualTableInput)
-        Seq(tableWithType)
+        Seq(table)
       case view: View =>
         // For view, add the flow to resolvedInputs and return empty.
         require(upstreamNodes.size == 1, "Found multiple flows to view")
@@ -116,7 +109,7 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
   }
 }
 
-private class FlowResolver(rawGraph: DataflowGraph) extends Logging {
+private class FlowResolver(rawGraph: DataflowGraph) {
 
   /** Helper used to track which confs were set by which flows. */
   private case class FlowConf(key: String, value: String, flowIdentifier: TableIdentifier)
@@ -217,11 +210,6 @@ private class FlowResolver(rawGraph: DataflowGraph) extends Logging {
         val mustBeAppend = rawGraph.flowsTo(f.destinationIdentifier).size > 1
         new StreamingFlow(flow, funcResult, mustBeAppend = mustBeAppend)
       case _: UnresolvedFlow => new CompleteFlow(flow, funcResult)
-    }
-    if (!funcResult.resolved) {
-      logError(s"Failed to resolve ${flow.displayName}: ${funcResult.failure.mkString("\n\n\n")}")
-    } else {
-      logInfo(s"Successfully resolved ${flow.displayName}")
     }
     typedFlow
   }

@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec, ValidateRequirements}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.util.Utils
 
 // scalastyle:off line.size.limit
 /**
@@ -77,8 +78,9 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
   }
 
   private val referenceRegex = "#\\d+".r
-  private val normalizeRegex = "#\\d+L?".r
-  private val planIdRegex = "plan_id=\\d+".r
+  // Do not match `id=#123` like ids as those are actually plan ids in `SubqueryExec` nodes.
+  private val exprIdRegexp = "(?<prefix>(?<!id=)#)\\d+L?".r
+  private val planIdRegex = "(?<prefix>(plan_id=|id=#))\\d+".r
 
   private val clsName = this.getClass.getCanonicalName
 
@@ -123,7 +125,7 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
 
     if (!foundMatch) {
       FileUtils.deleteDirectory(dir)
-      assert(dir.mkdirs())
+      assert(Utils.createDirectory(dir))
 
       val file = new File(dir, "simplified.txt")
       FileUtils.writeStringToFile(file, simplified, StandardCharsets.UTF_8)
@@ -230,18 +232,15 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
   }
 
   private def normalizeIds(plan: String): String = {
-    val map = new mutable.HashMap[String, String]()
-    normalizeRegex.findAllMatchIn(plan).map(_.toString)
-      .foreach(map.getOrElseUpdate(_, (map.size + 1).toString))
-    val exprIdNormalized = normalizeRegex.replaceAllIn(
-      plan, regexMatch => s"#${map(regexMatch.toString)}")
+    val exprIdMap = new mutable.HashMap[String, String]()
+    val exprIdNormalized = exprIdRegexp.replaceAllIn(plan,
+      m => exprIdMap.getOrElseUpdate(m.toString(), s"${m.group("prefix")}${exprIdMap.size + 1}"))
 
-    // Normalize the plan id in Exchange nodes. See `Exchange.stringArgs`.
+    // Normalize the plan ids in Exchange and Subquery nodes.
+    // See `Exchange.stringArgs` and `SubqueryExec.stringArgs`
     val planIdMap = new mutable.HashMap[String, String]()
-    planIdRegex.findAllMatchIn(exprIdNormalized).map(_.toString)
-      .foreach(planIdMap.getOrElseUpdate(_, (planIdMap.size + 1).toString))
-    planIdRegex.replaceAllIn(
-      exprIdNormalized, regexMatch => s"plan_id=${planIdMap(regexMatch.toString)}")
+    planIdRegex.replaceAllIn(exprIdNormalized,
+      m => planIdMap.getOrElseUpdate(s"$m", s"${m.group("prefix")}${planIdMap.size + 1}"))
   }
 
   private def normalizeLocation(plan: String): String = {

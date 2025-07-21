@@ -549,7 +549,6 @@ class FrameConstructorMixin:
     @unittest.skipIf(
         not extension_float_dtypes_available, "pandas extension float dtypes are not available"
     )
-    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_extension_float_dtypes(self):
         pdf = pd.DataFrame(
             {

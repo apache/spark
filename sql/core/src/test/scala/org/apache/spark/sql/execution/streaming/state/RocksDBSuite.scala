@@ -3534,6 +3534,87 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  testWithChangelogCheckpointingEnabled("SPARK-52553 - v1 changelog with invalid version number" +
+    " does not cause NumberFormatException") {
+    withTempDir { dir =>
+      withDB(dir.getCanonicalPath) { db =>
+        // In v1 changelog, the first key size would be written first in the file.
+        // We want the first few bytes in the changelog file to represent the UTF-8 string "v)"
+        // Because it has a prefix v, the changelog factory would try to parse ) as the version.
+        val dfsChangelogFileMethod = PrivateMethod[Path](Symbol("dfsChangelogFile"))
+        val changelogFilePath = db.fileManager invokePrivate dfsChangelogFileMethod(1L, None)
+
+        val fileManagerMethod = PrivateMethod[CheckpointFileManager](Symbol("fm"))
+        val fm = db.fileManager invokePrivate fileManagerMethod()
+
+        val codecMethod = PrivateMethod[CompressionCodec](Symbol("codec"))
+        val codec = db.fileManager invokePrivate codecMethod()
+
+        // Write a changelog file (1.changelog) with the desired content
+        val output = new DataOutputStream(codec.compressedOutputStream(
+          fm.createAtomic(changelogFilePath, overwriteIfPossible = true)))
+        // Write the string "v)"
+        output.writeUTF("v)")
+        output.close()
+
+        // Now try to read the changelog file using changelog reader
+        // It shouldn't throw NumberFormatException
+        val changelogReader = db.fileManager.getChangelogReader(1)
+        assert(changelogReader.version === 1)
+        changelogReader.closeIfNeeded()
+      }
+    }
+  }
+
+  test("SPARK-52637: RocksDB compaction leading to incorrect file mapping during load " +
+    "does not lead to versionID mismatch") {
+    val sqlConf = new SQLConf
+    sqlConf.setConf(
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT,
+      1)
+    val dbConf = RocksDBConf(StateStoreConf(sqlConf))
+
+    withTempDir { remoteDir => withTempDir { localDir =>
+      withDB(remoteDir.toString, localDir = localDir, conf = dbConf) { db =>
+        db.load(0)
+        db.commit()
+
+        val workingDir = localDir.listFiles().filter(_.getName.startsWith("workingDir")).head
+
+        logInfo(s"files: ${db.fileManager.listRocksDBFiles(workingDir)}")
+
+        db.load(1)
+        db.put("0", "0")
+        db.commit()
+
+        db.doMaintenance() // upload snapshot to remoteDir
+
+        // confirm that sst files exist
+        assert(db.fileManager.listRocksDBFiles(workingDir)._1.nonEmpty)
+        db.fileManager.listRocksDBFiles(workingDir)._1
+          .foreach(file => file.delete()) // simulate rocksdb compaction by removing SST files
+
+        // confirm that there are entries in the mapping
+        val fileMapping = PrivateMethod[RocksDBFileMapping](Symbol("rocksDBFileMapping"))
+        val localFileMappings = PrivateMethod[mutable.Map[String, (Long, RocksDBImmutableFile)]](
+          Symbol("localFileMappings"))
+        val fileMappingObj = db invokePrivate fileMapping()
+        val localFileMappingsObj = fileMappingObj invokePrivate localFileMappings()
+        assert(localFileMappingsObj.exists { case (_, (version, _)) =>
+          version >= 1
+        })
+
+        // reload version 1
+        db.load(1)
+
+        // ensure that there are no leftover fileMappings from the first load of version 1
+        assert(!localFileMappingsObj.exists { case (_, (version, _)) =>
+          version >= 1
+        })
+      }
+    }}
+  }
+
   private def assertAcquiredThreadIsCurrentThread(db: RocksDB): Unit = {
     val threadInfo = db.getAcquiredThreadInfo()
     assert(threadInfo != None,

@@ -20712,8 +20712,8 @@ def schema_of_variant_agg(v: "ColumnOrName") -> Column:
 @_try_remote_functions
 def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> Column:
     """
-    Converts a column containing a :class:`StructType`, :class:`ArrayType` or a :class:`MapType`
-    into a JSON string. Throws an exception, in the case of an unsupported type.
+    Converts a column containing a :class:`StructType`, :class:`ArrayType`, :class:`MapType`
+    or a :class:`VariantType` into a JSON string. Throws an exception, in the case of an unsupported type.
 
     .. versionadded:: 2.1.0
 
@@ -20723,7 +20723,7 @@ def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) ->
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
-        name of column containing a struct, an array or a map.
+        name of column containing a struct, an array, a map, or a variant object.
     options : dict, optional
         options to control converting. accepts the same options as the JSON datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
@@ -20777,7 +20777,18 @@ def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) ->
     |{"name":"Alice"}|
     +----------------+
 
-    Example 4: Converting a nested MapType column to JSON
+    Example 4: Converting a VariantType column to JSON
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1, '{"name": "Alice"}')], ("key", "value"))
+    >>> df.select(sf.to_json(sf.parse_json(df.value)).alias("json")).show(truncate=False)
+    +----------------+
+    |json            |
+    +----------------+
+    |{"name":"Alice"}|
+    +----------------+
+
+    Example 5: Converting a nested MapType column to JSON
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(1, [{"name": "Alice"}, {"name": "Bob"}])], ("key", "value"))
@@ -20788,7 +20799,7 @@ def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) ->
     |[{"name":"Alice"},{"name":"Bob"}]|
     +---------------------------------+
 
-    Example 5: Converting a simple ArrayType column to JSON
+    Example 6: Converting a simple ArrayType column to JSON
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(1, ["Alice", "Bob"])], ("key", "value"))
@@ -20799,7 +20810,7 @@ def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) ->
     |["Alice","Bob"]|
     +---------------+
 
-    Example 6: Converting to JSON with specified options
+    Example 7: Converting to JSON with specified options
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT (DATE('2022-02-22'), 1) AS date")

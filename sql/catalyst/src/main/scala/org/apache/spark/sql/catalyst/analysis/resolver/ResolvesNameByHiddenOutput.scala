@@ -21,22 +21,11 @@ import java.util.HashSet
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{
-  Attribute,
-  AttributeReference,
-  ExprId,
-  NamedExpression,
-  PipeOperator
-}
-import org.apache.spark.sql.catalyst.plans.logical.{
-  Aggregate,
-  Distinct,
-  LogicalPlan,
-  Project,
-  SubqueryAlias,
-  UnaryNode
-}
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.expressions.{ExprId, NamedExpression, PipeOperator}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * [[ResolvesNameByHiddenOutput]] is used by resolvers for operators that are able to resolve
@@ -175,7 +164,7 @@ import org.apache.spark.sql.catalyst.util._
  *
  * In the plan you can see that `col2` is added to the lower [[Project.projectList]].
  */
-trait ResolvesNameByHiddenOutput {
+trait ResolvesNameByHiddenOutput extends SQLConfHelper {
 
   /**
    * Insert the missing expressions in the output list of the operator. Recursively call
@@ -233,6 +222,20 @@ trait ResolvesNameByHiddenOutput {
       case other => other
     }
 
+  /**
+   * Deduplicates missing expressions by [[ExprId]].
+   */
+  def deduplicateMissingExpressions(
+      missingExpressions: Seq[NamedExpression]): Seq[NamedExpression] = {
+    val duplicateMissingExpressions = new HashSet[ExprId]
+    missingExpressions.collect {
+      case expression: NamedExpression
+        if !duplicateMissingExpressions.contains(expression.exprId) =>
+        duplicateMissingExpressions.add(expression.exprId)
+        expression
+    }
+  }
+
   private def expandOperatorsOutputList(
       operator: UnaryNode,
       operatorOutput: Seq[NamedExpression],
@@ -242,24 +245,27 @@ trait ResolvesNameByHiddenOutput {
       missingExpressions = missingExpressions
     )
 
-    val missingAttributes = filteredMissingExpressions.collect {
-      case attribute: AttributeReference => attribute
+    if (filteredMissingExpressions.nonEmpty) {
+      val (metadataCols, nonMetadataCols) =
+        operatorOutput.partition(_.toAttribute.qualifiedAccessOnly)
+
+      operator match {
+        case aggregate: Aggregate =>
+          val newAggregateList = nonMetadataCols ++ filteredMissingExpressions ++ metadataCols
+          aggregate.copy(aggregateExpressions = newAggregateList)
+        case project: Project =>
+          val expandedChild = insertMissingExpressions(
+            operator = operator.child,
+            missingExpressions = filteredMissingExpressions
+          )
+          val newProjectList =
+            nonMetadataCols ++ filteredMissingExpressions.map(_.toAttribute) ++ metadataCols
+
+          project.copy(projectList = newProjectList, child = expandedChild)
+      }
+    } else {
+      operator
     }
-
-    val expandedChild = insertMissingExpressions(operator.child, missingAttributes)
-
-    val (metadataCols, nonMetadataCols) =
-      operatorOutput.partition(_.toAttribute.qualifiedAccessOnly)
-
-    val newOutputList = nonMetadataCols ++ filteredMissingExpressions ++ metadataCols
-    val newOperator = operator match {
-      case aggregate: Aggregate =>
-        aggregate.copy(aggregateExpressions = newOutputList, child = expandedChild)
-      case project: Project =>
-        project.copy(projectList = newOutputList, child = expandedChild)
-    }
-
-    newOperator
   }
 
   private def filterMissingExpressions(
@@ -300,12 +306,43 @@ trait ResolvesNameByHiddenOutput {
    * because they may be needed in upper operators (if not, they will be pruned away in
    * [[PruneMetadataColumns]]). Other hidden attributes are thrown away, because we cannot
    * reference them from the new [[Project]] (they are not outputted from below).
+   *
+   * If [[SQLConf.SINGLE_PASS_RESOLVER_PREVENT_USING_ALIASES_FROM_NON_DIRECT_CHILDREN]] is set to
+   * true, we need to overwrite the current scope and clear `aggregateListAliases` and
+   * `baseAggregate`. This is needed in order to prevent later replacement of Sort/Having
+   * expressions using semantically equal aliased expressions from non-direct children. For
+   * example, in the following query:
+   *
+   * {{{ SELECT col1 AS a FROM VALUES(1,2) GROUP BY col1, col2 HAVING col2 > 1 ORDER BY col1; }}}
+   *
+   * With flag set to false, analyzed plan will be:
+   *
+   * Sort [a#3 ASC NULLS FIRST], true
+   * +- Project [a#3]
+   *    +- Filter (col2#2 > 1)
+   *       +- Aggregate [col1#1, col2#2], [col1#1 AS a#3, col2#2, col1#1]
+   *          +- LocalRelation [col1#1, col2#2]
+   *
+   * Instead of using missing attribute `col1#1` we can use its alias `a#3` in the [[Sort]] and
+   * avoid adding an extra projection. This is because all of [[Sort]], [[Project]], [[Filter]] and
+   * [[Aggregate]] belong to the same [[NameScope]] since [[Project]] was artificially inserted.
+   *
+   * However, fixed-point can't handle this case properly and produces the following plan:
+   *
+   * Project [a#3]
+   * +- Sort [col1#1 ASC NULLS FIRST], true
+   *    +- Project [a#3, col1#1]
+   *       +- Filter (col2#2 > 1)
+   *          +- Aggregate [col1#1, col2#2], [col1#1 AS a#3, col2#2, col1#1]
+   *             +- LocalRelation [col1#1, col2#2]
+   *
+   * Therefore, we need to match this behavior of fixed-point in single-pass in order to avoid
+   * logical plan mismatches.
    */
   def retainOriginalOutput(
       operator: LogicalPlan,
       missingExpressions: Seq[NamedExpression],
-      output: Seq[Attribute],
-      hiddenOutput: Seq[Attribute]): LogicalPlan = {
+      scopes: NameScopeStack): LogicalPlan = {
     if (missingExpressions.isEmpty) {
       operator
     } else {
@@ -314,16 +351,28 @@ trait ResolvesNameByHiddenOutput {
         missingExpressionIds.add(expression.exprId)
       }
 
-      val hiddenOutputToPreserve = hiddenOutput.filter { hiddenAttribute =>
+      val hiddenOutputToPreserve = scopes.current.hiddenOutput.filter { hiddenAttribute =>
         hiddenAttribute.qualifiedAccessOnly && missingExpressionIds.contains(
           hiddenAttribute.exprId
         )
       }
 
       val project = Project(
-        projectList = output ++ hiddenOutputToPreserve,
+        projectList = scopes.current.output ++ hiddenOutputToPreserve,
         child = operator
       )
+
+      if (conf.getConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_PREVENT_USING_ALIASES_FROM_NON_DIRECT_CHILDREN
+        )) {
+        scopes.overwriteCurrent(
+          output = Some(scopes.current.output),
+          hiddenOutput = Some(scopes.current.hiddenOutput),
+          availableAliases = Some(scopes.current.availableAliases),
+          aggregateListAliases = Seq.empty,
+          baseAggregate = None
+        )
+      }
 
       project
     }

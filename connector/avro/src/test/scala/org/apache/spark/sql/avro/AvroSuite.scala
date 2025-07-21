@@ -1899,7 +1899,7 @@ abstract class AvroSuite
     withTempPath { tempDir =>
       val tempEmptyDir = s"$tempDir/sqlOverwrite"
       // Create a temp directory for table that will be overwritten
-      new File(tempEmptyDir).mkdirs()
+      Utils.createDirectory(tempEmptyDir)
       spark.sql(
         s"""
            |CREATE TEMPORARY VIEW episodes

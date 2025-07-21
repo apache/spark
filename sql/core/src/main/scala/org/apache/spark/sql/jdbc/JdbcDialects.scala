@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.StringUtils
+import org.apache.commons.lang3.Strings
 
 import org.apache.spark.{SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.annotation.{DeveloperApi, Since}
@@ -244,7 +244,9 @@ abstract class JdbcDialect extends Serializable with Logging {
    * name is a reserved keyword, or in case it contains characters that require quotes (e.g. space).
    */
   def quoteIdentifier(colName: String): String = {
-    s""""$colName""""
+    // By ANSI standard, quotes are escaped with another quotes.
+    val escapedColName = colName.replace("\"", "\"\"")
+    s""""$escapedColName""""
   }
 
   /**
@@ -352,7 +354,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   @Since("2.3.0")
   protected[jdbc] def escapeSql(value: String): String =
-    if (value == null) null else StringUtils.replace(value, "'", "''")
+    if (value == null) null else Strings.CS.replace(value, "'", "''")
 
   /**
    * Converts value to SQL expression.
@@ -852,6 +854,11 @@ abstract class JdbcDialect extends Serializable with Logging {
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3183")
 
   def supportsHint: Boolean = false
+
+  /**
+   * Returns true if dialect supports JOIN operator.
+   */
+  def supportsJoin: Boolean = false
 
   /**
    * Return the DB-specific quoted and fully qualified table name

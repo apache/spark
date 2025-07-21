@@ -917,6 +917,110 @@ struct<CAST(10.654321 AS INTERVAL MONTH):interval month>
 
 
 -- !query
+SELECT CAST(TIME '00:01:52' AS tinyint)
+-- !query schema
+struct<CAST(TIME '00:01:52' AS TINYINT):tinyint>
+-- !query output
+112
+
+
+-- !query
+SELECT CAST(TIME '00:01:52' AS smallint)
+-- !query schema
+struct<CAST(TIME '00:01:52' AS SMALLINT):smallint>
+-- !query output
+112
+
+
+-- !query
+SELECT CAST(TIME '00:01:52' AS int)
+-- !query schema
+struct<CAST(TIME '00:01:52' AS INT):int>
+-- !query output
+112
+
+
+-- !query
+SELECT CAST(TIME '00:01:52' AS bigint)
+-- !query schema
+struct<CAST(TIME '00:01:52' AS BIGINT):bigint>
+-- !query output
+112
+
+
+-- !query
+SELECT CAST(TIME '23:59:59' AS tinyint)
+-- !query schema
+struct<CAST(TIME '23:59:59' AS TINYINT):tinyint>
+-- !query output
+NULL
+
+
+-- !query
+SELECT CAST(TIME '23:59:59' AS smallint)
+-- !query schema
+struct<CAST(TIME '23:59:59' AS SMALLINT):smallint>
+-- !query output
+NULL
+
+
+-- !query
+SELECT CAST(TIME '23:59:59' AS int)
+-- !query schema
+struct<CAST(TIME '23:59:59' AS INT):int>
+-- !query output
+86399
+
+
+-- !query
+SELECT CAST(TIME '23:59:59' AS bigint)
+-- !query schema
+struct<CAST(TIME '23:59:59' AS BIGINT):bigint>
+-- !query output
+86399
+
+
+-- !query
+SELECT CAST(TIME '00:00:17.5' AS tinyint)
+-- !query schema
+struct<CAST(TIME '00:00:17.5' AS TINYINT):tinyint>
+-- !query output
+17
+
+
+-- !query
+SELECT CAST(TIME '00:00:17.5' AS int)
+-- !query schema
+struct<CAST(TIME '00:00:17.5' AS INT):int>
+-- !query output
+17
+
+
+-- !query
+SELECT CAST(TIME '00:00:17.9' AS int)
+-- !query schema
+struct<CAST(TIME '00:00:17.9' AS INT):int>
+-- !query output
+17
+
+
+-- !query
+SELECT CAST(TIME '00:00:00' AS tinyint)
+-- !query schema
+struct<CAST(TIME '00:00:00' AS TINYINT):tinyint>
+-- !query output
+0
+
+
+-- !query
+SELECT CAST(TIME '00:00:00' AS int)
+-- !query schema
+struct<CAST(TIME '00:00:00' AS INT):int>
+-- !query output
+0
+
+
+-- !query
 SELECT '1.23' :: int
 -- !query schema
 struct<CAST(1.23 AS INT):int>
@@ -1070,6 +1174,38 @@ struct<CAST(10.123456 AS INTERVAL DAY TO SECOND):interval day to second>
 
 
 -- !query
+SELECT TIME '00:01:52' :: tinyint
+-- !query schema
+struct<CAST(TIME '00:01:52' AS TINYINT):tinyint>
+-- !query output
+112
+
+
+-- !query
+SELECT TIME '00:01:52' :: int
+-- !query schema
+struct<CAST(TIME '00:01:52' AS INT):int>
+-- !query output
+112
+
+
+-- !query
+SELECT TIME '23:59:59' :: tinyint
+-- !query schema
+struct<CAST(TIME '23:59:59' AS TINYINT):tinyint>
+-- !query output
+NULL
+
+
+-- !query
+SELECT TIME '23:59:59' :: int
+-- !query schema
+struct<CAST(TIME '23:59:59' AS INT):int>
+-- !query output
+86399
+
+
+-- !query
 SELECT '1.23' :: int :: long
 -- !query schema
 struct<CAST(CAST(1.23 AS INT) AS BIGINT):bigint>
@@ -1159,3 +1295,139 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "hint" : ""
   }
 }
+
+
+-- !query
+SELECT CAST(time '00:00:00' AS decimal(1, 0))
+-- !query schema
+struct<CAST(TIME '00:00:00' AS DECIMAL(1,0)):decimal(1,0)>
+-- !query output
+0
+
+
+-- !query
+SELECT CAST(time '12:00:00' AS decimal(7, 2))
+-- !query schema
+struct<CAST(TIME '12:00:00' AS DECIMAL(7,2)):decimal(7,2)>
+-- !query output
+43200.00
+
+
+-- !query
+SELECT CAST(time '01:30:45' AS decimal(8, 3))
+-- !query schema
+struct<CAST(TIME '01:30:45' AS DECIMAL(8,3)):decimal(8,3)>
+-- !query output
+5445.000
+
+
+-- !query
+SELECT CAST(time '23:59:59' AS decimal(9, 4))
+-- !query schema
+struct<CAST(TIME '23:59:59' AS DECIMAL(9,4)):decimal(9,4)>
+-- !query output
+86399.0000
+
+
+-- !query
+SELECT CAST(time '01:02:03' AS decimal(15, 9))
+-- !query schema
+struct<CAST(TIME '01:02:03' AS DECIMAL(15,9)):decimal(15,9)>
+-- !query output
+3723.000000000
+
+
+-- !query
+SELECT CAST(time '10:20:30' AS decimal(20, 10))
+-- !query schema
+struct<CAST(TIME '10:20:30' AS DECIMAL(20,10)):decimal(20,10)>
+-- !query output
+37230.0000000000
+
+
+-- !query
+SELECT CAST(time '23:59:59.001' AS decimal(8, 3))
+-- !query schema
+struct<CAST(TIME '23:59:59.001' AS DECIMAL(8,3)):decimal(8,3)>
+-- !query output
+86399.001
+
+
+-- !query
+SELECT CAST(time '23:59:59.999999' AS decimal(11, 6))
+-- !query schema
+struct<CAST(TIME '23:59:59.999999' AS DECIMAL(11,6)):decimal(11,6)>
+-- !query output
+86399.999999
+
+
+-- !query
+SELECT CAST(time '23:59:59.999999999' AS decimal(14, 9))
+-- !query schema
+struct<CAST(TIME '23:59:59.999999' AS DECIMAL(14,9)):decimal(14,9)>
+-- !query output
+86399.999999000
+
+
+-- !query
+SELECT CAST(time '23:59:59.999999999' AS decimal(20, 10))
+-- !query schema
+struct<CAST(TIME '23:59:59.999999' AS DECIMAL(20,10)):decimal(20,10)>
+-- !query output
+86399.9999990000
+
+
+-- !query
+SELECT CAST(time '00:01:00' AS decimal(1, 0))
+-- !query schema
+struct<CAST(TIME '00:01:00' AS DECIMAL(1,0)):decimal(1,0)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT CAST(time '01:00:00' AS decimal(3, 0))
+-- !query schema
+struct<CAST(TIME '01:00:00' AS DECIMAL(3,0)):decimal(3,0)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT CAST(time '10:00:00' AS decimal(5, 2))
+-- !query schema
+struct<CAST(TIME '10:00:00' AS DECIMAL(5,2)):decimal(5,2)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT CAST(time '23:59:59.9' AS decimal(6, 0))
+-- !query schema
+struct<CAST(TIME '23:59:59.9' AS DECIMAL(6,0)):decimal(6,0)>
+-- !query output
+86400
+
+
+-- !query
+SELECT CAST(time '23:59:59.999' AS decimal(8, 2))
+-- !query schema
+struct<CAST(TIME '23:59:59.999' AS DECIMAL(8,2)):decimal(8,2)>
+-- !query output
+86400.00
+
+
+-- !query
+SELECT CAST(time '23:59:59.999999' AS decimal(11, 5))
+-- !query schema
+struct<CAST(TIME '23:59:59.999999' AS DECIMAL(11,5)):decimal(11,5)>
+-- !query output
+86400.00000
+
+
+-- !query
+SELECT CAST(time '23:59:59.999999999' AS decimal(14, 8))
+-- !query schema
+struct<CAST(TIME '23:59:59.999999' AS DECIMAL(14,8)):decimal(14,8)>
+-- !query output
+86399.99999900

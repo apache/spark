@@ -796,6 +796,25 @@ def wrap_grouped_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type, ru
     )
 
 
+def wrap_grouped_agg_arrow_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
+    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
+
+    arrow_return_type = to_arrow_type(
+        return_type, prefers_large_types=use_large_var_types(runner_conf)
+    )
+
+    def wrapped(*series):
+        import pyarrow as pa
+
+        result = func(*series)
+        return pa.array([result])
+
+    return (
+        args_kwargs_offsets,
+        lambda *a: (wrapped(*a), arrow_return_type),
+    )
+
+
 def wrap_window_agg_pandas_udf(
     f, args_offsets, kwargs_offsets, return_type, runner_conf, udf_index
 ):
@@ -974,6 +993,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         # The below doesn't support named argument, but shares the same protocol.
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
     ):
         args_offsets = []
         kwargs_offsets = {}
@@ -1068,6 +1088,10 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         return args_offsets, wrap_cogrouped_map_arrow_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
         return wrap_grouped_agg_pandas_udf(
+            func, args_offsets, kwargs_offsets, return_type, runner_conf
+        )
+    elif eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF:
+        return wrap_grouped_agg_arrow_udf(
             func, args_offsets, kwargs_offsets, return_type, runner_conf
         )
     elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
@@ -1670,9 +1694,10 @@ def read_udtf(pickleSer, infile, eval_type):
                     names = [f"_{n}" for n in range(len(list_args))]
                     t = pa.Table.from_arrays(list_args, names=names)
                     schema = from_arrow_schema(t.schema, prefers_large_var_types)
-                    rows = ArrowTableToRowsConversion.convert(t, schema=schema)
+                    rows = ArrowTableToRowsConversion.convert(
+                        t, schema=schema, return_as_tuples=True
+                    )
                     for row in rows:
-                        row = tuple(row)  # type: ignore[assignment]
                         for batch in convert_to_arrow(func(*row)):
                             yield verify_result(batch), arrow_return_type
 
@@ -1815,6 +1840,7 @@ def read_udfs(pickleSer, infile, eval_type):
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
         PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
@@ -1911,6 +1937,7 @@ def read_udfs(pickleSer, infile, eval_type):
         elif eval_type in (
             PythonEvalType.SQL_SCALAR_ARROW_UDF,
             PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
         ):
             # Arrow cast for type coercion is disabled by default
             ser = ArrowStreamArrowUDFSerializer(timezone, safecheck, _assign_cols_by_name, False)
@@ -2347,6 +2374,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
 def main(infile, outfile):
     faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
+    tracebackDumpIntervalSeconds = os.environ.get("PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", None)
     try:
         if faulthandler_log_path:
             faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
@@ -2357,6 +2385,9 @@ def main(infile, outfile):
         split_index = read_int(infile)
         if split_index == -1:  # for unit tests
             sys.exit(-1)
+
+        if tracebackDumpIntervalSeconds is not None and int(tracebackDumpIntervalSeconds) > 0:
+            faulthandler.dump_traceback_later(int(tracebackDumpIntervalSeconds), repeat=True)
 
         check_python_version(infile)
 
@@ -2464,6 +2495,9 @@ def main(infile, outfile):
         # write a different value to tell JVM to not reuse this worker
         write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
         sys.exit(-1)
+
+    # Force to cancel dump_traceback_later
+    faulthandler.cancel_dump_traceback_later()
 
 
 if __name__ == "__main__":

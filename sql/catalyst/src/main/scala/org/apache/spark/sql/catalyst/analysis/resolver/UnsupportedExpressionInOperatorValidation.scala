@@ -17,30 +17,37 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.{
-  Expression,
-  Generator,
-  WindowExpression
-}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Generator, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{
-  Aggregate,
-  BaseEvalPythonUDTF,
-  CollectMetrics,
-  Generate,
-  LateralJoin,
-  LogicalPlan,
-  Project,
-  Window
-}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 object UnsupportedExpressionInOperatorValidation {
 
   /**
-   * Check that `expression` is allowed to exist in `operator`'s expression tree.
+   * Check that `expression` is allowed to exist in `operator`'s expression tree. Here, we avoid
+   * validating [[AggregateExpression]]s when they are under a [[Sort]] or [[Filter]] on top of
+   * [[Aggregate]] as the transformation to attributes is delayed to specific resolvers (if
+   * needed). Example:
+   *
+   * {{{ SELECT SUM(col1) + 1 FROM VALUES(1) ORDER BY SUM(col1) + 1 }}}
+   *
+   * In this case, ordering [[AggregateExpression]] in `SUM(col1) + 1` should be allowed here
+   * as its parent expression `SUM(col1) + 1` will be transformed to attribute later in
+   * [[GroupingAndAggregateExpressionsExtractor.extractReferencedGroupingAndAggregateExpressions]]
+   * and thus at the end of [[Sort]] resolution we won't have any [[AggregateExpression]]s in its
+   * ordering expression tree. On the other side, here is a query that should fail:
+   *
+   * {{{ SELECT col1 FROM VALUES(1) ORDER BY MAX(col1) }}}
+   *
+   * `MAX(col1)` can't be extracted as the child of the [[Sort]] is [[Project]] and thus we fail
+   * during validation in [[Resolver.validateResolvedOperatorGenerically]].
    */
-  def isExpressionInUnsupportedOperator(expression: Expression, operator: LogicalPlan): Boolean = {
+  def isExpressionInUnsupportedOperator(
+      expression: Expression,
+      operator: LogicalPlan,
+      isSortOnTopOfAggregate: Boolean,
+      isFilterOnTopOfAggregate: Boolean): Boolean = {
     expression match {
       case _: WindowExpression => operator.isInstanceOf[Window]
       case _: AggregateExpression =>
@@ -48,6 +55,8 @@ object UnsupportedExpressionInOperatorValidation {
         operator.isInstanceOf[Aggregate] ||
         operator.isInstanceOf[Window] ||
         operator.isInstanceOf[CollectMetrics] ||
+        isSortOnTopOfAggregate ||
+        isFilterOnTopOfAggregate ||
         onlyInLateralSubquery(operator))
       case _: Generator =>
         !(operator.isInstanceOf[Generate] ||

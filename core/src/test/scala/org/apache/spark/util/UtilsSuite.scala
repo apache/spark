@@ -33,7 +33,6 @@ import scala.util.{Random, Try}
 
 import com.google.common.io.Files
 import org.apache.commons.io.IOUtils
-import org.apache.commons.lang3.SystemUtils
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -527,13 +526,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
     // The following 3 scenarios are only for the method: createDirectory(File)
     // 6. Symbolic link
-    // JAVA_RUNTIME_VERSION is like "17.0.14+7-LTS"
-    lazy val javaVersion = Runtime.Version.parse(SystemUtils.JAVA_RUNTIME_VERSION)
     val scenario6 = java.nio.file.Files.createSymbolicLink(new File(testDir, "scenario6")
       .toPath, scenario1.toPath).toFile
     if (Utils.isJavaVersionAtLeast21) {
       assert(Utils.createDirectory(scenario6))
-    } else if (javaVersion.feature() == 17 && javaVersion.update() >= 14) {
+    } else if (Runtime.version().feature() == 17 && Runtime.version().update() >= 14) {
       // SPARK-50946: Java 17.0.14 includes JDK-8294193, so scenario6 can succeed.
       assert(Utils.createDirectory(scenario6))
     } else {
@@ -1034,7 +1031,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   test("Kill process") {
     // Verify that we can terminate a process even if it is in a bad state. This is only run
     // on UNIX since it does some OS specific things to verify the correct behavior.
-    if (SystemUtils.IS_OS_UNIX) {
+    if (Utils.isUnix) {
       def pidExists(pid: Long): Boolean = {
         val p = Runtime.getRuntime.exec(Array("kill", "-0", s"$pid"))
         p.waitFor()

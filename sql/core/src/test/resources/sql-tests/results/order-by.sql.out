@@ -395,6 +395,70 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT SUM(a) + 1 FROM testData ORDER BY SUM(a) + 1
+-- !query schema
+struct<(sum(a) + 1):bigint>
+-- !query output
+16
+
+
+-- !query
+SELECT 1 + SUM(b) FROM testData ORDER BY SUM(b) + 1
+-- !query schema
+struct<(1 + sum(b)):bigint>
+-- !query output
+11
+
+
+-- !query
+SELECT SUM(a) + 1 FROM testData ORDER BY 1 + SUM(a)
+-- !query schema
+struct<(sum(a) + 1):bigint>
+-- !query output
+16
+
+
+-- !query
+SELECT MAX(a) + SUM(b) FROM testData ORDER BY SUM(b) + MAX(a)
+-- !query schema
+struct<(max(a) + sum(b)):bigint>
+-- !query output
+13
+
+
+-- !query
+SELECT SUM(a) + 1 + MIN(a) FROM testData ORDER BY 1 + 1 + 1 + MIN(a) + 1 + SUM(a)
+-- !query schema
+struct<((sum(a) + 1) + min(a)):bigint>
+-- !query output
+17
+
+
+-- !query
+SELECT SUM(b) + 1 FROM testData HAVING SUM(b) + 1 > 0 ORDER BY SUM(b) + 1
+-- !query schema
+struct<(sum(b) + 1):bigint>
+-- !query output
+11
+
+
+-- !query
+SELECT col1 FROM VALUES(1,2) GROUP BY col1, col2 ORDER BY col2, col2
+-- !query schema
+struct<col1:int>
+-- !query output
+1
+
+
+-- !query
+SELECT col1 AS a, a AS b FROM VALUES(1,2) GROUP BY col1, col2 ORDER BY col2, col2
+-- !query schema
+struct<a:int,b:int>
+-- !query output
+1	1
+
+
+-- !query
 DROP VIEW IF EXISTS testData
 -- !query schema
 struct<>

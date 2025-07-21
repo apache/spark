@@ -17,18 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.IdentityHashMap
-
-import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{
-  AnsiTypeCoercion,
-  CollationTypeCoercion,
-  TypeCoercion
-}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, OuterReference, SubExprUtils}
+import org.apache.spark.sql.catalyst.expressions.{Expression, OuterReference, SubExprUtils}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, ListAgg}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Sort}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
@@ -45,11 +36,6 @@ class AggregateExpressionResolver(
 
   private val traversals = expressionResolver.getExpressionTreeTraversals
 
-  protected override val ansiTransformations: CoercesExpressionTypes.Transformations =
-    AggregateExpressionResolver.ANSI_TYPE_COERCION_TRANSFORMATIONS
-  protected override val nonAnsiTransformations: CoercesExpressionTypes.Transformations =
-    AggregateExpressionResolver.TYPE_COERCION_TRANSFORMATIONS
-
   private val expressionResolutionContextStack =
     expressionResolver.getExpressionResolutionContextStack
   private val subqueryRegistry = operatorResolver.getSubqueryRegistry
@@ -62,6 +48,7 @@ class AggregateExpressionResolver(
    * resolving its children recursively and validating the resolved expression.
    */
   override def resolve(aggregateExpression: AggregateExpression): Expression = {
+    expressionResolutionContextStack.peek().resolvingTreeUnderAggregateExpression = true
     val aggregateExpressionWithChildrenResolved =
       withResolvedChildren(aggregateExpression, expressionResolver.resolve _)
         .asInstanceOf[AggregateExpression]
@@ -90,8 +77,6 @@ class AggregateExpressionResolver(
    *    1. Update the [[ExpressionResolver.expressionResolutionContextStack]];
    *    2. Handle [[OuterReference]] in [[AggregateExpression]], if there are any (see
    *    `handleOuterAggregateExpression`);
-   *    3. Handle [[AggregateExpression]] in [[Sort]] operator (see
-   *    `handleAggregateExpressionInSort`);
    *  - Validation:
    *   1. [[ListAgg]] is not allowed in DISTINCT aggregates if it contains [[SortOrder]] different
    *      from its child;
@@ -124,12 +109,7 @@ class AggregateExpressionResolver(
     if (expressionResolutionContext.hasOuterReferences) {
       handleOuterAggregateExpression(aggregateExpressionWithChildrenResolved)
     } else {
-      traversals.current.parentOperator match {
-        case Sort(_, _, aggregate: Aggregate, _) =>
-          handleAggregateExpressionInSort(aggregateExpressionWithChildrenResolved, aggregate)
-        case other =>
-          aggregateExpressionWithChildrenResolved
-      }
+      aggregateExpressionWithChildrenResolved
     }
   }
 
@@ -143,15 +123,13 @@ class AggregateExpressionResolver(
           throwNestedAggregateFunction(aggregateExpression)
         }
 
-        val nonDeterministicChild =
-          aggregateExpression.aggregateFunction.children.collectFirst {
-            case child if !child.deterministic => child
+        aggregateExpression.aggregateFunction.children.foreach { child =>
+          if (!child.deterministic) {
+            throwAggregateFunctionWithNondeterministicExpression(
+              aggregateExpression,
+              child
+            )
           }
-        if (nonDeterministicChild.nonEmpty) {
-          throwAggregateFunctionWithNondeterministicExpression(
-            aggregateExpression,
-            nonDeterministicChild.get
-          )
         }
     }
 
@@ -163,12 +141,15 @@ class AggregateExpressionResolver(
    *  - Create a new subtree without [[OuterReference]]s;
    *  - Alias this subtree and put it inside the current [[SubqueryScope]];
    *  - If outer aggregates are allowed, replace the [[AggregateExpression]] with an
-   *    [[OuterReference]] to the auto-generated [[Alias]] that we created. This alias will later
-   *    be injected into the outer [[Aggregate]]; We store the name that needs to be used for the
-   *    [[OuterReference]] in [[OuterReference.SINGLE_PASS_SQL_STRING_OVERRIDE]] computed based on
-   *    the [[AggregateExpression]] without [[OuterReference]] pulled out.
+   *    [[OuterReference]] to the auto-generated [[Alias]] that we created in case the subtree
+   *    without [[OuterReference]]s can't be found in the outer
+   *    [[Aggregate.aggregateExpressions]] list. Otherwise, use the [[Alias]] from the outer
+   *    [[Aggregate]]. This alias will later be injected into the outer [[Aggregate]];
+   *  - Store the name that needs to be used for the [[OuterReference]] in
+   *    [[OuterReference.SINGLE_PASS_SQL_STRING_OVERRIDE]] computed based on the
+   *    [[AggregateExpression]] without [[OuterReference]] pulled out.
    *  - In case we have an [[AggregateExpression]] inside a [[Sort]] operator, we need to handle it
-   *    in a special way (see [[handleAggregateExpressionInSort]] for more details).
+   *    in a special way (see [[handleAggregateExpressionOutsideAggregate]] for more details).
    *  - Return the original [[AggregateExpression]] otherwise. This is done to stay compatible
    *    with the fixed-point Analyzer - a proper exception will be thrown later by
    *    [[ValidateSubqueryExpression]].
@@ -183,19 +164,12 @@ class AggregateExpressionResolver(
     }
 
     val resolvedOuterAggregateExpression =
-      if (subqueryRegistry.currentScope.isOuterAggregateAllowed) {
-        val aggregateExpressionWithStrippedOuterReferences =
-          SubExprUtils.stripOuterReference(aggregateExpression)
-
-        val outerAggregateExpressionAlias = autoGeneratedAliasProvider.newOuterAlias(
-          child = aggregateExpressionWithStrippedOuterReferences
+      if (subqueryRegistry.currentScope.aggregateExpressionsExtractor.isDefined) {
+        extractOuterAggregateExpression(
+          aggregateExpression = aggregateExpression,
+          aggregateExpressionsExtractor =
+            subqueryRegistry.currentScope.aggregateExpressionsExtractor.get
         )
-        subqueryRegistry.currentScope.addOuterAggregateExpression(
-          outerAggregateExpressionAlias,
-          aggregateExpressionWithStrippedOuterReferences
-        )
-
-        OuterReference(outerAggregateExpressionAlias.toAttribute)
       } else {
         aggregateExpression
       }
@@ -211,41 +185,30 @@ class AggregateExpressionResolver(
     }
   }
 
-  /**
-   * If we order by an [[AggregateExpression]] which is not present in the [[Aggregate]] operator
-   * (child of the [[Sort]]) we have to extract it (by adding it to the
-   * `extractedAggregateExpressionAliases` list of the current expression tree traversal) and add
-   * it to the [[Aggregate]] operator afterwards (this is done in the [[SortResolver]]).
-   */
-  private def handleAggregateExpressionInSort(
-      aggregateExpression: Expression,
-      aggregate: Aggregate): Expression = {
-    val aliasChildToAliasInAggregateExpressions = new IdentityHashMap[Expression, Alias]
-    val aggregateExpressionsSemanticComparator = new SemanticComparator(
-      aggregate.aggregateExpressions.collect {
-        case alias: Alias =>
-          aliasChildToAliasInAggregateExpressions.put(alias.child, alias)
-          alias.child
-      }
+  private def extractOuterAggregateExpression(
+      aggregateExpression: AggregateExpression,
+      aggregateExpressionsExtractor: GroupingAndAggregateExpressionsExtractor): OuterReference = {
+    val aggregateExpressionWithStrippedOuterReferences =
+      SubExprUtils.stripOuterReference(aggregateExpression)
+
+    val outerAggregateExpressionAlias = autoGeneratedAliasProvider.newOuterAlias(
+      child = aggregateExpressionWithStrippedOuterReferences
     )
 
-    val referencedAggregateExpression =
-      aggregateExpressionsSemanticComparator.collectFirst(aggregateExpression)
+    val (_, referencedAggregateExpressionAlias) =
+      aggregateExpressionsExtractor.collectFirstAggregateExpression(
+        aggregateExpressionWithStrippedOuterReferences
+      )
 
-    referencedAggregateExpression match {
-      case Some(expression) =>
-        aliasChildToAliasInAggregateExpressions.get(expression) match {
-          case null =>
-            throw SparkException.internalError(
-              s"No parent alias for expression $expression while extracting aggregate" +
-              s"expressions in Sort operator."
-            )
-          case alias: Alias => alias.toAttribute
-        }
+    referencedAggregateExpressionAlias match {
+      case Some(alias) =>
+        subqueryRegistry.currentScope.addAliasForOuterAggregateExpression(alias)
+        OuterReference(alias.toAttribute)
       case None =>
-        val alias = autoGeneratedAliasProvider.newAlias(child = aggregateExpression)
-        traversals.current.extractedAggregateExpressionAliases.add(alias)
-        alias.toAttribute
+        subqueryRegistry.currentScope.addAliasForOuterAggregateExpression(
+          outerAggregateExpressionAlias
+        )
+        OuterReference(outerAggregateExpressionAlias.toAttribute)
     }
   }
 
@@ -274,24 +237,4 @@ class AggregateExpressionResolver(
       origin = nonDeterministicChild.origin
     )
   }
-}
-
-object AggregateExpressionResolver {
-  // Ordering in the list of type coercions should be in sync with the list in [[TypeCoercion]].
-  private val TYPE_COERCION_TRANSFORMATIONS: Seq[Expression => Expression] = Seq(
-    CollationTypeCoercion.apply,
-    TypeCoercion.InTypeCoercion.apply,
-    TypeCoercion.FunctionArgumentTypeCoercion.apply,
-    TypeCoercion.IfTypeCoercion.apply,
-    TypeCoercion.ImplicitTypeCoercion.apply
-  )
-
-  // Ordering in the list of type coercions should be in sync with the list in [[AnsiTypeCoercion]].
-  private val ANSI_TYPE_COERCION_TRANSFORMATIONS: Seq[Expression => Expression] = Seq(
-    CollationTypeCoercion.apply,
-    AnsiTypeCoercion.InTypeCoercion.apply,
-    AnsiTypeCoercion.FunctionArgumentTypeCoercion.apply,
-    AnsiTypeCoercion.IfTypeCoercion.apply,
-    AnsiTypeCoercion.ImplicitTypeCoercion.apply
-  )
 }

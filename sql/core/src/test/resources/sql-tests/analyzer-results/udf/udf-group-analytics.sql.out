@@ -256,7 +256,7 @@ HAVING GROUPING(year) = 1 AND GROUPING_ID(course, year) > 0 ORDER BY course, udf
 Sort [course#x ASC NULLS FIRST, cast(udf(cast(year#x as string)) as int) ASC NULLS FIRST], true
 +- Project [course#x, year#x]
    +- Filter ((cast(cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) as int) = 1) AND (spark_grouping_id#xL > cast(0 as bigint)))
-      +- Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, spark_grouping_id#xL, spark_grouping_id#xL]
+      +- Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, spark_grouping_id#xL]
          +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
             +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
                +- SubqueryAlias coursesales
@@ -307,34 +307,32 @@ Project [udf(course)#x, year#x]
 SELECT course, year, GROUPING(course), GROUPING(year) FROM courseSales GROUP BY CUBE(course, year)
 ORDER BY GROUPING(course), GROUPING(year), course, udf(year)
 -- !query analysis
-Project [course#x, year#x, grouping(course)#x, grouping(year)#x]
-+- Sort [cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) ASC NULLS FIRST, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) ASC NULLS FIRST, course#x ASC NULLS FIRST, cast(udf(cast(year#x as string)) as int) ASC NULLS FIRST], true
-   +- Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(course)#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(year)#x, spark_grouping_id#xL, spark_grouping_id#xL]
-      +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
-         +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
-            +- SubqueryAlias coursesales
-               +- View (`courseSales`, [course#x, year#x, earnings#x])
-                  +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
-                     +- Project [course#x, year#x, earnings#x]
-                        +- SubqueryAlias courseSales
-                           +- LocalRelation [course#x, year#x, earnings#x]
+Sort [grouping(course)#x ASC NULLS FIRST, grouping(year)#x ASC NULLS FIRST, course#x ASC NULLS FIRST, cast(udf(cast(year#x as string)) as int) ASC NULLS FIRST], true
++- Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS grouping(course)#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(year)#x]
+   +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
+      +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
+         +- SubqueryAlias coursesales
+            +- View (`courseSales`, [course#x, year#x, earnings#x])
+               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                  +- Project [course#x, year#x, earnings#x]
+                     +- SubqueryAlias courseSales
+                        +- LocalRelation [course#x, year#x, earnings#x]
 
 
 -- !query
 SELECT course, year, GROUPING_ID(course, year) FROM courseSales GROUP BY CUBE(course, year)
 ORDER BY GROUPING(course), GROUPING(year), course, udf(year)
 -- !query analysis
-Project [course#x, year#x, grouping_id(course, year)#xL]
-+- Sort [cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) ASC NULLS FIRST, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) ASC NULLS FIRST, course#x ASC NULLS FIRST, cast(udf(cast(year#x as string)) as int) ASC NULLS FIRST], true
-   +- Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, spark_grouping_id#xL AS grouping_id(course, year)#xL, spark_grouping_id#xL, spark_grouping_id#xL]
-      +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
-         +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
-            +- SubqueryAlias coursesales
-               +- View (`courseSales`, [course#x, year#x, earnings#x])
-                  +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
-                     +- Project [course#x, year#x, earnings#x]
-                        +- SubqueryAlias courseSales
-                           +- LocalRelation [course#x, year#x, earnings#x]
+Sort [cast((shiftright(grouping_id(course, year)#xL, 1) & 1) as tinyint) ASC NULLS FIRST, cast((shiftright(grouping_id(course, year)#xL, 0) & 1) as tinyint) ASC NULLS FIRST, course#x ASC NULLS FIRST, cast(udf(cast(year#x as string)) as int) ASC NULLS FIRST], true
++- Aggregate [course#x, year#x, spark_grouping_id#xL], [course#x, year#x, spark_grouping_id#xL AS grouping_id(course, year)#xL]
+   +- Expand [[course#x, year#x, earnings#x, course#x, year#x, 0], [course#x, year#x, earnings#x, course#x, null, 1], [course#x, year#x, earnings#x, null, year#x, 2], [course#x, year#x, earnings#x, null, null, 3]], [course#x, year#x, earnings#x, course#x, year#x, spark_grouping_id#xL]
+      +- Project [course#x, year#x, earnings#x, course#x AS course#x, year#x AS year#x]
+         +- SubqueryAlias coursesales
+            +- View (`courseSales`, [course#x, year#x, earnings#x])
+               +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                  +- Project [course#x, year#x, earnings#x]
+                     +- SubqueryAlias courseSales
+                        +- LocalRelation [course#x, year#x, earnings#x]
 
 
 -- !query

@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
@@ -47,6 +48,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsRead, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation}
+import org.apache.spark.sql.connector.join.{JoinType => V2JoinType}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
@@ -324,7 +326,14 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
         Seq.empty, append.query, false, append.isByName)
 
     case unresolvedCatalogRelation: UnresolvedCatalogRelation =>
-      resolveUnresolvedCatalogRelation(unresolvedCatalogRelation)
+      val result = resolveUnresolvedCatalogRelation(unresolvedCatalogRelation)
+      // We put the resolved relation into the [[AnalyzerBridgeState]] for
+      // it to be later reused by the single-pass [[Resolver]] to avoid resolving the
+      // relation metadata twice.
+      AnalysisContext.get.getSinglePassResolverBridgeState.map { bridgeState =>
+        bridgeState.catalogRelationsWithResolvedMetadata.put(unresolvedCatalogRelation, result)
+      }
+      result
 
     case s @ StreamingRelationV2(
         _, _, table, extraOptions, _, _, _, Some(UnresolvedCatalogRelation(tableMeta, _, true))) =>
@@ -392,7 +401,7 @@ object DataSourceStrategy
         l.output.toStructType,
         Set.empty,
         Set.empty,
-        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty),
+        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty, Seq.empty),
         toCatalystRDD(l, baseRelation.buildScan()),
         baseRelation,
         l.stream,
@@ -467,7 +476,7 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
-        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty),
+        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty, Seq.empty),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.stream,
@@ -491,13 +500,20 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
-        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty),
+        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty, Seq.empty),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.stream,
         relation.catalogTable.map(_.identifier))
       execution.ProjectExec(
         projects, filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan))
+    }
+  }
+
+  def translateJoinType(joinType: JoinType): Option[V2JoinType] = {
+    joinType match {
+      case Inner => Some(V2JoinType.INNER_JOIN)
+      case _ => None
     }
   }
 

@@ -101,6 +101,8 @@ class ResolutionValidator {
         validateJoin(join)
       case repartition: Repartition =>
         validateRepartition(repartition)
+      case sample: Sample =>
+        validateSample(sample)
       // [[LogicalRelation]], [[HiveTableRelation]] and other specific relations can't be imported
       // because of a potential circular dependency, so we match a generic Catalyst
       // [[MultiInstanceRelation]] instead.
@@ -145,19 +147,25 @@ class ResolutionValidator {
   }
 
   private def validateAggregate(aggregate: Aggregate): Unit = {
-    attributeScopeStack.withNewScope() {
+    attributeScopeStack.pushScope()
+    try {
       validate(aggregate.child)
       expressionResolutionValidator.validateProjectList(aggregate.aggregateExpressions)
       aggregate.groupingExpressions.foreach(expressionResolutionValidator.validate)
+    } finally {
+      attributeScopeStack.popScope()
     }
 
     handleOperatorOutput(aggregate)
   }
 
   private def validateProject(project: Project): Unit = {
-    attributeScopeStack.withNewScope() {
+    attributeScopeStack.pushScope()
+    try {
       validate(project.child)
       expressionResolutionValidator.validateProjectList(project.projectList)
+    } finally {
+      attributeScopeStack.popScope()
     }
 
     handleOperatorOutput(project)
@@ -263,12 +271,20 @@ class ResolutionValidator {
     validate(repartition.child)
   }
 
+  private def validateSample(sample: Sample): Unit = {
+    validate(sample.child)
+  }
+
   private def validateJoin(join: Join) = {
-    attributeScopeStack.withNewScope() {
-      attributeScopeStack.withNewScope() {
+    attributeScopeStack.pushScope()
+    try {
+      attributeScopeStack.pushScope()
+      try {
         validate(join.left)
         validate(join.right)
         assert(join.left.outputSet.intersect(join.right.outputSet).isEmpty)
+      } finally {
+        attributeScopeStack.popScope()
       }
 
       attributeScopeStack.overwriteCurrent(join.left.output ++ join.right.output)
@@ -277,6 +293,8 @@ class ResolutionValidator {
         case Some(condition) => expressionResolutionValidator.validate(condition)
         case None =>
       }
+    } finally {
+      attributeScopeStack.popScope()
     }
 
     handleOperatorOutput(join)

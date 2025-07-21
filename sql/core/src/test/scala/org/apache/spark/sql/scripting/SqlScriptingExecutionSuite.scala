@@ -2720,7 +2720,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |          SELECT varL3;
         |          SELECT 1/0;
         |        END;
-
         |        SELECT 5;
         |        SELECT 1/0;
         |        SELECT 6;
@@ -2938,5 +2937,77 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1))     // select 1
     )
     verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("Integer literal column in FOR query") {
+    val sqlScript1 =
+      """
+        |BEGIN
+        |  FOR SELECT 1 DO
+        |    SELECT 2;
+        |  END FOR;
+        |END
+        |""".stripMargin
+    verifySqlScriptResult(sqlScript1, Seq(Seq(Row(2))))
+
+    val sqlScript2 =
+      """
+        |BEGIN
+        |  FOR x AS SELECT 1 DO
+        |    SELECT x.`1`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+    verifySqlScriptResult(sqlScript2, Seq(Seq(Row(1))))
+  }
+
+  test("Column with space in FOR query") {
+    val sqlScript1 =
+      """
+        |BEGIN
+        |  FOR SELECT 1 AS `Space Column` DO
+        |    SELECT `Space Column`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(1)))
+    verifySqlScriptResult(sqlScript1, expected)
+
+    val sqlScript2 =
+      """
+        |BEGIN
+        |  FOR x AS SELECT 1 AS `Space Column` DO
+        |    SELECT x.`Space Column`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+    verifySqlScriptResult(sqlScript2, expected)
+  }
+
+  test("FOR query referencing table with space") {
+    withTable("test_tbl") {
+      sql("CREATE TABLE test_tbl (`Space Column` INT) USING parquet")
+      sql("INSERT INTO test_tbl VALUES (1)")
+      val sqlScript1 =
+      """
+        |BEGIN
+        |  FOR SELECT * FROM test_tbl DO
+        |    SELECT `Space Column`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+      val expected = Seq(Seq(Row(1)))
+      verifySqlScriptResult(sqlScript1, expected)
+
+      val sqlScript2 =
+      """
+        |BEGIN
+        |  FOR x AS SELECT * FROM test_tbl DO
+        |    SELECT x.`Space Column`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+      verifySqlScriptResult(sqlScript2, expected)
+    }
   }
 }

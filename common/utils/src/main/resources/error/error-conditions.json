@@ -90,6 +90,30 @@
     ],
     "sqlState" : "42000"
   },
+  "APPROX_TOP_K_MAX_ITEMS_TRACKED_EXCEEDS_LIMIT" : {
+    "message" : [
+      "The max items tracked `maxItemsTracked`(<maxItemsTracked>) of `approx_top_k` should be less than or equal to <limit>."
+    ],
+    "sqlState" : "22023"
+  },
+  "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K" : {
+    "message" : [
+      "The max items tracked `maxItemsTracked`(<maxItemsTracked>) of `approx_top_k` should be greater than or equal to `k`(<k>)."
+    ],
+    "sqlState" : "22023"
+  },
+  "APPROX_TOP_K_NON_POSITIVE_ARG" : {
+    "message" : [
+      "The value of <argName> in `approx_top_k` must be a positive integer, but got <argValue>."
+    ],
+    "sqlState" : "22023"
+  },
+  "APPROX_TOP_K_NULL_ARG" : {
+    "message" : [
+      "The value of <argName> in `approx_top_k` cannot be NULL."
+    ],
+    "sqlState" : "22004"
+  },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
@@ -248,6 +272,24 @@
       "Dataset transformations and actions can only be invoked by the driver, not inside of other Dataset transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the dataset1.map transformation. For more information, see SPARK-28702."
     ],
     "sqlState" : "0A000"
+  },
+  "CANNOT_LOAD_CHECKPOINT_FILE_MANAGER" : {
+    "message" : [
+      "Error loading streaming checkpoint file manager for path=<path>."
+    ],
+    "subClass" : {
+      "ERROR_LOADING_CLASS" : {
+        "message" : [
+          "Error instantiating streaming checkpoint file manager for path=<path> with className=<className>. msg=<msg>."
+        ]
+      },
+      "UNCATEGORIZED" : {
+        "message" : [
+          ""
+        ]
+      }
+    },
+    "sqlState" : "58030"
   },
   "CANNOT_LOAD_FUNCTION_CLASS" : {
     "message" : [
@@ -497,6 +539,13 @@
       }
     },
     "sqlState" : "0A000"
+  },
+  "CANNOT_UPDATE_PARTITION_COLUMNS" : {
+    "message" : [
+      "Declared partitioning <requestedPartitionColumns> conflicts with existing table partitioning <existingPartitionColumns>.",
+      "Please delete the table or change the declared partitioning to match its partitions."
+    ],
+    "sqlState" : "42000"
   },
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [
@@ -846,6 +895,11 @@
           "Please fit or load a model smaller than <modelMaxSize> bytes."
         ]
       },
+      "MODEL_SUMMARY_LOST" : {
+        "message" : [
+          "The model <objectName> summary is lost because the cached model is offloaded."
+        ]
+      },
       "UNSUPPORTED_EXCEPTION" : {
         "message" : [
           "<message>"
@@ -913,6 +967,18 @@
       }
     },
     "sqlState" : "21S01"
+  },
+  "DATAFLOW_GRAPH_NOT_FOUND" : {
+    "message" : [
+      "Dataflow graph with id <graphId> could not be found"
+    ],
+    "sqlState" : "KD011"
+  },
+  "DATATYPE_CANNOT_ORDER" : {
+    "message" : [
+      "Type <dataType> does not support ordered operations."
+    ],
+    "sqlState" : "0A000"
   },
   "DATATYPE_MISMATCH" : {
     "message" : [
@@ -2214,6 +2280,12 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_ATTRIBUTE_NOT_FOUND" : {
+    "message" : [
+      "Could not find <missingAttr> in <inputAttrs>."
+    ],
+    "sqlState" : "XX000"
+  },
   "INTERNAL_ERROR_BROADCAST" : {
     "message" : [
       "<message>"
@@ -2687,6 +2759,34 @@
     "message" : [
       "Field name <fieldName> is invalid: <path> is not a struct."
     ],
+    "sqlState" : "42000"
+  },
+  "INVALID_FLOW_QUERY_TYPE" : {
+    "message" : [
+      "Flow <flowIdentifier> returns an invalid relation type."
+    ],
+    "subClass" : {
+      "BATCH_RELATION_FOR_STREAMING_TABLE" : {
+        "message" : [
+          "Streaming tables may only be defined by streaming relations, but the flow <flowIdentifier> attempts to write a batch relation to the streaming table <tableIdentifier>. Consider using the STREAM operator in Spark-SQL to convert the batch relation into a streaming relation, or populating the streaming table with an append once-flow instead."
+        ]
+      },
+      "STREAMING_RELATION_FOR_MATERIALIZED_VIEW" : {
+        "message" : [
+          "Materialized views may only be defined by a batch relation, but the flow <flowIdentifier> attempts to write a streaming relation to the materialized view <tableIdentifier>."
+        ]
+      },
+      "STREAMING_RELATION_FOR_ONCE_FLOW" : {
+        "message" : [
+          "<flowIdentifier> is an append once-flow that is defined by a streaming relation. Append once-flows may only be defined by or return a batch relation."
+        ]
+      },
+      "STREAMING_RELATION_FOR_PERSISTED_VIEW" : {
+        "message" : [
+          "Persisted views may only be defined by a batch relation, but the flow <flowIdentifier> attempts to write a streaming relation to the persisted view <viewIdentifier>."
+        ]
+      }
+    },
     "sqlState" : "42000"
   },
   "INVALID_FORMAT" : {
@@ -3397,14 +3497,9 @@
       "Invalid recursive reference found inside WITH RECURSIVE clause."
     ],
     "subClass" : {
-      "NUMBER" : {
-        "message" : [
-          "Multiple self-references to one recursive CTE are not allowed."
-        ]
-      },
       "PLACE" : {
         "message" : [
-          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins, in aggregates, and in subquery expressions."
+          "Recursive references cannot be used on the right side of left outer/semi/anti joins, on the left side of right outer joins, in full outer joins, in aggregates, window functions or sorts"
         ]
       }
     },
@@ -4122,6 +4217,12 @@
     ],
     "sqlState" : "42P20"
   },
+  "MULTIPART_FLOW_NAME_NOT_SUPPORTED" : {
+    "message" : [
+      "Flow with multipart name '<flowName>' is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "MULTIPLE_PRIMARY_KEYS" : {
     "message" : [
       "Multiple primary keys are defined: <columns>. Please ensure that only one primary key is defined for the table."
@@ -4327,6 +4428,18 @@
       "Operation <operation> is not allowed for <tableIdentWithDB> because it is not a partitioned table."
     ],
     "sqlState" : "42809"
+  },
+  "NOT_A_SCALAR_FUNCTION" : {
+    "message" : [
+      "<functionName> appears as a scalar expression here, but the function was defined as a table function. Please update the query to move the function call into the FROM clause, or redefine <functionName> as a scalar function instead."
+    ],
+    "sqlState" : "42887"
+  },
+  "NOT_A_TABLE_FUNCTION" : {
+    "message" : [
+      "<functionName> appears as a table function here, but the function was defined as a scalar function. Please update the query to move the function call outside the FROM clause, or redefine <functionName> as a table function instead."
+    ],
+    "sqlState" : "42887"
   },
   "NOT_NULL_ASSERT_VIOLATION" : {
     "message" : [
@@ -4607,6 +4720,38 @@
     ],
     "sqlState" : "42K03"
   },
+  "PIPELINE_DATASET_WITHOUT_FLOW" : {
+    "message" : [
+      "Pipeline dataset <identifier> does not have any defined flows. Please attach a query with the dataset's definition, or explicitly define at least one flow that writes to the dataset."
+    ],
+    "sqlState" : "0A000"
+  },
+  "PIPELINE_DUPLICATE_IDENTIFIERS" : {
+    "message" : [
+      "A duplicate identifier was found for elements registered in the pipeline's dataflow graph."
+    ],
+    "subClass" : {
+      "DATASET" : {
+        "message" : [
+          "Attempted to register a <datasetType1> with identifier <datasetName>, but a <datasetType2> has already been registered with that identifier. Please ensure all datasets created within this pipeline have unique identifiers."
+        ]
+      },
+      "FLOW" : {
+        "message" : [
+          "Flow <flowName> was found in multiple datasets: <datasetNames>"
+        ]
+      }
+    },
+    "sqlState" : "42710"
+  },
+  "PIPELINE_SQL_GRAPH_ELEMENT_REGISTRATION_ERROR" : {
+    "message" : [
+      "<message>",
+      "<offendingQuery>",
+      "<codeLocation>"
+    ],
+    "sqlState" : "42000"
+  },
   "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION" : {
     "message" : [
       "Non-grouping expression <expr> is provided as an argument to the |> AGGREGATE pipe operator but does not contain any aggregate function; please update it to include an aggregate function and then retry the query again."
@@ -4803,6 +4948,13 @@
     ],
     "sqlState" : "22023"
   },
+  "RUN_EMPTY_PIPELINE" : {
+    "message" : [
+      "Pipelines are expected to have at least one non-temporary dataset defined (tables, persisted views) but no non-temporary datasets were found in your pipeline.",
+      "Please verify that you have included the expected source files, and that your source code includes table definitions (e.g., CREATE MATERIALIZED VIEW in SQL code, @sdp.table in python code)."
+    ],
+    "sqlState" : "42617"
+  },
   "SCALAR_FUNCTION_NOT_COMPATIBLE" : {
     "message" : [
       "ScalarFunction <scalarFunc> not overrides method 'produceResult(InternalRow)' with custom implementation."
@@ -4925,6 +5077,12 @@
       "SQL Scripts in EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) is not SQL Script. Make sure the sql_string is a well-formed SQL statement and does not contain BEGIN and END."
     ],
     "sqlState" : "07501"
+  },
+  "STAGE_MATERIALIZATION_MULTIPLE_FAILURES" : {
+    "message" : [
+      "Multiple failures (<failureCount>) in stage materialization: <failureDetails>"
+    ],
+    "sqlState" : "XX000"
   },
   "STAR_GROUP_BY_POS" : {
     "message" : [
@@ -7812,11 +7970,6 @@
       "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2005" : {
-    "message" : [
-      "Type <dataType> does not support ordered operations."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2017" : {
     "message" : [
       "not resolved."
@@ -8229,11 +8382,6 @@
       "Failed to get outer pointer for <innerCls>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2155" : {
-    "message" : [
-      "<userClass> is not annotated with SQLUserDefinedType nor registered with UDTRegistration.}"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2163" : {
     "message" : [
       "Initial type <dataType> must be a <target>."
@@ -8513,11 +8661,6 @@
       "Failed to set original ACL <aclEntries> back to the created path: <path>. Exception: <message>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2235" : {
-    "message" : [
-      "Multiple failures in stage materialization."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2236" : {
     "message" : [
       "Unrecognized compression scheme type ID: <typeId>."
@@ -8570,7 +8713,7 @@
   },
   "_LEGACY_ERROR_TEMP_2250" : {
     "message" : [
-      "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastJoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg>"
+      "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastJoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg> or apply the shuffle sort merge join hint as described in the Spark documentation: https://spark.apache.org/docs/latest/sql-ref-syntax-qry-select-hints.html#join-hints."
     ]
   },
   "_LEGACY_ERROR_TEMP_2251" : {

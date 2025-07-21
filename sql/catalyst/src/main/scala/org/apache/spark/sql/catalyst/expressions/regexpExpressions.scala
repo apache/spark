@@ -293,6 +293,8 @@ sealed abstract class MultiLikeBase
   extends UnaryExpression with ImplicitCastInputTypes with Predicate {
   override def nullIntolerant: Boolean = true
 
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
   protected def patterns: Seq[UTF8String]
 
   protected def isNotSpecified: Boolean
