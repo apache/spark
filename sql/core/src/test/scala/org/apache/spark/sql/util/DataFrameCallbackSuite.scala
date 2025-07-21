@@ -51,6 +51,19 @@ class DataFrameCallbackSuite extends QueryTest
     super.sparkConf.set(EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES, false)
   }
 
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+
+    val confsToSet = Map(
+      SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED -> false,
+      SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED -> false
+    )
+
+    confsToSet.foreach { case (key, newValue) =>
+      spark.sessionState.conf.setConf(key, newValue)
+    }
+  }
+
   test("execute callback functions when a DataFrame action finished successfully") {
     val metrics = ArrayBuffer.empty[(String, QueryExecution, Long)]
     val listener = new QueryExecutionListener {
