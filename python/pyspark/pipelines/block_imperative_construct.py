@@ -62,9 +62,9 @@ def block_imperative_construct() -> Generator[None, None, None]:
         return original_connect_sql(self, sqlQuery, args, **kwargs)
 
     try:
-        RuntimeConf.set = blocked_conf_set
-        SparkSession.sql = blocked_sql
+        setattr(RuntimeConf, "set", blocked_conf_set)
+        setattr(SparkSession, "sql", blocked_sql)
         yield
     finally:
-        RuntimeConf.set = original_connect_set
-        SparkSession.sql = original_connect_sql
+        setattr(RuntimeConf, "set", original_connect_set)
+        setattr(SparkSession, "sql", original_connect_sql)
