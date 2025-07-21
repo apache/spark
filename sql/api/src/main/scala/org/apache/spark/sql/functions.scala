@@ -5424,7 +5424,7 @@ object functions {
   def dayofyear(e: Column): Column = Column.fn("dayofyear", e)
 
   /**
-   * Extracts the hours as an integer from a given date/timestamp/string.
+   * Extracts the hours as an integer from a given date/time/timestamp/string.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -5497,7 +5497,7 @@ object functions {
   def last_day(e: Column): Column = Column.fn("last_day", e)
 
   /**
-   * Extracts the minutes as an integer from a given date/timestamp/string.
+   * Extracts the minutes as an integer from a given date/time/timestamp/string.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -5603,7 +5603,7 @@ object functions {
     Column.fn("next_day", date, dayOfWeek)
 
   /**
-   * Extracts the seconds as an integer from a given date/timestamp/string.
+   * Extracts the seconds as an integer from a given date/time/timestamp/string.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a timestamp
    * @group datetime_funcs

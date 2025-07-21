@@ -26,6 +26,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession {
+  import testImplicits._
 
   // Helper method to assert that two DataFrames with TimeType values are approximately equal.
   // This method assumes that the two dataframes (df1 and df2) have the same schemas and sizes.
@@ -107,6 +108,105 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
       // Check that both methods produce approximately the same result.
       assertTwoTimesAreApproximatelyEqual(result1, result2)
     }
+  }
+
+  test("SPARK-52885: hour function") {
+    // Input data for the function.
+    val schema = StructType(Seq(
+      StructField("time", TimeType(), nullable = false)
+    ))
+    val data = Seq(
+      Row(LocalTime.parse("00:00:00")),
+      Row(LocalTime.parse("01:02:03.4")),
+      Row(LocalTime.parse("23:59:59.999999"))
+    )
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+    // Test the function using both `selectExpr` and `select`.
+    val result1 = df.selectExpr(
+      "hour(time)"
+    )
+    val result2 = df.select(
+      hour(col("time"))
+    )
+    // Check that both methods produce the same result.
+    checkAnswer(result1, result2)
+
+    // Expected output of the function.
+    val expected = Seq(
+      0,
+      1,
+      23
+    ).toDF("hour").select(col("hour"))
+    // Check that the results match the expected output.
+    checkAnswer(result1, expected)
+    checkAnswer(result2, expected)
+  }
+
+  test("SPARK-52886: minute function") {
+    // Input data for the function.
+    val schema = StructType(Seq(
+      StructField("time", TimeType(), nullable = false)
+    ))
+    val data = Seq(
+      Row(LocalTime.parse("00:00:00")),
+      Row(LocalTime.parse("01:02:03.4")),
+      Row(LocalTime.parse("23:59:59.999999"))
+    )
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+    // Test the function using both `selectExpr` and `select`.
+    val result1 = df.selectExpr(
+      "minute(time)"
+    )
+    val result2 = df.select(
+      minute(col("time"))
+    )
+    // Check that both methods produce the same result.
+    checkAnswer(result1, result2)
+
+    // Expected output of the function.
+    val expected = Seq(
+      0,
+      2,
+      59
+    ).toDF("minute").select(col("minute"))
+    // Check that the results match the expected output.
+    checkAnswer(result1, expected)
+    checkAnswer(result2, expected)
+  }
+
+  test("SPARK-52887: second function") {
+    // Input data for the function.
+    val schema = StructType(Seq(
+      StructField("time", TimeType(), nullable = false)
+    ))
+    val data = Seq(
+      Row(LocalTime.parse("00:00:00")),
+      Row(LocalTime.parse("01:02:03.4")),
+      Row(LocalTime.parse("23:59:59.999999"))
+    )
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+    // Test the function using both `selectExpr` and `select`.
+    val result1 = df.selectExpr(
+      "second(time)"
+    )
+    val result2 = df.select(
+      second(col("time"))
+    )
+    // Check that both methods produce the same result.
+    checkAnswer(result1, result2)
+
+    // Expected output of the function.
+    val expected = Seq(
+      0,
+      3,
+      59
+    ).toDF("second").select(col("second"))
+    // Check that the results match the expected output.
+    checkAnswer(result1, expected)
+    checkAnswer(result2, expected)
   }
 }
 

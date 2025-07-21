@@ -54,6 +54,7 @@ import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{CallerContext, Clock, JsonProtocol, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkStringUtils.stringToSeq
 import org.apache.spark.util.kvstore._
 
 /**
@@ -318,13 +319,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   override def getEventLogsUnderProcess(): Int = pendingReplayTasksCount.get()
 
   override def getLastUpdatedTime(): Long = lastScanTime.get()
-
-  /**
-   * Split a comma separated String, filter out any empty items, and return a Sequence of strings
-   */
-  private def stringToSeq(list: String): Seq[String] = {
-    list.split(',').map(_.trim).filter(_.nonEmpty).toImmutableArraySeq
-  }
 
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
     val app = try {
