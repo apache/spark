@@ -554,27 +554,51 @@ class Expression(google.protobuf.message.Message):
 
             STRUCT_TYPE_FIELD_NUMBER: builtins.int
             ELEMENTS_FIELD_NUMBER: builtins.int
+            DATA_TYPE_STRUCT_FIELD_NUMBER: builtins.int
             @property
-            def struct_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            def struct_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+                """(Deprecated) The type of the struct.
+
+                This field is deprecated since Spark 4.1+ because using DataType as the type of a struct
+                is ambiguous. This field should only be set if the data_type_struct field is not set.
+                Use data_type_struct field instead.
+                """
             @property
             def elements(
                 self,
             ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
                 global___Expression.Literal
-            ]: ...
+            ]:
+                """(Required) The literal values that make up the struct elements."""
+            @property
+            def data_type_struct(self) -> pyspark.sql.connect.proto.types_pb2.DataType.Struct:
+                """The type of the struct.
+
+                Whether data_type_struct.fields.data_type should be set depends on
+                whether each field's type can be inferred from the elements field.
+                """
             def __init__(
                 self,
                 *,
                 struct_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
                 elements: collections.abc.Iterable[global___Expression.Literal] | None = ...,
+                data_type_struct: pyspark.sql.connect.proto.types_pb2.DataType.Struct | None = ...,
             ) -> None: ...
             def HasField(
-                self, field_name: typing_extensions.Literal["struct_type", b"struct_type"]
+                self,
+                field_name: typing_extensions.Literal[
+                    "data_type_struct", b"data_type_struct", "struct_type", b"struct_type"
+                ],
             ) -> builtins.bool: ...
             def ClearField(
                 self,
                 field_name: typing_extensions.Literal[
-                    "elements", b"elements", "struct_type", b"struct_type"
+                    "data_type_struct",
+                    b"data_type_struct",
+                    "elements",
+                    b"elements",
+                    "struct_type",
+                    b"struct_type",
                 ],
             ) -> None: ...
 
