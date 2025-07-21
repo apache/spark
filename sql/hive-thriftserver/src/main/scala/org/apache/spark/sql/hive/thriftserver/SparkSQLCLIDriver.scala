@@ -27,7 +27,7 @@ import scala.jdk.CollectionConverters._
 import jline.console.ConsoleReader
 import jline.console.completer.{ArgumentCompleter, Completer, StringsCompleter}
 import jline.console.history.FileHistory
-import org.apache.commons.lang3.StringUtils
+import org.apache.commons.lang3.{Strings, StringUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
 import org.apache.hadoop.hive.common.HiveInterruptUtils
@@ -52,6 +52,7 @@ import org.apache.spark.sql.internal.{SharedState, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.LEGACY_EMPTY_CURRENT_DB_IN_CLI
 import org.apache.spark.util.ShutdownHookManager
 import org.apache.spark.util.SparkExitCode._
+import org.apache.spark.util.Utils
 
 /**
  * This code doesn't support remote connections in Hive 1.2+, as the underlying CliDriver
@@ -504,7 +505,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             case e: IOException =>
               console.printError(
                 s"""Failed with exception ${e.getClass.getName}: ${e.getMessage}
-                   |${org.apache.hadoop.util.StringUtils.stringifyException(e)}
+                   |${Utils.stringifyException(e)}
                  """.stripMargin)
               ret = 1
           }
@@ -572,7 +573,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       val commands = splitSemiColon(line).asScala
       var command: String = ""
       for (oneCmd <- commands) {
-        if (StringUtils.endsWith(oneCmd, "\\")) {
+        if (Strings.CS.endsWith(oneCmd, "\\")) {
           command += StringUtils.chop(oneCmd) + ";"
         } else {
           command += oneCmd

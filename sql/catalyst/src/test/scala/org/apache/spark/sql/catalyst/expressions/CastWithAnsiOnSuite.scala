@@ -810,7 +810,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
         ),
         condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
         parameters = Map(
-          "value" -> "86399.123456",
+          "value" -> "86399.123456000",
           "precision" -> "2",
           "scale" -> "0",
           "config" -> """"spark.sql.ansi.enabled""""

@@ -94,7 +94,7 @@ The `spark-pipelines init` command, described below, makes it easy to generate a
 
 ## The `spark-pipelines` Command Line Interface
 
-The `spark-pipelines` command line interface (CLI) is the primary way to execute a pipeline. It also contains an `init` subcommand for generating a pipeline project.
+The `spark-pipelines` command line interface (CLI) is the primary way to execute a pipeline. It also contains an `init` subcommand for generating a pipeline project and a `dry-run` subcommand for validating a pipeline.
 
 `spark-pipelines` is built on top of `spark-submit`, meaning that it supports all cluster managers supported by `spark-submit`. It supports all `spark-submit` arguments except for `--class`.
 
@@ -105,6 +105,13 @@ The `spark-pipelines` command line interface (CLI) is the primary way to execute
 ### `spark-pipelines run`
 
 `spark-pipelines run` launches an execution of a pipeline and monitors its progress until it completes. The `--spec` parameter allows selecting the pipeline spec file. If not provided, the CLI will look in the current directory and parent directories for a file named `pipeline.yml` or `pipeline.yaml`.
+
+### `spark-pipelines dry-run`
+
+`spark-pipelines dry-run` launches an execution of a pipeline that doesn't write or read any data, but catches many kinds of errors that would be caught if the pipeline were to actually run. E.g.
+- Syntax errors – e.g. invalid Python or SQL code
+- Analysis errors – e.g. selecting from a table that doesn't exist or selecting a column that doesn't exist
+- Graph validation errors - e.g. cyclic dependencies
 
 ## Programming with SDP in Python
 

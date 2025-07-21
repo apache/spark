@@ -17,20 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-
 /**
- * A mixin trait for all operator resolvers that need to resolve their children.
+ * [[OutputType]] represents different types of output used during multipart name resolution in the
+ * [[NameScope]].
  */
-trait ResolvesOperatorChildren {
+object OutputType extends Enumeration {
+  type OutputType = Value
 
-  /**
-   * Resolves generic [[LogicalPlan]] children and returns its copy with children resolved.
-   */
-  protected def withResolvedChildren[OperatorType <: LogicalPlan](
-      unresolvedOperator: OperatorType,
-      resolve: LogicalPlan => LogicalPlan): OperatorType = {
-    val newChildren = unresolvedOperator.children.map(resolve(_))
-    unresolvedOperator.withNewChildren(newChildren).asInstanceOf[OperatorType]
-  }
+  val Main, Hidden, Metadata = Value
 }

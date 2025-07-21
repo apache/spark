@@ -15,20 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.analysis.resolver
-
-import org.apache.spark.sql.catalyst.expressions.{Expression, IntegerLiteral}
+package org.apache.spark.util;
 
 /**
- * Try to extract ordinal from an expression. Return `Some(ordinal)` if the type of the expression
- * is [[IntegerLitera]], `None` otherwise.
+ * An immutable pair of values. Note that the fields are intentionally designed to be `getLeft` and
+ * `getRight` instead of `left` and `right` in order to mitigate the migration burden
+ * from `org.apache.commons.lang3.tuple.Pair`.
  */
-object TryExtractOrdinal {
-  def apply(expression: Expression): Option[Int] = {
-    expression match {
-      case IntegerLiteral(literal) =>
-        Some(literal)
-      case other => None
-    }
+public record Pair<L, R>(L getLeft, R getRight) {
+  public static <L, R> Pair<L, R> of(L left, R right) {
+    return new Pair<>(left, right);
   }
 }

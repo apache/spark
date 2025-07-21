@@ -21,28 +21,19 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{
-  AnalysisContext,
-  FunctionResolution,
-  UnresolvedRelation
-}
-import org.apache.spark.sql.catalyst.analysis.resolver.{
-  AnalyzerBridgeState,
-  BridgedRelationId,
-  BridgedRelationMetadataProvider,
-  MetadataResolver,
-  RelationId,
-  Resolver,
-  ViewResolver
-}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.resolver._
 import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.execution.datasources.{FileResolver, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class MetadataResolverSuite extends QueryTest with SharedSparkSession with SQLTestUtils {
+class MetadataResolverSuite
+    extends QueryTest
+    with SharedSparkSession
+    with SQLTestUtils {
   private val catalogName = "spark_catalog"
 
   private val keyValueTableSchema = StructType(
@@ -57,9 +48,7 @@ class MetadataResolverSuite extends QueryTest with SharedSparkSession with SQLTe
     )
   )
 
-  test(
-    "Single CSV relation"
-  ) {
+  test("Single CSV relation") {
     withTable("src_csv") {
       spark.sql("CREATE TABLE src_csv (key INT, value STRING) USING CSV;").collect()
 
@@ -70,9 +59,7 @@ class MetadataResolverSuite extends QueryTest with SharedSparkSession with SQLTe
     }
   }
 
-  test(
-    "Single ORC relation"
-  ) {
+  test("Single ORC relation") {
     withTable("src_orc") {
       spark.sql("CREATE TABLE src_orc (key INT, value STRING) USING ORC;").collect()
 
@@ -176,9 +163,7 @@ class MetadataResolverSuite extends QueryTest with SharedSparkSession with SQLTe
     }
   }
 
-  test(
-    "Relation from a file"
-  ) {
+  test("Relation from a file") {
     val df = spark.range(100).toDF()
     withTempPath(f => {
       df.write.json(f.getCanonicalPath)
@@ -341,7 +326,6 @@ class MetadataResolverSuite extends QueryTest with SharedSparkSession with SQLTe
         new MetadataResolver(
           spark.sessionState.catalogManager,
           relationResolution,
-          new FunctionResolution(spark.sessionState.catalogManager, relationResolution),
           Seq(new FileResolver(spark))
         )
     }
