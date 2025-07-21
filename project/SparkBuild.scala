@@ -334,7 +334,7 @@ object SparkBuild extends PomBuild {
       Seq("-Xdoclint:all", "-Xdoclint:-missing")
     },
 
-    javaVersion := SbtPomKeys.effectivePom.value.getProperties.get("maven.compiler.release").asInstanceOf[String],
+    javaVersion := SbtPomKeys.effectivePom.value.getProperties.get("java.version").asInstanceOf[String],
 
     (Compile / javacOptions) ++= Seq(
       "-encoding", UTF_8.name(),
