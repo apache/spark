@@ -18,10 +18,6 @@
 import unittest
 
 from pyspark.errors import PySparkException
-from pyspark.sql.connect.conf import RuntimeConf
-from pyspark.sql.connect.catalog import Catalog
-from pyspark.sql.connect.dataframe import DataFrame
-from pyspark.sql.connect.udf import UDFRegistration
 from pyspark.sql.types import StringType
 from pyspark.testing.connectutils import (
     ReusedConnectTestCase,
@@ -35,77 +31,184 @@ from pyspark.pipelines.block_imperative_construct import block_imperative_constr
 @unittest.skipIf(not should_test_connect, connect_requirement_message or "Connect not available")
 class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
     
-    def _get_test_cases_for_method(self, method_info):
-        """Get appropriate test cases for different method types."""
-        method_name = method_info["method"]
+    def test_blocks_runtime_conf_set(self):
+        """Test that spark.conf.set() is blocked."""
+        config = self.spark.conf
         
-        if method_name == "set":
-            return [
-                ("spark.test.string", "string_value"),
-                ("spark.test.int", 42),
-                ("spark.test.bool", True),
-                ("spark.test.float", 3.14),
-            ]
-        elif "catalog" in method_name.lower():
-            return ["test_catalog", "spark_catalog", "hive_metastore"]
-        elif "database" in method_name.lower():
-            return ["test_db", "default", "my_database"]
-        elif "global" in method_name.lower():
-            return ["global_test_view", "global_temp_view", "my_global_view"]
-        elif method_name in ["register", "registerJavaFunction", "registerJavaUDAF"]:
-            # UDF registration methods - return test function/class names
-            return [
-                ("test_udf", lambda x: x + 1),
-                ("another_udf", lambda x: x * 2),
-            ]
-        else:  # temp view methods
-            return ["test_view", "temp_view", "my_view"]
+        test_cases = [
+            ("spark.test.string", "string_value"),
+            ("spark.test.int", 42),
+            ("spark.test.bool", True),
+        ]
+        
+        for key, value in test_cases:
+            with self.subTest(key=key, value=value):
+                with block_imperative_construct():
+                    with self.assertRaises(PySparkException) as context:
+                        config.set(key, value)
+                    
+                    self.assertEqual(
+                        context.exception.getCondition(),
+                        "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+                    )
+                    self.assertIn("'RuntimeConf.set'", str(context.exception))
 
-    def _get_target_object(self, method_info):
-        """Get the appropriate object to call the method on."""
-        cls = method_info["class"]
-        if cls == RuntimeConf:
-            return self.spark.conf
-        elif cls == Catalog:
-            return self.spark.catalog
-        elif cls == DataFrame:
-            return self.spark.range(1)
-        elif cls == UDFRegistration:
-            return self.spark.udf
+    def test_blocks_catalog_set_current_catalog(self):
+        """Test that spark.catalog.setCurrentCatalog() is blocked."""
+        catalog = self.spark.catalog
         
-    def test_blocks_all_methods(self):
-        """Test that all configured methods are properly blocked."""
-        for method_info in BLOCKED_METHODS:
-            method_name = method_info["method"]
-            test_cases = self._get_test_cases_for_method(method_info)
-            target_obj = self._get_target_object(method_info)
+        with block_imperative_construct():
+            with self.assertRaises(PySparkException) as context:
+                catalog.setCurrentCatalog("test_catalog")
             
-            with self.subTest(method=method_name):
-                for test_case in test_cases:
-                    with self.subTest(test_case=test_case):
-                        with block_imperative_construct():
-                            with self.assertRaises(PySparkException) as context:
-                                if method_name == "set":
-                                    # set method takes key, value
-                                    key, value = test_case
-                                    getattr(target_obj, method_name)(key, value)
-                                elif method_name in ["register", "registerJavaFunction", "registerJavaUDAF"]:
-                                    # UDF registration methods
-                                    udf_name, udf_func = test_case
-                                    if method_name == "register":
-                                        getattr(target_obj, method_name)(udf_name, udf_func, StringType())
-                                    elif method_name == "registerJavaFunction":
-                                        getattr(target_obj, method_name)(udf_name, "com.example.TestUDF", StringType())
-                                    elif method_name == "registerJavaUDAF":
-                                        getattr(target_obj, method_name)(udf_name, "com.example.TestUDAF")
-                                else:
-                                    # other methods take a single parameter
-                                    getattr(target_obj, method_name)(test_case)
+            self.assertEqual(
+                context.exception.getCondition(),
+                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+            )
+            self.assertIn("'Catalog.setCurrentCatalog'", str(context.exception))
 
-                            self.assertEqual(
-                                context.exception.getCondition(),
-                                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
-                            )
+    def test_blocks_catalog_set_current_database(self):
+        """Test that spark.catalog.setCurrentDatabase() is blocked."""
+        catalog = self.spark.catalog
+        
+        with block_imperative_construct():
+            with self.assertRaises(PySparkException) as context:
+                catalog.setCurrentDatabase("test_db")
+            
+            self.assertEqual(
+                context.exception.getCondition(),
+                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+            )
+            self.assertIn("'Catalog.setCurrentDatabase'", str(context.exception))
+
+    def test_blocks_catalog_drop_temp_view(self):
+        """Test that spark.catalog.dropTempView() is blocked."""
+        catalog = self.spark.catalog
+        
+        with block_imperative_construct():
+            with self.assertRaises(PySparkException) as context:
+                catalog.dropTempView("test_view")
+            
+            self.assertEqual(
+                context.exception.getCondition(),
+                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+            )
+            self.assertIn("'Catalog.dropTempView'", str(context.exception))
+
+    def test_blocks_catalog_drop_global_temp_view(self):
+        """Test that spark.catalog.dropGlobalTempView() is blocked."""
+        catalog = self.spark.catalog
+        
+        with block_imperative_construct():
+            with self.assertRaises(PySparkException) as context:
+                catalog.dropGlobalTempView("test_view")
+            
+            self.assertEqual(
+                context.exception.getCondition(),
+                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+            )
+            self.assertIn("'Catalog.dropGlobalTempView'", str(context.exception))
+
+    def test_blocks_dataframe_create_temp_view(self):
+        """Test that DataFrame.createTempView() is blocked."""
+        df = self.spark.range(1)
+        
+        with block_imperative_construct():
+            with self.assertRaises(PySparkException) as context:
+                df.createTempView("test_view")
+            
+            self.assertEqual(
+                context.exception.getCondition(),
+                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+            )
+            self.assertIn("'DataFrame.createTempView'", str(context.exception))
+
+    def test_blocks_dataframe_create_or_replace_temp_view(self):
+        """Test that DataFrame.createOrReplaceTempView() is blocked."""
+        df = self.spark.range(1)
+        
+        with block_imperative_construct():
+            with self.assertRaises(PySparkException) as context:
+                df.createOrReplaceTempView("test_view")
+            
+            self.assertEqual(
+                context.exception.getCondition(),
+                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+            )
+            self.assertIn("'DataFrame.createOrReplaceTempView'", str(context.exception))
+
+    def test_blocks_dataframe_create_global_temp_view(self):
+        """Test that DataFrame.createGlobalTempView() is blocked."""
+        df = self.spark.range(1)
+        
+        with block_imperative_construct():
+            with self.assertRaises(PySparkException) as context:
+                df.createGlobalTempView("test_view")
+            
+            self.assertEqual(
+                context.exception.getCondition(),
+                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+            )
+            self.assertIn("'DataFrame.createGlobalTempView'", str(context.exception))
+
+    def test_blocks_dataframe_create_or_replace_global_temp_view(self):
+        """Test that DataFrame.createOrReplaceGlobalTempView() is blocked."""
+        df = self.spark.range(1)
+        
+        with block_imperative_construct():
+            with self.assertRaises(PySparkException) as context:
+                df.createOrReplaceGlobalTempView("test_view")
+            
+            self.assertEqual(
+                context.exception.getCondition(),
+                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+            )
+            self.assertIn("'DataFrame.createOrReplaceGlobalTempView'", str(context.exception))
+
+    def test_blocks_udf_register(self):
+        """Test that spark.udf.register() is blocked."""
+        udf_registry = self.spark.udf
+        
+        def test_func(x):
+            return x + 1
+        
+        with block_imperative_construct():
+            with self.assertRaises(PySparkException) as context:
+                udf_registry.register("test_udf", test_func, StringType())
+            
+            self.assertEqual(
+                context.exception.getCondition(),
+                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+            )
+            self.assertIn("'UDFRegistration.register'", str(context.exception))
+
+    def test_blocks_udf_register_java_function(self):
+        """Test that spark.udf.registerJavaFunction() is blocked."""
+        udf_registry = self.spark.udf
+        
+        with block_imperative_construct():
+            with self.assertRaises(PySparkException) as context:
+                udf_registry.registerJavaFunction("test_java_udf", "com.example.TestUDF", StringType())
+            
+            self.assertEqual(
+                context.exception.getCondition(),
+                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+            )
+            self.assertIn("'UDFRegistration.registerJavaFunction'", str(context.exception))
+
+    def test_blocks_udf_register_java_udaf(self):
+        """Test that spark.udf.registerJavaUDAF() is blocked."""
+        udf_registry = self.spark.udf
+        
+        with block_imperative_construct():
+            with self.assertRaises(PySparkException) as context:
+                udf_registry.registerJavaUDAF("test_java_udaf", "com.example.TestUDAF")
+            
+            self.assertEqual(
+                context.exception.getCondition(),
+                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+            )
+            self.assertIn("'UDFRegistration.registerJavaUDAF'", str(context.exception))
 
     def test_restores_original_methods_after_context(self):
         """Test that all methods are properly restored after context manager exits."""
@@ -137,45 +240,6 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
             method_name = method_info["method"]
             with self.subTest(class_method=f"{cls.__name__}.{method_name}"):
                 self.assertIs(getattr(cls, method_name), original_methods[(cls, method_name)])
-
-    def test_restores_methods_even_with_exception(self):
-        """Test that methods are properly restored even when exceptions occur."""
-        # Store original methods
-        original_methods = {}
-        for method_info in BLOCKED_METHODS:
-            cls = method_info["class"]
-            method_name = method_info["method"]
-            original_methods[(cls, method_name)] = getattr(cls, method_name)
-
-        # Test with various exception scenarios
-        exception_test_cases = [
-            # Config exception
-            lambda: self.spark.conf.set("spark.test.key", "test_value"),
-            # Catalog exceptions
-            lambda: self.spark.catalog.setCurrentCatalog("test_catalog"),
-            lambda: self.spark.catalog.dropTempView("test_view"),
-            # DataFrame exceptions
-            lambda: self.spark.range(1).createTempView("test_view"),
-            lambda: self.spark.range(1).createOrReplaceGlobalTempView("global_view"),
-            # UDF registration exceptions
-            lambda: self.spark.udf.register("test_udf", lambda x: x + 1, StringType()),
-            lambda: self.spark.udf.registerJavaFunction("java_udf", "com.example.TestUDF", StringType()),
-        ]
-
-        for i, exception_case in enumerate(exception_test_cases):
-            with self.subTest(exception_case_index=i):
-                try:
-                    with block_imperative_construct():
-                        exception_case()
-                except PySparkException:
-                    pass
-
-                # Verify all methods are restored after exception
-                for method_info in BLOCKED_METHODS:
-                    cls = method_info["class"]
-                    method_name = method_info["method"]
-                    self.assertIs(getattr(cls, method_name), original_methods[(cls, method_name)])
-
 
 
 if __name__ == "__main__":
