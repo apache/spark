@@ -1062,11 +1062,6 @@
       "Type hints for <target> should be specified; however, got <sig>."
     ]
   },
-  "UDF_ARROW_TYPE_CONVERSION_ERROR": {
-    "message": [
-      "Cannot convert the output value of the input '<data>' with type '<schema>' to the specified return type of the column: '<arrow_schema>'. Please check if the data types match and try again."
-    ]
-  },
   "UDF_RETURN_TYPE": {
     "message": [
       "Return type of the user-defined function should be <expected>, but is <actual>."

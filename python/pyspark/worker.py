@@ -244,7 +244,8 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
         def evaluate(*args):
             with ThreadPoolExecutor(max_workers=c) as pool:
                 """
-                Takes list of Python objects and returns tuple of (results, arrow_return_type, return_type).
+                Takes list of Python objects and returns tuple of
+                (results, arrow_return_type, return_type).
                 """
                 return list(pool.map(lambda row: func(*row), get_args(*args)))
 
@@ -253,7 +254,8 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
         @fail_on_stopiteration
         def evaluate(*args):
             """
-            Takes list of Python objects and returns tuple of (results, arrow_return_type, return_type).
+            Takes list of Python objects and returns tuple of
+            (results, arrow_return_type, return_type).
             """
             return [func(*row) for row in get_args(*args)]
 

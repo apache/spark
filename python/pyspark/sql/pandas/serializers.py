@@ -49,10 +49,6 @@ from pyspark.sql.types import (
     StructField,
     LongType,
     IntegerType,
-    ByteType,
-    ShortType,
-    FloatType,
-    DoubleType,
 )
 
 if TYPE_CHECKING:
