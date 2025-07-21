@@ -15,12 +15,11 @@
 # limitations under the License.
 #
 from contextlib import contextmanager
-from typing import Generator, NoReturn, Union, Any, Optional, Dict, List
-import re
+from typing import Generator, NoReturn, Union
 
 from pyspark.errors import PySparkException
 from pyspark.sql.connect.conf import RuntimeConf
-from pyspark.sql.connect.session import SparkSession
+from pyspark.sql.connect.catalog import Catalog
 
 
 @contextmanager
@@ -29,9 +28,13 @@ def block_imperative_construct() -> Generator[None, None, None]:
     Context manager that blocks imperative constructs found in a pipeline python definition file
     Blocks:
         - imperative config set via: spark.conf.set("k", "v")
+        - catalog changes via: spark.catalog.setCurrentCatalog("catalog_name")
+        - database changes via: spark.catalog.setCurrentDatabase("db_name")
     """
     # store the original methods
     original_connect_set = RuntimeConf.set
+    original_connect_catalog_set_current_catalog = Catalog.setCurrentCatalog
+    original_connect_catalog_set_current_database = Catalog.setCurrentDatabase
 
     def blocked_conf_set(self: RuntimeConf, key: str, value: Union[str, int, bool]) -> NoReturn:
         raise PySparkException(
@@ -41,8 +44,28 @@ def block_imperative_construct() -> Generator[None, None, None]:
             },
         )
 
+    def blocked_connect_catalog_set_current_catalog(self: Catalog, catalogName: str) -> NoReturn:
+        raise PySparkException(
+            errorClass="IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
+            messageParameters={
+                "method": "'spark.catalog.setCurrentCatalog'",
+            },
+        )
+
+    def blocked_connect_catalog_set_current_database(self: Catalog, dbName: str) -> NoReturn:
+        raise PySparkException(
+            errorClass="IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
+            messageParameters={
+                "method": "'spark.catalog.setCurrentDatabase'",
+            },
+        )
+
     try:
         setattr(RuntimeConf, "set", blocked_conf_set)
+        setattr(Catalog, "setCurrentCatalog", blocked_connect_catalog_set_current_catalog)
+        setattr(Catalog, "setCurrentDatabase", blocked_connect_catalog_set_current_database)
         yield
     finally:
         setattr(RuntimeConf, "set", original_connect_set)
+        setattr(Catalog, "setCurrentCatalog", original_connect_catalog_set_current_catalog)
+        setattr(Catalog, "setCurrentDatabase", original_connect_catalog_set_current_database)

@@ -19,7 +19,7 @@ import unittest
 
 from pyspark.errors import PySparkException
 from pyspark.sql.connect.conf import RuntimeConf
-from pyspark.sql.connect.session import SparkSession
+from pyspark.sql.connect.catalog import Catalog
 from pyspark.testing.connectutils import (
     ReusedConnectTestCase,
     should_test_connect,
@@ -52,18 +52,70 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
                         "IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
                     )
 
+    def test_blocks_catalog_set_current_catalog(self):
+        catalog = self.spark.catalog
+
+        test_cases = [
+            "test_catalog",
+            "spark_catalog",
+            "hive_metastore",
+        ]
+
+        for catalog_name in test_cases:
+            with self.subTest(catalog_name=catalog_name):
+                with block_imperative_construct():
+                    with self.assertRaises(PySparkException) as context:
+                        catalog.setCurrentCatalog(catalog_name)
+
+                    self.assertEqual(
+                        context.exception.getCondition(),
+                        "IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
+                    )
+                    self.assertIn("'spark.catalog.setCurrentCatalog'", str(context.exception))
+
+    def test_blocks_catalog_set_current_database(self):
+        catalog = self.spark.catalog
+
+        test_cases = [
+            "test_db",
+            "default",
+            "my_database",
+        ]
+
+        for db_name in test_cases:
+            with self.subTest(db_name=db_name):
+                with block_imperative_construct():
+                    with self.assertRaises(PySparkException) as context:
+                        catalog.setCurrentDatabase(db_name)
+
+                    self.assertEqual(
+                        context.exception.getCondition(),
+                        "IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
+                    )
+                    self.assertIn("'spark.catalog.setCurrentDatabase'", str(context.exception))
+
     def test_restores_original_methods_after_context(self):
         original_set = RuntimeConf.set
+        original_set_current_catalog = Catalog.setCurrentCatalog
+        original_set_current_database = Catalog.setCurrentDatabase
 
         self.assertIs(RuntimeConf.set, original_set)
+        self.assertIs(Catalog.setCurrentCatalog, original_set_current_catalog)
+        self.assertIs(Catalog.setCurrentDatabase, original_set_current_database)
 
         with block_imperative_construct():
             self.assertIsNot(RuntimeConf.set, original_set)
+            self.assertIsNot(Catalog.setCurrentCatalog, original_set_current_catalog)
+            self.assertIsNot(Catalog.setCurrentDatabase, original_set_current_database)
 
         self.assertIs(RuntimeConf.set, original_set)
+        self.assertIs(Catalog.setCurrentCatalog, original_set_current_catalog)
+        self.assertIs(Catalog.setCurrentDatabase, original_set_current_database)
 
     def test_restores_methods_even_with_exception(self):
         original_set = RuntimeConf.set
+        original_set_current_catalog = Catalog.setCurrentCatalog
+        original_set_current_database = Catalog.setCurrentDatabase
 
         try:
             with block_imperative_construct():
@@ -72,6 +124,28 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
             pass
 
         self.assertIs(RuntimeConf.set, original_set)
+        self.assertIs(Catalog.setCurrentCatalog, original_set_current_catalog)
+        self.assertIs(Catalog.setCurrentDatabase, original_set_current_database)
+
+        try:
+            with block_imperative_construct():
+                self.spark.catalog.setCurrentCatalog("test_catalog")
+        except PySparkException:
+            pass
+
+        self.assertIs(RuntimeConf.set, original_set)
+        self.assertIs(Catalog.setCurrentCatalog, original_set_current_catalog)
+        self.assertIs(Catalog.setCurrentDatabase, original_set_current_database)
+
+        try:
+            with block_imperative_construct():
+                self.spark.catalog.setCurrentDatabase("test_db")
+        except PySparkException:
+            pass
+
+        self.assertIs(RuntimeConf.set, original_set)
+        self.assertIs(Catalog.setCurrentCatalog, original_set_current_catalog)
+        self.assertIs(Catalog.setCurrentDatabase, original_set_current_database)
 
 
 
