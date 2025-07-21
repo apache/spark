@@ -184,6 +184,20 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     }
   }
 
+  protected val supportsFilterPushdown: Boolean = true
+
+  protected val supportsLimitPushdown: Boolean = true
+
+  protected val supportsAggregatePushdown: Boolean = true
+
+  protected val supportsSortPushdown: Boolean = true
+
+  protected val supportsOffsetPushdown: Boolean = true
+
+  protected val supportsColumnPruning: Boolean = true
+
+  protected val supportsJoinPushdown: Boolean = true
+
   // Condition-less joins are not supported in join pushdown
   test("Test that 2-way join without condition should not have join pushed down") {
     val sqlQuery =
@@ -435,7 +449,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
 
-      checkAggregateRemoved(df)
+      checkAggregateRemoved(df, supportsAggregatePushdown)
       checkJoinPushed(
         df,
         expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
@@ -488,8 +502,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
 
-      checkSortRemoved(df)
-      checkLimitRemoved(df)
+      checkSortRemoved(df, supportsSortPushdown)
+      checkLimitRemoved(df, supportsLimitPushdown)
 
       checkJoinPushed(
         df,
@@ -520,7 +534,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
         expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}",
           s"$catalogAndNamespace.${caseConvert(joinTableName2)}"
       )
-      checkFilterPushed(df)
+      checkFilterPushed(df, supportsFilterPushdown)
       checkAnswer(df, rows)
     }
   }
