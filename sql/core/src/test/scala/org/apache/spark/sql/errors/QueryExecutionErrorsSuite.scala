@@ -656,6 +656,7 @@ class QueryExecutionErrorsSuite
       sqlState = "42704")
 
     JdbcDialects.unregisterDialect(testH2DialectUnrecognizedSQLType)
+    JdbcDialects.registerDialect(existH2Dialect)
   }
 
   test("INVALID_BUCKET_FILE: error if there exists any malformed bucket files") {
