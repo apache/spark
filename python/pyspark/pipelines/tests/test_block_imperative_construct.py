@@ -21,6 +21,8 @@ from pyspark.errors import PySparkException
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.catalog import Catalog
 from pyspark.sql.connect.dataframe import DataFrame
+from pyspark.sql.connect.udf import UDFRegistration
+from pyspark.sql.types import StringType
 from pyspark.testing.connectutils import (
     ReusedConnectTestCase,
     should_test_connect,
@@ -50,6 +52,12 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
             return ["test_db", "default", "my_database"]
         elif "global" in method_name.lower():
             return ["global_test_view", "global_temp_view", "my_global_view"]
+        elif method_name in ["register", "registerJavaFunction", "registerJavaUDAF"]:
+            # UDF registration methods - return test function/class names
+            return [
+                ("test_udf", lambda x: x + 1),
+                ("another_udf", lambda x: x * 2),
+            ]
         else:  # temp view methods
             return ["test_view", "temp_view", "my_view"]
 
@@ -62,11 +70,12 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
             return self.spark.catalog
         elif cls == DataFrame:
             return self.spark.range(1)
+        elif cls == UDFRegistration:
+            return self.spark.udf
         
     def test_blocks_all_methods(self):
         """Test that all configured methods are properly blocked."""
         for method_info in BLOCKED_METHODS:
-            cls = method_info["class"]
             method_name = method_info["method"]
             test_cases = self._get_test_cases_for_method(method_info)
             target_obj = self._get_target_object(method_info)
@@ -80,6 +89,15 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
                                     # set method takes key, value
                                     key, value = test_case
                                     getattr(target_obj, method_name)(key, value)
+                                elif method_name in ["register", "registerJavaFunction", "registerJavaUDAF"]:
+                                    # UDF registration methods
+                                    udf_name, udf_func = test_case
+                                    if method_name == "register":
+                                        getattr(target_obj, method_name)(udf_name, udf_func, StringType())
+                                    elif method_name == "registerJavaFunction":
+                                        getattr(target_obj, method_name)(udf_name, "com.example.TestUDF", StringType())
+                                    elif method_name == "registerJavaUDAF":
+                                        getattr(target_obj, method_name)(udf_name, "com.example.TestUDAF")
                                 else:
                                     # other methods take a single parameter
                                     getattr(target_obj, method_name)(test_case)
@@ -139,6 +157,9 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
             # DataFrame exceptions
             lambda: self.spark.range(1).createTempView("test_view"),
             lambda: self.spark.range(1).createOrReplaceGlobalTempView("global_view"),
+            # UDF registration exceptions
+            lambda: self.spark.udf.register("test_udf", lambda x: x + 1, StringType()),
+            lambda: self.spark.udf.registerJavaFunction("java_udf", "com.example.TestUDF", StringType()),
         ]
 
         for i, exception_case in enumerate(exception_test_cases):

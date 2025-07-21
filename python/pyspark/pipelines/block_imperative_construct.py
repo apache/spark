@@ -21,55 +21,70 @@ from pyspark.errors import PySparkException
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.catalog import Catalog
 from pyspark.sql.connect.dataframe import DataFrame
+from pyspark.sql.connect.udf import UDFRegistration
 
-
-# Define all methods to block in a structured way
+# pyspark methods that should be blocked from executing in user supplied python pipeline definition files
 BLOCKED_METHODS = [
     {
         "class": RuntimeConf,
         "method": "set",
-        "suggestion": "set configuration via the pipeline spec or use the 'spark_conf' argument in various decorators"
+        "suggestion": "Instead set configuration via the pipeline spec or use the 'spark_conf' argument in various decorators"
     },
     {
         "class": Catalog,
         "method": "setCurrentCatalog",
-        "suggestion": "set catalog via the pipeline spec or the 'name' argument on the dataset decorators"
+        "suggestion": "Instead set catalog via the pipeline spec or the 'name' argument on the dataset decorators"
     },
     {
         "class": Catalog,
         "method": "setCurrentDatabase",
-        "suggestion": "set database via the pipeline spec or the 'name' argument on the dataset decorators"
+        "suggestion": "Instead set database via the pipeline spec or the 'name' argument on the dataset decorators"
     },
     {
         "class": Catalog,
         "method": "dropTempView",
-        "suggestion": "remove the temporary view definition directly"
+        "suggestion": "Instead remove the temporary view definition directly"
 
     },
     {
         "class": Catalog,
         "method": "dropGlobalTempView",
-        "suggestion": "remove the temporary view definition directly"
+        "suggestion": "Instead remove the temporary view definition directly"
     },
     {
         "class": DataFrame,
         "method": "createTempView",
-        "suggestion": "use the @temporary_view decorator to define temporary views"
+        "suggestion": "Instead use the @temporary_view decorator to define temporary views"
     },
     {
         "class": DataFrame,
         "method": "createOrReplaceTempView",
-        "suggestion": "use the @temporary_view decorator to define temporary views"
+        "suggestion": "Instead use the @temporary_view decorator to define temporary views"
     },
     {
         "class": DataFrame,
         "method": "createGlobalTempView",
-        "suggestion": "use the @temporary_view decorator to define temporary views"
+        "suggestion": "Instead use the @temporary_view decorator to define temporary views"
     },
     {
         "class": DataFrame,
         "method": "createOrReplaceGlobalTempView",
-        "suggestion": "use the @temporary_view decorator to define temporary views"
+        "suggestion": "Instead use the @temporary_view decorator to define temporary views"
+    },
+    {
+        "class": UDFRegistration,
+        "method": "register",
+        "suggestion": "",
+    },
+    {
+        "class": UDFRegistration,
+        "method": "registerJavaFunction",
+        "suggestion": "",
+    },
+    {
+        "class": UDFRegistration,
+        "method": "registerJavaUDAF",
+        "suggestion": "",
     },
 ]
 
@@ -94,6 +109,7 @@ def block_imperative_construct() -> Generator[None, None, None]:
         - catalog changes via: spark.catalog.setCurrentCatalog("catalog_name")
         - database changes via: spark.catalog.setCurrentDatabase("db_name")
         - temporary view creation/deletion via DataFrame and catalog methods
+        - user-defined functions registration
     """
     # Store original methods
     original_methods = {}

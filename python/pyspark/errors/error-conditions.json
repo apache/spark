@@ -366,7 +366,7 @@
   "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE": {
     "message": [
       "Imperative construct <method> is not allowed in declarative pipelines.",
-      "Instead <suggestion>"
+      "<suggestion>"
     ]
   },
   "INCORRECT_CONF_FOR_PROFILE": {
