@@ -85,52 +85,56 @@ class NumPyCompatTestsMixin:
     def test_np_spark_compat_series(self):
         from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
 
-        # Use randomly generated dataFrame
-        pdf = pd.DataFrame(
-            np.random.randint(-100, 100, size=(np.random.randint(100), 2)), columns=["a", "b"]
-        )
-        pdf2 = pd.DataFrame(
-            np.random.randint(-100, 100, size=(len(pdf), len(pdf.columns))), columns=["a", "b"]
-        )
-        psdf = ps.from_pandas(pdf)
-        psdf2 = ps.from_pandas(pdf2)
+        # Disable arrow errors, some numpy functions produce results that exceed value ranges
+        with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
+            # Use randomly generated dataFrame
+            pdf = pd.DataFrame(
+                np.random.randint(-100, 100, size=(np.random.randint(100), 2)), columns=["a", "b"]
+            )
+            pdf2 = pd.DataFrame(
+                np.random.randint(-100, 100, size=(len(pdf), len(pdf.columns))), columns=["a", "b"]
+            )
+            psdf = ps.from_pandas(pdf)
+            psdf2 = ps.from_pandas(pdf2)
 
-        for np_name, spark_func in unary_np_spark_mappings.items():
-            np_func = getattr(np, np_name)
-            if np_name not in self.blacklist:
-                try:
-                    # unary ufunc
-                    self.assert_eq(np_func(pdf.a), np_func(psdf.a), almost=True)
-                except Exception as e:
-                    raise AssertionError("Test in '%s' function was failed." % np_name) from e
+            for np_name, spark_func in unary_np_spark_mappings.items():
+                np_func = getattr(np, np_name)
+                if np_name not in self.blacklist:
+                    try:
+                        # unary ufunc
+                        self.assert_eq(np_func(pdf.a), np_func(psdf.a), almost=True)
+                    except Exception as e:
+                        raise AssertionError("Test in '%s' function was failed." % np_name) from e
 
-        for np_name, spark_func in binary_np_spark_mappings.items():
-            np_func = getattr(np, np_name)
-            if np_name not in self.blacklist:
-                try:
-                    # binary ufunc
-                    self.assert_eq(np_func(pdf.a, pdf.b), np_func(psdf.a, psdf.b), almost=True)
-                    self.assert_eq(np_func(pdf.a, 1), np_func(psdf.a, 1), almost=True)
-                except Exception as e:
-                    raise AssertionError("Test in '%s' function was failed." % np_name) from e
-
-        # Test only top 5 for now. 'compute.ops_on_diff_frames' option increases too much time.
-        try:
-            set_option("compute.ops_on_diff_frames", True)
-            for np_name, spark_func in list(binary_np_spark_mappings.items())[:5]:
+            for np_name, spark_func in binary_np_spark_mappings.items():
                 np_func = getattr(np, np_name)
                 if np_name not in self.blacklist:
                     try:
                         # binary ufunc
-                        self.assert_eq(
-                            np_func(pdf.a, pdf2.b).sort_index(),
-                            np_func(psdf.a, psdf2.b).sort_index(),
-                            almost=True,
-                        )
+                        self.assert_eq(np_func(pdf.a, pdf.b), np_func(psdf.a, psdf.b), almost=True)
+                        self.assert_eq(np_func(pdf.a, 1), np_func(psdf.a, 1), almost=True)
                     except Exception as e:
                         raise AssertionError("Test in '%s' function was failed." % np_name) from e
-        finally:
-            reset_option("compute.ops_on_diff_frames")
+
+            # Test only top 5 for now. 'compute.ops_on_diff_frames' option increases too much time.
+            try:
+                set_option("compute.ops_on_diff_frames", True)
+                for np_name, spark_func in list(binary_np_spark_mappings.items())[:5]:
+                    np_func = getattr(np, np_name)
+                    if np_name not in self.blacklist:
+                        try:
+                            # binary ufunc
+                            self.assert_eq(
+                                np_func(pdf.a, pdf2.b).sort_index(),
+                                np_func(psdf.a, psdf2.b).sort_index(),
+                                almost=True,
+                            )
+                        except Exception as e:
+                            raise AssertionError(
+                                "Test in '%s' function was failed." % np_name
+                            ) from e
+            finally:
+                reset_option("compute.ops_on_diff_frames")
 
     @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_np_spark_compat_frame(self):
