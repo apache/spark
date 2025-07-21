@@ -323,7 +323,7 @@ class SqlScriptingLabelContext {
   private def assertIdentifierNotInSeenLabels(identifierCtx: Option[MultipartIdentifierContext]): Unit = {
     val identifierName = identifierCtx.map(_.getText)
 
-    if(identifierName.isDefined && seenLabels.contains(identifierName.get.toLowerCase(Locale.ROOT)))) {
+    if(identifierName.isDefined && seenLabels.contains(identifierName.get.toLowerCase(Locale.ROOT))) {
       withOrigin(identifierCtx.get) {
         throw SqlScriptingErrors
           .forVariableNameAlreadyExistsAsLabelInScope(CurrentOrigin.get, identifierName.get)
@@ -385,7 +385,7 @@ class SqlScriptingLabelContext {
 
     if(identifierName.isDefined) {
       assertIdentifierNotInSeenLabels(identifierCtx)
-      seenLabels.add(identifierName.get.toLowerCase(Locale.ROOT)))
+      seenLabels.add(identifierName.get.toLowerCase(Locale.ROOT))
     }
   }
 
@@ -397,7 +397,7 @@ class SqlScriptingLabelContext {
     val identifierName = identifierCtx.map(_.getText)
 
     if(identifierName.isDefined) {
-      seenLabels.remove(identifierName.get.toLowerCase(Locale.ROOT)))
+      seenLabels.remove(identifierName.get.toLowerCase(Locale.ROOT))
     }
   }
 

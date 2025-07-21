@@ -2405,6 +2405,25 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(e.getMessage.contains(" that already exists as a label name in scope."))
   }
 
+  test("label name is the same as the for loop variable - should fail") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  FOR L1 AS SELECT 1 DO
+        |    L1: BEGIN
+        |      SELECT 2;
+        |    END L1;
+        |  END FOR;
+        |END""".stripMargin
+
+    val e = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    }
+    assert(e.getCondition === "FOR_VARIABLE_NAME_ALREADY_EXISTS_AS_LABEL_IN_SCOPE")
+    assert(e.getMessage.contains("Found for variable name "))
+    assert(e.getMessage.contains(" that already exists as a label name in scope."))
+  }
+
   test("for statement") {
     val sqlScriptText =
       """
