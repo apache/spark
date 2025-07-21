@@ -317,6 +317,21 @@ class SqlScriptingLabelContext {
   }
 
   /**
+   * Assert the identifier is not contained within seenLabels.
+   * If the identifier is contained within seenLabels, raise an exception.
+   */
+  private def assertIdentifierNotInSeenLabels(identifierCtx: Option[MultipartIdentifierContext]): Unit = {
+    val identifierName = identifierCtx.map(_.getText)
+
+    if(identifierName.isDefined && seenLabels.contains(identifierName.get.toLowerCase(Locale.ROOT)))) {
+      withOrigin(identifierCtx.get) {
+        throw SqlScriptingErrors
+          .forVariableNameAlreadyExistsAsLabelInScope(CurrentOrigin.get, identifierName.get)
+      }
+    }
+  }
+
+  /**
    * Enter a labeled scope and return the label text.
    * If the label is defined, it will be returned and added to seenLabels.
    * If the label is not defined, a random UUID will be returned.
@@ -361,19 +376,31 @@ class SqlScriptingLabelContext {
   }
 
   /**
-   * Assert the identifier is not contained within seenLabels.
-   * If the identifier is contained within seenLabels, raise an exception.
+   * Enter a for loop scope.
+   * If the for loop variable is defined, it will be asserted to not be inside seenLabels;
+   * Then, if the for loop variable is defined, it will be added to seenLabels.
    */
-  def assertIdentifierNotInSeenLabels(identifierCtx: Option[MultipartIdentifierContext]): Unit = {
+  def enterForScope(identifierCtx: Option[MultipartIdentifierContext]): Unit = {
     val identifierName = identifierCtx.map(_.getText)
 
-    if(identifierName.isDefined && seenLabels.contains(identifierName.get.toLowerCase())) {
-      withOrigin(identifierCtx.get) {
-        throw SqlScriptingErrors
-          .forVariableNameAlreadyExistsAsLabelInScope(CurrentOrigin.get, identifierName.get)
-      }
+    if(identifierName.isDefined) {
+      assertIdentifierNotInSeenLabels(identifierCtx)
+      seenLabels.add(identifierName.get.toLowerCase(Locale.ROOT)))
     }
   }
+
+  /**
+   * Exit a for loop scope.
+   * If the for loop variable is defined, it will be removed from seenLabels.
+   */
+  def exitForScope(identifierCtx: Option[MultipartIdentifierContext]): Unit = {
+    val identifierName = identifierCtx.map(_.getText)
+
+    if(identifierName.isDefined) {
+      seenLabels.remove(identifierName.get.toLowerCase(Locale.ROOT)))
+    }
+  }
+
 }
 
 object SqlScriptingLabelContext {

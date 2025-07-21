@@ -557,7 +557,7 @@ class AstBuilder extends DataTypeAstBuilder
     val query = withOrigin(queryCtx) {
       SingleStatement(visitQuery(queryCtx))
     }
-    parsingCtx.labelContext.assertIdentifierNotInSeenLabels(Option(ctx.multipartIdentifier()))
+    parsingCtx.labelContext.enterForScope(Option(ctx.multipartIdentifier()))
     val varName = Option(ctx.multipartIdentifier()).map(_.getText)
     val body = visitCompoundBodyImpl(
       ctx.compoundBody(),
@@ -566,6 +566,7 @@ class AstBuilder extends DataTypeAstBuilder
       isScope = false
     )
     parsingCtx.labelContext.exitLabeledScope(Option(ctx.beginLabel()))
+    parsingCtx.labelContext.exitForScope(Option(ctx.multipartIdentifier()))
 
     ForStatement(query, varName, body, Some(labelText))
   }

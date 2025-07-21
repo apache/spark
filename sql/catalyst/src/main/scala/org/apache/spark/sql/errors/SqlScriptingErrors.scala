@@ -44,7 +44,7 @@ private[sql] object SqlScriptingErrors {
   def duplicateLabels(origin: Origin, label: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
-      errorClass = "LABEL_ALREADY_EXISTS",
+      errorClass = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       cause = null,
       messageParameters = Map("label" -> toSQLId(label)))
   }
