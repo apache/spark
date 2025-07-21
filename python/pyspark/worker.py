@@ -885,7 +885,8 @@ def wrap_grouped_agg_arrow_udf(f, args_offsets, kwargs_offsets, return_type, run
 
         result = func(*series)
 
-        if isinstance(result, pa.Scalar) and LooseVersion(pa.__version__) < LooseVersion("19.0.0"):
+        if isinstance(result, pa.Scalar) and LooseVersion(pa.__version__) < LooseVersion("13.0.0"):
+            # earlier versions do not support pa.array([pa.Scalar values]).
             result = result.as_py()
         return pa.array([result])
 
