@@ -64,7 +64,6 @@ def append_flow(
             target=target,
             spark_conf=spark_conf,
             source_code_location=source_code_location,
-            once=False,
             func=func,
         )
         get_active_graph_element_registry().register_flow(flow)
@@ -174,7 +173,6 @@ def table(
                 target=resolved_name,
                 spark_conf=spark_conf or {},
                 source_code_location=source_code_location,
-                once=False,
                 func=decorated,
             )
         )
@@ -277,7 +275,6 @@ def materialized_view(
                 target=resolved_name,
                 spark_conf=spark_conf or {},
                 source_code_location=source_code_location,
-                once=False,
                 func=decorated,
             )
         )
@@ -368,7 +365,6 @@ def temporary_view(
                 spark_conf=spark_conf or {},
                 name=resolved_name,
                 source_code_location=source_code_location,
-                once=False,
             )
         )
 

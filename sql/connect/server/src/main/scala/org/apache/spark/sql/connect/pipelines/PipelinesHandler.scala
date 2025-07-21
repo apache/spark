@@ -209,7 +209,7 @@ private[connect] object PipelinesHandler extends Logging {
         func =
           FlowAnalysis.createFlowFunctionFromLogicalPlan(transformRelationFunc(flow.getRelation)),
         sqlConf = flow.getSqlConfMap.asScala.toMap,
-        once = flow.getOnce,
+        once = false,
         queryContext = QueryContext(
           Option(graphElementRegistry.defaultCatalog),
           Option(graphElementRegistry.defaultDatabase)),

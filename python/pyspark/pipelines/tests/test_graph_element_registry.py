@@ -74,13 +74,11 @@ class GraphElementRegistryTest(unittest.TestCase):
         st2_flow1_obj = registry.flows[2]
         self.assertEqual(st2_flow1_obj.name, "flow1")
         self.assertEqual(st2_flow1_obj.target, "st2")
-        self.assertEqual(st2_flow1_obj.once, False)
         assert mv_flow_obj.source_code_location.filename.endswith("test_graph_element_registry.py")
 
         st2_flow1_obj = registry.flows[3]
         self.assertEqual(st2_flow1_obj.name, "flow2")
         self.assertEqual(st2_flow1_obj.target, "st2")
-        self.assertEqual(st2_flow1_obj.once, False)
         assert mv_flow_obj.source_code_location.filename.endswith("test_graph_element_registry.py")
 
     def test_definition_without_graph_element_registry(self):
