@@ -97,12 +97,6 @@ SELECT time_trunc('MINUTE', time'12:34:56.123456789');
 SELECT time_trunc('SECOND', time'12:34:56.123456789');
 SELECT time_trunc('MILLISECOND', time'12:34:56.123456789');
 SELECT time_trunc('MICROSECOND', time'12:34:56.123456789');
--- SPARK-51554: time truncation with string overload for time.
-SELECT time_trunc('HOUR', '12:34:56.123456789');
-SELECT time_trunc('MINUTE', '12:34:56.123456789');
-SELECT time_trunc('SECOND', '12:34:56.123456789');
-SELECT time_trunc('MILLISECOND', '12:34:56.123456789');
-SELECT time_trunc('MICROSECOND', '12:34:56.123456789');
 
 -- SPARK-51554: time truncation with zero time.
 SELECT time_trunc('HOUR', time'00:00:00');

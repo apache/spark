@@ -522,19 +522,5 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val timeTruncSec = TimeTrunc(Literal("SECOND"), Literal(timeWithMicroPrecision, TimeType(3)))
     assert(timeTruncSec.dataType == TimeType(3))
     checkEvaluation(timeTruncSec, localTime(15, 30, 45, 0))
-
-    // Test string time overload.
-    checkEvaluation(
-      TimeTrunc(Literal("HOUR"), Literal("15:30:45")),
-      localTime(15, 0, 0, 0)
-    )
-    checkEvaluation(
-      TimeTrunc(Literal("SECOND"), Literal("15:30:45.123")),
-      localTime(15, 30, 45, 0)
-    )
-    checkEvaluation(
-      TimeTrunc(Literal("MICROSECOND"), Literal("15:30:45.123456789")),
-      localTime(15, 30, 45, 123456)
-    )
   }
 }

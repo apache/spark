@@ -564,41 +564,6 @@ Project [time_trunc(MICROSECOND, 12:34:56.123456) AS time_trunc(MICROSECOND, TIM
 
 
 -- !query
-SELECT time_trunc('HOUR', '12:34:56.123456789')
--- !query analysis
-Project [time_trunc(HOUR, 12:34:56.123456789) AS time_trunc(HOUR, 12:34:56.123456789)#x]
-+- OneRowRelation
-
-
--- !query
-SELECT time_trunc('MINUTE', '12:34:56.123456789')
--- !query analysis
-Project [time_trunc(MINUTE, 12:34:56.123456789) AS time_trunc(MINUTE, 12:34:56.123456789)#x]
-+- OneRowRelation
-
-
--- !query
-SELECT time_trunc('SECOND', '12:34:56.123456789')
--- !query analysis
-Project [time_trunc(SECOND, 12:34:56.123456789) AS time_trunc(SECOND, 12:34:56.123456789)#x]
-+- OneRowRelation
-
-
--- !query
-SELECT time_trunc('MILLISECOND', '12:34:56.123456789')
--- !query analysis
-Project [time_trunc(MILLISECOND, 12:34:56.123456789) AS time_trunc(MILLISECOND, 12:34:56.123456789)#x]
-+- OneRowRelation
-
-
--- !query
-SELECT time_trunc('MICROSECOND', '12:34:56.123456789')
--- !query analysis
-Project [time_trunc(MICROSECOND, 12:34:56.123456789) AS time_trunc(MICROSECOND, 12:34:56.123456789)#x]
-+- OneRowRelation
-
-
--- !query
 SELECT time_trunc('HOUR', time'00:00:00')
 -- !query analysis
 Project [time_trunc(HOUR, 00:00:00) AS time_trunc(HOUR, TIME '00:00:00')#x]

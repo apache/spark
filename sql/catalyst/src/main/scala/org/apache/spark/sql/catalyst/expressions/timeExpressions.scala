@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, ObjectType, StringType, TimeType, TypeCollection}
+import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, ObjectType, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -644,13 +644,13 @@ case class SubtractTimes(left: Expression, right: Expression)
           - "SECOND" - zero out the seconds with fraction part
           - "MILLISECOND" - zero out the microseconds
           - "MICROSECOND" - zero out the nanoseconds
-      * expr - a TIME or STRING with a valid time format
+      * expr - a TIME with a valid time format
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_('HOUR', '09:32:05.359');
+      > SELECT _FUNC_('HOUR', TIME'09:32:05.359');
        09:00:00
-      > SELECT _FUNC_('MILLISECOND', '09:32:05.123456');
+      > SELECT _FUNC_('MILLISECOND', TIME'09:32:05.123456');
        09:32:05.123
   """,
   group = "datetime_funcs",
@@ -663,17 +663,9 @@ case class TimeTrunc(unit: Expression, time: Expression)
   override def right: Expression = time
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(
-      StringTypeWithCollation(supportsTrimCollation = true),
-      TypeCollection(AnyTimeType, StringTypeWithCollation(supportsTrimCollation = true))
-    )
+    Seq(StringTypeWithCollation(supportsTrimCollation = true), AnyTimeType)
 
-  override def dataType: DataType = {
-    time.dataType match {
-      case TimeType(precision) => TimeType(precision)
-      case _ => TimeType()
-    }
-  }
+  override def dataType: DataType = time.dataType
 
   override def prettyName: String = "time_trunc"
 
@@ -682,17 +674,12 @@ case class TimeTrunc(unit: Expression, time: Expression)
     copy(unit = newUnit, time = newTime)
 
   override def replacement: Expression = {
-    val castedTime = if (time.dataType.isInstanceOf[StringType]) {
-      Cast(time, TimeType())
-    } else {
-      time
-    }
     StaticInvoke(
       classOf[DateTimeUtils.type],
       dataType,
       "timeTrunc",
-      Seq(unit, castedTime),
-      Seq(unit.dataType, castedTime.dataType)
+      Seq(unit, time),
+      Seq(unit.dataType, time.dataType)
     )
   }
 }

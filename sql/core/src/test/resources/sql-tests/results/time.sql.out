@@ -685,46 +685,6 @@ struct<time_trunc(MICROSECOND, TIME '12:34:56.123456'):time(6)>
 
 
 -- !query
-SELECT time_trunc('HOUR', '12:34:56.123456789')
--- !query schema
-struct<time_trunc(HOUR, 12:34:56.123456789):time(6)>
--- !query output
-12:00:00
-
-
--- !query
-SELECT time_trunc('MINUTE', '12:34:56.123456789')
--- !query schema
-struct<time_trunc(MINUTE, 12:34:56.123456789):time(6)>
--- !query output
-12:34:00
-
-
--- !query
-SELECT time_trunc('SECOND', '12:34:56.123456789')
--- !query schema
-struct<time_trunc(SECOND, 12:34:56.123456789):time(6)>
--- !query output
-12:34:56
-
-
--- !query
-SELECT time_trunc('MILLISECOND', '12:34:56.123456789')
--- !query schema
-struct<time_trunc(MILLISECOND, 12:34:56.123456789):time(6)>
--- !query output
-12:34:56.123
-
-
--- !query
-SELECT time_trunc('MICROSECOND', '12:34:56.123456789')
--- !query schema
-struct<time_trunc(MICROSECOND, 12:34:56.123456789):time(6)>
--- !query output
-12:34:56.123456
-
-
--- !query
 SELECT time_trunc('HOUR', time'00:00:00')
 -- !query schema
 struct<time_trunc(HOUR, TIME '00:00:00'):time(6)>
