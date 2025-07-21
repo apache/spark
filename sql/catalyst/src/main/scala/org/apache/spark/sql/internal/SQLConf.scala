@@ -3949,8 +3949,9 @@ object SQLConf {
   val PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED =
     buildConf("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled")
       .internal()
-      .doc(s"When true and ${PYTHON_UDF_ARROW_ENABLED.key} is enabled, extra pandas " +
-        "conversion happens during (de)serialization between JVM and Python workers. " +
+      .doc(s"When true and ${PYTHON_UDF_ARROW_ENABLED.key} is enabled, " +
+        "matches the default Arrow Python UDF behavior before 4.1.0. With this behavior, " +
+        "extra pandas conversion happens during (de)serialization between JVM and Python workers. " +
         "This matters especially when the produced output has a schema different from " +
         "specified schema, resulting in a different type coercion.")
       .version("4.1.0")

@@ -697,6 +697,20 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
 
 
 class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
+    """
+    Serializer used by Python worker to evaluate Arrow Python UDFs
+    when the legacy pandas conversion is disabled 
+    (instead of legacy ArrowStreamPandasUDFSerializer).
+    
+    Parameters
+    ----------
+    timezone : str
+        A timezone to respect when handling timestamp values
+    safecheck : bool
+        If True, conversion from Arrow to Pandas checks for overflow/truncation
+    input_types : bool
+        If True, then Pandas DataFrames will get columns by name
+    """
     def __init__(
         self,
         timezone,
@@ -712,6 +726,19 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
         self._input_types = input_types
 
     def load_stream(self, stream):
+        """
+        Loads a stream of Arrow record batches and converts them to Python values.
+
+        Parameters
+        ----------
+        stream : object
+            Input stream containing Arrow record batches
+
+        Yields
+        ------
+        list
+            List of columns containing list of Python values.
+        """
         import pyarrow as pa
 
         converters = [
@@ -730,6 +757,22 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
                 yield columns
 
     def dump_stream(self, iterator, stream):
+        """
+        Dumps an iterator of Python values as a stream of Arrow record batches.
+
+        Parameters
+        ----------
+        iterator : iterator
+            Iterator yielding tuples of (data, arrow_type, spark_type) for single UDF
+            or list of tuples for multiple UDFs in a projection
+        stream : object
+            Output stream to write the Arrow record batches
+
+        Returns
+        -------
+        object
+            Result of writing the Arrow stream via ArrowStreamArrowUDFSerializer dump_stream
+        """
         import pyarrow as pa
 
         def create_array(results, arrow_type, spark_type):
@@ -738,10 +781,7 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
             try:
                 return pa.array(converted, type=arrow_type)
             except pa.lib.ArrowInvalid:
-                if self._arrow_cast:
-                    return pa.array(converted).cast(target_type=arrow_type, safe=self._safecheck)
-                else:
-                    raise
+                return pa.array(converted).cast(target_type=arrow_type, safe=self._safecheck)
 
         def py_to_batch():
             for packed in iterator:

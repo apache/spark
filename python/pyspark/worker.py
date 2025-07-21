@@ -262,7 +262,7 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
     def verify_result_length(result, length):
         if len(result) != length:
             raise PySparkRuntimeError(
-                errorClass="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
+                errorClass="SCHEMA_MISMATCH_FOR_ARROW_PYTHON_UDF",
                 messageParameters={
                     "udf_type": "arrow_batch_udf",
                     "expected": str(length),
@@ -1914,7 +1914,6 @@ def read_udfs(pickleSer, infile, eval_type):
 
     state_server_port = None
     key_schema = None
-    input_types = None
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,

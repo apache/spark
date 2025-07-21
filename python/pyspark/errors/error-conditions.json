@@ -997,6 +997,11 @@
       "Result vector from <udf_type> was not the required length: expected <expected>, got <actual>."
     ]
   },
+  "SCHEMA_MISMATCH_FOR_ARROW_PYTHON_UDF": {
+    "message": [
+      "Result vector from <udf_type> was not the required length: expected <expected>, got <actual>."
+    ]
+  },
   "SESSION_ALREADY_EXIST": {
     "message": [
       "Cannot start a remote Spark session because there is a regular Spark session already running."
