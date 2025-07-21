@@ -36,6 +36,7 @@ from pyspark.accumulators import (
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
 from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
+from pyspark.loose_version import LooseVersion
 from pyspark.resource import ResourceInformation
 from pyspark.util import PythonEvalType, local_connect_and_auth
 from pyspark.serializers import (
@@ -883,7 +884,10 @@ def wrap_grouped_agg_arrow_udf(f, args_offsets, kwargs_offsets, return_type, run
         import pyarrow as pa
 
         result = func(*series)
-        return pa.array(obj=[result], type=arrow_return_type)
+
+        if isinstance(result, pa.Scalar) and LooseVersion(pa.__version__) < LooseVersion("19.0.0"):
+            result = result.as_py()
+        return pa.array([result])
 
     return (
         args_kwargs_offsets,
