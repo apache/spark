@@ -27,303 +27,133 @@ from pyspark.testing.connectutils import (
     connect_requirement_message,
 )
 
-from pyspark.pipelines.block_imperative_construct import block_imperative_construct
+from pyspark.pipelines.block_imperative_construct import block_imperative_construct, BLOCKED_METHODS
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message or "Connect not available")
 class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
-    def test_blocks_runtime_config_set(self):
-        config = self.spark.conf
+    
+    def _get_test_cases_for_method(self, method_info):
+        """Get appropriate test cases for different method types."""
+        method_name = method_info["method"]
+        
+        if method_name == "set":
+            return [
+                ("spark.test.string", "string_value"),
+                ("spark.test.int", 42),
+                ("spark.test.bool", True),
+                ("spark.test.float", 3.14),
+            ]
+        elif "catalog" in method_name.lower():
+            return ["test_catalog", "spark_catalog", "hive_metastore"]
+        elif "database" in method_name.lower():
+            return ["test_db", "default", "my_database"]
+        elif "global" in method_name.lower():
+            return ["global_test_view", "global_temp_view", "my_global_view"]
+        else:  # temp view methods
+            return ["test_view", "temp_view", "my_view"]
 
-        test_cases = [
-            ("spark.test.string", "string_value"),
-            ("spark.test.int", 42),
-            ("spark.test.bool", True),
-            ("spark.test.float", 3.14),
-        ]
+    def _get_target_object(self, method_info):
+        """Get the appropriate object to call the method on."""
+        cls = method_info["class"]
+        if cls == RuntimeConf:
+            return self.spark.conf
+        elif cls == Catalog:
+            return self.spark.catalog
+        elif cls == DataFrame:
+            return self.spark.range(1)
+        
+    def test_blocks_all_methods(self):
+        """Test that all configured methods are properly blocked."""
+        for method_info in BLOCKED_METHODS:
+            cls = method_info["class"]
+            method_name = method_info["method"]
+            test_cases = self._get_test_cases_for_method(method_info)
+            target_obj = self._get_target_object(method_info)
+            
+            with self.subTest(method=method_name):
+                for test_case in test_cases:
+                    with self.subTest(test_case=test_case):
+                        with block_imperative_construct():
+                            with self.assertRaises(PySparkException) as context:
+                                if method_name == "set":
+                                    # set method takes key, value
+                                    key, value = test_case
+                                    getattr(target_obj, method_name)(key, value)
+                                else:
+                                    # other methods take a single parameter
+                                    getattr(target_obj, method_name)(test_case)
 
-        for key, value in test_cases:
-            with self.subTest(key=key, value=value):
-                with block_imperative_construct():
-                    with self.assertRaises(PySparkException) as context:
-                        config.set(key, value)
-
-                    self.assertEqual(
-                        context.exception.getCondition(),
-                        "IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
-                    )
-
-    def test_blocks_catalog_set_current_catalog(self):
-        catalog = self.spark.catalog
-
-        test_cases = [
-            "test_catalog",
-            "spark_catalog",
-            "hive_metastore",
-        ]
-
-        for catalog_name in test_cases:
-            with self.subTest(catalog_name=catalog_name):
-                with block_imperative_construct():
-                    with self.assertRaises(PySparkException) as context:
-                        catalog.setCurrentCatalog(catalog_name)
-
-                    self.assertEqual(
-                        context.exception.getCondition(),
-                        "IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
-                    )
-                    self.assertIn("'spark.catalog.setCurrentCatalog'", str(context.exception))
-
-    def test_blocks_catalog_set_current_database(self):
-        catalog = self.spark.catalog
-
-        test_cases = [
-            "test_db",
-            "default",
-            "my_database",
-        ]
-
-        for db_name in test_cases:
-            with self.subTest(db_name=db_name):
-                with block_imperative_construct():
-                    with self.assertRaises(PySparkException) as context:
-                        catalog.setCurrentDatabase(db_name)
-
-                    self.assertEqual(
-                        context.exception.getCondition(),
-                        "IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
-                    )
-                    self.assertIn("'spark.catalog.setCurrentDatabase'", str(context.exception))
-
-    def test_blocks_catalog_drop_temp_view(self):
-        catalog = self.spark.catalog
-
-        test_cases = [
-            "test_view",
-            "temp_view",
-            "my_view",
-        ]
-
-        for view_name in test_cases:
-            with self.subTest(view_name=view_name):
-                with block_imperative_construct():
-                    with self.assertRaises(PySparkException) as context:
-                        catalog.dropTempView(view_name)
-
-                    self.assertEqual(
-                        context.exception.getCondition(),
-                        "IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
-                    )
-                    self.assertIn("'spark.catalog.dropTempView'", str(context.exception))
-
-    def test_blocks_catalog_drop_global_temp_view(self):
-        catalog = self.spark.catalog
-
-        test_cases = [
-            "global_test_view",
-            "global_temp_view",
-            "my_global_view",
-        ]
-
-        for view_name in test_cases:
-            with self.subTest(view_name=view_name):
-                with block_imperative_construct():
-                    with self.assertRaises(PySparkException) as context:
-                        catalog.dropGlobalTempView(view_name)
-
-                    self.assertEqual(
-                        context.exception.getCondition(),
-                        "IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
-                    )
-                    self.assertIn("'spark.catalog.dropGlobalTempView'", str(context.exception))
-
-    def test_blocks_dataframe_create_temp_view(self):
-        df = self.spark.range(1)
-
-        test_cases = [
-            "test_view",
-            "temp_view",
-            "my_view",
-        ]
-
-        for view_name in test_cases:
-            with self.subTest(view_name=view_name):
-                with block_imperative_construct():
-                    with self.assertRaises(PySparkException) as context:
-                        df.createTempView(view_name)
-
-                    self.assertEqual(
-                        context.exception.getCondition(),
-                        "IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
-                    )
-                    self.assertIn("'DataFrame.createTempView'", str(context.exception))
-
-    def test_blocks_dataframe_create_or_replace_temp_view(self):
-        df = self.spark.range(1)
-
-        test_cases = [
-            "test_view",
-            "temp_view",
-            "my_view",
-        ]
-
-        for view_name in test_cases:
-            with self.subTest(view_name=view_name):
-                with block_imperative_construct():
-                    with self.assertRaises(PySparkException) as context:
-                        df.createOrReplaceTempView(view_name)
-
-                    self.assertEqual(
-                        context.exception.getCondition(),
-                        "IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
-                    )
-                    self.assertIn("'DataFrame.createOrReplaceTempView'", str(context.exception))
-
-    def test_blocks_dataframe_create_global_temp_view(self):
-        df = self.spark.range(1)
-
-        test_cases = [
-            "global_test_view",
-            "global_temp_view", 
-            "my_global_view",
-        ]
-
-        for view_name in test_cases:
-            with self.subTest(view_name=view_name):
-                with block_imperative_construct():
-                    with self.assertRaises(PySparkException) as context:
-                        df.createGlobalTempView(view_name)
-
-                    self.assertEqual(
-                        context.exception.getCondition(),
-                        "IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
-                    )
-                    self.assertIn("'DataFrame.createGlobalTempView'", str(context.exception))
-
-    def test_blocks_dataframe_create_or_replace_global_temp_view(self):
-        df = self.spark.range(1)
-
-        test_cases = [
-            "global_test_view",
-            "global_temp_view",
-            "my_global_view",
-        ]
-
-        for view_name in test_cases:
-            with self.subTest(view_name=view_name):
-                with block_imperative_construct():
-                    with self.assertRaises(PySparkException) as context:
-                        df.createOrReplaceGlobalTempView(view_name)
-
-                    self.assertEqual(
-                        context.exception.getCondition(),
-                        "IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
-                    )
-                    self.assertIn("'DataFrame.createOrReplaceGlobalTempView'", str(context.exception))
+                            self.assertEqual(
+                                context.exception.getCondition(),
+                                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+                            )
 
     def test_restores_original_methods_after_context(self):
-        original_set = RuntimeConf.set
-        original_set_current_catalog = Catalog.setCurrentCatalog
-        original_set_current_database = Catalog.setCurrentDatabase
-        original_drop_temp_view = Catalog.dropTempView
-        original_drop_global_temp_view = Catalog.dropGlobalTempView
-        original_create_temp_view = DataFrame.createTempView
-        original_create_or_replace_temp_view = DataFrame.createOrReplaceTempView
-        original_create_global_temp_view = DataFrame.createGlobalTempView
-        original_create_or_replace_global_temp_view = DataFrame.createOrReplaceGlobalTempView
+        """Test that all methods are properly restored after context manager exits."""
+        # Store original methods
+        original_methods = {}
+        for method_info in BLOCKED_METHODS:
+            cls = method_info["class"]
+            method_name = method_info["method"]
+            original_methods[(cls, method_name)] = getattr(cls, method_name)
 
-        self.assertIs(RuntimeConf.set, original_set)
-        self.assertIs(Catalog.setCurrentCatalog, original_set_current_catalog)
-        self.assertIs(Catalog.setCurrentDatabase, original_set_current_database)
-        self.assertIs(Catalog.dropTempView, original_drop_temp_view)
-        self.assertIs(Catalog.dropGlobalTempView, original_drop_global_temp_view)
-        self.assertIs(DataFrame.createTempView, original_create_temp_view)
-        self.assertIs(DataFrame.createOrReplaceTempView, original_create_or_replace_temp_view)
-        self.assertIs(DataFrame.createGlobalTempView, original_create_global_temp_view)
-        self.assertIs(DataFrame.createOrReplaceGlobalTempView, original_create_or_replace_global_temp_view)
+        # Verify methods are originally set correctly
+        for method_info in BLOCKED_METHODS:
+            cls = method_info["class"]
+            method_name = method_info["method"]
+            with self.subTest(class_method=f"{cls.__name__}.{method_name}"):
+                self.assertIs(getattr(cls, method_name), original_methods[(cls, method_name)])
 
+        # Verify methods are replaced during context
         with block_imperative_construct():
-            self.assertIsNot(RuntimeConf.set, original_set)
-            self.assertIsNot(Catalog.setCurrentCatalog, original_set_current_catalog)
-            self.assertIsNot(Catalog.setCurrentDatabase, original_set_current_database)
-            self.assertIsNot(Catalog.dropTempView, original_drop_temp_view)
-            self.assertIsNot(Catalog.dropGlobalTempView, original_drop_global_temp_view)
-            self.assertIsNot(DataFrame.createTempView, original_create_temp_view)
-            self.assertIsNot(DataFrame.createOrReplaceTempView, original_create_or_replace_temp_view)
-            self.assertIsNot(DataFrame.createGlobalTempView, original_create_global_temp_view)
-            self.assertIsNot(DataFrame.createOrReplaceGlobalTempView, original_create_or_replace_global_temp_view)
+            for method_info in BLOCKED_METHODS:
+                cls = method_info["class"]
+                method_name = method_info["method"]
+                with self.subTest(class_method=f"{cls.__name__}.{method_name}"):
+                    self.assertIsNot(getattr(cls, method_name), original_methods[(cls, method_name)])
 
-        self.assertIs(RuntimeConf.set, original_set)
-        self.assertIs(Catalog.setCurrentCatalog, original_set_current_catalog)
-        self.assertIs(Catalog.setCurrentDatabase, original_set_current_database)
-        self.assertIs(Catalog.dropTempView, original_drop_temp_view)
-        self.assertIs(Catalog.dropGlobalTempView, original_drop_global_temp_view)
-        self.assertIs(DataFrame.createTempView, original_create_temp_view)
-        self.assertIs(DataFrame.createOrReplaceTempView, original_create_or_replace_temp_view)
-        self.assertIs(DataFrame.createGlobalTempView, original_create_global_temp_view)
-        self.assertIs(DataFrame.createOrReplaceGlobalTempView, original_create_or_replace_global_temp_view)
+        # Verify methods are restored after context
+        for method_info in BLOCKED_METHODS:
+            cls = method_info["class"]
+            method_name = method_info["method"]
+            with self.subTest(class_method=f"{cls.__name__}.{method_name}"):
+                self.assertIs(getattr(cls, method_name), original_methods[(cls, method_name)])
 
     def test_restores_methods_even_with_exception(self):
-        original_set = RuntimeConf.set
-        original_set_current_catalog = Catalog.setCurrentCatalog
-        original_set_current_database = Catalog.setCurrentDatabase
-        original_drop_temp_view = Catalog.dropTempView
-        original_drop_global_temp_view = Catalog.dropGlobalTempView
-        original_create_temp_view = DataFrame.createTempView
-        original_create_or_replace_temp_view = DataFrame.createOrReplaceTempView
-        original_create_global_temp_view = DataFrame.createGlobalTempView
-        original_create_or_replace_global_temp_view = DataFrame.createOrReplaceGlobalTempView
+        """Test that methods are properly restored even when exceptions occur."""
+        # Store original methods
+        original_methods = {}
+        for method_info in BLOCKED_METHODS:
+            cls = method_info["class"]
+            method_name = method_info["method"]
+            original_methods[(cls, method_name)] = getattr(cls, method_name)
 
-        # Test with config exception
-        try:
-            with block_imperative_construct():
-                self.spark.conf.set("spark.test.key", "test_value")
-        except PySparkException:
-            pass
+        # Test with various exception scenarios
+        exception_test_cases = [
+            # Config exception
+            lambda: self.spark.conf.set("spark.test.key", "test_value"),
+            # Catalog exceptions
+            lambda: self.spark.catalog.setCurrentCatalog("test_catalog"),
+            lambda: self.spark.catalog.dropTempView("test_view"),
+            # DataFrame exceptions
+            lambda: self.spark.range(1).createTempView("test_view"),
+            lambda: self.spark.range(1).createOrReplaceGlobalTempView("global_view"),
+        ]
 
-        self.assertIs(RuntimeConf.set, original_set)
-        self.assertIs(Catalog.setCurrentCatalog, original_set_current_catalog)
-        self.assertIs(Catalog.setCurrentDatabase, original_set_current_database)
-        self.assertIs(Catalog.dropTempView, original_drop_temp_view)
-        self.assertIs(Catalog.dropGlobalTempView, original_drop_global_temp_view)
-        self.assertIs(DataFrame.createTempView, original_create_temp_view)
-        self.assertIs(DataFrame.createOrReplaceTempView, original_create_or_replace_temp_view)
-        self.assertIs(DataFrame.createGlobalTempView, original_create_global_temp_view)
-        self.assertIs(DataFrame.createOrReplaceGlobalTempView, original_create_or_replace_global_temp_view)
+        for i, exception_case in enumerate(exception_test_cases):
+            with self.subTest(exception_case_index=i):
+                try:
+                    with block_imperative_construct():
+                        exception_case()
+                except PySparkException:
+                    pass
 
-        # Test with catalog exception
-        try:
-            with block_imperative_construct():
-                self.spark.catalog.setCurrentCatalog("test_catalog")
-        except PySparkException:
-            pass
-
-        self.assertIs(RuntimeConf.set, original_set)
-        self.assertIs(Catalog.setCurrentCatalog, original_set_current_catalog)
-        self.assertIs(Catalog.setCurrentDatabase, original_set_current_database)
-        self.assertIs(Catalog.dropTempView, original_drop_temp_view)
-        self.assertIs(Catalog.dropGlobalTempView, original_drop_global_temp_view)
-        self.assertIs(DataFrame.createTempView, original_create_temp_view)
-        self.assertIs(DataFrame.createOrReplaceTempView, original_create_or_replace_temp_view)
-        self.assertIs(DataFrame.createGlobalTempView, original_create_global_temp_view)
-        self.assertIs(DataFrame.createOrReplaceGlobalTempView, original_create_or_replace_global_temp_view)
-
-        # Test with DataFrame exception
-        try:
-            with block_imperative_construct():
-                self.spark.range(1).createTempView("test_view")
-        except PySparkException:
-            pass
-
-        self.assertIs(RuntimeConf.set, original_set)
-        self.assertIs(Catalog.setCurrentCatalog, original_set_current_catalog)
-        self.assertIs(Catalog.setCurrentDatabase, original_set_current_database)
-        self.assertIs(Catalog.dropTempView, original_drop_temp_view)
-        self.assertIs(Catalog.dropGlobalTempView, original_drop_global_temp_view)
-        self.assertIs(DataFrame.createTempView, original_create_temp_view)
-        self.assertIs(DataFrame.createOrReplaceTempView, original_create_or_replace_temp_view)
-        self.assertIs(DataFrame.createGlobalTempView, original_create_global_temp_view)
-        self.assertIs(DataFrame.createOrReplaceGlobalTempView, original_create_or_replace_global_temp_view)
+                # Verify all methods are restored after exception
+                for method_info in BLOCKED_METHODS:
+                    cls = method_info["class"]
+                    method_name = method_info["method"]
+                    self.assertIs(getattr(cls, method_name), original_methods[(cls, method_name)])
 
 
 

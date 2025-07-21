@@ -23,6 +23,68 @@ from pyspark.sql.connect.catalog import Catalog
 from pyspark.sql.connect.dataframe import DataFrame
 
 
+# Define all methods to block in a structured way
+BLOCKED_METHODS = [
+    {
+        "class": RuntimeConf,
+        "method": "set",
+        "suggestion": "set configuration via the pipeline spec or use the 'spark_conf' argument in various decorators"
+    },
+    {
+        "class": Catalog,
+        "method": "setCurrentCatalog",
+        "suggestion": "set catalog via the pipeline spec or the 'name' argument on the dataset decorators"
+    },
+    {
+        "class": Catalog,
+        "method": "setCurrentDatabase",
+        "suggestion": "set database via the pipeline spec or the 'name' argument on the dataset decorators"
+    },
+    {
+        "class": Catalog,
+        "method": "dropTempView",
+        "suggestion": "remove the temporary view definition directly"
+
+    },
+    {
+        "class": Catalog,
+        "method": "dropGlobalTempView",
+        "suggestion": "remove the temporary view definition directly"
+    },
+    {
+        "class": DataFrame,
+        "method": "createTempView",
+        "suggestion": "use the @temporary_view decorator to define temporary views"
+    },
+    {
+        "class": DataFrame,
+        "method": "createOrReplaceTempView",
+        "suggestion": "use the @temporary_view decorator to define temporary views"
+    },
+    {
+        "class": DataFrame,
+        "method": "createGlobalTempView",
+        "suggestion": "use the @temporary_view decorator to define temporary views"
+    },
+    {
+        "class": DataFrame,
+        "method": "createOrReplaceGlobalTempView",
+        "suggestion": "use the @temporary_view decorator to define temporary views"
+    },
+]
+
+def _create_blocked_method(error_method_name: str, suggestion: str):
+    def blocked_method(*args, **kwargs) -> NoReturn:
+        raise PySparkException(
+            errorClass="IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+            messageParameters={
+                "method": error_method_name,
+                "suggestion": suggestion,
+            },
+        )
+    return blocked_method
+
+
 @contextmanager
 def block_imperative_construct() -> Generator[None, None, None]:
     """
@@ -33,107 +95,27 @@ def block_imperative_construct() -> Generator[None, None, None]:
         - database changes via: spark.catalog.setCurrentDatabase("db_name")
         - temporary view creation/deletion via DataFrame and catalog methods
     """
-    # store the original methods
-    original_connect_set = RuntimeConf.set
-    original_connect_catalog_set_current_catalog = Catalog.setCurrentCatalog
-    original_connect_catalog_set_current_database = Catalog.setCurrentDatabase
-    original_connect_catalog_drop_temp_view = Catalog.dropTempView
-    original_connect_catalog_drop_global_temp_view = Catalog.dropGlobalTempView
-    original_connect_dataframe_create_temp_view = DataFrame.createTempView
-    original_connect_dataframe_create_or_replace_temp_view = DataFrame.createOrReplaceTempView
-    original_connect_dataframe_create_global_temp_view = DataFrame.createGlobalTempView
-    original_connect_dataframe_create_or_replace_global_temp_view = DataFrame.createOrReplaceGlobalTempView
-
-    def blocked_conf_set(self: RuntimeConf, key: str, value: Union[str, int, bool]) -> NoReturn:
-        raise PySparkException(
-            errorClass="IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
-            messageParameters={
-                "method": "'spark.conf.set'",
-            },
-        )
-
-    def blocked_connect_catalog_set_current_catalog(self: Catalog, catalogName: str) -> NoReturn:
-        raise PySparkException(
-            errorClass="IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
-            messageParameters={
-                "method": "'spark.catalog.setCurrentCatalog'",
-            },
-        )
-
-    def blocked_connect_catalog_set_current_database(self: Catalog, dbName: str) -> NoReturn:
-        raise PySparkException(
-            errorClass="IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
-            messageParameters={
-                "method": "'spark.catalog.setCurrentDatabase'",
-            },
-        )
-
-    def blocked_connect_catalog_drop_temp_view(self: Catalog, viewName: str) -> NoReturn:
-        raise PySparkException(
-            errorClass="IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
-            messageParameters={
-                "method": "'spark.catalog.dropTempView'",
-            },
-        )
-
-    def blocked_connect_catalog_drop_global_temp_view(self: Catalog, viewName: str) -> NoReturn:
-        raise PySparkException(
-            errorClass="IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
-            messageParameters={
-                "method": "'spark.catalog.dropGlobalTempView'",
-            },
-        )
-
-    def blocked_connect_dataframe_create_temp_view(self: DataFrame, name: str) -> NoReturn:
-        raise PySparkException(
-            errorClass="IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
-            messageParameters={
-                "method": "'DataFrame.createTempView'",
-            },
-        )
-
-    def blocked_connect_dataframe_create_or_replace_temp_view(self: DataFrame, name: str) -> NoReturn:
-        raise PySparkException(
-            errorClass="IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
-            messageParameters={
-                "method": "'DataFrame.createOrReplaceTempView'",
-            },
-        )
-
-    def blocked_connect_dataframe_create_global_temp_view(self: DataFrame, name: str) -> NoReturn:
-        raise PySparkException(
-            errorClass="IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
-            messageParameters={
-                "method": "'DataFrame.createGlobalTempView'",
-            },
-        )
-
-    def blocked_connect_dataframe_create_or_replace_global_temp_view(self: DataFrame, name: str) -> NoReturn:
-        raise PySparkException(
-            errorClass="IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
-            messageParameters={
-                "method": "'DataFrame.createOrReplaceGlobalTempView'",
-            },
-        )
+    # Store original methods
+    original_methods = {}
+    for method_info in BLOCKED_METHODS:
+        cls = method_info["class"]
+        method_name = method_info["method"]
+        original_methods[(cls, method_name)] = getattr(cls, method_name)
 
     try:
-        setattr(RuntimeConf, "set", blocked_conf_set)
-        setattr(Catalog, "setCurrentCatalog", blocked_connect_catalog_set_current_catalog)
-        setattr(Catalog, "setCurrentDatabase", blocked_connect_catalog_set_current_database)
-        setattr(Catalog, "dropTempView", blocked_connect_catalog_drop_temp_view)
-        setattr(Catalog, "dropGlobalTempView", blocked_connect_catalog_drop_global_temp_view)
-        setattr(DataFrame, "createTempView", blocked_connect_dataframe_create_temp_view)
-        setattr(DataFrame, "createOrReplaceTempView", blocked_connect_dataframe_create_or_replace_temp_view)
-        setattr(DataFrame, "createGlobalTempView", blocked_connect_dataframe_create_global_temp_view)
-        setattr(DataFrame, "createOrReplaceGlobalTempView", blocked_connect_dataframe_create_or_replace_global_temp_view)
+        # Replace methods with blocked versions
+        for method_info in BLOCKED_METHODS:
+            cls = method_info["class"]
+            method_name = method_info["method"]
+            error_method_name = f"'{cls.__name__}.{method_name}'"
+            blocked_method = _create_blocked_method(error_method_name, method_info["suggestion"])
+            setattr(cls, method_name, blocked_method)
+
         yield
     finally:
-        setattr(RuntimeConf, "set", original_connect_set)
-        setattr(Catalog, "setCurrentCatalog", original_connect_catalog_set_current_catalog)
-        setattr(Catalog, "setCurrentDatabase", original_connect_catalog_set_current_database)
-        setattr(Catalog, "dropTempView", original_connect_catalog_drop_temp_view)
-        setattr(Catalog, "dropGlobalTempView", original_connect_catalog_drop_global_temp_view)
-        setattr(DataFrame, "createTempView", original_connect_dataframe_create_temp_view)
-        setattr(DataFrame, "createOrReplaceTempView", original_connect_dataframe_create_or_replace_temp_view)
-        setattr(DataFrame, "createGlobalTempView", original_connect_dataframe_create_global_temp_view)
-        setattr(DataFrame, "createOrReplaceGlobalTempView", original_connect_dataframe_create_or_replace_global_temp_view)
+        # Restore original methods
+        for method_info in BLOCKED_METHODS:
+            cls = method_info["class"]
+            method_name = method_info["method"]
+            original_method = original_methods[(cls, method_name)]
+            setattr(cls, method_name, original_method)
