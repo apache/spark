@@ -189,7 +189,6 @@ jobs:
         run: |
           export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
           export MAVEN_CLI_OPTS="--no-transfer-progress"
-          export JAVA_VERSION=${{ matrix.java }}
           export INPUT_BRANCH=${{ inputs.branch }}
           export ENABLE_KINESIS_TESTS=0
           # Replace with the real module name, for example, connector#kafka-0-10 -> connector/kafka-0-10
