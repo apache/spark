@@ -43,12 +43,14 @@ public abstract class AbstractFetchShuffleBlocks extends BlockTransferMessage {
     this.shuffleId = shuffleId;
   }
 
+  // checkstyle.off: RegexpSinglelineJava
   public ToStringBuilder toStringHelper() {
     return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
       .append("appId", appId)
       .append("execId", execId)
       .append("shuffleId", shuffleId);
   }
+  // checkstyle.on: RegexpSinglelineJava
 
   /**
    * Returns number of blocks in the request.
