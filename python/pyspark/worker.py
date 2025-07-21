@@ -957,29 +957,14 @@ def wrap_bounded_window_agg_arrow_udf(f, args_offsets, kwargs_offsets, return_ty
     def wrapped(begin_index, end_index, *series):
         import pyarrow as pa
 
+        assert isinstance(begin_index, pa.Int32Array), type(begin_index)
+        assert isinstance(end_index, pa.Int32Array), type(end_index)
+
         result = []
-
-        # Index operation is faster on np.ndarray,
-        # So we turn the index series into np array
-        # here for performance
-        begin_array = begin_index.values
-        end_array = end_index.values
-
-        for i in range(len(begin_array)):
-            # Note: Create a slice from a series for each window is
-            #       actually pretty expensive. However, there
-            #       is no easy way to reduce cost here.
-            # Note: s.iloc[i : j] is about 30% faster than s[i: j], with
-            #       the caveat that the created slices shares the same
-            #       memory with s. Therefore, user are not allowed to
-            #       change the value of input series inside the window
-            #       function. It is rare that user needs to modify the
-            #       input series in the window function, and therefore,
-            #       it is be a reasonable restriction.
-            # Note: Calling reset_index on the slices will increase the cost
-            #       of creating slices by about 100%. Therefore, for performance
-            #       reasons we don't do it here.
-            series_slices = [s.iloc[begin_array[i] : end_array[i]] for s in series]
+        for i in range(len(begin_index)):
+            offset = begin_index[i].as_py()
+            length = end_index[i].as_py() - offset
+            series_slices = [s.slice(offset=offset, length=length) for s in series]
             result.append(func(*series_slices))
         return pa.array(result)
 
