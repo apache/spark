@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{ExplainSuiteHelper, QueryTest}
 import org.apache.spark.sql.connector.DataSourcePushdownTestUtils
-import org.apache.spark.sql.jdbc.{H2Dialect, JdbcDialect}
+import org.apache.spark.sql.jdbc.{H2Dialect, JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -46,6 +46,11 @@ class JDBCV2JoinPushdownSuite
     Utils.classForName("org.h2.Driver")
     super.beforeAll()
     dataPreparation()
+    // Registering the dialect because of CI running multiple tests. For example, in
+    // QueryExecutionErrorsSuite H2 dialect is being registered, and somewhere it is
+    // not registered back. The suite should be fixed, but to be safe for now, we are
+    // always registering H2 dialect before test execution.
+    JdbcDialects.registerDialect(H2Dialect())
   }
 
   override def afterAll(): Unit = {
