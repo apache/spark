@@ -574,7 +574,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       var command: String = ""
       for (oneCmd <- commands) {
         if (Strings.CS.endsWith(oneCmd, "\\")) {
-          command += oneCmd.substring(0, oneCmd.length - 1) + ";"
+          command += oneCmd.dropRight(1) + ";"
         } else {
           command += oneCmd
           if (!StringUtils.isBlank(command)) {
