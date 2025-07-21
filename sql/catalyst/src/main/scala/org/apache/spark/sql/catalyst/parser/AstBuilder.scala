@@ -557,6 +557,7 @@ class AstBuilder extends DataTypeAstBuilder
     val query = withOrigin(queryCtx) {
       SingleStatement(visitQuery(queryCtx))
     }
+    parsingCtx.labelContext.assertIdentifierNotInSeenLabels(Option(ctx.multipartIdentifier()))
     val varName = Option(ctx.multipartIdentifier()).map(_.getText)
     val body = visitCompoundBodyImpl(
       ctx.compoundBody(),

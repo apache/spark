@@ -30,6 +30,17 @@ import org.apache.spark.sql.internal.SQLConf
  */
 private[sql] object SqlScriptingErrors {
 
+  def forVariableNameAlreadyExistsAsLabelInScope(
+    origin: Origin,
+    varName: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "FOR_VARIABLE_NAME_ALREADY_EXISTS_AS_LABEL_IN_SCOPE",
+      cause = null,
+      messageParameters = Map("varName" -> toSQLId(varName)))
+  }
+
+
   def duplicateLabels(origin: Origin, label: String): Throwable = {
     new SqlScriptingException(
       origin = origin,

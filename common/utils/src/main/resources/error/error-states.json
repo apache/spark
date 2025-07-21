@@ -3345,7 +3345,7 @@
         "description": "A duplicate parameter-name, SQL variable name, label, or condition-name was detected.",
         "origin": "DB2",
         "standard": "N",
-        "usedBy": ["DB2"]
+        "usedBy": ["DB2, Spark"]
     },
     "42736": {
         "description": "The label specified on the GOTO, ITERATE, or LEAVE statement is not found or not valid.",

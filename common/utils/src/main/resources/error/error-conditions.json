@@ -1816,6 +1816,12 @@
     ],
     "sqlState" : "39000"
   },
+  "FOR_VARIABLE_NAME_ALREADY_EXISTS_AS_LABEL_IN_SCOPE" : {
+    "message": [
+      "Found FOR variable name <varName> that already exists as a label in the scope."
+    ],
+    "sqlState" : "42734"
+  },
   "FORBIDDEN_OPERATION" : {
     "message" : [
       "The operation <statement> is not allowed on the <objectType>: <objectName>."

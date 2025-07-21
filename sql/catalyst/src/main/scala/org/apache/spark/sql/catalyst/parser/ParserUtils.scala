@@ -28,7 +28,7 @@ import org.antlr.v4.runtime.tree.{ParseTree, TerminalNodeImpl}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
-import org.apache.spark.sql.catalyst.parser.SqlBaseParser.{BeginLabelContext, EndLabelContext}
+import org.apache.spark.sql.catalyst.parser.SqlBaseParser.{BeginLabelContext, EndLabelContext, MultipartIdentifierContext}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, ErrorCondition}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.SparkParserUtils
@@ -357,6 +357,21 @@ class SqlScriptingLabelContext {
   def exitLabeledScope(beginLabelCtx: Option[BeginLabelContext]): Unit = {
     if (isLabelDefined(beginLabelCtx)) {
       seenLabels.remove(beginLabelCtx.get.multipartIdentifier().getText.toLowerCase(Locale.ROOT))
+    }
+  }
+
+  /**
+   * Assert the identifier is not contained within seenLabels.
+   * If the identifier is contained within seenLabels, raise an exception.
+   */
+  def assertIdentifierNotInSeenLabels(identifierCtx: Option[MultipartIdentifierContext]): Unit = {
+    val identifierName = identifierCtx.map(_.getText)
+
+    if(identifierName.isDefined && seenLabels.contains(identifierName.get.toLowerCase())) {
+      withOrigin(identifierCtx.get) {
+        throw SqlScriptingErrors
+          .forVariableNameAlreadyExistsAsLabelInScope(CurrentOrigin.get, identifierName.get)
+      }
     }
   }
 }

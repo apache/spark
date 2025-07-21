@@ -2336,6 +2336,75 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(forStatement.label.get == "lbl_4")
   }
 
+  test("for variable not the same as labels in scope") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  L1: BEGIN
+        |    L2: BEGIN
+        |      L3: FOR L4 AS SELECT 1 DO
+        |        SELECT 1;
+        |        FOR L5 AS SELECT 3 DO
+        |          L4: BEGIN
+        |            SELECT L4;
+        |          END L4;
+        |         SELECT 4;
+        |        END FOR;
+        |      END FOR L3;
+        |    END L2;
+        |    L4: BEGIN
+        |      SELECT 3;
+        |    END L4;
+        |  END L1;
+        |END""".stripMargin
+
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[CompoundBody])
+  }
+
+  test("for variable name is the same as a label in scope - should fail") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  L1: BEGIN
+        |    L2: BEGIN
+        |      L3: FOR L2 AS SELECT 1 DO
+        |        SELECT 1;
+        |        SELECT 2;
+        |      END FOR L3;
+        |    END L2;
+        |    L4: BEGIN
+        |      SELECT 3;
+        |    END L4;
+        |  END L1;
+        |END""".stripMargin
+
+    val e = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    }
+    assert(e.getCondition === "FOR_VARIABLE_NAME_ALREADY_EXISTS_AS_LABEL_IN_SCOPE")
+    assert(e.getMessage.contains("Found for variable name "))
+    assert(e.getMessage.contains(" that already exists as a label name in scope."))
+  }
+
+  test("for variable name is the same as the label of the for loop - should fail") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  L1: FOR L1 AS SELECT 1 DO
+        |    SELECT 2;
+        |  END FOR L1;
+        |END""".stripMargin
+
+    val e = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    }
+    assert(e.getCondition === "FOR_VARIABLE_NAME_ALREADY_EXISTS_AS_LABEL_IN_SCOPE")
+    assert(e.getMessage.contains("Found for variable name "))
+    assert(e.getMessage.contains(" that already exists as a label name in scope."))
+  }
+
   test("for statement") {
     val sqlScriptText =
       """
