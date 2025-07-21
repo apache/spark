@@ -20,8 +20,6 @@ package org.apache.spark.network.protocol;
 import java.util.Objects;
 
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 /**
  * Response to {@link ChunkFetchRequest} when there is an error fetching the chunk.
@@ -70,9 +68,6 @@ public final class ChunkFetchFailure extends AbstractMessage implements Response
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("streamChunkId", streamChunkId)
-      .append("errorString", errorString)
-      .toString();
+    return "ChunkFetchFailure[streamChunkId=" + streamChunkId + ",errorString=" + errorString + "]";
   }
 }
