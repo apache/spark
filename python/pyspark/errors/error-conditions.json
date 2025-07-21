@@ -363,6 +363,12 @@
       "Function `<func_name>` should return Column, got <return_type>."
     ]
   },
+  "IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE": {
+    "message": [
+      "Setting configuration imperatively with <method> is not allowed.",
+      "Use the 'spark_conf' parameter in pipeline decorators or the configuration setting in pipeline spec instead"
+    ]
+  },
   "INCORRECT_CONF_FOR_PROFILE": {
     "message": [
       "`spark.python.profile` or `spark.python.profile.memory` configuration",
