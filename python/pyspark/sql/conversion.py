@@ -296,7 +296,11 @@ class LocalDataToArrowConversion:
                     return None
                 else:
                     assert isinstance(value, decimal.Decimal)
-                    return None if value.is_nan() else value
+                    if value.is_nan():
+                        if not nullable:
+                            raise PySparkValueError(f"input for {dataType} must not be None")
+                        return None
+                    return value
 
             return convert_decimal
 
