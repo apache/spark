@@ -46,11 +46,14 @@ class ArrowPythonUDFParityLegacyTestsMixin(ArrowPythonUDFTestsMixin):
         finally:
             super().tearDownClass()
 
+
 class ArrowPythonUDFParityNonLegacyTestsMixin(ArrowPythonUDFTestsMixin):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.spark.conf.set("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "false")
+        cls.spark.conf.set(
+            "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "false"
+        )
 
     @classmethod
     def tearDownClass(cls):
@@ -58,6 +61,7 @@ class ArrowPythonUDFParityNonLegacyTestsMixin(ArrowPythonUDFTestsMixin):
             cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled")
         finally:
             super().tearDownClass()
+
 
 class ArrowPythonUDFParityLegacyTests(UDFParityTests, ArrowPythonUDFParityLegacyTestsMixin):
     @classmethod
@@ -71,6 +75,7 @@ class ArrowPythonUDFParityLegacyTests(UDFParityTests, ArrowPythonUDFParityLegacy
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
         finally:
             super(ArrowPythonUDFParityLegacyTests, cls).tearDownClass()
+
 
 class ArrowPythonUDFParityNonLegacyTests(UDFParityTests, ArrowPythonUDFParityNonLegacyTestsMixin):
     @classmethod

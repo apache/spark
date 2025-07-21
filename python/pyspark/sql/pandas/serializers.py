@@ -699,9 +699,9 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
 class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
     """
     Serializer used by Python worker to evaluate Arrow Python UDFs
-    when the legacy pandas conversion is disabled 
+    when the legacy pandas conversion is disabled
     (instead of legacy ArrowStreamPandasUDFSerializer).
-    
+
     Parameters
     ----------
     timezone : str
@@ -711,6 +711,7 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
     input_types : bool
         If True, then Pandas DataFrames will get columns by name
     """
+
     def __init__(
         self,
         timezone,
