@@ -52,42 +52,18 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
                         "IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
                     )
 
-    def test_blocks_sql_set_commands(self):
-        sql_set_commands = [
-            "SET spark.sql.adaptive.enabled=true",
-            "set spark.sql.adaptive.coalescePartitions.enabled=false",
-            "  SET   spark.test.config = 'test_value'  ",
-            "SET spark.executor.memory=2g",
-        ]
-
-        for sql_query in sql_set_commands:
-            with self.subTest(sql_query=sql_query):
-                with block_imperative_construct():
-                    with self.assertRaises(PySparkException) as context:
-                        self.spark.sql(sql_query)
-
-                    self.assertEqual(
-                        context.exception.getCondition(),
-                        "IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
-                    )
-
     def test_restores_original_methods_after_context(self):
         original_set = RuntimeConf.set
-        original_sql = SparkSession.sql
 
         self.assertIs(RuntimeConf.set, original_set)
-        self.assertIs(SparkSession.sql, original_sql)
 
         with block_imperative_construct():
             self.assertIsNot(RuntimeConf.set, original_set)
-            self.assertIsNot(SparkSession.sql, original_sql)
 
         self.assertIs(RuntimeConf.set, original_set)
-        self.assertIs(SparkSession.sql, original_sql)
 
     def test_restores_methods_even_with_exception(self):
         original_set = RuntimeConf.set
-        original_sql = SparkSession.sql
 
         try:
             with block_imperative_construct():
@@ -96,31 +72,7 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
             pass
 
         self.assertIs(RuntimeConf.set, original_set)
-        self.assertIs(SparkSession.sql, original_sql)
 
-    def test_sql_non_set_command_allowed(self):
-        non_set_commands = [
-            "SELECT * FROM table",
-            "INSERT INTO table VALUES (1)",
-            "UPDATE table SET column = value",
-            "CREATE TABLE table (id INT)",
-            "RESET key",  # reset is allowed
-            "SHOW TABLES",
-        ]
-
-        for sql_query in non_set_commands:
-            with self.subTest(sql_query=sql_query):
-                with block_imperative_construct():
-                    try:
-                        # these might fail due to missing tables/data,
-                        # but they should not be blocked by our context manager
-                        self.spark.sql(sql_query)
-                    except Exception as e:
-                        # Make sure it's not our blocking exception
-                        if isinstance(e, PySparkException):
-                            self.assertNotEqual(
-                                e.getCondition(), "IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE"
-                            )
 
 
 if __name__ == "__main__":

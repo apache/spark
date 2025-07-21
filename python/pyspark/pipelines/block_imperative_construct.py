@@ -28,14 +28,10 @@ def block_imperative_construct() -> Generator[None, None, None]:
     """
     Context manager that blocks imperative constructs found in a pipeline python definition file
     Blocks:
-        - imperative config set via: spark.conf.set("k", "v") and spark.sql("SET k=v")
+        - imperative config set via: spark.conf.set("k", "v")
     """
     # store the original methods
     original_connect_set = RuntimeConf.set
-    original_connect_sql = SparkSession.sql
-
-    # pattern to SQL statements that start with SET
-    set_command_pattern = re.compile(r"^\s*SET\s+", re.IGNORECASE)
 
     def blocked_conf_set(self: RuntimeConf, key: str, value: Union[str, int, bool]) -> NoReturn:
         raise PySparkException(
@@ -45,26 +41,8 @@ def block_imperative_construct() -> Generator[None, None, None]:
             },
         )
 
-    def blocked_sql(
-        self: SparkSession,
-        sqlQuery: str,
-        args: Optional[Union[Dict[str, Any], List]] = None,
-        **kwargs: Any,
-    ) -> Any:
-        if set_command_pattern.match(sqlQuery.strip()):
-            raise PySparkException(
-                errorClass="IMPERATIVE_CONF_SET_IN_DECLARATIVE_PIPELINE",
-                messageParameters={
-                    "method": "'spark.sql(SET ... )'",
-                },
-            )
-        # for other cases, allow and call original
-        return original_connect_sql(self, sqlQuery, args, **kwargs)
-
     try:
         setattr(RuntimeConf, "set", blocked_conf_set)
-        setattr(SparkSession, "sql", blocked_sql)
         yield
     finally:
         setattr(RuntimeConf, "set", original_connect_set)
-        setattr(SparkSession, "sql", original_connect_sql)
