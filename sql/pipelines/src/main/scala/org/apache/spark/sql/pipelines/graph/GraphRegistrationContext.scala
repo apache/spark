@@ -26,11 +26,14 @@ import org.apache.spark.sql.catalyst.TableIdentifier
  *
  * @param defaultCatalog The pipeline's default catalog.
  * @param defaultDatabase The pipeline's default schema.
+ * @param storageRoot The root storage location for pipeline metadata, including checkpoints for
+ *                    some kinds of flows.
  */
 class GraphRegistrationContext(
     val defaultCatalog: String,
     val defaultDatabase: String,
-    val defaultSqlConf: Map[String, String]) {
+    val defaultSqlConf: Map[String, String],
+    val storageRoot: Option[String]) {
   import GraphRegistrationContext._
 
   protected val tables = new mutable.ListBuffer[Table]

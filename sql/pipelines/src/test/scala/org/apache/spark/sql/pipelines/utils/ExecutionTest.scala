@@ -57,7 +57,8 @@ trait TestPipelineUpdateContextMixin {
       unresolvedGraph: DataflowGraph,
       fullRefreshTables: TableFilter = NoTables,
       refreshTables: TableFilter = AllTables,
-      resetCheckpointFlows: FlowFilter = AllFlows
+      resetCheckpointFlows: FlowFilter = AllFlows,
+      storageRootOpt: Option[String] = None
   ) extends PipelineUpdateContext {
     val eventBuffer = new PipelineRunEventBuffer()
 
