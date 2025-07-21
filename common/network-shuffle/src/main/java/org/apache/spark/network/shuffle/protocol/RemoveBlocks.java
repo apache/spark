@@ -21,8 +21,6 @@ import java.util.Arrays;
 import java.util.Objects;
 
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 import org.apache.spark.network.protocol.Encoders;
 
@@ -51,11 +49,8 @@ public class RemoveBlocks extends BlockTransferMessage {
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("appId", appId)
-      .append("execId", execId)
-      .append("blockIds", Arrays.toString(blockIds))
-      .toString();
+    return "RemoveBlocks[appId=" + appId + ",execId=" + execId +
+        ",blockIds=" + Arrays.toString(blockIds) + "]";
   }
 
   @Override

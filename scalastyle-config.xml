@@ -299,6 +299,16 @@ This file is divided into 3 sections:
     <customMessage>Use org.apache.spark.util.Pair instead</customMessage>
   </check>
 
+  <check customId="commonslang3tuple" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.commons\.lang3\.builder\.ToStringBuilder</parameter></parameters>
+    <customMessage>Use String concatenation instead</customMessage>
+  </check>
+
+  <check customId="commonslang3split" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">StringUtils.split</parameter></parameters>
+    <customMessage>Use Utils.stringToSeq instead</customMessage>
+  </check>
+
   <check customId="uribuilder" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">UriBuilder\.fromUri</parameter></parameters>
     <customMessage>Use Utils.getUriBuilder instead.</customMessage>

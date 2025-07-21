@@ -27,7 +27,7 @@ import scala.jdk.CollectionConverters._
 import jline.console.ConsoleReader
 import jline.console.completer.{ArgumentCompleter, Completer, StringsCompleter}
 import jline.console.history.FileHistory
-import org.apache.commons.lang3.StringUtils
+import org.apache.commons.lang3.{Strings, StringUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
 import org.apache.hadoop.hive.common.HiveInterruptUtils
@@ -169,7 +169,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     val auxJars = HiveConf.getVar(conf, HiveConf.getConfVars("hive.aux.jars.path"))
     if (StringUtils.isNotBlank(auxJars)) {
       val resourceLoader = SparkSQLEnv.sparkSession.sessionState.resourceLoader
-      StringUtils.split(auxJars, ",").foreach(resourceLoader.addJar(_))
+      Utils.stringToSeq(auxJars).foreach(resourceLoader.addJar(_))
     }
 
     // The class loader of CliSessionState's conf is current main thread's class loader
@@ -573,8 +573,8 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       val commands = splitSemiColon(line).asScala
       var command: String = ""
       for (oneCmd <- commands) {
-        if (StringUtils.endsWith(oneCmd, "\\")) {
-          command += StringUtils.chop(oneCmd) + ";"
+        if (Strings.CS.endsWith(oneCmd, "\\")) {
+          command += oneCmd.dropRight(1) + ";"
         } else {
           command += oneCmd
           if (!StringUtils.isBlank(command)) {
