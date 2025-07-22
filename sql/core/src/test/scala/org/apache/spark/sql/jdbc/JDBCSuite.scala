@@ -102,10 +102,80 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     properties.setProperty("password", "testPass")
 
     conn = DriverManager.getConnection(url, properties)
-    conn.prepareStatement("create schema test").executeUpdate()
-    conn.prepareStatement(
-      "create table test.people (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
 
+    // Batch 1: Create schema and all tables
+    val tableCreationStmt = conn.createStatement()
+    
+    tableCreationStmt.addBatch("create schema test")
+    tableCreationStmt.addBatch("create table test.people (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)")
+    tableCreationStmt.addBatch("create table test.inttypes (a INT, b BOOLEAN, c TINYINT, d SMALLINT, e BIGINT)")
+    tableCreationStmt.addBatch("create table test.strtypes (a BINARY(20), b VARCHAR(20), c VARCHAR_IGNORECASE(20), d CHAR(20), e BLOB, f CLOB)")
+    tableCreationStmt.addBatch("create table test.timetypes (a TIME, b DATE, c TIMESTAMP(7))")
+    tableCreationStmt.addBatch("CREATE TABLE test.timezone (tz TIMESTAMP WITH TIME ZONE) AS SELECT '1999-01-08 04:05:06.543543543-08:00'")
+    tableCreationStmt.addBatch("CREATE TABLE test.array_table (ar Integer ARRAY) AS SELECT ARRAY[1, 2, 3]")
+    tableCreationStmt.addBatch("create table test.flttypes (a DOUBLE, b REAL, c DECIMAL(38, 18))")
+    tableCreationStmt.addBatch("create table test.nulltypes (a INT, b BOOLEAN, c TINYINT, d BINARY(20), e VARCHAR(20), f VARCHAR_IGNORECASE(20), g CHAR(20), h BLOB, i CLOB, j TIME, k DATE, l TIMESTAMP, m DOUBLE, n REAL, o DECIMAL(38, 18))")
+    tableCreationStmt.addBatch("create table test.emp(name TEXT(32) NOT NULL, theid INTEGER, \"Dept\" INTEGER)")
+    tableCreationStmt.addBatch("create table test.seq(id INTEGER)")
+    tableCreationStmt.addBatch("create table test.\"mixedCaseCols\" (\"Name\" TEXT(32), \"Id\" INTEGER NOT NULL)")
+    tableCreationStmt.addBatch("CREATE TABLE test.partition (THEID INTEGER, `THE ID` INTEGER) AS SELECT 1, 1")
+    tableCreationStmt.addBatch("CREATE TABLE test.datetime (d DATE, t TIMESTAMP)")
+    tableCreationStmt.addBatch("CREATE TABLE test.composite_name (`last name` TEXT(32) NOT NULL, id INTEGER NOT NULL)")
+    
+    tableCreationStmt.executeBatch()
+
+    // Handle special cases that require prepared statements
+    val strtypesStmt = conn.prepareStatement("insert into test.strtypes values (?, ?, ?, ?, ?, ?)")
+    strtypesStmt.setBytes(1, testBytes)
+    strtypesStmt.setString(2, "Sensitive")
+    strtypesStmt.setString(3, "Insensitive")
+    strtypesStmt.setString(4, "Twenty-byte CHAR")
+    strtypesStmt.setBytes(5, testBytes)
+    strtypesStmt.setString(6, "I am a clob!")
+    strtypesStmt.executeUpdate()
+
+    // Batch 2: All data insertion
+    val dataInsertionStmt = conn.createStatement()
+
+    dataInsertionStmt.addBatch("insert into test.people values ('fred', 1)")
+    dataInsertionStmt.addBatch("insert into test.people values ('mary', 2)")
+    dataInsertionStmt.addBatch("insert into test.people values ('joe ''foo'' \"bar\"', 3)")
+
+    dataInsertionStmt.addBatch("insert into test.inttypes values (1, false, 3, 4, 1234567890123)")
+    dataInsertionStmt.addBatch("insert into test.inttypes values (null, null, null, null, null)")
+
+    dataInsertionStmt.addBatch("insert into test.timetypes values ('12:34:56', '1996-01-01', '2002-02-20 11:22:33.543543543')")
+    dataInsertionStmt.addBatch("insert into test.timetypes values ('12:34:56', null, '2002-02-20 11:22:33.543543543')")
+
+    dataInsertionStmt.addBatch("insert into test.flttypes values (1.0000000000000002220446049250313080847263336181640625, 1.00000011920928955078125, 123456789012345.543215432154321)")
+
+    dataInsertionStmt.addBatch("insert into test.nulltypes values (null, null, null, null, null, null, null, null, null, null, null, null, null, null, null)")
+
+    dataInsertionStmt.addBatch("insert into test.emp values ('fred', 1, 10)")
+    dataInsertionStmt.addBatch("insert into test.emp values ('mary', 2, null)")
+    dataInsertionStmt.addBatch("insert into test.emp values ('joe ''foo'' \"bar\"', 3, 30)")
+    dataInsertionStmt.addBatch("insert into test.emp values ('kathy', null, null)")
+
+    (0 to 6).foreach { value =>
+      dataInsertionStmt.addBatch(s"insert into test.seq values ($value)")
+    }
+    dataInsertionStmt.addBatch("insert into test.seq values (null)")
+
+    dataInsertionStmt.addBatch("""insert into test."mixedCaseCols" values ('fred', 1)""")
+    dataInsertionStmt.addBatch("""insert into test."mixedCaseCols" values ('mary', 2)""")
+    dataInsertionStmt.addBatch("""insert into test."mixedCaseCols" values (null, 3)""")
+
+    dataInsertionStmt.addBatch("INSERT INTO test.datetime VALUES ('2018-07-06', '2018-07-06 05:50:00.0')")
+    dataInsertionStmt.addBatch("INSERT INTO test.datetime VALUES ('2018-07-06', '2018-07-06 08:10:08.0')")
+    dataInsertionStmt.addBatch("INSERT INTO test.datetime VALUES ('2018-07-08', '2018-07-08 13:32:01.0')")
+    dataInsertionStmt.addBatch("INSERT INTO test.datetime VALUES ('2018-07-12', '2018-07-12 09:51:15.0')")
+
+    dataInsertionStmt.addBatch("INSERT INTO test.composite_name VALUES ('smith', 1)")
+    dataInsertionStmt.addBatch("INSERT INTO test.composite_name VALUES ('jones', 2)")
+
+    dataInsertionStmt.executeBatch()
+
+    // Finally: All SQL view creation
     sql(
       s"""
         |CREATE OR REPLACE TEMPORARY VIEW foobar
@@ -138,9 +208,6 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         |         upperBound '9223372036854775807', numPartitions '3')
        """.stripMargin.replaceAll("\n", " "))
 
-    conn.prepareStatement("create table test.inttypes (a INT, b BOOLEAN, c TINYINT, "
-      + "d SMALLINT, e BIGINT)").executeUpdate()
-
     sql(
       s"""
         |CREATE OR REPLACE TEMPORARY VIEW inttypes
@@ -148,25 +215,12 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         |OPTIONS (url '$url', dbtable 'TEST.INTTYPES', user 'testUser', password 'testPass')
        """.stripMargin.replaceAll("\n", " "))
 
-    conn.prepareStatement("create table test.strtypes (a BINARY(20), b VARCHAR(20), "
-      + "c VARCHAR_IGNORECASE(20), d CHAR(20), e BLOB, f CLOB)").executeUpdate()
-    val stmt = conn.prepareStatement("insert into test.strtypes values (?, ?, ?, ?, ?, ?)")
-    stmt.setBytes(1, testBytes)
-    stmt.setString(2, "Sensitive")
-    stmt.setString(3, "Insensitive")
-    stmt.setString(4, "Twenty-byte CHAR")
-    stmt.setBytes(5, testBytes)
-    stmt.setString(6, "I am a clob!")
-    stmt.executeUpdate()
     sql(
       s"""
         |CREATE OR REPLACE TEMPORARY VIEW strtypes
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.STRTYPES', user 'testUser', password 'testPass')
        """.stripMargin.replaceAll("\n", " "))
-
-    conn.prepareStatement("create table test.timetypes (a TIME, b DATE, c TIMESTAMP(7))"
-        ).executeUpdate()
 
     sql(
       s"""
@@ -175,21 +229,6 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         |OPTIONS (url '$url', dbtable 'TEST.TIMETYPES', user 'testUser', password 'testPass')
        """.stripMargin.replaceAll("\n", " "))
 
-    conn.prepareStatement("CREATE TABLE test.timezone (tz TIMESTAMP WITH TIME ZONE) " +
-      "AS SELECT '1999-01-08 04:05:06.543543543-08:00'")
-      .executeUpdate()
-
-    conn.prepareStatement("CREATE TABLE test.array_table (ar Integer ARRAY) " +
-      "AS SELECT ARRAY[1, 2, 3]")
-      .executeUpdate()
-
-    conn.prepareStatement("create table test.flttypes (a DOUBLE, b REAL, c DECIMAL(38, 18))"
-        ).executeUpdate()
-    conn.prepareStatement("insert into test.flttypes values ("
-      + "1.0000000000000002220446049250313080847263336181640625, "
-      + "1.00000011920928955078125, "
-      + "123456789012345.543215432154321)").executeUpdate()
-
     sql(
       s"""
         |CREATE OR REPLACE TEMPORARY VIEW flttypes
@@ -197,29 +236,12 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         |OPTIONS (url '$url', dbtable 'TEST.FLTTYPES', user 'testUser', password 'testPass')
        """.stripMargin.replaceAll("\n", " "))
 
-    conn.prepareStatement(
-      s"""
-        |create table test.nulltypes (a INT, b BOOLEAN, c TINYINT, d BINARY(20), e VARCHAR(20),
-        |f VARCHAR_IGNORECASE(20), g CHAR(20), h BLOB, i CLOB, j TIME, k DATE, l TIMESTAMP,
-        |m DOUBLE, n REAL, o DECIMAL(38, 18))
-       """.stripMargin.replaceAll("\n", " ")).executeUpdate()
-    conn.prepareStatement("insert into test.nulltypes values ("
-      + "null, null, null, null, null, null, null, null, null, "
-      + "null, null, null, null, null, null)").executeUpdate()
-
     sql(
       s"""
          |CREATE OR REPLACE TEMPORARY VIEW nulltypes
          |USING org.apache.spark.sql.jdbc
          |OPTIONS (url '$url', dbtable 'TEST.NULLTYPES', user 'testUser', password 'testPass')
        """.stripMargin.replaceAll("\n", " "))
-
-    conn.prepareStatement(
-      "create table test.emp(name TEXT(32) NOT NULL," +
-        " theid INTEGER, \"Dept\" INTEGER)").executeUpdate()
-
-    conn.prepareStatement(
-      "create table test.seq(id INTEGER)").executeUpdate()
 
     sql(
       s"""
@@ -229,64 +251,12 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         |partitionColumn '"Dept"', lowerBound '1', upperBound '4', numPartitions '3')
        """.stripMargin.replaceAll("\n", " "))
 
-    conn.prepareStatement(
-      """create table test."mixedCaseCols" ("Name" TEXT(32), "Id" INTEGER NOT NULL)""")
-      .executeUpdate()
-
     sql(
       s"""
         |CREATE OR REPLACE TEMPORARY VIEW mixedCaseCols
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST."mixedCaseCols"', user 'testUser', password 'testPass')
        """.stripMargin.replaceAll("\n", " "))
-
-    conn.prepareStatement("CREATE TABLE test.partition (THEID INTEGER, `THE ID` INTEGER) " +
-      "AS SELECT 1, 1")
-      .executeUpdate()
-
-    conn.prepareStatement("CREATE TABLE test.datetime (d DATE, t TIMESTAMP)").executeUpdate()
-
-    conn.prepareStatement(
-      "CREATE TABLE test.composite_name (`last name` TEXT(32) NOT NULL, id INTEGER NOT NULL)")
-      .executeUpdate()
-
-    val batchStmt = conn.createStatement()
-
-    batchStmt.addBatch("insert into test.people values ('fred', 1)")
-    batchStmt.addBatch("insert into test.people values ('mary', 2)")
-    batchStmt.addBatch("insert into test.people values ('joe ''foo'' \"bar\"', 3)")
-
-    batchStmt.addBatch("insert into test.inttypes values (1, false, 3, 4, 1234567890123)")
-    batchStmt.addBatch("insert into test.inttypes values (null, null, null, null, null)")
-
-    batchStmt.addBatch("insert into test.timetypes values " +
-      "('12:34:56', '1996-01-01', '2002-02-20 11:22:33.543543543')")
-    batchStmt.addBatch("insert into test.timetypes values " +
-      "('12:34:56', null, '2002-02-20 11:22:33.543543543')")
-
-    batchStmt.addBatch("insert into test.emp values ('fred', 1, 10)")
-    batchStmt.addBatch("insert into test.emp values ('mary', 2, null)")
-    batchStmt.addBatch("insert into test.emp values ('joe ''foo'' \"bar\"', 3, 30)")
-    batchStmt.addBatch("insert into test.emp values ('kathy', null, null)")
-
-    (0 to 6).foreach { value =>
-      batchStmt.addBatch(s"insert into test.seq values ($value)")
-    }
-    batchStmt.addBatch("insert into test.seq values (null)")
-
-    batchStmt.addBatch("""insert into test."mixedCaseCols" values ('fred', 1)""")
-    batchStmt.addBatch("""insert into test."mixedCaseCols" values ('mary', 2)""")
-    batchStmt.addBatch("""insert into test."mixedCaseCols" values (null, 3)""")
-
-    batchStmt.addBatch("INSERT INTO test.datetime VALUES ('2018-07-06', '2018-07-06 05:50:00.0')")
-    batchStmt.addBatch("INSERT INTO test.datetime VALUES ('2018-07-06', '2018-07-06 08:10:08.0')")
-    batchStmt.addBatch("INSERT INTO test.datetime VALUES ('2018-07-08', '2018-07-08 13:32:01.0')")
-    batchStmt.addBatch("INSERT INTO test.datetime VALUES ('2018-07-12', '2018-07-12 09:51:15.0')")
-
-    batchStmt.addBatch("INSERT INTO test.composite_name VALUES ('smith', 1)")
-    batchStmt.addBatch("INSERT INTO test.composite_name VALUES ('jones', 2)")
-
-    batchStmt.executeBatch()
 
     sql(
       s"""
