@@ -872,6 +872,22 @@ object functions {
     Column.fn("last_value", e, ignoreNulls)
 
   /**
+   * Create time from hour, minute and second fields. For invalid inputs it will throw an error.
+   *
+   * @param hour
+   *   the hour to represent, from 0 to 23
+   * @param minute
+   *   the minute to represent, from 0 to 59
+   * @param second
+   *   the second to represent, from 0 to 59.999999
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def make_time(hour: Column, minute: Column, second: Column): Column = {
+    Column.fn("make_time", hour, minute, second)
+  }
+
+  /**
    * Aggregate function: returns the most frequent value in a group.
    *
    * @group agg_funcs
@@ -5814,6 +5830,24 @@ object functions {
    * @since 2.2.0
    */
   def to_date(e: Column, fmt: String): Column = Column.fn("to_date", e, lit(fmt))
+
+  /**
+   * This is a special version of `to_date` that performs the same operation, but returns a NULL
+   * value instead of raising an error if date cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_to_date(e: Column): Column = Column.fn("try_to_date", e)
+
+  /**
+   * This is a special version of `to_date` that performs the same operation, but returns a NULL
+   * value instead of raising an error if date cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_to_date(e: Column, fmt: String): Column = Column.fn("try_to_date", e, lit(fmt))
 
   /**
    * Returns the number of days since 1970-01-01.

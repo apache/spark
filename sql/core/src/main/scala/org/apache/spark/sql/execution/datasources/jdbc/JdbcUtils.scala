@@ -46,6 +46,7 @@ import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType, NoopDialect}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -357,7 +358,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       resultSet: ResultSet,
       dialect: JdbcDialect,
       schema: StructType,
-      inputMetrics: InputMetrics): Iterator[InternalRow] = {
+      inputMetrics: InputMetrics,
+      fetchAndTransformToInternalRowsMetric: Option[SQLMetric] = None): Iterator[InternalRow] = {
     new NextIterator[InternalRow] {
       private[this] val rs = resultSet
       private[this] val getters: Array[JDBCValueGetter] = makeGetters(dialect, schema)
@@ -372,7 +374,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         }
       }
 
-      override protected def getNext(): InternalRow = {
+      private def getNextWithoutTiming: InternalRow = {
         if (rs.next()) {
           inputMetrics.incRecordsRead(1)
           var i = 0
@@ -385,6 +387,16 @@ object JdbcUtils extends Logging with SQLConfHelper {
         } else {
           finished = true
           null.asInstanceOf[InternalRow]
+        }
+      }
+
+      override protected def getNext(): InternalRow = {
+        if (fetchAndTransformToInternalRowsMetric.isDefined) {
+          SQLMetrics.withTimingNs(fetchAndTransformToInternalRowsMetric.get) {
+            getNextWithoutTiming
+          }
+        } else {
+          getNextWithoutTiming
         }
       }
     }

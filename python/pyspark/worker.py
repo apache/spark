@@ -1668,12 +1668,9 @@ def read_udtf(pickleSer, infile, eval_type):
                         pa.RecordBatch.from_pylist(data, schema=pa.schema(list(arrow_return_type)))
                     ]
                 try:
-                    ret = LocalDataToArrowConversion.convert(
+                    return LocalDataToArrowConversion.convert(
                         data, return_type, prefers_large_var_types
                     ).to_batches()
-                    if len(return_type.fields) == 0:
-                        return [pa.RecordBatch.from_struct_array(pa.array([{}] * len(data)))]
-                    return ret
                 except Exception as e:
                     raise PySparkRuntimeError(
                         errorClass="UDTF_ARROW_TYPE_CONVERSION_ERROR",

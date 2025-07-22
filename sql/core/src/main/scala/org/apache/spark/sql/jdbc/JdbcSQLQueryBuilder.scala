@@ -208,7 +208,7 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
 
   // If join has been pushed down, reuse join query as a subquery. Otherwise, fallback to
   // what is provided in options.
-  private def tableOrQuery = joinQuery.getOrElse(options.tableOrQuery)
+  protected final def tableOrQuery: String = joinQuery.getOrElse(options.tableOrQuery)
 
   /**
    * Build the final SQL query that following dialect's SQL syntax.

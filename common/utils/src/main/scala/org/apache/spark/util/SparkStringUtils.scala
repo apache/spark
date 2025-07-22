@@ -101,4 +101,12 @@ private[spark] object SparkStringUtils extends SparkStringUtils with Logging {
   def truncatedString[T](seq: Seq[T], sep: String, maxFields: Int): String = {
     truncatedString(seq, "", sep, "", maxFields)
   }
+
+  def isEmpty(str: String): Boolean = str == null || str.length() == 0
+
+  def isNotEmpty(str: String): Boolean = !isEmpty(str)
+
+  def isBlank(str: String): Boolean = str == null || str.isBlank
+
+  def isNotBlank(str: String): Boolean = !isBlank(str)
 }

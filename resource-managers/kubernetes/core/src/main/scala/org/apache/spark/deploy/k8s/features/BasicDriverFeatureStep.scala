@@ -21,7 +21,6 @@ import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model._
 
-import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
@@ -37,9 +36,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     .get(KUBERNETES_DRIVER_POD_NAME)
     .getOrElse(s"${conf.resourceNamePrefix}-driver")
 
-  private val driverContainerImage = conf
-    .get(DRIVER_CONTAINER_IMAGE)
-    .getOrElse(throw new SparkException("Must specify the driver container image"))
+  private val driverContainerImage = conf.image
 
   // CPU settings
   private val driverCpuCores = conf.get(DRIVER_CORES)
