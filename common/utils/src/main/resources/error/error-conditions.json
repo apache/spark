@@ -1823,7 +1823,7 @@
     "subClass" : {
       "NAME_ALREADY_IN_USE": {
         "message": [
-          "Variable name <varName> used in FOR statement is already used in another parenting FOR loop or as a label in parenting scope. This is forbidden to avoid issues with referencing variables/columns."
+          "Variable name <varName> used in the FOR statement is already used in a parent FOR loop or as a label in the enclosing scope."
         ]
       }
     },
