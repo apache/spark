@@ -113,15 +113,7 @@ def transform_boolean_operand_to_numeric(
 def _should_return_all_false(left: IndexOpsLike, right: Any) -> bool:
     """
     Determine if binary comparison should short-circuit to all False,
-    based on incompatible dtypes.
-
-    This function is used to mimic pandas behavior when comparing operands
-    with non-matching dtypes that cannot be reasonably coerced, such as
-    comparing floats with strings.
-
-    It internally transforms boolean operands to numeric (long) and checks
-    whether both operands are numeric or not. If they are not, and their
-    dtypes differ, the comparison result is considered to be all False.
+    based on incompatible dtypes: non-numeric vs. numeric (including bools).
     """
     from pandas.api.types import is_numeric_dtype
     from pyspark.pandas.base import IndexOpsMixin
