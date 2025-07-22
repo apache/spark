@@ -20,13 +20,14 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, SQLFunctionNode, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{withPosition, Analyzer, SQLFunctionExpression, SQLFunctionNode, SQLTableFunction, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, SQLFunction, UserDefinedFunction, UserDefinedFunctionErrors}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{LateralJoin, LogicalPlan, OneRowRelation, Project, UnresolvedWith}
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand._
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
@@ -391,7 +392,7 @@ case class CreateSQLFunctionCommand(
             }
             // Check cyclic reference using qualified function names.
             val newPath = path :+ f.function.name
-            if (f.function.name.sameIdentifier(name)) {
+            if (f.function.name == name) {
               throw UserDefinedFunctionErrors.cyclicFunctionReference(newPath.mkString(" -> "))
             }
             val plan = catalog.makeSQLTableFunctionPlan(f.name, f.function, f.inputs, f.output)
@@ -404,7 +405,7 @@ case class CreateSQLFunctionCommand(
 
     def checkExpression(expression: Expression, path: Seq[FunctionIdentifier]): Unit = {
       expression.foreach {
-        case SubqueryExpression(plan) => checkPlan(plan, path)
+        case s: SubqueryExpression => checkPlan(s.plan, path)
         case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _) =>
           val funcId = nameParts.asFunctionIdentifier
           val info = catalog.lookupFunctionInfo(funcId)
@@ -414,7 +415,7 @@ case class CreateSQLFunctionCommand(
             }
             // Check cyclic reference using qualified function names.
             val newPath = path :+ f.function.name
-            if (f.function.name.sameIdentifier(name)) {
+            if (f.function.name == name) {
               throw UserDefinedFunctionErrors.cyclicFunctionReference(newPath.mkString(" -> "))
             }
             val plan = catalog.makeSQLFunctionPlan(f.name, f.function, f.inputs)
