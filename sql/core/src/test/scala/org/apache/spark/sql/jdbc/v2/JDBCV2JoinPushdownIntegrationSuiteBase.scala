@@ -600,4 +600,44 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       checkAnswer(df, rows)
     }
   }
+
+  test("Test condition with aliased column") {
+    // After the first join, columns will be aliased because we are doing self join in CTE.
+    // Second join, is joining on aliased column, so the aliased value should be used in generated
+    // SQL query.
+    val sqlQuery = s"""
+      |WITH ws_wh AS (
+      |    SELECT
+      |        ws1.ID,
+      |        ws1.AMOUNT wh1,
+      |        ws2.AMOUNT wh2
+      |    FROM
+      |        $catalogAndNamespace.$casedJoinTableName1 ws1,
+      |        $catalogAndNamespace.$casedJoinTableName1 ws2
+      |    WHERE
+      |        ws1.ID = ws2.ID
+      |        AND ws1.AMOUNT <> ws2.AMOUNT
+      |)
+      |SELECT
+      |   NEXT_ID
+      |FROM
+      |   $catalogAndNamespace.$casedJoinTableName2,
+      |   ws_wh
+      |WHERE
+      |   NEXT_ID = ws_wh.ID
+      |""".stripMargin
+
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
+    }
+
+    assert(!rows.isEmpty)
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+
+      checkJoinPushed(df)
+      checkAnswer(df, rows)
+    }
+  }
 }
