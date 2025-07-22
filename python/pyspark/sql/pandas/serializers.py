@@ -740,8 +740,6 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
         list
             List of columns containing list of Python values.
         """
-        import pyarrow as pa
-
         converters = [
             ArrowTableToRowsConversion._create_converter(dt, none_on_identity=True)
             for dt in self._input_types
