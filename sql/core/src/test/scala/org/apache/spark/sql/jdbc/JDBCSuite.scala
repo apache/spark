@@ -228,8 +228,10 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       "create table test.emp(name TEXT(32) NOT NULL," +
         " theid INTEGER, \"Dept\" INTEGER)").executeUpdate()
 
-    conn.prepareStatement("insert into test.emp values " +
-      "('fred', 1, 10), ('mary', 2, null), ('joe ''foo'' \"bar\"', 3, 30), ('kathy', null, null)").executeUpdate()
+    conn
+      .prepareStatement("insert into test.emp values " +
+        "('fred', 1, 10), ('mary', 2, null), ('joe ''foo'' \"bar\"', 3, 30), ('kathy', null, null)")
+      .executeUpdate()
 
     conn.prepareStatement(
       "create table test.seq(id INTEGER)").executeUpdate()
