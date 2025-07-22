@@ -375,6 +375,84 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT make_timestamp(timestamp_ntz '2018-11-17 13:33:33', TIME'0:0:0', 'CET')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"DATE\"",
+    "sqlExpr" : "\"make_timestamp(TIMESTAMP_NTZ '2018-11-17 13:33:33', TIME '00:00:00', CET)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 78,
+    "fragment" : "make_timestamp(timestamp_ntz '2018-11-17 13:33:33', TIME'0:0:0', 'CET')"
+  } ]
+}
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', timestamp '2018-11-17 13:33:33', 'CET')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"make_timestamp(DATE '1970-01-01', TIMESTAMP '2018-11-17 13:33:33', CET)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 79,
+    "fragment" : "make_timestamp(DATE'1970-01-01', timestamp '2018-11-17 13:33:33', 'CET')"
+  } ]
+}
+
+
+-- !query
+SELECT make_timestamp(DATE'1970-01-01', timestamp_ntz '2018-11-17 13:33:33', 'CET')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"make_timestamp(DATE '1970-01-01', TIMESTAMP_NTZ '2018-11-17 13:33:33', CET)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 83,
+    "fragment" : "make_timestamp(DATE'1970-01-01', timestamp_ntz '2018-11-17 13:33:33', 'CET')"
+  } ]
+}
+
+
+-- !query
 select TIMESTAMP_SECONDS(1230219000),TIMESTAMP_SECONDS(-1230219000),TIMESTAMP_SECONDS(null)
 -- !query schema
 struct<timestamp_seconds(1230219000):timestamp,timestamp_seconds(-1230219000):timestamp,timestamp_seconds(NULL):timestamp>

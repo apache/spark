@@ -53,8 +53,11 @@ SELECT make_timestamp(NULL, TIME'00:00:00', NULL);
 SELECT make_timestamp(DATE'1970-01-01', NULL, NULL);
 SELECT make_timestamp(NULL, NULL, NULL);
 
--- SPARK-51415: unsupported parameters.
+-- SPARK-51415: unsupported input types.
 SELECT make_timestamp(timestamp '2018-11-17 13:33:33', TIME'0:0:0', 'CET');
+SELECT make_timestamp(timestamp_ntz '2018-11-17 13:33:33', TIME'0:0:0', 'CET');
+SELECT make_timestamp(DATE'1970-01-01', timestamp '2018-11-17 13:33:33', 'CET');
+SELECT make_timestamp(DATE'1970-01-01', timestamp_ntz '2018-11-17 13:33:33', 'CET');
 
 -- [SPARK-31710] TIMESTAMP_SECONDS, TIMESTAMP_MILLISECONDS and TIMESTAMP_MICROSECONDS that always create timestamp_ltz
 select TIMESTAMP_SECONDS(1230219000),TIMESTAMP_SECONDS(-1230219000),TIMESTAMP_SECONDS(null);
