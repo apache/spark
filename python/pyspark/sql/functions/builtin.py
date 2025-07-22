@@ -11394,11 +11394,11 @@ def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
     >>> df = spark.createDataFrame([('foo',)], ['ts'])
     >>> df.select(sf.try_to_date(df.ts)).show()
-    +--------------+
-    |try_to_date(t)|
-    +--------------+
-    |          NULL|
-    +--------------+
+    +---------------+
+    |try_to_date(ts)|
+    +---------------+
+    |           NULL|
+    +---------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
