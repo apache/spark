@@ -35,7 +35,6 @@ from pyspark.sql.types import (
     DecimalType,
     FractionalType,
     IntegralType,
-    LongType,
     MapType,
     NullType,
     NumericType,
