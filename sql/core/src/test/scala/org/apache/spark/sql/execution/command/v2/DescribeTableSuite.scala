@@ -239,13 +239,12 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
         """.stripMargin)
 
         var expectedConstraintsDdl = Array(
-          "pk_table_pk,PrimaryKey,CONSTRAINT pk_table_pk PRIMARY KEY (id) NOT ENFORCED NORELY",
-          "fk_a,ForeignKey,CONSTRAINT fk_a FOREIGN KEY (a) " +
-            "REFERENCES fk_table (id) NOT ENFORCED RELY",
-          "uk_b,Unique,CONSTRAINT uk_b UNIQUE (b) NOT ENFORCED NORELY",
-          "uk_a_c,Unique,CONSTRAINT uk_a_c UNIQUE (a, c) NOT ENFORCED NORELY",
-          "c1,Check,CONSTRAINT c1 CHECK (c IS NOT NULL) ENFORCED NORELY",
-          "c2,Check,CONSTRAINT c2 CHECK (id > 0) ENFORCED NORELY"
+          "pk_table_pk,CONSTRAINT pk_table_pk PRIMARY KEY (id) NOT ENFORCED NORELY,",
+          "fk_a,CONSTRAINT fk_a FOREIGN KEY (a) REFERENCES fk_table (id) NOT ENFORCED RELY,",
+          "uk_b,CONSTRAINT uk_b UNIQUE (b) NOT ENFORCED NORELY,",
+          "uk_a_c,CONSTRAINT uk_a_c UNIQUE (a, c) NOT ENFORCED NORELY,",
+          "c1,CONSTRAINT c1 CHECK (c IS NOT NULL) ENFORCED NORELY,",
+          "c2,CONSTRAINT c2 CHECK (id > 0) ENFORCED NORELY,"
         )
         var descDdL = sql(s"DESCRIBE EXTENDED $tbl").collect().map(_.mkString(","))
           .filter(_.contains("CONSTRAINT"))
@@ -255,14 +254,14 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
         descDdL = sql(s"DESCRIBE EXTENDED $tbl").collect().map(_.mkString(","))
           .filter(_.contains("CONSTRAINT"))
         expectedConstraintsDdl = expectedConstraintsDdl ++
-          Array("c3,Check,CONSTRAINT c3 CHECK (b IS NOT NULL) ENFORCED RELY")
+          Array("c3,CONSTRAINT c3 CHECK (b IS NOT NULL) ENFORCED RELY,")
         assert(descDdL === expectedConstraintsDdl)
 
         sql(s"ALTER TABLE $tbl DROP CONSTRAINT c1")
         descDdL = sql(s"DESCRIBE EXTENDED $tbl").collect().map(_.mkString(","))
           .filter(_.contains("CONSTRAINT"))
         assert(descDdL === expectedConstraintsDdl
-          .filter(_ != "c1,Check,CONSTRAINT c1 CHECK (c IS NOT NULL) ENFORCED NORELY"))
+          .filter(_ != "c1,CONSTRAINT c1 CHECK (c IS NOT NULL) ENFORCED NORELY,"))
       }
     }
   }

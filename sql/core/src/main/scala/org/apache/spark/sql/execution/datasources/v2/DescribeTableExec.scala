@@ -42,10 +42,10 @@ case class DescribeTableExec(
     addClustering(rows)
 
     if (isExtended) {
-      addTableConstraints(rows)
       addMetadataColumns(rows)
       addTableDetails(rows)
       addTableStats(rows)
+      addTableConstraints(rows)
     }
     rows.toSeq
   }
@@ -94,7 +94,7 @@ case class DescribeTableExec(
       rows += emptyRow()
       rows += toCatalystRow("# Constraint Information", "", "")
       rows ++= table.constraints().map{ constraint =>
-        toCatalystRow(constraint.name(), constraint.getClass.getSimpleName, constraint.toDDL)
+        toCatalystRow(constraint.name(), constraint.toDDL, "")
       }
     }
   }
