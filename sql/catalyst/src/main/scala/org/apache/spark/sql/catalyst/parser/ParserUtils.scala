@@ -390,7 +390,9 @@ class SqlScriptingLabelContext {
 
       if (SqlScriptingLabelContext.isForbiddenLabelName(identifierName)) {
         withOrigin(ctx) {
-          throw SqlScriptingErrors.labelNameForbidden(CurrentOrigin.get, identifierName)
+          throw SqlScriptingErrors.labelNameForbidden(
+            CurrentOrigin.get,
+            identifierName.toLowerCase(Locale.ROOT))
         }
       }
     }

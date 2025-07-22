@@ -2385,7 +2385,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         parsePlan(sqlScriptText)
       },
       condition = "LABEL_ALREADY_EXISTS",
-      parameters = Map("label" -> "`L2`"))
+      parameters = Map("label" -> "`l2`"))
   }
 
   test("for variable name is the same as the label of the for loop - should fail") {
@@ -2402,7 +2402,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         parsePlan(sqlScriptText)
       },
       condition = "LABEL_ALREADY_EXISTS",
-      parameters = Map("label" -> "`L1`"))
+      parameters = Map("label" -> "`l1`"))
   }
 
   test("label name is the same as the for loop variable name - should fail") {
