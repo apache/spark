@@ -1818,7 +1818,7 @@
   },
   "FOR_VARIABLE_NAME_FORBIDDEN" : {
     "message": [
-      "An error regarding the naming of an iterator variable inside a for loop occurred."
+      "Invalid iterator variable name used in a FOR loop."
     ],
     "subClass" : {
       "NAME_ALREADY_IN_USE": {
