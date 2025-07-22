@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Union
 import org.apache.spark.sql.execution.{SparkPlan, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession, SQLTestData}
@@ -1506,6 +1507,28 @@ class DataFrameSetOperationsSuite extends QueryTest
         checkAnswer(nonColumnarUnion,
           Row(1) :: Row(2) :: Row(3) :: Row(7) :: Row(8) :: Row(9) :: Nil)
       }
+    }
+  }
+
+  test("union partitioning") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df1 = Seq((1, 2, 4), (1, 3, 5), (2, 2, 3), (2, 4, 5)).toDF("a", "b", "c")
+      val df2 = Seq((1, 2, 4), (1, 3, 5), (2, 2, 3), (2, 4, 5)).toDF("a", "b", "c")
+
+      val union = df1.repartition($"a").union(df2.repartition($"a"))
+      val unionExec = union.queryExecution.executedPlan.collect {
+        case u: UnionExec => u
+      }
+      assert(unionExec.size == 1)
+
+      val shuffle = df1.repartition($"a").queryExecution.executedPlan.collect {
+        case s: ShuffleExchangeExec => s
+      }
+      assert(shuffle.size == 1)
+
+      val childPartitioning = shuffle.head.outputPartitioning
+      val partitioning = unionExec.head.outputPartitioning
+      assert(partitioning == childPartitioning)
     }
   }
 }
