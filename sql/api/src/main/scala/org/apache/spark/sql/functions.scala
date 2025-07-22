@@ -5764,7 +5764,7 @@ object functions {
   def to_date(e: Column, fmt: String): Column = Column.fn("to_date", e, lit(fmt))
 
   /**
-   * This is a special version of `try_to_date` that performs the same operation, but returns a
+   * This is a special version of `to_date` that performs the same operation, but returns a
    * NULL value instead of raising an error if date cannot be created.
    *
    * @group datetime_funcs
@@ -5773,7 +5773,7 @@ object functions {
   def try_to_date(e: Column): Column = Column.fn("try_to_date", e)
 
   /**
-   * This is a special version of `try_to_date` that performs the same operation, but returns a
+   * This is a special version of `to_date` that performs the same operation, but returns a
    * NULL value instead of raising an error if date cannot be created.
    *
    * @group datetime_funcs

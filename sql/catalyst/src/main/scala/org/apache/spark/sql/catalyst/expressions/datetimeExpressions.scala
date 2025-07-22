@@ -2125,7 +2125,7 @@ case class ParseToDate(
     this(left, None)
   }
 
-  override def prettyName: String = "to_date"
+  override def nodeName: String = "to_date"
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Some(timeZoneId))
