@@ -76,7 +76,7 @@ case class DescribeRelationJsonCommand(
         describeFormattedTableInfoJson(v.metadata, jsonMap)
         describeViewSqlConfsJson(v.metadata, jsonMap)
 
-      case ResolvedTable(catalog, identifier, table @ V1Table(metadata), _) =>
+      case ResolvedTable(catalog, identifier, V1Table(metadata), _) =>
         describeIdentifier(identifier.toQualifiedNameParts(catalog), jsonMap)
         val schema = if (metadata.schema.isEmpty) {
           // In older versions of Spark,
@@ -94,12 +94,6 @@ case class DescribeRelationJsonCommand(
             sparkSession, sparkSession.sessionState.catalog, metadata, jsonMap)
         } else {
           describeFormattedTableInfoJson(metadata, jsonMap)
-        }
-        if (table.constraints().nonEmpty) {
-          val constraintsJson = JArray(table.constraints().map { constraint =>
-            JString(constraint.toDDL)
-          }.toList)
-          addKeyValueToMap("constraints", constraintsJson, jsonMap)
         }
 
       case _ => throw QueryCompilationErrors.describeAsJsonNotSupportedForV2TablesError()
