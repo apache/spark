@@ -5703,7 +5703,7 @@ object functions {
    * Parses a string value to a time value.
    *
    * @param str
-   *   A string to be parsed to time
+   *   A string to be parsed to time.
    * @return
    *   A time, or raises an error if the input is malformed.
    * @group datetime_funcs
@@ -5720,9 +5720,9 @@ object functions {
    * Patterns</a> for valid time format patterns.
    *
    * @param str
-   *   A string to be parsed to time
+   *   A string to be parsed to time.
    * @param format
-   *   Time format pattern to follow
+   *   A time format pattern to follow.
    * @return
    *   A time, or raises an error if the input is malformed.
    * @group datetime_funcs
@@ -5768,7 +5768,7 @@ object functions {
    * Parses a string value to a time value.
    *
    * @param str
-   *   A string to be parsed to time
+   *   A string to be parsed to time.
    * @return
    *   A time, or null if the input is malformed.
    * @group datetime_funcs
@@ -5785,9 +5785,9 @@ object functions {
    * Patterns</a> for valid time format patterns.
    *
    * @param str
-   *   A string to be parsed to time
+   *   A string to be parsed to time.
    * @param format
-   *   Time format pattern to follow
+   *   A time format pattern to follow.
    * @return
    *   A time, or null if the input is malformed.
    * @group datetime_funcs
