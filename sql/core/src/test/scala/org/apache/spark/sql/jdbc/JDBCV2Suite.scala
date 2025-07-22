@@ -190,7 +190,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         .prepareStatement("CREATE TABLE \"test\".\"person\" (\"名\" INTEGER NOT NULL)")
         .executeUpdate()
 
-      // Optimized: Batch insert for person table (was 2 separate INSERTs)
       conn.prepareStatement("INSERT INTO \"test\".\"person\" VALUES (1), (2)").executeUpdate()
 
       conn.prepareStatement(
