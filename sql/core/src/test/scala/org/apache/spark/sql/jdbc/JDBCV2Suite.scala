@@ -157,54 +157,48 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     super.beforeAll()
     Utils.classForName("org.h2.Driver")
     withConnection { conn =>
-      conn.prepareStatement("CREATE SCHEMA \"test\"").executeUpdate()
-      conn.prepareStatement(
-        "CREATE TABLE \"test\".\"empty_table\" (name TEXT(32) NOT NULL, id INTEGER NOT NULL)")
-        .executeUpdate()
-      conn.prepareStatement(
-        "CREATE TABLE \"test\".\"people\" (name TEXT(32) NOT NULL, id INTEGER NOT NULL)")
-        .executeUpdate()
-
-      conn.prepareStatement(
-        "CREATE TABLE \"test\".\"employee\" (dept INTEGER, name TEXT(32), salary NUMERIC(20, 2)," +
-          " bonus DOUBLE, is_manager BOOLEAN)").executeUpdate()
-
-      conn.prepareStatement(
-        "CREATE TABLE \"test\".\"dept\" (\"dept id\" INTEGER NOT NULL, \"dept.id\" INTEGER)")
-        .executeUpdate()
-
-      // scalastyle:off
-      conn
-        .prepareStatement("CREATE TABLE \"test\".\"person\" (\"名\" INTEGER NOT NULL)")
-        .executeUpdate()
-      // scalastyle:on
-
-      conn.prepareStatement(
-        """CREATE TABLE "test"."view1" ("|col1" INTEGER, "|col2" INTEGER)""").executeUpdate()
-      conn.prepareStatement(
-        """CREATE TABLE "test"."view2" ("|col1" INTEGER, "|col3" INTEGER)""").executeUpdate()
-
-      conn.prepareStatement(
-        "CREATE TABLE \"test\".\"item\" (id INTEGER, name TEXT(32), price NUMERIC(23, 3))")
-        .executeUpdate()
-
-      conn.prepareStatement(
-        "CREATE TABLE \"test\".\"datetime\" (name TEXT(32), date1 DATE, time1 TIMESTAMP)")
-        .executeUpdate()
-
-      conn.prepareStatement(
-        "CREATE TABLE \"test\".\"address\" (email TEXT(32) NOT NULL)").executeUpdate()
-
-      conn.prepareStatement("CREATE TABLE \"test\".\"binary_tab\" (name TEXT(32),b BINARY(20))")
-        .executeUpdate()
-
-      conn.prepareStatement("CREATE TABLE \"test\".\"employee_bonus\" " +
-        "(name TEXT(32), salary NUMERIC(20, 2), bonus DOUBLE, factor DOUBLE)").executeUpdate()
-
-      conn.prepareStatement(
-        "CREATE TABLE \"test\".\"strings_with_nulls\" (str TEXT(32))").executeUpdate()
 
       val batchStmt = conn.createStatement()
+      batchStmt.addBatch("CREATE SCHEMA \"test\"")
+
+      batchStmt.addBatch(
+        "CREATE TABLE \"test\".\"empty_table\" (name TEXT(32) NOT NULL, id INTEGER NOT NULL)")
+
+      batchStmt.addBatch(
+        "CREATE TABLE \"test\".\"people\" (name TEXT(32) NOT NULL, id INTEGER NOT NULL)")
+
+      batchStmt.addBatch(
+        "CREATE TABLE \"test\".\"employee\" (dept INTEGER, name TEXT(32), salary NUMERIC(20, 2)," +
+          " bonus DOUBLE, is_manager BOOLEAN)")
+
+      batchStmt.addBatch(
+        "CREATE TABLE \"test\".\"dept\" (\"dept id\" INTEGER NOT NULL, \"dept.id\" INTEGER)")
+
+      // scalastyle:off
+      batchStmt.addBatch("CREATE TABLE \"test\".\"person\" (\"名\" INTEGER NOT NULL)")
+      // scalastyle:on
+
+      batchStmt.addBatch(
+        """CREATE TABLE "test"."view1" ("|col1" INTEGER, "|col2" INTEGER)""")
+      batchStmt.addBatch(
+        """CREATE TABLE "test"."view2" ("|col1" INTEGER, "|col3" INTEGER)""")
+
+      batchStmt.addBatch(
+        "CREATE TABLE \"test\".\"item\" (id INTEGER, name TEXT(32), price NUMERIC(23, 3))")
+
+      batchStmt.addBatch(
+        "CREATE TABLE \"test\".\"datetime\" (name TEXT(32), date1 DATE, time1 TIMESTAMP)")
+
+      batchStmt.addBatch(
+        "CREATE TABLE \"test\".\"address\" (email TEXT(32) NOT NULL)")
+
+      batchStmt.addBatch("CREATE TABLE \"test\".\"binary_tab\" (name TEXT(32),b BINARY(20))")
+
+      batchStmt.addBatch("CREATE TABLE \"test\".\"employee_bonus\" " +
+        "(name TEXT(32), salary NUMERIC(20, 2), bonus DOUBLE, factor DOUBLE)")
+
+      batchStmt.addBatch(
+        "CREATE TABLE \"test\".\"strings_with_nulls\" (str TEXT(32))")
 
       batchStmt.addBatch("INSERT INTO \"test\".\"people\" VALUES ('fred', 1)")
       batchStmt.addBatch("INSERT INTO \"test\".\"people\" VALUES ('mary', 2)")
