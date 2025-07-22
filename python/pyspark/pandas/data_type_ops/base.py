@@ -115,10 +115,10 @@ def _should_return_all_false(left: IndexOpsLike, right: Any) -> bool:
     Determine if binary comparison should short-circuit to all False,
     based on incompatible dtypes: non-numeric vs. numeric (including bools).
     """
-    from pandas.api.types import is_numeric_dtype
+    from pandas.core.dtypes.common import is_numeric_dtype
     from pyspark.pandas.base import IndexOpsMixin
 
-    def are_both_numeric(left_dtype, right_dtype) -> bool:
+    def are_both_numeric(left_dtype: Dtype, right_dtype: Dtype) -> bool:
         return is_numeric_dtype(left_dtype) and is_numeric_dtype(right_dtype)
 
     left_dtype = left.dtype
@@ -419,7 +419,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession):
             if _should_return_all_false(left, right):
-                return left._with_new_scol(F.lit(False)).rename(None)
+                return left._with_new_scol(F.lit(False)).rename(None)  # type: ignore[attr-defined]
 
         if isinstance(right, (list, tuple)):
             from pyspark.pandas.series import first_series, scol_for

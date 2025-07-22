@@ -258,7 +258,7 @@ class NumericOps(DataTypeOps):
         else:
             if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession):
                 if _should_return_all_false(left, right):
-                    return left._with_new_scol(F.lit(False)).rename(None)
+                    return left._with_new_scol(F.lit(False)).rename(None)  # type: ignore[attr-defined]
                 if _is_boolean_type(right):
                     right = transform_boolean_operand_to_numeric(
                         right, spark_type=as_spark_type(left.dtype)
