@@ -92,7 +92,7 @@ case class DescribeTableExec(
   private def addTableConstraints(rows: ArrayBuffer[InternalRow]): Unit = {
     if (table.constraints.nonEmpty) {
       rows += emptyRow()
-      rows += toCatalystRow("# Constraint Information", "", "")
+      rows += toCatalystRow("# Constraints", "", "")
       rows ++= table.constraints().map{ constraint =>
         toCatalystRow(constraint.name(), constraint.toDDL, "")
       }
