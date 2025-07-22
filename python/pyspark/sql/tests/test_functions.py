@@ -82,7 +82,9 @@ class FunctionsTestsMixin:
 
         # Functions that we expect to be missing in python until they are added to pyspark
         expected_missing_in_py = set(
-            ["current_time"]  # TODO(SPARK-52889): @uros-db is addressing this separately.
+            # TODO(SPARK-52888): Implement the make_time function in Python
+            # TODO(SPARK-52889): Implement the current_time function in Python
+            ["current_time", "make_time"]
         )
 
         self.assertEqual(
@@ -1276,6 +1278,11 @@ class FunctionsTestsMixin:
         df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
         parse_result = df.select(F.to_date(F.col("dateCol"))).first()
         self.assertEqual(datetime.date(2017, 1, 22), parse_result["to_date(dateCol)"])
+
+    def test_try_datetime_functions(self):
+        df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
+        parse_result = df.select(F.try_to_date(F.col("dateCol")).alias("tryToDateCol")).first()
+        self.assertEqual(datetime.date(2017, 1, 22), parse_result["tryToDateCol"])
 
     def test_assert_true(self):
         self.check_assert_true(SparkRuntimeException)

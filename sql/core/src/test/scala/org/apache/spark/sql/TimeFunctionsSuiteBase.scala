@@ -110,6 +110,41 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
     }
   }
 
+  test("SPARK-52881: make_time function") {
+    // Input data for the function.
+    val schema = StructType(Seq(
+      StructField("hour", IntegerType, nullable = false),
+      StructField("minute", IntegerType, nullable = false),
+      StructField("second", DecimalType(16, 6), nullable = false)
+    ))
+    val data = Seq(
+      Row(0, 0, BigDecimal(0.0)),
+      Row(1, 2, BigDecimal(3.4)),
+      Row(23, 59, BigDecimal(59.999999))
+    )
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+    // Test the function using both `selectExpr` and `select`.
+    val result1 = df.selectExpr(
+      "make_time(hour, minute, second)"
+    )
+    val result2 = df.select(
+      make_time(col("hour"), col("minute"), col("second"))
+    )
+    // Check that both methods produce the same result.
+    checkAnswer(result1, result2)
+
+    // Expected output of the function.
+    val expected = Seq(
+      "00:00:00",
+      "01:02:03.4",
+      "23:59:59.999999"
+    ).toDF("timeString").select(col("timeString").cast("time"))
+    // Check that the results match the expected output.
+    checkAnswer(result1, expected)
+    checkAnswer(result2, expected)
+  }
+
   test("SPARK-52885: hour function") {
     // Input data for the function.
     val schema = StructType(Seq(
