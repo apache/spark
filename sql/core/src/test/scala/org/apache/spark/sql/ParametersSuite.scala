@@ -789,9 +789,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     def query(p: String): String = {
       s"""
          |WITH RECURSIVE t1(n) AS (
-         |    SELECT 1 FROM t1
-         |    UNION ALL
-         |    SELECT n+1 FROM t1 WHERE n < 5)
+         |  SELECT 1
+         |  UNION ALL
+         |  SELECT n+1 FROM IDENTIFIER($p) WHERE n < 5)
          |SELECT * FROM t1""".stripMargin
     }
 
