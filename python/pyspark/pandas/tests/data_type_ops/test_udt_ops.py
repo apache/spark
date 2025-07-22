@@ -143,6 +143,13 @@ class UDTOpsTestsMixin:
         self.assert_eq(pdf, psdf._to_pandas())
         self.assert_eq(ps.from_pandas(pdf), psdf)
 
+    def test_with_all_null(self):
+        lst = [None, None, None, None]
+        pser = pd.Series(lst, dtype=object)
+        psser = ps.Series(lst, dtype=object)
+        self.assert_eq(pser, psser._to_pandas())
+        self.assert_eq(ps.from_pandas(pser), psser)
+
     def test_isnull(self):
         self.assert_eq(self.pser.isnull(), self.psser.isnull())
 
