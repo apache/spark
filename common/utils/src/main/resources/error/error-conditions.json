@@ -1816,10 +1816,17 @@
     ],
     "sqlState" : "39000"
   },
-  "FOR_VARIABLE_NAME_ALREADY_EXISTS_AS_LABEL_IN_SCOPE" : {
+  "FOR_VARIABLE_NAME_FORBIDDEN" : {
     "message": [
-      "Found FOR variable name <varName> that already exists as a label in the scope."
+      "An error regarding the naming of an iterator variable inside a for loop occurred."
     ],
+    "subClass" : {
+      "NAME_ALREADY_IN_USE": {
+        "message": [
+          "Variable name <varName> used in FOR statement is already used in another parenting FOR loop or as a label in parenting scope. This is forbidden to avoid issues with referencing variables/columns."
+        ]
+      }
+    },
     "sqlState" : "42734"
   },
   "FORBIDDEN_OPERATION" : {
