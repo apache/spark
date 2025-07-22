@@ -25,3 +25,8 @@ SELECT ID, STRUCT(ST.C, ST.D).D NST FROM tbl_x;
 
 -- Select an alias from a struct
 SELECT ID, STRUCT(ST.C as STC, ST.D as STD).STD FROM tbl_x;
+
+-- LCAs with struct columns
+SELECT STRUCT(1 AS a) AS b, b AS c;
+SELECT STRUCT(1 AS a) AS b, b AS c GROUP BY b;
+SELECT MAX(STRUCT(1 AS a)), 2 AS b, b AS c GROUP BY b;
