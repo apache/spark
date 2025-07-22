@@ -82,7 +82,8 @@ class FunctionsTestsMixin:
 
         # Functions that we expect to be missing in python until they are added to pyspark
         expected_missing_in_py = set(
-            ["make_time"]  # TODO(SPARK-52888): @uros-db is addressing this separately.
+            # TODO(SPARK-52888): Implement the make_time function in Python
+            ["make_time"]
         )
 
         self.assertEqual(
