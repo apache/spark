@@ -320,10 +320,12 @@ class SqlScriptingLabelContext {
    * Assert the identifier is not contained within seenLabels.
    * If the identifier is contained within seenLabels, raise an exception.
    */
-  private def assertIdentifierNotInSeenLabels(identifierCtx: Option[MultipartIdentifierContext]): Unit = {
+  private def assertIdentifierNotInSeenLabels(
+    identifierCtx: Option[MultipartIdentifierContext]): Unit = {
     val identifierName = identifierCtx.map(_.getText)
 
-    if(identifierName.isDefined && seenLabels.contains(identifierName.get.toLowerCase(Locale.ROOT))) {
+    if(identifierName.isDefined
+      && seenLabels.contains(identifierName.get.toLowerCase(Locale.ROOT))) {
       withOrigin(identifierCtx.get) {
         throw SqlScriptingErrors
           .forVariableNameAlreadyExistsAsLabelInScope(CurrentOrigin.get, identifierName.get)

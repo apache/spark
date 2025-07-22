@@ -35,7 +35,7 @@ private[sql] object SqlScriptingErrors {
     varName: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
-      errorClass = "FOR_VARIABLE_NAME_ALREADY_EXISTS_AS_LABEL_IN_SCOPE",
+      errorClass = "FOR_VARIABLE_NAME_FORBIDDEN.NAME_ALREADY_IN_USE",
       cause = null,
       messageParameters = Map("varName" -> toSQLId(varName)))
   }
