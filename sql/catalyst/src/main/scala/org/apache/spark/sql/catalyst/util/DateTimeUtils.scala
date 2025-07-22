@@ -511,27 +511,23 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Returns time truncated to the unit specified by the level.
    */
-  private def timeTrunc(level: Int, nanos: Long): Long = {
+  private def parseTimeTruncLevel(level: Int): ChronoUnit = {
     level match {
-      case TRUNC_TO_HOUR =>
-        val truncatedTime = nanosToLocalTime(nanos).
-          withMinute(0).
-          withSecond(0).
-          withNano(0)
-        localTimeToNanos(truncatedTime)
-      case TRUNC_TO_MINUTE =>
-        val localTime = nanosToLocalTime(nanos)
-        val truncatedTime = localTime.withSecond(0).withNano(0)
-        localTimeToNanos(truncatedTime)
-      case TRUNC_TO_SECOND =>
-        nanos - Math.floorMod(nanos, NANOS_PER_SECOND)
-      case TRUNC_TO_MILLISECOND =>
-        nanos - Math.floorMod(nanos, NANOS_PER_MILLIS)
-      case TRUNC_TO_MICROSECOND =>
-        nanos - Math.floorMod(nanos, NANOS_PER_MICROS)
+      case TRUNC_TO_HOUR => ChronoUnit.HOURS
+      case TRUNC_TO_MINUTE => ChronoUnit.MINUTES
+      case TRUNC_TO_SECOND => ChronoUnit.SECONDS
+      case TRUNC_TO_MILLISECOND => ChronoUnit.MILLIS
+      case TRUNC_TO_MICROSECOND => ChronoUnit.MICROS
       case _ =>
         throw new IllegalArgumentException(s"Unsupported time truncation level: $level")
     }
+  }
+
+  /**
+   * Returns time truncated to the unit specified by the level.
+   */
+  private def timeTrunc(level: Int, nanos: Long): Long = {
+    localTimeToNanos(nanosToLocalTime(nanos).truncatedTo(parseTimeTruncLevel(level)))
   }
 
   /**
