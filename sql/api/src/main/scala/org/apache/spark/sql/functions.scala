@@ -5700,10 +5700,12 @@ object functions {
     Column.fn("unix_timestamp", s, lit(p))
 
   /**
-   * Parses a string value to a time value. If the input is malformed, raises an error.
+   * Parses a string value to a time value.
    *
    * @param str
-   *   string to be parsed to time
+   *   A string to be parsed to time
+   * @return
+   *   A time, or raises an error if the input is malformed.
    * @group datetime_funcs
    * @since 4.1.0
    */
@@ -5712,12 +5714,17 @@ object functions {
   }
 
   /**
-   * Parses a string value to a time value. If the input is malformed, raises an error.
+   * Parses a string value to a time value.
+   *
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime
+   * Patterns</a> for valid time format patterns.
    *
    * @param str
-   *   string to be parsed to time
+   *   A string to be parsed to time
    * @param format
-   *   time format pattern to follow
+   *   Time format pattern to follow
+   * @return
+   *   A time, or raises an error if the input is malformed.
    * @group datetime_funcs
    * @since 4.1.0
    */
@@ -5758,10 +5765,12 @@ object functions {
   def to_timestamp(s: Column, fmt: String): Column = Column.fn("to_timestamp", s, lit(fmt))
 
   /**
-   * Parses a string value to a time value. If the input is malformed, returns null.
+   * Parses a string value to a time value.
    *
    * @param str
-   *   string to be parsed to time
+   *   A string to be parsed to time
+   * @return
+   *   A time, or null if the input is malformed.
    * @group datetime_funcs
    * @since 4.1.0
    */
@@ -5770,12 +5779,17 @@ object functions {
   }
 
   /**
-   * Parses a string value to a time value. If the input is malformed, returns null.
+   * Parses a string value to a time value.
+   *
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime
+   * Patterns</a> for valid time format patterns.
    *
    * @param str
-   *   string to be parsed to time
+   *   A string to be parsed to time
    * @param format
-   *   time format pattern to follow
+   *   Time format pattern to follow
+   * @return
+   *   A time, or null if the input is malformed.
    * @group datetime_funcs
    * @since 4.1.0
    */
