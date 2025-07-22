@@ -105,7 +105,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     conn.prepareStatement("create schema test").executeUpdate()
     conn.prepareStatement(
       "create table test.people (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
-    
+
     sql(
       s"""
         |CREATE OR REPLACE TEMPORARY VIEW foobar
@@ -140,7 +140,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
     conn.prepareStatement("create table test.inttypes (a INT, b BOOLEAN, c TINYINT, "
       + "d SMALLINT, e BIGINT)").executeUpdate()
-    
+
     sql(
       s"""
         |CREATE OR REPLACE TEMPORARY VIEW inttypes
@@ -167,7 +167,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
     conn.prepareStatement("create table test.timetypes (a TIME, b DATE, c TIMESTAMP(7))"
         ).executeUpdate()
-    
+
     sql(
       s"""
         |CREATE OR REPLACE TEMPORARY VIEW timetypes
@@ -189,7 +189,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       + "1.0000000000000002220446049250313080847263336181640625, "
       + "1.00000011920928955078125, "
       + "123456789012345.543215432154321)").executeUpdate()
-    
+
     sql(
       s"""
         |CREATE OR REPLACE TEMPORARY VIEW flttypes
@@ -206,7 +206,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     conn.prepareStatement("insert into test.nulltypes values ("
       + "null, null, null, null, null, null, null, null, null, "
       + "null, null, null, null, null, null)").executeUpdate()
-    
+
     sql(
       s"""
          |CREATE OR REPLACE TEMPORARY VIEW nulltypes
