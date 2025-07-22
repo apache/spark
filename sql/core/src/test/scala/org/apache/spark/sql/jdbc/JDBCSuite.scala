@@ -105,10 +105,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     conn.prepareStatement("create schema test").executeUpdate()
     conn.prepareStatement(
       "create table test.people (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
-
-    conn.prepareStatement("insert into test.people values " +
-      "('fred', 1), ('mary', 2), ('joe ''foo'' \"bar\"', 3)").executeUpdate()
-
+    
     sql(
       s"""
         |CREATE OR REPLACE TEMPORARY VIEW foobar
@@ -143,10 +140,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
     conn.prepareStatement("create table test.inttypes (a INT, b BOOLEAN, c TINYINT, "
       + "d SMALLINT, e BIGINT)").executeUpdate()
-
-    conn.prepareStatement("insert into test.inttypes values " +
-      "(1, false, 3, 4, 1234567890123), (null, null, null, null, null)").executeUpdate()
-
+    
     sql(
       s"""
         |CREATE OR REPLACE TEMPORARY VIEW inttypes
@@ -173,11 +167,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
     conn.prepareStatement("create table test.timetypes (a TIME, b DATE, c TIMESTAMP(7))"
         ).executeUpdate()
-
-    conn.prepareStatement("insert into test.timetypes values " +
-      "('12:34:56', '1996-01-01', '2002-02-20 11:22:33.543543543'), " +
-      "('12:34:56', null, '2002-02-20 11:22:33.543543543')").executeUpdate()
-
+    
     sql(
       s"""
         |CREATE OR REPLACE TEMPORARY VIEW timetypes
@@ -199,7 +189,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       + "1.0000000000000002220446049250313080847263336181640625, "
       + "1.00000011920928955078125, "
       + "123456789012345.543215432154321)").executeUpdate()
-
+    
     sql(
       s"""
         |CREATE OR REPLACE TEMPORARY VIEW flttypes
@@ -216,7 +206,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     conn.prepareStatement("insert into test.nulltypes values ("
       + "null, null, null, null, null, null, null, null, null, "
       + "null, null, null, null, null, null)").executeUpdate()
-
+    
     sql(
       s"""
          |CREATE OR REPLACE TEMPORARY VIEW nulltypes
@@ -228,16 +218,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       "create table test.emp(name TEXT(32) NOT NULL," +
         " theid INTEGER, \"Dept\" INTEGER)").executeUpdate()
 
-    conn
-      .prepareStatement("insert into test.emp values " +
-        "('fred', 1, 10), ('mary', 2, null), ('joe ''foo'' \"bar\"', 3, 30), ('kathy', null, null)")
-      .executeUpdate()
-
     conn.prepareStatement(
       "create table test.seq(id INTEGER)").executeUpdate()
-
-    val seqValues = (0 to 6).map(value => s"($value)").mkString(", ") + ", (null)"
-    conn.prepareStatement(s"insert into test.seq values $seqValues").executeUpdate()
 
     sql(
       s"""
@@ -250,9 +232,6 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     conn.prepareStatement(
       """create table test."mixedCaseCols" ("Name" TEXT(32), "Id" INTEGER NOT NULL)""")
       .executeUpdate()
-
-    conn.prepareStatement("""insert into test."mixedCaseCols" values """ +
-      """('fred', 1), ('mary', 2), (null, 3)""").executeUpdate()
 
     sql(
       s"""
@@ -267,18 +246,47 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
     conn.prepareStatement("CREATE TABLE test.datetime (d DATE, t TIMESTAMP)").executeUpdate()
 
-    conn.prepareStatement("INSERT INTO test.datetime VALUES " +
-      "('2018-07-06', '2018-07-06 05:50:00.0'), " +
-      "('2018-07-06', '2018-07-06 08:10:08.0'), " +
-      "('2018-07-08', '2018-07-08 13:32:01.0'), " +
-      "('2018-07-12', '2018-07-12 09:51:15.0')").executeUpdate()
-
     conn.prepareStatement(
       "CREATE TABLE test.composite_name (`last name` TEXT(32) NOT NULL, id INTEGER NOT NULL)")
       .executeUpdate()
 
-    conn.prepareStatement("INSERT INTO test.composite_name VALUES " +
-      "('smith', 1), ('jones', 2)").executeUpdate()
+    val batchStmt = conn.createStatement()
+
+    batchStmt.addBatch("insert into test.people values ('fred', 1)")
+    batchStmt.addBatch("insert into test.people values ('mary', 2)")
+    batchStmt.addBatch("insert into test.people values ('joe ''foo'' \"bar\"', 3)")
+
+    batchStmt.addBatch("insert into test.inttypes values (1, false, 3, 4, 1234567890123)")
+    batchStmt.addBatch("insert into test.inttypes values (null, null, null, null, null)")
+
+    batchStmt.addBatch("insert into test.timetypes values " +
+      "('12:34:56', '1996-01-01', '2002-02-20 11:22:33.543543543')")
+    batchStmt.addBatch("insert into test.timetypes values " +
+      "('12:34:56', null, '2002-02-20 11:22:33.543543543')")
+
+    batchStmt.addBatch("insert into test.emp values ('fred', 1, 10)")
+    batchStmt.addBatch("insert into test.emp values ('mary', 2, null)")
+    batchStmt.addBatch("insert into test.emp values ('joe ''foo'' \"bar\"', 3, 30)")
+    batchStmt.addBatch("insert into test.emp values ('kathy', null, null)")
+
+    (0 to 6).foreach { value =>
+      batchStmt.addBatch(s"insert into test.seq values ($value)")
+    }
+    batchStmt.addBatch("insert into test.seq values (null)")
+
+    batchStmt.addBatch("""insert into test."mixedCaseCols" values ('fred', 1)""")
+    batchStmt.addBatch("""insert into test."mixedCaseCols" values ('mary', 2)""")
+    batchStmt.addBatch("""insert into test."mixedCaseCols" values (null, 3)""")
+
+    batchStmt.addBatch("INSERT INTO test.datetime VALUES ('2018-07-06', '2018-07-06 05:50:00.0')")
+    batchStmt.addBatch("INSERT INTO test.datetime VALUES ('2018-07-06', '2018-07-06 08:10:08.0')")
+    batchStmt.addBatch("INSERT INTO test.datetime VALUES ('2018-07-08', '2018-07-08 13:32:01.0')")
+    batchStmt.addBatch("INSERT INTO test.datetime VALUES ('2018-07-12', '2018-07-12 09:51:15.0')")
+
+    batchStmt.addBatch("INSERT INTO test.composite_name VALUES ('smith', 1)")
+    batchStmt.addBatch("INSERT INTO test.composite_name VALUES ('jones', 2)")
+
+    batchStmt.executeBatch()
 
     sql(
       s"""
