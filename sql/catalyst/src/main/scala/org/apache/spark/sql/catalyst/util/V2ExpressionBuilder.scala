@@ -84,15 +84,15 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     case _ => false
   }
 
-  private def translateLiteral(l: Literal): Option[V2Expression] = l match {
-    case Literal(true, BooleanType) => Some(new AlwaysTrue())
-    case Literal(false, BooleanType) => Some(new AlwaysFalse())
-    case other => Some(LiteralValue(other.value, other.dataType))
+  private def translateLiteral(l: Literal): V2Expression = l match {
+    case Literal(true, BooleanType) => new AlwaysTrue()
+    case Literal(false, BooleanType) => new AlwaysFalse()
+    case other => LiteralValue(other.value, other.dataType)
   }
 
   private def generateExpression(
       expr: Expression, isPredicate: Boolean = false): Option[V2Expression] = expr match {
-    case literal: Literal => translateLiteral(literal)
+    case literal: Literal => Some(translateLiteral(literal))
     case _ if expr.contextIndependentFoldable =>
       // If the expression is context independent foldable, we can convert it to a literal.
       // This is useful for increasing the coverage of V2 expressions.
