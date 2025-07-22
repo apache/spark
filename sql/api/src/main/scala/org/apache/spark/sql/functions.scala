@@ -5706,6 +5706,7 @@ object functions {
    *   A string to be parsed to time.
    * @return
    *   A time, or raises an error if the input is malformed.
+   *
    * @group datetime_funcs
    * @since 4.1.0
    */
@@ -5725,6 +5726,7 @@ object functions {
    *   A time format pattern to follow.
    * @return
    *   A time, or raises an error if the input is malformed.
+   *
    * @group datetime_funcs
    * @since 4.1.0
    */
@@ -5771,6 +5773,7 @@ object functions {
    *   A string to be parsed to time.
    * @return
    *   A time, or null if the input is malformed.
+   *
    * @group datetime_funcs
    * @since 4.1.0
    */
@@ -5790,6 +5793,7 @@ object functions {
    *   A time format pattern to follow.
    * @return
    *   A time, or null if the input is malformed.
+   *
    * @group datetime_funcs
    * @since 4.1.0
    */
