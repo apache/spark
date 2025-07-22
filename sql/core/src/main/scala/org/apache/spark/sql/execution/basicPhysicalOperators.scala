@@ -699,6 +699,18 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
     }
   }
 
+  private lazy val childrenRDDs = children.map(_.execute())
+
+  override def outputPartitioning: Partitioning = {
+    val nonEmptyRdds = childrenRDDs.filter(!_.partitions.isEmpty)
+    if (sparkContext.isPartitionerAwareUnion(nonEmptyRdds)) {
+      // `isPartitionerAwareUnion` ensures that at least one child is non-empty.
+      children.head.outputPartitioning
+    } else {
+      super.outputPartitioning
+    }
+  }
+
   protected override def doExecute(): RDD[InternalRow] =
     sparkContext.union(children.map(_.execute()))
 
