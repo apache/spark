@@ -209,8 +209,7 @@ case class AQEShuffleReadExec private(
       val numCoalescedPartitionsMetric = metrics("numCoalescedPartitions")
       val x = partitionSpecs.count(isCoalescedSpec)
       numCoalescedPartitionsMetric.set(x)
-      driverAccumUpdates ++= Seq(numCoalescedPartitionsMetric.id ->
-        partitionSpecs.count(isCoalescedSpec))
+      driverAccumUpdates ++= Seq(numCoalescedPartitionsMetric.id -> x)
     }
 
     partitionDataSizes.foreach { dataSizes =>
