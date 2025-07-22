@@ -158,6 +158,7 @@ abstract class AbstractCommandBuilder {
         "common/sketch",
         "common/tags",
         "common/unsafe",
+        "sql/connect/client/jdbc",
         "sql/connect/common",
         "sql/connect/server",
         "core",

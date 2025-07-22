@@ -53,8 +53,8 @@ object BuildCommons {
   val streamingProjects@Seq(streaming, streamingKafka010) =
     Seq("streaming", "streaming-kafka-0-10").map(ProjectRef(buildLocation, _))
 
-  val connectProjects@Seq(connectCommon, connect, connectClient, connectShims) =
-    Seq("connect-common", "connect", "connect-client-jvm", "connect-shims")
+  val connectProjects@Seq(connectCommon, connect, connectJdbc, connectClient, connectShims) =
+    Seq("connect-common", "connect", "connect-jdbc", "connect-client-jvm", "connect-shims")
       .map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
@@ -447,6 +447,7 @@ object SparkBuild extends PomBuild {
 
   enable(SparkConnectCommon.settings)(connectCommon)
   enable(SparkConnect.settings)(connect)
+  enable(SparkConnectJdbc.settings)(connectJdbc)
   enable(SparkConnectClient.settings)(connectClient)
 
   /* Protobuf settings */
@@ -833,6 +834,93 @@ object SparkConnect {
   )
 }
 
+object SparkConnectJdbc {
+  import BuildCommons.protoVersion
+  val buildTestDeps = TaskKey[Unit]("buildTestDeps", "Build needed dependencies for test.")
+
+  lazy val settings = Seq(
+    // For some reason the resolution from the imported Maven build does not work for some
+    // of these dependendencies that we need to shade later on.
+    libraryDependencies ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
+      Seq(
+        "com.google.guava" % "guava" % guavaVersion,
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
+      )
+    },
+    dependencyOverrides ++= {
+      val guavaVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "connect.guava.version").asInstanceOf[String]
+      Seq(
+        "com.google.guava" % "guava" % guavaVersion,
+        "com.google.protobuf" % "protobuf-java" % protoVersion
+      )
+    },
+
+    buildTestDeps := {
+      (LocalProject("assembly") / Compile / Keys.`package`).value
+      (LocalProject("catalyst") / Test / Keys.`package`).value
+    },
+
+    // SPARK-42538: Make sure the `${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars` is available for testing.
+    // At the same time, the build of `connect`, `connect-client-jvm` and `sql` will be triggered by `assembly` build,
+    // so no additional configuration is required.
+    test := ((Test / test) dependsOn (buildTestDeps)).value,
+
+    testOnly := ((Test / testOnly) dependsOn (buildTestDeps)).evaluated,
+
+    (Test / javaOptions) += "-Darrow.memory.debug.allocator=true",
+
+    (assembly / test) := { },
+
+    (assembly / logLevel) := Level.Info,
+
+    // Exclude `scala-library` from assembly.
+    (assembly / assemblyPackageScala / assembleArtifact) := false,
+
+    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`,`jsr305-*.jar` and
+    // `netty-*.jar` and `unused-1.0.0.jar` from assembly.
+    (assembly / assemblyExcludedJars) := {
+      val cp = (assembly / fullClasspath).value
+      cp filter { v =>
+        val name = v.data.getName
+        name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
+          name.startsWith("jsr305-") || name == "unused-1.0.0.jar"
+      }
+    },
+    // Only include `spark-connect-jdbc-*.jar`
+    // This needs to be consistent with the content of `maven-shade-plugin`.
+    (assembly / assemblyExcludedJars) := {
+      val cp = (assembly / fullClasspath).value
+      val validPrefixes = Set("spark-connect-jdbc")
+      cp filterNot { v =>
+        validPrefixes.exists(v.data.getName.startsWith)
+      }
+    },
+
+    (assembly / assemblyShadeRules) := Seq(
+      ShadeRule.rename("io.grpc.**" -> "org.sparkproject.connect.client.io.grpc.@1").inAll,
+      ShadeRule.rename("com.google.**" -> "org.sparkproject.connect.client.com.google.@1").inAll,
+      ShadeRule.rename("io.netty.**" -> "org.sparkproject.connect.client.io.netty.@1").inAll,
+      ShadeRule.rename("org.checkerframework.**" -> "org.sparkproject.connect.client.org.checkerframework.@1").inAll,
+      ShadeRule.rename("javax.annotation.**" -> "org.sparkproject.connect.client.javax.annotation.@1").inAll,
+      ShadeRule.rename("io.perfmark.**" -> "org.sparkproject.connect.client.io.perfmark.@1").inAll,
+      ShadeRule.rename("org.codehaus.**" -> "org.sparkproject.connect.client.org.codehaus.@1").inAll,
+      ShadeRule.rename("android.annotation.**" -> "org.sparkproject.connect.client.android.annotation.@1").inAll
+    ),
+
+    (assembly / assemblyMergeStrategy) := {
+      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
+      // Drop all proto files that are not needed as artifacts of the build.
+      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
+      case _ => MergeStrategy.first
+    }
+  )
+}
+
 object SparkConnectClient {
   import BuildCommons.protoVersion
   val buildTestDeps = TaskKey[Unit]("buildTestDeps", "Build needed dependencies for test.")
@@ -1115,7 +1203,7 @@ object ExcludedDependencies {
  * client dependencies.
  */
 object ExcludeShims {
-  val shimmedProjects = Set("spark-sql-api", "spark-connect-common", "spark-connect-client-jvm")
+  val shimmedProjects = Set("spark-sql-api", "spark-connect-common", "spark-connect-client-jvm", "spark-connect-jdbc")
   val classPathFilter = TaskKey[Classpath => Classpath]("filter for classpath")
   lazy val settings = Seq(
     classPathFilter := {
@@ -1505,12 +1593,12 @@ object Unidoc {
     ),
     (ScalaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient,
-        connectShims, protobuf, profiler),
+        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectJdbc,
+        connectClient, connectShims, protobuf, profiler),
     (JavaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
-        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectClient,
-        connectShims, protobuf, profiler),
+        yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectJdbc,
+        connectClient, connectShims, protobuf, profiler),
   )
 }
 
@@ -1563,6 +1651,8 @@ object CopyDependencies {
             // Do not place Spark Connect client jars as it is not built-in.
           } else if (noProvidedSparkJars && jar.getName.contains("spark-avro")) {
             // Do not place Spark Avro jars as it is not built-in.
+          } else if (jar.getName.contains("spark-connect-jdbc")) {
+            Files.copy(jar.toPath(), destJar.toPath())
           } else if (jar.getName.contains("spark-connect")) {
             Files.copy(fid.toPath, destJar.toPath)
           } else if (jar.getName.contains("spark-protobuf")) {
