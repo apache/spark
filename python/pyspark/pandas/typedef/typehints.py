@@ -362,9 +362,9 @@ def infer_pd_series_spark_type(
     if dtype == np.dtype("object"):
         if len(pser) == 0 or pser.isnull().all():
             return types.NullType()
-        first_idx = pser.first_valid_index()
-        if first_idx is not None and hasattr(pser.loc[first_idx], "__UDT__"):
-            return pser.loc[first_idx].__UDT__
+        notnull = pser[pser.notnull()]
+        if hasattr(notnull.iloc[0], "__UDT__"):
+            return notnull.iloc[0].__UDT__
         else:
             return from_arrow_type(pa.Array.from_pandas(pser).type, prefer_timestamp_ntz)
     elif isinstance(dtype, CategoricalDtype):
