@@ -150,6 +150,9 @@ case class CreateSQLFunctionCommand(
           Project(outputAlias, inputPlan)
         }
 
+        // Check cyclic function reference before running the analyzer.
+        checkCyclicFunctionReference(catalog, name, plan)
+
         // Check the function body can be analyzed correctly.
         val analyzed = analyzer.execute(plan)
         val (resolved, resolvedReturnType) = analyzed match {
@@ -172,6 +175,8 @@ case class CreateSQLFunctionCommand(
         if (query.isEmpty) {
           throw UserDefinedFunctionErrors.bodyIsNotAQueryForSqlTableUdf(name.funcName)
         }
+        // Check cyclic function reference before running the analyzer.
+        checkCyclicFunctionReference(catalog, name, query.get)
 
         // Construct a lateral join to analyze the function body.
         val plan = LateralJoin(inputPlan, LateralSubquery(query.get), Inner, None)
@@ -365,6 +370,64 @@ case class CreateSQLFunctionCommand(
           routineName = name.asMultipart, varName = varName)
       }
     }
+  }
+
+    /**
+   * Check if the given plan contains cyclic function references.
+   */
+  private def checkCyclicFunctionReference(
+      catalog: SessionCatalog,
+      identifier: FunctionIdentifier,
+      plan: LogicalPlan): Unit = {
+
+    def checkPlan(plan: LogicalPlan, path: Seq[FunctionIdentifier]): Unit = {
+      plan.foreach {
+        case u @ UnresolvedTableValuedFunction(nameParts, arguments, _) =>
+          val funcId = nameParts.asFunctionIdentifier
+          val info = catalog.lookupFunctionInfo(funcId)
+          if (isSQLFunction(info.getClassName)) {
+            val f = withPosition(u) {
+              catalog.lookupTableFunction(funcId, arguments).asInstanceOf[SQLTableFunction]
+            }
+            // Check cyclic reference using qualified function names.
+            val newPath = path :+ f.function.name
+            if (f.function.name.sameIdentifier(name)) {
+              throw UserDefinedFunctionErrors.cyclicFunctionReference(newPath.mkString(" -> "))
+            }
+            val plan = catalog.makeSQLTableFunctionPlan(f.name, f.function, f.inputs, f.output)
+            checkPlan(plan, newPath)
+        }
+        case p: LogicalPlan =>
+          p.expressions.foreach(checkExpression(_, path))
+      }
+    }
+
+    def checkExpression(expression: Expression, path: Seq[FunctionIdentifier]): Unit = {
+      expression.foreach {
+        case SubqueryExpression(plan) => checkPlan(plan, path)
+        case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _) =>
+          val funcId = nameParts.asFunctionIdentifier
+          val info = catalog.lookupFunctionInfo(funcId)
+          if (isSQLFunction(info.getClassName)) {
+            val f = withPosition(u) {
+              catalog.lookupFunction(funcId, arguments).asInstanceOf[SQLFunctionExpression]
+            }
+            // Check cyclic reference using qualified function names.
+            val newPath = path :+ f.function.name
+            if (f.function.name.sameIdentifier(name)) {
+              throw UserDefinedFunctionErrors.cyclicFunctionReference(newPath.mkString(" -> "))
+            }
+            val plan = catalog.makeSQLFunctionPlan(f.name, f.function, f.inputs)
+            checkPlan(plan, newPath)
+          }
+        case _ =>
+      }
+    }
+
+    // Normalize the catalog name `spark_catalog` to `hive_metastore` before checking
+    // cyclic function references. Function identifiers fetched from function registries
+    // will already have the catalog name normalized.
+    checkPlan(plan, Seq(identifier))
   }
 
   /**
