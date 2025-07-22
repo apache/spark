@@ -407,7 +407,6 @@ def create_streaming_table(
     name: str,
     *,
     comment: Optional[str] = None,
-    spark_conf: Optional[Dict[str, str]] = None,
     table_properties: Optional[Dict[str, str]] = None,
     partition_cols: Optional[List[str]] = None,
     schema: Optional[Union[StructType, str]] = None,
@@ -421,9 +420,6 @@ def create_streaming_table(
 
     :param name: The name of the table.
     :param comment: Description of the table.
-    :param spark_conf: A dict whose keys are the conf names and values are the conf values. \
-        These confs will be set when the query for the dataset is executed and they can override \
-        confs set for the pipeline or on the cluster.
     :param table_properties: A dict where the keys are the property names and the values are the \
         property values. These properties will be set on the table.
     :param partition_cols: A list containing the column names of the partition columns.
