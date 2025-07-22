@@ -322,14 +322,13 @@ class SqlScriptingLabelContext {
    */
   private def assertIdentifierNotInSeenLabels(
     identifierCtx: Option[MultipartIdentifierContext]): Unit = {
-    val identifierName = identifierCtx.map(_.getText)
-
     identifierCtx.foreach { ctx =>
       val identifierName = ctx.getText
-      if(seenLabels.contains(identifierName.toLowerCase(Locale.ROOT))) {
-      withOrigin(ctx) {
-        throw SqlScriptingErrors
-          .forVariableNameAlreadyExistsAsLabelInScope(CurrentOrigin.get, identifierName)
+      if (seenLabels.contains(identifierName.toLowerCase(Locale.ROOT))) {
+        withOrigin(ctx) {
+          throw SqlScriptingErrors
+            .duplicateLabels(CurrentOrigin.get, identifierName)
+        }
       }
     }
   }
@@ -384,11 +383,16 @@ class SqlScriptingLabelContext {
    * Then, if the for loop variable is defined, it will be added to seenLabels.
    */
   def enterForScope(identifierCtx: Option[MultipartIdentifierContext]): Unit = {
-    val identifierName = identifierCtx.map(_.getText)
-
-    if(identifierName.isDefined) {
+    identifierCtx.foreach { ctx =>
+      val identifierName = ctx.getText
       assertIdentifierNotInSeenLabels(identifierCtx)
-      seenLabels.add(identifierName.get.toLowerCase(Locale.ROOT))
+      seenLabels.add(identifierName.toLowerCase(Locale.ROOT))
+
+      if (SqlScriptingLabelContext.isForbiddenLabelName(identifierName)) {
+        withOrigin(ctx) {
+          throw SqlScriptingErrors.labelNameForbidden(CurrentOrigin.get, identifierName)
+        }
+      }
     }
   }
 
@@ -397,10 +401,9 @@ class SqlScriptingLabelContext {
    * If the for loop variable is defined, it will be removed from seenLabels.
    */
   def exitForScope(identifierCtx: Option[MultipartIdentifierContext]): Unit = {
-    val identifierName = identifierCtx.map(_.getText)
-
-    if(identifierName.isDefined) {
-      seenLabels.remove(identifierName.get.toLowerCase(Locale.ROOT))
+    identifierCtx.foreach { ctx =>
+      val identifierName = ctx.getText
+      seenLabels.remove(identifierName.toLowerCase(Locale.ROOT))
     }
   }
 

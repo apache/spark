@@ -565,8 +565,8 @@ class AstBuilder extends DataTypeAstBuilder
       parsingCtx,
       isScope = false
     )
-    parsingCtx.labelContext.exitLabeledScope(Option(ctx.beginLabel()))
     parsingCtx.labelContext.exitForScope(Option(ctx.multipartIdentifier()))
+    parsingCtx.labelContext.exitLabeledScope(Option(ctx.beginLabel()))
 
     ForStatement(query, varName, body, Some(labelText))
   }
