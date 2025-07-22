@@ -34,6 +34,10 @@ private[spark] trait SparkStringUtils {
     s"[${SPACE_DELIMITED_UPPERCASE_HEX.formatHex(bytes)}]"
   }
 
+  def fromHexString(hex: String): Array[Byte] = {
+    SPACE_DELIMITED_UPPERCASE_HEX.parseHex(hex.stripPrefix("[").stripSuffix("]"))
+  }
+
   def sideBySide(left: String, right: String): Seq[String] = {
     sideBySide(left.split("\n").toImmutableArraySeq, right.split("\n").toImmutableArraySeq)
   }
