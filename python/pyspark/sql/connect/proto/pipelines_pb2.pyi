@@ -438,6 +438,7 @@ class PipelineCommand(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
             """SQL configurations set when running this flow."""
+
         def __init__(
             self,
             *,
