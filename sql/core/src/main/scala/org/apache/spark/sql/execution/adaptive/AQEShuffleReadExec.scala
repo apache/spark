@@ -224,7 +224,9 @@ case class AQEShuffleReadExec private(
 
   @transient override lazy val metrics: Map[String, SQLMetric] = {
     if (shuffleStage.isDefined) {
-      Map("numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions")) ++ {
+      Map("numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions"),
+        "numEmptyPartitions" ->
+          SQLMetrics.createMetric(sparkContext, "number of empty partitions")) ++ {
         if (isLocalRead) {
           // We split the mapper partition evenly when creating local shuffle read, so no
           // data size info is available.
@@ -245,9 +247,7 @@ case class AQEShuffleReadExec private(
       } ++ {
         if (hasCoalescedPartition) {
           Map("numCoalescedPartitions" ->
-            SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"),
-            "numEmptyPartitions" ->
-              SQLMetrics.createMetric(sparkContext, "number of empty partitions"))
+            SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"))
         } else {
           Map.empty
         }
