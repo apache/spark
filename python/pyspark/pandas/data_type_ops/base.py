@@ -52,6 +52,7 @@ from pyspark.pandas.typedef.typehints import (
     extension_float_dtypes_available,
     extension_object_dtypes_available,
     spark_type_to_pandas_dtype,
+    as_spark_type,
 )
 from pyspark.pandas.utils import is_ansi_mode_enabled
 
@@ -520,6 +521,12 @@ class DataTypeOps(object, metaclass=ABCMeta):
             return first_series(DataFrame(internal))
         else:
             from pyspark.pandas.base import column_op
+
+            if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession):
+                if _is_boolean_type(left):
+                    left = transform_boolean_operand_to_numeric(
+                        left, spark_type=as_spark_type(right.dtype)
+                    )
 
             return column_op(PySparkColumn.__eq__)(left, right)
 
