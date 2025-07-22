@@ -186,9 +186,11 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       conn.prepareStatement("INSERT INTO \"test\".\"dept\" VALUES " +
         "(1, 1), (2, 1)").executeUpdate()
 
+      // scalastyle:off
       conn
         .prepareStatement("CREATE TABLE \"test\".\"person\" (\"名\" INTEGER NOT NULL)")
         .executeUpdate()
+      // scalastyle:on
 
       conn.prepareStatement("INSERT INTO \"test\".\"person\" VALUES (1), (2)").executeUpdate()
 
