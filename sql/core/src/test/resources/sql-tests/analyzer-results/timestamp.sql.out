@@ -291,6 +291,30 @@ SELECT make_timestamp(NULL, NULL, NULL)
 
 
 -- !query
+SELECT make_timestamp(timestamp '2018-11-17 13:33:33', TIME'0:0:0', 'CET')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"DATE\"",
+    "sqlExpr" : "\"make_timestamp(TIMESTAMP '2018-11-17 13:33:33', TIME '00:00:00', CET)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 74,
+    "fragment" : "make_timestamp(timestamp '2018-11-17 13:33:33', TIME'0:0:0', 'CET')"
+  } ]
+}
+
+
+-- !query
 select TIMESTAMP_SECONDS(1230219000),TIMESTAMP_SECONDS(-1230219000),TIMESTAMP_SECONDS(null)
 -- !query analysis
 Project [timestamp_seconds(1230219000) AS timestamp_seconds(1230219000)#x, timestamp_seconds(-1230219000) AS timestamp_seconds(-1230219000)#x, timestamp_seconds(null) AS timestamp_seconds(NULL)#x]

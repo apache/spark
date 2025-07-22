@@ -839,10 +839,10 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Makes a timestamp without time zone from a date and a local time.
    *
-   * @param days The number of days since the epoch. 1970-01-01.
+   * @param days The number of days since the epoch 1970-01-01.
    *             Negative numbers represent earlier days.
    * @param nanos The number of nanoseconds within the day since the midnight.
-   * @return The number of microseconds since the epoch of 1970-01-01 00:00:00Z.
+   * @return The number of microseconds since the epoch 1970-01-01 00:00:00Z.
    */
   def makeTimestampNTZ(days: Int, nanos: Long): Long = {
     localDateTimeToMicros(LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos)))
@@ -851,11 +851,11 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Makes a timestamp from a date and a local time.
    *
-   * @param days The number of days since the epoch. 1970-01-01.
+   * @param days The number of days since the epoch 1970-01-01.
    *             Negative numbers represent earlier days.
    * @param nanos The number of nanoseconds within the day since the midnight.
    * @param zoneId The time zone ID at which the operation is performed.
-   * @return The number of microseconds since the epoch of 1970-01-01 00:00:00Z.
+   * @return The number of microseconds since the epoch 1970-01-01 00:00:00Z.
    */
   def makeTimestamp(days: Int, nanos: Long, zoneId: ZoneId): Long = {
     val ldt = LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos))
@@ -865,11 +865,11 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Makes a timestamp from a date and a local time with timezone string.
    *
-   * @param days The number of days since the epoch. 1970-01-01.
+   * @param days The number of days since the epoch 1970-01-01.
    *             Negative numbers represent earlier days.
    * @param nanos The number of nanoseconds within the day since the midnight.
    * @param timezone The time zone string.
-   * @return The number of microseconds since the epoch of 1970-01-01 00:00:00Z.
+   * @return The number of microseconds since the epoch 1970-01-01 00:00:00Z.
    */
   def makeTimestamp(days: Int, nanos: Long, timezone: UTF8String): Long = {
     val zoneId = getZoneId(timezone.toString)

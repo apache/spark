@@ -3090,7 +3090,7 @@ case class TryMakeTimestamp(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(date [, time [, timezone]]) - Create timestamp from date and time fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.
+    _FUNC_(date[, time[, timezone]]) - Create timestamp from date and time fields.
     """,
   arguments = """
     Arguments:
@@ -3165,7 +3165,7 @@ case class MakeTimestampFromDateTime(
   usage = """
     _FUNC_(year, month, day, hour, min, sec[, timezone]) - Create the current timestamp with local time zone from year, month, day, hour, min, sec and timezone fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.
 
-    _FUNC_(date [, time [, timezone]]) - Create timestamp from date and time fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.
+    _FUNC_(date[, time[, timezone]]) - Create timestamp from date and time fields.
     """,
   arguments = """
     Arguments:
