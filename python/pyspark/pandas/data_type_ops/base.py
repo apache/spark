@@ -417,16 +417,14 @@ class DataTypeOps(object, metaclass=ABCMeta):
         raise TypeError(">= can not be applied to %s." % self.pretty_name)
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.internal import InternalField
-
         if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession):
             if _should_return_all_false(left, right):
-                return left._with_new_scol(F.lit(False))
+                return left._with_new_scol(F.lit(False)).rename(None)
 
         if isinstance(right, (list, tuple)):
             from pyspark.pandas.series import first_series, scol_for
             from pyspark.pandas.frame import DataFrame
-            from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME
+            from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, InternalField
 
             if len(left) != len(right):
                 raise ValueError("Lengths must be equal")
