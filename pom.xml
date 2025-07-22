@@ -2630,8 +2630,7 @@
                     <version>${maven.version}</version>
                   </requireMavenVersion>
                   <requireJavaVersion>
-                    <version>[${java.minimum.version},)</version>
-                    <message>The Java version used to build the project is outdated. Please use ${java.minimum.version} or later.</message>
+                    <version>${java.version}</version>
                   </requireJavaVersion>
                   <bannedDependencies>
                     <excludes>
