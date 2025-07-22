@@ -18,8 +18,9 @@
 package org.apache.spark.util.sketch;
 
 import org.junit.jupiter.api.*;
-import org.junitpioneer.jupiter.cartesian.CartesianTest;
-import org.junitpioneer.jupiter.cartesian.CartesianTest.Values;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.PrintStream;
 import java.nio.file.Files;
@@ -30,6 +31,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.stream.LongStream;
+import java.util.stream.Stream;
 
 
 public class SparkBloomFilterSuite {
@@ -97,6 +99,19 @@ public class SparkBloomFilterSuite {
     testOut.close();
   }
 
+  private static Stream<Arguments> dataPointProvider() {
+    // temporary workaround:
+    //   to reduce running time to acceptable levels, we test only one case,
+    //   with the default FPP and the default seed only.
+    return Stream.of(
+      Arguments.of(1_000_000_000L, 0.03, BloomFilterImplV2.DEFAULT_SEED)
+    );
+    // preferable minimum parameter space for tests:
+    //   {1_000_000L, 1_000_000_000L}           for: long numItems
+    //   {0.05, 0.03, 0.01, 0.001}              for: double expectedFpp
+    //   {BloomFilterImpl.DEFAULT_SEED, 1, 127} for: int deterministicSeed
+  }
+
   /**
    * This test, in N number of iterations, inserts N even numbers (2*i) int,
    * and leaves out N odd numbers (2*i+1) from the tested BloomFilter instance.
@@ -109,18 +124,12 @@ public class SparkBloomFilterSuite {
    * @param deterministicSeed the deterministic seed to use to initialize
    *                          the primary BloomFilter instance.
    */
-  @CartesianTest(name = "testAccuracyEvenOdd_{index}.n{0}_fpp{1}_seed{2}")
+  @ParameterizedTest(name = "testAccuracyEvenOdd.n{0}_fpp{1}_seed{2}")
+  @MethodSource("dataPointProvider")
   public void testAccuracyEvenOdd(
-    // temporary workaround:
-    //   to reduce running time to acceptable levels, we test only one case,
-    //   with the default FPP and the default seed only.
-    @Values(longs = {1_000_000_000L}) long numItems,
-    @Values(doubles = {0.03}) double expectedFpp,
-    @Values(ints = {BloomFilterImplV2.DEFAULT_SEED}) int deterministicSeed,
-    // preferable minimum parameter space for tests:
-    //   @Values(longs = {1_000_000L, 1_000_000_000L}) long numItems,
-    //   @Values(doubles = {0.05, 0.03, 0.01, 0.001}) double expectedFpp,
-    //   @Values(ints = {BloomFilterImpl.DEFAULT_SEED, 1, 127}) int deterministicSeed,
+    long numItems,
+    double expectedFpp,
+    int deterministicSeed,
     TestInfo testInfo
   ) {
     String testName = testInfo.getDisplayName();
@@ -236,18 +245,12 @@ public class SparkBloomFilterSuite {
    *                          the primary BloomFilter instance. (The secondary will be
    *                          initialized with the constant seed of 0xCAFEBABE)
    */
-  @CartesianTest(name = "testAccuracyRandom_{index}.n{0}_fpp{1}_seed{2}")
+  @ParameterizedTest(name = "testAccuracyRandom.n{0}_fpp{1}_seed{2}")
+  @MethodSource("dataPointProvider")
   public void testAccuracyRandomDistribution(
-    // temporary workaround:
-    //   to reduce running time to acceptable levels, we test only one case,
-    //   with the default FPP and the default seed only.
-    @Values(longs = {1_000_000_000L}) long numItems,
-    @Values(doubles = {0.03}) double expectedFpp,
-    @Values(ints = {BloomFilterImplV2.DEFAULT_SEED}) int deterministicSeed,
-    // preferable minimum parameter space for tests:
-    //   @Values(longs = {1_000_000L, 1_000_000_000L}) long numItems,
-    //   @Values(doubles = {0.05, 0.03, 0.01, 0.001}) double expectedFpp,
-    //   @Values(ints = {BloomFilterImpl.DEFAULT_SEED, 1, 127}) int deterministicSeed,
+    long numItems,
+    double expectedFpp,
+    int deterministicSeed,
     TestInfo testInfo
   ) {
     String testName = testInfo.getDisplayName();

@@ -220,7 +220,6 @@
     <icu4j.version>77.1</icu4j.version>
     <junit-jupiter.version>5.13.1</junit-jupiter.version>
     <junit-platform.version>1.13.1</junit-platform.version>
-    <junit-pioneer.version>2.3.0</junit-pioneer.version>
     <!--
       SPARK-50299: When updating `sbt-jupiter-interface.version`,
       also need to update the version in `SparkBuild.scala` and `plugins.sbt`.
@@ -1306,12 +1305,6 @@
         <groupId>com.github.sbt.junit</groupId>
         <artifactId>jupiter-interface</artifactId>
         <version>${sbt-jupiter-interface.version}</version>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.junit-pioneer</groupId>
-        <artifactId>junit-pioneer</artifactId>
-        <version>${junit-pioneer.version}</version>
         <scope>test</scope>
       </dependency>
       <dependency>
