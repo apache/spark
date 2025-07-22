@@ -206,43 +206,51 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
       val batchStmt = conn.createStatement()
 
-      batchStmt.addBatch("INSERT INTO \"test\".\"people\" VALUES ('fred', 1), ('mary', 2)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"people\" VALUES ('fred', 1)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"people\" VALUES ('mary', 2)")
 
-      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES " +
-        "(1, 'amy', 10000, 1000, true), " +
-        "(2, 'alex', 12000, 1200, false), " +
-        "(1, 'cathy', 9000, 1200, false), " +
-        "(2, 'david', 10000, 1300, true), " +
-        "(6, 'jen', 12000, 1200, true)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (1, 'amy', 10000, 1000, true)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (2, 'alex', 12000, 1200, false)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (1, 'cathy', 9000, 1200, false)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (2, 'david', 10000, 1300, true)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (6, 'jen', 12000, 1200, true)")
 
-      batchStmt.addBatch("INSERT INTO \"test\".\"dept\" VALUES (1, 1), (2, 1)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"dept\" VALUES (1, 1)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"dept\" VALUES (2, 1)")
 
-      batchStmt.addBatch("INSERT INTO \"test\".\"person\" VALUES (1), (2)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"person\" VALUES (1)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"person\" VALUES (2)")
 
-      batchStmt.addBatch("INSERT INTO \"test\".\"item\" VALUES " +
-        "(1, 'bottle', 11111111111111111111.123), " +
-        "(1, 'bottle', 99999999999999999999.123)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"item\"" +
+        "VALUES (1, 'bottle', 11111111111111111111.123)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"item\"" +
+        "VALUES (1, 'bottle', 99999999999999999999.123)")
 
-      batchStmt.addBatch("INSERT INTO \"test\".\"datetime\" VALUES " +
-        "('amy', '2022-05-19', '2022-05-19 00:00:00'), " +
-        "('alex', '2022-05-18', '2022-05-18 00:00:00')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"datetime\"" +
+        "VALUES ('amy', '2022-05-19', '2022-05-19 00:00:00')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"datetime\"" +
+        "VALUES ('alex', '2022-05-18', '2022-05-18 00:00:00')")
 
-      batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES " +
-        "('abc_def@gmail.com'), " +
-        "('abc%def@gmail.com'), " +
-        "('abc%_def@gmail.com'), " +
-        "('abc_%def@gmail.com'), " +
-        "('abc_''%def@gmail.com')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc_def@gmail.com')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc%def@gmail.com')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc%_def@gmail.com')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc_%def@gmail.com')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc_''%def@gmail.com')")
 
-      batchStmt.addBatch("INSERT INTO \"test\".\"employee_bonus\" VALUES " +
-        "('amy', 10000, 1000, 0.1), " +
-        "('alex', 12000, 1200, 0.1), " +
-        "('cathy', 8000, 1200, 0.15), " +
-        "('david', 10000, 1300, 0.13), " +
-        "('jen', 12000, 2400, 0.2)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee_bonus\"" +
+        "VALUES ('amy', 10000, 1000, 0.1)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee_bonus\"" +
+        "VALUES ('alex', 12000, 1200, 0.1)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee_bonus\"" +
+        "VALUES ('cathy', 8000, 1200, 0.15)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee_bonus\"" +
+        "VALUES ('david', 10000, 1300, 0.13)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee_bonus\"" +
+        "VALUES ('jen', 12000, 2400, 0.2)")
 
-      batchStmt.addBatch("INSERT INTO \"test\".\"strings_with_nulls\" VALUES " +
-        "('abc'), ('a a a'), (null)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"strings_with_nulls\" VALUES ('abc')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"strings_with_nulls\" VALUES ('a a a')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"strings_with_nulls\" VALUES (null)")
 
       batchStmt.executeBatch()
 
