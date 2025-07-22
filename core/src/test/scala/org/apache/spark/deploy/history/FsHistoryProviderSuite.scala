@@ -1645,7 +1645,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       withTempDir { dir =>
         val conf = createTestConf(true)
         conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
-        conf.set(ON_DEMAND_ENABLED, onDemandEnabled)
+        conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, onDemandEnabled)
         val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
         val provider = new FsHistoryProvider(conf)
 
@@ -1656,9 +1656,14 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
           SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
         writer1.stop()
 
-        assert(provider.getListing().length === 0)
         assert(dir.listFiles().length === 1)
+        assert(provider.getListing().length === 0)
         assert(provider.getAppUI("app1", None).isDefined == onDemandEnabled)
+        assert(provider.getListing().length === (if (onDemandEnabled) 1 else 0))
+
+        assert(dir.listFiles().length === 1)
+        assert(provider.getAppUI("nonexist", None).isEmpty)
+        assert(provider.getListing().length === (if (onDemandEnabled) 1 else 0))
 
         provider.stop()
       }
