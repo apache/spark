@@ -138,7 +138,7 @@ case class CTERelationDef(
         Some(union)
       case SubqueryAlias(_, WithCTE(union: Union, _)) =>
         Some(union)
-      case SubqueryAlias(_, UnresolvedSubqueryColumnAliases(_, WithCTE(_, union: Union))) =>
+      case SubqueryAlias(_, UnresolvedSubqueryColumnAliases(_, WithCTE(union: Union, _))) =>
         Some(union)
       case _ => None
     }
