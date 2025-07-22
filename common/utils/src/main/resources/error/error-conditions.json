@@ -1816,19 +1816,6 @@
     ],
     "sqlState" : "39000"
   },
-  "FOR_VARIABLE_NAME_FORBIDDEN" : {
-    "message": [
-      "Invalid iterator variable name used in a FOR loop."
-    ],
-    "subClass" : {
-      "NAME_ALREADY_IN_USE": {
-        "message": [
-          "Variable name <varName> used in the FOR statement is already used in a parent FOR loop or as a label in the enclosing scope."
-        ]
-      }
-    },
-    "sqlState" : "42734"
-  },
   "FORBIDDEN_OPERATION" : {
     "message" : [
       "The operation <statement> is not allowed on the <objectType>: <objectName>."
