@@ -324,11 +324,12 @@ class SqlScriptingLabelContext {
     identifierCtx: Option[MultipartIdentifierContext]): Unit = {
     val identifierName = identifierCtx.map(_.getText)
 
-    if(identifierName.isDefined
-      && seenLabels.contains(identifierName.get.toLowerCase(Locale.ROOT))) {
-      withOrigin(identifierCtx.get) {
+    identifierCtx.foreach { ctx =>
+      val identifierName = ctx.getText
+      if(seenLabels.contains(identifierName.toLowerCase(Locale.ROOT))) {
+      withOrigin(ctx) {
         throw SqlScriptingErrors
-          .forVariableNameAlreadyExistsAsLabelInScope(CurrentOrigin.get, identifierName.get)
+          .forVariableNameAlreadyExistsAsLabelInScope(CurrentOrigin.get, identifierName)
       }
     }
   }
