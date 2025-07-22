@@ -2107,8 +2107,8 @@ case class ParseToDate(
 
   override lazy val replacement: Expression = withOrigin(origin) {
     format.map { f =>
-      Cast(GetTimestamp(left, f, TimestampType, "try_to_date", timeZoneId, ansiEnabled), DateType,
-        timeZoneId, EvalMode.fromBoolean(ansiEnabled))
+      Cast(GetTimestamp(left, f, TimestampType, "try_to_timestamp", timeZoneId, ansiEnabled),
+        DateType, timeZoneId, EvalMode.fromBoolean(ansiEnabled))
     }.getOrElse(Cast(left, DateType, timeZoneId,
       EvalMode.fromBoolean(ansiEnabled))) // backwards compatibility
   }

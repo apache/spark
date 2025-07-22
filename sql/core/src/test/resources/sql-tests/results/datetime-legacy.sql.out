@@ -207,7 +207,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "func" : "`try_to_date`",
+    "func" : "`try_to_timestamp`",
     "message" : "Unparseable date: \"02-29\""
   }
 }
