@@ -110,6 +110,37 @@ def transform_boolean_operand_to_numeric(
         return operand
 
 
+def _should_return_all_false(left: IndexOpsLike, right: Any) -> bool:
+    """
+    Determine if binary comparison should short-circuit to all False,
+    based on incompatible dtypes.
+
+    This function is used to mimic pandas behavior when comparing operands
+    with non-matching dtypes that cannot be reasonably coerced, such as
+    comparing floats with strings.
+
+    It internally transforms boolean operands to numeric (long) and checks
+    whether both operands are numeric or not. If they are not, and their
+    dtypes differ, the comparison result is considered to be all False.
+    """
+    from pandas.api.types import is_numeric_dtype
+    from pyspark.pandas.base import IndexOpsMixin
+
+    def are_both_numeric(left_dtype, right_dtype) -> bool:
+        return is_numeric_dtype(left_dtype) and is_numeric_dtype(right_dtype)
+
+    left_dtype = left.dtype
+
+    if isinstance(right, (IndexOpsMixin, np.ndarray, pd.Series)):
+        right_dtype = right.dtype
+    elif isinstance(right, (list, tuple)):
+        right_dtype = pd.Series(right).dtype
+    else:
+        right_dtype = pd.Series([right]).dtype
+
+    return left_dtype != right_dtype and not are_both_numeric(left_dtype, right_dtype)
+
+
 def _as_categorical_type(
     index_ops: IndexOpsLike, dtype: CategoricalDtype, spark_type: DataType
 ) -> IndexOpsLike:
@@ -396,6 +427,10 @@ class DataTypeOps(object, metaclass=ABCMeta):
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.internal import InternalField
 
+        if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession):
+            if _should_return_all_false(left, right):
+                return left._with_new_scol(F.lit(False))
+
         if isinstance(right, (list, tuple)):
             from pyspark.pandas.series import first_series, scol_for
             from pyspark.pandas.frame import DataFrame
@@ -485,25 +520,6 @@ class DataTypeOps(object, metaclass=ABCMeta):
             return first_series(DataFrame(internal))
         else:
             from pyspark.pandas.base import column_op
-
-            if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession):
-                from pyspark.pandas.base import IndexOpsMixin
-
-                def are_both_numeric(left_dtype, right_dtype):
-                    return pd.api.types.is_numeric_dtype(
-                        left_dtype
-                    ) and pd.api.types.is_numeric_dtype(right_dtype)
-
-                left = transform_boolean_operand_to_numeric(left, spark_type=LongType())
-                right = transform_boolean_operand_to_numeric(right, spark_type=LongType())
-                left_dtype = left.dtype
-                if isinstance(right, (IndexOpsMixin, np.ndarray)):
-                    right_dtype = right.dtype
-                else:
-                    right_dtype = pd.Series([right]).dtype
-
-                if left_dtype != right_dtype and not are_both_numeric(left_dtype, right_dtype):
-                    return left._with_new_scol(F.lit(False))
 
             return column_op(PySparkColumn.__eq__)(left, right)
 
