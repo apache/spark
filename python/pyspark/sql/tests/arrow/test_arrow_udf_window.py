@@ -17,22 +17,12 @@
 
 import unittest
 
-from pyspark.sql.pandas.functions import arrow_udf, ArrowUDFType, PandasUDFType
+from pyspark.sql.pandas.functions import arrow_udf, ArrowUDFType
 from pyspark.util import PythonEvalType
 from pyspark.sql import Row
-from pyspark.sql.functions import (
-    array,
-    explode,
-    col,
-    lit,
-    mean,
-    min,
-    max,
-    rank,
-    udf,
-)
+from pyspark.sql import functions as sf
 from pyspark.sql.window import Window
-from pyspark.errors import AnalysisException, PythonException
+from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pyarrow,
@@ -47,15 +37,15 @@ class WindowArrowUDFTestsMixin:
         return (
             self.spark.range(10)
             .toDF("id")
-            .withColumn("vs", array([lit(i * 1.0) + col("id") for i in range(20, 30)]))
-            .withColumn("v", explode(col("vs")))
+            .withColumn("vs", sf.array([sf.lit(i * 1.0) + sf.col("id") for i in range(20, 30)]))
+            .withColumn("v", sf.explode(sf.col("vs")))
             .drop("vs")
-            .withColumn("w", lit(1.0))
+            .withColumn("w", sf.lit(1.0))
         )
 
     @property
     def python_plus_one(self):
-        @udf("double")
+        @sf.udf("double")
         def plus_one(v):
             assert isinstance(v, float)
             return v + 1
@@ -163,10 +153,10 @@ class WindowArrowUDFTestsMixin:
         mean_udf = self.arrow_agg_mean_udf
 
         result1 = df.withColumn("mean_v", mean_udf(df["v"]).over(w))
-        expected1 = df.withColumn("mean_v", mean(df["v"]).over(w))
+        expected1 = df.withColumn("mean_v", sf.mean(df["v"]).over(w))
 
         result2 = df.select(mean_udf(df["v"]).over(w))
-        expected2 = df.select(mean(df["v"]).over(w))
+        expected2 = df.select(sf.mean(df["v"]).over(w))
 
         self.assertEqual(expected1.collect(), result1.collect())
         self.assertEqual(expected2.collect(), result2.collect())
@@ -182,9 +172,9 @@ class WindowArrowUDFTestsMixin:
         )
 
         expected1 = (
-            df.withColumn("mean_v", mean(df["v"]).over(w))
-            .withColumn("max_v", max(df["v"]).over(w))
-            .withColumn("min_w", min(df["w"]).over(w))
+            df.withColumn("mean_v", sf.mean(df["v"]).over(w))
+            .withColumn("max_v", sf.max(df["v"]).over(w))
+            .withColumn("min_w", sf.min(df["w"]).over(w))
         )
 
         self.assertEqual(expected1.collect(), result1.collect())
@@ -194,7 +184,7 @@ class WindowArrowUDFTestsMixin:
         w = self.unbounded_window
 
         result1 = df.withColumn("v", self.arrow_agg_mean_udf(df["v"]).over(w))
-        expected1 = df.withColumn("v", mean(df["v"]).over(w))
+        expected1 = df.withColumn("v", sf.mean(df["v"]).over(w))
 
         self.assertEqual(expected1.collect(), result1.collect())
 
@@ -204,7 +194,7 @@ class WindowArrowUDFTestsMixin:
         mean_udf = self.arrow_agg_mean_udf
 
         result1 = df.withColumn("v", mean_udf(df["v"] * 2).over(w) + 1)
-        expected1 = df.withColumn("v", mean(df["v"] * 2).over(w) + 1)
+        expected1 = df.withColumn("v", sf.mean(df["v"] * 2).over(w) + 1)
 
         self.assertEqual(expected1.collect(), result1.collect())
 
@@ -217,10 +207,10 @@ class WindowArrowUDFTestsMixin:
         mean_udf = self.arrow_agg_mean_udf
 
         result1 = df.withColumn("v2", plus_one(mean_udf(plus_one(df["v"])).over(w)))
-        expected1 = df.withColumn("v2", plus_one(mean(plus_one(df["v"])).over(w)))
+        expected1 = df.withColumn("v2", plus_one(sf.mean(plus_one(df["v"])).over(w)))
 
         result2 = df.withColumn("v2", time_two(mean_udf(time_two(df["v"])).over(w)))
-        expected2 = df.withColumn("v2", time_two(mean(time_two(df["v"])).over(w)))
+        expected2 = df.withColumn("v2", time_two(sf.mean(time_two(df["v"])).over(w)))
 
         self.assertEqual(expected1.collect(), result1.collect())
         self.assertEqual(expected2.collect(), result2.collect())
@@ -231,10 +221,10 @@ class WindowArrowUDFTestsMixin:
         mean_udf = self.arrow_agg_mean_udf
 
         result1 = df.withColumn("v2", mean_udf(df["v"]).over(w))
-        expected1 = df.withColumn("v2", mean(df["v"]).over(w))
+        expected1 = df.withColumn("v2", sf.mean(df["v"]).over(w))
 
         result2 = df.select(mean_udf(df["v"]).over(w))
-        expected2 = df.select(mean(df["v"]).over(w))
+        expected2 = df.select(sf.mean(df["v"]).over(w))
 
         self.assertEqual(expected1.collect(), result1.collect())
         self.assertEqual(expected2.collect(), result2.collect())
@@ -247,26 +237,28 @@ class WindowArrowUDFTestsMixin:
         min_udf = self.arrow_agg_min_udf
 
         result1 = df.withColumn("v_diff", max_udf(df["v"]).over(w) - min_udf(df["v"]).over(w))
-        expected1 = df.withColumn("v_diff", max(df["v"]).over(w) - min(df["v"]).over(w))
+        expected1 = df.withColumn("v_diff", sf.max(df["v"]).over(w) - sf.min(df["v"]).over(w))
 
         # Test mixing sql window function and window udf in the same expression
-        result2 = df.withColumn("v_diff", max_udf(df["v"]).over(w) - min(df["v"]).over(w))
+        result2 = df.withColumn("v_diff", max_udf(df["v"]).over(w) - sf.min(df["v"]).over(w))
         expected2 = expected1
 
         # Test chaining sql aggregate function and udf
         result3 = (
             df.withColumn("max_v", max_udf(df["v"]).over(w))
-            .withColumn("min_v", min(df["v"]).over(w))
-            .withColumn("v_diff", col("max_v") - col("min_v"))
+            .withColumn("min_v", sf.min(df["v"]).over(w))
+            .withColumn("v_diff", sf.col("max_v") - sf.col("min_v"))
             .drop("max_v", "min_v")
         )
         expected3 = expected1
 
         # Test mixing sql window function and udf
         result4 = df.withColumn("max_v", max_udf(df["v"]).over(w)).withColumn(
-            "rank", rank().over(ow)
+            "rank", sf.rank().over(ow)
         )
-        expected4 = df.withColumn("max_v", max(df["v"]).over(w)).withColumn("rank", rank().over(ow))
+        expected4 = df.withColumn("max_v", sf.max(df["v"]).over(w)).withColumn(
+            "rank", sf.rank().over(ow)
+        )
 
         self.assertEqual(expected1.collect(), result1.collect())
         self.assertEqual(expected2.collect(), result2.collect())
@@ -281,21 +273,19 @@ class WindowArrowUDFTestsMixin:
         result1 = df.withColumn("v2", array_udf(df["v"]).over(w))
         self.assertEqual(result1.first()["v2"], [1.0, 2.0])
 
-    # def test_invalid_args(self):
-    #     with self.quiet():
-    #         self.check_invalid_args()
-    #
-    # def check_invalid_args(self):
-    #     df = self.data
-    #     w = self.unbounded_window
-    #
-    #     with self.assertRaisesRegex(AnalysisException, ".*not supported within a window function"):
-    #         foo_udf = arrow_udf(lambda x: x, "v double", PandasUDFType.GROUPED_MAP)
-    #         df.withColumn("v2", foo_udf(df["v"]).over(w)).schema
+    def test_invalid_args(self):
+        with self.quiet():
+            self.check_invalid_args()
+
+    def check_invalid_args(self):
+        df = self.data
+        w = self.unbounded_window
+
+        with self.assertRaises(PySparkTypeError):
+            foo_udf = arrow_udf(lambda x: x, "v double", PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF)
+            df.withColumn("v2", foo_udf(df["v"]).over(w)).schema
 
     def test_bounded_simple(self):
-        from pyspark.sql.functions import mean, max, min, count
-
         df = self.data
         w1 = self.sliding_row_window
         w2 = self.shrinking_range_window
@@ -314,17 +304,15 @@ class WindowArrowUDFTestsMixin:
         )
 
         expected1 = (
-            df.withColumn("mean_v", mean(plus_one(df["v"])).over(w1))
-            .withColumn("count_v", count(df["v"]).over(w2))
-            .withColumn("max_v", max(df["v"]).over(w2))
-            .withColumn("min_v", min(df["v"]).over(w1))
+            df.withColumn("mean_v", sf.mean(plus_one(df["v"])).over(w1))
+            .withColumn("count_v", sf.count(df["v"]).over(w2))
+            .withColumn("max_v", sf.max(df["v"]).over(w2))
+            .withColumn("min_v", sf.min(df["v"]).over(w1))
         )
 
         self.assertEqual(expected1.collect(), result1.collect())
 
     def test_growing_window(self):
-        from pyspark.sql.functions import mean
-
         df = self.data
         w1 = self.growing_row_window
         w2 = self.growing_range_window
@@ -335,38 +323,30 @@ class WindowArrowUDFTestsMixin:
             "m2", mean_udf(df["v"]).over(w2)
         )
 
-        expected1 = df.withColumn("m1", mean(df["v"]).over(w1)).withColumn(
-            "m2", mean(df["v"]).over(w2)
+        expected1 = df.withColumn("m1", sf.mean(df["v"]).over(w1)).withColumn(
+            "m2", sf.mean(df["v"]).over(w2)
         )
 
         self.assertEqual(expected1.collect(), result1.collect())
 
     def test_sliding_window(self):
-        from pyspark.sql.functions import mean
-
         df = self.data
         w1 = self.sliding_row_window
         w2 = self.sliding_range_window
 
         mean_udf = self.arrow_agg_mean_udf
 
-        result1 = df.withColumn("m1", mean_udf(df["v"]).over(w1)).sort("id", "v")
+        result1 = df.withColumn("m1", mean_udf(df["v"]).over(w1)).withColumn(
+            "m2", mean_udf(df["v"]).over(w2)
+        )
 
-        expected1 = df.withColumn("m1", mean(df["v"]).over(w1)).sort("id", "v")
-
-        expected1.show()
-
-        print()
-        print()
-        print()
-
-        result1.show()
+        expected1 = df.withColumn("m1", sf.mean(df["v"]).over(w1)).withColumn(
+            "m2", sf.mean(df["v"]).over(w2)
+        )
 
         self.assertEqual(expected1.collect(), result1.collect())
 
     def test_shrinking_window(self):
-        from pyspark.sql.functions import mean
-
         df = self.data
         w1 = self.shrinking_row_window
         w2 = self.shrinking_range_window
@@ -377,15 +357,13 @@ class WindowArrowUDFTestsMixin:
             "m2", mean_udf(df["v"]).over(w2)
         )
 
-        expected1 = df.withColumn("m1", mean(df["v"]).over(w1)).withColumn(
-            "m2", mean(df["v"]).over(w2)
+        expected1 = df.withColumn("m1", sf.mean(df["v"]).over(w1)).withColumn(
+            "m2", sf.mean(df["v"]).over(w2)
         )
 
         self.assertEqual(expected1.collect(), result1.collect())
 
     def test_bounded_mixed(self):
-        from pyspark.sql.functions import mean, max
-
         df = self.data
         w1 = self.sliding_row_window
         w2 = self.unbounded_window
@@ -400,9 +378,9 @@ class WindowArrowUDFTestsMixin:
         )
 
         expected1 = (
-            df.withColumn("mean_v", mean(df["v"]).over(w1))
-            .withColumn("max_v", max(df["v"]).over(w2))
-            .withColumn("mean_unbounded_v", mean(df["v"]).over(w1))
+            df.withColumn("mean_v", sf.mean(df["v"]).over(w1))
+            .withColumn("max_v", sf.max(df["v"]).over(w2))
+            .withColumn("mean_unbounded_v", sf.mean(df["v"]).over(w1))
         )
 
         self.assertEqual(expected1.collect(), result1.collect())
@@ -421,7 +399,7 @@ class WindowArrowUDFTestsMixin:
             ):
                 with self.subTest(bound=bound, query_no=i):
                     self.assertEqual(
-                        windowed.collect(), df.withColumn("wm", mean(df.v).over(w)).collect()
+                        windowed.collect(), df.withColumn("wm", sf.mean(df.v).over(w)).collect()
                     )
 
         with self.tempView("v"):
@@ -521,7 +499,7 @@ class WindowArrowUDFTestsMixin:
             ):
                 with self.subTest(bound=bound, query_no=i):
                     self.assertEqual(
-                        windowed.collect(), df.withColumn("wm", mean(df.v).over(w)).collect()
+                        windowed.collect(), df.withColumn("wm", sf.mean(df.v).over(w)).collect()
                     )
 
         with self.tempView("v"):
