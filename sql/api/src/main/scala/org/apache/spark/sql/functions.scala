@@ -1396,6 +1396,9 @@ object functions {
    * Returns the current time at the start of query evaluation. Note that the result will contain
    * 6 fractional digits of seconds.
    *
+   * @return
+   *   A time.
+   *
    * @group datetime_funcs
    * @since 4.1.0
    */
@@ -1408,7 +1411,10 @@ object functions {
    *
    * @param precision
    *   An integer literal in the range [0..6], indicating how many fractional digits of seconds to
-   *   include in the result
+   *   include in the result.
+   * @return
+   *   A time.
+   *
    * @group datetime_funcs
    * @since 4.1.0
    */
