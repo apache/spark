@@ -1640,7 +1640,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
-  test("SPARK-52914: Support spark.history.fs.update.onDemandEnabled") {
+  test("SPARK-52914: Support spark.history.fs.eventLog.rolling.onDemandLoadEnabled") {
     Seq(true, false).foreach { onDemandEnabled =>
       withTempDir { dir =>
         val conf = createTestConf(true)
