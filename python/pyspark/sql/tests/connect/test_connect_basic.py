@@ -1508,16 +1508,6 @@ class SparkConnectGCTests(SparkConnectSQLTestCase):
 
         eventually(catch_assertions=True)(condition)()
 
-    def test_time_lit(self) -> None:
-        # SPARK-52779: Test TimeType lit
-        ndf = self.connect.range(1).select(CF.lit(datetime.time(12, 13, 14)))
-        df = self.spark.sql("SELECT TIME '12:13:14'")
-
-        self.assert_eq(
-            ndf.toPandas(),
-            df.toPandas(),
-        )
-
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_basic import *  # noqa: F401

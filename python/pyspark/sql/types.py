@@ -372,14 +372,14 @@ class BooleanType(AtomicType, metaclass=DataTypeSingleton):
 class DatetimeType(AtomicType):
     """Super class of all datetime data type."""
 
-    def needConversion(self) -> bool:
-        return True
-
 
 class DateType(DatetimeType, metaclass=DataTypeSingleton):
     """Date (datetime.date) data type."""
 
     EPOCH_ORDINAL = datetime.datetime(1970, 1, 1).toordinal()
+
+    def needConversion(self) -> bool:
+        return True
 
     def toInternal(self, d: datetime.date) -> int:
         if d is not None:
@@ -401,6 +401,9 @@ class TimeType(AnyTimeType):
 
     def __init__(self, precision: int = 6):
         self.precision = precision
+
+    def needConversion(self) -> bool:
+        return True
 
     def toInternal(self, t: datetime.time) -> int:
         if t is not None:
@@ -432,6 +435,9 @@ class TimeType(AnyTimeType):
 class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
     """Timestamp (datetime.datetime) data type."""
 
+    def needConversion(self) -> bool:
+        return True
+
     def toInternal(self, dt: datetime.datetime) -> int:
         if dt is not None:
             seconds = (
@@ -447,6 +453,9 @@ class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
 
 class TimestampNTZType(DatetimeType, metaclass=DataTypeSingleton):
     """Timestamp (datetime.datetime) data type without timezone information."""
+
+    def needConversion(self) -> bool:
+        return True
 
     @classmethod
     def typeName(cls) -> str:
