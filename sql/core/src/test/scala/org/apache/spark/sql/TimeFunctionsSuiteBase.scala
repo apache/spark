@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.time.LocalTime
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkDateTimeException}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -193,6 +193,16 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
     // Check that the results match the expected output.
     checkAnswer(result1, expected)
     checkAnswer(result2, expected)
+
+    // Error is thrown for malformed input.
+    val invalidTimeDF = Seq("invalid_time").toDF("str")
+    checkError(
+      exception = intercept[SparkDateTimeException] {
+        invalidTimeDF.select(to_time(col("str"))).collect()
+      },
+      condition = "CANNOT_PARSE_TIME",
+      parameters = Map("input" -> "'invalid_time'", "format" -> "'HH:mm:ss.SSSSSS'")
+    )
   }
 
   test("SPARK-52883: to_time function with format") {
@@ -227,6 +237,16 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
     // Check that the results match the expected output.
     checkAnswer(result1, expected)
     checkAnswer(result2, expected)
+
+    // Error is thrown for malformed input.
+    val invalidTimeDF = Seq(("invalid_time", "HH.mm.ss")).toDF("str", "format")
+    checkError(
+      exception = intercept[SparkDateTimeException] {
+        invalidTimeDF.select(to_time(col("str"), col("format"))).collect()
+      },
+      condition = "CANNOT_PARSE_TIME",
+      parameters = Map("input" -> "'invalid_time'", "format" -> "'HH.mm.ss'")
+    )
   }
 
   test("SPARK-52884: try_to_time function without format") {
@@ -238,6 +258,7 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
       Row("00:00:00"),
       Row("01:02:03.4"),
       Row("23:59:59.999999"),
+      Row("invalid_time"),
       Row(null)
     )
     val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
@@ -257,6 +278,7 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
       "00:00:00",
       "01:02:03.4",
       "23:59:59.999999",
+      null,
       null
     ).toDF("timeString").select(col("timeString").cast("time"))
     // Check that the results match the expected output.
@@ -274,6 +296,9 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
       Row("00.00.00", "HH.mm.ss"),
       Row("01.02.03.4", "HH.mm.ss.SSS"),
       Row("23.59.59.999999", "HH.mm.ss.SSSSSS"),
+      Row("invalid_time", "HH.mm.ss"),
+      Row("00.00.00", "invalid_format"),
+      Row("invalid_time", "invalid_format"),
       Row("00:00:00", "HH.mm.ss"),
       Row("abc", "HH.mm.ss"),
       Row("00:00:00", null),
@@ -296,6 +321,9 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
       "00:00:00",
       "01:02:03.4",
       "23:59:59.999999",
+      null,
+      null,
+      null,
       null,
       null,
       null,
