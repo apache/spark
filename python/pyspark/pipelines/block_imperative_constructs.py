@@ -120,7 +120,9 @@ def block_imperative_constructs() -> Generator[None, None, None]:
             cls = method_info["class"]
             method_name = method_info["method"]
             error_method_name = f"'{cls.__name__}.{method_name}'"
-            blocked_method = _create_blocked_method(error_method_name, method_info["error_sub_class"])
+            blocked_method = _create_blocked_method(
+                error_method_name, method_info["error_sub_class"]
+            )
             setattr(cls, method_name, blocked_method)
 
         yield
