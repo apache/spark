@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
