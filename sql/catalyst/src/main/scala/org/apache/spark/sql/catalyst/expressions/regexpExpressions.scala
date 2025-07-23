@@ -598,13 +598,14 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
+    val pattern = ctx.freshName("pattern")
     nullSafeCodeGen(ctx, ev, (str, regex, limit) => {
       // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
       s"""
-         |UTF8String pattern =
+         |UTF8String $pattern =
          |  CollationSupport.collationAwareRegex($regex, $collationId, $legacySplitTruncate);
          |${ev.value} = new $arrayClass($legacySplitTruncate ?
-         |  $str.splitLegacyTruncate(pattern, $limit) : $str.split(pattern, $limit));
+         |  $str.splitLegacyTruncate($pattern, $limit) : $str.split($pattern, $limit));
          |""".stripMargin
     })
   }
