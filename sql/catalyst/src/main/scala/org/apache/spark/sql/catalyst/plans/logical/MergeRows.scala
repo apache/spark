@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expre
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Instruction, ROW_ID}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.types.{DataType, NullType}
+import org.apache.spark.sql.types.{DataType, NullType, StructType}
 
 case class MergeRows(
     isSourceRowPresent: Expression,
@@ -31,7 +31,8 @@ case class MergeRows(
     notMatchedBySourceInstructions: Seq[Instruction],
     checkCardinality: Boolean,
     output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    evolvedTargetSchema: Option[StructType]) extends UnaryNode {
 
   override lazy val producedAttributes: AttributeSet = {
     AttributeSet(output.filterNot(attr => inputSet.contains(attr)))

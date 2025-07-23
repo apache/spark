@@ -59,8 +59,17 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       table: RowLevelOperationTable,
       metadataAttrs: Seq[AttributeReference],
       rowIdAttrs: Seq[AttributeReference] = Nil): DataSourceV2Relation = {
+    buildRelationWithAttrs(relation, relation.output, table, metadataAttrs, rowIdAttrs)
+  }
 
-    val attrs = dedupAttrs(relation.output ++ rowIdAttrs ++ metadataAttrs)
+  protected def buildRelationWithAttrs(
+      relation: DataSourceV2Relation,
+      relationAttrs: Seq[AttributeReference],
+      table: RowLevelOperationTable,
+      metadataAttrs: Seq[AttributeReference],
+      rowIdAttrs: Seq[AttributeReference]): DataSourceV2Relation = {
+
+    val attrs = dedupAttrs(relationAttrs ++ rowIdAttrs ++ metadataAttrs)
     relation.copy(table = table, output = attrs)
   }
 
@@ -89,7 +98,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       relation: DataSourceV2Relation,
       operation: SupportsDelta): Seq[AttributeReference] = {
 
-    val rowIdAttrs = V2ExpressionUtils.resolveRefs[AttributeReference](
+    val rowIdAttrs: Seq[AttributeReference] = V2ExpressionUtils.resolveRefs[AttributeReference](
       operation.rowId.toImmutableArraySeq,
       relation)
 

@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.MergeRowsExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, MapType, StringType, StructField, StructType}
 
 abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   with AdaptiveSparkPlanHelper {
@@ -2150,6 +2150,491 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
           sql(s"DROP TABLE $tableNameAsString")
         }
+      }
+    }
+  }
+
+  test("Merge schema evolution new column with set explicit column") {
+    Seq(true, false).foreach { withSchemaEvolution: Boolean =>
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }
+            |{ "pk": 4, "salary": 400, "dep": "marketing" }
+            |{ "pk": 5, "salary": 500, "dep": "executive" }
+            |""".stripMargin)
+
+        val sourceDF = Seq((4, 150, "dummy", true),
+          (5, 250, "dummy", true),
+          (6, 350, "dummy", false)).toDF("pk", "salary", "dep", "active")
+        sourceDF.createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt = s"""MERGE $schemaEvolutionClause
+                           |INTO $tableNameAsString t
+                           |USING source s
+                           |ON t.pk = s.pk
+                           |WHEN MATCHED THEN
+                           | UPDATE SET dep='software', active=s.active
+                           |WHEN NOT MATCHED THEN
+                           | INSERT (pk, salary, dep, active) VALUES (s.pk, 0, s.dep, s.active)
+                           |""".stripMargin
+
+        if (withSchemaEvolution) {
+          sql(mergeStmt)
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 100, "hr", false),
+              Row(2, 200, "software", false),
+              Row(3, 300, "hr", false),
+              Row(4, 400, "software", true),
+              Row(5, 500, "software", true),
+              Row(6, 0, "dummy", false)))
+        } else {
+          val e = intercept[org.apache.spark.sql.AnalysisException] {
+            sql(mergeStmt)
+          }
+          assert(e.errorClass.get == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+          assert(e.getMessage.contains("A column, variable, or function parameter with name " +
+            "`active` cannot be resolved"))
+        }
+
+        sql(s"DROP TABLE $tableNameAsString")
+      }
+    }
+  }
+
+  test("Merge schema evolution new column with set all columns") {
+    Seq(true, false).foreach { withSchemaEvolution: Boolean =>
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }
+            |{ "pk": 4, "salary": 400, "dep": "marketing" }
+            |{ "pk": 5, "salary": 500, "dep": "executive" }
+            |""".stripMargin)
+
+        val sourceDF = Seq((4, 150, "finance", true),
+          (5, 250, "finance", false),
+          (6, 350, "finance", true)).toDF("pk", "salary", "dep", "active")
+        sourceDF.createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        sql(
+          s"""MERGE $schemaEvolutionClause
+             |INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET *
+             |WHEN NOT MATCHED THEN
+             | INSERT *
+             |""".stripMargin)
+
+        if (withSchemaEvolution) {
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 100, "hr", false),
+              Row(2, 200, "software", false),
+              Row(3, 300, "hr", false),
+              Row(4, 150, "finance", true),
+              Row(5, 250, "finance", false),
+              Row(6, 350, "finance", true)))
+        } else {
+          // Without schema evolution, the new columns are not added
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 100, "hr"),
+              Row(2, 200, "software"),
+              Row(3, 300, "hr"),
+              Row(4, 150, "finance"),
+              Row(5, 250, "finance"),
+              Row(6, 350, "finance")))
+        }
+      }
+      sql(s"DROP TABLE $tableNameAsString")
+    }
+  }
+
+  test("Merge schema evolution replacing column with set all column") {
+    Seq(true, false).foreach { withSchemaEvolution: Boolean =>
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }
+            |{ "pk": 4, "salary": 400, "dep": "marketing" }
+            |{ "pk": 5, "salary": 500, "dep": "executive" }
+            |""".stripMargin)
+
+        val sourceDF = Seq((4, 150, true),
+          (5, 250, true),
+          (6, 350, false)).toDF("pk", "salary", "active")
+        sourceDF.createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt = s"""MERGE $schemaEvolutionClause
+                           |INTO $tableNameAsString t
+                           |USING source s
+                           |ON t.pk = s.pk
+                           |WHEN MATCHED THEN
+                           | UPDATE SET *
+                           |WHEN NOT MATCHED THEN
+                           | INSERT *
+                           |""".stripMargin
+
+        if (withSchemaEvolution) {
+          sql(mergeStmt)
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 100, "hr", false),
+              Row(2, 200, "software", false),
+              Row(3, 300, "hr", false),
+              Row(4, 150, "marketing", true),
+              Row(5, 250, "executive", true),
+              Row(6, 350, null, false)))
+        } else {
+          val e = intercept[org.apache.spark.sql.AnalysisException] {
+            sql(mergeStmt)
+          }
+          assert(e.errorClass.get == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+          assert(e.getMessage.contains("A column, variable, or function parameter with name " +
+            "`dep` cannot be resolved"))
+        }
+
+        sql(s"DROP TABLE $tableNameAsString")
+      }
+    }
+  }
+
+  test("Merge schema evolution replacing column with set explicit column") {
+    Seq(true, false).foreach { withSchemaEvolution: Boolean =>
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }
+            |{ "pk": 4, "salary": 400, "dep": "marketing" }
+            |{ "pk": 5, "salary": 500, "dep": "executive" }
+            |""".stripMargin)
+
+        val sourceDF = Seq((4, 150, true),
+          (5, 250, true),
+          (6, 350, false)).toDF("pk", "salary", "active")
+        sourceDF.createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt = s"""MERGE $schemaEvolutionClause
+                           |INTO $tableNameAsString t
+                           |USING source s
+                           |ON t.pk = s.pk
+                           |WHEN MATCHED THEN
+                           | UPDATE SET dep = 'finance', active = s.active
+                           |WHEN NOT MATCHED THEN
+                           | INSERT (pk, salary, dep, active) VALUES
+                           | (s.pk, s.salary, 'finance', s.active)
+                           |""".stripMargin
+
+        if (withSchemaEvolution) {
+          sql(mergeStmt)
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 100, "hr", false),
+              Row(2, 200, "software", false),
+              Row(3, 300, "hr", false),
+              Row(4, 400, "finance", true),
+              Row(5, 500, "finance", true),
+              Row(6, 350, "finance", false)))
+        } else {
+          val e = intercept[org.apache.spark.sql.AnalysisException] {
+            sql(mergeStmt)
+          }
+          assert(e.errorClass.get == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+          assert(e.getMessage.contains("A column, variable, or function parameter with name " +
+            "`active` cannot be resolved"))
+        }
+
+        sql(s"DROP TABLE $tableNameAsString")
+      }
+    }
+  }
+
+  test("merge into schema evolution add column with nested field and set explicit columns") {
+    Seq(true, false).foreach { withSchemaEvolution: Boolean =>
+      withTempView("source") {
+        createAndInitTable(
+          s"""pk INT NOT NULL,
+             |s STRUCT<c1: INT, c2: STRUCT<a: ARRAY<INT>, m: MAP<STRING, STRING>>>,
+             |dep STRING""".stripMargin,
+          """{ "pk": 1, "s": { "c1": 2, "c2": { "a": [1,2], "m": { "a": "b" } } }, "dep": "hr" }""")
+
+        val sourceTableSchema = StructType(Seq(
+          StructField("pk", IntegerType, nullable = false),
+          StructField("s", StructType(Seq(
+            StructField("c1", IntegerType),
+            StructField("c2", StructType(Seq(
+              StructField("a", ArrayType(IntegerType)),
+              StructField("m", MapType(StringType, StringType)),
+              StructField("c3", BooleanType) // new column
+            )))
+          ))),
+          StructField("dep", StringType)
+        ))
+        val data = Seq(
+          Row(1, Row(10, Row(Array(3, 4), Map("c" -> "d"), false)), "sales"),
+          Row(2, Row(20, Row(Array(4, 5), Map("e" -> "f"), true)), "engineering")
+        )
+        spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+          .createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt =
+          s"""MERGE $schemaEvolutionClause
+             |INTO $tableNameAsString t
+             |USING source src
+             |ON t.pk = src.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET s.c1 = -1, s.c2.m = map('k', 'v'), s.c2.a = array(-1),
+             | s.c2.c3 = src.s.c2.c3
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, s, dep) VALUES (src.pk,
+             |   named_struct('c1', src.s.c1,
+             |     'c2', named_struct('a', src.s.c2.a, 'm', map('g', 'h'), 'c3', true)), src.dep)
+             |""".stripMargin
+
+        if (withSchemaEvolution) {
+          sql(mergeStmt)
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(Row(1, Row(-1, Row(Seq(-1), Map("k" -> "v"), false)), "hr"),
+              Row(2, Row(20, Row(Seq(4, 5), Map("g" -> "h"), true)), "engineering")))
+        } else {
+          val exception = intercept[org.apache.spark.sql.AnalysisException] {
+            sql(mergeStmt)
+          }
+          assert(exception.errorClass.get == "FIELD_NOT_FOUND")
+          assert(exception.getMessage.contains("No such struct field `c3` in `a`, `m`. "))
+        }
+      }
+      sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+    }
+  }
+
+  test("merge into schema evolution add column with nested field and set all columns") {
+    Seq(true, false).foreach { withSchemaEvolution: Boolean =>
+      withTempView("source") {
+        createAndInitTable(
+          s"""pk INT NOT NULL,
+             |s STRUCT<c1: INT, c2: STRUCT<a: ARRAY<INT>, m: MAP<STRING, STRING>>>,
+             |dep STRING""".stripMargin,
+          """{ "pk": 1, "s": { "c1": 2, "c2": { "a": [1,2], "m": { "a": "b" } } }, "dep": "hr" }""")
+
+        val sourceTableSchema = StructType(Seq(
+          StructField("pk", IntegerType, nullable = false),
+          StructField("s", StructType(Seq(
+            StructField("c1", IntegerType),
+            StructField("c2", StructType(Seq(
+              StructField("a", ArrayType(IntegerType)),
+              StructField("m", MapType(StringType, StringType)),
+              StructField("c3", BooleanType) // new column
+            )))
+          ))),
+          StructField("dep", StringType)
+        ))
+        val data = Seq(
+          Row(1, Row(10, Row(Array(3, 4), Map("c" -> "d"), false)), "sales"),
+          Row(2, Row(20, Row(Array(4, 5), Map("e" -> "f"), true)), "engineering")
+        )
+        spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+          .createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt =
+          s"""MERGE $schemaEvolutionClause
+             |INTO $tableNameAsString t
+             |USING source src
+             |ON t.pk = src.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET *
+             |WHEN NOT MATCHED THEN
+             | INSERT *
+             |""".stripMargin
+
+        if (withSchemaEvolution) {
+          sql(mergeStmt)
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(Row(1, Row(10, Row(Seq(3, 4), Map("c" -> "d"), false)), "sales"),
+              Row(2, Row(20, Row(Seq(4, 5), Map("e" -> "f"), true)), "engineering")))
+        } else {
+          val exception = intercept[org.apache.spark.sql.AnalysisException] {
+            sql(mergeStmt)
+          }
+          assert(exception.errorClass.get == "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS")
+          assert(exception.getMessage.contains(
+            "Cannot write extra fields `c3` to the struct `s`.`c2`"))
+        }
+      }
+      sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+    }
+  }
+
+  test("merge into schema evolution replace column with nested field and set explicit columns") {
+    Seq(true, false).foreach { withSchemaEvolution: Boolean =>
+      withTempView("source") {
+        createAndInitTable(
+          s"""pk INT NOT NULL,
+             |s STRUCT<c1: INT, c2: STRUCT<a: ARRAY<INT>, m: MAP<STRING, STRING>>>,
+             |dep STRING""".stripMargin,
+          """{ "pk": 1, "s": { "c1": 2, "c2": { "a": [1,2], "m": { "a": "b" } } }, "dep": "hr" }""")
+
+        val sourceTableSchema = StructType(Seq(
+          StructField("pk", IntegerType, nullable = false),
+          StructField("s", StructType(Seq(
+            StructField("c1", IntegerType),
+            StructField("c2", StructType(Seq(
+              // removed column 'a'
+              StructField("m", MapType(StringType, StringType)),
+              StructField("c3", BooleanType) // new column
+            )))
+          ))),
+          StructField("dep", StringType)
+        ))
+        val data = Seq(
+          Row(1, Row(10, Row(Map("c" -> "d"), false)), "sales"),
+          Row(2, Row(20, Row(Map("e" -> "f"), true)), "engineering")
+        )
+        spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+          .createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt =
+          s"""MERGE $schemaEvolutionClause
+             |INTO $tableNameAsString t
+             |USING source src
+             |ON t.pk = src.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET s.c1 = -1, s.c2.m = map('k', 'v'), s.c2.a = array(-1),
+             | s.c2.c3 = src.s.c2.c3
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, s, dep) VALUES (src.pk,
+             |   named_struct('c1', src.s.c1,
+             |     'c2', named_struct('a', array(-2), 'm', map('g', 'h'), 'c3', true)), src.dep)
+             |""".stripMargin
+
+        if (withSchemaEvolution) {
+          sql(mergeStmt)
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(Row(1, Row(-1, Row(Seq(-1), Map("k" -> "v"), false)), "hr"),
+              Row(2, Row(20, Row(Seq(-2), Map("g" -> "h"), true)), "engineering")))
+        } else {
+          val exception = intercept[org.apache.spark.sql.AnalysisException] {
+            sql(mergeStmt)
+          }
+          assert(exception.errorClass.get == "FIELD_NOT_FOUND")
+          assert(exception.getMessage.contains("No such struct field `c3` in `a`, `m`. "))
+        }
+      }
+      sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+    }
+  }
+
+  // TODO- support schema evolution for missing nested types using UPDATE SET * and INSERT *
+  test("merge into schema evolution replace column with nested field and set all columns") {
+    Seq(true, false).foreach { withSchemaEvolution: Boolean =>
+      withTempView("source") {
+        createAndInitTable(
+          s"""pk INT NOT NULL,
+             |s STRUCT<c1: INT, c2: STRUCT<a: ARRAY<INT>, m: MAP<STRING, STRING>>>,
+             |dep STRING""".stripMargin,
+          """{ "pk": 1, "s": { "c1": 2, "c2": { "a": [1,2], "m": { "a": "b" } } }, "dep": "hr" }""")
+
+        val sourceTableSchema = StructType(Seq(
+          StructField("pk", IntegerType, nullable = false),
+          StructField("s", StructType(Seq(
+            StructField("c1", IntegerType),
+            StructField("c2", StructType(Seq(
+              // removed column 'a'
+              StructField("m", MapType(StringType, StringType)),
+              StructField("c3", BooleanType) // new column
+            )))
+          ))),
+          StructField("dep", StringType)
+        ))
+        val data = Seq(
+          Row(1, Row(10, Row(Map("c" -> "d"), false)), "sales"),
+          Row(2, Row(20, Row(Map("e" -> "f"), true)), "engineering")
+        )
+        spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+          .createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val exception = intercept[org.apache.spark.sql.AnalysisException] {
+          sql(
+            s"""MERGE $schemaEvolutionClause
+               |INTO $tableNameAsString t
+               |USING source src
+               |ON t.pk = src.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET *
+               |WHEN NOT MATCHED THEN
+               | INSERT *
+               |""".stripMargin)
+        }
+
+        assert(exception.errorClass.get == "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+        assert(exception.getMessage.contains("Cannot find data for the output column `s`.`c2`.`a`"))
+      }
+      sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+    }
+  }
+
+  test("merge into empty table with NOT MATCHED clause schema evolution") {
+    Seq(true, false) foreach { withSchemaEvolution =>
+      withTempView("source") {
+        createTable("pk INT NOT NULL, salary INT, dep STRING")
+
+        val sourceRows = Seq(
+          (1, 100, "hr", true),
+          (2, 200, "finance", false),
+          (3, 300, "hr", true))
+        sourceRows.toDF("pk", "salary", "dep", "active").createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+
+        sql(
+          s"""MERGE $schemaEvolutionClause
+             |INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN NOT MATCHED THEN
+             | INSERT *
+             |""".stripMargin)
+
+        if (withSchemaEvolution) {
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 100, "hr", true),
+              Row(2, 200, "finance", false),
+              Row(3, 300, "hr", true)))
+        } else {
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 100, "hr"),
+              Row(2, 200, "finance"),
+              Row(3, 300, "hr")))
+        }
+        sql("DROP TABLE IF EXISTS " + tableNameAsString)
       }
     }
   }

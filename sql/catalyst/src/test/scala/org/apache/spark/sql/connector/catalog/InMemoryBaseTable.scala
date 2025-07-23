@@ -70,7 +70,7 @@ abstract class InMemoryBaseTable(
   // Stores the table version validated during the last `ALTER TABLE ... ADD CONSTRAINT` operation.
   private var validatedTableVersion: String = null
 
-  private var tableColumns: Array[Column] = initialColumns
+  protected var tableColumns: Array[Column] = initialColumns
 
   override def columns(): Array[Column] = tableColumns
 
@@ -358,7 +358,7 @@ abstract class InMemoryBaseTable(
   }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    new InMemoryScanBuilder(schema, options)
+    new InMemoryScanBuilder(schema(), options)
   }
 
   private def canEvaluate(filter: Filter): Boolean = {
