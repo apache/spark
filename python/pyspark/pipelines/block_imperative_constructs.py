@@ -29,27 +29,27 @@ BLOCKED_METHODS: List = [
     {
         "class": RuntimeConf,
         "method": "set",
-        "error_sub_class": f"RUNTIME_CONF_SET",
+        "error_sub_class": "RUNTIME_CONF_SET",
     },
     {
         "class": Catalog,
         "method": "setCurrentCatalog",
-        "error_sub_class": f"SET_CURRENT_CATALOG",
+        "error_sub_class": "SET_CURRENT_CATALOG",
     },
     {
         "class": Catalog,
         "method": "setCurrentDatabase",
-        "error_sub_class": f"SET_CURRENT_DATABASE",
+        "error_sub_class": "SET_CURRENT_DATABASE",
     },
     {
         "class": Catalog,
         "method": "dropTempView",
-        "error_sub_class": f"DROP_TEMP_VIEW",
+        "error_sub_class": "DROP_TEMP_VIEW",
     },
     {
         "class": Catalog,
         "method": "dropGlobalTempView",
-        "error_sub_class": f"DROP_GLOBAL_TEMP_VIEW",
+        "error_sub_class": "DROP_GLOBAL_TEMP_VIEW",
     },
     {
         "class": DataFrame,
