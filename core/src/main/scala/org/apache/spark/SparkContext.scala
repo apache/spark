@@ -1609,8 +1609,7 @@ class SparkContext(config: SparkConf) extends Logging {
   // Note that input rdds must be all non-empty, i.e., rdds.filter(_.partitions.isEmpty).isEmpty
   protected[spark] def isPartitionerAwareUnion[T: ClassTag](rdds: Seq[RDD[T]]): Boolean = {
     assert(!rdds.exists(_.partitions.isEmpty), "Must not have empty RDDs")
-    val partitioners = rdds.flatMap(_.partitioner).toSet
-    rdds.forall(_.partitioner.isDefined) && partitioners.size == 1
+    rdds.forall(_.partitioner.isDefined) && rdds.flatMap(_.partitioner).toSet.size == 1
   }
 
   /** Build the union of a list of RDDs. */
