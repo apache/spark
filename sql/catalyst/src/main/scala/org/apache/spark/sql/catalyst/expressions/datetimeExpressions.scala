@@ -3083,33 +3083,6 @@ case class TryMakeTimestamp(
   }
 }
 
-/**
- * This make_timestamp overload creates a timestamp from:
- *   - a date, optional time, and optional timezone.
- */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(date[, time[, timezone]]) - Create timestamp from date and time fields.
-    """,
-  arguments = """
-    Arguments:
-      * date - a date expression
-      * time - a time expression (optional)
-      * timezone - the time zone identifier (optional). For example, CET, UTC and etc.
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(DATE'2014-12-28');
-       2014-12-27 16:00:00
-      > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887');
-       2014-12-27 22:30:45.887
-      > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887', 'CET');
-       2014-12-27 21:30:45.887
-  """,
-  group = "datetime_funcs",
-  since = "4.1.0")
-// scalastyle:on line.size.limit
 case class MakeTimestampFromDateTime(
     date: Expression,
     time: Option[Expression] = None,
