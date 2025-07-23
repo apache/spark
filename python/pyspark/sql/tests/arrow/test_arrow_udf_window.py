@@ -19,7 +19,6 @@ import unittest
 
 from pyspark.sql.pandas.functions import arrow_udf, ArrowUDFType
 from pyspark.util import PythonEvalType
-from pyspark.sql import Row
 from pyspark.sql import functions as sf
 from pyspark.sql.window import Window
 from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
