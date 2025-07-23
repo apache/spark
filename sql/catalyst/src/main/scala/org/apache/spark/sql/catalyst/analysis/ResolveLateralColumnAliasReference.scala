@@ -229,7 +229,9 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] with AliasHe
             case e => e.children.forall(eligibleToLiftUp)
           }
         }
-        if (!aggregateExpressions.forall(eligibleToLiftUp)) {
+        val aggregateExpressionsWithTrimmedAliases =
+          aggregateExpressions.map(trimNonTopLevelAliases)
+        if (!aggregateExpressionsWithTrimmedAliases.forall(eligibleToLiftUp)) {
           agg
         } else {
           val newAggExprs = new LinkedHashSet[NamedExpression]
@@ -268,9 +270,8 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] with AliasHe
               case e => e.mapChildren(extractExpressions)
             }
           }
-          val projectExprs = aggregateExpressions.map(
-            expression =>
-              extractExpressions(trimNonTopLevelAliases(expression)).asInstanceOf[NamedExpression]
+          val projectExprs = aggregateExpressionsWithTrimmedAliases.map(
+            extractExpressions(_).asInstanceOf[NamedExpression]
           )
           val newProject = Project(
             projectList = projectExprs,
