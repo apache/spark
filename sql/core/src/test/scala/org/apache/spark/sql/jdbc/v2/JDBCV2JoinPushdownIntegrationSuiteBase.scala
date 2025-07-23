@@ -109,7 +109,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   def schemaPreparation(): Unit = {
     withConnection {conn =>
       conn
-        .prepareStatement(s"CREATE SCHEMA IF NOT EXISTS ${quoteSchemaName(namespace)}")
+        .prepareStatement(s"CREATE SCHEMA ${quoteSchemaName(namespace)}")
         .executeUpdate()
     }
   }
