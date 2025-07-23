@@ -66,7 +66,7 @@ private[sql] object SqlScriptingErrors {
   def variableNameForbidden(origin: Origin, varName: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
-      errorClass = "VARIABLE_NAME_FORBIDDEN",
+      errorClass = "INVALID_VARIABLE_DECLARATION.NAME_FORBIDDEN",
       cause = null,
       messageParameters = Map("varName" -> toSQLId(varName))
     )

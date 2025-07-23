@@ -533,6 +533,34 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(exception.origin.line.contains(4))
   }
 
+  test("declare with variable name \"system\"") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE system VARCHAR(50);
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "INVALID_VARIABLE_DECLARATION.NAME_FORBIDDEN",
+      parameters = Map("varName" -> "`system`"))
+  }
+
+  test("declare with variable name \"session\"") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE session VARCHAR(50);
+        |END""".stripMargin
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "INVALID_VARIABLE_DECLARATION.NAME_FORBIDDEN",
+      parameters = Map("varName" -> "`session`"))
+  }
+
   test("declare variable in wrong scope") {
     val sqlScriptText =
       """

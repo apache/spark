@@ -3874,7 +3874,7 @@
       "Invalid variable declaration."
     ],
     "subClass" : {
-      "FORBIDDEN_NAME" : {
+      "NAME_FORBIDDEN" : {
         "message" : [
           "The variable name <varName> is forbidden."
         ]
