@@ -2125,6 +2125,13 @@ package object config {
       .intConf
       .createWithDefault(1)
 
+  private[spark] val IO_COMPRESSION_ZSTD_STRATEGY =
+    ConfigBuilder("spark.io.compression.zstd.strategy")
+      .doc("Compression strategy for Zstd compression codec. The default value 1")
+      .version("4.1.0")
+      .intConf
+      .createOptional
+
   private[spark] val IO_COMPRESSION_LZF_PARALLEL =
     ConfigBuilder("spark.io.compression.lzf.parallel.enabled")
       .doc("When true, LZF compression will use multiple threads to compress data in parallel.")
