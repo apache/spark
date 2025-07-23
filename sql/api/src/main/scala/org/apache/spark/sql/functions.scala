@@ -5700,6 +5700,41 @@ object functions {
     Column.fn("unix_timestamp", s, lit(p))
 
   /**
+   * Parses a string value to a time value.
+   *
+   * @param str
+   *   A string to be parsed to time.
+   * @return
+   *   A time, or raises an error if the input is malformed.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def to_time(str: Column): Column = {
+    Column.fn("to_time", str)
+  }
+
+  /**
+   * Parses a string value to a time value.
+   *
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime
+   * Patterns</a> for valid time format patterns.
+   *
+   * @param str
+   *   A string to be parsed to time.
+   * @param format
+   *   A time format pattern to follow.
+   * @return
+   *   A time, or raises an error if the input is malformed.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def to_time(str: Column, format: Column): Column = {
+    Column.fn("to_time", str, format)
+  }
+
+  /**
    * Converts to a timestamp by casting rules to `TimestampType`.
    *
    * @param s
@@ -5730,6 +5765,41 @@ object functions {
    * @since 2.2.0
    */
   def to_timestamp(s: Column, fmt: String): Column = Column.fn("to_timestamp", s, lit(fmt))
+
+  /**
+   * Parses a string value to a time value.
+   *
+   * @param str
+   *   A string to be parsed to time.
+   * @return
+   *   A time, or null if the input is malformed.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def try_to_time(str: Column): Column = {
+    Column.fn("try_to_time", str)
+  }
+
+  /**
+   * Parses a string value to a time value.
+   *
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime
+   * Patterns</a> for valid time format patterns.
+   *
+   * @param str
+   *   A string to be parsed to time.
+   * @param format
+   *   A time format pattern to follow.
+   * @return
+   *   A time, or null if the input is malformed.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def try_to_time(str: Column, format: Column): Column = {
+    Column.fn("try_to_time", str, format)
+  }
 
   /**
    * Parses the `s` with the `format` to a timestamp. The function always returns null on an
