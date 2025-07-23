@@ -6158,6 +6158,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEGACY_TRUNCATE_FOR_EMPTY_REGEX_SPLIT =
+    buildConf("spark.sql.legacy.truncateForEmptyRegexSplit")
+      .internal()
+      .doc("When set to true, using empty regex to split will discard the trailing string, which " +
+        "is consistent with the behavior of Spark 3.4 - Spark 4.0. See SPARK-49968 for detail.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
