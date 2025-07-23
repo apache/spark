@@ -238,30 +238,33 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
              |$defaultUsing
         """.stripMargin)
 
+        // Default value for ENFORCED and RELY is skipped showing.
         var expectedConstraintsDdl = Array(
-          "pk_table_pk,CONSTRAINT pk_table_pk PRIMARY KEY (id) NOT ENFORCED NORELY,",
-          "fk_a,CONSTRAINT fk_a FOREIGN KEY (a) REFERENCES fk_table (id) NOT ENFORCED RELY,",
-          "uk_b,CONSTRAINT uk_b UNIQUE (b) NOT ENFORCED NORELY,",
-          "uk_a_c,CONSTRAINT uk_a_c UNIQUE (a, c) NOT ENFORCED NORELY,",
-          "c1,CONSTRAINT c1 CHECK (c IS NOT NULL) ENFORCED NORELY,",
-          "c2,CONSTRAINT c2 CHECK (id > 0) ENFORCED NORELY,"
+          "# Constraints,,",
+          "pk_table_pk,PRIMARY KEY (id),",
+          "fk_a,FOREIGN KEY (a) REFERENCES fk_table (id) RELY,",
+          "uk_b,UNIQUE (b),",
+          "uk_a_c,UNIQUE (a, c),",
+          "c1,CHECK (c IS NOT NULL),",
+          "c2,CHECK (id > 0),"
         )
         var descDdL = sql(s"DESCRIBE EXTENDED $tbl").collect().map(_.mkString(","))
-          .filter(_.contains("CONSTRAINT"))
+          .dropWhile(_ != "# Constraints,,")
         assert(descDdL === expectedConstraintsDdl)
 
-        sql(s"ALTER TABLE $tbl ADD CONSTRAINT c3 CHECK (b IS NOT NULL) ENFORCED RELY")
+        // Show non-default value for RELY.
+        sql(s"ALTER TABLE $tbl ADD CONSTRAINT c3 CHECK (b IS NOT NULL) RELY")
         descDdL = sql(s"DESCRIBE EXTENDED $tbl").collect().map(_.mkString(","))
-          .filter(_.contains("CONSTRAINT"))
+          .dropWhile(_ != "# Constraints,,")
         expectedConstraintsDdl = expectedConstraintsDdl ++
-          Array("c3,CONSTRAINT c3 CHECK (b IS NOT NULL) ENFORCED RELY,")
+          Array("c3,CHECK (b IS NOT NULL) RELY,")
         assert(descDdL === expectedConstraintsDdl)
 
         sql(s"ALTER TABLE $tbl DROP CONSTRAINT c1")
         descDdL = sql(s"DESCRIBE EXTENDED $tbl").collect().map(_.mkString(","))
-          .filter(_.contains("CONSTRAINT"))
+          .dropWhile(_ != "# Constraints,,")
         assert(descDdL === expectedConstraintsDdl
-          .filter(_ != "c1,CONSTRAINT c1 CHECK (c IS NOT NULL) ENFORCED NORELY,"))
+          .filter(_ != "c1,CHECK (c IS NOT NULL),"))
       }
     }
   }

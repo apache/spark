@@ -94,7 +94,7 @@ case class DescribeTableExec(
       rows += emptyRow()
       rows += toCatalystRow("# Constraints", "", "")
       rows ++= table.constraints().map{ constraint =>
-        toCatalystRow(constraint.name(), constraint.toDDL, "")
+        toCatalystRow(constraint.name(), constraint.toDescription, "")
       }
     }
   }

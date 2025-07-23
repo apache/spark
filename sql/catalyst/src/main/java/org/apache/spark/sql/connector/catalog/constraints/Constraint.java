@@ -59,6 +59,12 @@ public interface Constraint {
   String toDDL();
 
   /**
+   * Similar to {@link #toDDL()}, but returns the description of this constraint for describing
+   * table purpose.
+   */
+  String toDescription();
+
+  /**
    * Instantiates a builder for a CHECK constraint.
    *
    * @param name the constraint name
