@@ -21,6 +21,12 @@ import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.connector.write.RowLevelOperationBuilder;
 import org.apache.spark.sql.connector.write.RowLevelOperation;
 import org.apache.spark.sql.connector.write.RowLevelOperationInfo;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * A mix-in interface for {@link Table} row-level operations support. Data sources can implement
@@ -39,4 +45,22 @@ public interface SupportsRowLevelOperations extends Table {
    * @return the row-level operation builder
    */
   RowLevelOperationBuilder newRowLevelOperationBuilder(RowLevelOperationInfo info);
+
+
+  /**
+   * Calculate target table schema for MERGE INTO schema evolution.
+   * @param sourceTableSchema schema of the source table for MERGE INTO operation.
+   * @return new schema for the target table
+   */
+  default StructType mergeSchema(StructType sourceTableSchema) {
+    return CatalogV2Util.v2ColumnsToStructType(columns());
+  }
+
+  /**
+   * Update schema for MERGE INTO schema evolution.
+   * @param newSchema schema to apply to target table for MERGE INTO operation. This
+   *                          will be from the return value of #{@link #mergeSchema(StructType)}
+   */
+  default void updateSchema(StructType newSchema) {
+  }
 }
