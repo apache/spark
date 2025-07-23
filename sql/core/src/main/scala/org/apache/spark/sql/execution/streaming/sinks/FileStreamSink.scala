@@ -32,6 +32,7 @@ import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, FileFormat, FileFormatWriter}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.Metadata
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 object FileStreamSink extends Logging {
@@ -173,12 +174,15 @@ class FileStreamSink(
       }
       val qe = data.queryExecution
 
+      val outputColumns = qe.analyzed.output
+      val tableSchema = outputColumns.map(_.withMetadata(Metadata.empty)).toStructType
+
       FileFormatWriter.write(
         sparkSession = sparkSession,
         plan = qe.executedPlan,
         fileFormat = fileFormat,
         committer = committer,
-        outputSpec = FileFormatWriter.OutputSpec(path, Map.empty, qe.analyzed.output),
+        outputSpec = FileFormatWriter.OutputSpec(path, Map.empty, tableSchema, outputColumns),
         hadoopConf = hadoopConf,
         partitionColumns = partitionColumns,
         bucketSpec = None,

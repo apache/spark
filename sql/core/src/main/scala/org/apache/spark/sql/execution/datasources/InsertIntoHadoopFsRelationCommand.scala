@@ -27,14 +27,12 @@ import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.EXISTS_DEFAULT_COLUMN_METADATA_KEY
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
-import org.apache.spark.sql.types.MetadataBuilder
+import org.apache.spark.sql.types.Metadata
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -182,7 +180,13 @@ case class InsertIntoHadoopFsRelationCommand(
         qualifiedOutputPath
       }
 
-      val outputColumns = markColumnsWithDefaultForJson(this.outputColumns)
+      // Get the schema from the catalogTable, if provided, otherwise use the query columns.
+      // The catalogTable schema may have metadata that is used by the writer.
+      // For example, the org.apache.spark.sql.catalyst.json.JacksonGenerator is
+      // sensitive to whether the column has a default value defined.
+      // We explicitly block metadata from the query columns to avoid any confusion.
+      val tableSchema = catalogTable.map(_.schema).getOrElse(
+        outputColumns.map(_.withMetadata(Metadata.empty)).toStructType)
 
       val updatedPartitionPaths =
         FileFormatWriter.write(
@@ -191,7 +195,8 @@ case class InsertIntoHadoopFsRelationCommand(
           fileFormat = fileFormat,
           committer = committer,
           outputSpec = FileFormatWriter.OutputSpec(
-            committerOutputPath.toString, customPartitionLocations, outputColumns),
+            committerOutputPath.toString, customPartitionLocations,
+            tableSchema, outputColumns),
           hadoopConf = hadoopConf,
           partitionColumns = partitionColumns,
           bucketSpec = bucketSpec,
@@ -225,37 +230,6 @@ case class InsertIntoHadoopFsRelationCommand(
     }
 
     Seq.empty[Row]
-  }
-
-  /**
-   * The JSON writer [[org.apache.spark.sql.catalyst.json.JacksonGenerator]] has a special feature
-   * that changes the null handling of top-level columns that have a default value such that a
-   * explicit null is written.  This is detected today by looking for the metadata key
-   * [[ResolveDefaultColumnsUtils#EXISTS_DEFAULT_COLUMN_METADATA_KEY]] on the query attribute.
-   * This function copies this key from the table attribute to the query attribute only
-   * when a table metadata is available, only for JSON output, and only when the configuration
-   * requests the special feature.
-   *
-   * We should instead pass the table description down to the writers instead of using query
-   * attribute metadata, but this is a nontrivial change.
-   */
-  private def markColumnsWithDefaultForJson(outputColumns: Seq[Attribute]): Seq[Attribute] = {
-    if (catalogTable.isEmpty || !fileFormat.isInstanceOf[JsonFileFormat] ||
-        !conf.jsonWriteNullIfWithDefaultValue) {
-      outputColumns
-    } else {
-      outputColumns.zip(catalogTable.get.schema.fields).map { case (col, field) =>
-        if (field.hasExistenceDefaultValue) {
-          val metadata = new MetadataBuilder().withMetadata(col.metadata)
-              .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY,
-                field.metadata.getString(EXISTS_DEFAULT_COLUMN_METADATA_KEY))
-              .build()
-          col.withMetadata(metadata)
-        } else {
-          col
-        }
-      }
-    }
   }
 
   /**

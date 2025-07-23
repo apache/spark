@@ -135,6 +135,7 @@ trait FileWrite extends Write {
       uuid = UUID.randomUUID().toString,
       serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
       outputWriterFactory = outputWriterFactory,
+      tableSchema = schema,
       allColumns = allColumns,
       dataColumns = allColumns,
       partitionColumns = Seq.empty,

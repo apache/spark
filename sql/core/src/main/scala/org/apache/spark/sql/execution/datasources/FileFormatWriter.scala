@@ -39,6 +39,7 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -49,6 +50,7 @@ object FileFormatWriter extends Logging {
   case class OutputSpec(
       outputPath: String,
       customPartitionLocations: Map[TablePartitionSpec, String],
+      tableSchema: StructType,
       outputColumns: Seq[Attribute])
 
   /** Describes how concurrent output writers should be executed. */
@@ -114,17 +116,18 @@ object FileFormatWriter extends Logging {
 
     val caseInsensitiveOptions = CaseInsensitiveMap(options)
 
-    val dataSchema = dataColumns.toStructType
-    DataSourceUtils.verifySchema(fileFormat, dataSchema)
-    DataSourceUtils.checkFieldNames(fileFormat, dataSchema)
+    val tableSchema = finalOutputSpec.tableSchema
+    DataSourceUtils.verifySchema(fileFormat, tableSchema)
+    DataSourceUtils.checkFieldNames(fileFormat, tableSchema)
     // Note: prepareWrite has side effect. It sets "job".
     val outputWriterFactory =
-      fileFormat.prepareWrite(sparkSession, job, caseInsensitiveOptions, dataSchema)
+      fileFormat.prepareWrite(sparkSession, job, caseInsensitiveOptions, tableSchema)
 
     val description = new WriteJobDescription(
       uuid = UUID.randomUUID.toString,
       serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
       outputWriterFactory = outputWriterFactory,
+      tableSchema = tableSchema,
       allColumns = finalOutputSpec.outputColumns,
       dataColumns = dataColumns,
       partitionColumns = partitionColumns,
