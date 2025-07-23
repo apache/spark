@@ -18,8 +18,6 @@
 package org.apache.spark.network.shuffle.protocol;
 
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 import org.apache.spark.network.shuffle.checksum.Cause;
 
@@ -38,9 +36,7 @@ public class CorruptionCause extends BlockTransferMessage {
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("cause", cause)
-      .toString();
+    return "CorruptionCause[cause=" + cause + "]";
   }
 
   @Override

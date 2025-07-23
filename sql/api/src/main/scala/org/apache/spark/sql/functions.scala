@@ -872,6 +872,22 @@ object functions {
     Column.fn("last_value", e, ignoreNulls)
 
   /**
+   * Create time from hour, minute and second fields. For invalid inputs it will throw an error.
+   *
+   * @param hour
+   *   the hour to represent, from 0 to 23
+   * @param minute
+   *   the minute to represent, from 0 to 59
+   * @param second
+   *   the second to represent, from 0 to 59.999999
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def make_time(hour: Column, minute: Column, second: Column): Column = {
+    Column.fn("make_time", hour, minute, second)
+  }
+
+  /**
    * Aggregate function: returns the most frequent value in a group.
    *
    * @group agg_funcs
@@ -5400,7 +5416,7 @@ object functions {
   def dayofyear(e: Column): Column = Column.fn("dayofyear", e)
 
   /**
-   * Extracts the hours as an integer from a given date/timestamp/string.
+   * Extracts the hours as an integer from a given date/time/timestamp/string.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -5473,7 +5489,7 @@ object functions {
   def last_day(e: Column): Column = Column.fn("last_day", e)
 
   /**
-   * Extracts the minutes as an integer from a given date/timestamp/string.
+   * Extracts the minutes as an integer from a given date/time/timestamp/string.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -5579,7 +5595,7 @@ object functions {
     Column.fn("next_day", date, dayOfWeek)
 
   /**
-   * Extracts the seconds as an integer from a given date/timestamp/string.
+   * Extracts the seconds as an integer from a given date/time/timestamp/string.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a timestamp
    * @group datetime_funcs
@@ -5762,6 +5778,24 @@ object functions {
    * @since 2.2.0
    */
   def to_date(e: Column, fmt: String): Column = Column.fn("to_date", e, lit(fmt))
+
+  /**
+   * This is a special version of `to_date` that performs the same operation, but returns a NULL
+   * value instead of raising an error if date cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_to_date(e: Column): Column = Column.fn("try_to_date", e)
+
+  /**
+   * This is a special version of `to_date` that performs the same operation, but returns a NULL
+   * value instead of raising an error if date cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_to_date(e: Column, fmt: String): Column = Column.fn("try_to_date", e, lit(fmt))
 
   /**
    * Returns the number of days since 1970-01-01.

@@ -363,6 +363,8 @@ private case class PostgresDialect()
 
   override def supportsTableSample: Boolean = true
 
+  override def supportsJoin: Boolean = true
+
   override def getTableSample(sample: TableSampleInfo): String = {
     // hard-coded to BERNOULLI for now because Spark doesn't have a way to specify sample
     // method name

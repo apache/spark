@@ -107,8 +107,11 @@ object WindowResolution {
    *
    * By checking the type and configuration of [[WindowExpression.windowFunction]] it enforces the
    * following rules:
+   * - Disallows [[FrameLessOffsetWindowFunction]] (e.g. [[Lag]]) without defined ordering or
+   *   one with a frame which is defined as something other than an offset frame (e.g.
+   *   `ROWS BETWEEN` is logically incompatible with offset functions).
    * - Disallows distinct aggregate expressions in window functions.
-   * - Disallows use of certain aggregate functions - [[ListaAgg]], [[PercentileCont]],
+   * - Disallows use of certain aggregate functions - [[ListAgg]], [[PercentileCont]],
    *   [[PercentileDisc]], [[Median]]
    * - Allows only window functions of following types:
    *   - [[AggregateExpression]] (non-distinct)
@@ -116,6 +119,28 @@ object WindowResolution {
    *   - [[AggregateWindowFunction]]
    */
   def validateResolvedWindowExpression(windowExpression: WindowExpression): Unit = {
+    checkWindowFunctionAndFrameMismatch(windowExpression)
+    checkWindowFunction(windowExpression)
+  }
+
+  def checkWindowFunctionAndFrameMismatch(windowExpression: WindowExpression): Unit = {
+    windowExpression match {
+      case _ @ WindowExpression(
+      windowFunction: FrameLessOffsetWindowFunction,
+      WindowSpecDefinition(_, order, frame: SpecifiedWindowFrame)
+      ) if order.isEmpty || !frame.isOffset =>
+        windowExpression.failAnalysis(
+          errorClass = "WINDOW_FUNCTION_AND_FRAME_MISMATCH",
+          messageParameters = Map(
+            "funcName" -> toSQLExpr(windowFunction),
+            "windowExpr" -> toSQLExpr(windowExpression)
+          )
+        )
+      case _ =>
+    }
+  }
+
+  def checkWindowFunction(windowExpression: WindowExpression): Unit = {
     windowExpression.windowFunction match {
       case AggregateExpression(_, _, true, _, _) =>
         windowExpression.failAnalysis(

@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkRuntimeException
-import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, NamedExpression, OuterReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project, Sort, Union}
 import org.apache.spark.sql.execution._
@@ -2845,5 +2845,39 @@ class SubquerySuite extends QueryTest
       Row(false) :: Row(false) :: Row(false) :: Row(false) :: Row(false)
         :: Row(true) :: Row(true) :: Row(true) :: Nil
     )
+  }
+
+
+  test("SPARK-52896: Outer reference ExprId should match exposed attribute") {
+    val plan =
+      sql(
+        """
+          | SELECT col1
+          | FROM VALUES(1,2)
+          | GROUP BY col1
+          | HAVING MAX(col2) == (SELECT 1 WHERE MAX(col2) = 1)
+          |
+      """.stripMargin).queryExecution.analyzed
+
+    // Expected plan:
+    // Project
+    // +- Filter (scalar-subquery)
+    // :  +- Project
+    // :     +- Filter
+    // :        +- OneRowRelation
+    // +- Aggregate
+    //   +- LocalRelation
+
+    val havingNode = plan.asInstanceOf[Project].child.asInstanceOf[Filter]
+    val subquery =
+      havingNode.condition.asInstanceOf[EqualTo].right.asInstanceOf[SubqueryExpression]
+    val subqueryFilter = subquery.plan.asInstanceOf[Project].child.asInstanceOf[Filter]
+
+    val exposedAttribute = subquery.getOuterAttrs.head.asInstanceOf[NamedExpression]
+    val outerReferenceAttribute = subqueryFilter.condition.asInstanceOf[EqualTo].collectFirst {
+      case outerReference: OuterReference => outerReference.e
+    }.get
+
+    assert(exposedAttribute.exprId == outerReferenceAttribute.exprId)
   }
 }

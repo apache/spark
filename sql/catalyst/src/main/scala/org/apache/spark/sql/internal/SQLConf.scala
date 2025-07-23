@@ -2436,6 +2436,13 @@ object SQLConf {
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(300L)
 
+  val STATE_STORE_MAINTENANCE_PROCESSING_TIMEOUT =
+    buildConf("spark.sql.streaming.stateStore.maintenanceProcessingTimeout")
+      .internal()
+      .doc("Timeout in seconds to wait for maintenance to process this partition.")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(30L)
+
   val STATE_SCHEMA_CHECK_ENABLED =
     buildConf("spark.sql.streaming.stateStore.stateSchemaCheck")
       .doc("When true, Spark will validate the state schema against schema on existing state and " +
@@ -3933,6 +3940,18 @@ object SQLConf {
       .internal()
       .doc(s"When true and ${PYTHON_TABLE_UDF_ARROW_ENABLED.key} is enabled, extra pandas " +
         "conversion happens during (de)serialization between JVM and Python workers. " +
+        "This matters especially when the produced output has a schema different from " +
+        "specified schema, resulting in a different type coercion.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED =
+    buildConf("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled")
+      .internal()
+      .doc(s"When true and ${PYTHON_UDF_ARROW_ENABLED.key} is enabled, matches the " +
+        "default Arrow Python UDF behavior before 4.1.0. With this behavior, extra" +
+        "pandas conversion happens during (de)serialization between JVM and Python workers. " +
         "This matters especially when the produced output has a schema different from " +
         "specified schema, resulting in a different type coercion.")
       .version("4.1.0")
@@ -6343,6 +6362,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def stateStoreMaintenanceShutdownTimeout: Long = getConf(STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT)
 
+  def stateStoreMaintenanceProcessingTimeout: Long =
+    getConf(STATE_STORE_MAINTENANCE_PROCESSING_TIMEOUT)
+
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
   def stateStoreFormatValidationEnabled: Boolean = getConf(STATE_STORE_FORMAT_VALIDATION_ENABLED)
@@ -6963,6 +6985,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(SQLConf.PYSPARK_WORKER_PYTHON_EXECUTABLE)
 
   def legacyPandasConversion: Boolean = getConf(PYTHON_TABLE_UDF_LEGACY_PANDAS_CONVERSION_ENABLED)
+
+  def legacyPandasConversionUDF: Boolean = getConf(PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED)
 
   def pythonPlannerExecMemory: Option[Long] = getConf(PYTHON_PLANNER_EXEC_MEMORY)
 

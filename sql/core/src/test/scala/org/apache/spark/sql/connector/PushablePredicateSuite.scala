@@ -24,7 +24,7 @@ import org.apache.spark.sql.connector.expressions.filter.{AlwaysTrue, Predicate 
 import org.apache.spark.sql.execution.datasources.v2.PushablePredicate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.sql.types.{BooleanType, TimestampType}
 
 class PushablePredicateSuite extends QueryTest with SharedSparkSession {
 
@@ -70,7 +70,8 @@ class PushablePredicateSuite extends QueryTest with SharedSparkSession {
         withSQLConf(
           SQLConf.DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE.key -> createV2Predicate.toString,
           SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE.key -> noAssert.toString) {
-          val catalystExpr = Cast(Literal.create("true"), BooleanType)
+          val catalystExpr =
+            Cast(Cast(Literal.create("2025-01-01 00:00:00"), TimestampType), BooleanType)
           if (createV2Predicate) {
             val pushable = PushablePredicate.unapply(catalystExpr)
             assert(pushable.isDefined)
