@@ -718,6 +718,49 @@ class GroupedAggPandasUDFTestsMixin:
                         aggregated, df.groupby("id").agg((sum(df.v) + sum(df.w)).alias("s"))
                     )
 
+    def test_arrow_cast_enabled_numeric_to_decimal(self):
+        import numpy as np
+        from decimal import Decimal
+
+        columns = [
+            "int8",
+            "int16",
+            "int32",
+            "uint8",
+            "uint16",
+            "uint32",
+            "float64",
+        ]
+
+        pdf = pd.DataFrame({key: np.arange(1, 2).astype(key) for key in columns})
+        df = self.spark.range(2).repartition(1)
+
+        for column in columns:
+            with self.subTest(column=column):
+
+                @pandas_udf("decimal(10,0)", PandasUDFType.GROUPED_AGG)
+                def test(series):
+                    return pdf[column].iloc[0]
+
+                row = df.groupby("id").agg(test(df.id)).first()
+                res = row[1]
+                self.assertEqual(res, Decimal("1"))
+
+    def test_arrow_cast_enabled_str_to_numeric(self):
+        df = self.spark.range(2).repartition(1)
+
+        types = ["int", "long", "float", "double"]
+
+        for type_str in types:
+            with self.subTest(type=type_str):
+
+                @pandas_udf(type_str, PandasUDFType.GROUPED_AGG)
+                def test(series):
+                    return 123
+
+                row = df.groupby("id").agg(test(df.id)).first()
+                self.assertEqual(row[1], 123)
+
 
 class GroupedAggPandasUDFTests(GroupedAggPandasUDFTestsMixin, ReusedSQLTestCase):
     pass
