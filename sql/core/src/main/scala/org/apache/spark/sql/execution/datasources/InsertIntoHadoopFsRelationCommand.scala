@@ -32,7 +32,6 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
-import org.apache.spark.sql.types.Metadata
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -180,14 +179,6 @@ case class InsertIntoHadoopFsRelationCommand(
         qualifiedOutputPath
       }
 
-      // Get the schema from the catalogTable, if provided, otherwise use the query columns.
-      // The catalogTable schema may have metadata that is used by the writer.
-      // For example, the org.apache.spark.sql.catalyst.json.JacksonGenerator is
-      // sensitive to whether the column has a default value defined.
-      // We explicitly block metadata from the query columns to avoid any confusion.
-      val tableSchema = catalogTable.map(_.schema).getOrElse(
-        outputColumns.map(_.withMetadata(Metadata.empty)).toStructType)
-
       val updatedPartitionPaths =
         FileFormatWriter.write(
           sparkSession = sparkSession,
@@ -195,8 +186,7 @@ case class InsertIntoHadoopFsRelationCommand(
           fileFormat = fileFormat,
           committer = committer,
           outputSpec = FileFormatWriter.OutputSpec(
-            committerOutputPath.toString, customPartitionLocations,
-            tableSchema, outputColumns),
+            committerOutputPath.toString, customPartitionLocations, outputColumns),
           hadoopConf = hadoopConf,
           partitionColumns = partitionColumns,
           bucketSpec = bucketSpec,

@@ -36,7 +36,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.FileFormatWriter.ConcurrentOutputWriterSpec
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -176,7 +176,7 @@ class SingleDirectoryDataWriter(
 
     currentWriter = description.outputWriterFactory.newInstance(
       path = currentPath,
-      dataSchema = description.tableSchema,
+      dataSchema = description.dataColumns.toStructType,
       context = taskAttemptContext)
 
     statsTrackers.foreach(_.newFile(currentPath))
@@ -599,7 +599,6 @@ class WriteJobDescription(
     val uuid: String, // prevent collision between different (appending) write jobs
     val serializableHadoopConf: SerializableConfiguration,
     val outputWriterFactory: OutputWriterFactory,
-    val tableSchema: StructType,
     val allColumns: Seq[Attribute],
     val dataColumns: Seq[Attribute],
     val partitionColumns: Seq[Attribute],

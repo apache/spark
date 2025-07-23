@@ -39,7 +39,6 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -50,7 +49,6 @@ object FileFormatWriter extends Logging {
   case class OutputSpec(
       outputPath: String,
       customPartitionLocations: Map[TablePartitionSpec, String],
-      tableSchema: StructType,
       outputColumns: Seq[Attribute])
 
   /** Describes how concurrent output writers should be executed. */
@@ -116,10 +114,7 @@ object FileFormatWriter extends Logging {
 
     val caseInsensitiveOptions = CaseInsensitiveMap(options)
 
-    val dataSchema = StructType(
-      finalOutputSpec.tableSchema.zip(finalOutputSpec.outputColumns).
-      filterNot(p => partitionSet.contains(p._2)).
-      map(_._1))
+    val dataSchema = dataColumns.toStructType
     DataSourceUtils.verifySchema(fileFormat, dataSchema)
     DataSourceUtils.checkFieldNames(fileFormat, dataSchema)
     // Note: prepareWrite has side effect. It sets "job".
@@ -130,7 +125,6 @@ object FileFormatWriter extends Logging {
       uuid = UUID.randomUUID.toString,
       serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
       outputWriterFactory = outputWriterFactory,
-      tableSchema = dataSchema,
       allColumns = finalOutputSpec.outputColumns,
       dataColumns = dataColumns,
       partitionColumns = partitionColumns,

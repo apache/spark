@@ -27,7 +27,6 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.execution.datasources.{FileFormat, FileFormatWriter}
-import org.apache.spark.sql.types.Metadata
 
 // Base trait from which all hive insert statement physical execution extends.
 private[hive] trait SaveAsHiveFile extends DataWritingCommand {
@@ -48,16 +47,13 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = outputLocation)
 
-    val tableSchema = outputColumns.map(_.withMetadata(Metadata.empty)).toStructType
-
     FileFormatWriter.write(
       sparkSession = sparkSession,
       plan = plan,
       fileFormat = fileFormat,
       committer = committer,
       outputSpec =
-        FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations,
-          tableSchema, outputColumns),
+        FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations, outputColumns),
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
       bucketSpec = bucketSpec,
