@@ -133,7 +133,11 @@ object ArrowPythonRunner {
     val legacyPandasConversion = Seq(
       SQLConf.PYTHON_TABLE_UDF_LEGACY_PANDAS_CONVERSION_ENABLED.key ->
       conf.legacyPandasConversion.toString)
+    val legacyPandasConversionUDF = Seq(
+      SQLConf.PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED.key ->
+      conf.legacyPandasConversionUDF.toString)
     Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++
-      arrowAyncParallelism ++ useLargeVarTypes ++ legacyPandasConversion: _*)
+      arrowAyncParallelism ++ useLargeVarTypes ++
+      legacyPandasConversion ++ legacyPandasConversionUDF: _*)
   }
 }

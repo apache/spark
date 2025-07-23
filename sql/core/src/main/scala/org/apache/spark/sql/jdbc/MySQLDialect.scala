@@ -201,7 +201,6 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     // Identifier quote characters can be included within an identifier if you quote the
     // identifier. If the character to be included within the identifier is the same as
     // that used to quote the identifier itself, then you need to double the character.
-    // The following statement creates a table named a`b that contains a column named c"d:
     val escapedColName = colName.replace("`", "``")
     s"`$escapedColName`"
   }

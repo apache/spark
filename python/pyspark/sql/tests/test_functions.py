@@ -84,7 +84,9 @@ class FunctionsTestsMixin:
         expected_missing_in_py = set(
             # TODO(SPARK-52888): Implement the make_time function in Python
             # TODO(SPARK-52889): Implement the current_time function in Python
-            ["current_time", "make_time"]
+            # TODO(SPARK-52890): Implement the to_time function in Python
+            # TODO(SPARK-52891): Implement the try_to_time function in Python
+            ["current_time", "make_time", "to_time", "try_to_time"]
         )
 
         self.assertEqual(
