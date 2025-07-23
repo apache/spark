@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.time.LocalTime
+import java.time.temporal.ChronoUnit
 
 import org.apache.spark.{SparkConf, SparkDateTimeException}
 import org.apache.spark.sql.functions._
@@ -35,12 +36,12 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
     // Check that both DataFrames have the same schema.
     val schema1 = df1.schema
     val schema2 = df2.schema
-    require(schema1 == schema2, s"Both DataFrames must have the same schema, but got " +
+    require(schema1 == schema2, "Both DataFrames must have the same schema, but got " +
       s"$schema1 and $schema2 for the two given DataFrames df1 and df2, respectively.")
     // Check that both DataFrames have the same number of rows.
     val numRows1 = df1.count()
     val numRows2 = df2.count()
-    require(numRows1 == numRows2, s"Both DataFrames must have the same number of rows, but got" +
+    require(numRows1 == numRows2, "Both DataFrames must have the same number of rows, but got" +
       s"$numRows1 and $numRows2 rows in the two given DataFrames df1 and df2, respectively.")
     // Check that both DataFrames have only 1 column.
     val fields1 = schema1.fields.length
@@ -49,23 +50,19 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
     require(fields2 == 1, s"The second DataFrame must have only one column, but got $fields2.")
     // Check that the column type is TimeType.
     val columnType1 = schema1.fields.head.dataType
-    require(columnType1.isInstanceOf[TimeType], s"The column type of the first DataFrame " +
+    require(columnType1.isInstanceOf[TimeType], "The column type of the first DataFrame " +
       s"must be TimeType, but got $columnType1.")
     val columnType2 = schema2.fields.head.dataType
-    require(columnType2.isInstanceOf[TimeType], s"The column type of the second DataFrame " +
+    require(columnType2.isInstanceOf[TimeType], "The column type of the second DataFrame " +
       s"must be TimeType, but got $columnType2.")
 
     // Extract the LocalTime values from the input DataFrames.
     val time1: LocalTime = df1.collect().head.get(0).asInstanceOf[LocalTime]
     val time2: LocalTime = df2.collect().head.get(0).asInstanceOf[LocalTime]
 
-    // Parse the results as times in milliseconds.
-    val timeValue1 = java.sql.Time.valueOf(time1).getTime
-    val timeValue2 = java.sql.Time.valueOf(time2).getTime
-
     // Check that the time difference is within a set number of minutes.
     val maxTimeDiffInMinutes = 15 // This should be enough time to ensure correctness.
-    val timeDiffInMillis = Math.abs(timeValue1 - timeValue2)
+    val timeDiffInMillis = Math.abs(ChronoUnit.MILLIS.between(time1, time2))
     assert(
       timeDiffInMillis <= maxTimeDiffInMinutes * 60 * 1000,
       s"Time difference exceeds $maxTimeDiffInMinutes minutes: $timeDiffInMillis ms."
