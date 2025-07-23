@@ -425,9 +425,6 @@ case class CreateSQLFunctionCommand(
       }
     }
 
-    // Normalize the catalog name `spark_catalog` to `hive_metastore` before checking
-    // cyclic function references. Function identifiers fetched from function registries
-    // will already have the catalog name normalized.
     checkPlan(plan, Seq(identifier))
   }
 
