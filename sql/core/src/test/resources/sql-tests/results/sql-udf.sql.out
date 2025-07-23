@@ -3850,6 +3850,110 @@ struct<>
 
 
 -- !query
+CREATE TEMPORARY VIEW t AS VALUES (0) t(a)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION foo3_5a(x INT) RETURNS INT RETURN x
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION foo3_5b(x INT) RETURNS INT RETURN (SELECT SUM(a) FROM t)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION foo3_5c(x INT) RETURNS TABLE (a INT) RETURN SELECT a FROM t
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS INT RETURN foo3_5a(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "FUNCTION",
+    "tempObjName" : "`foo3_5a`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS TABLE (a INT) RETURN SELECT foo3_5a(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "FUNCTION",
+    "tempObjName" : "`foo3_5a`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS INT RETURN (SELECT SUM(a) FROM t)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`t`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS TABLE (a INT) RETURN SELECT a FROM t
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`t`"
+  }
+}
+
+
+-- !query
 CREATE FUNCTION foo3_14a() RETURNS INT RETURN 1
 -- !query schema
 struct<>
@@ -5053,6 +5157,46 @@ struct<>
 
 -- !query
 DROP FUNCTION IF EXISTS foo4_3
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION IF EXISTS foo1d3
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION IF EXISTS foo3_3b
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION IF EXISTS foo3_5a
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION IF EXISTS foo3_5b
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION IF EXISTS foo3_5c
 -- !query schema
 struct<>
 -- !query output
