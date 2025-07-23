@@ -262,7 +262,7 @@ class NumericOps(DataTypeOps):
                     return left_scol.rename(None)  # type: ignore[attr-defined]
                 if _is_boolean_type(right):  # numeric vs. bool
                     right = transform_boolean_operand_to_numeric(
-                        right, spark_type=as_spark_type(left.dtype)
+                        right, spark_type=left.spark.data_type
                     )
             return pyspark_column_op("__eq__", left, right, fillna=False)
 
