@@ -471,8 +471,7 @@ CREATE OR REPLACE FUNCTION foo1d5(a INT, b INT) RETURNS INT RETURN a + foo1d4(b)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-requirement failed: Unresolved attributes found when constructing LocalRelation.
+
 
 
 -- !query
@@ -480,7 +479,7 @@ SELECT foo1d5(10, 2)
 -- !query schema
 struct<spark_catalog.default.foo1d5(10, 2):int>
 -- !query output
-12
+15
 
 
 -- !query
@@ -1722,31 +1721,15 @@ CREATE OR REPLACE FUNCTION bar1_10(b INT) RETURNS STRING RETURN foo1_10(TRY_CAST
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-requirement failed: Unresolved attributes found when constructing LocalRelation.
+
 
 
 -- !query
 SELECT bar1_10(3)
 -- !query schema
-struct<>
+struct<spark_catalog.default.bar1_10(3):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`bar1_10`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 17,
-    "fragment" : "bar1_10(3)"
-  } ]
-}
+5
 
 
 -- !query
@@ -3917,8 +3900,7 @@ CREATE FUNCTION foo3_4b(x INT) RETURNS INT RETURN foo3_4a(x)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-requirement failed: Unresolved attributes found when constructing LocalRelation.
+
 
 
 -- !query
@@ -3926,14 +3908,7 @@ CREATE FUNCTION foo3_4c(x INT) RETURNS INT RETURN foo3_4b(x)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
-{
-  "errorClass" : "ROUTINE_NOT_FOUND",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`default`.`foo3_4b`"
-  }
-}
+
 
 
 -- !query
@@ -3941,14 +3916,7 @@ CREATE FUNCTION foo3_4d(x INT) RETURNS INT RETURN (SELECT foo3_4c(x))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
-{
-  "errorClass" : "ROUTINE_NOT_FOUND",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`default`.`foo3_4c`"
-  }
-}
+
 
 
 -- !query
@@ -3956,8 +3924,7 @@ CREATE FUNCTION foo3_4e(x INT) RETURNS TABLE(a INT) RETURN SELECT foo3_4a(x)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-requirement failed: Unresolved attributes found when constructing LocalRelation.
+
 
 
 -- !query
@@ -3965,14 +3932,7 @@ CREATE FUNCTION foo3_4f(x INT) RETURNS TABLE(b INT) RETURN SELECT * FROM foo3_4e
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
-{
-  "errorClass" : "ROUTINE_NOT_FOUND",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`default`.`foo3_4e`"
-  }
-}
+
 
 
 -- !query
@@ -3980,12 +3940,12 @@ CREATE OR REPLACE FUNCTION foo3_4a(x INT) RETURNS INT RETURN foo3_4b(x)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ROUTINE_NOT_FOUND",
-  "sqlState" : "42883",
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
   "messageParameters" : {
-    "routineName" : "`default`.`foo3_4b`"
+    "path" : "spark_catalog.default.foo3_4a -> spark_catalog.default.foo3_4b -> spark_catalog.default.foo3_4a"
   }
 }
 
@@ -3995,12 +3955,12 @@ CREATE OR REPLACE FUNCTION foo3_4a(x INT) RETURNS INT RETURN foo3_4c(x)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ROUTINE_NOT_FOUND",
-  "sqlState" : "42883",
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
   "messageParameters" : {
-    "routineName" : "`default`.`foo3_4c`"
+    "path" : "spark_catalog.default.foo3_4a -> spark_catalog.default.foo3_4c -> spark_catalog.default.foo3_4b -> spark_catalog.default.foo3_4a"
   }
 }
 
@@ -4010,12 +3970,12 @@ CREATE OR REPLACE FUNCTION foo3_4a(x INT) RETURNS INT RETURN foo3_4d(x)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ROUTINE_NOT_FOUND",
-  "sqlState" : "42883",
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
   "messageParameters" : {
-    "routineName" : "`default`.`foo3_4d`"
+    "path" : "spark_catalog.default.foo3_4a -> spark_catalog.default.foo3_4d -> spark_catalog.default.foo3_4c -> spark_catalog.default.foo3_4b -> spark_catalog.default.foo3_4a"
   }
 }
 
@@ -4025,12 +3985,12 @@ CREATE OR REPLACE FUNCTION foo3_4a(x INT) RETURNS INT RETURN SELECT SUM(a) FROM 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ROUTINE_NOT_FOUND",
-  "sqlState" : "42883",
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
   "messageParameters" : {
-    "routineName" : "`default`.`foo3_4e`"
+    "path" : "spark_catalog.default.foo3_4a -> spark_catalog.default.foo3_4e -> spark_catalog.default.foo3_4a"
   }
 }
 
@@ -4040,12 +4000,12 @@ CREATE OR REPLACE FUNCTION foo3_4e(x INT) RETURNS TABLE (c INT) RETURN SELECT * 
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ROUTINE_NOT_FOUND",
-  "sqlState" : "42883",
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
   "messageParameters" : {
-    "routineName" : "`default`.`foo3_4f`"
+    "path" : "spark_catalog.default.foo3_4e -> spark_catalog.default.foo3_4f -> spark_catalog.default.foo3_4e"
   }
 }
 

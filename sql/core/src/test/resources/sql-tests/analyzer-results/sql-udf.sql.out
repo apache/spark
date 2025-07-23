@@ -425,16 +425,16 @@ Project [spark_catalog.default.foo1d5(a#x, b#x) AS spark_catalog.default.foo1d5(
 -- !query
 CREATE OR REPLACE FUNCTION foo1d5(a INT, b INT) RETURNS INT RETURN a + foo1d4(b)
 -- !query analysis
-java.lang.IllegalArgumentException
-requirement failed: Unresolved attributes found when constructing LocalRelation.
+CreateSQLFunctionCommand spark_catalog.default.foo1d5, a INT, b INT, INT, a + foo1d4(b), false, false, false, true
 
 
 -- !query
 SELECT foo1d5(10, 2)
 -- !query analysis
 Project [spark_catalog.default.foo1d5(a#x, b#x) AS spark_catalog.default.foo1d5(10, 2)#x]
-+- Project [cast(10 as int) AS a#x, cast(2 as int) AS b#x]
-   +- OneRowRelation
++- Project [a#x, b#x, cast(b#x as int) AS a#x, cast(cast(3 as int) as int) AS b#x]
+   +- Project [cast(10 as int) AS a#x, cast(2 as int) AS b#x]
+      +- OneRowRelation
 
 
 -- !query
@@ -1406,29 +1406,16 @@ CreateSQLFunctionCommand spark_catalog.default.foo1_10, a INT, INT, a + 2, false
 -- !query
 CREATE OR REPLACE FUNCTION bar1_10(b INT) RETURNS STRING RETURN foo1_10(TRY_CAST(b AS STRING))
 -- !query analysis
-java.lang.IllegalArgumentException
-requirement failed: Unresolved attributes found when constructing LocalRelation.
+CreateSQLFunctionCommand spark_catalog.default.bar1_10, b INT, STRING, foo1_10(TRY_CAST(b AS STRING)), false, false, false, true
 
 
 -- !query
 SELECT bar1_10(3)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`bar1_10`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 17,
-    "fragment" : "bar1_10(3)"
-  } ]
-}
+Project [spark_catalog.default.bar1_10(b#x) AS spark_catalog.default.bar1_10(3)#x]
++- Project [b#x, cast(try_cast(b#x as string) as int) AS a#x]
+   +- Project [cast(3 as int) AS b#x]
+      +- OneRowRelation
 
 
 -- !query
@@ -3769,65 +3756,42 @@ CreateSQLFunctionCommand spark_catalog.default.foo3_4a, x INT, INT, 1, false, fa
 -- !query
 CREATE FUNCTION foo3_4b(x INT) RETURNS INT RETURN foo3_4a(x)
 -- !query analysis
-java.lang.IllegalArgumentException
-requirement failed: Unresolved attributes found when constructing LocalRelation.
+CreateSQLFunctionCommand spark_catalog.default.foo3_4b, x INT, INT, foo3_4a(x), false, false, false, false
 
 
 -- !query
 CREATE FUNCTION foo3_4c(x INT) RETURNS INT RETURN foo3_4b(x)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
-{
-  "errorClass" : "ROUTINE_NOT_FOUND",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`default`.`foo3_4b`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_4c, x INT, INT, foo3_4b(x), false, false, false, false
 
 
 -- !query
 CREATE FUNCTION foo3_4d(x INT) RETURNS INT RETURN (SELECT foo3_4c(x))
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
-{
-  "errorClass" : "ROUTINE_NOT_FOUND",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`default`.`foo3_4c`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_4d, x INT, INT, (SELECT foo3_4c(x)), false, false, false, false
 
 
 -- !query
 CREATE FUNCTION foo3_4e(x INT) RETURNS TABLE(a INT) RETURN SELECT foo3_4a(x)
 -- !query analysis
-java.lang.IllegalArgumentException
-requirement failed: Unresolved attributes found when constructing LocalRelation.
+CreateSQLFunctionCommand spark_catalog.default.foo3_4e, x INT, a INT, SELECT foo3_4a(x), true, false, false, false
 
 
 -- !query
 CREATE FUNCTION foo3_4f(x INT) RETURNS TABLE(b INT) RETURN SELECT * FROM foo3_4e(x)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
-{
-  "errorClass" : "ROUTINE_NOT_FOUND",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`default`.`foo3_4e`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.foo3_4f, x INT, b INT, SELECT * FROM foo3_4e(x), true, false, false, false
 
 
 -- !query
 CREATE OR REPLACE FUNCTION foo3_4a(x INT) RETURNS INT RETURN foo3_4b(x)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ROUTINE_NOT_FOUND",
-  "sqlState" : "42883",
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
   "messageParameters" : {
-    "routineName" : "`default`.`foo3_4b`"
+    "path" : "spark_catalog.default.foo3_4a -> spark_catalog.default.foo3_4b -> spark_catalog.default.foo3_4a"
   }
 }
 
@@ -3835,12 +3799,12 @@ org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
 -- !query
 CREATE OR REPLACE FUNCTION foo3_4a(x INT) RETURNS INT RETURN foo3_4c(x)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ROUTINE_NOT_FOUND",
-  "sqlState" : "42883",
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
   "messageParameters" : {
-    "routineName" : "`default`.`foo3_4c`"
+    "path" : "spark_catalog.default.foo3_4a -> spark_catalog.default.foo3_4c -> spark_catalog.default.foo3_4b -> spark_catalog.default.foo3_4a"
   }
 }
 
@@ -3848,12 +3812,12 @@ org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
 -- !query
 CREATE OR REPLACE FUNCTION foo3_4a(x INT) RETURNS INT RETURN foo3_4d(x)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ROUTINE_NOT_FOUND",
-  "sqlState" : "42883",
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
   "messageParameters" : {
-    "routineName" : "`default`.`foo3_4d`"
+    "path" : "spark_catalog.default.foo3_4a -> spark_catalog.default.foo3_4d -> spark_catalog.default.foo3_4c -> spark_catalog.default.foo3_4b -> spark_catalog.default.foo3_4a"
   }
 }
 
@@ -3861,12 +3825,12 @@ org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
 -- !query
 CREATE OR REPLACE FUNCTION foo3_4a(x INT) RETURNS INT RETURN SELECT SUM(a) FROM foo3_4e(x)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ROUTINE_NOT_FOUND",
-  "sqlState" : "42883",
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
   "messageParameters" : {
-    "routineName" : "`default`.`foo3_4e`"
+    "path" : "spark_catalog.default.foo3_4a -> spark_catalog.default.foo3_4e -> spark_catalog.default.foo3_4a"
   }
 }
 
@@ -3874,12 +3838,12 @@ org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
 -- !query
 CREATE OR REPLACE FUNCTION foo3_4e(x INT) RETURNS TABLE (c INT) RETURN SELECT * FROM foo3_4f(x)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ROUTINE_NOT_FOUND",
-  "sqlState" : "42883",
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
   "messageParameters" : {
-    "routineName" : "`default`.`foo3_4f`"
+    "path" : "spark_catalog.default.foo3_4e -> spark_catalog.default.foo3_4f -> spark_catalog.default.foo3_4e"
   }
 }
 
@@ -4688,7 +4652,7 @@ DropFunctionCommand spark_catalog.default.foo1_10, true, false
 -- !query
 DROP FUNCTION IF EXISTS bar1_10
 -- !query analysis
-NoopCommand DROP FUNCTION, [bar1_10]
+DropFunctionCommand spark_catalog.default.bar1_10, true, false
 
 
 -- !query
@@ -5042,31 +5006,31 @@ DropFunctionCommand spark_catalog.default.foo3_4a, true, false
 -- !query
 DROP FUNCTION IF EXISTS foo3_4b
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo3_4b]
+DropFunctionCommand spark_catalog.default.foo3_4b, true, false
 
 
 -- !query
 DROP FUNCTION IF EXISTS foo3_4c
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo3_4c]
+DropFunctionCommand spark_catalog.default.foo3_4c, true, false
 
 
 -- !query
 DROP FUNCTION IF EXISTS foo3_4d
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo3_4d]
+DropFunctionCommand spark_catalog.default.foo3_4d, true, false
 
 
 -- !query
 DROP FUNCTION IF EXISTS foo3_4e
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo3_4e]
+DropFunctionCommand spark_catalog.default.foo3_4e, true, false
 
 
 -- !query
 DROP FUNCTION IF EXISTS foo3_4f
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo3_4f]
+DropFunctionCommand spark_catalog.default.foo3_4f, true, false
 
 
 -- !query
