@@ -422,6 +422,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       AddMetadataColumns ::
       DeduplicateRelations ::
       ResolveCollationName ::
+      ResolveMergeIntoSchemaEvolution ::
       new ResolveReferences(catalogManager) ::
       // Please do not insert any other rules in between. See the TODO comments in rule
       // ResolveLateralColumnAliasReference for more details.
@@ -1670,7 +1671,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   // The update value can access columns from both target and source tables.
                   resolveAssignments(assignments, m, MergeResolvePolicy.BOTH))
               case UpdateStarAction(updateCondition) =>
-                val assignments = targetTable.output.map { attr =>
+                val attrs = if (m.withSchemaEvolution) {
+                  // For UPDATE *, the column must be from source table, even with schema evolution.
+                  targetTable.output.filter(targetCol => sourceTable.output.exists(
+                    sourceCol => conf.resolver(sourceCol.name, targetCol.name)))
+                } else {
+                  targetTable.output
+                }
+                val assignments = attrs.map { attr =>
                   Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
                 }
                 UpdateAction(
@@ -1689,11 +1697,16 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   resolvedInsertCondition,
                   resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE))
               case InsertStarAction(insertCondition) =>
-                // The insert action is used when not matched, so its condition and value can only
-                // access columns from the source table.
+                val attrs = if (m.withSchemaEvolution) {
+                  // For INSERT *, the column must be from source table, even with schema evolution.
+                  targetTable.output.filter(targetCol => sourceTable.output.exists(
+                    sourceCol => conf.resolver(sourceCol.name, targetCol.name)))
+                } else {
+                  targetTable.output
+                }
                 val resolvedInsertCondition = insertCondition.map(
                   resolveExpressionByPlanOutput(_, m.sourceTable))
-                val assignments = targetTable.output.map { attr =>
+                val assignments = attrs.map { attr =>
                   Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
                 }
                 InsertAction(
@@ -3686,10 +3699,19 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * - Detect plans that are not compatible with the output table and throw AnalysisException
    */
   object ResolveOutputRelation extends Rule[LogicalPlan] {
+
+    def mergeWithSchemaEvolution(query: LogicalPlan): Boolean = {
+      query match {
+        case MergeRows(_, _, _, _, _, _, _, _, Some(_)) => true
+        case _ => false
+      }
+    }
+
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(COMMAND), ruleId) {
       case v2Write: V2WriteCommand
-          if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved =>
+          if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved
+          && !mergeWithSchemaEvolution(v2Write.query) =>
         validateStoreAssignmentPolicy()
         TableOutputResolver.suitableForByNameCheck(v2Write.isByName,
           expected = v2Write.table.output, queryOutput = v2Write.query.output)
