@@ -29,7 +29,7 @@ BLOCKED_METHODS: List = [
     {
         "class": RuntimeConf,
         "method": "set",
-        "error_sub_class": "RUNTIME_CONF_SET",
+        "error_sub_class": "SET_RUNTIME_CONF",
     },
     {
         "class": Catalog,

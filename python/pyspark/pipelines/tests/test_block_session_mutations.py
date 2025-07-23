@@ -52,7 +52,7 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
 
                     self.assertEqual(
                         context.exception.getCondition(),
-                        f"{ERROR_CLASS}.RUNTIME_CONF_SET",
+                        f"{ERROR_CLASS}.SET_RUNTIME_CONF",
                     )
                     self.assertIn("'RuntimeConf.set'", str(context.exception))
 

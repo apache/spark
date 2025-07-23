@@ -1007,7 +1007,7 @@
       "Session mutation <method> is not allowed in declarative pipelines."
     ],
     "sub_class": {
-      "RUNTIME_CONF_SET": {
+      "SET_RUNTIME_CONF": {
         "message": [
           "Instead set configuration via the pipeline spec or use the 'spark_conf' argument in various decorators."
         ]
