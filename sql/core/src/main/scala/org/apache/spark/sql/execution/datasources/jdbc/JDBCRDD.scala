@@ -94,7 +94,7 @@ object JDBCRDD extends Logging {
    */
   val remoteSchemaDiscoveryMetric: SQLMetric = SQLMetrics.createNanoTimingMetric(
     SparkSession.active.sparkContext,
-    name = "Remote schema discovery time"
+    name = "Remote JDBC schema discovery time"
   )
 
   /**
