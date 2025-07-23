@@ -102,7 +102,7 @@ def _create_blocked_method(error_method_name: str, error_sub_class: str) -> Call
 
 
 @contextmanager
-def block_imperative_constructs() -> Generator[None, None, None]:
+def block_session_mutations() -> Generator[None, None, None]:
     """
     Context manager that blocks imperative constructs found in a pipeline python definition file
     See BLOCKED_METHODS above for a list
