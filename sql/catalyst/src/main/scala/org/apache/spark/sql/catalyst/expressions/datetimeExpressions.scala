@@ -3086,17 +3086,18 @@ case class TryMakeTimestamp(
 case class MakeTimestampFromDateTime(
     date: Expression,
     time: Option[Expression] = None,
-    timezone: Option[Expression] = None)
-  extends Expression with RuntimeReplaceable with ExpectsInputTypes {
+    timezone: Option[Expression] = None,
+    timeZoneId: Option[String] = None)
+  extends Expression with RuntimeReplaceable with ExpectsInputTypes with TimeZoneAwareExpression {
 
   def this(date: Expression) =
-    this(date, None, None)
+    this(date, None, None, None)
 
   def this(date: Expression, time: Expression) =
-    this(date, Some(time), None)
+    this(date, Some(time), None, None)
 
   def this(date: Expression, time: Expression, timezone: Expression) =
-    this(date, Some(time), Some(timezone))
+    this(date, Some(time), Some(timezone), None)
 
   override def children: Seq[Expression] = Seq(date) ++ time ++ timezone
 
@@ -3119,6 +3120,11 @@ case class MakeTimestampFromDateTime(
   }
 
   override def prettyName: String = "make_timestamp"
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
