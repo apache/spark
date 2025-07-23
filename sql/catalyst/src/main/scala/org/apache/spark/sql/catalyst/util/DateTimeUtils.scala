@@ -533,17 +533,6 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Set of supported time truncation levels for TIME values.
-   */
-  private val supportedTimeTruncLevels = Set(
-    TRUNC_TO_HOUR,
-    TRUNC_TO_MINUTE,
-    TRUNC_TO_SECOND,
-    TRUNC_TO_MILLISECOND,
-    TRUNC_TO_MICROSECOND
-  )
-
-  /**
    * Returns the truncate level, could be from TRUNC_TO_MICROSECOND to TRUNC_TO_YEAR,
    * or TRUNC_INVALID, TRUNC_INVALID means unsupported truncate level.
    */
