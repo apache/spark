@@ -378,7 +378,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private def loadFromFallbackLocation(appId: String, attemptId: Option[String], logPath: String)
     : ApplicationInfoWrapper = {
     val date = new Date(0)
-    val info = ApplicationAttemptInfo(attemptId, date, date, date, 0, "spark", false, "unknown")
+    val lastUpdate = new Date()
+    val info = ApplicationAttemptInfo(
+      attemptId, date, date, lastUpdate, 0, "spark", false, "unknown")
     addListing(new ApplicationInfoWrapper(
       ApplicationInfo(appId, appId, None, None, None, None, List.empty),
       List(new AttemptInfoWrapper(info, logPath, 0, Some(1), None, None, None, None))))

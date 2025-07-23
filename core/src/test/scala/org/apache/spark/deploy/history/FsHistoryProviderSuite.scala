@@ -1661,6 +1661,10 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         assert(provider.getAppUI("app1", None).isDefined == onDemandEnabled)
         assert(provider.getListing().length === (if (onDemandEnabled) 1 else 0))
 
+        // The dummy entry should be protected from cleanLogs()
+        provider.cleanLogs()
+        assert(dir.listFiles().length === 1)
+
         assert(dir.listFiles().length === 1)
         assert(provider.getAppUI("nonexist", None).isEmpty)
         assert(provider.getListing().length === (if (onDemandEnabled) 1 else 0))
