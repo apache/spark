@@ -299,7 +299,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "func" : "`try_to_date`",
+    "func" : "`try_to_timestamp`",
     "message" : "Text '2020-01-27T20:06:11.847' could not be parsed at index 10"
   }
 }
@@ -315,7 +315,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
-    "func" : "`try_to_date`",
+    "func" : "`try_to_timestamp`",
     "message" : "Text 'Unparseable' could not be parsed at index 0"
   }
 }
