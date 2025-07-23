@@ -23,6 +23,7 @@ from itertools import chain
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
+from pandas.core.dtypes.common import is_numeric_dtype
 
 from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import (
@@ -100,8 +101,18 @@ def transform_boolean_operand_to_numeric(
         dtype = spark_type_to_pandas_dtype(
             spark_type, use_extension_dtypes=operand._internal.data_fields[0].is_extension_dtype
         )
+
+        if is_ansi_mode_enabled(operand._internal.spark_frame.sparkSession):
+            casted = (
+                F.when(operand.spark.column.isNull(), None)
+                .otherwise(F.when(operand.spark.column, F.lit(1)).otherwise(F.lit(0)))
+                .cast(spark_type)
+            )
+        else:
+            casted = operand.spark.column.cast(spark_type)
+
         return operand._with_new_scol(
-            operand.spark.column.cast(spark_type),
+            casted,
             field=operand._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type),
         )
     elif isinstance(operand, bool):
@@ -115,7 +126,6 @@ def _should_return_all_false(left: IndexOpsLike, right: Any) -> bool:
     Determine if binary comparison should short-circuit to all False,
     based on incompatible dtypes: non-numeric vs. numeric (including bools).
     """
-    from pandas.core.dtypes.common import is_numeric_dtype
     from pyspark.pandas.base import IndexOpsMixin
 
     def are_both_numeric(left_dtype: Dtype, right_dtype: Dtype) -> bool:
@@ -512,7 +522,10 @@ class DataTypeOps(object, metaclass=ABCMeta):
             from pyspark.pandas.base import column_op
 
             if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession):
-                if _is_boolean_type(left):
+                # Handle bool vs. non-bool numeric comparisons
+                left_is_bool = _is_boolean_type(left)
+                right_is_non_bool_numeric = is_numeric_dtype(right) and not _is_boolean_type(right)
+                if left_is_bool and right_is_non_bool_numeric:
                     left = transform_boolean_operand_to_numeric(
                         left, spark_type=as_spark_type(right.dtype)
                     )

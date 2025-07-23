@@ -260,7 +260,7 @@ class NumericOps(DataTypeOps):
                 if _should_return_all_false(left, right):
                     left_scol = left._with_new_scol(F.lit(False))
                     return left_scol.rename(None)  # type: ignore[attr-defined]
-                if _is_boolean_type(right):
+                if _is_boolean_type(right):  # numeric vs. bool
                     right = transform_boolean_operand_to_numeric(
                         right, spark_type=as_spark_type(left.dtype)
                     )
