@@ -20,11 +20,10 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.datasketches.common.SketchesArgumentException
 import org.apache.datasketches.memory.Memory
 import org.apache.datasketches.theta.{CompactSketch, SetOperation}
-import org.apache.datasketches.thetacommon.ThetaUtil
 
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.ThetaSketch
+import org.apache.spark.sql.catalyst.util.ThetaSketchUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, IntegerType, LongType}
 
@@ -38,7 +37,7 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, Integ
        3
   """,
   group = "misc_funcs",
-  since = "4.0.0")
+  since = "3.5.5")
 case class ThetaSketchEstimate(child: Expression)
     extends UnaryExpression
     with CodegenFallback
@@ -78,7 +77,7 @@ case class ThetaSketchEstimate(child: Expression)
        6
   """,
   group = "misc_funcs",
-  since = "4.0.0")
+  since = "3.5.5")
 // scalastyle:on line.size.limit
 case class ThetaUnion(first: Expression, second: Expression, third: Expression)
     extends TernaryExpression
@@ -87,7 +86,7 @@ case class ThetaUnion(first: Expression, second: Expression, third: Expression)
   override def nullIntolerant: Boolean = true
 
   def this(first: Expression, second: Expression) = {
-    this(first, second, Literal(ThetaUtil.checkNomLongs(ThetaUtil.DEFAULT_NOMINAL_ENTRIES)))
+    this(first, second, Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))
   }
 
   def this(first: Expression, second: Expression, third: Int) = {
@@ -122,7 +121,7 @@ case class ThetaUnion(first: Expression, second: Expression, third: Expression)
           throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
       }
     val logNominalEntries = value3.asInstanceOf[Int]
-    ThetaSketch.checkLgNomLongs(logNominalEntries)
+    ThetaSketchUtils.checkLgNomLongs(logNominalEntries)
     val union = SetOperation.builder
       .setLogNominalEntries(logNominalEntries)
       .buildUnion
@@ -145,7 +144,7 @@ case class ThetaUnion(first: Expression, second: Expression, third: Expression)
        2
   """,
   group = "misc_funcs",
-  since = "4.0.0")
+  since = "3.5.5")
 // scalastyle:on line.size.limit
 case class ThetaDifference(first: Expression, second: Expression, third: Expression)
     extends TernaryExpression
@@ -154,7 +153,7 @@ case class ThetaDifference(first: Expression, second: Expression, third: Express
   override def nullIntolerant: Boolean = true
 
   def this(first: Expression, second: Expression) = {
-    this(first, second, Literal(ThetaUtil.checkNomLongs(ThetaUtil.DEFAULT_NOMINAL_ENTRIES)))
+    this(first, second, Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))
   }
 
   def this(first: Expression, second: Expression, third: Int) = {
@@ -189,7 +188,7 @@ case class ThetaDifference(first: Expression, second: Expression, third: Express
           throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
       }
     val logNominalEntries = value3.asInstanceOf[Int]
-    ThetaSketch.checkLgNomLongs(logNominalEntries)
+    ThetaSketchUtils.checkLgNomLongs(logNominalEntries)
     val difference = SetOperation.builder
       .setLogNominalEntries(logNominalEntries)
       .buildANotB
@@ -212,7 +211,7 @@ case class ThetaDifference(first: Expression, second: Expression, third: Express
        2
   """,
   group = "misc_funcs",
-  since = "4.0.0")
+  since = "3.5.5")
 // scalastyle:on line.size.limit
 case class ThetaIntersection(first: Expression, second: Expression, third: Expression)
     extends TernaryExpression
@@ -221,7 +220,7 @@ case class ThetaIntersection(first: Expression, second: Expression, third: Expre
   override def nullIntolerant: Boolean = true
 
   def this(first: Expression, second: Expression) = {
-    this(first, second, Literal(ThetaUtil.checkNomLongs(ThetaUtil.DEFAULT_NOMINAL_ENTRIES)))
+    this(first, second, Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))
   }
 
   def this(first: Expression, second: Expression, third: Int) = {
@@ -256,7 +255,7 @@ case class ThetaIntersection(first: Expression, second: Expression, third: Expre
           throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
       }
     val logNominalEntries = value3.asInstanceOf[Int]
-    ThetaSketch.checkLgNomLongs(logNominalEntries)
+    ThetaSketchUtils.checkLgNomLongs(logNominalEntries)
     val intersection = SetOperation.builder
       .setLogNominalEntries(logNominalEntries)
       .buildIntersection

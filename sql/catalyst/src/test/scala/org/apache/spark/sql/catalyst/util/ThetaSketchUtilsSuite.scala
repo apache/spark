@@ -19,38 +19,45 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 
-class ThetaSketchSuite extends SparkFunSuite {
+class ThetaSketchUtilsSuite extends SparkFunSuite {
 
   test("checkLgNomLongs: accepts values within valid range") {
-    val validValues = Seq(ThetaSketch.MIN_LG_NOM_LONGS, 10, 20, ThetaSketch.MAX_LG_NOM_LONGS)
+    val validValues =
+      Seq(ThetaSketchUtils.MIN_LG_NOM_LONGS, 10, 20, ThetaSketchUtils.MAX_LG_NOM_LONGS)
     validValues.foreach { value =>
       // Should not throw
-      ThetaSketch.checkLgNomLongs(value)
+      ThetaSketchUtils.checkLgNomLongs(value)
     }
   }
 
   test("checkLgNomLongs: throws exception for values below minimum") {
-    val invalidValues = Seq(ThetaSketch.MIN_LG_NOM_LONGS - 1, 0, -5)
+    val invalidValues = Seq(ThetaSketchUtils.MIN_LG_NOM_LONGS - 1, 0, -5)
     invalidValues.foreach { value =>
       val e = intercept[SparkRuntimeException] {
-        ThetaSketch.checkLgNomLongs(value)
+        ThetaSketchUtils.checkLgNomLongs(value)
       }
       assert(
         e.getMessage.contains(
-          s"must be between ${ThetaSketch.MIN_LG_NOM_LONGS} and ${ThetaSketch.MAX_LG_NOM_LONGS}"))
+          s"must be between ${ThetaSketchUtils.MIN_LG_NOM_LONGS} " +
+          s"and ${ThetaSketchUtils.MAX_LG_NOM_LONGS}"
+        )
+      )
       assert(e.getMessage.contains(s"$value"))
     }
   }
 
   test("checkLgNomLongs: throws exception for values above maximum") {
-    val invalidValues = Seq(ThetaSketch.MAX_LG_NOM_LONGS + 1, 30, 100)
+    val invalidValues = Seq(ThetaSketchUtils.MAX_LG_NOM_LONGS + 1, 30, 100)
     invalidValues.foreach { value =>
       val e = intercept[SparkRuntimeException] {
-        ThetaSketch.checkLgNomLongs(value)
+        ThetaSketchUtils.checkLgNomLongs(value)
       }
       assert(
         e.getMessage.contains(
-          s"must be between ${ThetaSketch.MIN_LG_NOM_LONGS} and ${ThetaSketch.MAX_LG_NOM_LONGS}"))
+          s"must be between ${ThetaSketchUtils.MIN_LG_NOM_LONGS} " +
+          s"and ${ThetaSketchUtils.MAX_LG_NOM_LONGS}"
+        )
+      )
       assert(e.getMessage.contains(s"$value"))
     }
   }

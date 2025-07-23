@@ -20,14 +20,13 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.datasketches.common.SketchesArgumentException
 import org.apache.datasketches.memory.Memory
 import org.apache.datasketches.theta.{CompactSketch, Intersection, SetOperation, Union, UpdateSketch, UpdateSketchBuilder}
-import org.apache.datasketches.thetacommon.ThetaUtil
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, ThetaSketch}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, ThetaSketchUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, ArrayType, BinaryType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType, TypeCollection}
@@ -63,7 +62,7 @@ case class IntersectionAggregationBuffer(sketch: Intersection) extends ThetaSket
        3
   """,
   group = "agg_funcs",
-  since = "4.0.0")
+  since = "3.5.5")
 // scalastyle:on line.size.limit
 case class ThetaSketchAgg(
     left: Expression,
@@ -78,14 +77,14 @@ case class ThetaSketchAgg(
 
   lazy val lgNomEntries: Int = {
     val lgNomEntriesInput = right.eval().asInstanceOf[Int]
-    ThetaSketch.checkLgNomLongs(lgNomEntriesInput)
+    ThetaSketchUtils.checkLgNomLongs(lgNomEntriesInput)
     lgNomEntriesInput
   }
 
   // Constructors
 
   def this(child: Expression) = {
-    this(child, Literal(ThetaUtil.checkNomLongs(ThetaUtil.DEFAULT_NOMINAL_ENTRIES)), 0, 0)
+    this(child, Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS), 0, 0)
   }
 
   def this(child: Expression, lgNomEntries: Expression) = {
@@ -280,7 +279,7 @@ case class ThetaSketchAgg(
        1
   """,
   group = "agg_funcs",
-  since = "4.0.0")
+  since = "3.5.5")
 // scalastyle:on line.size.limit
 case class ThetaUnionAgg(
     left: Expression,
@@ -295,14 +294,14 @@ case class ThetaUnionAgg(
 
   lazy val lgNomEntries: Int = {
     val lgNomEntriesInput = right.eval().asInstanceOf[Int]
-    ThetaSketch.checkLgNomLongs(lgNomEntriesInput)
+    ThetaSketchUtils.checkLgNomLongs(lgNomEntriesInput)
     lgNomEntriesInput
   }
 
   // Constructors
 
   def this(child: Expression) = {
-    this(child, Literal(ThetaUtil.checkNomLongs(ThetaUtil.DEFAULT_NOMINAL_ENTRIES)), 0, 0)
+    this(child, Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS), 0, 0)
   }
 
   def this(child: Expression, lgNomEntries: Expression) = {
@@ -480,7 +479,7 @@ case class ThetaUnionAgg(
        1
   """,
   group = "agg_funcs",
-  since = "4.0.0")
+  since = "3.5.5")
 // scalastyle:on line.size.limit
 case class ThetaIntersectionAgg(
     left: Expression,
@@ -495,14 +494,14 @@ case class ThetaIntersectionAgg(
 
   lazy val lgNomEntries: Int = {
     val lgNomEntriesInput = right.eval().asInstanceOf[Int]
-    ThetaSketch.checkLgNomLongs(lgNomEntriesInput)
+    ThetaSketchUtils.checkLgNomLongs(lgNomEntriesInput)
     lgNomEntriesInput
   }
 
   // Constructors
 
   def this(child: Expression) = {
-    this(child, Literal(ThetaUtil.checkNomLongs(ThetaUtil.DEFAULT_NOMINAL_ENTRIES)), 0, 0)
+    this(child, Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS), 0, 0)
   }
 
   def this(child: Expression, lgNomEntries: Expression) = {

@@ -19,24 +19,25 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
-object ThetaSketch {
+object ThetaSketchUtils {
   // Bounds copied from DataSketches' ThetaUtil
   final val MIN_LG_NOM_LONGS = 4
   final val MAX_LG_NOM_LONGS = 26
+  final val DEFAULT_LG_NOM_LONGS = 12
 
   /**
-   * Validates the lgNomLongs parameter for Theta sketch size.
-   * Throws a Spark SQL exception if the value is out of bounds.
+   * Validates the lgNomLongs parameter for Theta sketch size. Throws a Spark SQL exception if the
+   * value is out of bounds.
    *
-   * @param lgNomLongs Log2 of nominal entries
+   * @param lgNomLongs
+   *   Log2 of nominal entries
    */
   def checkLgNomLongs(lgNomLongs: Int): Unit = {
     if (lgNomLongs < MIN_LG_NOM_LONGS || lgNomLongs > MAX_LG_NOM_LONGS) {
       throw QueryExecutionErrors.thetaInvalidLgNomEntries(
         min = MIN_LG_NOM_LONGS,
         max = MAX_LG_NOM_LONGS,
-        value = lgNomLongs
-      )
+        value = lgNomLongs)
     }
   }
 }

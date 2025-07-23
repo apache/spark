@@ -1156,7 +1156,7 @@ object functions {
    * intersection buffer.
    *
    * @group agg_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_intersection_agg(e: Column, lgNomEntries: Column): Column =
     Column.fn("theta_intersection_agg", e, lgNomEntries)
@@ -1168,7 +1168,7 @@ object functions {
    * intersection buffer.
    *
    * @group agg_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_intersection_agg(e: Column, lgNomEntries: Int): Column =
     Column.fn("theta_intersection_agg", e, lit(lgNomEntries))
@@ -1180,7 +1180,7 @@ object functions {
    * intersection buffer.
    *
    * @group agg_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_intersection_agg(columnName: String, lgNomEntries: Int): Column =
     theta_intersection_agg(Column(columnName), lgNomEntries)
@@ -1191,7 +1191,7 @@ object functions {
    * via a Datasketches Intersection instance. Uses default intersection buffer size.
    *
    * @group agg_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_intersection_agg(e: Column): Column =
     Column.fn("theta_intersection_agg", e)
@@ -1202,7 +1202,7 @@ object functions {
    * via a Datasketches Intersection instance. Uses default intersection buffer size.
    *
    * @group agg_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_intersection_agg(columnName: String): Column =
     theta_intersection_agg(Column(columnName))
@@ -1212,7 +1212,7 @@ object functions {
    * configured with the lgNomEntries arg.
    *
    * @group agg_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_sketch_agg(e: Column, lgNomEntries: Column): Column =
     Column.fn("theta_sketch_agg", e, lgNomEntries)
@@ -1222,7 +1222,7 @@ object functions {
    * configured with the lgNomEntries arg.
    *
    * @group agg_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_sketch_agg(e: Column, lgNomEntries: Int): Column =
     Column.fn("theta_sketch_agg", e, lit(lgNomEntries))
@@ -1232,7 +1232,7 @@ object functions {
    * ThetaSketch configured with the lgNomEntries arg.
    *
    * @group agg_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_sketch_agg(columnName: String, lgNomEntries: Int): Column =
     theta_sketch_agg(Column(columnName), lgNomEntries)
@@ -1242,7 +1242,7 @@ object functions {
    * configured with the default lgNomEntries value.
    *
    * @group agg_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_sketch_agg(e: Column): Column =
     Column.fn("theta_sketch_agg", e)
@@ -1252,7 +1252,7 @@ object functions {
    * configured with the default lgNomEntries value.
    *
    * @group agg_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_sketch_agg(columnName: String): Column =
     theta_sketch_agg(Column(columnName))
@@ -1263,7 +1263,7 @@ object functions {
    * Datasketches Union instance. Allows setting of log nominal entries for the union buffer.
    *
    * @group agg_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_union_agg(e: Column, lgNomEntries: Column): Column =
     Column.fn("theta_union_agg", e, lgNomEntries)
@@ -1274,7 +1274,7 @@ object functions {
    * Datasketches Union instance. Allows setting of log nominal entries for the union buffer.
    *
    * @group agg_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_union_agg(e: Column, lgNomEntries: Int): Column =
     Column.fn("theta_union_agg", e, lit(lgNomEntries))
@@ -1285,7 +1285,7 @@ object functions {
    * Datasketches Union instance. Allows setting of log nominal entries for the union buffer.
    *
    * @group agg_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_union_agg(columnName: String, lgNomEntries: Int): Column =
     theta_union_agg(Column(columnName), lgNomEntries)
@@ -1296,7 +1296,7 @@ object functions {
    * Datasketches Union instance. Uses default union buffer size.
    *
    * @group agg_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_union_agg(e: Column): Column =
     Column.fn("theta_union_agg", e)
@@ -1307,7 +1307,7 @@ object functions {
    * Datasketches Union instance. Uses default union buffer size.
    *
    * @group agg_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_union_agg(columnName: String): Column =
     theta_union_agg(Column(columnName))
@@ -3674,7 +3674,7 @@ object functions {
    * Datasketches AnotB object. Uses default log nominal entries.
    *
    * @group misc_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_difference(c1: Column, c2: Column): Column =
     Column.fn("theta_difference", c1, c2)
@@ -3684,7 +3684,7 @@ object functions {
    * Datasketches AnotB object. Uses default log nominal entries.
    *
    * @group misc_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_difference(columnName1: String, columnName2: String): Column = {
     theta_difference(Column(columnName1), Column(columnName2))
@@ -3695,7 +3695,7 @@ object functions {
    * Datasketches AnotB object. Allows setting of log nominal entries for the difference buffer.
    *
    * @group misc_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_difference(c1: Column, c2: Column, lgNomEntries: Int): Column =
     Column.fn("theta_difference", c1, c2, lit(lgNomEntries))
@@ -3705,7 +3705,7 @@ object functions {
    * Datasketches AnotB object. Allows setting of log nominal entries for the difference buffer.
    *
    * @group misc_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_difference(columnName1: String, columnName2: String, lgNomEntries: Int): Column = {
     theta_difference(Column(columnName1), Column(columnName2), lgNomEntries)
@@ -3716,7 +3716,7 @@ object functions {
    * Datasketches Intersection object. Uses default log nominal entries.
    *
    * @group misc_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_intersection(c1: Column, c2: Column): Column =
     Column.fn("theta_intersection", c1, c2)
@@ -3726,7 +3726,7 @@ object functions {
    * Datasketches Intersection object. Uses default log nominal entries.
    *
    * @group misc_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_intersection(columnName1: String, columnName2: String): Column = {
     theta_intersection(Column(columnName1), Column(columnName2))
@@ -3738,7 +3738,7 @@ object functions {
    * buffer.
    *
    * @group misc_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_intersection(c1: Column, c2: Column, lgNomEntries: Int): Column =
     Column.fn("theta_intersection", c1, c2, lit(lgNomEntries))
@@ -3749,7 +3749,7 @@ object functions {
    * buffer.
    *
    * @group misc_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_intersection(columnName1: String, columnName2: String, lgNomEntries: Int): Column = {
     theta_intersection(Column(columnName1), Column(columnName2), lgNomEntries)
@@ -3760,7 +3760,7 @@ object functions {
    * Datasketches ThetaSketch.
    *
    * @group misc_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_sketch_estimate(c: Column): Column = Column.fn("theta_sketch_estimate", c)
 
@@ -3769,7 +3769,7 @@ object functions {
    * Datasketches ThetaSketch.
    *
    * @group misc_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_sketch_estimate(columnName: String): Column = {
     theta_sketch_estimate(Column(columnName))
@@ -3780,7 +3780,7 @@ object functions {
    * Union object. Uses default log nominal entries.
    *
    * @group misc_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_union(c1: Column, c2: Column): Column =
     Column.fn("theta_union", c1, c2)
@@ -3790,7 +3790,7 @@ object functions {
    * Union object. Uses default log nominal entries.
    *
    * @group misc_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_union(columnName1: String, columnName2: String): Column = {
     theta_union(Column(columnName1), Column(columnName2))
@@ -3801,7 +3801,7 @@ object functions {
    * Union object. Allows setting of log nominal entries for the union buffer.
    *
    * @group misc_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_union(c1: Column, c2: Column, lgNomEntries: Int): Column =
     Column.fn("theta_union", c1, c2, lit(lgNomEntries))
@@ -3811,7 +3811,7 @@ object functions {
    * Union object. Allows setting of log nominal entries for the union buffer.
    *
    * @group misc_funcs
-   * @since 4.0.0
+   * @since 3.5.5
    */
   def theta_union(columnName1: String, columnName2: String, lgNomEntries: Int): Column = {
     theta_union(Column(columnName1), Column(columnName2), lgNomEntries)
