@@ -717,13 +717,15 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
       // the default partitioning. Note that for such cases, it means that these
       // child operator will be replaced by Spark in query planning later, in other
       // words, `execute` won't be actually called on them during the execution of
-      // this plan. So we can safely return the default partitioning.
+      // this plan. So we can safely return the default partitioning. If it is a
+      // real exception, when `doExecute` is called to access `childrenRDDs`, the
+      // exception will be thrown again.
       case e if NonFatal(e) => super.outputPartitioning
     }
   }
 
   protected override def doExecute(): RDD[InternalRow] =
-    sparkContext.union(children.map(_.execute()))
+    sparkContext.union(childrenRDDs)
 
   override def supportsColumnar: Boolean = children.forall(_.supportsColumnar)
 
