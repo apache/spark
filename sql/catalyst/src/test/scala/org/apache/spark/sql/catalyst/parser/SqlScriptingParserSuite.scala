@@ -2012,7 +2012,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("lbl")))
   }
 
@@ -2031,7 +2031,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("lbl")))
   }
 
@@ -2050,7 +2050,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("lbl")))
   }
 
@@ -2092,7 +2092,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("lbl_1")))
   }
 
@@ -2111,7 +2111,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("lbl")))
   }
 
@@ -2130,7 +2130,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("lbl")))
   }
 
@@ -2149,7 +2149,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("w_loop")))
   }
 
@@ -2170,7 +2170,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("r_loop")))
   }
 
@@ -2189,7 +2189,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("l_loop")))
   }
 
@@ -2208,7 +2208,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("f_loop")))
   }
 
@@ -2384,7 +2384,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SqlScriptingException] {
         parsePlan(sqlScriptText)
       },
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> "`l2`"))
   }
 
@@ -2401,7 +2401,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SqlScriptingException] {
         parsePlan(sqlScriptText)
       },
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> "`l1`"))
   }
 
@@ -2420,7 +2420,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SqlScriptingException] {
         parsePlan(sqlScriptText)
       },
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> "`l1`"))
   }
 
@@ -2439,7 +2439,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SqlScriptingException] {
         parsePlan(sqlScriptText)
       },
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> "`l1`"))
   }
 
