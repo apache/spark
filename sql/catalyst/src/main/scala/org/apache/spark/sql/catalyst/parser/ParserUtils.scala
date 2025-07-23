@@ -327,7 +327,7 @@ class SqlScriptingLabelContext {
       if (seenLabels.contains(identifierName.toLowerCase(Locale.ROOT))) {
         withOrigin(ctx) {
           throw SqlScriptingErrors
-            .duplicateLabels(CurrentOrigin.get, identifierName)
+            .duplicateLabels(CurrentOrigin.get, identifierName.toLowerCase(Locale.ROOT))
         }
       }
     }

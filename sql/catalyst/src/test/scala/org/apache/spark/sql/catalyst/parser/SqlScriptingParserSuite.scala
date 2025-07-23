@@ -2424,6 +2424,42 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       parameters = Map("label" -> "`l1`"))
   }
 
+  test("nested for loop variable names are the same - should fail") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  FOR L1 AS SELECT 1 DO
+        |    FOR L1 AS SELECT 2 DO
+        |     SELECT 3;
+        |    END FOR;
+        |  END FOR;
+        |END""".stripMargin
+
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "LABEL_ALREADY_EXISTS",
+      parameters = Map("label" -> "`l1`"))
+  }
+
+  test("for loop variable names are the same but for loops are not nested") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  FOR L1 AS SELECT 1 DO
+        |    SELECT 2;
+        |  END FOR;
+        |  FOR L1 AS SELECT 3 DO
+        |    SELECT 4;
+        |  END FOR;
+        |END""".stripMargin
+
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.collection.length == 2)
+    assert(tree.collection.forall(_.isInstanceOf[ForStatement]))
+  }
+
   test("for statement") {
     val sqlScriptText =
       """
