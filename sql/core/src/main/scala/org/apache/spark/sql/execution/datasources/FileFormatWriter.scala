@@ -116,18 +116,21 @@ object FileFormatWriter extends Logging {
 
     val caseInsensitiveOptions = CaseInsensitiveMap(options)
 
-    val tableSchema = finalOutputSpec.tableSchema
-    DataSourceUtils.verifySchema(fileFormat, tableSchema)
-    DataSourceUtils.checkFieldNames(fileFormat, tableSchema)
+    val dataSchema = StructType(
+      finalOutputSpec.tableSchema.zip(finalOutputSpec.outputColumns).
+      filterNot(p => partitionSet.contains(p._2)).
+      map(_._1))
+    DataSourceUtils.verifySchema(fileFormat, dataSchema)
+    DataSourceUtils.checkFieldNames(fileFormat, dataSchema)
     // Note: prepareWrite has side effect. It sets "job".
     val outputWriterFactory =
-      fileFormat.prepareWrite(sparkSession, job, caseInsensitiveOptions, tableSchema)
+      fileFormat.prepareWrite(sparkSession, job, caseInsensitiveOptions, dataSchema)
 
     val description = new WriteJobDescription(
       uuid = UUID.randomUUID.toString,
       serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
       outputWriterFactory = outputWriterFactory,
-      tableSchema = tableSchema,
+      tableSchema = dataSchema,
       allColumns = finalOutputSpec.outputColumns,
       dataColumns = dataColumns,
       partitionColumns = partitionColumns,
