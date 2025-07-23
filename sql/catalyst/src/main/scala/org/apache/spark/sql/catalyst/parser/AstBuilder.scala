@@ -20,9 +20,11 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.{List, Locale}
 import java.util.concurrent.TimeUnit
 
+import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
+import scala.util.matching.Regex
 
 import org.antlr.v4.runtime.{ParserRuleContext, RuleContext, Token}
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
@@ -384,8 +386,12 @@ class AstBuilder extends DataTypeAstBuilder
     withOrigin(ctx) {
       Option(ctx.statement().asInstanceOf[ParserRuleContext])
         .orElse(Option(ctx.setStatementInsideSqlScript().asInstanceOf[ParserRuleContext]))
-        .map { s =>
-          SingleStatement(parsedPlan = visit(s).asInstanceOf[LogicalPlan])
+        .map {
+          case createVariableContext: CreateVariableContext =>
+            SingleStatement(parsedPlan = visitCreateVariableImpl(
+              createVariableContext,
+              isSqlScript = true))
+          case stmt => SingleStatement(parsedPlan = visit(stmt).asInstanceOf[LogicalPlan])
         }.getOrElse {
           if (ctx.getChildCount == 1) {
             ctx.getChild(0) match {
@@ -409,6 +415,9 @@ class AstBuilder extends DataTypeAstBuilder
                 visitDeclareHandlerStatementImpl(declareHandlerContext, parsingCtx)
               case declareConditionContext: DeclareConditionStatementContext =>
                 visitDeclareConditionStatementImpl(declareConditionContext)
+              case createVariableContext: CreateVariableContext =>
+                visitCreateVariableImpl(createVariableContext, isSqlScript = true)
+                  .asInstanceOf[CompoundPlanStatement]
               case stmt => visit(stmt).asInstanceOf[CompoundPlanStatement]
             }
           } else {
@@ -6372,6 +6381,22 @@ class AstBuilder extends DataTypeAstBuilder
     PosParameter(ctx.QUESTION().getSymbol.getStartIndex)
   }
 
+  private object SqlScriptingVariableContext {
+    private val forbiddenVariableNames: immutable.Set[Regex] =
+      immutable.Set("system".r, "session".r)
+
+    def isForbiddenVariableName(variableName: String): Boolean = {
+      forbiddenVariableNames.exists(_.matches(variableName.toLowerCase(Locale.ROOT)))
+    }
+  }
+
+  /**
+   * Proxy method used for visiting CreateVariable outside of SQL Scripts.
+   */
+  override def visitCreateVariable(ctx: CreateVariableContext): LogicalPlan = {
+    visitCreateVariableImpl(ctx, isSqlScript = false);
+  }
+
   /**
    * Create a [[CreateVariable]] command.
    *
@@ -6383,7 +6408,8 @@ class AstBuilder extends DataTypeAstBuilder
    *
    * We will add CREATE VARIABLE for persisted variable definitions to this, hence the name.
    */
-  override def visitCreateVariable(ctx: CreateVariableContext): LogicalPlan = withOrigin(ctx) {
+  private def visitCreateVariableImpl(ctx: CreateVariableContext, isSqlScript: Boolean)
+      : LogicalPlan = withOrigin(ctx) {
     val dataTypeOpt = Option(ctx.dataType()).map(typedVisit[DataType])
     val defaultExpression = if (ctx.variableDefaultExpression() == null) {
       if (dataTypeOpt.isEmpty) {
@@ -6397,6 +6423,16 @@ class AstBuilder extends DataTypeAstBuilder
       val default = visitVariableDefaultExpression(ctx.variableDefaultExpression())
       dataTypeOpt.map { dt => default.copy(child = Cast(default.child, dt)) }.getOrElse(default)
     }
+
+    val lowercaseIdentifierReference = ctx.identifierReference().getText.toLowerCase(Locale.ROOT)
+    if (isSqlScript
+      && SqlScriptingVariableContext.isForbiddenVariableName(lowercaseIdentifierReference)) {
+      withOrigin(ctx.identifierReference()) {
+        throw SqlScriptingErrors
+          .variableNameForbidden(CurrentOrigin.get, lowercaseIdentifierReference)
+      }
+    }
+
     CreateVariable(
       withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
       defaultExpression,
