@@ -511,22 +511,26 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Returns time truncated to the unit specified by the level.
    */
-  private def parseTimeTruncLevel(level: Int): ChronoUnit = {
-    level match {
-      case TRUNC_TO_HOUR => ChronoUnit.HOURS
-      case TRUNC_TO_MINUTE => ChronoUnit.MINUTES
-      case TRUNC_TO_SECOND => ChronoUnit.SECONDS
-      case TRUNC_TO_MILLISECOND => ChronoUnit.MILLIS
-      case TRUNC_TO_MICROSECOND => ChronoUnit.MICROS
+  private def parseTimeTruncLevel(level: UTF8String): ChronoUnit = {
+    if (level == null) {
+      throw QueryExecutionErrors.invalidTimeTruncUnitError("time_trunc", "null")
+    }
+    level.toString.toUpperCase(Locale.ROOT) match {
+      case "HOUR" => ChronoUnit.HOURS
+      case "MINUTE" => ChronoUnit.MINUTES
+      case "SECOND" => ChronoUnit.SECONDS
+      case "MILLISECOND" => ChronoUnit.MILLIS
+      case "MICROSECOND" => ChronoUnit.MICROS
       case _ =>
-        throw new IllegalArgumentException(s"Unsupported time truncation level: $level")
+        throw QueryExecutionErrors.invalidTimeTruncUnitError("time_trunc", level.toString)
     }
   }
 
   /**
-   * Returns time truncated to the unit specified by the level.
+   * Returns time truncated to the unit specified by the level. Trunc level should be generated
+   * using `parseTruncLevel()`, and should be between TRUNC_TO_HOUR and TRUNC_TO_MICROSECOND.
    */
-  private def timeTrunc(level: Int, nanos: Long): Long = {
+  def timeTrunc(level: UTF8String, nanos: Long): Long = {
     localTimeToNanos(nanosToLocalTime(nanos).truncatedTo(parseTimeTruncLevel(level)))
   }
 
@@ -540,20 +544,6 @@ object DateTimeUtils extends SparkDateTimeUtils {
     TRUNC_TO_MILLISECOND,
     TRUNC_TO_MICROSECOND
   )
-
-  /**
-   * Returns time truncated to the unit specified by the level. Trunc level should be generated
-   * using `parseTruncLevel()`, and should be between TRUNC_TO_HOUR and TRUNC_TO_MICROSECOND.
-   */
-  def timeTrunc(level: UTF8String, nanos: Long): Long = {
-    require(level != null, "Truncation level must not be null.")
-    require(nanos >= 0, "Nanoseconds must be non-negative.")
-    val truncLevel = parseTruncLevel(level)
-    if (!supportedTimeTruncLevels.contains(truncLevel)) {
-      throw QueryExecutionErrors.invalidTimeTruncUnitError("time_trunc", level.toString)
-    }
-    timeTrunc(truncLevel, nanos)
-  }
 
   /**
    * Returns the truncate level, could be from TRUNC_TO_MICROSECOND to TRUNC_TO_YEAR,
