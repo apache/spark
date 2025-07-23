@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit._
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
+import scala.util.control.NonFatal
 
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
 import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD}
@@ -31,15 +32,12 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
-
-import scala.util.control.NonFatal
 
 /** Physical plan for Project. */
 case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
@@ -702,21 +700,9 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
     }
   }
 
-  private def allowedOperators(child: SparkPlan): Boolean = {
-    child match {
-      // Their `execute` are not implemented
-      case n if n.containsPattern(SUBQUERY_EXEC) => false
-      case _ => true
-    }
-  }
-
   private lazy val childrenRDDs = children.map(_.execute())
 
   override def outputPartitioning: Partitioning = {
-    if (!children.forall(allowedOperators)) {
-      return super.outputPartitioning
-    }
-
     try {
       val nonEmptyRdds = childrenRDDs.filter(!_.partitions.isEmpty)
       if (sparkContext.isPartitionerAwareUnion(nonEmptyRdds)) {
@@ -811,8 +797,6 @@ object CoalesceExec {
 abstract class BaseSubqueryExec extends SparkPlan {
   def name: String
   def child: SparkPlan
-
-  override val nodePatterns : Seq[TreePattern] = Seq(SUBQUERY_EXEC)
 
   override def output: Seq[Attribute] = child.output
 
