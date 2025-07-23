@@ -169,7 +169,12 @@ case object ContainerCgroupMetrics extends ExecutorMetricType with Logging {
     "ContainerMemoryWorkingSetBytes"
   )
 
-  lazy val isAvailable = SparkEnv.get.conf.get(config.EXECUTOR_CONTAINER_METRICS_ENABLED)
+  lazy val isAvailable = {
+    Option(SparkEnv.get) match {
+      case None => false
+      case Some(e) => e.conf.get(config.EXECUTOR_CONTAINER_METRICS_ENABLED)
+    }
+  }
 
   /** read the cumulative CPU usage (ns) of the cgroup (v1 or v2) */
   private def readCpuUsageNs(): Long = {
