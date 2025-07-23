@@ -25,7 +25,7 @@ from pyspark.testing.connectutils import (
     connect_requirement_message,
 )
 
-from pyspark.pipelines.block_imperative_constructs import block_imperative_constructs, BLOCKED_METHODS
+from pyspark.pipelines.block_imperative_constructs import block_imperative_constructs, BLOCKED_METHODS, ERROR_CLASS
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message or "Connect not available")
@@ -48,7 +48,7 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
 
                     self.assertEqual(
                         context.exception.getCondition(),
-                        "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+                        f"{ERROR_CLASS}.RUNTIME_CONF_SET",
                     )
                     self.assertIn("'RuntimeConf.set'", str(context.exception))
 
@@ -62,7 +62,7 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
 
             self.assertEqual(
                 context.exception.getCondition(),
-                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+                f"{ERROR_CLASS}.SET_CURRENT_CATALOG",
             )
             self.assertIn("'Catalog.setCurrentCatalog'", str(context.exception))
 
@@ -76,7 +76,7 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
 
             self.assertEqual(
                 context.exception.getCondition(),
-                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+                f"{ERROR_CLASS}.SET_CURRENT_DATABASE",
             )
             self.assertIn("'Catalog.setCurrentDatabase'", str(context.exception))
 
@@ -90,7 +90,7 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
 
             self.assertEqual(
                 context.exception.getCondition(),
-                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+                f"{ERROR_CLASS}.DROP_TEMP_VIEW",
             )
             self.assertIn("'Catalog.dropTempView'", str(context.exception))
 
@@ -104,7 +104,7 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
 
             self.assertEqual(
                 context.exception.getCondition(),
-                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+                f"{ERROR_CLASS}.DROP_GLOBAL_TEMP_VIEW",
             )
             self.assertIn("'Catalog.dropGlobalTempView'", str(context.exception))
 
@@ -118,7 +118,7 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
 
             self.assertEqual(
                 context.exception.getCondition(),
-                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+                f"{ERROR_CLASS}.CREATE_TEMP_VIEW",
             )
             self.assertIn("'DataFrame.createTempView'", str(context.exception))
 
@@ -132,7 +132,7 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
 
             self.assertEqual(
                 context.exception.getCondition(),
-                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+                f"{ERROR_CLASS}.CREATE_OR_REPLACE_TEMP_VIEW",
             )
             self.assertIn("'DataFrame.createOrReplaceTempView'", str(context.exception))
 
@@ -146,7 +146,7 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
 
             self.assertEqual(
                 context.exception.getCondition(),
-                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+                f"{ERROR_CLASS}.CREATE_GLOBAL_TEMP_VIEW",
             )
             self.assertIn("'DataFrame.createGlobalTempView'", str(context.exception))
 
@@ -160,7 +160,7 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
 
             self.assertEqual(
                 context.exception.getCondition(),
-                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+                f"{ERROR_CLASS}.CREATE_OR_REPLACE_GLOBAL_TEMP_VIEW",
             )
             self.assertIn("'DataFrame.createOrReplaceGlobalTempView'", str(context.exception))
 
@@ -177,7 +177,7 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
 
             self.assertEqual(
                 context.exception.getCondition(),
-                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+                f"{ERROR_CLASS}.REGISTER_UDF",
             )
             self.assertIn("'UDFRegistration.register'", str(context.exception))
 
@@ -193,7 +193,7 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
 
             self.assertEqual(
                 context.exception.getCondition(),
-                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+                f"{ERROR_CLASS}.REGISTER_JAVA_UDF",
             )
             self.assertIn("'UDFRegistration.registerJavaFunction'", str(context.exception))
 
@@ -207,7 +207,7 @@ class BlockImperativeConfSetConnectTests(ReusedConnectTestCase):
 
             self.assertEqual(
                 context.exception.getCondition(),
-                "IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+                f"{ERROR_CLASS}.REGISTER_JAVA_UDAF",
             )
             self.assertIn("'UDFRegistration.registerJavaUDAF'", str(context.exception))
 

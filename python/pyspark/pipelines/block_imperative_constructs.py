@@ -24,80 +24,77 @@ from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.udf import UDFRegistration
 
 # pyspark methods that should be blocked from executing in python pipeline definition files
+ERROR_CLASS = "SESSION_MUTATION_IN_DECLARATIVE_PIPELINE"
 BLOCKED_METHODS: List = [
     {
         "class": RuntimeConf,
         "method": "set",
-        "suggestion": "Instead set configuration via the pipeline spec "
-        "or use the 'spark_conf' argument in various decorators",
+        "error_sub_class": f"RUNTIME_CONF_SET",
     },
     {
         "class": Catalog,
         "method": "setCurrentCatalog",
-        "suggestion": "Instead set catalog via the pipeline spec "
-        "or the 'name' argument on the dataset decorators",
+        "error_sub_class": f"SET_CURRENT_CATALOG",
     },
     {
         "class": Catalog,
         "method": "setCurrentDatabase",
-        "suggestion": "Instead set database via the pipeline spec "
-        "or the 'name' argument on the dataset decorators",
+        "error_sub_class": f"SET_CURRENT_DATABASE",
     },
     {
         "class": Catalog,
         "method": "dropTempView",
-        "suggestion": "Instead remove the temporary view definition directly",
+        "error_sub_class": f"DROP_TEMP_VIEW",
     },
     {
         "class": Catalog,
         "method": "dropGlobalTempView",
-        "suggestion": "Instead remove the temporary view definition directly",
+        "error_sub_class": f"DROP_GLOBAL_TEMP_VIEW",
     },
     {
         "class": DataFrame,
         "method": "createTempView",
-        "suggestion": "Instead use the @temporary_view decorator to define temporary views",
+        "error_sub_class": "CREATE_TEMP_VIEW",
     },
     {
         "class": DataFrame,
         "method": "createOrReplaceTempView",
-        "suggestion": "Instead use the @temporary_view decorator to define temporary views",
+        "error_sub_class": "CREATE_OR_REPLACE_TEMP_VIEW",
     },
     {
         "class": DataFrame,
         "method": "createGlobalTempView",
-        "suggestion": "Instead use the @temporary_view decorator to define temporary views",
+        "error_sub_class": "CREATE_GLOBAL_TEMP_VIEW",
     },
     {
         "class": DataFrame,
         "method": "createOrReplaceGlobalTempView",
-        "suggestion": "Instead use the @temporary_view decorator to define temporary views",
+        "error_sub_class": "CREATE_OR_REPLACE_GLOBAL_TEMP_VIEW",
     },
     {
         "class": UDFRegistration,
         "method": "register",
-        "suggestion": "",
+        "error_sub_class": "REGISTER_UDF",
     },
     {
         "class": UDFRegistration,
         "method": "registerJavaFunction",
-        "suggestion": "",
+        "error_sub_class": "REGISTER_JAVA_UDF",
     },
     {
         "class": UDFRegistration,
         "method": "registerJavaUDAF",
-        "suggestion": "",
+        "error_sub_class": "REGISTER_JAVA_UDAF",
     },
 ]
 
 
-def _create_blocked_method(error_method_name: str, suggestion: str) -> Callable:
+def _create_blocked_method(error_method_name: str, error_sub_class: str) -> Callable:
     def blocked_method(*args: object, **kwargs: object) -> NoReturn:
         raise PySparkException(
-            errorClass="IMPERATIVE_CONSTRUCT_IN_DECLARATIVE_PIPELINE",
+            errorClass=f"{ERROR_CLASS}.{error_sub_class}",
             messageParameters={
                 "method": error_method_name,
-                "suggestion": suggestion,
             },
         )
 
@@ -123,7 +120,7 @@ def block_imperative_constructs() -> Generator[None, None, None]:
             cls = method_info["class"]
             method_name = method_info["method"]
             error_method_name = f"'{cls.__name__}.{method_name}'"
-            blocked_method = _create_blocked_method(error_method_name, method_info["suggestion"])
+            blocked_method = _create_blocked_method(error_method_name, method_info["error_sub_class"])
             setattr(cls, method_name, blocked_method)
 
         yield
