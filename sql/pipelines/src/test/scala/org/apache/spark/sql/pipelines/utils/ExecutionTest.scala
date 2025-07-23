@@ -62,7 +62,10 @@ trait TestPipelineUpdateContextMixin {
   ) extends PipelineUpdateContext {
     val eventBuffer = new PipelineRunEventBuffer()
 
-    override val eventCallback: PipelineEvent => Unit = eventBuffer.addEvent
+    override val eventCallback: PipelineEvent => Unit = { event =>
+      eventBuffer.addEvent(event)
+      println(event.messageWithError)
+    }
 
     override def flowProgressEventLogger: FlowProgressEventLogger = {
       new FlowProgressEventLogger(eventCallback = eventCallback)

@@ -111,11 +111,15 @@ class GraphRegistrationContext(
         validatedViews
           .filter(_.isInstanceOf[TemporaryView])
           .exists(_.identifier == f.destinationIdentifier)
+      val flowWritesToSink =
+        validatedSinks
+          .filter(_.isInstanceOf[Sink])
+          .exists(_.identifier == f.destinationIdentifier)
 
       // If the flow is created implicitly as part of defining a view, then we do not
       // qualify the flow identifier and the flow destination. This is because views are
       // not permitted to have multipart
-      if (isImplicitFlow && flowWritesToView) {
+      if ((isImplicitFlow && flowWritesToView) || flowWritesToSink) {
         f
       } else {
         f.copy(

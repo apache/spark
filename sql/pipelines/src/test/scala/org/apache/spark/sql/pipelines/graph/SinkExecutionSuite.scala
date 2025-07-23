@@ -53,10 +53,14 @@ class SinkExecutionSuite extends ExecutionTest with SharedSparkSession {
       val unresolvedGraph =
         createDataflowGraph(ints.toDF(), "sink_a", "flow_to_sink_a", "memory")
       val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph)
-      updateContext.pipelineExecution.runPipeline()
+      updateContext.pipelineExecution.startPipeline()
       updateContext.pipelineExecution.awaitCompletion()
 
-      verifyCheckpointLocation(rootDirectory.getPath, unresolvedGraph.flows.head.identifier)
+      verifyCheckpointLocation(
+        rootDirectory.getPath,
+        updateContext.pipelineExecution.graphExecution.get,
+        unresolvedGraph.flows.head.identifier
+      )
 
       checkAnswer(spark.sql("SELECT * FROM sink_a"), Seq(1, 2, 3, 4).toDF().collect().toSeq)
     }
@@ -82,10 +86,14 @@ class SinkExecutionSuite extends ExecutionTest with SharedSparkSession {
 
         val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph)
         ints.addData(1, 2, 3, 4)
-        updateContext.pipelineExecution.runPipeline()
+        updateContext.pipelineExecution.startPipeline()
         updateContext.pipelineExecution.awaitCompletion()
 
-        verifyCheckpointLocation(rootDirectory.getPath, unresolvedGraph.flows.head.identifier)
+        verifyCheckpointLocation(
+          rootDirectory.getPath,
+          updateContext.pipelineExecution.graphExecution.get,
+          unresolvedGraph.flows.head.identifier
+        )
 
         checkAnswer(
           spark.read.format("delta").load(externalDeltaPath.getPath),
@@ -95,19 +103,22 @@ class SinkExecutionSuite extends ExecutionTest with SharedSparkSession {
     }
   }
 
-  def verifyCheckpointLocation(rootDirectory: String, flowIdentifier: TableIdentifier): Unit = {
-    val checkpointLocation = new Path(
+  def verifyCheckpointLocation(
+      rootDirectory: String,
+      graphExecution: GraphExecution,
+      flowIdentifier: TableIdentifier): Unit = {
+    val expectedCheckpointLocation = new Path(
       "file://" + rootDirectory + s"/checkpoints/${flowIdentifier.table}/0"
     )
-    assert(
-      new Path(
-        getCheckpointPath(
-          spark.streams.get(flowExecution.getStreamingQuery
+    val streamingQuery = graphExecution.flowExecutions
+      .get(flowIdentifier)
+      .asInstanceOf[StreamingFlowExecution]
+      .getStreamingQuery
 
-          )
-        )
-      ) == checkpointLocation
-    )
+
+    val actualCheckpointLocation = new Path(getCheckpointPath(streamingQuery))
+
+    assert(actualCheckpointLocation == expectedCheckpointLocation)
   }
 
   private def getCheckpointPath(q: StreamingQuery): String =
