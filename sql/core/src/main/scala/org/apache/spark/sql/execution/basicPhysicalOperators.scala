@@ -39,6 +39,8 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 
+import scala.util.control.NonFatal
+
 /** Physical plan for Project. */
 case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   extends UnaryExecNode
@@ -715,12 +717,22 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
       return super.outputPartitioning
     }
 
-    val nonEmptyRdds = childrenRDDs.filter(!_.partitions.isEmpty)
-    if (sparkContext.isPartitionerAwareUnion(nonEmptyRdds)) {
-      // `isPartitionerAwareUnion` ensures that at least one child is non-empty.
-      children.head.outputPartitioning
-    } else {
-      super.outputPartitioning
+    try {
+      val nonEmptyRdds = childrenRDDs.filter(!_.partitions.isEmpty)
+      if (sparkContext.isPartitionerAwareUnion(nonEmptyRdds)) {
+        // `isPartitionerAwareUnion` ensures that at least one child is non-empty.
+        children.head.outputPartitioning
+      } else {
+        super.outputPartitioning
+      }
+    } catch {
+      // If any child operator doesn't support `execute`, we cannot determine the
+      // partitioning. Even if it is other exception, we also simply fall back to
+      // the default partitioning. Note that for such cases, it means that these
+      // child operator will be replaced by Spark in query planning later, in other
+      // words, `execute` won't be actually called on them during the execution of
+      // this plan. So we can safely return the default partitioning.
+      case e if NonFatal(e) => super.outputPartitioning
     }
   }
 
