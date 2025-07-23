@@ -322,7 +322,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
     val logPath = RollingEventLogFilesWriter.EVENT_LOG_DIR_NAME_PREFIX +
-        Utils.nameForAppAndAttempt(appId, attemptId)
+        EventLogFileWriter.nameForAppAndAttempt(appId, attemptId)
     val app = try {
       load(appId)
      } catch {
