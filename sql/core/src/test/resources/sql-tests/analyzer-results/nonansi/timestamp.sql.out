@@ -160,7 +160,7 @@ Project [make_timestamp(1, 1, 1, 1, 1, cast(999.999999 as decimal(16,6)), None, 
 -- !query
 SELECT make_timestamp(make_date(2021, 07, 11))
 -- !query analysis
-Project [make_timestamp(make_date(2021, 7, 11, false), None, None) AS make_timestamp(make_date(2021, 7, 11))#x]
+Project [make_timestamp(make_date(2021, 7, 11, false), None, None, Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11))#x]
 +- OneRowRelation
 
 
@@ -179,7 +179,7 @@ SELECT make_timestamp(NULL)
 -- !query
 SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678))
 -- !query analysis
-Project [make_timestamp(make_date(2021, 7, 11, false), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), None) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678))#x]
+Project [make_timestamp(make_date(2021, 7, 11, false), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), None, Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678))#x]
 +- OneRowRelation
 
 
@@ -210,35 +210,35 @@ SELECT make_timestamp(NULL, NULL)
 -- !query
 SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'MIT')
 -- !query analysis
-Project [make_timestamp(make_date(2021, 7, 11, false), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(MIT)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), MIT)#x]
+Project [make_timestamp(make_date(2021, 7, 11, false), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(MIT), Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), MIT)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'PST')
 -- !query analysis
-Project [make_timestamp(make_date(2021, 7, 11, false), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(PST)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), PST)#x]
+Project [make_timestamp(make_date(2021, 7, 11, false), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(PST), Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), PST)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'UTC')
 -- !query analysis
-Project [make_timestamp(make_date(2021, 7, 11, false), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(UTC)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), UTC)#x]
+Project [make_timestamp(make_date(2021, 7, 11, false), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(UTC), Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), UTC)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'CET')
 -- !query analysis
-Project [make_timestamp(make_date(2021, 7, 11, false), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(CET)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), CET)#x]
+Project [make_timestamp(make_date(2021, 7, 11, false), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(CET), Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), CET)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'JST')
 -- !query analysis
-Project [make_timestamp(make_date(2021, 7, 11, false), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(JST)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), JST)#x]
+Project [make_timestamp(make_date(2021, 7, 11, false), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(JST), Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), JST)#x]
 +- OneRowRelation
 
 
