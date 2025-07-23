@@ -512,9 +512,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * Returns time truncated to the unit specified by the level.
    */
   private def parseTimeTruncLevel(level: UTF8String): ChronoUnit = {
-    if (level == null) {
-      throw QueryExecutionErrors.invalidTimeTruncUnitError("time_trunc", "null")
-    }
+    require(level != null, "Truncation level cannot be null")
     level.toString.toUpperCase(Locale.ROOT) match {
       case "HOUR" => ChronoUnit.HOURS
       case "MINUTE" => ChronoUnit.MINUTES
