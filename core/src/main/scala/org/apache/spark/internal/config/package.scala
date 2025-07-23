@@ -2127,7 +2127,9 @@ package object config {
 
   private[spark] val IO_COMPRESSION_ZSTD_STRATEGY =
     ConfigBuilder("spark.io.compression.zstd.strategy")
-      .doc("Compression strategy for Zstd compression codec. The default value 1")
+      .doc("Compression strategy for Zstd compression codec. The higher the value is, the more " +
+        "complex it becomes, usually resulting stronger but slower compression or higher CPU " +
+        "cost.")
       .version("4.1.0")
       .intConf
       .createOptional
