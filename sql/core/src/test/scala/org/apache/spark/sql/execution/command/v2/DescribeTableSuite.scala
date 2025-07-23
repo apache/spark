@@ -238,15 +238,15 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
              |$defaultUsing
         """.stripMargin)
 
-        // Default value for ENFORCED and RELY is skipped showing.
+        // Skipped showing NOT ENFORCED/NORELY if they are the default.
         var expectedConstraintsDdl = Array(
           "# Constraints,,",
           "pk_table_pk,PRIMARY KEY (id),",
           "fk_a,FOREIGN KEY (a) REFERENCES fk_table (id) RELY,",
           "uk_b,UNIQUE (b),",
           "uk_a_c,UNIQUE (a, c),",
-          "c1,CHECK (c IS NOT NULL),",
-          "c2,CHECK (id > 0),"
+          "c1,CHECK (c IS NOT NULL) ENFORCED,",
+          "c2,CHECK (id > 0) ENFORCED,"
         )
         var descDdL = sql(s"DESCRIBE EXTENDED $tbl").collect().map(_.mkString(","))
           .dropWhile(_ != "# Constraints,,")
@@ -257,14 +257,14 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
         descDdL = sql(s"DESCRIBE EXTENDED $tbl").collect().map(_.mkString(","))
           .dropWhile(_ != "# Constraints,,")
         expectedConstraintsDdl = expectedConstraintsDdl ++
-          Array("c3,CHECK (b IS NOT NULL) RELY,")
+          Array("c3,CHECK (b IS NOT NULL) ENFORCED RELY,")
         assert(descDdL === expectedConstraintsDdl)
 
         sql(s"ALTER TABLE $tbl DROP CONSTRAINT c1")
         descDdL = sql(s"DESCRIBE EXTENDED $tbl").collect().map(_.mkString(","))
           .dropWhile(_ != "# Constraints,,")
         assert(descDdL === expectedConstraintsDdl
-          .filter(_ != "c1,CHECK (c IS NOT NULL),"))
+          .filter(_ != "c1,CHECK (c IS NOT NULL) ENFORCED,"))
       }
     }
   }
