@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{LongType, StructType}
@@ -699,9 +700,21 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
     }
   }
 
+  private def allowedOperators(child: SparkPlan): Boolean = {
+    child match {
+      // Their `execute` are not implemented
+      case n if n.containsPattern(SUBQUERY_EXEC) => false
+      case _ => true
+    }
+  }
+
   private lazy val childrenRDDs = children.map(_.execute())
 
   override def outputPartitioning: Partitioning = {
+    if (!children.forall(allowedOperators)) {
+      return super.outputPartitioning
+    }
+
     val nonEmptyRdds = childrenRDDs.filter(!_.partitions.isEmpty)
     if (sparkContext.isPartitionerAwareUnion(nonEmptyRdds)) {
       // `isPartitionerAwareUnion` ensures that at least one child is non-empty.
@@ -786,6 +799,8 @@ object CoalesceExec {
 abstract class BaseSubqueryExec extends SparkPlan {
   def name: String
   def child: SparkPlan
+
+  override val nodePatterns : Seq[TreePattern] = Seq(SUBQUERY_EXEC)
 
   override def output: Seq[Attribute] = child.output
 
