@@ -105,15 +105,10 @@ def _create_blocked_method(error_method_name: str, suggestion: str) -> Callable:
 
 
 @contextmanager
-def block_imperative_construct() -> Generator[None, None, None]:
+def block_imperative_constructs() -> Generator[None, None, None]:
     """
     Context manager that blocks imperative constructs found in a pipeline python definition file
-    Blocks:
-        - imperative config set via: spark.conf.set("k", "v")
-        - catalog changes via: spark.catalog.setCurrentCatalog("catalog_name")
-        - database changes via: spark.catalog.setCurrentDatabase("db_name")
-        - temporary view creation/deletion via DataFrame and catalog methods
-        - user-defined functions registration
+    See BLOCKED_METHODS above for a list
     """
     # Store original methods
     original_methods = {}
