@@ -52,7 +52,6 @@ from pyspark.sql.conversion import LocalDataToArrowConversion, ArrowTableToRowsC
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import (
     ArrowStreamPandasUDFSerializer,
-    ArrowStreamArrowUDFSerializer,
     ArrowStreamPandasUDTFSerializer,
     CogroupArrowUDFSerializer,
     CogroupPandasUDFSerializer,
@@ -63,6 +62,8 @@ from pyspark.sql.pandas.serializers import (
     TransformWithStateInPandasInitStateSerializer,
     TransformWithStateInPySparkRowSerializer,
     TransformWithStateInPySparkRowInitStateSerializer,
+    ArrowStreamArrowUDFSerializer,
+    ArrowBatchUDFSerializer,
     ArrowStreamUDTFSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_type, from_arrow_schema
@@ -202,6 +203,81 @@ def wrap_scalar_arrow_udf(f, args_offsets, kwargs_offsets, return_type, runner_c
 
 
 def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
+    if use_legacy_pandas_udf_conversion(runner_conf):
+        return wrap_arrow_batch_udf_legacy(
+            f, args_offsets, kwargs_offsets, return_type, runner_conf
+        )
+    else:
+        return wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf)
+
+
+def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf):
+    from pyspark.sql.pandas.types import to_arrow_type
+
+    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
+
+    zero_arg_exec = False
+    if len(args_kwargs_offsets) == 0:
+        args_kwargs_offsets = (0,)
+        zero_arg_exec = True
+
+    arrow_return_type = to_arrow_type(
+        return_type, prefers_large_types=use_large_var_types(runner_conf)
+    )
+
+    if zero_arg_exec:
+
+        def get_args(*args: list):
+            return [() for _ in args[0]]
+
+    else:
+
+        def get_args(*args: list):
+            return zip(*args)
+
+    if "spark.sql.execution.pythonUDF.arrow.concurrency.level" in runner_conf:
+        from concurrent.futures import ThreadPoolExecutor
+
+        c = int(runner_conf["spark.sql.execution.pythonUDF.arrow.concurrency.level"])
+
+        @fail_on_stopiteration
+        def evaluate(*args):
+            with ThreadPoolExecutor(max_workers=c) as pool:
+                """
+                Takes list of Python objects and returns tuple of
+                (results, arrow_return_type, return_type).
+                """
+                return list(pool.map(lambda row: func(*row), get_args(*args)))
+
+    else:
+
+        @fail_on_stopiteration
+        def evaluate(*args):
+            """
+            Takes list of Python objects and returns tuple of
+            (results, arrow_return_type, return_type).
+            """
+            return [func(*row) for row in get_args(*args)]
+
+    def verify_result_length(result, length):
+        if len(result) != length:
+            raise PySparkRuntimeError(
+                errorClass="SCHEMA_MISMATCH_FOR_ARROW_PYTHON_UDF",
+                messageParameters={
+                    "udf_type": "arrow_batch_udf",
+                    "expected": str(length),
+                    "actual": str(len(result)),
+                },
+            )
+        return result
+
+    return (
+        args_kwargs_offsets,
+        lambda *a: (verify_result_length(evaluate(*a), len(a[0])), arrow_return_type, return_type),
+    )
+
+
+def wrap_arrow_batch_udf_legacy(f, args_offsets, kwargs_offsets, return_type, runner_conf):
     import pandas as pd
 
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
@@ -1122,6 +1198,15 @@ def use_large_var_types(runner_conf):
     return runner_conf.get("spark.sql.execution.arrow.useLargeVarTypes", "false").lower() == "true"
 
 
+def use_legacy_pandas_udf_conversion(runner_conf):
+    return (
+        runner_conf.get(
+            "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "false"
+        ).lower()
+        == "true"
+    )
+
+
 # Read and process a serialized user-defined table function (UDTF) from a socket.
 # It expects the UDTF to be in a specific format and performs various checks to
 # ensure the UDTF is valid. This function also prepares a mapper function for applying
@@ -1938,6 +2023,14 @@ def read_udfs(pickleSer, infile, eval_type):
         ):
             # Arrow cast for type coercion is disabled by default
             ser = ArrowStreamArrowUDFSerializer(timezone, safecheck, _assign_cols_by_name, False)
+        elif (
+            eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
+            and not use_legacy_pandas_udf_conversion(runner_conf)
+        ):
+            input_types = [
+                f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))
+            ]
+            ser = ArrowBatchUDFSerializer(timezone, safecheck, input_types)
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
             # pandas Series. See SPARK-27240.
