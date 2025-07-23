@@ -659,6 +659,8 @@ case class SubtractTimes(left: Expression, right: Expression)
 case class TimeTrunc(unit: Expression, time: Expression)
   extends BinaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
 
+  override def nullIntolerant: Boolean = true
+
   override def left: Expression = unit
   override def right: Expression = time
 
@@ -679,7 +681,8 @@ case class TimeTrunc(unit: Expression, time: Expression)
       dataType,
       "timeTrunc",
       Seq(unit, time),
-      Seq(unit.dataType, time.dataType)
+      Seq(unit.dataType, time.dataType),
+      propagateNull = nullIntolerant
     )
   }
 }
