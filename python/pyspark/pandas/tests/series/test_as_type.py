@@ -53,7 +53,7 @@ class SeriesAsTypeMixin:
         self.assert_eq(psser.astype(bool), pser.astype(bool))
         self.assert_eq(psser.astype(str), pser.astype(str))
         self.assert_eq(psser.str.strip().astype(bool), pser.str.strip().astype(bool))
-        self.assert_eq(ps.Series(["abc"]).astype(int), pd.Series([float('nan')]))
+        self.assert_eq(ps.Series(["abc"]).astype(int), pd.Series([float("nan")]))
 
         if extension_object_dtypes_available:
             from pandas import StringDtype
