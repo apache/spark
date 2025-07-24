@@ -518,7 +518,7 @@ ZONE: 'ZONE';
 
 EQ  : '=' | '==';
 NSEQ: '<=>';
-NEQ : '<>';
+NEQ : '<>' {complex_type_level_counter == 0}?;
 NEQJ: '!=';
 LT  : '<';
 LTE : '<=' | '!>';
