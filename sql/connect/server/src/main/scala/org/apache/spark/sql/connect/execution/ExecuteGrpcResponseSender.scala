@@ -233,7 +233,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       def gotResponse = response.nonEmpty
       // 3. sent everything from the stream and the stream is finished
       def streamFinished = executionObserver.getLastResponseIndex().exists(nextIndex > _) ||
-        executionObserver.completed() && response.isEmpty
+        executionObserver.isCleaned()
       // 4. time deadline or size limit reached
       def deadlineLimitReached =
         sentResponsesSize > maximumResponseSize || deadlineTimeNs < System.nanoTime()
