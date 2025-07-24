@@ -1832,9 +1832,20 @@ def read_udtf(pickleSer, infile, eval_type):
             def convert_to_arrow(data: Iterable):
                 data = list(check_return_value(data))
                 if len(data) == 0:
-                    return [
-                        pa.RecordBatch.from_pylist(data, schema=pa.schema(list(arrow_return_type)))
-                    ]
+                    return [pa.RecordBatch.from_pylist(data, schema=pa.schema(list(arrow_return_type)))]
+                
+                # if unnecessary, try to skip expensive LocalDataToArrowConversion
+                needs_conversion = any(
+                    LocalDataToArrowConversion._need_converter(field.dataType, field.nullable)
+                    for field in return_type.fields
+                )
+                
+                if not needs_conversion:
+                    try:
+                        return [pa.RecordBatch.from_pylist(data, schema=pa.schema(list(arrow_return_type)))]
+                    except Exception:
+                        pass
+                
                 try:
                     return LocalDataToArrowConversion.convert(
                         data, return_type, prefers_large_var_types
