@@ -219,6 +219,7 @@ jobs:
             echo "Push failed, retrying in 3 seconds..."
             sleep 3
           fi
+        done
     - name: Upload benchmark results
       uses: actions/upload-artifact@v4
       with:
