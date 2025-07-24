@@ -39,6 +39,17 @@ abstract class DataStreamReader {
   def format(source: String): this.type
 
   /**
+   * Assigns a name to this streaming source for use with named sources.
+   * When named sources are enabled via spark.sql.streaming.namedSources.enabled,
+   * all sources must have explicit names. This allows for source evolution
+   * (adding/removing sources) without losing checkpoint state.
+   *
+   * @param sourceName The unique name for this source (alphanumeric, underscore, hyphen only)
+   * @since 4.1.0
+   */
+  def name(sourceName: String): this.type
+
+  /**
    * Specifies the input schema. Some data sources (e.g. JSON) can infer the input schema
    * automatically from data. By specifying the schema here, the underlying data source can skip
    * the schema inference step, and thus speed up data loading.

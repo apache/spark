@@ -87,6 +87,7 @@ class MicroBatchExecution(
   protected[sql] val errorNotifier = new ErrorNotifier()
 
   @volatile protected var sources: Seq[SparkDataStream] = Seq.empty
+  @volatile protected var sourceNames: Seq[Option[String]] = Seq.empty
 
   @volatile protected[sql] var triggerExecutor: TriggerExecutor = _
 
@@ -150,6 +151,8 @@ class MicroBatchExecution(
     val toExecutionRelationMap = MutableMap[StreamingRelation, StreamingExecutionRelation]()
     val v2ToExecutionRelationMap = MutableMap[StreamingRelationV2, StreamingExecutionRelation]()
     val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2ScanRelation]()
+    val namedSourcesEnabled = sparkSession.sessionState.conf.getConf(
+      SQLConf.STREAMING_NAMED_SOURCES_ENABLED)
     // We transform each distinct streaming relation into a StreamingExecutionRelation, keeping a
     // map as we go to ensure each identical relation gets the same StreamingExecutionRelation
     // object. For each microbatch, the StreamingExecutionRelation will be replaced with a logical
@@ -163,27 +166,51 @@ class MicroBatchExecution(
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     val _logicalPlan = analyzedPlan.transform {
-      case streamingRelation @ StreamingRelation(dataSourceV1, sourceName, output) =>
+      case streamingRelation @ StreamingRelation(
+          dataSourceV1, sourceName, output, userProvidedName) =>
         toExecutionRelationMap.getOrElseUpdate(streamingRelation, {
           // Materialize source to avoid creating it in every batch
-          val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
+          val metadataPath = if (namedSourcesEnabled) {
+            userProvidedName match {
+              case Some(name) => s"$resolvedCheckpointRoot/sources/$name"
+              case None => throw new IllegalArgumentException(
+                s"Named sources are enabled but source '$sourceName' does not have a name. " +
+                "When spark.sql.streaming.namedSources.enabled=true, all sources must have " +
+                "explicit names via .name(\"source-id\").")
+            }
+          } else {
+            s"$resolvedCheckpointRoot/sources/$nextSourceId"
+          }
           val source = dataSourceV1.createSource(metadataPath)
-          nextSourceId += 1
+          if (!namedSourcesEnabled) {
+            nextSourceId += 1
+          }
           logInfo(log"Using Source [${MDC(LogKeys.STREAMING_SOURCE, source)}] " +
             log"from DataSourceV1 named '${MDC(LogKeys.STREAMING_DATA_SOURCE_NAME, sourceName)}' " +
             log"[${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dataSourceV1)}]")
-          StreamingExecutionRelation(source, output, dataSourceV1.catalogTable)(sparkSession)
+          StreamingExecutionRelation(
+            source, output, dataSourceV1.catalogTable, userProvidedName)(sparkSession)
         })
 
       case s @ StreamingRelationV2(src, srcName, table: SupportsRead, options, output,
-        catalog, identifier, v1) =>
+        catalog, identifier, v1, userProvidedName) =>
         val dsStr = if (src.nonEmpty) s"[${src.get}]" else ""
         val v2Disabled = disabledSources.contains(src.getOrElse(None).getClass.getCanonicalName)
         if (!v2Disabled && table.supports(TableCapability.MICRO_BATCH_READ)) {
           v2ToRelationMap.getOrElseUpdate(s, {
             // Materialize source to avoid creating it in every batch
-            val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
-            nextSourceId += 1
+            val metadataPath = if (namedSourcesEnabled) {
+              userProvidedName match {
+                case Some(name) => s"$resolvedCheckpointRoot/sources/$name"
+                case None => throw new IllegalArgumentException(
+                  s"Named sources are enabled but source '$srcName' does not have a name. " +
+                  "When spark.sql.streaming.namedSources.enabled=true, all sources must have " +
+                  "explicit names via .name(\"source-id\").")
+              }
+            } else {
+              nextSourceId += 1
+              s"$resolvedCheckpointRoot/sources/${nextSourceId - 1}"
+            }
             logInfo(log"Reading table [${MDC(LogKeys.STREAMING_TABLE, table)}] " +
               log"from DataSourceV2 named '${MDC(LogKeys.STREAMING_DATA_SOURCE_NAME, srcName)}' " +
               log"${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
@@ -191,7 +218,7 @@ class MicroBatchExecution(
             val scan = table.newScanBuilder(options).build()
             val stream = scan.toMicroBatchStream(metadataPath)
             val relation = StreamingDataSourceV2Relation(
-              table, output, catalog, identifier, options, metadataPath)
+              table, output, catalog, identifier, options, metadataPath, userProvidedName)
             StreamingDataSourceV2ScanRelation(relation, scan, output, stream)
           })
         } else if (v1.isEmpty) {
@@ -200,10 +227,20 @@ class MicroBatchExecution(
         } else {
           v2ToExecutionRelationMap.getOrElseUpdate(s, {
             // Materialize source to avoid creating it in every batch
-            val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
+            val metadataPath = if (namedSourcesEnabled) {
+              userProvidedName match {
+                case Some(name) => s"$resolvedCheckpointRoot/sources/$name"
+                case None => throw new IllegalArgumentException(
+                  s"Named sources are enabled but source '$srcName' does not have a name. " +
+                  "When spark.sql.streaming.namedSources.enabled=true, all sources must have " +
+                  "explicit names via .name(\"source-id\").")
+              }
+            } else {
+              nextSourceId += 1
+              s"$resolvedCheckpointRoot/sources/${nextSourceId - 1}"
+            }
             val source =
               v1.get.asInstanceOf[StreamingRelation].dataSource.createSource(metadataPath)
-            nextSourceId += 1
             logInfo(log"Using Source [${MDC(LogKeys.STREAMING_SOURCE, source)}] from " +
               log"DataSourceV2 named '${MDC(LogKeys.STREAMING_DATA_SOURCE_NAME, srcName)}' " +
               log"${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
@@ -213,16 +250,57 @@ class MicroBatchExecution(
           })
         }
     }
-    sources = _logicalPlan.collect {
+    val sourcesWithNames = _logicalPlan.collect {
       // v1 source
-      case s: StreamingExecutionRelation => s.source
+      case s: StreamingExecutionRelation => (s.source, s.userProvidedName)
       // v2 source
-      case r: StreamingDataSourceV2ScanRelation => r.stream
+      case r: StreamingDataSourceV2ScanRelation => (r.stream, r.relation.userProvidedName)
+    }
+    sources = sourcesWithNames.map(_._1)
+    sourceNames = sourcesWithNames.map(_._2)
+
+    // Validate source names if named sources are enabled
+    if (namedSourcesEnabled) {
+      // Validate source names (all must have names by this point due to earlier validation)
+      sourceNames.flatten.foreach { name =>
+        OffsetSeqV2.validateSourceName(name)
+      }
+
+      // Check for duplicate names
+      val nameGroups = sourceNames.flatten.groupBy(identity).filter(_._2.size > 1)
+      if (nameGroups.nonEmpty) {
+        val duplicates = nameGroups.keys.mkString(", ")
+        throw new IllegalArgumentException(
+          s"Duplicate source names found: $duplicates. Each source must have a unique name.")
+      }
     }
 
     // Initializing TriggerExecutor relies on `sources`, hence calling this after initializing
     // sources.
     triggerExecutor = getTrigger()
+
+    // Set source names on offsetLog for V2 format serialization
+    if (namedSourcesEnabled) {
+      offsetLog.setSourceNames(sourceNames.flatten)
+    }
+
+    // Validate checkpoint version compatibility
+    offsetLog.detectCheckpointVersion() match {
+      case Some(checkpointVersion) =>
+        if (namedSourcesEnabled && checkpointVersion == 1) {
+          throw new IllegalStateException(
+            "Named sources are enabled (spark.sql.streaming.namedSources.enabled=true) but the " +
+            "checkpoint was created with positional sources (V1 format). Named sources require " +
+            "a new checkpoint directory. Please specify a different checkpoint location.")
+        } else if (!namedSourcesEnabled && checkpointVersion == 2) {
+          throw new IllegalStateException(
+            "Named sources are disabled (spark.sql.streaming.namedSources.enabled=false) but the " +
+            "checkpoint was created with named sources (V2 format). To read this checkpoint, " +
+            "set spark.sql.streaming.namedSources.enabled=true.")
+        }
+      case None =>
+        // No existing checkpoint, will use the configured version
+    }
 
     uniqueSources = triggerExecutor match {
       case _: SingleBatchExecutor =>
@@ -748,7 +826,7 @@ class MicroBatchExecution(
     // Replace sources in the logical plan with data that has arrived since the last batch.
     val newBatchesPlan = logicalPlan transform {
       // For v1 sources.
-      case StreamingExecutionRelation(source, output, catalogTable) =>
+      case StreamingExecutionRelation(source, output, catalogTable, _) =>
         mutableNewData.get(source).map { dataPlan =>
           val hasFileMetadata = output.exists {
             case FileSourceMetadataAttribute(_) => true

@@ -36,6 +36,14 @@ object StreamingRelation {
     StreamingRelation(
       dataSource, dataSource.sourceInfo.name, toAttributes(dataSource.sourceInfo.schema))
   }
+
+  def apply(dataSource: DataSource, userProvidedName: Option[String]): StreamingRelation = {
+    StreamingRelation(
+      dataSource,
+      dataSource.sourceInfo.name,
+      toAttributes(dataSource.sourceInfo.schema),
+      userProvidedName)
+  }
 }
 
 /**
@@ -45,7 +53,11 @@ object StreamingRelation {
  * It should be used to create [[Source]] and converted to [[StreamingExecutionRelation]] when
  * passing to [[StreamExecution]] to run a query.
  */
-case class StreamingRelation(dataSource: DataSource, sourceName: String, output: Seq[Attribute])
+case class StreamingRelation(
+    dataSource: DataSource,
+    sourceName: String,
+    output: Seq[Attribute],
+    userProvidedName: Option[String] = None)
   extends LeafNode with MultiInstanceRelation with ExposesMetadataColumns {
   override def isStreaming: Boolean = true
   override def toString: String = sourceName
@@ -87,7 +99,8 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
 case class StreamingExecutionRelation(
     source: SparkDataStream,
     output: Seq[Attribute],
-    catalogTable: Option[CatalogTable])(session: SparkSession)
+    catalogTable: Option[CatalogTable],
+    userProvidedName: Option[String] = None)(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
 
   override def otherCopyArgs: Seq[AnyRef] = session :: Nil
@@ -102,7 +115,9 @@ case class StreamingExecutionRelation(
     sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
   )
 
-  override def newInstance(): LogicalPlan = this.copy(output = output.map(_.newInstance()))(session)
+  override def newInstance(): LogicalPlan = this.copy(
+    output = output.map(_.newInstance()),
+    userProvidedName = userProvidedName)(session)
 }
 
 /**
@@ -121,13 +136,15 @@ case class StreamingRelationExec(
 
 object StreamingExecutionRelation {
   def apply(source: Source, session: SparkSession): StreamingExecutionRelation = {
-    StreamingExecutionRelation(source, toAttributes(source.schema), None)(session)
+    StreamingExecutionRelation(
+      source, toAttributes(source.schema), None, None)(session)
   }
 
   def apply(
       source: Source,
       session: SparkSession,
       catalogTable: CatalogTable): StreamingExecutionRelation = {
-    StreamingExecutionRelation(source, toAttributes(source.schema), Some(catalogTable))(session)
+    StreamingExecutionRelation(
+      source, toAttributes(source.schema), Some(catalogTable), None)(session)
   }
 }

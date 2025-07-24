@@ -3290,6 +3290,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STREAMING_NAMED_SOURCES_ENABLED =
+    buildConf("spark.sql.streaming.namedSources.enabled")
+      .doc("When true, enables named sources in Structured Streaming queries, allowing " +
+        "source evolution (adding/removing sources without losing checkpoint state). " +
+        "This is an opt-in breaking change that requires new checkpoint directories. " +
+        "When enabled, all sources must have explicit names via .name(\"source-id\").")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION =
     buildConf("spark.sql.statistics.parallelFileListingInStatsComputation.enabled")
       .internal()

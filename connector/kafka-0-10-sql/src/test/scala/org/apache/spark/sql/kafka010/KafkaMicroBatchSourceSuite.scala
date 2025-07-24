@@ -37,6 +37,7 @@ import org.scalatest.matchers.should._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.TestUtils
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, ForeachWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
@@ -124,7 +125,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSparkSession with K
 
       val sources: Seq[SparkDataStream] = {
         query.get.logicalPlan.collect {
-          case StreamingExecutionRelation(source: KafkaSource, _, _) => source
+          case StreamingExecutionRelation(source: KafkaSource, _, _, _) => source
           case r: StreamingDataSourceV2ScanRelation
             if r.stream.isInstanceOf[KafkaMicroBatchStream] ||
               r.stream.isInstanceOf[KafkaContinuousStream] =>
@@ -1615,14 +1616,15 @@ abstract class KafkaMicroBatchV1SourceSuite extends KafkaMicroBatchSourceSuiteBa
       makeSureGetOffsetCalled,
       AssertOnQuery { query =>
         query.logicalPlan.collectFirst {
-          case StreamingExecutionRelation(_: KafkaSource, _, _) => true
+          case StreamingExecutionRelation(_: KafkaSource, _, _, _) => true
         }.nonEmpty
       }
     )
   }
 }
 
-abstract class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
+abstract class KafkaMicroBatchV2SourceSuite
+  extends KafkaMicroBatchSourceSuiteBase with Logging {
 
   test("V2 Source is used by default") {
     val topic = newTopic()
@@ -1852,6 +1854,102 @@ abstract class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBa
 
     // test null latestAvailablePartitionOffsets
     assert(KafkaMicroBatchStream.metrics(Optional.ofNullable(offset), null).isEmpty)
+  }
+
+  test("Named Sources V2 - source evolution from file stream to Kafka") {
+    import testImplicits._
+
+    val checkpointLocation = Utils.createTempDir().getCanonicalPath
+    val srcDir = Utils.createTempDir(namePrefix = "streaming.src")
+    val tmpDir = Utils.createTempDir(namePrefix = "streaming.tmp")
+    val outputDir = Utils.createTempDir()
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    // Ensure checkpoint directory is truly empty
+    Utils.deleteRecursively(new File(checkpointLocation))
+    new File(checkpointLocation).mkdirs()
+
+    try {
+      // Phase 1: Start with file stream source
+      // Important: File stream only detects new files after stream starts
+      val fileQuery = spark.readStream
+        .format("text")
+        .option("maxFilesPerTrigger", "1")
+        .name("file-backfill")
+        .load(srcDir.getCanonicalPath)
+        .selectExpr("value")
+        .dropDuplicates("value")
+        .writeStream
+        .option("checkpointLocation", checkpointLocation)
+        .format("parquet")
+        .option("path", outputDir.getCanonicalPath)
+        .start()
+      logError(s"### checkpointLocation: ${checkpointLocation}")
+
+      try {
+        // Add files after the stream starts
+        (1 to 5).foreach { i =>
+          val tempFile = Utils.tempFileWith(new File(tmpDir, s"text-$i"))
+          val content = s"file-$i"
+          Files.write(tempFile.toPath, content.getBytes(UTF_8))
+          val finalFile = new File(srcDir, tempFile.getName)
+          require(tempFile.renameTo(finalFile), s"Failed to rename $tempFile to $finalFile")
+          Thread.sleep(100) // Small delay to ensure files are detected in order
+        }
+
+        // Wait for file stream to process all files
+        fileQuery.processAllAvailable()
+
+        // Verify file data was written
+        val fileData = spark.read.parquet(outputDir.getCanonicalPath).as[String].collect().sorted
+        assert(fileData.length === 5, s"Expected 5 file records but got ${fileData.length}")
+        assert(fileData === Array("file-1", "file-2", "file-3", "file-4", "file-5"))
+
+      } finally {
+        fileQuery.stop()
+      }
+
+      // Phase 2: Send Kafka messages before starting Kafka stream
+      testUtils.sendMessages(topic, Array("kafka-1", "kafka-2", "kafka-3"))
+
+      // Phase 3: Restart with Kafka source using same checkpoint
+      val kafkaQuery = spark.readStream
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("subscribe", topic)
+        .option("startingOffsets", "earliest")
+        .name("kafka-realtime")
+        .load()
+        .selectExpr("CAST(value AS STRING) AS value")
+        .dropDuplicates("value")
+        .writeStream
+        .option("checkpointLocation", checkpointLocation)
+        .format("parquet")
+        .option("path", outputDir.getCanonicalPath)
+        .start()
+
+      try {
+        // Wait for Kafka data to be processed
+        kafkaQuery.processAllAvailable()
+
+        // Verify both file and Kafka data are present
+        val allData = spark.read.parquet(outputDir.getCanonicalPath).as[String].collect().sorted
+        assert(allData.length === 8,
+          s"Expected 8 total records but got ${allData.length}: ${allData.mkString(", ")}")
+        assert(allData === Array("file-1", "file-2", "file-3", "file-4", "file-5",
+                                 "kafka-1", "kafka-2", "kafka-3"))
+
+      } finally {
+        kafkaQuery.stop()
+      }
+
+    } finally {
+      Thread.sleep(2 * 60 * 1000)
+      Utils.deleteRecursively(srcDir)
+      Utils.deleteRecursively(tmpDir)
+      Utils.deleteRecursively(outputDir)
+    }
   }
 }
 

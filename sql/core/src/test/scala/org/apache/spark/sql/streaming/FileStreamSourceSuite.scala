@@ -19,6 +19,8 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 import java.net.URI
+import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.Files
 import java.time.{LocalDateTime, ZoneOffset}
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicLong
@@ -188,7 +190,7 @@ abstract class FileStreamSourceTest
   protected def getSourceFromFileStream(df: DataFrame): FileStreamSource = {
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
     df.queryExecution.analyzed
-      .collect { case StreamingRelation(dataSource, _, _) =>
+      .collect { case StreamingRelation(dataSource, _, _, _) =>
         // There is only one source in our tests so just set sourceId to 0
         dataSource.createSource(s"$checkpointLocation/sources/0").asInstanceOf[FileStreamSource]
       }.head
@@ -196,7 +198,7 @@ abstract class FileStreamSourceTest
 
   protected def getSourcesFromStreamingQuery(query: StreamExecution): Seq[FileStreamSource] = {
     query.logicalPlan.collect {
-      case StreamingExecutionRelation(source, _, _) if source.isInstanceOf[FileStreamSource] =>
+      case StreamingExecutionRelation(source, _, _, _) if source.isInstanceOf[FileStreamSource] =>
         source.asInstanceOf[FileStreamSource]
     }
   }
@@ -249,7 +251,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         reader.load()
       }
     df.queryExecution.analyzed
-      .collect { case s @ StreamingRelation(dataSource, _, _) => s.schema }.head
+      .collect { case s @ StreamingRelation(dataSource, _, _, _) => s.schema }.head
   }
 
   override def beforeAll(): Unit = {
@@ -2171,6 +2173,225 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     override def getWorkingDirectory: Path = new Path("/somewhere")
 
     override def getFileStatus(f: Path): FileStatus = throw new NotImplementedError
+  }
+
+  test("Named Sources V2 - source evolution with different directories") {
+    import testImplicits._
+
+    val checkpointLocation = Utils.createTempDir().getCanonicalPath
+    withThreeTempDirs { case (srcDir1, srcDir2, tmpDir) =>
+      val outputDir = Utils.createTempDir()
+
+      // Ensure checkpoint directory is truly empty
+      Utils.deleteRecursively(new File(checkpointLocation))
+      new File(checkpointLocation).mkdirs()
+
+      try {
+        // Phase 1: Start with file stream source from first directory
+        val fileQuery1 = spark.readStream
+          .format("text")
+          .option("maxFilesPerTrigger", "1")
+          .name("file-source-1")
+          .load(srcDir1.getCanonicalPath)
+          .selectExpr("value")
+          .dropDuplicates("value")
+          .writeStream
+          .option("checkpointLocation", checkpointLocation)
+          .format("parquet")
+          .option("path", outputDir.getCanonicalPath)
+          .start()
+
+        try {
+          // Add files to first directory after the stream starts
+          (1 to 5).foreach { i =>
+            val tempFile = Utils.tempFileWith(new File(tmpDir, s"text-$i"))
+            val content = s"dir1-file-$i"
+            Files.write(tempFile.toPath, content.getBytes(UTF_8))
+            val finalFile = new File(srcDir1, tempFile.getName)
+            require(tempFile.renameTo(finalFile), s"Failed to rename $tempFile to $finalFile")
+            Thread.sleep(100) // Small delay to ensure files are detected in order
+          }
+
+          // Wait for file stream to process all files
+          fileQuery1.processAllAvailable()
+          logError(s"### checkpointLocation: ${checkpointLocation}")
+
+          // Verify first directory data was written
+          val fileData1 = spark.read.parquet(outputDir.getCanonicalPath).as[String].collect().sorted
+          assert(fileData1.length === 5,
+            s"Expected 5 records from dir1 but got ${fileData1.length}")
+          assert(fileData1 === Array(
+            "dir1-file-1", "dir1-file-2", "dir1-file-3", "dir1-file-4", "dir1-file-5"))
+        } finally {
+          fileQuery1.stop()
+        }
+
+        // Phase 2: Add files to second directory before starting the second stream
+        (1 to 3).foreach { i =>
+          val tempFile = Utils.tempFileWith(new File(tmpDir, s"text2-$i"))
+          val content = s"dir2-file-$i"
+          Files.write(tempFile.toPath, content.getBytes(UTF_8))
+          val finalFile = new File(srcDir2, tempFile.getName)
+          require(tempFile.renameTo(finalFile), s"Failed to rename $tempFile to $finalFile")
+        }
+
+        // Phase 3: Restart with file source from second directory using same checkpoint
+        val fileQuery2 = spark.readStream
+          .format("text")
+          .option("maxFilesPerTrigger", "1")
+          .name("file-source-2")
+          .load(srcDir2.getCanonicalPath)
+          .selectExpr("value")
+          .dropDuplicates("value")
+          .writeStream
+          .option("checkpointLocation", checkpointLocation)
+          .format("parquet")
+          .option("path", outputDir.getCanonicalPath)
+          .start()
+
+        try {
+          // Wait for second directory data to be processed
+          fileQuery2.processAllAvailable()
+
+          // Verify both directories' data are present
+          val allData = spark.read.parquet(outputDir.getCanonicalPath).as[String].collect().sorted
+          assert(allData.length === 8,
+            s"Expected 8 total records but got ${allData.length}: ${allData.mkString(", ")}")
+          assert(allData === Array(
+            "dir1-file-1", "dir1-file-2", "dir1-file-3", "dir1-file-4", "dir1-file-5",
+              "dir2-file-1", "dir2-file-2", "dir2-file-3"))
+        } finally {
+          fileQuery2.stop()
+        }
+      } finally {
+        Thread.sleep(120000L)
+        Utils.deleteRecursively(outputDir)
+      }
+    }
+  }
+
+  test("Named Sources V2 - evolve from single source to union of two sources") {
+    import testImplicits._
+    withSQLConf(
+      SQLConf.STREAMING_NAMED_SOURCES_ENABLED.key -> "true"
+    ) {
+
+      val checkpointLocation = Utils.createTempDir().getCanonicalPath
+      withThreeTempDirs { case (srcDir1, srcDir2, tmpDir) =>
+        val outputDir = Utils.createTempDir()
+
+        // Ensure checkpoint directory is truly empty
+        Utils.deleteRecursively(new File(checkpointLocation))
+        new File(checkpointLocation).mkdirs()
+
+        try {
+          // Phase 1: Start with single file stream source
+          val fileQuery1 = spark.readStream
+            .format("text")
+            .option("maxFilesPerTrigger", "1")
+            .name("main-source")
+            .load(srcDir1.getCanonicalPath)
+            .selectExpr("value")
+            .dropDuplicates("value")
+            .writeStream
+            .option("checkpointLocation", checkpointLocation)
+            .format("parquet")
+            .option("path", outputDir.getCanonicalPath)
+            .start()
+
+          try {
+            // Add files to first directory after the stream starts
+            (1 to 5).foreach { i =>
+              val tempFile = Utils.tempFileWith(new File(tmpDir, s"text-$i"))
+              val content = s"source1-file-$i"
+              Files.write(tempFile.toPath, content.getBytes(UTF_8))
+              val finalFile = new File(srcDir1, tempFile.getName)
+              require(tempFile.renameTo(finalFile), s"Failed to rename $tempFile to $finalFile")
+              Thread.sleep(100) // Small delay to ensure files are detected in order
+            }
+
+            // Wait for file stream to process all files
+            fileQuery1.processAllAvailable()
+
+            // Verify first source data was written
+            val fileData1 = spark.read.parquet(outputDir.getCanonicalPath)
+              .as[String].collect().sorted
+            assert(fileData1.length === 5,
+              s"Expected 5 records from source1 but got ${fileData1.length}")
+            assert(fileData1 ===
+              Array("source1-file-1", "source1-file-2", "source1-file-3",
+                "source1-file-4", "source1-file-5"))
+          } finally {
+            fileQuery1.stop()
+          }
+
+          // Phase 2: Add files to both directories before starting the union query
+          // Add more files to first directory
+          (6 to 8).foreach { i =>
+            val tempFile = Utils.tempFileWith(new File(tmpDir, s"text-$i"))
+            val content = s"source1-file-$i"
+            Files.write(tempFile.toPath, content.getBytes(UTF_8))
+            val finalFile = new File(srcDir1, tempFile.getName)
+            require(tempFile.renameTo(finalFile), s"Failed to rename $tempFile to $finalFile")
+          }
+
+          // Add files to second directory
+          (1 to 4).foreach { i =>
+            val tempFile = Utils.tempFileWith(new File(tmpDir, s"text2-$i"))
+            val content = s"source2-file-$i"
+            Files.write(tempFile.toPath, content.getBytes(UTF_8))
+            val finalFile = new File(srcDir2, tempFile.getName)
+            require(tempFile.renameTo(finalFile), s"Failed to rename $tempFile to $finalFile")
+          }
+
+          // Phase 3: Restart with union of two file sources using same checkpoint
+          // Keep the same source with the same name
+          val stream1 = spark.readStream
+            .format("text")
+            .option("maxFilesPerTrigger", "1")
+            .name("main-source")  // Same name as before
+            .load(srcDir1.getCanonicalPath)
+            .selectExpr("value")
+
+          // Add a new source
+          val stream2 = spark.readStream
+            .format("text")
+            .option("maxFilesPerTrigger", "1")
+            .name("additional-source")
+            .load(srcDir2.getCanonicalPath)
+            .selectExpr("value")
+
+          val unionQuery = stream1.union(stream2)
+            .dropDuplicates("value")
+            .writeStream
+            .option("checkpointLocation", checkpointLocation)
+            .format("parquet")
+            .option("path", outputDir.getCanonicalPath)
+            .start()
+
+          try {
+            // Wait for union query to process all new files
+            unionQuery.processAllAvailable()
+
+            // Verify all data is present (original 5 + new 3 from source1 + 4 from source2)
+            val allData = spark.read.parquet(outputDir.getCanonicalPath)
+              .as[String].collect().sorted
+            assert(allData.length === 12,
+              s"Expected 12 total records but got ${allData.length}: ${allData.mkString(", ")}")
+            assert(allData === Array(
+              "source1-file-1", "source1-file-2", "source1-file-3",
+              "source1-file-4", "source1-file-5",
+              "source1-file-6", "source1-file-7", "source1-file-8",
+              "source2-file-1", "source2-file-2", "source2-file-3",
+              "source2-file-4"))
+          } finally {
+            unionQuery.stop()
+          }
+        } finally {
+          Utils.deleteRecursively(outputDir)
+        }
+      }
+    }
   }
 
   test("SourceFileArchiver - fail when base archive path matches source pattern") {
