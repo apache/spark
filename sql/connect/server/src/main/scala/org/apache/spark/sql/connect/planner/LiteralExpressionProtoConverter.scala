@@ -107,14 +107,14 @@ object LiteralExpressionProtoConverter {
       case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
         expressions.Literal.create(
           LiteralValueProtoConverter.toCatalystArray(lit.getArray),
-          ArrayType(DataTypeProtoConverter.toCatalystType(lit.getArray.getElementType)))
+          DataTypeProtoConverter.toCatalystType(
+            proto.DataType.newBuilder.setArray(lit.getArray.getDataTypeArray).build()))
 
       case proto.Expression.Literal.LiteralTypeCase.MAP =>
         expressions.Literal.create(
           LiteralValueProtoConverter.toCatalystMap(lit.getMap),
-          MapType(
-            DataTypeProtoConverter.toCatalystType(lit.getMap.getKeyType),
-            DataTypeProtoConverter.toCatalystType(lit.getMap.getValueType)))
+          DataTypeProtoConverter.toCatalystType(
+            proto.DataType.newBuilder.setMap(lit.getMap.getDataTypeMap).build()))
 
       case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
         val (structData, structType) = LiteralValueProtoConverter.toCatalystStruct(lit.getStruct)
