@@ -773,47 +773,46 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
   }
 
   test("Partial constant folding of math functions") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> true.toString) {
-      checkV2Conversion(
-        catalystExpr = Log10(Literal(100.0)) + $"cint".int,
-        v2Expr = new GeneralScalarExpression("+", Array(
-          LiteralValue(2.0, DoubleType),
-          FieldReference("cint"))))
+    assume(SQLConf.get.ansiEnabled)
+    checkV2Conversion(
+      catalystExpr = Log10(Literal(100.0)) + $"cint".int,
+      v2Expr = new GeneralScalarExpression("+", Array(
+        LiteralValue(2.0, DoubleType),
+        FieldReference("cint"))))
 
-      checkV2Conversion(
-        catalystExpr = Abs(Literal(-10), failOnError = true) * $"cdouble".double,
-        v2Expr = new GeneralScalarExpression("*", Array(
-          LiteralValue(10, IntegerType),
-          FieldReference("cdouble"))))
+    checkV2Conversion(
+      catalystExpr = Abs(Literal(-10), failOnError = true) * $"cdouble".double,
+      v2Expr = new GeneralScalarExpression("*", Array(
+        LiteralValue(10, IntegerType),
+        FieldReference("cdouble"))))
 
-      checkV2Conversion(
-        catalystExpr = Sqrt(Literal(16.0)) - $"cint".int,
-        v2Expr = new GeneralScalarExpression("-", Array(
-          LiteralValue(4.0, DoubleType),
-          FieldReference("cint"))))
+    checkV2Conversion(
+      catalystExpr = Sqrt(Literal(16.0)) - $"cint".int,
+      v2Expr = new GeneralScalarExpression("-", Array(
+        LiteralValue(4.0, DoubleType),
+        FieldReference("cint"))))
 
-      checkV2Conversion(
-        catalystExpr = $"cdouble".double / Log2(Literal(32.0)),
-        v2Expr = new GeneralScalarExpression("/", Array(
-          FieldReference("cdouble"),
-          LiteralValue(5.0, DoubleType))))
+    checkV2Conversion(
+      catalystExpr = $"cdouble".double / Log2(Literal(32.0)),
+      v2Expr = new GeneralScalarExpression("/", Array(
+        FieldReference("cdouble"),
+        LiteralValue(5.0, DoubleType))))
 
-      checkV2Conversion(
-        catalystExpr = Floor(Literal(7.9)) + Ceil(Literal(2.1)),
-        v2Expr = LiteralValue(10L, LongType))
+    checkV2Conversion(
+      catalystExpr = Floor(Literal(7.9)) + Ceil(Literal(2.1)),
+      v2Expr = LiteralValue(10L, LongType))
 
-      checkV2Conversion(
-        catalystExpr = $"cint".int % Abs(Literal(-3), failOnError = true),
-        v2Expr = new GeneralScalarExpression("%", Array(
-          FieldReference("cint"),
-          LiteralValue(3, IntegerType))))
+    checkV2Conversion(
+      catalystExpr = $"cint".int % Abs(Literal(-3), failOnError = true),
+      v2Expr = new GeneralScalarExpression("%", Array(
+        FieldReference("cint"),
+        LiteralValue(3, IntegerType))))
 
-      checkV2Conversion(
-        catalystExpr = Exp(Literal(0.0)) * $"cdouble".double,
-        v2Expr = new GeneralScalarExpression("*", Array(
-          LiteralValue(1.0, DoubleType),
-          FieldReference("cdouble"))))
-    }
+    checkV2Conversion(
+      catalystExpr = Exp(Literal(0.0)) * $"cdouble".double,
+      v2Expr = new GeneralScalarExpression("*", Array(
+        LiteralValue(1.0, DoubleType),
+        FieldReference("cdouble"))))
   }
 
   test("Current Like functions are not supported") {
