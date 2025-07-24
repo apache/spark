@@ -59,8 +59,7 @@ public interface Constraint {
   String toDDL();
 
   /**
-   * Similar to {@link #toDDL()}, but returns the description of this constraint for describing
-   * table purpose.
+   * Returns the constraint description for DESCRIBE TABLE output, excluding the constraint name (shown separately).
    */
   String toDescription();
 
