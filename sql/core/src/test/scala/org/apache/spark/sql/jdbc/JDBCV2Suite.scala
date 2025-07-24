@@ -166,17 +166,28 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
       batchStmt.addBatch(
         "CREATE TABLE \"test\".\"people\" (name TEXT(32) NOT NULL, id INTEGER NOT NULL)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"people\" VALUES ('fred', 1)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"people\" VALUES ('mary', 2)")
 
       batchStmt.addBatch(
         "CREATE TABLE \"test\".\"employee\" (dept INTEGER, name TEXT(32), salary NUMERIC(20, 2)," +
           " bonus DOUBLE, is_manager BOOLEAN)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (1, 'amy', 10000, 1000, true)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (2, 'alex', 12000, 1200, false)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (1, 'cathy', 9000, 1200, false)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (2, 'david', 10000, 1300, true)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (6, 'jen', 12000, 1200, true)")
 
       batchStmt.addBatch(
         "CREATE TABLE \"test\".\"dept\" (\"dept id\" INTEGER NOT NULL, \"dept.id\" INTEGER)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"dept\" VALUES (1, 1)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"dept\" VALUES (2, 1)")
 
       // scalastyle:off
       batchStmt.addBatch("CREATE TABLE \"test\".\"person\" (\"名\" INTEGER NOT NULL)")
       // scalastyle:on
+      batchStmt.addBatch("INSERT INTO \"test\".\"person\" VALUES (1)")
+      batchStmt.addBatch("INSERT INTO \"test\".\"person\" VALUES (2)")
 
       batchStmt.addBatch(
         """CREATE TABLE "test"."view1" ("|col1" INTEGER, "|col2" INTEGER)""")
@@ -185,52 +196,28 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
       batchStmt.addBatch(
         "CREATE TABLE \"test\".\"item\" (id INTEGER, name TEXT(32), price NUMERIC(23, 3))")
-
-      batchStmt.addBatch(
-        "CREATE TABLE \"test\".\"datetime\" (name TEXT(32), date1 DATE, time1 TIMESTAMP)")
-
-      batchStmt.addBatch(
-        "CREATE TABLE \"test\".\"address\" (email TEXT(32) NOT NULL)")
-
-      batchStmt.addBatch("CREATE TABLE \"test\".\"binary_tab\" (name TEXT(32),b BINARY(20))")
-
-      batchStmt.addBatch("CREATE TABLE \"test\".\"employee_bonus\" " +
-        "(name TEXT(32), salary NUMERIC(20, 2), bonus DOUBLE, factor DOUBLE)")
-
-      batchStmt.addBatch(
-        "CREATE TABLE \"test\".\"strings_with_nulls\" (str TEXT(32))")
-
-      batchStmt.addBatch("INSERT INTO \"test\".\"people\" VALUES ('fred', 1)")
-      batchStmt.addBatch("INSERT INTO \"test\".\"people\" VALUES ('mary', 2)")
-
-      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (1, 'amy', 10000, 1000, true)")
-      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (2, 'alex', 12000, 1200, false)")
-      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (1, 'cathy', 9000, 1200, false)")
-      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (2, 'david', 10000, 1300, true)")
-      batchStmt.addBatch("INSERT INTO \"test\".\"employee\" VALUES (6, 'jen', 12000, 1200, true)")
-
-      batchStmt.addBatch("INSERT INTO \"test\".\"dept\" VALUES (1, 1)")
-      batchStmt.addBatch("INSERT INTO \"test\".\"dept\" VALUES (2, 1)")
-
-      batchStmt.addBatch("INSERT INTO \"test\".\"person\" VALUES (1)")
-      batchStmt.addBatch("INSERT INTO \"test\".\"person\" VALUES (2)")
-
       batchStmt.addBatch("INSERT INTO \"test\".\"item\"" +
         "VALUES (1, 'bottle', 11111111111111111111.123)")
       batchStmt.addBatch("INSERT INTO \"test\".\"item\"" +
         "VALUES (1, 'bottle', 99999999999999999999.123)")
 
+      batchStmt.addBatch(
+        "CREATE TABLE \"test\".\"datetime\" (name TEXT(32), date1 DATE, time1 TIMESTAMP)")
       batchStmt.addBatch("INSERT INTO \"test\".\"datetime\"" +
         "VALUES ('amy', '2022-05-19', '2022-05-19 00:00:00')")
       batchStmt.addBatch("INSERT INTO \"test\".\"datetime\"" +
         "VALUES ('alex', '2022-05-18', '2022-05-18 00:00:00')")
 
+      batchStmt.addBatch(
+        "CREATE TABLE \"test\".\"address\" (email TEXT(32) NOT NULL)")
       batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc_def@gmail.com')")
       batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc%def@gmail.com')")
       batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc%_def@gmail.com')")
       batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc_%def@gmail.com')")
       batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc_''%def@gmail.com')")
 
+      batchStmt.addBatch("CREATE TABLE \"test\".\"employee_bonus\" " +
+        "(name TEXT(32), salary NUMERIC(20, 2), bonus DOUBLE, factor DOUBLE)")
       batchStmt.addBatch("INSERT INTO \"test\".\"employee_bonus\"" +
         "VALUES ('amy', 10000, 1000, 0.1)")
       batchStmt.addBatch("INSERT INTO \"test\".\"employee_bonus\"" +
@@ -242,12 +229,17 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       batchStmt.addBatch("INSERT INTO \"test\".\"employee_bonus\"" +
         "VALUES ('jen', 12000, 2400, 0.2)")
 
+      batchStmt.addBatch(
+        "CREATE TABLE \"test\".\"strings_with_nulls\" (str TEXT(32))")
       batchStmt.addBatch("INSERT INTO \"test\".\"strings_with_nulls\" VALUES ('abc')")
       batchStmt.addBatch("INSERT INTO \"test\".\"strings_with_nulls\" VALUES ('a a a')")
       batchStmt.addBatch("INSERT INTO \"test\".\"strings_with_nulls\" VALUES (null)")
 
       batchStmt.executeBatch()
 
+      conn
+        .prepareStatement("CREATE TABLE \"test\".\"binary_tab\" (name TEXT(32),b BINARY(20))")
+        .executeUpdate()
       val stmt = conn.prepareStatement("INSERT INTO \"test\".\"binary_tab\" VALUES (?, ?)")
       stmt.setString(1, "jen")
       stmt.setBytes(2, testBytes)
