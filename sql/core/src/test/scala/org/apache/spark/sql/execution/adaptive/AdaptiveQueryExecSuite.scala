@@ -1092,7 +1092,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("AABCmetrics of the shuffle read") {
+  test("metrics of the shuffle read") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT key FROM testData GROUP BY key")
