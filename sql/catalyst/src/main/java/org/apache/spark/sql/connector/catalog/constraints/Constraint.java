@@ -59,7 +59,8 @@ public interface Constraint {
   String toDDL();
 
   /**
-   * Returns the constraint description for DESCRIBE TABLE output, excluding the constraint name (shown separately).
+   * Returns the constraint description for DESCRIBE TABLE output, excluding the constraint
+   * name (shown separately).
    */
   String toDescription();
 
