@@ -52,7 +52,6 @@ from pyspark.pandas.typedef.typehints import (
     extension_float_dtypes_available,
     extension_object_dtypes_available,
     spark_type_to_pandas_dtype,
-    as_spark_type,
 )
 from pyspark.pandas.utils import is_ansi_mode_enabled
 
