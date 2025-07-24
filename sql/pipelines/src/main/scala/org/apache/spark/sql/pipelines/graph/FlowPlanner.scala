@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import org.apache.hadoop.fs.Path
-
 import org.apache.spark.sql.streaming.Trigger
 
 /**
@@ -52,6 +50,7 @@ class FlowPlanner(
           updateContext = updateContext
         )
       case sf: StreamingFlow =>
+        val flowMetadata = FlowSystemMetadata(updateContext, sf, graph)
         output match {
           case t: Table =>
             new StreamingTableWrite(
@@ -62,7 +61,7 @@ class FlowPlanner(
               updateContext = updateContext,
               sqlConf = sf.sqlConf,
               trigger = triggerFor(sf),
-              checkpointPath = t.path
+              checkpointPath = flowMetadata.latestCheckpointLocation
             )
           case s: Sink =>
             new SinkWrite(
@@ -73,9 +72,7 @@ class FlowPlanner(
               updateContext = updateContext,
               sqlConf = sf.sqlConf,
               trigger = triggerFor(sf),
-              checkpointPath = TODOChangeThisNameCheckpointLocations.checkpointLocationForSinkFlow(
-                updateContext.storageRootOpt.get, flow.displayName
-              ).toString
+              checkpointPath = flowMetadata.latestCheckpointLocation
             )
           case _ =>
             throw new UnsupportedOperationException(
@@ -88,14 +85,5 @@ class FlowPlanner(
           s"Unable to plan flow of type ${flow.getClass.getSimpleName}"
         )
     }
-  }
-}
-
-object TODOChangeThisNameCheckpointLocations {
-  def checkpointLocationForSinkFlow(pipelineStorageRoot: String, flowName: String): Path = {
-    new Path(
-      new Path(new Path(new Path(pipelineStorageRoot), "_pipeline_metadata"), "checkpoints"),
-      flowName
-    )
   }
 }

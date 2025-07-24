@@ -52,21 +52,25 @@ class SinkExecutionSuite extends ExecutionTest with SharedSparkSession {
 
       val unresolvedGraph =
         createDataflowGraph(ints.toDF(), "sink_a", "flow_to_sink_a", "memory")
-      val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph)
+      val updateContext = TestPipelineUpdateContext(
+        spark,
+        unresolvedGraph,
+        storageRootOpt = Option(rootDirectory.getPath)
+      )
       updateContext.pipelineExecution.startPipeline()
       updateContext.pipelineExecution.awaitCompletion()
 
       verifyCheckpointLocation(
         rootDirectory.getPath,
         updateContext.pipelineExecution.graphExecution.get,
-        unresolvedGraph.flows.head.identifier
+        TableIdentifier("flow_to_sink_a")
       )
 
-      checkAnswer(spark.sql("SELECT * FROM sink_a"), Seq(1, 2, 3, 4).toDF().collect().toSeq)
+      checkAnswer(spark.sql("SELECT * FROM flow_to_sink_a"), Seq(1, 2, 3, 4).toDF().collect().toSeq)
     }
   }
 
-  test("writing to external sink - delta sink with path") {
+  test("writing to external sink - parquet sink with path") {
     val session = spark
     import session.implicits._
 
@@ -76,31 +80,38 @@ class SinkExecutionSuite extends ExecutionTest with SharedSparkSession {
         ints.addData(1, 2, 3, 4)
         val unresolvedGraph = createDataflowGraph(
           ints.toDF(),
-          "delta_sink",
-          "flow_to_delta_sink",
-          "delta",
+          "parquet_sink",
+          "flow_to_parquet_sink",
+          "parquet",
           Map(
             "path" -> externalDeltaPath.getPath
           )
         )
 
-        val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph)
-        ints.addData(1, 2, 3, 4)
+        val updateContext = TestPipelineUpdateContext(
+          spark,
+          unresolvedGraph,
+          storageRootOpt = Option(rootDirectory.getPath)
+        )
         updateContext.pipelineExecution.startPipeline()
         updateContext.pipelineExecution.awaitCompletion()
 
         verifyCheckpointLocation(
           rootDirectory.getPath,
           updateContext.pipelineExecution.graphExecution.get,
-          unresolvedGraph.flows.head.identifier
+          TableIdentifier("flow_to_parquet_sink")
         )
 
         checkAnswer(
-          spark.read.format("delta").load(externalDeltaPath.getPath),
+          spark.read.format("parquet").load(externalDeltaPath.getPath),
           Seq(1, 2, 3, 4).toDF().collect().toSeq
         )
       }
     }
+  }
+
+  test("writing to sink, no storage root") {
+    // TODO
   }
 
   def verifyCheckpointLocation(
@@ -110,11 +121,9 @@ class SinkExecutionSuite extends ExecutionTest with SharedSparkSession {
     val expectedCheckpointLocation = new Path(
       "file://" + rootDirectory + s"/checkpoints/${flowIdentifier.table}/0"
     )
-    val streamingQuery = graphExecution.flowExecutions
-      .get(flowIdentifier)
+    val streamingQuery = graphExecution.flowExecutions(flowIdentifier)
       .asInstanceOf[StreamingFlowExecution]
       .getStreamingQuery
-
 
     val actualCheckpointLocation = new Path(getCheckpointPath(streamingQuery))
 

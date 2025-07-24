@@ -65,6 +65,9 @@ trait TestPipelineUpdateContextMixin {
     override val eventCallback: PipelineEvent => Unit = { event =>
       eventBuffer.addEvent(event)
       println(event.messageWithError)
+      event.error.foreach { error =>
+        throw error
+      }
     }
 
     override def flowProgressEventLogger: FlowProgressEventLogger = {
