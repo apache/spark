@@ -62,7 +62,7 @@ object JDBCRDD extends Logging {
     val fullQuery = prepareQuery + dialect.getSchemaQuery(table)
 
     try {
-        getQueryOutputSchema(fullQuery, options, dialect)
+      getQueryOutputSchema(fullQuery, options, dialect)
     } catch {
       case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
         throw new SparkException(
