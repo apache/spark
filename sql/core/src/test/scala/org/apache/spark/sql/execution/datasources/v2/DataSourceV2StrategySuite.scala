@@ -22,8 +22,9 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
-import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
+import org.apache.spark.sql.connector.expressions.{FieldReference, GeneralScalarExpression, LiteralValue, Expression => V2Expression}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate, And => V2And, Not => V2Not, Or => V2Or}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -772,45 +773,47 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
   }
 
   test("Partial constant folding of math functions") {
-    checkV2Conversion(
-      catalystExpr = Log10(Literal(100.0)) + $"cint".int,
-      v2Expr = new GeneralScalarExpression("+", Array(
-        LiteralValue(2.0, DoubleType),
-        FieldReference("cint"))))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> true.toString) {
+      checkV2Conversion(
+        catalystExpr = Log10(Literal(100.0)) + $"cint".int,
+        v2Expr = new GeneralScalarExpression("+", Array(
+          LiteralValue(2.0, DoubleType),
+          FieldReference("cint"))))
 
-    checkV2Conversion(
-      catalystExpr = Abs(Literal(-10), failOnError = true) * $"cdouble".double,
-      v2Expr = new GeneralScalarExpression("*", Array(
-        LiteralValue(10, IntegerType),
-        FieldReference("cdouble"))))
+      checkV2Conversion(
+        catalystExpr = Abs(Literal(-10), failOnError = true) * $"cdouble".double,
+        v2Expr = new GeneralScalarExpression("*", Array(
+          LiteralValue(10, IntegerType),
+          FieldReference("cdouble"))))
 
-    checkV2Conversion(
-      catalystExpr = Sqrt(Literal(16.0)) - $"cint".int,
-      v2Expr = new GeneralScalarExpression("-", Array(
-        LiteralValue(4.0, DoubleType),
-        FieldReference("cint"))))
+      checkV2Conversion(
+        catalystExpr = Sqrt(Literal(16.0)) - $"cint".int,
+        v2Expr = new GeneralScalarExpression("-", Array(
+          LiteralValue(4.0, DoubleType),
+          FieldReference("cint"))))
 
-    checkV2Conversion(
-      catalystExpr = $"cdouble".double / Log2(Literal(32.0)),
-      v2Expr = new GeneralScalarExpression("/", Array(
-        FieldReference("cdouble"),
-        LiteralValue(5.0, DoubleType))))
+      checkV2Conversion(
+        catalystExpr = $"cdouble".double / Log2(Literal(32.0)),
+        v2Expr = new GeneralScalarExpression("/", Array(
+          FieldReference("cdouble"),
+          LiteralValue(5.0, DoubleType))))
 
-    checkV2Conversion(
-      catalystExpr = Floor(Literal(7.9)) + Ceil(Literal(2.1)),
-      v2Expr = LiteralValue(10L, LongType))
+      checkV2Conversion(
+        catalystExpr = Floor(Literal(7.9)) + Ceil(Literal(2.1)),
+        v2Expr = LiteralValue(10L, LongType))
 
-    checkV2Conversion(
-      catalystExpr = $"cint".int % Abs(Literal(-3), failOnError = true),
-      v2Expr = new GeneralScalarExpression("%", Array(
-        FieldReference("cint"),
-        LiteralValue(3, IntegerType))))
+      checkV2Conversion(
+        catalystExpr = $"cint".int % Abs(Literal(-3), failOnError = true),
+        v2Expr = new GeneralScalarExpression("%", Array(
+          FieldReference("cint"),
+          LiteralValue(3, IntegerType))))
 
-    checkV2Conversion(
-      catalystExpr = Exp(Literal(0.0)) * $"cdouble".double,
-      v2Expr = new GeneralScalarExpression("*", Array(
-        LiteralValue(1.0, DoubleType),
-        FieldReference("cdouble"))))
+      checkV2Conversion(
+        catalystExpr = Exp(Literal(0.0)) * $"cdouble".double,
+        v2Expr = new GeneralScalarExpression("*", Array(
+          LiteralValue(1.0, DoubleType),
+          FieldReference("cdouble"))))
+    }
   }
 
   test("Current Like functions are not supported") {
