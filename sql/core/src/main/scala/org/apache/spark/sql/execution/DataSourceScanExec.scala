@@ -120,10 +120,15 @@ case class RowDataSourceScanExec(
   extends DataSourceScanExec with InputRDDCodegen {
 
   override lazy val metrics: Map[String, SQLMetric] = {
+    val tempMetric = relation.schemaFetchTimeMetric match {
+      case None => Seq()
+      case Some(metric) => Seq("remoteSchemaFetchTime" -> metric)
+    }
     val metrics = Map(
       DataSourceScanExec.numOutputRowsKey ->
         SQLMetrics.createMetric(sparkContext, "number of output rows")
-    )
+    ) ++ tempMetric
+
 
     rdd match {
       case rddWithDSMetrics: DataSourceMetricsMixin => metrics ++ rddWithDSMetrics.getMetrics

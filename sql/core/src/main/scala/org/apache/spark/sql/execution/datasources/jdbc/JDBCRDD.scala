@@ -26,11 +26,9 @@ import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkEx
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.SQL_TEXT
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.execution.datasources.{DataSourceMetricsMixin, ExternalEngineDatasourceRDD}
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD.remoteSchemaDiscoveryMetric
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
@@ -64,9 +62,7 @@ object JDBCRDD extends Logging {
     val fullQuery = prepareQuery + dialect.getSchemaQuery(table)
 
     try {
-      SQLMetrics.withTimingNs(remoteSchemaDiscoveryMetric) {
         getQueryOutputSchema(fullQuery, options, dialect)
-      }
     } catch {
       case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
         throw new SparkException(
@@ -88,14 +84,6 @@ object JDBCRDD extends Logging {
       }
     }
   }
-
-  /**
-   * Time duration of remote schema discovery
-   */
-  val remoteSchemaDiscoveryMetric: SQLMetric = SQLMetrics.createNanoTimingMetric(
-    SparkSession.active.sparkContext,
-    name = "Remote JDBC schema discovery time"
-  )
 
   /**
    * Prune all but the specified columns from the specified Catalyst schema.
@@ -351,8 +339,7 @@ class JDBCRDD(
   override def getMetrics: Seq[(String, SQLMetric)] = {
     Seq(
       "fetchAndTransformToInternalRowsNs" -> fetchAndTransformToInternalRowsMetric,
-      "queryExecutionTime" -> queryExecutionTimeMetric,
-      "remoteSchemaDiscoveryTime" -> remoteSchemaDiscoveryMetric
+      "queryExecutionTime" -> queryExecutionTimeMetric
     )
   }
 }
