@@ -1792,7 +1792,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     pa.Table.from_batches([result], schema=pa.schema(list(arrow_return_type))),
                     assign_cols_by_name=False,
                     expected_cols_and_types=[
-                        (col.name, to_arrow_type(col.dataType)) for col in return_type.fields
+                        (field.name, field.type) for field in arrow_return_type
                     ],
                 )
                 return result
