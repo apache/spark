@@ -45,7 +45,7 @@ from pyspark.pandas.data_type_ops.base import (
     _is_boolean_type,
     _should_return_all_false,
 )
-from pyspark.pandas.typedef.typehints import extension_dtypes, pandas_on_spark_type, as_spark_type
+from pyspark.pandas.typedef.typehints import extension_dtypes, pandas_on_spark_type
 from pyspark.pandas.utils import is_ansi_mode_enabled
 from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import (
