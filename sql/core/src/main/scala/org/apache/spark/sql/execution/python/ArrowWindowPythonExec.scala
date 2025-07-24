@@ -113,9 +113,11 @@ object ArrowWindowPythonExec {
       partitionSpec: Seq[Expression],
       orderSpec: Seq[SortOrder],
       child: SparkPlan): ArrowWindowPythonExec = {
-    val evalTypes = windowExpression.map(w => WindowFunctionType.pythonEvalType(w).get)
+    val evalTypes = windowExpression.flatMap(w => WindowFunctionType.pythonEvalType(w))
+    assert(evalTypes.nonEmpty,
+      "Cannot extract eval type from PythonUDAFs in ArrowWindowPythonExec")
     assert(evalTypes.distinct.size == 1,
-      "All window functions must have the same eval type in WindowInPandasExec")
+      "All window functions must have the same eval type in ArrowWindowPythonExec")
     ArrowWindowPythonExec(windowExpression, partitionSpec, orderSpec, child, evalTypes.head)
   }
 }
