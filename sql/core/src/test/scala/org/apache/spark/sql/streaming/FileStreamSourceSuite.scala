@@ -2214,7 +2214,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
           // Wait for file stream to process all files
           fileQuery1.processAllAvailable()
-          logError(s"### checkpointLocation: ${checkpointLocation}")
 
           // Verify first directory data was written
           val fileData1 = spark.read.parquet(outputDir.getCanonicalPath).as[String].collect().sorted
