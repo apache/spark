@@ -321,7 +321,7 @@ class SqlScriptingLabelContext {
    * If the identifier is contained within seenLabels, raise an exception.
    */
   private def assertIdentifierNotInSeenLabels(
-    identifierCtx: Option[MultipartIdentifierContext]): Unit = {
+      identifierCtx: Option[MultipartIdentifierContext]): Unit = {
     identifierCtx.foreach { ctx =>
       val identifierName = ctx.getText
       if (seenLabels.contains(identifierName.toLowerCase(Locale.ROOT))) {
@@ -359,9 +359,9 @@ class SqlScriptingLabelContext {
       // Do not add the label to the seenLabels set if it is not defined.
       java.util.UUID.randomUUID.toString.toLowerCase(Locale.ROOT)
     }
-    if (SqlScriptingLabelContext.isForbiddenLabelName(labelText)) {
+    if (SqlScriptingLabelContext.isForbiddenLabelOrForVariableName(labelText)) {
       withOrigin(beginLabelCtx.get) {
-        throw SqlScriptingErrors.labelNameForbidden(CurrentOrigin.get, labelText)
+        throw SqlScriptingErrors.labelOrForVariableNameForbidden(CurrentOrigin.get, labelText)
       }
     }
     labelText
@@ -388,9 +388,9 @@ class SqlScriptingLabelContext {
       assertIdentifierNotInSeenLabels(identifierCtx)
       seenLabels.add(identifierName.toLowerCase(Locale.ROOT))
 
-      if (SqlScriptingLabelContext.isForbiddenLabelName(identifierName)) {
+      if (SqlScriptingLabelContext.isForbiddenLabelOrForVariableName(identifierName)) {
         withOrigin(ctx) {
-          throw SqlScriptingErrors.labelNameForbidden(
+          throw SqlScriptingErrors.labelOrForVariableNameForbidden(
             CurrentOrigin.get,
             identifierName.toLowerCase(Locale.ROOT))
         }
@@ -415,7 +415,7 @@ object SqlScriptingLabelContext {
   private val forbiddenLabelNames: immutable.Set[Regex] =
     immutable.Set("builtin".r, "session".r, "sys.*".r)
 
-  def isForbiddenLabelName(labelName: String): Boolean = {
+  def isForbiddenLabelOrForVariableName(labelName: String): Boolean = {
     forbiddenLabelNames.exists(_.matches(labelName.toLowerCase(Locale.ROOT)))
   }
 }

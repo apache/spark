@@ -323,7 +323,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_NAME_FORBIDDEN",
+      condition = "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN",
       parameters = Map("label" -> toSQLId("system")))
     assert(exception.origin.line.contains(3))
   }
@@ -345,7 +345,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_NAME_FORBIDDEN",
+      condition = "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN",
       parameters = Map("label" -> toSQLId("sysxyz")))
     assert(exception.origin.line.contains(3))
   }
@@ -367,7 +367,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_NAME_FORBIDDEN",
+      condition = "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN",
       parameters = Map("label" -> toSQLId("session")))
     assert(exception.origin.line.contains(3))
   }
@@ -389,7 +389,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_NAME_FORBIDDEN",
+      condition = "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN",
       parameters = Map("label" -> toSQLId("builtin")))
     assert(exception.origin.line.contains(3))
   }
@@ -411,7 +411,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_NAME_FORBIDDEN",
+      condition = "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN",
       parameters = Map("label" -> toSQLId("system")))
     assert(exception.origin.line.contains(3))
   }
@@ -433,7 +433,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_NAME_FORBIDDEN",
+      condition = "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN",
       parameters = Map("label" -> toSQLId("session")))
     assert(exception.origin.line.contains(3))
   }
