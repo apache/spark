@@ -80,7 +80,7 @@ class OpsTestBase:
             "date": pd.Series(
                 [datetime.date(1994, 1, 1), datetime.date(1994, 1, 2), datetime.date(1994, 1, 3)]
             ),
-            "datetime": pd.to_datetime(pd.Series([1, 2, 3]), unit="s"),
+            "datetime": pd.to_datetime(pd.Series([1, 2, 3])),
             "timedelta": pd.Series(
                 [datetime.timedelta(1), datetime.timedelta(hours=2), datetime.timedelta(weeks=3)]
             ),
@@ -127,7 +127,7 @@ class OpsTestBase:
     def non_numeric_psers(self):
         psers = {
             "string": pd.Series(["x", "y", "z"]),
-            "datetime": pd.to_datetime(pd.Series([1, 2, 3]), unit="s"),
+            "datetime": pd.to_datetime(pd.Series([1, 2, 3])),
             "bool": pd.Series([True, True, False]),
             "date": pd.Series(
                 [datetime.date(1994, 1, 1), datetime.date(1994, 1, 2), datetime.date(1994, 1, 3)]

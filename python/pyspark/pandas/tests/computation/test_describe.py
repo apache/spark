@@ -135,7 +135,7 @@ class FrameDescribeMixin:
         psdf = ps.DataFrame(
             {
                 "a": [1, 2, 3],
-                "b": [pd.Timestamp(1000), pd.Timestamp(1000), pd.Timestamp(1000)],
+                "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)],
                 "c": [None, None, None],
             }
         )
@@ -184,8 +184,8 @@ class FrameDescribeMixin:
         # Explicit empty DataFrame timestamp only
         psdf = ps.DataFrame(
             {
-                "a": [pd.Timestamp(1000), pd.Timestamp(1000), pd.Timestamp(1000)],
-                "b": [pd.Timestamp(1000), pd.Timestamp(1000), pd.Timestamp(1000)],
+                "a": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)],
+                "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)],
             }
         )
         pdf = psdf._to_pandas()
@@ -199,7 +199,7 @@ class FrameDescribeMixin:
 
         # Explicit empty DataFrame numeric & timestamp
         psdf = ps.DataFrame(
-            {"a": [1, 2, 3], "b": [pd.Timestamp(1000), pd.Timestamp(1000), pd.Timestamp(1000)]}
+            {"a": [1, 2, 3], "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)]}
         )
         pdf = psdf._to_pandas()
         pdf_result = pdf[pdf.a != pdf.a].describe()
@@ -219,10 +219,7 @@ class FrameDescribeMixin:
 
         # Explicit empty DataFrame string & timestamp
         psdf = ps.DataFrame(
-            {
-                "a": ["a", "b", "c"],
-                "b": [pd.Timestamp(1000), pd.Timestamp(1000), pd.Timestamp(1000)],
-            }
+            {"a": ["a", "b", "c"], "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)]}
         )
         pdf = psdf._to_pandas()
         pdf_result = pdf[pdf.a != pdf.a].describe()
