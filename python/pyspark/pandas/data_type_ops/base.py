@@ -117,17 +117,22 @@ def _should_return_all_false(left: IndexOpsLike, right: Any) -> bool:
     based on incompatible dtypes: non-numeric vs. numeric (including bools).
     """
     from pyspark.pandas.base import IndexOpsMixin
+    from pandas.api.types import is_list_like
 
     def are_both_numeric(left_dtype: Dtype, right_dtype: Dtype) -> bool:
         return is_numeric_dtype(left_dtype) and is_numeric_dtype(right_dtype)
 
     left_dtype = left.dtype
 
-    if isinstance(right, (IndexOpsMixin, np.ndarray, pd.Series)):
+    if isinstance(right, IndexOpsMixin):
         right_dtype = right.dtype
     elif isinstance(right, (list, tuple)):
         right_dtype = pd.Series(right).dtype
     else:
+        assert not is_list_like(right), (
+            "Only ps.Series, ps.Index, list, tuple, or scalar is supported as the "
+            "right-hand operand."
+        )
         right_dtype = pd.Series([right]).dtype
 
     return left_dtype != right_dtype and not are_both_numeric(left_dtype, right_dtype)
