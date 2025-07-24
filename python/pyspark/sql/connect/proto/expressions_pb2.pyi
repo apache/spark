@@ -563,7 +563,6 @@ class Expression(google.protobuf.message.Message):
                 is ambiguous. This field should only be set if the data_type_struct field is not set.
                 Use data_type_struct field instead.
                 """
-
             @property
             def elements(
                 self,
@@ -571,7 +570,6 @@ class Expression(google.protobuf.message.Message):
                 global___Expression.Literal
             ]:
                 """(Required) The literal values that make up the struct elements."""
-
             @property
             def data_type_struct(self) -> pyspark.sql.connect.proto.types_pb2.DataType.Struct:
                 """The type of the struct.
@@ -579,7 +577,6 @@ class Expression(google.protobuf.message.Message):
                 Whether data_type_struct.fields.data_type should be set depends on
                 whether each field's type can be inferred from the elements field.
                 """
-
             def __init__(
                 self,
                 *,
