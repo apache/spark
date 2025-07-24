@@ -61,8 +61,13 @@ class JDBCMetricsSuite extends QueryTest with SharedSparkSession {
   test("Test logging of schema fetch time") {
     val df = sql("SELECT * FROM people")
     val leaves = df.queryExecution.executedPlan.collectLeaves().head.metrics
-    val testKey = "remoteSchemaDiscoveryTime"
-    assert(leaves.get(testKey) == null)
+    val testKey = "remoteSchemaFetchTime"
+    val optionMetric = leaves.get(testKey)
+    assert(optionMetric != null)
+    if(optionMetric.isDefined) {
+      val metric = optionMetric.get
+      assert(!metric.isZero)
+    }
   }
 
   test("Select *") {

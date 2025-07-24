@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
@@ -267,6 +268,10 @@ private[sql] case class JDBCRelation(
   extends BaseRelation
   with PrunedFilteredScan
   with InsertableRelation {
+
+  def setSchemaFetchTime(fetchTime: SQLMetric): Unit = {
+    schemaFetchTimeMetric = Some(fetchTime)
+  }
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
