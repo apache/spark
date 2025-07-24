@@ -2793,42 +2793,6 @@ object TryMakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
   }
 }
 
-/**
- * This make_timestamp overload creates a timestamp from:
- *   - a year, month, day, hour, min, sec and optional timezone.
- */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(year, month, day, hour, min, sec[, timezone]) - Create timestamp from year, month, day, hour, min, sec and timezone fields. The result data type is consistent with the value of configuration `spark.sql.timestampType`. If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.",
-  arguments = """
-    Arguments:
-      * year - the year to represent, from 1 to 9999
-      * month - the month-of-year to represent, from 1 (January) to 12 (December)
-      * day - the day-of-month to represent, from 1 to 31
-      * hour - the hour-of-day to represent, from 0 to 23
-      * min - the minute-of-hour to represent, from 0 to 59
-      * sec - the second-of-minute and its micro-fraction to represent, from 0 to 60.
-              The value can be either an integer like 13 , or a fraction like 13.123.
-              If the sec argument equals to 60, the seconds field is set
-              to 0 and 1 minute is added to the final timestamp.
-      * timezone - the time zone identifier. For example, CET, UTC and etc.
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887);
-       2014-12-28 06:30:45.887
-      > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887, 'CET');
-       2014-12-27 21:30:45.887
-      > SELECT _FUNC_(2019, 6, 30, 23, 59, 60);
-       2019-07-01 00:00:00
-      > SELECT _FUNC_(2019, 6, 30, 23, 59, 1);
-       2019-06-30 23:59:01
-      > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
-       NULL
-  """,
-  group = "datetime_funcs",
-  since = "3.0.0")
-// scalastyle:on line.size.limit
 case class MakeTimestamp(
     year: Expression,
     month: Expression,
@@ -3107,8 +3071,8 @@ case class MakeTimestampFromDateTime(
   override def replacement: Expression = {
     // If time is not provided, we use midnight, i.e. 00:00:00.
     val timeExpr = time.getOrElse(Literal(0L, TimeType(0)))
-    // If timezone is not provided, we use UTC, i.e. +00:00.
-    val zoneIdExpr = timezone.getOrElse(Literal("+00:00"))
+    // If timezone is not provided, we use the session timezone.
+    val zoneIdExpr = timezone.getOrElse(Literal(timeZoneId.get))
     StaticInvoke(
       classOf[DateTimeUtils.type],
       TimestampType,
@@ -3167,14 +3131,14 @@ case class MakeTimestampFromDateTime(
       > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887, 'CET');
        2014-12-27 21:30:45.887
       > SELECT _FUNC_(DATE'2014-12-28');
-       2014-12-27 16:00:00
+       2014-12-28 00:00:00
       > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887');
-       2014-12-27 22:30:45.887
+       2014-12-28 06:30:45.887
       > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887', 'CET');
        2014-12-27 21:30:45.887
   """,
   group = "datetime_funcs",
-  since = "4.1.0")
+  since = "3.0.0")
 // scalastyle:on line.size.limit
 object MakeTimestampExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {

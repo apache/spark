@@ -2163,7 +2163,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Test with valid date.
     checkEvaluation(
       MakeTimestampFromDateTime(dateLit("2023-10-01")),
-      timestampToMicros("2023-10-01T00:00:00", UTC)
+      timestampToMicros("2023-10-01T00:00:00", LA)
     )
 
     // Test with null date.
@@ -2180,7 +2180,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         dateLit("2023-10-01"),
         Some(timeLit("12:34:56.123456"))
       ),
-      timestampToMicros("2023-10-01T12:34:56.123456", UTC)
+      timestampToMicros("2023-10-01T12:34:56.123456", LA)
     )
 
     // Test with null date.
