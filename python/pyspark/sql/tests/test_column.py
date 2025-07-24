@@ -133,8 +133,8 @@ class ColumnTestsMixin:
         self.assertTrue(isinstance(df["key"], Column))
         self.assertTrue(isinstance(df[0], Column))
         self.assertRaises(IndexError, lambda: df[2])
-        self.assertRaises(AnalysisException, lambda: df["bad_key"])
         self.assertRaises(TypeError, lambda: df[{}])
+        self.assertRaises(AnalysisException, lambda: df.select(df["bad_key"]).schema)
 
     def test_column_name_with_non_ascii(self):
         columnName = "数量"

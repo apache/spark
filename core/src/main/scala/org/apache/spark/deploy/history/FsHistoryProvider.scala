@@ -321,9 +321,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   override def getLastUpdatedTime(): Long = lastScanTime.get()
 
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
+    val logPath = RollingEventLogFilesWriter.EVENT_LOG_DIR_NAME_PREFIX +
+        EventLogFileWriter.nameForAppAndAttempt(appId, attemptId)
     val app = try {
       load(appId)
      } catch {
+      case _: NoSuchElementException if this.conf.get(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED) =>
+        loadFromFallbackLocation(appId, attemptId, logPath)
       case _: NoSuchElementException =>
         return None
     }
@@ -345,6 +349,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           createInMemoryStore(attempt)
       }
     } catch {
+      case _: FileNotFoundException if this.conf.get(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED) =>
+        if (app.attempts.head.info.appSparkVersion == "unknown") {
+          listing.synchronized {
+            listing.delete(classOf[ApplicationInfoWrapper], appId)
+          }
+        }
+        return None
       case _: FileNotFoundException =>
         return None
     }
@@ -362,6 +373,18 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     Some(loadedUI)
+  }
+
+  private def loadFromFallbackLocation(appId: String, attemptId: Option[String], logPath: String)
+    : ApplicationInfoWrapper = {
+    val date = new Date(0)
+    val lastUpdate = new Date()
+    val info = ApplicationAttemptInfo(
+      attemptId, date, date, lastUpdate, 0, "spark", false, "unknown")
+    addListing(new ApplicationInfoWrapper(
+      ApplicationInfo(appId, appId, None, None, None, None, List.empty),
+      List(new AttemptInfoWrapper(info, logPath, 0, Some(1), None, None, None, None))))
+    load(appId)
   }
 
   override def getEmptyListingHtml(): Seq[Node] = {

@@ -21,12 +21,10 @@ import java.io.{ByteArrayInputStream, InputStream, PrintStream}
 import java.net.URI
 import java.nio.file.{Files, Path, Paths}
 
-import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.sql.Artifact.LocalData
 import org.apache.spark.sql.util.ArtifactUtils
+import org.apache.spark.util.{MavenUtils, SparkStringUtils}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.MavenUtils
 
 private[sql] class Artifact private (val path: Path, val storage: LocalData) {
   require(!path.isAbsolute, s"Bad path: $path")
@@ -104,7 +102,7 @@ private[sql] object Artifact {
     val (transitive, exclusions, repos) = MavenUtils.parseQueryParams(uri)
 
     val exclusionsList: Seq[String] =
-      if (!StringUtils.isBlank(exclusions)) {
+      if (!SparkStringUtils.isBlank(exclusions)) {
         exclusions.split(",").toImmutableArraySeq
       } else {
         Nil
