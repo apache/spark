@@ -27,6 +27,7 @@ T = TypeVar("T")
 
 
 class ResultIterable(Iterable[T]):
+
     """
     A special result iterable. This is used because the standard
     iterator can not be pickled

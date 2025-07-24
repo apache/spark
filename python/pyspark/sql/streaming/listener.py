@@ -518,17 +518,15 @@ class StreamingQueryProgress(dict):
             sink=SinkProgress.fromJson(j["sink"]),
             numInputRows=j["numInputRows"] if "numInputRows" in j else None,
             inputRowsPerSecond=j["inputRowsPerSecond"] if "inputRowsPerSecond" in j else None,
-            processedRowsPerSecond=(
-                j["processedRowsPerSecond"] if "processedRowsPerSecond" in j else None
-            ),
-            observedMetrics=(
-                {
-                    k: Row(*row_dict.keys())(*row_dict.values())  # Assume no nested rows
-                    for k, row_dict in j["observedMetrics"].items()
-                }
-                if "observedMetrics" in j
-                else {}
-            ),
+            processedRowsPerSecond=j["processedRowsPerSecond"]
+            if "processedRowsPerSecond" in j
+            else None,
+            observedMetrics={
+                k: Row(*row_dict.keys())(*row_dict.values())  # Assume no nested rows
+                for k, row_dict in j["observedMetrics"].items()
+            }
+            if "observedMetrics" in j
+            else {},
         )
 
     @property

@@ -130,7 +130,9 @@ class UserDefinedTableFunction:
         self.returnType: Optional[DataType] = (
             None
             if returnType is None
-            else UnparsedDataType(returnType) if isinstance(returnType, str) else returnType
+            else UnparsedDataType(returnType)
+            if isinstance(returnType, str)
+            else returnType
         )
         self._name = name or func.__name__
         self.evalType = evalType

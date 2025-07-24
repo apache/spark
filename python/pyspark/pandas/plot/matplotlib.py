@@ -450,11 +450,9 @@ class PandasOnSparkHistPlot(PandasHistPlot, HistogramPlotBase):
             artists = self._plot(ax, y, column_num=i, stacking_id=stacking_id, **kwds)
             # `if hasattr(...)` makes plotting compatible with pandas < 1.3,
             # see pandas-dev/pandas#40078.
-            (
-                self._append_legend_handles_labels(artists[0], label)
-                if hasattr(self, "_append_legend_handles_labels")
-                else self._add_legend_handle(artists[0], label, index=i)
-            )
+            self._append_legend_handles_labels(artists[0], label) if hasattr(
+                self, "_append_legend_handles_labels"
+            ) else self._add_legend_handle(artists[0], label, index=i)
 
     @classmethod
     def _plot(cls, ax, y, style=None, bins=None, bottom=0, column_num=0, stacking_id=None, **kwds):
@@ -571,11 +569,9 @@ class PandasOnSparkKdePlot(PandasKdePlot, KdePlotBase):
             artists = self._plot(ax, y, column_num=i, stacking_id=stacking_id, **kwds)
             # `if hasattr(...)` makes plotting compatible with pandas < 1.3,
             # see pandas-dev/pandas#40078.
-            (
-                self._append_legend_handles_labels(artists[0], label)
-                if hasattr(self, "_append_legend_handles_labels")
-                else self._add_legend_handle(artists[0], label, index=i)
-            )
+            self._append_legend_handles_labels(artists[0], label) if hasattr(
+                self, "_append_legend_handles_labels"
+            ) else self._add_legend_handle(artists[0], label, index=i)
 
     @staticmethod
     def _get_ind(y, ind):

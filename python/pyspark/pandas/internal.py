@@ -715,15 +715,11 @@ class InternalFrame:
         ):
             schema = spark_frame.select(index_spark_columns + data_spark_columns).schema
             fields = [
-                (
-                    InternalField.from_struct_field(struct_field)
-                    if field is None
-                    else (
-                        InternalField(field.dtype, struct_field)
-                        if field.struct_field is None
-                        else field
-                    )
-                )
+                InternalField.from_struct_field(struct_field)
+                if field is None
+                else InternalField(field.dtype, struct_field)
+                if field.struct_field is None
+                else field
                 for field, struct_field in zip(index_fields + data_fields, schema.fields)
             ]
             index_fields = fields[: len(index_spark_columns)]
@@ -731,29 +727,21 @@ class InternalFrame:
         elif any(field is None or field.struct_field is None for field in index_fields):
             schema = spark_frame.select(index_spark_columns).schema
             index_fields = [
-                (
-                    InternalField.from_struct_field(struct_field)
-                    if field is None
-                    else (
-                        InternalField(field.dtype, struct_field)
-                        if field.struct_field is None
-                        else field
-                    )
-                )
+                InternalField.from_struct_field(struct_field)
+                if field is None
+                else InternalField(field.dtype, struct_field)
+                if field.struct_field is None
+                else field
                 for field, struct_field in zip(index_fields, schema.fields)
             ]
         elif any(field is None or field.struct_field is None for field in data_fields):
             schema = spark_frame.select(data_spark_columns).schema
             data_fields = [
-                (
-                    InternalField.from_struct_field(struct_field)
-                    if field is None
-                    else (
-                        InternalField(field.dtype, struct_field)
-                        if field.struct_field is None
-                        else field
-                    )
-                )
+                InternalField.from_struct_field(struct_field)
+                if field is None
+                else InternalField(field.dtype, struct_field)
+                if field.struct_field is None
+                else field
                 for field, struct_field in zip(data_fields, schema.fields)
             ]
 

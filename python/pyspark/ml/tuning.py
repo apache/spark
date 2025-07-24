@@ -169,10 +169,12 @@ class ParamGridBuilder:
         return self
 
     @overload
-    def baseOn(self, __args: "ParamMap") -> "ParamGridBuilder": ...
+    def baseOn(self, __args: "ParamMap") -> "ParamGridBuilder":
+        ...
 
     @overload
-    def baseOn(self, *args: Tuple[Param, Any]) -> "ParamGridBuilder": ...
+    def baseOn(self, *args: Tuple[Param, Any]) -> "ParamGridBuilder":
+        ...
 
     @since("1.4.0")
     def baseOn(self, *args: Union["ParamMap", Tuple[Param, Any]]) -> "ParamGridBuilder":
@@ -851,10 +853,9 @@ class CrossValidator(
             validation = datasets[i][1]
             train = datasets[i][0]
 
-            with (
-                _cache_spark_dataset(train) as train,
-                _cache_spark_dataset(validation) as validation,
-            ):
+            with _cache_spark_dataset(train) as train, _cache_spark_dataset(
+                validation
+            ) as validation:
                 tasks = map(
                     inheritable_thread_target(dataset.sparkSession),
                     _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam),

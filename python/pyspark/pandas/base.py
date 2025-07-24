@@ -117,11 +117,9 @@ def align_diff_index_ops(
                     column_op(func)(
                         this_index_ops.to_series().reset_index(drop=True),
                         *[
-                            (
-                                arg.to_series().reset_index(drop=True)
-                                if isinstance(arg, Index)
-                                else arg
-                            )
+                            arg.to_series().reset_index(drop=True)
+                            if isinstance(arg, Index)
+                            else arg
                             for arg in args
                         ],
                     ).sort_index(),

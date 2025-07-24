@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
 
 class TaskContext:
+
     """
     Contextual information about a task which can be read or mutated during
     execution. To access the TaskContext for a running task, use:
@@ -300,6 +301,7 @@ def _load_from_socket(
 
 
 class BarrierTaskContext(TaskContext):
+
     """
     A :class:`TaskContext` with extra contextual info and tooling for tasks in a barrier stage.
     Use :func:`BarrierTaskContext.get` to obtain the barrier context for a running barrier task.

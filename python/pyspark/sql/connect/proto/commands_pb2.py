@@ -53,9 +53,9 @@ _builder.BuildTopDescriptorsAndMessages(
 )
 if not _descriptor._USE_C_DESCRIPTORS:
     _globals["DESCRIPTOR"]._loaded_options = None
-    _globals["DESCRIPTOR"]._serialized_options = (
-        b"\n\036org.apache.spark.connect.protoP\001Z\022internal/generated"
-    )
+    _globals[
+        "DESCRIPTOR"
+    ]._serialized_options = b"\n\036org.apache.spark.connect.protoP\001Z\022internal/generated"
     _globals["_SQLCOMMAND_ARGSENTRY"]._loaded_options = None
     _globals["_SQLCOMMAND_ARGSENTRY"]._serialized_options = b"8\001"
     _globals["_SQLCOMMAND_NAMEDARGUMENTSENTRY"]._loaded_options = None
@@ -154,9 +154,9 @@ if not _descriptor._USE_C_DESCRIPTORS:
     _globals["_STREAMINGQUERYMANAGERCOMMANDRESULT_ACTIVERESULT"]._serialized_end = 9483
     _globals["_STREAMINGQUERYMANAGERCOMMANDRESULT_STREAMINGQUERYINSTANCE"]._serialized_start = 9485
     _globals["_STREAMINGQUERYMANAGERCOMMANDRESULT_STREAMINGQUERYINSTANCE"]._serialized_end = 9600
-    _globals["_STREAMINGQUERYMANAGERCOMMANDRESULT_AWAITANYTERMINATIONRESULT"]._serialized_start = (
-        9602
-    )
+    _globals[
+        "_STREAMINGQUERYMANAGERCOMMANDRESULT_AWAITANYTERMINATIONRESULT"
+    ]._serialized_start = 9602
     _globals["_STREAMINGQUERYMANAGERCOMMANDRESULT_AWAITANYTERMINATIONRESULT"]._serialized_end = 9661
     _globals[
         "_STREAMINGQUERYMANAGERCOMMANDRESULT_STREAMINGQUERYLISTENERINSTANCE"

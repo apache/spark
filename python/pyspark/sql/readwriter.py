@@ -1061,7 +1061,8 @@ class DataFrameReader(OptionUtils):
     @overload
     def jdbc(
         self, url: str, table: str, *, properties: Optional[Dict[str, str]] = None
-    ) -> "DataFrame": ...
+    ) -> "DataFrame":
+        ...
 
     @overload
     def jdbc(
@@ -1074,7 +1075,8 @@ class DataFrameReader(OptionUtils):
         numPartitions: int,
         *,
         properties: Optional[Dict[str, str]] = None,
-    ) -> "DataFrame": ...
+    ) -> "DataFrame":
+        ...
 
     @overload
     def jdbc(
@@ -1084,7 +1086,8 @@ class DataFrameReader(OptionUtils):
         *,
         predicates: List[str],
         properties: Optional[Dict[str, str]] = None,
-    ) -> "DataFrame": ...
+    ) -> "DataFrame":
+        ...
 
     def jdbc(
         self,
@@ -1392,10 +1395,12 @@ class DataFrameWriter(OptionUtils):
         return self
 
     @overload
-    def partitionBy(self, *cols: str) -> "DataFrameWriter": ...
+    def partitionBy(self, *cols: str) -> "DataFrameWriter":
+        ...
 
     @overload
-    def partitionBy(self, *cols: List[str]) -> "DataFrameWriter": ...
+    def partitionBy(self, *cols: List[str]) -> "DataFrameWriter":
+        ...
 
     def partitionBy(self, *cols: Union[str, List[str]]) -> "DataFrameWriter":
         """Partitions the output by the given columns on the file system.
@@ -1452,10 +1457,12 @@ class DataFrameWriter(OptionUtils):
         return self
 
     @overload
-    def bucketBy(self, numBuckets: int, col: str, *cols: str) -> "DataFrameWriter": ...
+    def bucketBy(self, numBuckets: int, col: str, *cols: str) -> "DataFrameWriter":
+        ...
 
     @overload
-    def bucketBy(self, numBuckets: int, col: TupleOrListOfString) -> "DataFrameWriter": ...
+    def bucketBy(self, numBuckets: int, col: TupleOrListOfString) -> "DataFrameWriter":
+        ...
 
     def bucketBy(
         self, numBuckets: int, col: Union[str, TupleOrListOfString], *cols: Optional[str]
@@ -1551,10 +1558,12 @@ class DataFrameWriter(OptionUtils):
         return self
 
     @overload
-    def sortBy(self, col: str, *cols: str) -> "DataFrameWriter": ...
+    def sortBy(self, col: str, *cols: str) -> "DataFrameWriter":
+        ...
 
     @overload
-    def sortBy(self, col: TupleOrListOfString) -> "DataFrameWriter": ...
+    def sortBy(self, col: TupleOrListOfString) -> "DataFrameWriter":
+        ...
 
     def sortBy(
         self, col: Union[str, TupleOrListOfString], *cols: Optional[str]
@@ -1633,10 +1642,12 @@ class DataFrameWriter(OptionUtils):
         return self
 
     @overload
-    def clusterBy(self, *cols: str) -> "DataFrameWriter": ...
+    def clusterBy(self, *cols: str) -> "DataFrameWriter":
+        ...
 
     @overload
-    def clusterBy(self, *cols: List[str]) -> "DataFrameWriter": ...
+    def clusterBy(self, *cols: List[str]) -> "DataFrameWriter":
+        ...
 
     def clusterBy(self, *cols: Union[str, List[str]]) -> "DataFrameWriter":
         """Clusters the data by the given columns to optimize query performance.

@@ -80,10 +80,12 @@ class GroupedData(PandasGroupedOpsMixin):
             return super().__repr__()
 
     @overload
-    def agg(self, *exprs: Column) -> "DataFrame": ...
+    def agg(self, *exprs: Column) -> "DataFrame":
+        ...
 
     @overload
-    def agg(self, __exprs: Dict[str, str]) -> "DataFrame": ...
+    def agg(self, __exprs: Dict[str, str]) -> "DataFrame":
+        ...
 
     def agg(self, *exprs: Union[Column, Dict[str, str]]) -> "DataFrame":
         """Compute aggregates and returns the result as a :class:`DataFrame`.

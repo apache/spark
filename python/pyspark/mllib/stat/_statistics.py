@@ -34,6 +34,7 @@ __all__ = ["MultivariateStatisticalSummary", "Statistics"]
 
 
 class MultivariateStatisticalSummary(JavaModelWrapper):
+
     """
     Trait for multivariate statistical summary of a data matrix.
     """
@@ -105,11 +106,13 @@ class Statistics:
 
     @overload
     @staticmethod
-    def corr(x: RDD[Vector], *, method: Optional["CorrMethodType"] = ...) -> Matrix: ...
+    def corr(x: RDD[Vector], *, method: Optional["CorrMethodType"] = ...) -> Matrix:
+        ...
 
     @overload
     @staticmethod
-    def corr(x: RDD[float], y: RDD[float], method: Optional["CorrMethodType"] = ...) -> float: ...
+    def corr(x: RDD[float], y: RDD[float], method: Optional["CorrMethodType"] = ...) -> float:
+        ...
 
     @staticmethod
     def corr(
@@ -186,8 +189,7 @@ class Statistics:
 
         if not y:
             return cast(
-                JavaObject,
-                callMLlibFunc("corr", x.map(_convert_to_vector), method),
+                JavaObject, callMLlibFunc("corr", x.map(_convert_to_vector), method)
             ).toArray()
         else:
             return cast(
@@ -197,15 +199,18 @@ class Statistics:
 
     @overload
     @staticmethod
-    def chiSqTest(observed: Matrix) -> ChiSqTestResult: ...
+    def chiSqTest(observed: Matrix) -> ChiSqTestResult:
+        ...
 
     @overload
     @staticmethod
-    def chiSqTest(observed: Vector, expected: Optional[Vector] = ...) -> ChiSqTestResult: ...
+    def chiSqTest(observed: Vector, expected: Optional[Vector] = ...) -> ChiSqTestResult:
+        ...
 
     @overload
     @staticmethod
-    def chiSqTest(observed: RDD[LabeledPoint]) -> List[ChiSqTestResult]: ...
+    def chiSqTest(observed: RDD[LabeledPoint]) -> List[ChiSqTestResult]:
+        ...
 
     @staticmethod
     def chiSqTest(

@@ -38,7 +38,7 @@ from pyspark.pandas.exceptions import PandasNotImplementedError
 MAX_MISSING_PARAMS_SIZE = 5
 COMMON_PARAMETER_SET = {"kwargs", "args", "cls"}
 MODULE_GROUP_MATCH = [(pd, ps), (pdw, psw), (pdg, psg)]
-PANDAS_LATEST_VERSION = "2.3.1"
+PANDAS_LATEST_VERSION = "2.3.0"
 
 RST_HEADER = """
 =====================
@@ -374,10 +374,8 @@ def _write_table(
         else:
             lines.append("    * - :func:`%s`\n" % func_str)
         lines.append("      - %s\n" % status.implemented)
-        (
-            lines.append("      - \n")
-            if not status.missing
-            else lines.append("      - %s\n" % status.missing)
+        lines.append("      - \n") if not status.missing else lines.append(
+            "      - %s\n" % status.missing
         )
     w_fd.writelines(lines)
 

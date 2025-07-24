@@ -40,7 +40,8 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class BasePythonStreamingDataSourceTestsMixin:
     def test_basic_streaming_data_source_class(self):
-        class MyDataSource(DataSource): ...  # noqa: E701
+        class MyDataSource(DataSource):
+            ...
 
         options = dict(a=1, b=2)
         ds = MyDataSource(options=options)

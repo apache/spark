@@ -225,9 +225,9 @@ catalyst = Module(
     sbt_test_goals=[
         "catalyst/test",
     ],
-    environ=(
-        None if "GITHUB_ACTIONS" not in os.environ else {"ENABLE_DOCKER_INTEGRATION_TESTS": "1"}
-    ),
+    environ=None
+    if "GITHUB_ACTIONS" not in os.environ
+    else {"ENABLE_DOCKER_INTEGRATION_TESTS": "1"},
 )
 
 sql = Module(
@@ -240,9 +240,9 @@ sql = Module(
     sbt_test_goals=[
         "sql/test",
     ],
-    environ=(
-        None if "GITHUB_ACTIONS" not in os.environ else {"ENABLE_DOCKER_INTEGRATION_TESTS": "1"}
-    ),
+    environ=None
+    if "GITHUB_ACTIONS" not in os.environ
+    else {"ENABLE_DOCKER_INTEGRATION_TESTS": "1"},
 )
 
 hive = Module(
@@ -1602,9 +1602,9 @@ docker_integration_tests = Module(
     build_profile_flags=["-Pdocker-integration-tests"],
     source_file_regexes=["connector/docker-integration-tests"],
     sbt_test_goals=["docker-integration-tests/test"],
-    environ=(
-        None if "GITHUB_ACTIONS" not in os.environ else {"ENABLE_DOCKER_INTEGRATION_TESTS": "1"}
-    ),
+    environ=None
+    if "GITHUB_ACTIONS" not in os.environ
+    else {"ENABLE_DOCKER_INTEGRATION_TESTS": "1"},
     test_tags=["org.apache.spark.tags.DockerTest"],
 )
 

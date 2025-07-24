@@ -156,12 +156,14 @@ class Estimator(Params, Generic[M], metaclass=ABCMeta):
         return _FitMultipleIterator(fitSingleModel, len(paramMaps))
 
     @overload
-    def fit(self, dataset: DataFrame, params: Optional["ParamMap"] = ...) -> M: ...
+    def fit(self, dataset: DataFrame, params: Optional["ParamMap"] = ...) -> M:
+        ...
 
     @overload
     def fit(
         self, dataset: DataFrame, params: Union[List["ParamMap"], Tuple["ParamMap"]]
-    ) -> List[M]: ...
+    ) -> List[M]:
+        ...
 
     def fit(
         self,

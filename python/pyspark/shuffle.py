@@ -93,6 +93,7 @@ DiskBytesSpilled = 0
 
 
 class Aggregator:
+
     """
     Aggregator has tree functions to merge values into combiner.
 
@@ -108,6 +109,7 @@ class Aggregator:
 
 
 class SimpleAggregator(Aggregator):
+
     """
     SimpleAggregator is useful for the cases that combiners have
     same type with values
@@ -118,6 +120,7 @@ class SimpleAggregator(Aggregator):
 
 
 class Merger:
+
     """
     Merge shuffled data together by aggregator
     """
@@ -145,6 +148,7 @@ def _compressed_serializer(self, serializer=None):
 
 
 class ExternalMerger(Merger):
+
     """
     External merger will dump the aggregated data into disks when
     memory usage goes above the limit, then merge them together.
@@ -692,6 +696,7 @@ class GroupByKey:
 
 
 class ExternalGroupBy(ExternalMerger):
+
     """
     Group by the items by key. If any partition of them can not been
     hold in memory, it will do sort based group by.

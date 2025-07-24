@@ -63,7 +63,8 @@ class KinesisUtils:
         stsAssumeRoleArn: Optional[str] = ...,
         stsSessionName: Optional[str] = ...,
         stsExternalId: Optional[str] = ...,
-    ) -> "DStream[Optional[str]]": ...
+    ) -> "DStream[Optional[str]]":
+        ...
 
     @staticmethod
     @overload
@@ -83,7 +84,8 @@ class KinesisUtils:
         stsAssumeRoleArn: Optional[str] = ...,
         stsSessionName: Optional[str] = ...,
         stsExternalId: Optional[str] = ...,
-    ) -> "DStream[T]": ...
+    ) -> "DStream[T]":
+        ...
 
     @staticmethod
     def createStream(

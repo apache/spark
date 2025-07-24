@@ -387,19 +387,20 @@ class Profile:
             )
 
     @overload
-    def render(
-        self, id: int, *, type: Optional[str] = None, renderer: Optional[str] = None
-    ) -> Any: ...
+    def render(self, id: int, *, type: Optional[str] = None, renderer: Optional[str] = None) -> Any:
+        ...
 
     @overload
     def render(
         self, id: int, *, type: Optional[Literal["perf"]], renderer: Callable[[pstats.Stats], Any]
-    ) -> Any: ...
+    ) -> Any:
+        ...
 
     @overload
     def render(
         self, id: int, *, type: Literal["memory"], renderer: Callable[[CodeMapDict], Any]
-    ) -> Any: ...
+    ) -> Any:
+        ...
 
     def render(
         self,

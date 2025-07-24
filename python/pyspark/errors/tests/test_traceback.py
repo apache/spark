@@ -167,9 +167,8 @@ class BaseTracebackSqlTestsMixin:
 
     def test_udf(self):
         for jvm_stack_trace in [False, True]:
-            with (
-                self.subTest(jvm_stack_trace=jvm_stack_trace),
-                self.sql_conf({"spark.sql.pyspark.jvmStacktrace.enabled": jvm_stack_trace}),
+            with self.subTest(jvm_stack_trace=jvm_stack_trace), self.sql_conf(
+                {"spark.sql.pyspark.jvmStacktrace.enabled": jvm_stack_trace}
             ):
 
                 @sf.udf()

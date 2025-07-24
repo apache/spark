@@ -501,6 +501,7 @@ class MatrixUDTTests(MLlibTestCase):
 
 @unittest.skipIf(not have_scipy, "SciPy not installed")
 class SciPyTests(MLlibTestCase):
+
     """
     Test both vector operations and MLlib algorithms with SciPy sparse matrices,
     if SciPy is available.

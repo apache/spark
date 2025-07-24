@@ -63,6 +63,7 @@ class SpecialAccumulatorIds:
 
 
 class Accumulator(Generic[T]):
+
     """
     A shared variable that can be accumulated, i.e., has a commutative and associative "add"
     operation. Worker tasks on a Spark cluster can add values to an Accumulator with the `+=`
@@ -185,6 +186,7 @@ class Accumulator(Generic[T]):
 
 
 class AccumulatorParam(Generic[T]):
+
     """
     Helper object that defines how to accumulate values of a given type.
 
@@ -227,6 +229,7 @@ class AccumulatorParam(Generic[T]):
 
 
 class AddingAccumulatorParam(AccumulatorParam[U]):
+
     """
     An AccumulatorParam that uses the + operators to add values. Designed for simple types
     such as integers, floats, and lists. Requires the zero value for the underlying type
@@ -251,6 +254,7 @@ COMPLEX_ACCUMULATOR_PARAM = AddingAccumulatorParam(0.0j)  # type: ignore[type-va
 
 
 class UpdateRequestHandler(socketserver.StreamRequestHandler):
+
     """
     This handler will keep polling updates from the same socket until the
     server is shutdown.

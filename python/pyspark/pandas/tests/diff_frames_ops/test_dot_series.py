@@ -110,15 +110,13 @@ class DiffFramesDotSeriesMixin:
         with self.assertRaisesRegex(ValueError, "matrices are not aligned"):
             psser.dot(psser_other)
 
-        with (
-            ps.option_context("compute.eager_check", False),
-            self.assertRaisesRegex(ValueError, "matrices are not aligned"),
+        with ps.option_context("compute.eager_check", False), self.assertRaisesRegex(
+            ValueError, "matrices are not aligned"
         ):
             psser.dot(psser_other2)
 
-        with (
-            ps.option_context("compute.eager_check", True),
-            self.assertRaisesRegex(ValueError, "matrices are not aligned"),
+        with ps.option_context("compute.eager_check", True), self.assertRaisesRegex(
+            ValueError, "matrices are not aligned"
         ):
             psser.dot(psser_other)
 
