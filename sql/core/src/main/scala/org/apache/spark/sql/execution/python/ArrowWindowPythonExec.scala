@@ -61,7 +61,7 @@ import org.apache.spark.sql.execution.window._
  *     Unbounded window takes only input columns.
  * (2) Bounded window evaluates the udf once per input row.
  *     Unbounded window evaluates the udf once per window partition.
- * This is controlled by Python runner conf "pandas_window_bound_types"
+ * This is controlled by Python runner conf "window_bound_types"
  *
  * The logic to compute window bounds is delegated to [[WindowFunctionFrame]] and shared with
  * [[WindowExec]]

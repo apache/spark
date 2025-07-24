@@ -68,7 +68,7 @@ class ArrowWindowPythonEvaluatorFactory(
 
   private object BoundedWindow extends WindowBoundType("bounded")
 
-  private val windowBoundTypeConf = "pandas_window_bound_types"
+  private val windowBoundTypeConf = "window_bound_types"
 
   private def collectFunctions(
       udf: PythonFuncExpression): ((ChainedPythonFunctions, Long), Seq[Expression]) = {
