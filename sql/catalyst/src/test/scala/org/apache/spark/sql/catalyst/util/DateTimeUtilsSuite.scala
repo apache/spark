@@ -794,12 +794,16 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(DateTimeUtils.timeTrunc(UTF8String.fromString("MICROSECOND"), midnight) === 0)
 
     // Unsupported truncation levels.
-    Seq("DAY", "WEEK", "MONTH", "QUARTER", "YEAR", "INVALID", "ABC", "XYZ", "MS", " ", "", null).
+    Seq("DAY", "WEEK", "MONTH", "QUARTER", "YEAR", "INVALID", "ABC", "XYZ", "MS", " ", "").
         map(UTF8String.fromString).foreach { level =>
       intercept[IllegalArgumentException] {
         DateTimeUtils.timeTrunc(level, input)
         DateTimeUtils.timeTrunc(level, midnight)
       }
+    }
+    // Null truncation level is not allowed.
+    intercept[AssertionError] {
+      DateTimeUtils.timeTrunc(null, input)
     }
   }
 

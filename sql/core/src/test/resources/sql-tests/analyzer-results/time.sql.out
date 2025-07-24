@@ -494,6 +494,41 @@ Project [time_trunc(MICROSECOND, 12:34:56) AS time_trunc(MICROSECOND, TIME '12:3
 
 
 -- !query
+SELECT time_trunc('HOUR', time'12:34:56.1')
+-- !query analysis
+Project [time_trunc(HOUR, 12:34:56.1) AS time_trunc(HOUR, TIME '12:34:56.1')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MINUTE', time'12:34:56.1')
+-- !query analysis
+Project [time_trunc(MINUTE, 12:34:56.1) AS time_trunc(MINUTE, TIME '12:34:56.1')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('SECOND', time'12:34:56.1')
+-- !query analysis
+Project [time_trunc(SECOND, 12:34:56.1) AS time_trunc(SECOND, TIME '12:34:56.1')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MILLISECOND', time'12:34:56.1')
+-- !query analysis
+Project [time_trunc(MILLISECOND, 12:34:56.1) AS time_trunc(MILLISECOND, TIME '12:34:56.1')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MICROSECOND', time'12:34:56.1')
+-- !query analysis
+Project [time_trunc(MICROSECOND, 12:34:56.1) AS time_trunc(MICROSECOND, TIME '12:34:56.1')#x]
++- OneRowRelation
+
+
+-- !query
 SELECT time_trunc('HOUR', time'12:34:56.123456')
 -- !query analysis
 Project [time_trunc(HOUR, 12:34:56.123456) AS time_trunc(HOUR, TIME '12:34:56.123456')#x]
@@ -560,6 +595,41 @@ Project [time_trunc(MILLISECOND, 12:34:56.123456) AS time_trunc(MILLISECOND, TIM
 SELECT time_trunc('MICROSECOND', time'12:34:56.123456789')
 -- !query analysis
 Project [time_trunc(MICROSECOND, 12:34:56.123456) AS time_trunc(MICROSECOND, TIME '12:34:56.123456')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('hour', time'12:34:56')
+-- !query analysis
+Project [time_trunc(hour, 12:34:56) AS time_trunc(hour, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MiNuTe', time'12:34:56')
+-- !query analysis
+Project [time_trunc(MiNuTe, 12:34:56) AS time_trunc(MiNuTe, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('sEcOnD', time'12:34:56')
+-- !query analysis
+Project [time_trunc(sEcOnD, 12:34:56) AS time_trunc(sEcOnD, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('Millisecond', time'12:34:56')
+-- !query analysis
+Project [time_trunc(Millisecond, 12:34:56) AS time_trunc(Millisecond, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('microseconD', time'12:34:56')
+-- !query analysis
+Project [time_trunc(microseconD, 12:34:56) AS time_trunc(microseconD, TIME '12:34:56')#x]
 +- OneRowRelation
 
 
@@ -728,97 +798,6 @@ Project [time_trunc(INVALID, 12:34:56) AS time_trunc(INVALID, TIME '12:34:56')#x
 SELECT time_trunc('INVALID_UNIT', time'12:34:56')
 -- !query analysis
 Project [time_trunc(INVALID_UNIT, 12:34:56) AS time_trunc(INVALID_UNIT, TIME '12:34:56')#x]
-+- OneRowRelation
-
-
--- !query
-SELECT time_trunc('HOUR', time'24:00:00')
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_TYPED_LITERAL",
-  "sqlState" : "42604",
-  "messageParameters" : {
-    "value" : "'24:00:00'",
-    "valueType" : "\"TIME\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 27,
-    "stopIndex" : 40,
-    "fragment" : "time'24:00:00'"
-  } ]
-}
-
-
--- !query
-SELECT time_trunc('MINUTE', time'23:78:00')
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_TYPED_LITERAL",
-  "sqlState" : "42604",
-  "messageParameters" : {
-    "value" : "'23:78:00'",
-    "valueType" : "\"TIME\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 29,
-    "stopIndex" : 42,
-    "fragment" : "time'23:78:00'"
-  } ]
-}
-
-
--- !query
-SELECT time_trunc('SECOND', time'12:00:97')
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_TYPED_LITERAL",
-  "sqlState" : "42604",
-  "messageParameters" : {
-    "value" : "'12:00:97'",
-    "valueType" : "\"TIME\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 29,
-    "stopIndex" : 42,
-    "fragment" : "time'12:00:97'"
-  } ]
-}
-
-
--- !query
-SELECT time_trunc('MILLISECOND', time'24:00:00.1')
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_TYPED_LITERAL",
-  "sqlState" : "42604",
-  "messageParameters" : {
-    "value" : "'24:00:00.1'",
-    "valueType" : "\"TIME\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 34,
-    "stopIndex" : 49,
-    "fragment" : "time'24:00:00.1'"
-  } ]
-}
-
-
--- !query
-SELECT time_trunc('MICROSECOND', time'00:00:00.1234567890')
--- !query analysis
-Project [time_trunc(MICROSECOND, 00:00:00.123456) AS time_trunc(MICROSECOND, TIME '00:00:00.123456')#x]
 +- OneRowRelation
 
 

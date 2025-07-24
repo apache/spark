@@ -641,7 +641,7 @@ case class SubtractTimes(left: Expression, right: Expression)
       * unit - the unit representing the unit to be truncated to
           - "HOUR" - zero out the minutes and seconds with fraction part
           - "MINUTE" - zero out the seconds with fraction part
-          - "SECOND" - zero out the seconds with fraction part
+          - "SECOND" - zero out the fraction part of seconds
           - "MILLISECOND" - zero out the microseconds
           - "MICROSECOND" - zero out the nanoseconds
       * expr - a TIME with a valid time format

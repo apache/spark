@@ -512,7 +512,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * Returns time truncated to the unit specified by the level.
    */
   private def parseTimeTruncLevel(level: UTF8String): ChronoUnit = {
-    require(level != null, "Truncation level cannot be null")
+    assert(level != null, "Truncation level cannot be null")
     level.toString.toUpperCase(Locale.ROOT) match {
       case "HOUR" => ChronoUnit.HOURS
       case "MINUTE" => ChronoUnit.MINUTES
@@ -525,8 +525,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Returns time truncated to the unit specified by the level. Trunc level should be generated
-   * using `parseTruncLevel()`, and should be between TRUNC_TO_HOUR and TRUNC_TO_MICROSECOND.
+   * Returns time truncated to the unit specified by the level. Trunc level is parsed directly to
+   * corresponding ChronoUnits. Note that only levels from 'MICROSECOND' to 'HOUR' are supported.
    */
   def timeTrunc(level: UTF8String, nanos: Long): Long = {
     localTimeToNanos(nanosToLocalTime(nanos).truncatedTo(parseTimeTruncLevel(level)))
