@@ -84,58 +84,52 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
           val file = dir.listFiles().find(_.getName.endsWith(".parquet")).get
           val parquetFilePath = file.getAbsolutePath
           val inputFile = HadoopInputFile.fromPath(new Path(parquetFilePath), new Configuration())
-          try {
-            val reader = ParquetFileReader.open(inputFile)
-            val footer = reader.getFooter
-            val schema = footer.getFileMetaData.getSchema
-            // v.typed_value.t.typed_value
-            val vGroup = schema.getType(schema.getFieldIndex("v")).asGroupType()
-            val typedValueGroup = vGroup.getType("typed_value").asGroupType()
-            val tGroup = typedValueGroup.getType("t").asGroupType()
-            val typedValue1 = tGroup.getType("typed_value").asPrimitiveType()
-            assert(typedValue1.getPrimitiveTypeName == PrimitiveTypeName.INT64)
-            assert(typedValue1.getLogicalTypeAnnotation == LogicalTypeAnnotation.timestampType(
-              true, LogicalTypeAnnotation.TimeUnit.MICROS))
+          val reader = ParquetFileReader.open(inputFile)
+          val footer = reader.getFooter
+          val schema = footer.getFileMetaData.getSchema
+          // v.typed_value.t.typed_value
+          val vGroup = schema.getType(schema.getFieldIndex("v")).asGroupType()
+          val typedValueGroup = vGroup.getType("typed_value").asGroupType()
+          val tGroup = typedValueGroup.getType("t").asGroupType()
+          val typedValue1 = tGroup.getType("typed_value").asPrimitiveType()
+          assert(typedValue1.getPrimitiveTypeName == PrimitiveTypeName.INT64)
+          assert(typedValue1.getLogicalTypeAnnotation == LogicalTypeAnnotation.timestampType(
+            true, LogicalTypeAnnotation.TimeUnit.MICROS))
 
-            // v.typed_value.st.typed_value.t.typed_value
-            val stGroup = typedValueGroup.getType("st").asGroupType()
-            val stTypedValueGroup = stGroup.getType("typed_value").asGroupType()
-            val stTGroup = stTypedValueGroup.getType("t").asGroupType()
-            val typedValue2 = stTGroup.getType("typed_value").asPrimitiveType()
-            assert(typedValue2.getPrimitiveTypeName == PrimitiveTypeName.INT64)
-            assert(typedValue2.getLogicalTypeAnnotation == LogicalTypeAnnotation.timestampType(
-              true, LogicalTypeAnnotation.TimeUnit.MICROS))
+          // v.typed_value.st.typed_value.t.typed_value
+          val stGroup = typedValueGroup.getType("st").asGroupType()
+          val stTypedValueGroup = stGroup.getType("typed_value").asGroupType()
+          val stTGroup = stTypedValueGroup.getType("t").asGroupType()
+          val typedValue2 = stTGroup.getType("typed_value").asPrimitiveType()
+          assert(typedValue2.getPrimitiveTypeName == PrimitiveTypeName.INT64)
+          assert(typedValue2.getLogicalTypeAnnotation == LogicalTypeAnnotation.timestampType(
+            true, LogicalTypeAnnotation.TimeUnit.MICROS))
 
-            def verifyNonVariantTimestampType(t: PrimitiveType): Unit = {
-              timestampParquetType match {
-                case ParquetOutputTimestampType.INT96 =>
-                  assert(t.getPrimitiveTypeName == PrimitiveTypeName.INT96)
-                  assert(t.getLogicalTypeAnnotation == null)
-                case ParquetOutputTimestampType.TIMESTAMP_MICROS =>
-                  assert(t.getPrimitiveTypeName == PrimitiveTypeName.INT64)
-                  assert(t.getLogicalTypeAnnotation == LogicalTypeAnnotation.timestampType(
-                    true, LogicalTypeAnnotation.TimeUnit.MICROS))
-                case ParquetOutputTimestampType.TIMESTAMP_MILLIS =>
-                  assert(t.getPrimitiveTypeName == PrimitiveTypeName.INT64)
-                  assert(t.getLogicalTypeAnnotation == LogicalTypeAnnotation.timestampType(
-                    true, LogicalTypeAnnotation.TimeUnit.MILLIS))
-              }
+          def verifyNonVariantTimestampType(t: PrimitiveType): Unit = {
+            timestampParquetType match {
+              case ParquetOutputTimestampType.INT96 =>
+                assert(t.getPrimitiveTypeName == PrimitiveTypeName.INT96)
+                assert(t.getLogicalTypeAnnotation == null)
+              case ParquetOutputTimestampType.TIMESTAMP_MICROS =>
+                assert(t.getPrimitiveTypeName == PrimitiveTypeName.INT64)
+                assert(t.getLogicalTypeAnnotation == LogicalTypeAnnotation.timestampType(
+                  true, LogicalTypeAnnotation.TimeUnit.MICROS))
+              case ParquetOutputTimestampType.TIMESTAMP_MILLIS =>
+                assert(t.getPrimitiveTypeName == PrimitiveTypeName.INT64)
+                assert(t.getLogicalTypeAnnotation == LogicalTypeAnnotation.timestampType(
+                  true, LogicalTypeAnnotation.TimeUnit.MILLIS))
             }
-
-            // t1
-            val t1Value = schema.getType(schema.getFieldIndex("t1")).asPrimitiveType()
-            verifyNonVariantTimestampType(t1Value)
-
-            // st1.t1
-            val st1Group = schema.getType(schema.getFieldIndex("st1")).asGroupType()
-            val st1T1Value = st1Group.getType("t1").asPrimitiveType()
-            verifyNonVariantTimestampType(st1T1Value)
-            reader.close()
-          } catch {
-            case e: Exception =>
-              e.printStackTrace()
-              assert(false)
           }
+
+          // t1
+          val t1Value = schema.getType(schema.getFieldIndex("t1")).asPrimitiveType()
+          verifyNonVariantTimestampType(t1Value)
+
+          // st1.t1
+          val st1Group = schema.getType(schema.getFieldIndex("st1")).asGroupType()
+          val st1T1Value = st1Group.getType("t1").asPrimitiveType()
+          verifyNonVariantTimestampType(st1T1Value)
+          reader.close()
         }
       }
     }
