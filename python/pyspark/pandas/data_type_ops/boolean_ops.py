@@ -20,6 +20,7 @@ from typing import Any, Union
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
+from pandas.core.dtypes.common import is_numeric_dtype
 
 from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
@@ -328,8 +329,6 @@ class BooleanOps(DataTypeOps):
         return operand
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pandas.core.dtypes.common import is_numeric_dtype
-
         if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession):
             # Handle bool vs. non-bool numeric comparisons
             left_is_bool = _is_boolean_type(left)
