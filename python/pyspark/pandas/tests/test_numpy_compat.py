@@ -27,6 +27,11 @@ from pyspark.testing.utils import is_ansi_mode_test, ansi_mode_not_supported_mes
 
 
 class NumPyCompatTestsMixin:
+    @classmethod
+    def setUpClass(cls):
+        super(NumPyCompatTestsMixin, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pandas.convertToArrowArraySafely", "false")
+
     blacklist = [
         # Pandas-on-Spark does not currently support
         "conj",
