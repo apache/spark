@@ -554,7 +554,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           "targetType" -> toSQLType(to),
           "functionNames" -> "`DATE_FROM_UNIX_DATE`"
         )
-      ))
+      )
+    )
     assert(cast(1.toShort, to).checkInputDataTypes() ==
       DataTypeMismatch(
         errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
@@ -563,7 +564,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           "targetType" -> toSQLType(to),
           "functionNames" -> "`DATE_FROM_UNIX_DATE`"
         )
-      ))
+      )
+    )
     assert(cast(1, to).checkInputDataTypes() ==
       DataTypeMismatch(
         errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
@@ -572,7 +574,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           "targetType" -> toSQLType(to),
           "functionNames" -> "`DATE_FROM_UNIX_DATE`"
         )
-      ))
+      )
+    )
     assert(cast(1L, to).checkInputDataTypes() ==
       DataTypeMismatch(
         errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
@@ -581,7 +584,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           "targetType" -> toSQLType(to),
           "functionNames" -> "`DATE_FROM_UNIX_DATE`"
         )
-      ))
+      )
+    )
     assert(cast(1.0.toFloat, to).checkInputDataTypes() ==
       DataTypeMismatch(
         errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
@@ -590,7 +594,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           "targetType" -> toSQLType(to),
           "functionNames" -> "`DATE_FROM_UNIX_DATE`"
         )
-      ))
+      )
+    )
     assert(cast(1.0, to).checkInputDataTypes() ==
       DataTypeMismatch(
         errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
@@ -599,7 +604,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           "targetType" -> toSQLType(to),
           "functionNames" -> "`DATE_FROM_UNIX_DATE`"
         )
-      ))
+      )
+    )
   }
 
   test("SPARK-16729 type checking for casting to date type") {
