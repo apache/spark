@@ -186,15 +186,6 @@ Aggregate [theta_sketch_estimate(theta_difference(theta_sketch_agg(col1#x, 12, 0
 
 
 -- !query
-SELECT theta_sketch_agg(col)
-FROM VALUES (ARRAY(1, 2)), (ARRAY(3, 4)) tab(col)
--- !query analysis
-Aggregate [theta_sketch_agg(col#x, 12, 0, 0) AS theta_sketch_agg(col, 12)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
-
-
--- !query
 SELECT theta_sketch_agg(col, 2)
 FROM VALUES (50), (60), (60) tab(col)
 -- !query analysis

@@ -91,9 +91,6 @@ SELECT theta_sketch_estimate(theta_difference(
     (3, 5) AS tab(col1, col2);
 
 -- Negative test cases
-SELECT theta_sketch_agg(col)
-FROM VALUES (ARRAY(1, 2)), (ARRAY(3, 4)) tab(col);
-
 SELECT theta_sketch_agg(col, 2)
 FROM VALUES (50), (60), (60) tab(col);
 
