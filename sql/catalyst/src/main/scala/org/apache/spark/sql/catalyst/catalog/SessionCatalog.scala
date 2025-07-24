@@ -1668,6 +1668,9 @@ class SessionCatalog(
 
         paddedInput.zip(param.fields).map {
           case (expr, param) =>
+            // Add outer references to all resolved attributes and outer references in the function
+            // input. Outer references also need to be wrapped because the function input may
+            // already contain outer references.
             val outer = expr.transform {
               case a: Attribute if a.resolved => OuterReference(a)
               case o: OuterReference => OuterReference(o)
