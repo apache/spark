@@ -80,7 +80,7 @@ from pyspark.sql.types import (
 )
 from pyspark.util import fail_on_stopiteration, handle_worker_exception
 from pyspark import shuffle
-from pyspark.errors import PySparkRuntimeError, PySparkTypeError
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -1821,13 +1821,13 @@ def read_udtf(pickleSer, infile, eval_type):
                                 "func": f.__name__,
                             },
                         )
-                    if check_output_row_against_schema is not None:
-                        for row in res:
+                    for row in res:
+                        if not isinstance(row, tuple) and return_type_size == 1:
+                            row = (row,)
+                        if check_output_row_against_schema is not None:
                             if row is not None:
                                 check_output_row_against_schema(row)
-                            yield row
-                    else:
-                        yield from res
+                        yield row
 
             def convert_to_arrow(data: Iterable):
                 data = list(check_return_value(data))
@@ -1835,11 +1835,8 @@ def read_udtf(pickleSer, infile, eval_type):
                     return [
                         pa.RecordBatch.from_pylist(data, schema=pa.schema(list(arrow_return_type)))
                     ]
-                try:
-                    return LocalDataToArrowConversion.convert(
-                        data, return_type, prefers_large_var_types
-                    ).to_batches()
-                except Exception as e:
+
+                def raise_conversion_error(original_exception):
                     raise PySparkRuntimeError(
                         errorClass="UDTF_ARROW_TYPE_CONVERSION_ERROR",
                         messageParameters={
@@ -1847,7 +1844,30 @@ def read_udtf(pickleSer, infile, eval_type):
                             "schema": return_type.simpleString(),
                             "arrow_schema": str(arrow_return_type),
                         },
-                    ) from e
+                    ) from original_exception
+
+                try:
+                    return LocalDataToArrowConversion.convert(
+                        data, return_type, prefers_large_var_types
+                    ).to_batches()
+                except PySparkValueError as e:
+                    if e.getErrorClass() == "AXIS_LENGTH_MISMATCH":
+                        raise PySparkRuntimeError(
+                            errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
+                            messageParameters={
+                                "expected": e.getMessageParameters()[
+                                    "expected_length"
+                                ],  # type: ignore[index]
+                                "actual": e.getMessageParameters()[
+                                    "actual_length"
+                                ],  # type: ignore[index]
+                                "func": f.__name__,
+                            },
+                        ) from e
+                    # Fall through to general conversion error
+                    raise_conversion_error(e)
+                except Exception as e:
+                    raise_conversion_error(e)
 
             def evaluate(*args: pa.ChunkedArray):
                 if len(args) == 0:
