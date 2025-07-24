@@ -546,7 +546,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   protected def checkInvalidCastFromNumericType(to: DataType): Unit = {
-    cast(1.toByte, to).checkInputDataTypes() ==
+    assert(cast(1.toByte, to).checkInputDataTypes() ==
       DataTypeMismatch(
         errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
         messageParameters = Map(
@@ -554,8 +554,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           "targetType" -> toSQLType(to),
           "functionNames" -> "`DATE_FROM_UNIX_DATE`"
         )
-      )
-    cast(1.toShort, to).checkInputDataTypes() ==
+      ))
+    assert(cast(1.toShort, to).checkInputDataTypes() ==
       DataTypeMismatch(
         errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
         messageParameters = Map(
@@ -563,8 +563,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           "targetType" -> toSQLType(to),
           "functionNames" -> "`DATE_FROM_UNIX_DATE`"
         )
-      )
-    cast(1, to).checkInputDataTypes() ==
+      ))
+    assert(cast(1, to).checkInputDataTypes() ==
       DataTypeMismatch(
         errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
         messageParameters = Map(
@@ -572,8 +572,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           "targetType" -> toSQLType(to),
           "functionNames" -> "`DATE_FROM_UNIX_DATE`"
         )
-      )
-    cast(1L, to).checkInputDataTypes() ==
+      ))
+    assert(cast(1L, to).checkInputDataTypes() ==
       DataTypeMismatch(
         errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
         messageParameters = Map(
@@ -581,8 +581,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           "targetType" -> toSQLType(to),
           "functionNames" -> "`DATE_FROM_UNIX_DATE`"
         )
-      )
-    cast(1.0.toFloat, to).checkInputDataTypes() ==
+      ))
+    assert(cast(1.0.toFloat, to).checkInputDataTypes() ==
       DataTypeMismatch(
         errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
         messageParameters = Map(
@@ -590,8 +590,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           "targetType" -> toSQLType(to),
           "functionNames" -> "`DATE_FROM_UNIX_DATE`"
         )
-      )
-    cast(1.0, to).checkInputDataTypes() ==
+      ))
+    assert(cast(1.0, to).checkInputDataTypes() ==
       DataTypeMismatch(
         errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
         messageParameters = Map(
@@ -599,7 +599,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           "targetType" -> toSQLType(to),
           "functionNames" -> "`DATE_FROM_UNIX_DATE`"
         )
-      )
+      ))
   }
 
   test("SPARK-16729 type checking for casting to date type") {
