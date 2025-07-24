@@ -313,6 +313,6 @@ Package                    Supported version Note
 `grpcio`                   >=1.67.0          Required for Spark Connect
 `grpcio-status`            >=1.67.0          Required for Spark Connect
 `googleapis-common-protos` >=1.65.0          Required for Spark Connect
-`pyyaml`                   >=3.11            Required for spark-pipelines command line interface
+`pyyaml`                   >=5.4             Required for spark-pipelines command line interface
 `graphviz`                 >=0.20            Optional for Spark Connect
 ========================== ================= ===================================================
