@@ -365,10 +365,12 @@ class Params(Identifiable, metaclass=ABCMeta):
             raise TypeError("hasParam(): paramName must be a string")
 
     @overload
-    def getOrDefault(self, param: str) -> Any: ...
+    def getOrDefault(self, param: str) -> Any:
+        ...
 
     @overload
-    def getOrDefault(self, param: Param[T]) -> T: ...
+    def getOrDefault(self, param: Param[T]) -> T:
+        ...
 
     def getOrDefault(self, param: Union[str, Param[T]]) -> Union[Any, T]:
         """

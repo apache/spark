@@ -5643,7 +5643,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             (k if is_name_like_tuple(k) else (k,)): (
                 (v.spark.column, v._internal.data_fields[0])
                 if isinstance(v, IndexOpsMixin) and not isinstance(v, MultiIndex)
-                else (v, None) if isinstance(v, PySparkColumn) else (F.lit(v), None)
+                else (v, None)
+                if isinstance(v, PySparkColumn)
+                else (F.lit(v), None)
             )
             for k, v in kwargs.items()
         }
@@ -10927,11 +10929,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 column_label_names=(
                     df._internal.column_label_names[:-1]
                     + [
-                        (
-                            None
-                            if self._internal.index_names[-1] is None
-                            else df._internal.column_label_names[-1]
-                        )
+                        None
+                        if self._internal.index_names[-1] is None
+                        else df._internal.column_label_names[-1]
                     ]
                 ),
             )

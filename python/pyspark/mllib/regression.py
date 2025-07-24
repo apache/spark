@@ -65,6 +65,7 @@ __all__ = [
 
 
 class LabeledPoint:
+
     """
     Class that represents the features and labels of a data point.
 
@@ -98,6 +99,7 @@ class LabeledPoint:
 
 
 class LinearModel:
+
     """
     A linear model that has a vector of coefficients and an intercept.
 
@@ -133,6 +135,7 @@ class LinearModel:
 
 @inherit_doc
 class LinearRegressionModelBase(LinearModel):
+
     """A linear regression model.
 
     .. versionadded:: 0.9.0
@@ -148,10 +151,12 @@ class LinearRegressionModelBase(LinearModel):
     """
 
     @overload
-    def predict(self, x: "VectorLike") -> float: ...
+    def predict(self, x: "VectorLike") -> float:
+        ...
 
     @overload
-    def predict(self, x: RDD["VectorLike"]) -> RDD[float]: ...
+    def predict(self, x: RDD["VectorLike"]) -> RDD[float]:
+        ...
 
     def predict(self, x: Union["VectorLike", RDD["VectorLike"]]) -> Union[float, RDD[float]]:
         """
@@ -168,6 +173,7 @@ class LinearRegressionModelBase(LinearModel):
 
 @inherit_doc
 class LinearRegressionModel(LinearRegressionModelBase):
+
     """A linear regression model derived from a least-squares fit.
 
     .. versionadded:: 0.9.0
@@ -378,6 +384,7 @@ class LinearRegressionWithSGD:
 
 @inherit_doc
 class LassoModel(LinearRegressionModelBase):
+
     """A linear regression model derived from a least-squares fit with
     an l_1 penalty term.
 
@@ -555,6 +562,7 @@ class LassoWithSGD:
 
 @inherit_doc
 class RidgeRegressionModel(LinearRegressionModelBase):
+
     """A linear regression model derived from a least-squares fit with
     an l_2 penalty term.
 
@@ -735,6 +743,7 @@ class RidgeRegressionWithSGD:
 
 
 class IsotonicRegressionModel(Saveable, Loader["IsotonicRegressionModel"]):
+
     """
     Regression model for isotonic regression.
 
@@ -782,16 +791,20 @@ class IsotonicRegressionModel(Saveable, Loader["IsotonicRegressionModel"]):
         self.isotonic = isotonic
 
     @overload
-    def predict(self, x: float) -> np.float64: ...
+    def predict(self, x: float) -> np.float64:
+        ...
 
     @overload
-    def predict(self, x: "VectorLike") -> np.ndarray: ...
+    def predict(self, x: "VectorLike") -> np.ndarray:
+        ...
 
     @overload
-    def predict(self, x: RDD[float]) -> RDD[np.float64]: ...
+    def predict(self, x: RDD[float]) -> RDD[np.float64]:
+        ...
 
     @overload
-    def predict(self, x: RDD["VectorLike"]) -> RDD[np.ndarray]: ...
+    def predict(self, x: RDD["VectorLike"]) -> RDD[np.ndarray]:
+        ...
 
     def predict(
         self, x: Union[float, "VectorLike", RDD[float], RDD["VectorLike"]]

@@ -216,11 +216,8 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
 
     def test_udf_with_udt(self):
         for fallback in [False, True]:
-            with (
-                self.subTest(fallback=fallback),
-                self.sql_conf(
-                    {"spark.sql.execution.pythonUDF.arrow.legacy.fallbackOnUDT": fallback}
-                ),
+            with self.subTest(fallback=fallback), self.sql_conf(
+                {"spark.sql.execution.pythonUDF.arrow.legacy.fallbackOnUDT": fallback}
             ):
                 super().test_udf_with_udt()
 

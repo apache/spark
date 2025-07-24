@@ -93,10 +93,12 @@ class BisectingKMeansModel(JavaModelWrapper):
         return self.call("k")
 
     @overload
-    def predict(self, x: "VectorLike") -> int: ...
+    def predict(self, x: "VectorLike") -> int:
+        ...
 
     @overload
-    def predict(self, x: RDD["VectorLike"]) -> RDD[int]: ...
+    def predict(self, x: RDD["VectorLike"]) -> RDD[int]:
+        ...
 
     def predict(self, x: Union["VectorLike", RDD["VectorLike"]]) -> Union[int, RDD[int]]:
         """
@@ -219,6 +221,7 @@ class BisectingKMeans:
 
 @inherit_doc
 class KMeansModel(Saveable, Loader["KMeansModel"]):
+
     """A clustering model derived from the k-means method.
 
     .. versionadded:: 0.9.0
@@ -291,10 +294,12 @@ class KMeansModel(Saveable, Loader["KMeansModel"]):
         return len(self.centers)
 
     @overload
-    def predict(self, x: "VectorLike") -> int: ...
+    def predict(self, x: "VectorLike") -> int:
+        ...
 
     @overload
-    def predict(self, x: RDD["VectorLike"]) -> RDD[int]: ...
+    def predict(self, x: RDD["VectorLike"]) -> RDD[int]:
+        ...
 
     def predict(self, x: Union["VectorLike", RDD["VectorLike"]]) -> Union[int, RDD[int]]:
         """
@@ -459,6 +464,7 @@ class KMeans:
 
 @inherit_doc
 class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader["GaussianMixtureModel"]):
+
     """
     A clustering model derived from the Gaussian Mixture Model method.
 
@@ -553,10 +559,12 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader["GaussianM
         return len(self.weights)
 
     @overload
-    def predict(self, x: "VectorLike") -> np.int64: ...
+    def predict(self, x: "VectorLike") -> np.int64:
+        ...
 
     @overload
-    def predict(self, x: RDD["VectorLike"]) -> RDD[int]: ...
+    def predict(self, x: RDD["VectorLike"]) -> RDD[int]:
+        ...
 
     def predict(self, x: Union["VectorLike", RDD["VectorLike"]]) -> Union[np.int64, RDD[int]]:
         """
@@ -584,10 +592,12 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader["GaussianM
             return z.argmax()
 
     @overload
-    def predictSoft(self, x: "VectorLike") -> np.ndarray: ...
+    def predictSoft(self, x: "VectorLike") -> np.ndarray:
+        ...
 
     @overload
-    def predictSoft(self, x: RDD["VectorLike"]) -> RDD[pyarray.array]: ...
+    def predictSoft(self, x: RDD["VectorLike"]) -> RDD[pyarray.array]:
+        ...
 
     def predictSoft(
         self, x: Union["VectorLike", RDD["VectorLike"]]
@@ -714,6 +724,7 @@ class GaussianMixture:
 class PowerIterationClusteringModel(
     JavaModelWrapper, JavaSaveable, JavaLoader["PowerIterationClusteringModel"]
 ):
+
     """
     Model produced by :py:class:`PowerIterationClustering`.
 
@@ -1101,6 +1112,7 @@ class StreamingKMeans:
 
 
 class LDAModel(JavaModelWrapper, JavaSaveable, Loader["LDAModel"]):
+
     """A clustering model derived from the LDA method.
 
     Latent Dirichlet Allocation (LDA), a topic model designed for text documents.

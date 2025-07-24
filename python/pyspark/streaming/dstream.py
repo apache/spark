@@ -215,10 +215,12 @@ class DStream(Generic[T_co]):
         return self.transform(lambda rdd: rdd.partitionBy(numPartitions, partitionFunc))
 
     @overload
-    def foreachRDD(self: "DStream[T]", func: Callable[[RDD[T]], None]) -> None: ...
+    def foreachRDD(self: "DStream[T]", func: Callable[[RDD[T]], None]) -> None:
+        ...
 
     @overload
-    def foreachRDD(self: "DStream[T]", func: Callable[[datetime, RDD[T]], None]) -> None: ...
+    def foreachRDD(self: "DStream[T]", func: Callable[[datetime, RDD[T]], None]) -> None:
+        ...
 
     def foreachRDD(
         self: "DStream[T]",
@@ -381,14 +383,14 @@ class DStream(Generic[T_co]):
     #     return self.foreachRDD(saveAsPickleFile)
 
     @overload
-    def transform(
-        self: "DStream[T]", func: Callable[[RDD[T]], RDD[U]]
-    ) -> "TransformedDStream[U]": ...
+    def transform(self: "DStream[T]", func: Callable[[RDD[T]], RDD[U]]) -> "TransformedDStream[U]":
+        ...
 
     @overload
     def transform(
         self: "DStream[T]", func: Callable[[datetime, RDD[T]], RDD[U]]
-    ) -> "TransformedDStream[U]": ...
+    ) -> "TransformedDStream[U]":
+        ...
 
     def transform(
         self: "DStream[T]",
@@ -416,7 +418,8 @@ class DStream(Generic[T_co]):
         func: Callable[[RDD[T], RDD[U]], RDD[V]],
         other: "DStream[U]",
         keepSerializer: bool = ...,
-    ) -> "DStream[V]": ...
+    ) -> "DStream[V]":
+        ...
 
     @overload
     def transformWith(
@@ -424,7 +427,8 @@ class DStream(Generic[T_co]):
         func: Callable[[datetime, RDD[T], RDD[U]], RDD[V]],
         other: "DStream[U]",
         keepSerializer: bool = ...,
-    ) -> "DStream[V]": ...
+    ) -> "DStream[V]":
+        ...
 
     def transformWith(
         self: "DStream[T]",
@@ -879,14 +883,16 @@ class TransformedDStream(DStream[U]):
     """
 
     @overload
-    def __init__(self: DStream[U], prev: DStream[T], func: Callable[[RDD[T]], RDD[U]]): ...
+    def __init__(self: DStream[U], prev: DStream[T], func: Callable[[RDD[T]], RDD[U]]):
+        ...
 
     @overload
     def __init__(
         self: DStream[U],
         prev: DStream[T],
         func: Callable[[datetime, RDD[T]], RDD[U]],
-    ): ...
+    ):
+        ...
 
     def __init__(
         self,
@@ -905,9 +911,9 @@ class TransformedDStream(DStream[U]):
         if type(prev) is TransformedDStream and not prev.is_cached and not prev.is_checkpointed:
             prev_func: Callable = prev.func
             func = cast(Callable[[datetime, RDD[T]], RDD[U]], func)
-            self.func: Union[Callable[[RDD[T]], RDD[U]], Callable[[datetime, RDD[T]], RDD[U]]] = (
-                lambda t, rdd: func(t, prev_func(t, rdd))
-            )
+            self.func: Union[
+                Callable[[RDD[T]], RDD[U]], Callable[[datetime, RDD[T]], RDD[U]]
+            ] = lambda t, rdd: func(t, prev_func(t, rdd))
             self.prev: DStream[T] = prev.prev
         else:
             self.prev = prev

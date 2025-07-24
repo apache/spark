@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
 
 class ResourceProfile:
+
     """
     Resource profile to associate with an RDD. A :class:`pyspark.resource.ResourceProfile`
     allows the user to specify executor and task requirements for an RDD that will get
@@ -84,7 +85,8 @@ class ResourceProfile:
     """
 
     @overload
-    def __init__(self, _java_resource_profile: "JavaObject"): ...
+    def __init__(self, _java_resource_profile: "JavaObject"):
+        ...
 
     @overload
     def __init__(
@@ -92,7 +94,8 @@ class ResourceProfile:
         _java_resource_profile: None = ...,
         _exec_req: Optional[Dict[str, ExecutorResourceRequest]] = ...,
         _task_req: Optional[Dict[str, TaskResourceRequest]] = ...,
-    ): ...
+    ):
+        ...
 
     def __init__(
         self,
@@ -179,6 +182,7 @@ class ResourceProfile:
 
 
 class ResourceProfileBuilder:
+
     """
     Resource profile Builder to build a resource profile to associate with an RDD.
     A ResourceProfile allows the user to specify executor and task requirements for

@@ -95,6 +95,7 @@ U = TypeVar("U")
 
 
 class SparkContext:
+
     """
     Main entry point for Spark functionality. A SparkContext represents the
     connection to a Spark cluster, and can be used to create :class:`RDD` and
@@ -161,9 +162,9 @@ class SparkContext:
     _next_accum_id = 0
     _active_spark_context: ClassVar[Optional["SparkContext"]] = None
     _lock = RLock()
-    _python_includes: Optional[List[str]] = (
-        None  # zip and egg files that need to be added to PYTHONPATH
-    )
+    _python_includes: Optional[
+        List[str]
+    ] = None  # zip and egg files that need to be added to PYTHONPATH
     serializer: Serializer
     profiler_collector: ProfilerCollector
 

@@ -77,7 +77,7 @@ RUN apt-get update && apt-get install -y \
 
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
 RUN python3.11 -m pip install \
-    'black==24.3.0' \
+    'black==23.12.1' \
     'flake8==3.9.0' \
     'googleapis-common-protos-stubs==2.2.0' \
     'grpc-stubs==1.24.11' \

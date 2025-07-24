@@ -57,7 +57,7 @@ jira>=3.5.2
 PyGithub
 
 # pandas API on Spark Code formatter.
-black==24.3.0
+black==23.12.1
 py
 
 # Spark Connect (required)
@@ -76,7 +76,7 @@ graphviz==0.20.3
 flameprof==0.4
 
 # TorchDistributor dependencies
-torch
+torch<2.6.0
 torchvision
 torcheval
 

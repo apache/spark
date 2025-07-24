@@ -245,9 +245,8 @@ class CogroupedApplyInPandasTestsMixin:
 
     def check_apply_in_pandas_returning_incompatible_type(self):
         for safely in [True, False]:
-            with (
-                self.subTest(convertToArrowArraySafely=safely),
-                self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": safely}),
+            with self.subTest(convertToArrowArraySafely=safely), self.sql_conf(
+                {"spark.sql.execution.pandas.convertToArrowArraySafely": safely}
             ):
                 # sometimes we see ValueErrors
                 with self.subTest(convert="string to double"):
@@ -474,16 +473,12 @@ class CogroupedApplyInPandasTestsMixin:
             return pd.DataFrame(
                 [
                     {
-                        "id": (
-                            left["id"][0]
-                            if not left.empty
-                            else (right["id"][0] if not right.empty else None)
-                        ),
-                        "day": (
-                            left["day"][0]
-                            if not left.empty
-                            else (right["day"][0] if not right.empty else None)
-                        ),
+                        "id": left["id"][0]
+                        if not left.empty
+                        else (right["id"][0] if not right.empty else None),
+                        "day": left["day"][0]
+                        if not left.empty
+                        else (right["day"][0] if not right.empty else None),
                         "lefts": len(left.index),
                         "rights": len(right.index),
                     }

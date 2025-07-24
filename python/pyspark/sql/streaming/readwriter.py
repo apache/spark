@@ -1068,10 +1068,12 @@ class DataStreamWriter:
         return self
 
     @overload
-    def partitionBy(self, *cols: str) -> "DataStreamWriter": ...
+    def partitionBy(self, *cols: str) -> "DataStreamWriter":
+        ...
 
     @overload
-    def partitionBy(self, __cols: List[str]) -> "DataStreamWriter": ...
+    def partitionBy(self, __cols: List[str]) -> "DataStreamWriter":
+        ...
 
     def partitionBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
         """Partitions the output by the given columns on the file system.
@@ -1124,10 +1126,12 @@ class DataStreamWriter:
         return self
 
     @overload
-    def clusterBy(self, *cols: str) -> "DataStreamWriter": ...
+    def clusterBy(self, *cols: str) -> "DataStreamWriter":
+        ...
 
     @overload
-    def clusterBy(self, __cols: List[str]) -> "DataStreamWriter": ...
+    def clusterBy(self, __cols: List[str]) -> "DataStreamWriter":
+        ...
 
     def clusterBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
         """Clusters the output by the given columns.
@@ -1217,16 +1221,20 @@ class DataStreamWriter:
         return self
 
     @overload
-    def trigger(self, *, processingTime: str) -> "DataStreamWriter": ...
+    def trigger(self, *, processingTime: str) -> "DataStreamWriter":
+        ...
 
     @overload
-    def trigger(self, *, once: bool) -> "DataStreamWriter": ...
+    def trigger(self, *, once: bool) -> "DataStreamWriter":
+        ...
 
     @overload
-    def trigger(self, *, continuous: str) -> "DataStreamWriter": ...
+    def trigger(self, *, continuous: str) -> "DataStreamWriter":
+        ...
 
     @overload
-    def trigger(self, *, availableNow: bool) -> "DataStreamWriter": ...
+    def trigger(self, *, availableNow: bool) -> "DataStreamWriter":
+        ...
 
     def trigger(
         self,
@@ -1431,10 +1439,12 @@ class DataStreamWriter:
             return func_with_open_process_close
 
     @overload
-    def foreach(self, f: Callable[[Row], None]) -> "DataStreamWriter": ...
+    def foreach(self, f: Callable[[Row], None]) -> "DataStreamWriter":
+        ...
 
     @overload
-    def foreach(self, f: "SupportsProcess") -> "DataStreamWriter": ...
+    def foreach(self, f: "SupportsProcess") -> "DataStreamWriter":
+        ...
 
     def foreach(self, f: Union[Callable[[Row], None], "SupportsProcess"]) -> "DataStreamWriter":
         """

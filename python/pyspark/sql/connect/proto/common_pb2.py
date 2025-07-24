@@ -45,9 +45,9 @@ _builder.BuildTopDescriptorsAndMessages(
 )
 if not _descriptor._USE_C_DESCRIPTORS:
     _globals["DESCRIPTOR"]._loaded_options = None
-    _globals["DESCRIPTOR"]._serialized_options = (
-        b"\n\036org.apache.spark.connect.protoP\001Z\022internal/generated"
-    )
+    _globals[
+        "DESCRIPTOR"
+    ]._serialized_options = b"\n\036org.apache.spark.connect.protoP\001Z\022internal/generated"
     _globals["_RESOURCEPROFILE_EXECUTORRESOURCESENTRY"]._loaded_options = None
     _globals["_RESOURCEPROFILE_EXECUTORRESOURCESENTRY"]._serialized_options = b"8\001"
     _globals["_RESOURCEPROFILE_TASKRESOURCESENTRY"]._loaded_options = None

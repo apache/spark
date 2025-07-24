@@ -47,10 +47,12 @@ class TreeEnsembleModel(JavaModelWrapper, JavaSaveable):
     """
 
     @overload
-    def predict(self, x: "VectorLike") -> float: ...
+    def predict(self, x: "VectorLike") -> float:
+        ...
 
     @overload
-    def predict(self, x: RDD["VectorLike"]) -> RDD[float]: ...
+    def predict(self, x: RDD["VectorLike"]) -> RDD[float]:
+        ...
 
     def predict(self, x: Union["VectorLike", RDD["VectorLike"]]) -> Union[float, RDD[float]]:
         """
@@ -103,10 +105,12 @@ class DecisionTreeModel(JavaModelWrapper, JavaSaveable, JavaLoader["DecisionTree
     """
 
     @overload
-    def predict(self, x: "VectorLike") -> float: ...
+    def predict(self, x: "VectorLike") -> float:
+        ...
 
     @overload
-    def predict(self, x: RDD["VectorLike"]) -> RDD[float]: ...
+    def predict(self, x: RDD["VectorLike"]) -> RDD[float]:
+        ...
 
     def predict(self, x: Union["VectorLike", RDD["VectorLike"]]) -> Union[float, RDD[float]]:
         """

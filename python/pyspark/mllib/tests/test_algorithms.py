@@ -32,6 +32,7 @@ from pyspark.testing.utils import eventually
 
 
 class ListTests(MLlibTestCase):
+
     """
     Test MLlib algorithms on plain lists, to make sure they're passed through
     as NumPy arrays.

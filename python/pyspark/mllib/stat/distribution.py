@@ -23,6 +23,7 @@ from pyspark.mllib.linalg import Matrix, Vector
 
 
 class MultivariateGaussian(NamedTuple):
+
     """Represents a (mu, sigma) tuple
 
     Examples

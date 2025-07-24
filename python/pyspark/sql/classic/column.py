@@ -76,7 +76,8 @@ def _to_java_column(col: "ColumnOrName") -> "JavaObject":
 
 
 @overload
-def _to_seq(sc: "SparkContext", cols: Iterable["JavaObject"]) -> "JavaObject": ...
+def _to_seq(sc: "SparkContext", cols: Iterable["JavaObject"]) -> "JavaObject":
+    ...
 
 
 @overload
@@ -84,7 +85,8 @@ def _to_seq(
     sc: "SparkContext",
     cols: Iterable["ColumnOrName"],
     converter: Optional[Callable[["ColumnOrName"], "JavaObject"]],
-) -> "JavaObject": ...
+) -> "JavaObject":
+    ...
 
 
 def _to_seq(

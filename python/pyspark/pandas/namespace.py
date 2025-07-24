@@ -2246,11 +2246,11 @@ def get_dummies(
                     raise KeyError(name_like_string(columns))
                 if prefix is None:
                     prefix = [
-                        (
-                            str(label[len(columns) :])
-                            if len(label) > len(columns) + 1
-                            else label[len(columns)] if len(label) == len(columns) + 1 else ""
-                        )
+                        str(label[len(columns) :])
+                        if len(label) > len(columns) + 1
+                        else label[len(columns)]
+                        if len(label) == len(columns) + 1
+                        else ""
                         for label in column_labels
                     ]
             elif any(isinstance(col, tuple) for col in columns) and any(
@@ -2533,11 +2533,9 @@ def concat(
 
         level: int = min(psdf._internal.column_labels_level for psdf in psdfs)
         psdfs = [
-            (
-                DataFrame._index_normalized_frame(level, psdf)
-                if psdf._internal.column_labels_level > level
-                else psdf
-            )
+            DataFrame._index_normalized_frame(level, psdf)
+            if psdf._internal.column_labels_level > level
+            else psdf
             for psdf in psdfs
         ]
 

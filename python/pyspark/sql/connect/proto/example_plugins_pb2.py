@@ -49,9 +49,9 @@ _builder.BuildTopDescriptorsAndMessages(
 )
 if not _descriptor._USE_C_DESCRIPTORS:
     _globals["DESCRIPTOR"]._loaded_options = None
-    _globals["DESCRIPTOR"]._serialized_options = (
-        b"\n\036org.apache.spark.connect.protoP\001Z\022internal/generated"
-    )
+    _globals[
+        "DESCRIPTOR"
+    ]._serialized_options = b"\n\036org.apache.spark.connect.protoP\001Z\022internal/generated"
     _globals["_EXAMPLEPLUGINRELATION"]._serialized_start = 118
     _globals["_EXAMPLEPLUGINRELATION"]._serialized_end = 223
     _globals["_EXAMPLEPLUGINEXPRESSION"]._serialized_start = 225

@@ -292,15 +292,15 @@ def _with_origin(func: FuncT) -> FuncT:
 
 
 @overload
-def with_origin_to_class(
-    cls_or_ignores: Type[T], ignores: Optional[List[str]] = None
-) -> Type[T]: ...
+def with_origin_to_class(cls_or_ignores: Type[T], ignores: Optional[List[str]] = None) -> Type[T]:
+    ...
 
 
 @overload
 def with_origin_to_class(
     cls_or_ignores: Optional[List[str]] = None,
-) -> Callable[[Type[T]], Type[T]]: ...
+) -> Callable[[Type[T]], Type[T]]:
+    ...
 
 
 def with_origin_to_class(

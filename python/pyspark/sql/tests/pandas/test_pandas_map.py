@@ -281,9 +281,8 @@ class MapInPandasTestsMixin:
                 yield pdf.assign(id=pdf["id"].apply(str))
 
         for safely in [True, False]:
-            with (
-                self.subTest(convertToArrowArraySafely=safely),
-                self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": safely}),
+            with self.subTest(convertToArrowArraySafely=safely), self.sql_conf(
+                {"spark.sql.execution.pandas.convertToArrowArraySafely": safely}
             ):
                 # sometimes we see ValueErrors
                 with self.subTest(convert="string to double"):

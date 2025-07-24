@@ -135,6 +135,7 @@ class Serializer:
 
 
 class FramedSerializer(Serializer):
+
     """
     Serializer that writes objects as a stream of (length, data) pairs,
     where `length` is a 32-bit integer and data is `length` bytes.
@@ -186,6 +187,7 @@ class FramedSerializer(Serializer):
 
 
 class BatchedSerializer(Serializer):
+
     """
     Serializes a stream of objects in batches by calling its wrapped
     Serializer with streams of objects.
@@ -232,6 +234,7 @@ class BatchedSerializer(Serializer):
 
 
 class FlattenedValuesSerializer(BatchedSerializer):
+
     """
     Serializes a stream of list of pairs, split the list of values
     which contain more than a certain number of objects to make them
@@ -286,6 +289,7 @@ class AutoBatchedSerializer(BatchedSerializer):
 
 
 class CartesianDeserializer(Serializer):
+
     """
     Deserializes the JavaRDD cartesian() of two PythonRDDs.
     Due to pyspark batching we cannot simply use the result of the Java RDD cartesian,
@@ -311,6 +315,7 @@ class CartesianDeserializer(Serializer):
 
 
 class PairDeserializer(Serializer):
+
     """
     Deserializes the JavaRDD zip() of two PythonRDDs.
     Due to pyspark batching we cannot simply use the result of the Java RDD zip,
@@ -406,9 +411,9 @@ if os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":
             return _hack_namedtuple(cls)
 
         # replace namedtuple with the new one
-        collections.namedtuple.__globals__["_old_namedtuple_kwdefaults"] = (
-            _old_namedtuple_kwdefaults
-        )
+        collections.namedtuple.__globals__[
+            "_old_namedtuple_kwdefaults"
+        ] = _old_namedtuple_kwdefaults
         collections.namedtuple.__globals__["_old_namedtuple"] = _old_namedtuple
         collections.namedtuple.__globals__["_hack_namedtuple"] = _hack_namedtuple
         collections.namedtuple.__code__ = namedtuple.__code__
@@ -430,6 +435,7 @@ if os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":
 
 
 class PickleSerializer(FramedSerializer):
+
     """
     Serializes objects using Python's pickle serializer:
 
@@ -474,6 +480,7 @@ else:
 
 
 class MarshalSerializer(FramedSerializer):
+
     """
     Serializes objects using Python's Marshal serializer:
 
@@ -490,6 +497,7 @@ class MarshalSerializer(FramedSerializer):
 
 
 class AutoSerializer(FramedSerializer):
+
     """
     Choose marshal or pickle as serialization protocol automatically
     """
@@ -538,6 +546,7 @@ class CompressedSerializer(FramedSerializer):
 
 
 class UTF8Deserializer(Serializer):
+
     """
     Deserializes streams written by String.getBytes.
     """
@@ -606,6 +615,7 @@ def write_with_length(obj, stream):
 
 
 class ChunkedStream:
+
     """
     This is a file-like object takes a stream of data, of unknown length, and breaks it into fixed
     length frames.  The intended use case is serializing large data and sending it immediately over
