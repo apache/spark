@@ -202,6 +202,30 @@ class BaseUDTFTestsMixin:
         with self.assertRaisesRegex(PythonException, "UDTF_INVALID_OUTPUT_ROW_TYPE"):
             TestUDTF(lit(1)).collect()
 
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                return [a]
+
+        with self.assertRaisesRegex(PythonException, "UDTF_INVALID_OUTPUT_ROW_TYPE"):
+            TestUDTF(lit(1)).collect()
+
+    def test_udtf_eval_returning_tuple_with_struct_type(self):
+        @udtf(returnType="a: struct<b: int, c: int>")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield (a, a + 1),
+
+        assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=Row(b=1, c=2))])
+
+        @udtf(returnType="a: struct<b: int, c: int>")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a, a + 1
+
+        with self.assertRaisesRegex(PythonException, "UDTF_RETURN_SCHEMA_MISMATCH"):
+            TestUDTF(lit(1)).collect()
+
     def test_udtf_with_invalid_return_value(self):
         @udtf(returnType="x: int")
         class TestUDTF:
@@ -351,15 +375,13 @@ class BaseUDTFTestsMixin:
             TestUDTF(lit(1)).show()
 
     def test_udtf_with_wrong_num_output(self):
-        err_msg = "(UDTF_ARROW_TYPE_CONVERSION_ERROR|UDTF_RETURN_SCHEMA_MISMATCH)"
-
         # Output less columns than specified return schema
         @udtf(returnType="a: int, b: int")
         class TestUDTF:
             def eval(self, a: int):
                 yield a,
 
-        with self.assertRaisesRegex(PythonException, err_msg):
+        with self.assertRaisesRegex(PythonException, "UDTF_RETURN_SCHEMA_MISMATCH"):
             TestUDTF(lit(1)).collect()
 
         # Output more columns than specified return schema
@@ -368,7 +390,7 @@ class BaseUDTFTestsMixin:
             def eval(self, a: int):
                 yield a, a + 1
 
-        with self.assertRaisesRegex(PythonException, err_msg):
+        with self.assertRaisesRegex(PythonException, "UDTF_RETURN_SCHEMA_MISMATCH"):
             TestUDTF(lit(1)).collect()
 
     def test_udtf_with_empty_output_schema_and_non_empty_output(self):
@@ -377,9 +399,7 @@ class BaseUDTFTestsMixin:
             def eval(self):
                 yield 1,
 
-        with self.assertRaisesRegex(
-            PythonException, "(UDTF_RETURN_SCHEMA_MISMATCH|UDTF_ARROW_TYPE_CONVERSION_ERROR)"
-        ):
+        with self.assertRaisesRegex(PythonException, "UDTF_RETURN_SCHEMA_MISMATCH"):
             TestUDTF().collect()
 
     def test_udtf_with_non_empty_output_schema_and_empty_output(self):
@@ -388,9 +408,7 @@ class BaseUDTFTestsMixin:
             def eval(self):
                 yield tuple()
 
-        with self.assertRaisesRegex(
-            PythonException, "(UDTF_RETURN_SCHEMA_MISMATCH|UDTF_ARROW_TYPE_CONVERSION_ERROR)"
-        ):
+        with self.assertRaisesRegex(PythonException, "UDTF_RETURN_SCHEMA_MISMATCH"):
             TestUDTF().collect()
 
     def test_udtf_init(self):
@@ -545,8 +563,6 @@ class BaseUDTFTestsMixin:
             TestUDTF(lit(1)).collect()
 
     def test_udtf_terminate_with_wrong_num_output(self):
-        err_msg = "(UDTF_RETURN_SCHEMA_MISMATCH|UDTF_ARROW_TYPE_CONVERSION_ERROR)"
-
         @udtf(returnType="a: int, b: int")
         class TestUDTF:
             def eval(self, a: int):
@@ -555,7 +571,7 @@ class BaseUDTFTestsMixin:
             def terminate(self):
                 yield 1, 2, 3
 
-        with self.assertRaisesRegex(PythonException, err_msg):
+        with self.assertRaisesRegex(PythonException, "UDTF_RETURN_SCHEMA_MISMATCH"):
             TestUDTF(lit(1)).show()
 
         @udtf(returnType="a: int, b: int")
@@ -566,7 +582,7 @@ class BaseUDTFTestsMixin:
             def terminate(self):
                 yield 1,
 
-        with self.assertRaisesRegex(PythonException, err_msg):
+        with self.assertRaisesRegex(PythonException, "UDTF_RETURN_SCHEMA_MISMATCH"):
             TestUDTF(lit(1)).show()
 
     def test_udtf_determinism(self):
@@ -2908,6 +2924,13 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
         @udtf(returnType="a: int")
         class TestUDTF:
             def eval(self, a: int):
+                return (a,)
+
+        assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=1)])
+
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, a: int):
                 return [a]
 
         assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=1)])
@@ -3158,23 +3181,6 @@ class LegacyUDTFArrowTests(LegacyUDTFArrowTestsMixin, ReusedSQLTestCase):
 
 
 class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
-    def test_udtf_eval_returning_non_tuple(self):
-        @udtf(returnType="a: int")
-        class TestUDTF:
-            def eval(self, a: int):
-                yield a
-
-        with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CONVERSION_ERROR"):
-            TestUDTF(lit(1)).collect()
-
-        @udtf(returnType="a: int")
-        class TestUDTF:
-            def eval(self, a: int):
-                return [a]
-
-        with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CONVERSION_ERROR"):
-            TestUDTF(lit(1)).collect()
-
     def test_numeric_output_type_casting(self):
         class TestUDTF:
             def eval(self):
