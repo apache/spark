@@ -269,6 +269,8 @@ private[sql] case class JDBCRelation(
   with PrunedFilteredScan
   with InsertableRelation {
 
+  var schemaFetchTimeMetric: Option[SQLMetric] = None
+
   def setSchemaFetchTime(fetchTime: SQLMetric): Unit = {
     schemaFetchTimeMetric = Some(fetchTime)
   }
@@ -287,6 +289,13 @@ private[sql] case class JDBCRelation(
     }
   }
 
+  def additionalMetrics(): Map[String, SQLMetric] = {
+    val m: Map[String, SQLMetric] = schemaFetchTimeMetric
+      .fold(Map.empty[String, SQLMetric])(metric => Map("remoteSchemaFetchTime" -> metric))
+    // Add additional metrics here: m = m + ...
+    m
+ }
+
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     // When pushDownPredicate is false, all Filters that need to be pushed down should be ignored
     val pushedPredicates = if (jdbcOptions.pushDownPredicate) {
@@ -301,7 +310,8 @@ private[sql] case class JDBCRelation(
       requiredColumns,
       pushedPredicates,
       parts,
-      jdbcOptions).asInstanceOf[RDD[Row]]
+      jdbcOptions,
+      additionalMetrics = additionalMetrics()).asInstanceOf[RDD[Row]]
   }
 
   def buildScan(
@@ -326,7 +336,8 @@ private[sql] case class JDBCRelation(
       tableSample,
       limit,
       sortOrders,
-      offset).asInstanceOf[RDD[Row]]
+      offset,
+      additionalMetrics()).asInstanceOf[RDD[Row]]
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {

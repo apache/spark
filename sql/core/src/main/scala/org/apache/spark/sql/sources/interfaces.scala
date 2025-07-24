@@ -21,7 +21,6 @@ import org.apache.spark.annotation.{Stable, Unstable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
@@ -215,8 +214,6 @@ trait CreatableRelationProvider {
 abstract class BaseRelation {
   def sqlContext: SQLContext
   def schema: StructType
-
-  var schemaFetchTimeMetric: Option[SQLMetric] = None
 
   /**
    * Returns an estimated size of this relation in bytes. This information is used by the planner
