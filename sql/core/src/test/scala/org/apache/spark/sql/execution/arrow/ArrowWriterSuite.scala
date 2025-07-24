@@ -112,14 +112,14 @@ class ArrowWriterSuite extends SparkFunSuite {
 
   test("get multiple") {
     def check(dt: DataType, data: Seq[Any], timeZoneId: String = null): Unit = {
-      val dateType = dt match {
+      val datatype = dt match {
         case _: DayTimeIntervalType => DayTimeIntervalType()
         case _: YearMonthIntervalType => YearMonthIntervalType()
         case _: TimeType => TimeType()
         case u: UserDefinedType[_] => u.sqlType
         case tpe => tpe
       }
-      val schema = new StructType().add("value", dateType, nullable = false)
+      val schema = new StructType().add("value", datatype, nullable = false)
       val writer = ArrowWriter.create(schema, timeZoneId)
       assert(writer.schema === schema)
 
@@ -129,7 +129,7 @@ class ArrowWriterSuite extends SparkFunSuite {
       writer.finish()
 
       val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
-      val values = dateType match {
+      val values = datatype match {
         case BooleanType => reader.getBooleans(0, data.size)
         case ByteType => reader.getBytes(0, data.size)
         case ShortType => reader.getShorts(0, data.size)
