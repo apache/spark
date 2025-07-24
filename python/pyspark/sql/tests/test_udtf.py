@@ -2935,6 +2935,20 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
 
         assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=1)])
 
+    def test_udtf_use_large_var_types(self):
+        for use_large_var_types in [True, False]:
+            with self.subTest(use_large_var_types=use_large_var_types):
+                with self.sql_conf(
+                    {"spark.sql.execution.arrow.useLargeVarTypes": use_large_var_types}
+                ):
+
+                    @udtf(returnType="a: string")
+                    class TestUDTF:
+                        def eval(self, a: int):
+                            yield str(a)
+
+                    assertDataFrameEqual(TestUDTF(lit(1)), [Row(a="1")])
+
     def test_numeric_output_type_casting(self):
         class TestUDTF:
             def eval(self):
