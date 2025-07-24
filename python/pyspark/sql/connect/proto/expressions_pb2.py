@@ -50,9 +50,9 @@ _builder.BuildTopDescriptorsAndMessages(
 )
 if not _descriptor._USE_C_DESCRIPTORS:
     _globals["DESCRIPTOR"]._loaded_options = None
-    _globals["DESCRIPTOR"]._serialized_options = (
-        b"\n\036org.apache.spark.connect.protoP\001Z\022internal/generated"
-    )
+    _globals[
+        "DESCRIPTOR"
+    ]._serialized_options = b"\n\036org.apache.spark.connect.protoP\001Z\022internal/generated"
     _globals["_EXPRESSION_LITERAL_STRUCT"].fields_by_name["struct_type"]._loaded_options = None
     _globals["_EXPRESSION_LITERAL_STRUCT"].fields_by_name[
         "struct_type"
