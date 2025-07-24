@@ -134,6 +134,7 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
           } catch {
             case e: Exception =>
               e.printStackTrace()
+              assert(false)
           }
         }
       }
