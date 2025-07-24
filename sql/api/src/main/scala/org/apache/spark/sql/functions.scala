@@ -1393,6 +1393,36 @@ object functions {
   def count_if(e: Column): Column = Column.fn("count_if", e)
 
   /**
+   * Returns the current time at the start of query evaluation. Note that the result will contain
+   * 6 fractional digits of seconds.
+   *
+   * @return
+   *   A time.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def current_time(): Column = {
+    Column.fn("current_time")
+  }
+
+  /**
+   * Returns the current time at the start of query evaluation.
+   *
+   * @param precision
+   *   An integer literal in the range [0..6], indicating how many fractional digits of seconds to
+   *   include in the result.
+   * @return
+   *   A time.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def current_time(precision: Int): Column = {
+    Column.fn("current_time", lit(precision))
+  }
+
+  /**
    * Aggregate function: computes a histogram on numeric 'expr' using nb bins. The return value is
    * an array of (x,y) pairs representing the centers of the histogram's bins. As the value of
    * 'nb' is increased, the histogram approximation gets finer-grained, but may yield artifacts
