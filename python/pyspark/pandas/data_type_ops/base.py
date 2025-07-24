@@ -511,20 +511,6 @@ class DataTypeOps(object, metaclass=ABCMeta):
         else:
             from pyspark.pandas.base import column_op
 
-            if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession):
-                # Handle bool vs. non-bool numeric comparisons
-                left_is_bool = _is_boolean_type(left)
-                right_is_non_bool_numeric = is_numeric_dtype(right) and not _is_boolean_type(right)
-                if left_is_bool and right_is_non_bool_numeric:
-                    if isinstance(right, numbers.Number):
-                        left = transform_boolean_operand_to_numeric(
-                            left, spark_type=as_spark_type(type(right))
-                        )
-                    else:
-                        left = transform_boolean_operand_to_numeric(
-                            left, spark_type=right.spark.data_type
-                        )
-
             return column_op(PySparkColumn.__eq__)(left, right)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
