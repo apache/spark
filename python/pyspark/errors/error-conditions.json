@@ -992,6 +992,11 @@
       "An Observation can be used with a DataFrame only once."
     ]
   },
+  "SCHEMA_MISMATCH_FOR_ARROW_PYTHON_UDF": {
+    "message": [
+      "Result vector from <udf_type> was not the required length: expected <expected>, got <actual>."
+    ]
+  },
   "SCHEMA_MISMATCH_FOR_PANDAS_UDF": {
     "message": [
       "Result vector from <udf_type> was not the required length: expected <expected>, got <actual>."

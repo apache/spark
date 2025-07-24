@@ -3748,6 +3748,96 @@ ResetCommand spark.sql.ansi.enabled
 
 
 -- !query
+CREATE TEMPORARY VIEW t AS VALUES (0) t(a)
+-- !query analysis
+CreateViewCommand `t`, VALUES (0) t(a), false, false, LocalTempView, UNSUPPORTED, true
+   +- SubqueryAlias t
+      +- LocalRelation [a#x]
+
+
+-- !query
+CREATE TEMPORARY FUNCTION foo3_5a(x INT) RETURNS INT RETURN x
+-- !query analysis
+CreateSQLFunctionCommand foo3_5a, x INT, INT, x, false, true, false, false
+
+
+-- !query
+CREATE TEMPORARY FUNCTION foo3_5b(x INT) RETURNS INT RETURN (SELECT SUM(a) FROM t)
+-- !query analysis
+CreateSQLFunctionCommand foo3_5b, x INT, INT, (SELECT SUM(a) FROM t), false, true, false, false
+
+
+-- !query
+CREATE TEMPORARY FUNCTION foo3_5c(x INT) RETURNS TABLE (a INT) RETURN SELECT a FROM t
+-- !query analysis
+CreateSQLFunctionCommand foo3_5c, x INT, a INT, SELECT a FROM t, true, true, false, false
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS INT RETURN foo3_5a(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "FUNCTION",
+    "tempObjName" : "`foo3_5a`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS TABLE (a INT) RETURN SELECT foo3_5a(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "FUNCTION",
+    "tempObjName" : "`foo3_5a`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS INT RETURN (SELECT SUM(a) FROM t)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`t`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS TABLE (a INT) RETURN SELECT a FROM t
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VIEW",
+    "tempObjName" : "`t`"
+  }
+}
+
+
+-- !query
 CREATE FUNCTION foo3_14a() RETURNS INT RETURN 1
 -- !query analysis
 CreateSQLFunctionCommand spark_catalog.default.foo3_14a, INT, 1, false, false, false, false
@@ -4828,3 +4918,33 @@ DropFunctionCommand spark_catalog.default.foo4_2, true, false
 DROP FUNCTION IF EXISTS foo4_3
 -- !query analysis
 DropFunctionCommand spark_catalog.default.foo4_3, true, false
+
+
+-- !query
+DROP TEMPORARY FUNCTION IF EXISTS foo1d3
+-- !query analysis
+DropFunctionCommand foo1d3, true, true
+
+
+-- !query
+DROP TEMPORARY FUNCTION IF EXISTS foo3_3b
+-- !query analysis
+DropFunctionCommand foo3_3b, true, true
+
+
+-- !query
+DROP TEMPORARY FUNCTION IF EXISTS foo3_5a
+-- !query analysis
+DropFunctionCommand foo3_5a, true, true
+
+
+-- !query
+DROP TEMPORARY FUNCTION IF EXISTS foo3_5b
+-- !query analysis
+DropFunctionCommand foo3_5b, true, true
+
+
+-- !query
+DROP TEMPORARY FUNCTION IF EXISTS foo3_5c
+-- !query analysis
+DropFunctionCommand foo3_5c, true, true

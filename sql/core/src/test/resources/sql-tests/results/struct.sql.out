@@ -85,3 +85,43 @@ struct<ID:int,struct(ST.C AS STC, ST.D AS STD).STD:string>
 1	delta
 2	eta
 3	iota
+
+
+-- !query
+SELECT STRUCT(1 AS a) AS b, b AS c
+-- !query schema
+struct<b:struct<a:int>,c:struct<a:int>>
+-- !query output
+{"a":1}	{"a":1}
+
+
+-- !query
+SELECT STRUCT(col1 AS a) AS b, b AS c FROM VALUES(1)
+-- !query schema
+struct<b:struct<a:int>,c:struct<a:int>>
+-- !query output
+{"a":1}	{"a":1}
+
+
+-- !query
+SELECT STRUCT(1 AS a) AS b, b AS c GROUP BY b
+-- !query schema
+struct<b:struct<a:int>,c:struct<a:int>>
+-- !query output
+{"a":1}	{"a":1}
+
+
+-- !query
+SELECT STRUCT(col1 AS a) AS b, b AS c FROM VALUES(1) GROUP BY b
+-- !query schema
+struct<b:struct<a:int>,c:struct<a:int>>
+-- !query output
+{"a":1}	{"a":1}
+
+
+-- !query
+SELECT MAX(STRUCT(1 AS a)), 2 AS b, b AS c GROUP BY b
+-- !query schema
+struct<max(struct(1 AS a)):struct<a:int>,b:int,c:int>
+-- !query output
+{"a":1}	2	2
