@@ -512,7 +512,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val y = query.output.last
 
     val parsedPlan = byName(table, query)
-    val expectedPlan = byName(table, Project(Seq(X.withName("x"), y), query))
+    val expectedPlan = byName(table, Project(Seq(Alias(X, "x")(), y), query))
 
     assertNotResolved(parsedPlan)
     checkAnalysis(parsedPlan, expectedPlan, caseSensitive = false)
@@ -645,8 +645,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = byPosition(table, query)
     val expectedPlan = byPosition(table,
       Project(Seq(
-        Alias(Cast(a, FloatType, Some(conf.sessionLocalTimeZone)), "x")(),
-        Alias(Cast(b, FloatType, Some(conf.sessionLocalTimeZone)), "y")()),
+        Alias(a, "x")(),
+        Alias(b, "y")()),
         query))
 
     assertNotResolved(parsedPlan)
@@ -666,8 +666,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = byPosition(table, query)
     val expectedPlan = byPosition(table,
       Project(Seq(
-        Alias(Cast(y, FloatType, Some(conf.sessionLocalTimeZone)), "x")(),
-        Alias(Cast(x, FloatType, Some(conf.sessionLocalTimeZone)), "y")()),
+        Alias(y, "x")(),
+        Alias(x, "y")()),
         query))
 
     assertNotResolved(parsedPlan)
@@ -821,14 +821,11 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
           IsNull(queryCol),
           Literal(null, expectedColType),
           CreateNamedStruct(Seq(
-            Literal("a"), Cast(
+            Literal("a"),
               GetStructField(queryCol, 0, name = Some("x")),
-              IntegerType,
-              Some(conf.sessionLocalTimeZone)),
-            Literal("b"), Cast(
-              GetStructField(queryCol, 1, name = Some("y")),
-              IntegerType,
-              Some(conf.sessionLocalTimeZone))))),
+            Literal("b"),
+              GetStructField(queryCol, 1, name = Some("y"))
+          ))),
         "col")()),
         query)
       checkAnalysis(parsedPlan, byPosition(tableWithStructCol, expectedQuery))

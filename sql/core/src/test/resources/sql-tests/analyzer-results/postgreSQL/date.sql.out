@@ -9,7 +9,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`DATE_TBL`, false
 INSERT INTO DATE_TBL VALUES (date('1957-04-09'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/date_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/date_tbl], Append, `spark_catalog`.`default`.`date_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/date_tbl), [f1]
-+- Project [cast(col1#x as date) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -17,7 +17,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO DATE_TBL VALUES (date('1957-06-13'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/date_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/date_tbl], Append, `spark_catalog`.`default`.`date_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/date_tbl), [f1]
-+- Project [cast(col1#x as date) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -25,7 +25,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO DATE_TBL VALUES (date('1996-02-28'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/date_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/date_tbl], Append, `spark_catalog`.`default`.`date_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/date_tbl), [f1]
-+- Project [cast(col1#x as date) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -33,7 +33,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO DATE_TBL VALUES (date('1996-02-29'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/date_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/date_tbl], Append, `spark_catalog`.`default`.`date_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/date_tbl), [f1]
-+- Project [cast(col1#x as date) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -41,7 +41,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO DATE_TBL VALUES (date('1996-03-01'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/date_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/date_tbl], Append, `spark_catalog`.`default`.`date_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/date_tbl), [f1]
-+- Project [cast(col1#x as date) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -49,7 +49,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO DATE_TBL VALUES (date('1996-03-02'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/date_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/date_tbl], Append, `spark_catalog`.`default`.`date_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/date_tbl), [f1]
-+- Project [cast(col1#x as date) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -57,7 +57,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO DATE_TBL VALUES (date('1997-02-28'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/date_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/date_tbl], Append, `spark_catalog`.`default`.`date_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/date_tbl), [f1]
-+- Project [cast(col1#x as date) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -65,7 +65,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO DATE_TBL VALUES (date('1997-03-01'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/date_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/date_tbl], Append, `spark_catalog`.`default`.`date_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/date_tbl), [f1]
-+- Project [cast(col1#x as date) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -73,7 +73,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO DATE_TBL VALUES (date('1997-03-02'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/date_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/date_tbl], Append, `spark_catalog`.`default`.`date_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/date_tbl), [f1]
-+- Project [cast(col1#x as date) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -81,7 +81,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO DATE_TBL VALUES (date('2000-04-01'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/date_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/date_tbl], Append, `spark_catalog`.`default`.`date_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/date_tbl), [f1]
-+- Project [cast(col1#x as date) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -89,7 +89,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO DATE_TBL VALUES (date('2000-04-02'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/date_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/date_tbl], Append, `spark_catalog`.`default`.`date_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/date_tbl), [f1]
-+- Project [cast(col1#x as date) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -97,7 +97,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO DATE_TBL VALUES (date('2000-04-03'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/date_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/date_tbl], Append, `spark_catalog`.`default`.`date_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/date_tbl), [f1]
-+- Project [cast(col1#x as date) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -105,7 +105,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO DATE_TBL VALUES (date('2038-04-08'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/date_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/date_tbl], Append, `spark_catalog`.`default`.`date_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/date_tbl), [f1]
-+- Project [cast(col1#x as date) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -113,7 +113,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO DATE_TBL VALUES (date('2039-04-09'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/date_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/date_tbl], Append, `spark_catalog`.`default`.`date_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/date_tbl), [f1]
-+- Project [cast(col1#x as date) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -121,7 +121,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO DATE_TBL VALUES (date('2040-04-10'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/date_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/date_tbl], Append, `spark_catalog`.`default`.`date_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/date_tbl), [f1]
-+- Project [cast(col1#x as date) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 

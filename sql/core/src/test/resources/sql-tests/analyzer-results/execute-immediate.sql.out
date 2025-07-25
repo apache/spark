@@ -204,7 +204,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE 'INSERT INTO x VALUES(?)' USING 1
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/x, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/x], Append, `spark_catalog`.`default`.`x`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/x), [id]
-+- Project [cast(col1#x as int) AS id#x]
++- Project [col1#x AS id#x]
    +- LocalRelation [col1#x]
 
 

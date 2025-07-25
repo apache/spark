@@ -99,15 +99,10 @@ trait AliasHelper {
     val res = CurrentOrigin.withOrigin(e.origin) {
       e match {
         case a: Alias =>
-          val metadata = if (a.metadata == Metadata.empty) {
-            None
-          } else {
-            Some(a.metadata)
-          }
           a.copy(child = trimAliases(a.child))(
             exprId = a.exprId,
             qualifier = a.qualifier,
-            explicitMetadata = metadata,
+            explicitMetadata = a.explicitMetadata,
             nonInheritableMetadataKeys = a.nonInheritableMetadataKeys)
         case a: MultiAlias =>
           a.copy(child = trimAliases(a.child))
