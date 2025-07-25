@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
+
+import scala.collection.immutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
@@ -54,6 +57,15 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         if (nameParts.length != 1) {
           throw new AnalysisException(
             "INVALID_VARIABLE_DECLARATION.QUALIFIED_LOCAL_VARIABLE",
+            Map("varName" -> toSQLId(nameParts)))
+        }
+
+        val forbiddenVariableNames: immutable.Set[String] =
+          immutable.Set("system", "session")
+
+        if (forbiddenVariableNames.contains(nameParts.head.toLowerCase(Locale.ROOT))) {
+          throw new AnalysisException(
+            "INVALID_VARIABLE_DECLARATION.NAME_FORBIDDEN",
             Map("varName" -> toSQLId(nameParts)))
         }
 
