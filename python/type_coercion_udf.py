@@ -18,8 +18,8 @@
 #
 
 """
-PySpark dev script to to test the type coercion difference for different Spark configs 
-(e.g. arrow enabled, legacy pandas conversion enabled). 
+PySpark UDF dev util to test the type coercion difference for different
+Spark configs (e.g. arrow enabled, legacy pandas conversion enabled). 
 
 Usage (see optional configs below):
 # prereq: build Spark locally
