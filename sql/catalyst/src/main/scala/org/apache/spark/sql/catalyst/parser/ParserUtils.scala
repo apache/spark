@@ -18,17 +18,14 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.util
 import java.util.Locale
-
 import scala.collection.{immutable, mutable}
 import scala.util.matching.Regex
-
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, TerminalNodeImpl}
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
-import org.apache.spark.sql.catalyst.parser.SqlBaseParser.{BeginLabelContext, EndLabelContext}
+import org.apache.spark.sql.catalyst.parser.SqlBaseParser.{BeginLabelContext, EndLabelContext, IdentifierReferenceContext}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, ErrorCondition}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.SparkParserUtils
@@ -367,6 +364,15 @@ object SqlScriptingLabelContext {
 
   def isForbiddenLabelName(labelName: String): Boolean = {
     forbiddenLabelNames.exists(_.matches(labelName.toLowerCase(Locale.ROOT)))
+  }
+}
+
+object SqlScriptingVariableContext {
+  private val forbiddenVariableNames: immutable.Set[String] =
+    immutable.Set("system", "session")
+
+  def isForbiddenVariableName(variableName: String): Boolean = {
+    forbiddenVariableNames.contains(variableName.toLowerCase(Locale.ROOT))
   }
 }
 

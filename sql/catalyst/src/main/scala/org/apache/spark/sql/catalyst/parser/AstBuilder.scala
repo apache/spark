@@ -20,11 +20,9 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.{List, Locale}
 import java.util.concurrent.TimeUnit
 
-import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
-import scala.util.matching.Regex
 
 import org.antlr.v4.runtime.{ParserRuleContext, RuleContext, Token}
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
@@ -415,9 +413,6 @@ class AstBuilder extends DataTypeAstBuilder
                 visitDeclareHandlerStatementImpl(declareHandlerContext, parsingCtx)
               case declareConditionContext: DeclareConditionStatementContext =>
                 visitDeclareConditionStatementImpl(declareConditionContext)
-              case createVariableContext: CreateVariableContext =>
-                visitCreateVariableImpl(createVariableContext, isSqlScript = true)
-                  .asInstanceOf[CompoundPlanStatement]
               case stmt => visit(stmt).asInstanceOf[CompoundPlanStatement]
             }
           } else {
@@ -6379,15 +6374,6 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitPosParameterLiteral(
       ctx: PosParameterLiteralContext): Expression = withOrigin(ctx) {
     PosParameter(ctx.QUESTION().getSymbol.getStartIndex)
-  }
-
-  private object SqlScriptingVariableContext {
-    private val forbiddenVariableNames: immutable.Set[Regex] =
-      immutable.Set("system".r, "session".r)
-
-    def isForbiddenVariableName(variableName: String): Boolean = {
-      forbiddenVariableNames.exists(_.matches(variableName.toLowerCase(Locale.ROOT)))
-    }
   }
 
   /**
