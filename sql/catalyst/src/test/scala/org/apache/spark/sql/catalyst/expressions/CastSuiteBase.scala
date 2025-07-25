@@ -26,7 +26,6 @@ import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -545,62 +544,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast("0", false)
   }
 
-  protected def checkInvalidCastFromNumericType(to: DataType): Unit = {
-    cast(1.toByte, to).checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
-        messageParameters = Map(
-          "srcType" -> toSQLType(Literal(1.toByte).dataType),
-          "targetType" -> toSQLType(to),
-          "functionNames" -> "`DATE_FROM_UNIX_DATE`"
-        )
-      )
-    cast(1.toShort, to).checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
-        messageParameters = Map(
-          "srcType" -> toSQLType(Literal(1.toShort).dataType),
-          "targetType" -> toSQLType(to),
-          "functionNames" -> "`DATE_FROM_UNIX_DATE`"
-        )
-      )
-    cast(1, to).checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
-        messageParameters = Map(
-          "srcType" -> toSQLType(Literal(1).dataType),
-          "targetType" -> toSQLType(to),
-          "functionNames" -> "`DATE_FROM_UNIX_DATE`"
-        )
-      )
-    cast(1L, to).checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
-        messageParameters = Map(
-          "srcType" -> toSQLType(Literal(1L).dataType),
-          "targetType" -> toSQLType(to),
-          "functionNames" -> "`DATE_FROM_UNIX_DATE`"
-        )
-      )
-    cast(1.0.toFloat, to).checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
-        messageParameters = Map(
-          "srcType" -> toSQLType(Literal(1.0.toFloat).dataType),
-          "targetType" -> toSQLType(to),
-          "functionNames" -> "`DATE_FROM_UNIX_DATE`"
-        )
-      )
-    cast(1.0, to).checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
-        messageParameters = Map(
-          "srcType" -> toSQLType(Literal(1.0).dataType),
-          "targetType" -> toSQLType(to),
-          "functionNames" -> "`DATE_FROM_UNIX_DATE`"
-        )
-      )
-  }
+  protected def checkInvalidCastFromNumericType(to: DataType): Unit
 
   test("SPARK-16729 type checking for casting to date type") {
     assert(cast("1234", DateType).checkInputDataTypes().isSuccess)
