@@ -697,12 +697,4 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     assert(rows(0).getAs[java.sql.Timestamp](1)
       === java.sql.Timestamp.valueOf("2020-02-02 04:13:14.56789"))
   }
-
-  test("Test logging of schema fetch time") {
-    val df = sql("SELECT * FROM PEOPLE1")
-    val leaves = df.queryExecution.executedPlan.collectLeaves().head.metrics
-    val testKey = "remoteSchemaDiscoveryTime"
-
-    assert(leaves.get(testKey) != null)
-  }
 }

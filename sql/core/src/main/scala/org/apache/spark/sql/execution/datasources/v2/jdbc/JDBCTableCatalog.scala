@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, FunctionCa
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JDBCRDD, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JDBCRDD, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
@@ -155,13 +155,13 @@ class JDBCTableCatalog extends TableCatalog
     ) {
       val remoteSchemaFetchMetric = SQLMetrics.createNanoTimingMetric(
         SparkSession.active.sparkContext,
-        "Remote JDBC schema fetch time"
+        name = JDBCRelation.schemaFetchName
       )
       val schema = SQLMetrics.withTimingNs(remoteSchemaFetchMetric) {
         JDBCRDD.resolveTable(optionsWithTableName)
       }
       JDBCTable(ident, schema, optionsWithTableName,
-        Map("remoteSchemaFetchTime" -> remoteSchemaFetchMetric))
+        Map(JDBCRelation.schemaFetchKey -> remoteSchemaFetchMetric))
     }
   }
 
