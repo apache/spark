@@ -22,7 +22,7 @@ from pyspark.errors import PySparkImportError, PySparkRuntimeError
 def require_minimum_pandas_version() -> None:
     """Raise ImportError if minimum version of Pandas is not installed"""
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
-    minimum_pandas_version = "2.0.0"
+    minimum_pandas_version = "2.2.0"
 
     try:
         import pandas
