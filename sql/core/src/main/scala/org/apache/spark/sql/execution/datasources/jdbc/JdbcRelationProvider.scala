@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils._
-import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 
@@ -36,17 +36,14 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val sparkSession = sqlContext.sparkSession
     val resolver = sparkSession.sessionState.conf.resolver
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
-    val remoteSchemaFetchTimeMetric = SQLMetrics.createNanoTimingMetric(
+    val (schema, remoteSchemaFetchMetric) = SQLMetrics.withTimingNsNewMetric(
       sparkSession.sparkContext,
-      name = "Remote JDBC schema fetch time"
-    )
-    val schema = SQLMetrics.withTimingNs(remoteSchemaFetchTimeMetric) {
+      SQLMetrics.remoteSchemaFetchTime) {
       JDBCRelation.getSchema(resolver, jdbcOptions)
     }
-    val additionalMetrics: Map[String, SQLMetric] =
-      Map("remoteSchemaFetchTime" -> remoteSchemaFetchTimeMetric)
     val parts = JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)
-    val relation = JDBCRelation(schema, parts, jdbcOptions, additionalMetrics)(sparkSession)
+    val relation = JDBCRelation(schema, parts, jdbcOptions,
+      Map("remoteSchemaFetchTime" -> remoteSchemaFetchMetric))(sparkSession)
     relation
   }
 

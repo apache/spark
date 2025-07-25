@@ -28,6 +28,7 @@ import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -35,7 +36,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 case class JDBCTable(
     ident: Identifier,
     override val schema: StructType,
-    jdbcOptions: JDBCOptions)
+    jdbcOptions: JDBCOptions,
+    additionalMetrics: Map[String, SQLMetric] = Map())
   extends Table
   with SupportsRead
   with SupportsWrite
@@ -51,7 +53,7 @@ case class JDBCTable(
   override def newScanBuilder(options: CaseInsensitiveStringMap): JDBCScanBuilder = {
     val mergedOptions = new JDBCOptions(
       jdbcOptions.parameters.originalMap ++ options.asCaseSensitiveMap().asScala)
-    JDBCScanBuilder(SparkSession.active, schema, mergedOptions)
+    JDBCScanBuilder(SparkSession.active, schema, mergedOptions, additionalMetrics)
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {

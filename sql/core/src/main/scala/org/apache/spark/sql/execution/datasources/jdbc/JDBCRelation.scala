@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
-import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
@@ -256,8 +256,13 @@ private[sql] object JDBCRelation extends Logging {
       parts: Array[Partition],
       jdbcOptions: JDBCOptions)(
       sparkSession: SparkSession): JDBCRelation = {
-    val schema = JDBCRelation.getSchema(sparkSession.sessionState.conf.resolver, jdbcOptions)
-    JDBCRelation(schema, parts, jdbcOptions)(sparkSession)
+    val (schema, remoteSchemaFetchMetric) = SQLMetrics.withTimingNsNewMetric(
+      sparkSession.sparkContext,
+      SQLMetrics.remoteSchemaFetchTime) {
+      JDBCRelation.getSchema(sparkSession.sessionState.conf.resolver, jdbcOptions)
+    }
+    JDBCRelation(schema, parts, jdbcOptions,
+      Map("remoteSchemaFetchTime" -> remoteSchemaFetchMetric))(sparkSession)
   }
 }
 
