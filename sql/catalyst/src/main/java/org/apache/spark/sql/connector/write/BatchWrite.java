@@ -18,7 +18,8 @@
 package org.apache.spark.sql.connector.write;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.metric.MergeMetrics;
+
+import java.util.Map;
 
 /**
  * An interface that defines how to write the data to data source for batch processing.
@@ -107,11 +108,12 @@ public interface BatchWrite {
   void abort(WriterCommitMessage[] messages);
 
   /**
-   * Similar to {@link #commit(WriterCommitMessage[])}, but providing merge exec metrics to
+   * Similar to {@link #commit(WriterCommitMessage[])}, but providing operation metrics to
    * this batch write.
-   * @param metrics merge execution metrics
+   * @param metrics operation metrics.  The keys will be prefixed by operation type, eg `merge`
    */
-  default void commitMerge(WriterCommitMessage[] messages, MergeMetrics metrics) {
+  default void commitWithOperationMetrics(
+    WriterCommitMessage[] messages, Map<String, Long> metrics) {
     commit(messages);
   }
 }

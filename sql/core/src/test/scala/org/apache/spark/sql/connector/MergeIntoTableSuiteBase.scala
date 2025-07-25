@@ -1814,14 +1814,14 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
       val table = catalog.loadTable(ident)
       val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
-      assert(commitProps("numTargetRowsCopied") === (if (deltaMerge) "0" else "2"))
-      assert(commitProps("numTargetRowsInserted") === "0")
-      assert(commitProps("numTargetRowsUpdated") === "1")
-      assert(commitProps("numTargetRowsDeleted") === "0")
-      assert(commitProps("numTargetRowsMatchedUpdated") === "1")
-      assert(commitProps("numTargetRowsMatchedDeleted") === "0")
-      assert(commitProps("numTargetRowsNotMatchedBySourceUpdated") === "0")
-      assert(commitProps("numTargetRowsNotMatchedBySourceDeleted") === "0")
+      assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "2"))
+      assert(commitProps("merge.numTargetRowsInserted") === "0")
+      assert(commitProps("merge.numTargetRowsUpdated") === "1")
+      assert(commitProps("merge.numTargetRowsDeleted") === "0")
+      assert(commitProps("merge.numTargetRowsMatchedUpdated") === "1")
+      assert(commitProps("merge.numTargetRowsMatchedDeleted") === "0")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "0")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "0")
     }
   }
 
@@ -1870,14 +1870,14 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
       val table = catalog.loadTable(ident)
       val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
-      assert(commitProps("numTargetRowsCopied") === "0")
-      assert(commitProps("numTargetRowsInserted") === "1")
-      assert(commitProps("numTargetRowsUpdated") === "0")
-      assert(commitProps("numTargetRowsDeleted") === "0")
-      assert(commitProps("numTargetRowsMatchedUpdated") === "0")
-      assert(commitProps("numTargetRowsMatchedDeleted") === "0")
-      assert(commitProps("numTargetRowsNotMatchedBySourceUpdated") === "0")
-      assert(commitProps("numTargetRowsNotMatchedBySourceDeleted") === "0")
+      assert(commitProps("merge.numTargetRowsCopied") === "0")
+      assert(commitProps("merge.numTargetRowsInserted") === "1")
+      assert(commitProps("merge.numTargetRowsUpdated") === "0")
+      assert(commitProps("merge.numTargetRowsDeleted") === "0")
+      assert(commitProps("merge.numTargetRowsMatchedUpdated") === "0")
+      assert(commitProps("merge.numTargetRowsMatchedDeleted") === "0")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "0")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "0")
     }
   }
 
@@ -1925,14 +1925,14 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
       val table = catalog.loadTable(ident)
       val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
-      assert(commitProps("numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
-      assert(commitProps("numTargetRowsInserted") === "0")
-      assert(commitProps("numTargetRowsUpdated") === "2")
-      assert(commitProps("numTargetRowsDeleted") === "0")
-      assert(commitProps("numTargetRowsMatchedUpdated") === "1")
-      assert(commitProps("numTargetRowsMatchedDeleted") === "0")
-      assert(commitProps("numTargetRowsNotMatchedBySourceUpdated") === "1")
-      assert(commitProps("numTargetRowsNotMatchedBySourceDeleted") === "0")
+      assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
+      assert(commitProps("merge.numTargetRowsInserted") === "0")
+      assert(commitProps("merge.numTargetRowsUpdated") === "2")
+      assert(commitProps("merge.numTargetRowsDeleted") === "0")
+      assert(commitProps("merge.numTargetRowsMatchedUpdated") === "1")
+      assert(commitProps("merge.numTargetRowsMatchedDeleted") === "0")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "1")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "0")
     }
   }
 
@@ -1982,14 +1982,14 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
       val table = catalog.loadTable(ident)
       val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
-      assert(commitProps("numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
-      assert(commitProps("numTargetRowsInserted") === "0")
-      assert(commitProps("numTargetRowsUpdated") === "0")
-      assert(commitProps("numTargetRowsDeleted") === "2")
-      assert(commitProps("numTargetRowsMatchedUpdated") === "0")
-      assert(commitProps("numTargetRowsMatchedDeleted") === "1")
-      assert(commitProps("numTargetRowsNotMatchedBySourceUpdated") === "0")
-      assert(commitProps("numTargetRowsNotMatchedBySourceDeleted") === "1")
+      assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
+      assert(commitProps("merge.numTargetRowsInserted") === "0")
+      assert(commitProps("merge.numTargetRowsUpdated") === "0")
+      assert(commitProps("merge.numTargetRowsDeleted") === "2")
+      assert(commitProps("merge.numTargetRowsMatchedUpdated") === "0")
+      assert(commitProps("merge.numTargetRowsMatchedDeleted") === "1")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "0")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "1")
     }
   }
 
@@ -2040,14 +2040,14 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
       val table = catalog.loadTable(ident)
       val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
-      assert(commitProps("numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
-      assert(commitProps("numTargetRowsInserted") === "1")
-      assert(commitProps("numTargetRowsUpdated") === "2")
-      assert(commitProps("numTargetRowsDeleted") === "0")
-      assert(commitProps("numTargetRowsMatchedUpdated") === "1")
-      assert(commitProps("numTargetRowsMatchedDeleted") === "0")
-      assert(commitProps("numTargetRowsNotMatchedBySourceUpdated") === "1")
-      assert(commitProps("numTargetRowsNotMatchedBySourceDeleted") === "0")
+      assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
+      assert(commitProps("merge.numTargetRowsInserted") === "1")
+      assert(commitProps("merge.numTargetRowsUpdated") === "2")
+      assert(commitProps("merge.numTargetRowsDeleted") === "0")
+      assert(commitProps("merge.numTargetRowsMatchedUpdated") === "1")
+      assert(commitProps("merge.numTargetRowsMatchedDeleted") === "0")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "1")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "0")
     }
   }
 
@@ -2098,14 +2098,14 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
       val table = catalog.loadTable(ident)
       val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
-      assert(commitProps("numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
-      assert(commitProps("numTargetRowsInserted") === "1")
-      assert(commitProps("numTargetRowsUpdated") === "0")
-      assert(commitProps("numTargetRowsDeleted") === "2")
-      assert(commitProps("numTargetRowsMatchedUpdated") === "0")
-      assert(commitProps("numTargetRowsMatchedDeleted") === "1")
-      assert(commitProps("numTargetRowsNotMatchedBySourceUpdated") === "0")
-      assert(commitProps("numTargetRowsNotMatchedBySourceDeleted") === "1")
+      assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
+      assert(commitProps("merge.numTargetRowsInserted") === "1")
+      assert(commitProps("merge.numTargetRowsUpdated") === "0")
+      assert(commitProps("merge.numTargetRowsDeleted") === "2")
+      assert(commitProps("merge.numTargetRowsMatchedUpdated") === "0")
+      assert(commitProps("merge.numTargetRowsMatchedDeleted") === "1")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "0")
+      assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "1")
     }
   }
 
@@ -2139,14 +2139,14 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
           val table = catalog.loadTable(ident)
           val commitProps = table.asInstanceOf[InMemoryTable].commits.last.properties
-          assert(commitProps("numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
-          assert(commitProps("numTargetRowsInserted") === "1")
-          assert(commitProps("numTargetRowsUpdated") === "0")
-          assert(commitProps("numTargetRowsDeleted") === "2")
-          assert(commitProps("numTargetRowsMatchedUpdated") === "0")
-          assert(commitProps("numTargetRowsMatchedDeleted") === "1")
-          assert(commitProps("numTargetRowsNotMatchedBySourceUpdated") === "0")
-          assert(commitProps("numTargetRowsNotMatchedBySourceDeleted") === "1")
+          assert(commitProps("merge.numTargetRowsCopied") === (if (deltaMerge) "0" else "3"))
+          assert(commitProps("merge.numTargetRowsInserted") === "1")
+          assert(commitProps("merge.numTargetRowsUpdated") === "0")
+          assert(commitProps("merge.numTargetRowsDeleted") === "2")
+          assert(commitProps("merge.numTargetRowsMatchedUpdated") === "0")
+          assert(commitProps("merge.numTargetRowsMatchedDeleted") === "1")
+          assert(commitProps("merge.numTargetRowsNotMatchedBySourceUpdated") === "0")
+          assert(commitProps("merge.numTargetRowsNotMatchedBySourceDeleted") === "1")
 
           sql(s"DROP TABLE $tableNameAsString")
         }

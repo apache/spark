@@ -17,15 +17,16 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import java.{lang, util}
 import java.time.Instant
-import java.util
+
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, SortDirection, SortOrder, Transform}
-import org.apache.spark.sql.connector.metric.MergeMetrics
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
 import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
@@ -115,25 +116,11 @@ class InMemoryRowLevelOperationTable(
 
   abstract class RowLevelOperationBatchWrite extends TestBatchWrite {
 
-    override def commitMerge(messages: Array[WriterCommitMessage], metrics: MergeMetrics):
-    Unit = {
-      commitProperties += "numTargetRowsCopied" -> metrics.numTargetRowsCopied().orElse(-1).toString
-      commitProperties += "numTargetRowsInserted" ->
-        metrics.numTargetRowsInserted().orElse(-1).toString
-      commitProperties += "numTargetRowsDeleted" ->
-        metrics.numTargetRowsDeleted().orElse(-1).toString
-      commitProperties += "numTargetRowsUpdated" ->
-        metrics.numTargetRowsUpdated().orElse(-1).toString
-      commitProperties += "numTargetRowsInserted" ->
-        metrics.numTargetRowsInserted().orElse(-1).toString
-      commitProperties += ("numTargetRowsMatchedDeleted"
-        -> metrics.numTargetRowsMatchedDeleted().orElse(-1).toString)
-      commitProperties += ("numTargetRowsMatchedUpdated"
-        -> metrics.numTargetRowsMatchedUpdated().orElse(-1).toString)
-      commitProperties += ("numTargetRowsNotMatchedBySourceUpdated"
-        -> metrics.numTargetRowsNotMatchedBySourceUpdated().orElse(-1).toString)
-      commitProperties += ("numTargetRowsNotMatchedBySourceDeleted"
-        -> metrics.numTargetRowsNotMatchedBySourceDeleted().orElse(-1).toString)
+    override def commitWithOperationMetrics(messages: Array[WriterCommitMessage],
+                                            metrics: util.Map[String, lang.Long]): Unit = {
+      metrics.asScala.map {
+        case (key, value) => commitProperties += key -> String.valueOf(value)
+      }
       commit(messages)
       commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
       commitProperties.clear()

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.OptionalLong
+import java.lang.{Long => JLong}
 
 import scala.jdk.CollectionConverters._
 
@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUt
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSERT_OPERATION, REINSERT_OPERATION, UPDATE_OPERATION, WRITE_OPERATION, WRITE_WITH_METADATA_OPERATION}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.metric.{CustomMetric, MergeMetrics}
+import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, Write, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution, UnaryExecNode}
@@ -454,10 +454,11 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
         }
       )
 
-      val mergeMetricsOpt = getMergeMetrics(query)
+      val operationMetricOpt = getOperationMetrics(query)
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} is committing.")
-      mergeMetricsOpt match {
-        case Some(metrics) => batchWrite.commitMerge(messages, metrics)
+      operationMetricOpt match {
+        case Some(metrics) => batchWrite.commitWithOperationMetrics(messages,
+          metrics.map{ case (name, value) => name -> JLong.valueOf(value) }.asJava)
         case None => batchWrite.commit(messages)
       }
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} committed.")
@@ -482,27 +483,9 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
     Nil
   }
 
-  private def getMergeMetrics(query: SparkPlan): Option[MergeMetrics] = {
+  private def getOperationMetrics(query: SparkPlan): Option[Map[String, Long]] = {
     collectFirst(query) { case m: MergeRowsExec => m }.map{ n =>
-      MergeMetricsImpl(
-        numTargetRowsCopied = metric(n.metrics, "numTargetRowsCopied"),
-        numTargetRowsDeleted = metric(n.metrics, "numTargetRowsDeleted"),
-        numTargetRowsUpdated = metric(n.metrics, "numTargetRowsUpdated"),
-        numTargetRowsInserted = metric(n.metrics, "numTargetRowsInserted"),
-        numTargetRowsMatchedDeleted = metric(n.metrics, "numTargetRowsMatchedDeleted"),
-        numTargetRowsMatchedUpdated = metric(n.metrics, "numTargetRowsMatchedUpdated"),
-        numTargetRowsNotMatchedBySourceDeleted =
-          metric(n.metrics, "numTargetRowsNotMatchedBySourceDeleted"),
-        numTargetRowsNotMatchedBySourceUpdated =
-          metric(n.metrics, "numTargetRowsNotMatchedBySourceUpdated")
-      )
-    }
-  }
-
-  private def metric(metrics: Map[String, SQLMetric], metric: String): OptionalLong = {
-    metrics.get(metric) match {
-      case Some(m) => OptionalLong.of(m.value)
-      case None => OptionalLong.empty()
+      n.metrics.map { case (name, metric) => s"merge.$name" -> metric.value }
     }
   }
 }
@@ -759,13 +742,3 @@ private[v2] case class DataWritingSparkTaskResult(
  * Sink progress information collected after commit.
  */
 private[sql] case class StreamWriterCommitProgress(numOutputRows: Long)
-
-private case class MergeMetricsImpl(
-    override val numTargetRowsCopied: OptionalLong,
-    override val numTargetRowsDeleted: OptionalLong,
-    override val numTargetRowsUpdated: OptionalLong,
-    override val numTargetRowsInserted: OptionalLong,
-    override val numTargetRowsMatchedUpdated: OptionalLong,
-    override val numTargetRowsMatchedDeleted: OptionalLong,
-    override val numTargetRowsNotMatchedBySourceUpdated: OptionalLong,
-    override val numTargetRowsNotMatchedBySourceDeleted: OptionalLong) extends MergeMetrics
