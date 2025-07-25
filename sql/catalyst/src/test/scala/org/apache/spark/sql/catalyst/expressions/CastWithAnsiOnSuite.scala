@@ -39,6 +39,188 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
 
   override def evalMode: EvalMode.Value = EvalMode.ANSI
 
+  override protected def checkInvalidCastFromNumericType(to: DataType): Unit = to match {
+    case BinaryType =>
+      assert(cast(1.toByte, to).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITH_CONF_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> toSQLType(Literal(1.toByte).dataType),
+            "targetType" -> toSQLType(to),
+            "config" -> "\"spark.sql.ansi.enabled\"",
+            "configVal" -> "'false'"
+          )
+        )
+      )
+      assert(cast(1.toShort, to).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITH_CONF_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> toSQLType(Literal(1.toShort).dataType),
+            "targetType" -> toSQLType(to),
+            "config" -> "\"spark.sql.ansi.enabled\"",
+            "configVal" -> "'false'"
+          )
+        )
+      )
+      assert(cast(1, to).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITH_CONF_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> toSQLType(Literal(1).dataType),
+            "targetType" -> toSQLType(to),
+            "config" -> "\"spark.sql.ansi.enabled\"",
+            "configVal" -> "'false'"
+          )
+        )
+      )
+      assert(cast(1L, to).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITH_CONF_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> toSQLType(Literal(1L).dataType),
+            "targetType" -> toSQLType(to),
+            "config" -> "\"spark.sql.ansi.enabled\"",
+            "configVal" -> "'false'"
+          )
+        )
+      )
+      assert(cast(1.0.toFloat, to).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITHOUT_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> toSQLType(Literal(1.0.toFloat).dataType),
+            "targetType" -> toSQLType(to)
+          )
+        )
+      )
+      assert(cast(1.0, to).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITHOUT_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> toSQLType(Literal(1.0).dataType),
+            "targetType" -> toSQLType(to)
+          )
+        )
+      )
+    case TimestampNTZType =>
+      assert(cast(1.toByte, to).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITHOUT_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> toSQLType(Literal(1.toByte).dataType),
+            "targetType" -> toSQLType(to)
+          )
+        )
+      )
+      assert(cast(1.toShort, to).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITHOUT_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> toSQLType(Literal(1.toShort).dataType),
+            "targetType" -> toSQLType(to)
+          )
+        )
+      )
+      assert(cast(1, to).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITHOUT_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> toSQLType(Literal(1).dataType),
+            "targetType" -> toSQLType(to)
+          )
+        )
+      )
+      assert(cast(1L, to).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITHOUT_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> toSQLType(Literal(1L).dataType),
+            "targetType" -> toSQLType(to)
+          )
+        )
+      )
+      assert(cast(1.0.toFloat, to).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITHOUT_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> toSQLType(Literal(1.0.toFloat).dataType),
+            "targetType" -> toSQLType(to)
+          )
+        )
+      )
+      assert(cast(1.0, to).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITHOUT_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> toSQLType(Literal(1.0).dataType),
+            "targetType" -> toSQLType(to)
+          )
+        )
+      )
+    case _ =>
+      assert(cast(1.toByte, to).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> toSQLType(Literal(1.toByte).dataType),
+            "targetType" -> toSQLType(to),
+            "functionNames" -> "`DATE_FROM_UNIX_DATE`"
+          )
+        )
+      )
+      assert(cast(1.toShort, to).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> toSQLType(Literal(1.toShort).dataType),
+            "targetType" -> toSQLType(to),
+            "functionNames" -> "`DATE_FROM_UNIX_DATE`"
+          )
+        )
+      )
+      assert(cast(1, to).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> toSQLType(Literal(1).dataType),
+            "targetType" -> toSQLType(to),
+            "functionNames" -> "`DATE_FROM_UNIX_DATE`"
+          )
+        )
+      )
+      assert(cast(1L, to).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> toSQLType(Literal(1L).dataType),
+            "targetType" -> toSQLType(to),
+            "functionNames" -> "`DATE_FROM_UNIX_DATE`"
+          )
+        )
+      )
+      assert(cast(1.0.toFloat, to).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> toSQLType(Literal(1.0.toFloat).dataType),
+            "targetType" -> toSQLType(to),
+            "functionNames" -> "`DATE_FROM_UNIX_DATE`"
+          )
+        )
+      )
+      assert(cast(1.0, to).checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
+          messageParameters = Map(
+            "srcType" -> toSQLType(Literal(1.0).dataType),
+            "targetType" -> toSQLType(to),
+            "functionNames" -> "`DATE_FROM_UNIX_DATE`"
+          )
+        )
+      )
+  }
+
   private def isTryCast = evalMode == EvalMode.TRY
 
   private def testIntMaxAndMin(dt: DataType): Unit = {

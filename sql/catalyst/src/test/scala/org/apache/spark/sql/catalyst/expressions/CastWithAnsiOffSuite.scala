@@ -23,10 +23,12 @@ import java.time.temporal.ChronoUnit
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.analysis.TypeCoercionSuite
 import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
@@ -39,6 +41,63 @@ import org.apache.spark.unsafe.types.UTF8String
 class CastWithAnsiOffSuite extends CastSuiteBase {
 
   override def evalMode: EvalMode.Value = EvalMode.LEGACY
+
+  override protected def checkInvalidCastFromNumericType(to: DataType): Unit = {
+    assert(cast(1.toByte, to).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITHOUT_SUGGESTION",
+        messageParameters = Map(
+          "srcType" -> toSQLType(Literal(1.toByte).dataType),
+          "targetType" -> toSQLType(to)
+        )
+      )
+    )
+    assert(cast(1.toShort, to).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITHOUT_SUGGESTION",
+        messageParameters = Map(
+          "srcType" -> toSQLType(Literal(1.toShort).dataType),
+          "targetType" -> toSQLType(to)
+        )
+      )
+    )
+    assert(cast(1, to).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITHOUT_SUGGESTION",
+        messageParameters = Map(
+          "srcType" -> toSQLType(Literal(1).dataType),
+          "targetType" -> toSQLType(to)
+        )
+      )
+    )
+    assert(cast(1L, to).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITHOUT_SUGGESTION",
+        messageParameters = Map(
+          "srcType" -> toSQLType(Literal(1L).dataType),
+          "targetType" -> toSQLType(to)
+        )
+      )
+    )
+    assert(cast(1.0.toFloat, to).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITHOUT_SUGGESTION",
+        messageParameters = Map(
+          "srcType" -> toSQLType(Literal(1.0.toFloat).dataType),
+          "targetType" -> toSQLType(to)
+        )
+      )
+    )
+    assert(cast(1.0, to).checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITHOUT_SUGGESTION",
+        messageParameters = Map(
+          "srcType" -> toSQLType(Literal(1.0).dataType),
+          "targetType" -> toSQLType(to)
+        )
+      )
+    )
+  }
 
   test("null cast #2") {
     import DataTypeTestUtils._
