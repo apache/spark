@@ -1398,8 +1398,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
     val expectedPlan = OverwriteByExpression.byPosition(table,
       Project(Seq(
-        Alias(Cast(a, DoubleType, Some(conf.sessionLocalTimeZone)), "x")(),
-        Alias(Cast(b, DoubleType, Some(conf.sessionLocalTimeZone)), "y")()),
+        Alias(a, "x")(),
+        Alias(b, "y")()),
         query),
       LessThanOrEqual(x, Literal(15.0d)))
 
