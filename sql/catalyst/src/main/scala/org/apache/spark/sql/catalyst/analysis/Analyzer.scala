@@ -3632,7 +3632,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   object ResolveWindowFrame extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
       _.containsPattern(WINDOW_EXPRESSION), ruleId) {
-      case we => WindowResolution.resolveFrame(we)
+      case we: WindowExpression => WindowResolution.resolveFrame(we)
     }
   }
 
@@ -3642,7 +3642,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   object ResolveWindowOrder extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
       _.containsPattern(WINDOW_EXPRESSION), ruleId) {
-      case we => WindowResolution.resolveOrder(we)
+      case we: WindowExpression => WindowResolution.resolveOrder(we)
     }
   }
 
