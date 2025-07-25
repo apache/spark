@@ -619,12 +619,6 @@
     ],
     "sqlState" : "42602"
   },
-  "CYCLIC_FUNCTION_REFERENCE" : {
-    "message" : [
-      "Cyclic function reference detected: <path>."
-    ],
-    "sqlState" : "42887"
-  },
   "CLASS_NOT_OVERRIDE_EXPECTED_METHOD" : {
     "message" : [
       "<className> must override either <method1> or <method2>."
@@ -973,6 +967,12 @@
       }
     },
     "sqlState" : "21S01"
+  },
+  "CYCLIC_FUNCTION_REFERENCE" : {
+    "message" : [
+      "Cyclic function reference detected: <path>."
+    ],
+    "sqlState" : "42887"
   },
   "DATAFLOW_GRAPH_NOT_FOUND" : {
     "message" : [
