@@ -24,6 +24,7 @@ from itertools import groupby
 from typing import TYPE_CHECKING, Optional
 
 import pyspark
+from fontTools.misc.cython import returns
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.loose_version import LooseVersion
 from pyspark.serializers import (
@@ -685,15 +686,13 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
         timezone,
         safecheck,
         assign_cols_by_name,
-        arrow_cast,
     ):
         super(ArrowStreamArrowUDFSerializer, self).__init__()
         self._timezone = timezone
         self._safecheck = safecheck
         self._assign_cols_by_name = assign_cols_by_name
-        self._arrow_cast = arrow_cast
 
-    def _create_array(self, arr, arrow_type, arrow_cast):
+    def _create_array(self, arr, arrow_type):
         import pyarrow as pa
 
         assert isinstance(arr, pa.Array)
@@ -701,13 +700,10 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
 
         # TODO: should we handle timezone here?
 
-        try:
+        if arr.type == arrow_type:
             return arr
-        except pa.lib.ArrowException:
-            if arrow_cast:
-                return arr.cast(target_type=arrow_type, safe=self._safecheck)
-            else:
-                raise
+        else:
+            return arr.cast(target_type=arrow_type, safe=True)
 
     def dump_stream(self, iterator, stream):
         """
@@ -722,10 +718,10 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
             for packed in iterator:
                 if len(packed) == 2 and isinstance(packed[1], pa.DataType):
                     # single array UDF in a projection
-                    arrs = [self._create_array(packed[0], packed[1], self._arrow_cast)]
+                    arrs = [self._create_array(packed[0], packed[1])]
                 else:
                     # multiple array UDFs in a projection
-                    arrs = [self._create_array(t[0], t[1], self._arrow_cast) for t in packed]
+                    arrs = [self._create_array(t[0], t[1]) for t in packed]
 
                 batch = pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
 
