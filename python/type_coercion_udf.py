@@ -18,7 +18,7 @@
 #
 
 """
-PySpark UDF dev util to test the type coercion difference for different
+PySpark UDF dev util for @udf, to test the type coercion difference for different
 Spark configs (e.g. arrow enabled, legacy pandas conversion enabled). 
 
 Usage (see optional configs below):
@@ -51,6 +51,8 @@ TEST_DATA = [
     bytearray([65, 66, 67]),
     Decimal(1),
     {"a": 1},
+    Row(kwargs=1),
+    Row("namedtuple")(1),
 ]
 
 TEST_TYPES = [
@@ -64,8 +66,11 @@ TEST_TYPES = [
     TimestampType(),
     FloatType(),
     DoubleType(),
+    ArrayType(IntegerType()),
     BinaryType(),
     DecimalType(10, 0),
+    MapType(StringType(), IntegerType()),
+    StructType([StructField("_1", IntegerType())]),
 ]
 
 
