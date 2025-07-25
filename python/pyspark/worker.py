@@ -894,7 +894,7 @@ def wrap_grouped_agg_arrow_udf(f, args_offsets, kwargs_offsets, return_type, run
 def wrap_window_agg_pandas_udf(
     f, args_offsets, kwargs_offsets, return_type, runner_conf, udf_index
 ):
-    window_bound_types_str = runner_conf.get("pandas_window_bound_types")
+    window_bound_types_str = runner_conf.get("window_bound_types")
     window_bound_type = [t.strip().lower() for t in window_bound_types_str.split(",")][udf_index]
     if window_bound_type == "bounded":
         return wrap_bounded_window_agg_pandas_udf(
@@ -914,7 +914,7 @@ def wrap_window_agg_pandas_udf(
 
 
 def wrap_window_agg_arrow_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf, udf_index):
-    window_bound_types_str = runner_conf.get("pandas_window_bound_types")
+    window_bound_types_str = runner_conf.get("window_bound_types")
     window_bound_type = [t.strip().lower() for t in window_bound_types_str.split(",")][udf_index]
     if window_bound_type == "bounded":
         return wrap_bounded_window_agg_arrow_udf(
