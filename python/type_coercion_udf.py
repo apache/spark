@@ -125,7 +125,6 @@ def run_type_coercion_tests(
 
         results.append([spark_type.simpleString()] + list(map(str, result)))
 
-    # Create schema for results DataFrame
     schema = ["SQL Type \\ Python Value(Type)"] + [
         f"{str(v)}({type(v).__name__})" for v in test_data
     ]
