@@ -6167,6 +6167,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEGACY_TRUNCATE_FOR_EMPTY_REGEX_SPLIT =
+    buildConf("spark.sql.legacy.truncateForEmptyRegexSplit")
+      .internal()
+      .doc("When set to true, splitting a string of length n using an empty regex with a " +
+        "positive limit discards the last n - limit characters." +
+        "For example: SELECT split('abcd', '', 2) returns ['a', 'b']." +
+        "When set to false, the last element of the resulting array contains all input beyond " +
+        "the last matched regex." +
+        "For example: SELECT split('abcd', '', 2) returns ['a', 'bcd']." +
+        "According to the description of the split function, this should be set to false by " +
+        "default. See SPARK-49968 for details.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *

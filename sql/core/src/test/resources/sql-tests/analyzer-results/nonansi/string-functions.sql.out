@@ -129,9 +129,65 @@ Project [split(hello, , -1) AS split(hello, , -1)#x]
 
 
 -- !query
+SELECT split('hello', '', 0)
+-- !query analysis
+Project [split(hello, , 0) AS split(hello, , 0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT split('hello', '', 1)
+-- !query analysis
+Project [split(hello, , 1) AS split(hello, , 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT split('hello', '', 3)
+-- !query analysis
+Project [split(hello, , 3) AS split(hello, , 3)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT split('hello', '', 5)
+-- !query analysis
+Project [split(hello, , 5) AS split(hello, , 5)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT split('hello', '', 100)
+-- !query analysis
+Project [split(hello, , 100) AS split(hello, , 100)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT split('', '')
 -- !query analysis
 Project [split(, , -1) AS split(, , -1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT split('', '', -1)
+-- !query analysis
+Project [split(, , -1) AS split(, , -1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT split('', '', 0)
+-- !query analysis
+Project [split(, , 0) AS split(, , 0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT split('', '', 1)
+-- !query analysis
+Project [split(, , 1) AS split(, , 1)#x]
 +- OneRowRelation
 
 
