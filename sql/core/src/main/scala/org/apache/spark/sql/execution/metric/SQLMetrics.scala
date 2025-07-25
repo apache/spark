@@ -118,8 +118,6 @@ object SQLMetrics {
 
   private val baseForAvgMetric: Int = 10
 
-  val remoteSchemaFetchTime = "Remote JDBC schema fetch time"
-
   val cachedSQLAccumIdentifier = Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER)
 
   private val metricsCache: LoadingCache[String, Option[String]] =
@@ -237,10 +235,5 @@ object SQLMetrics {
       val endTime = System.nanoTime()
       metric.add(endTime - startTime)
       result
-  }
-
-  def withTimingNsNewMetric[T](sc: SparkContext, name: String)(f: => T): (T, SQLMetric) = {
-    val metric = SQLMetrics.createNanoTimingMetric(sc, name)
-    (withTimingNs(metric)(f), metric)
   }
 }

@@ -153,10 +153,11 @@ class JDBCTableCatalog extends TableCatalog
       description = s"Failed to load table: $ident",
       isRuntime = false
     ) {
-      val (schema, remoteSchemaFetchMetric) = SQLMetrics.withTimingNsNewMetric(
+      val remoteSchemaFetchMetric = SQLMetrics.createNanoTimingMetric(
         SparkSession.active.sparkContext,
-        SQLMetrics.remoteSchemaFetchTime
-      ) {
+        "Remote JDBC schema fetch time"
+      )
+      val schema = SQLMetrics.withTimingNs(remoteSchemaFetchMetric) {
         JDBCRDD.resolveTable(optionsWithTableName)
       }
       JDBCTable(ident, schema, optionsWithTableName,

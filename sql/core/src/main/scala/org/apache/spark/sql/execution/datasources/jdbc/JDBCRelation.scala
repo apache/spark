@@ -256,9 +256,11 @@ private[sql] object JDBCRelation extends Logging {
       parts: Array[Partition],
       jdbcOptions: JDBCOptions)(
       sparkSession: SparkSession): JDBCRelation = {
-    val (schema, remoteSchemaFetchMetric) = SQLMetrics.withTimingNsNewMetric(
+    val remoteSchemaFetchMetric = SQLMetrics.createNanoTimingMetric(
       sparkSession.sparkContext,
-      SQLMetrics.remoteSchemaFetchTime) {
+      "Remote JDBC schema fetch time"
+    )
+    val schema = SQLMetrics.withTimingNs(remoteSchemaFetchMetric) {
       JDBCRelation.getSchema(sparkSession.sessionState.conf.resolver, jdbcOptions)
     }
     JDBCRelation(schema, parts, jdbcOptions,
