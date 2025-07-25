@@ -2159,11 +2159,13 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     localDateTimeToMicros(LocalDateTime.parse(timestamp), zoneId)
   }
 
+  private val sessionZoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+
   test("SPARK-51415: make timestamp from date") {
     // Test with valid date.
     checkEvaluation(
       MakeTimestampFromDateTime(dateLit("2023-10-01")),
-      timestampToMicros("2023-10-01T00:00:00", LA)
+      timestampToMicros("2023-10-01T00:00:00", sessionZoneId)
     )
 
     // Test with null date.
@@ -2180,7 +2182,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         dateLit("2023-10-01"),
         Some(timeLit("12:34:56.123456"))
       ),
-      timestampToMicros("2023-10-01T12:34:56.123456", LA)
+      timestampToMicros("2023-10-01T12:34:56.123456", sessionZoneId)
     )
 
     // Test with null date.
@@ -2210,47 +2212,25 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-51415: make timestamp from date, time, and timezone") {
-    // Test with valid date, time, and timezone.
-    checkEvaluation(
-      MakeTimestampFromDateTime(
-        dateLit("2023-10-01"),
-        Some(timeLit("12:34:56.123456")),
-        Some(Literal("-09:30"))
-      ),
-      timestampToMicros("2023-10-01T12:34:56.123456", MIT)
-    )
-    checkEvaluation(
-      MakeTimestampFromDateTime(
-        dateLit("2023-10-01"),
-        Some(timeLit("12:34:56.123456")),
-        Some(Literal("-08:00"))
-      ),
-      timestampToMicros("2023-10-01T12:34:56.123456", PST)
-    )
-    checkEvaluation(
-      MakeTimestampFromDateTime(
-        dateLit("2023-10-01"),
-        Some(timeLit("12:34:56.123456")),
-        Some(Literal("+00:00"))
-      ),
-      timestampToMicros("2023-10-01T12:34:56.123456", UTC)
-    )
-    checkEvaluation(
-      MakeTimestampFromDateTime(
-        dateLit("2023-10-01"),
-        Some(timeLit("12:34:56.123456")),
-        Some(Literal("+01:00"))
-      ),
-      timestampToMicros("2023-10-01T12:34:56.123456", CET)
-    )
-    checkEvaluation(
-      MakeTimestampFromDateTime(
-        dateLit("2023-10-01"),
-        Some(timeLit("12:34:56.123456")),
-        Some(Literal("+09:00"))
-      ),
-      timestampToMicros("2023-10-01T12:34:56.123456", JST)
-    )
+    Seq(
+      ("-09:30", MIT),
+      ("-08:00", PST),
+      ("+00:00", UTC),
+      ("+01:00", CET),
+      ("+09:00", JST),
+      ("UTC", UTC),
+      ("America/Los_Angeles", LA)
+    ).foreach( { case (tz, zoneId) =>
+      // Test with valid date, time, and timezone.
+      checkEvaluation(
+        MakeTimestampFromDateTime(
+          dateLit("2023-10-01"),
+          Some(timeLit("12:34:56.123456")),
+          Some(Literal(tz))
+        ),
+        timestampToMicros("2023-10-01T12:34:56.123456", zoneId)
+      )
+    })
 
     // Test with null date.
     checkEvaluation(

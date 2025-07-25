@@ -3121,7 +3121,7 @@ case class MakeTimestampFromDateTime(
               0 to 60. If the sec argument equals to 60, the seconds field is set
               to 0 and 1 minute is added to the final timestamp.
       * date - a date expression
-      * time - a time expression (optional)
+      * time - a time expression (optional). Default is 00:00:00.
       * timezone - the time zone identifier (optional). For example, CET, UTC and etc.
   """,
   examples = """

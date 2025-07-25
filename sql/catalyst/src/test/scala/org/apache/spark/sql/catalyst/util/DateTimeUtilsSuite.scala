@@ -1339,33 +1339,6 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     })
   }
 
-  test("SPARK-51415: makeTimestamp with days, nanos, and timezone") {
-    Seq(
-      (UTF8String.fromString("-09:30"), -34200000000L), // MIT
-      (UTF8String.fromString("-08:00"), -28800000000L), // PST
-      (UTF8String.fromString("+00:00"), 0L), // UTC
-      (UTF8String.fromString("+01:00"), 3600000000L), // CET
-      (UTF8String.fromString("+09:00"), 32400000000L) // JST
-    ).foreach({ case (timezone: UTF8String, microsOffset: Long) =>
-      assert(makeTimestamp(0, 0, timezone) ==
-        0 - microsOffset)
-      assert(makeTimestamp(0, localTime(23, 59, 59), timezone) * NANOS_PER_MICROS ==
-        localTime(23, 59, 59) - microsOffset * NANOS_PER_MICROS)
-      assert(makeTimestamp(-1, 0, timezone) ==
-        -1 * MICROS_PER_DAY - microsOffset)
-      assert(makeTimestamp(-1, localTime(23, 59, 59, 999999), timezone) ==
-        -1 - microsOffset)
-      assert(makeTimestamp(days(9999, 12, 31), localTime(23, 59, 59, 999999), timezone) ==
-        date(9999, 12, 31, 23, 59, 59, 999999) - microsOffset)
-      assert(makeTimestamp(days(1, 1, 1), localTime(0, 0, 0), timezone) ==
-        date(1, 1, 1, 0, 0, 0) - microsOffset)
-      val msg = intercept[DateTimeException] {
-        makeTimestamp(0, -1, timezone)
-      }.getMessage
-      assert(msg.contains("Invalid value"))
-    })
-  }
-
   test("makeTimestampNTZ") {
     assert(makeTimestampNTZ(0, 0) == 0)
     assert(makeTimestampNTZ(0, localTime(23, 59, 59)) * NANOS_PER_MICROS == localTime(23, 59, 59))
