@@ -49,6 +49,9 @@ private[sql] case class JDBCPartitioningInfo(
     numPartitions: Int)
 
 private[sql] object JDBCRelation extends Logging {
+
+  val schemaFetchName = "Remote JDBC schema fetch time"
+  val schemaFetchKey = "remoteSchemaFetchTime"
   /**
    * Given a partitioning schematic (a column of integral type, a number of
    * partitions, and upper and lower bounds on the column's value), generate
@@ -258,13 +261,13 @@ private[sql] object JDBCRelation extends Logging {
       sparkSession: SparkSession): JDBCRelation = {
     val remoteSchemaFetchMetric = SQLMetrics.createNanoTimingMetric(
       sparkSession.sparkContext,
-      "Remote JDBC schema fetch time"
+      schemaFetchName
     )
     val schema = SQLMetrics.withTimingNs(remoteSchemaFetchMetric) {
       JDBCRelation.getSchema(sparkSession.sessionState.conf.resolver, jdbcOptions)
     }
     JDBCRelation(schema, parts, jdbcOptions,
-      Map("remoteSchemaFetchTime" -> remoteSchemaFetchMetric))(sparkSession)
+      Map(schemaFetchKey -> remoteSchemaFetchMetric))(sparkSession)
   }
 }
 
