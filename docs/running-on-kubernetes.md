@@ -643,7 +643,8 @@ See the [configuration page](configuration.html) for information on Spark config
     Container image to use for the Spark application.
     This is usually of the form <code>example.com/repo/spark:v1.0.0</code>.
     This configuration is required and must be provided by the user, unless explicit
-    images are provided for each different container type.
+    images are provided for each different container type. Note that <code>{{SPARK_VERSION}}</code> 
+    is the built-in variable that will be substituted with current Spark's version.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -651,7 +652,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.driver.container.image</code></td>
   <td><code>(value of spark.kubernetes.container.image)</code></td>
   <td>
-    Custom container image to use for the driver.
+    Custom container image to use for the driver. Note that <code>{{SPARK_VERSION}}</code> 
+    is the built-in variable that will be substituted with current Spark's version.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -659,7 +661,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.executor.container.image</code></td>
   <td><code>(value of spark.kubernetes.container.image)</code></td>
   <td>
-    Custom container image to use for executors.
+    Custom container image to use for executors. Note that <code>{{SPARK_VERSION}}</code> 
+    is the built-in variable that will be substituted with current Spark's version.
   </td>
   <td>2.3.0</td>
 </tr>

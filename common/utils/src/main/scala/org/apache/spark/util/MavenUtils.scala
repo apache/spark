@@ -22,7 +22,6 @@ import java.net.URI
 import java.text.ParseException
 import java.util.UUID
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.ivy.Ivy
 import org.apache.ivy.core.LogOptions
 import org.apache.ivy.core.module.descriptor.{Artifact, DefaultDependencyDescriptor, DefaultExcludeRule, DefaultModuleDescriptor, ExcludeRule}
@@ -567,7 +566,7 @@ private[spark] object MavenUtils extends Logging {
   }
 
   private def isInvalidQueryString(tokens: Array[String]): Boolean = {
-    tokens.length != 2 || StringUtils.isBlank(tokens(0)) || StringUtils.isBlank(tokens(1))
+    tokens.length != 2 || SparkStringUtils.isBlank(tokens(0)) || SparkStringUtils.isBlank(tokens(1))
   }
 
   /**

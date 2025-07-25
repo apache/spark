@@ -21,8 +21,6 @@ import java.util.Objects;
 
 import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 import org.apache.spark.network.protocol.Encoders;
 import org.apache.spark.network.server.BlockPushNonFatalFailure;
@@ -60,10 +58,8 @@ public class BlockPushReturnCode extends BlockTransferMessage {
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("returnCode", returnCode)
-      .append("failureBlockId", failureBlockId)
-      .toString();
+    return "BlockPushReturnCode[returnCode=" + returnCode +
+        ",failureBlockId=" + failureBlockId + "]";
   }
 
   @Override

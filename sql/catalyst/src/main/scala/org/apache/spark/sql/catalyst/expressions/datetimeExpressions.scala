@@ -2125,7 +2125,7 @@ case class ParseToDate(
     this(left, None)
   }
 
-  override def prettyName: String = "to_date"
+  override def nodeName: String = "to_date"
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Some(timeZoneId))
@@ -2151,6 +2151,45 @@ case class ParseToDate(
       copy(left = newChildren.head, format = Some(newChildren.last))
     } else {
       copy(left = newChildren.head)
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(date_str[, fmt]) - Parses the `date_str` expression with the `fmt` expression to a date.
+      The function always returns null on an invalid input with/without ANSI SQL mode enabled. By
+      default, it follows casting rules to a date if the `fmt` is omitted.
+  """,
+  arguments = """
+    Arguments:
+      * date_str - A string to be parsed to date.
+      * fmt - Date format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
+              date and time format patterns.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2016-12-31');
+       2016-12-31
+      > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
+       2016-12-31
+      > SELECT _FUNC_('foo', 'yyyy-MM-dd');
+       NULL
+  """,
+  group = "datetime_funcs",
+  since = "4.0.0")
+// scalastyle:on line.size.limit
+object TryToDateExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 1 || numArgs == 2) {
+      ParseToDate(
+        expressions.head,
+        expressions.drop(1).lastOption,
+        ansiEnabled = false)
+    } else {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), numArgs)
     }
   }
 }

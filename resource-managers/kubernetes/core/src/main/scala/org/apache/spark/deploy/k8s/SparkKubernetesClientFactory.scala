@@ -128,17 +128,19 @@ object SparkKubernetesClientFactory extends Logging {
 
   object ClientType extends Enumeration {
     import scala.language.implicitConversions
-    val Driver = Val(DRIVER_CLIENT_REQUEST_TIMEOUT, DRIVER_CLIENT_CONNECTION_TIMEOUT)
-    val Submission = Val(SUBMISSION_CLIENT_REQUEST_TIMEOUT, SUBMISSION_CLIENT_CONNECTION_TIMEOUT)
+    val Driver: ClientTypeVal =
+      ClientTypeVal(DRIVER_CLIENT_REQUEST_TIMEOUT, DRIVER_CLIENT_CONNECTION_TIMEOUT)
+    val Submission: ClientTypeVal =
+      ClientTypeVal(SUBMISSION_CLIENT_REQUEST_TIMEOUT, SUBMISSION_CLIENT_CONNECTION_TIMEOUT)
 
-    protected case class Val(
+    protected case class ClientTypeVal(
         requestTimeoutEntry: ConfigEntry[Int],
         connectionTimeoutEntry: ConfigEntry[Int])
-      extends super.Val {
+      extends Val {
       def requestTimeout(conf: SparkConf): Int = conf.get(requestTimeoutEntry)
       def connectionTimeout(conf: SparkConf): Int = conf.get(connectionTimeoutEntry)
     }
 
-    implicit def convert(value: Value): Val = value.asInstanceOf[Val]
+    implicit def convert(value: Value): ClientTypeVal = value.asInstanceOf[ClientTypeVal]
   }
 }
