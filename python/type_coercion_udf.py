@@ -1,3 +1,31 @@
+#!/usr/bin/env python3
+
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+"""
+PySpark dev script to to test the type coercion difference for different Spark configs 
+(e.g. arrow enabled, legacy pandas conversion enabled). 
+
+Usage (see optional configs below):
+# prereq: build Spark locally
+python ./type_coercion_udf.py
+"""
+
 import sys
 import array
 import datetime
@@ -40,26 +68,38 @@ TEST_TYPES = [
     DecimalType(10, 0),
 ]
 
+
 def create_spark_session(use_arrow: bool, legacy_pandas: bool) -> SparkSession:
     """Create Spark session with Arrow and legacy pandas configs"""
-    return (SparkSession.builder
-            .appName("TypeCoercionUDF")
-            .master("local[*]")
-            .config("spark.sql.execution.pythonUDF.arrow.enabled", str(use_arrow).lower())
-            .config("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", str(legacy_pandas).lower())
-            .getOrCreate())
+    return (
+        SparkSession.builder.appName("TypeCoercionUDF")
+        .master("local[*]")
+        .config("spark.sql.execution.pythonUDF.arrow.enabled", str(use_arrow).lower())
+        .config(
+            "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled",
+            str(legacy_pandas).lower(),
+        )
+        .getOrCreate()
+    )
 
-def run_type_coercion_tests(spark: SparkSession, test_data: List[Any], test_types: List[Any], use_arrow: bool, legacy_pandas: bool) -> str:
+
+def run_type_coercion_tests(
+    spark: SparkSession,
+    test_data: List[Any],
+    test_types: List[Any],
+    use_arrow: bool,
+    legacy_pandas: bool,
+) -> str:
     """Type coercion behavior for test data and types."""
     results = []
     count = 0
     total = len(test_types) * len(test_data)
-    
+
     print(f"\nTesting configs:")
     print(f"  Arrow enabled: {use_arrow}")
     print(f"  Legacy pandas: {legacy_pandas}")
     print()
-    
+
     for spark_type in test_types:
         result = []
         for value in test_data:
@@ -69,7 +109,7 @@ def run_type_coercion_tests(spark: SparkSession, test_data: List[Any], test_type
                 result_value = repr(row[0])
             except Exception:
                 result_value = "X"
-            
+
             result.append(result_value)
 
             count += 1
@@ -79,56 +119,55 @@ def run_type_coercion_tests(spark: SparkSession, test_data: List[Any], test_type
             print(f"  Result: {result_value}\n")
 
         results.append([spark_type.simpleString()] + list(map(str, result)))
-    
+
     # Create schema for results DataFrame
     schema = ["SQL Type \\ Python Value(Type)"] + [
         f"{str(v)}({type(v).__name__})" for v in test_data
     ]
-    
+
     return spark.createDataFrame(results, schema=schema)._show_string(truncate=False)
+
 
 def parse_args():
     """Parse command line args for Arrow and legacy pandas settings"""
     parser = argparse.ArgumentParser(
         description="Test PySpark UDF type coercion behavior with/without arrow and legacy pandas",
-        formatter_class=argparse.RawTextHelpFormatter
+        formatter_class=argparse.RawTextHelpFormatter,
     )
-    
+
+    parser.add_argument("--arrow", action="store_true", help="Enable Arrow-based UDF execution")
+
     parser.add_argument(
-        "--arrow",
-        action="store_true",
-        help="Enable Arrow-based UDF execution"
+        "--legacy-pandas", action="store_true", help="Enable legacy pandas UDF conversion"
     )
-    
-    parser.add_argument(
-        "--legacy-pandas",
-        action="store_true",
-        help="Enable legacy pandas UDF conversion"
-    )
-    
+
     return parser.parse_args()
+
 
 def main():
     """Example usage:
     # Test with Arrow enabled, legacy pandas enabled:
     python type_coercion_udf.py --arrow --legacy-pandas
-    
+
     # Test with Arrow enabled, legacy pandas disabled:
     python type_coercion_udf.py --arrow
-    
+
     # Test with Arrow disabled (legacy pandas setting ignored):
     python type_coercion_udf.py
     """
     args = parse_args()
     spark = create_spark_session(args.arrow, args.legacy_pandas)
-    
+
     try:
-        results = run_type_coercion_tests(spark, TEST_DATA, TEST_TYPES, args.arrow, args.legacy_pandas)
+        results = run_type_coercion_tests(
+            spark, TEST_DATA, TEST_TYPES, args.arrow, args.legacy_pandas
+        )
         print("\nResults:")
         print(results)
-        
+
     finally:
         spark.stop()
 
+
 if __name__ == "__main__":
-    main() 
+    main()
