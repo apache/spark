@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.lang.{Long => JLong}
+import java.lang
+import java.util
 
 import scala.jdk.CollectionConverters._
 
@@ -454,13 +455,9 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
         }
       )
 
-      val operationMetricOpt = getOperationMetrics(query)
+      val operationMetrics = getOperationMetrics(query)
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} is committing.")
-      operationMetricOpt match {
-        case Some(metrics) => batchWrite.commitWithOperationMetrics(messages,
-          metrics.map{ case (name, value) => name -> JLong.valueOf(value) }.asJava)
-        case None => batchWrite.commit(messages)
-      }
+      batchWrite.commit(messages, operationMetrics)
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} committed.")
       commitProgress = Some(StreamWriterCommitProgress(totalNumRowsAccumulator.value))
     } catch {
@@ -483,10 +480,10 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
     Nil
   }
 
-  private def getOperationMetrics(query: SparkPlan): Option[Map[String, Long]] = {
+  private def getOperationMetrics(query: SparkPlan): util.Map[String, lang.Long] = {
     collectFirst(query) { case m: MergeRowsExec => m }.map{ n =>
-      n.metrics.map { case (name, metric) => s"merge.$name" -> metric.value }
-    }
+      n.metrics.map { case (name, metric) => s"merge.$name" -> lang.Long.valueOf(metric.value) }
+    }.getOrElse(Map.empty[String, lang.Long]).asJava
   }
 }
 
@@ -742,3 +739,4 @@ private[v2] case class DataWritingSparkTaskResult(
  * Sink progress information collected after commit.
  */
 private[sql] case class StreamWriterCommitProgress(numOutputRows: Long)
+

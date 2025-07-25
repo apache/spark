@@ -116,7 +116,7 @@ class InMemoryRowLevelOperationTable(
 
   abstract class RowLevelOperationBatchWrite extends TestBatchWrite {
 
-    override def commitWithOperationMetrics(messages: Array[WriterCommitMessage],
+    override def commit(messages: Array[WriterCommitMessage],
                                             metrics: util.Map[String, lang.Long]): Unit = {
       metrics.asScala.map {
         case (key, value) => commitProperties += key -> String.valueOf(value)
