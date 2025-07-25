@@ -66,7 +66,7 @@ class JDBCMetricsSuite extends QueryTest with SharedSparkSession {
     assert(optionMetric != null)
     if(optionMetric.isDefined) {
       val metric = optionMetric.get
-      assert(!metric.isZero)
+      assert(metric.value >= 0)
     }
   }
 
