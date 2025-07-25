@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
@@ -263,7 +264,8 @@ private[sql] object JDBCRelation extends Logging {
 private[sql] case class JDBCRelation(
     override val schema: StructType,
     parts: Array[Partition],
-    jdbcOptions: JDBCOptions)(@transient val sparkSession: SparkSession)
+    jdbcOptions: JDBCOptions,
+    additionalMetrics: Map[String, SQLMetric] = Map())(@transient val sparkSession: SparkSession)
   extends BaseRelation
   with PrunedFilteredScan
   with InsertableRelation {
@@ -296,7 +298,8 @@ private[sql] case class JDBCRelation(
       requiredColumns,
       pushedPredicates,
       parts,
-      jdbcOptions).asInstanceOf[RDD[Row]]
+      jdbcOptions,
+      additionalMetrics = additionalMetrics).asInstanceOf[RDD[Row]]
   }
 
   def buildScan(
@@ -321,7 +324,8 @@ private[sql] case class JDBCRelation(
       tableSample,
       limit,
       sortOrders,
-      offset).asInstanceOf[RDD[Row]]
+      offset,
+      additionalMetrics).asInstanceOf[RDD[Row]]
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
