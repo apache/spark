@@ -196,6 +196,48 @@ class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
         return ArrowStreamSerializer.load_stream(self, stream)
 
 
+class PyArrowStreamUDTFSerializer(ArrowStreamSerializer):
+    """
+    Serializer for PyArrow-native UDTFs that work directly with PyArrow Tables and Arrays.
+    
+    This serializer handles conversion between Spark's Arrow data and PyArrow objects,
+    enabling true vectorized computation without row-by-row processing overhead.
+    """
+
+    def load_stream(self, stream):
+        """
+        Load PyArrow RecordBatch from stream and yield as PyArrow Table or individual Arrays
+        based on the number of columns.
+        """
+        import pyarrow as pa
+        
+        for batch in ArrowStreamSerializer.load_stream(self, stream):
+            yield pa.Table.from_batches([batch])
+
+    def dump_stream(self, iterator, stream):
+        """
+        Serialize PyArrow Tables from iterator to stream.
+        """
+        import pyarrow as pa
+        
+        def batch_iterator():
+            for result in iterator:
+                if isinstance(result, pa.Table):
+                    # Convert PyArrow Table to RecordBatch
+                    for batch in result.to_batches():
+                        yield batch
+                elif isinstance(result, pa.RecordBatch):
+                    # Already a RecordBatch
+                    yield result
+                else:
+                    raise ValueError(
+                        f"PyArrow UDTF must yield PyArrow Tables or RecordBatches, "
+                        f"but got {type(result)}"
+                    )
+        
+        ArrowStreamSerializer.dump_stream(self, batch_iterator(), stream)
+
+
 class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
     """
     Serializes pyarrow.RecordBatch data with Arrow streaming format.

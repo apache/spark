@@ -242,6 +242,60 @@ def _create_py_udtf(
     )
 
 
+def _create_pyarrow_udtf(
+    cls: Type,
+    returnType: Optional[Union[StructType, str]],
+    name: Optional[str] = None,
+    deterministic: bool = False,
+) -> "UserDefinedTableFunction":
+    """Create a PyArrow-native Python UDTF."""
+    # Validate PyArrow dependencies
+    try:
+        require_minimum_pandas_version()
+        require_minimum_pyarrow_version()
+    except ImportError as e:
+        raise ImportError(
+            f"PyArrow UDTF requires both pandas and pyarrow dependencies: {str(e)}"
+        ) from e
+
+    # Validate the handler class with PyArrow-specific checks
+    _validate_pyarrow_udtf_handler(cls, returnType)
+
+    return _create_udtf(
+        cls=cls,
+        returnType=returnType,
+        name=name,
+        evalType=PythonEvalType.SQL_ARROW_UDTF,
+        deterministic=deterministic,
+    )
+
+
+def _validate_pyarrow_udtf_handler(cls: Any, returnType: Optional[Union[StructType, str]]) -> None:
+    """Validate the handler class of a PyArrow UDTF."""
+    # First run standard UDTF validation
+    _validate_udtf_handler(cls, returnType)
+    
+    # Additional PyArrow-specific validation
+    import inspect
+    
+    # Check that eval method signature looks appropriate for PyArrow
+    if hasattr(cls, "eval"):
+        sig = inspect.signature(cls.eval)
+        params = list(sig.parameters.values())[1:]  # Skip 'self'
+        
+        # Check for type hints that suggest PyArrow usage
+        for param in params:
+            if param.annotation != inspect.Parameter.empty:
+                annotation_str = str(param.annotation)
+                if "pyarrow" not in annotation_str.lower() and "pa." not in annotation_str:
+                    import warnings
+                    warnings.warn(
+                        f"PyArrow UDTF parameter '{param.name}' does not have PyArrow type hints. "
+                        f"Consider using 'pa.Table' or 'pa.Array' for better clarity.",
+                        UserWarning,
+                    )
+
+
 def _validate_udtf_handler(cls: Any, returnType: Optional[Union[StructType, str]]) -> None:
     """Validate the handler class of a UDTF."""
 

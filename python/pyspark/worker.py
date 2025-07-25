@@ -65,6 +65,7 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamArrowUDFSerializer,
     ArrowBatchUDFSerializer,
     ArrowStreamUDTFSerializer,
+    PyArrowStreamUDTFSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import (
@@ -1331,7 +1332,17 @@ def read_udtf(pickleSer, infile, eval_type):
             )
         else:
             ser = ArrowStreamUDTFSerializer()
-
+    elif eval_type == PythonEvalType.SQL_ARROW_UDTF:
+        runner_conf = {}
+        # Load conf used for PyArrow native evaluation.
+        num_conf = read_int(infile)
+        for i in range(num_conf):
+            k = utf8_deserializer.loads(infile)
+            v = utf8_deserializer.loads(infile)
+            runner_conf[k] = v
+        prefers_large_var_types = use_large_var_types(runner_conf)
+        # Use PyArrow-native serializer for native PyArrow UDTFs
+        ser = PyArrowStreamUDTFSerializer()
     else:
         # Each row is a group so do not batch but send one by one.
         ser = BatchedSerializer(CPickleSerializer(), 1)
