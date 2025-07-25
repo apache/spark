@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -30,6 +31,9 @@ import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, LongTyp
 import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
+
+  override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
+
   val attrInts = Seq(
     $"cint".int,
     $"`c.int`".int,
@@ -773,7 +777,6 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
   }
 
   test("Partial constant folding of math functions") {
-    assume(SQLConf.get.ansiEnabled)
     checkV2Conversion(
       catalystExpr = Log10(Literal(100.0)) + $"cint".int,
       v2Expr = new GeneralScalarExpression("+", Array(
