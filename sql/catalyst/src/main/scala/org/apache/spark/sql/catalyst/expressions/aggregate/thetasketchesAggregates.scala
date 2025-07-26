@@ -235,8 +235,8 @@ case class ThetaSketchAgg(
    */
   override def eval(sketchState: ThetaSketchState): Any = {
     sketchState match {
-      case UpdatableSketchBuffer(s) => s.rebuild.compact.toByteArray
-      case FinalizedSketch(s) => s.toByteArray
+      case UpdatableSketchBuffer(s) => s.rebuild.compact.toByteArrayCompressed
+      case FinalizedSketch(s) => s.toByteArrayCompressed
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
   }
@@ -244,15 +244,15 @@ case class ThetaSketchAgg(
   /** Convert the underlying UpdateSketch into an Compact byte array */
   override def serialize(sketchState: ThetaSketchState): Array[Byte] = {
     sketchState match {
-      case UpdatableSketchBuffer(s) => s.rebuild.compact.toByteArray
-      case FinalizedSketch(s) => s.toByteArray
+      case UpdatableSketchBuffer(s) => s.rebuild.compact.toByteArrayCompressed
+      case FinalizedSketch(s) => s.toByteArrayCompressed
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
   }
 
   /** Wrap the byte array into a Compact sketch instance */
   override def deserialize(buffer: Array[Byte]): ThetaSketchState = {
-    FinalizedSketch(CompactSketch.wrap(Memory.wrap(buffer)))
+    FinalizedSketch(CompactSketch.heapify(Memory.wrap(buffer)))
   }
 }
 
@@ -428,8 +428,8 @@ case class ThetaUnionAgg(
    */
   override def eval(sketchState: ThetaSketchState): Any = {
     sketchState match {
-      case UnionAggregationBuffer(union) => union.getResult.toByteArray
-      case FinalizedSketch(s) => s.toByteArray
+      case UnionAggregationBuffer(union) => union.getResult.toByteArrayCompressed
+      case FinalizedSketch(s) => s.toByteArrayCompressed
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
   }
@@ -437,8 +437,8 @@ case class ThetaUnionAgg(
   /** Convert the underlying Union into an Compact byte array */
   override def serialize(sketchState: ThetaSketchState): Array[Byte] = {
     sketchState match {
-      case UnionAggregationBuffer(union) => union.getResult.toByteArray
-      case FinalizedSketch(s) => s.toByteArray
+      case UnionAggregationBuffer(union) => union.getResult.toByteArrayCompressed
+      case FinalizedSketch(s) => s.toByteArrayCompressed
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
   }
@@ -446,7 +446,7 @@ case class ThetaUnionAgg(
   /** Wrap the byte array into a Compact sketch instance */
   override def deserialize(buffer: Array[Byte]): ThetaSketchState = {
     if (buffer.nonEmpty) {
-      FinalizedSketch(CompactSketch.wrap(Memory.wrap(buffer)))
+      FinalizedSketch(CompactSketch.heapify(Memory.wrap(buffer)))
     } else {
       UnionAggregationBuffer(
         SetOperation.builder
@@ -637,8 +637,8 @@ case class ThetaIntersectionAgg(
    */
   override def eval(sketchState: ThetaSketchState): Any = {
     sketchState match {
-      case IntersectionAggregationBuffer(intersection) => intersection.getResult.toByteArray
-      case FinalizedSketch(s) => s.toByteArray
+      case IntersectionAggregationBuffer(intersection) => intersection.getResult.toByteArrayCompressed
+      case FinalizedSketch(s) => s.toByteArrayCompressed
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
   }
@@ -646,8 +646,8 @@ case class ThetaIntersectionAgg(
   /** Convert the underlying Intersection into an Compact byte array */
   override def serialize(sketchState: ThetaSketchState): Array[Byte] = {
     sketchState match {
-      case IntersectionAggregationBuffer(intersection) => intersection.getResult.toByteArray
-      case FinalizedSketch(compact) => compact.toByteArray
+      case IntersectionAggregationBuffer(intersection) => intersection.getResult.toByteArrayCompressed
+      case FinalizedSketch(s) => s.toByteArrayCompressed
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
   }
@@ -655,7 +655,7 @@ case class ThetaIntersectionAgg(
   /** Wrap the byte array into a Compact sketch instance */
   override def deserialize(buffer: Array[Byte]): ThetaSketchState = {
     if (buffer.nonEmpty) {
-      FinalizedSketch(CompactSketch.wrap(Memory.wrap(buffer)))
+      FinalizedSketch(CompactSketch.heapify(Memory.wrap(buffer)))
     } else {
       IntersectionAggregationBuffer(
         SetOperation.builder

@@ -127,7 +127,7 @@ case class ThetaUnion(first: Expression, second: Expression, third: Expression)
       .buildUnion
       .union(sketch1, sketch2)
 
-    union.toByteArray
+    union.toByteArrayCompressed
   }
 }
 
@@ -194,7 +194,7 @@ case class ThetaDifference(first: Expression, second: Expression, third: Express
       .buildANotB
       .aNotB(sketch1, sketch2)
 
-    difference.toByteArray
+    difference.toByteArrayCompressed
   }
 }
 
@@ -261,6 +261,6 @@ case class ThetaIntersection(first: Expression, second: Expression, third: Expre
       .buildIntersection
       .intersect(sketch1, sketch2)
 
-    intersection.toByteArray
+    intersection.toByteArrayCompressed
   }
 }
