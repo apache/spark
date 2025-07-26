@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{ArrayType, CharType, DataType, MapType, StringType, StructType, VarcharType}
+import org.apache.spark.sql.types.{ArrayType, CharType, DataType, DefaultCharType, DefaultVarcharType, MapType, StringType, StructType, VarcharType}
 
 trait SparkCharVarcharUtils {
 
@@ -54,7 +54,28 @@ trait SparkCharVarcharUtils {
       StructType(fields.map { field =>
         field.copy(dataType = replaceCharVarcharWithString(field.dataType))
       })
-    case CharType(_) | VarcharType(_) if !SqlApiConf.get.preserveCharVarcharTypeInfo => StringType
+    case DefaultCharType(_) if !SqlApiConf.get.preserveCharVarcharTypeInfo =>
+      if (!QueryTagger.getActiveTagsInLocalThread.contains(QueryTag.CHAR_TAG)) {
+        QueryTagger.addTags(Seq(QueryTag.CHAR_TAG))
+      }
+      StringType
+    case CharType(_, collationId)  if !SqlApiConf.get.preserveCharVarcharTypeInfo =>
+      if (!QueryTagger.getActiveTagsInLocalThread.contains(QueryTag.CHAR_TAG)) {
+        QueryTagger.addTags(Seq(QueryTag.CHAR_TAG))
+      }
+      if (SqlApiConf.get.charVarcharCollationsEnabled) StringType(collationId)
+      else StringType
+    case DefaultVarcharType(_) if !SqlApiConf.get.preserveCharVarcharTypeInfo =>
+      if (!QueryTagger.getActiveTagsInLocalThread.contains(QueryTag.VARCHAR_TAG)) {
+        QueryTagger.addTags(Seq(QueryTag.VARCHAR_TAG))
+      }
+      StringType
+    case VarcharType(_, collationId) if !SqlApiConf.get.preserveCharVarcharTypeInfo =>
+      if (!QueryTagger.getActiveTagsInLocalThread.contains(QueryTag.VARCHAR_TAG)) {
+        QueryTagger.addTags(Seq(QueryTag.VARCHAR_TAG))
+      }
+      if (SqlApiConf.get.charVarcharCollationsEnabled) StringType(collationId)
+      else StringType
     case _ => dt
   }
 }

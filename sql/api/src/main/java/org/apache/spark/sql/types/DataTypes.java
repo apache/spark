@@ -261,20 +261,47 @@ public class DataTypes {
   }
 
   /**
-   * Creates a CharType with the given length.
+   * Creates a StringType with the given collation.
+   *
+   * @since 4.1.0
+   */
+  public static StringType createStringType(int collation) {
+    return new StringType(collation, NoConstraint$.MODULE$);
+  }
+
+  /**
+   * Creates a CharType with the given length and `UTF8_BINARY` collation.
    *
    * @since 4.0.0
    */
   public static CharType createCharType(int length) {
-    return new CharType(length);
+    return new DefaultCharType(length);
   }
 
   /**
-   * Creates a VarcharType with the given length.
+   * Creates a CharType with the given length and collation.
+   *
+   * @since 4.0.0
+   */
+  public static CharType createCharType(int length, int collationId) {
+    return new CharType(length, collationId);
+  }
+
+  /**
+   * Creates a VarcharType with the given length and `UTF8_BINARY` collation.
    *
    * @since 4.0.0
    */
   public static VarcharType createVarcharType(int length) {
-    return new VarcharType(length);
+    return new DefaultVarcharType(length);
+  }
+
+  /**
+   * Creates a VarcharType with the given length and collation.
+   *
+   * @since 4.0.0
+   */
+  public static VarcharType createVarcharType(int length, int collationId) {
+    return new VarcharType(length, collationId);
   }
 }

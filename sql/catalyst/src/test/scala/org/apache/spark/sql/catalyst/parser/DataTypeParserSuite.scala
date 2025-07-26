@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
@@ -68,10 +69,14 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
   checkDataType("timestamp_ntz", TimestampNTZType)
   checkDataType("timestamp_ltz", TimestampType)
   checkDataType("string", StringType)
-  checkDataType("ChaR(5)", CharType(5))
-  checkDataType("ChaRacter(5)", CharType(5))
+  checkDataType("ChaR(5)", DefaultCharType(5))
+  checkDataType("ChaRacter(5)", DefaultCharType(5))
+  checkDataType("cHaR(27)", DefaultCharType(27))
+  checkDataType("chAr(5) coLLate UTf8_binary",
+    CharType(5, CollationFactory.UTF8_BINARY_COLLATION_ID))
+  checkDataType("chAr(5) coLLate UTF8_lcaSE",
+    CharType(5, CollationFactory.UTF8_LCASE_COLLATION_ID))
   checkDataType("varchAr(20)", VarcharType(20))
-  checkDataType("cHaR(27)", CharType(27))
   checkDataType("BINARY", BinaryType)
   checkDataType("void", NullType)
   checkDataType("interval", CalendarIntervalType)
