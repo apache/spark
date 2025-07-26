@@ -530,12 +530,15 @@ class SparkConnectCreationTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         from pandas import Timestamp
         import pandas as pd
 
+        # Nanoseconds are truncated to microseconds in the serializer
+        # Arrow will throw an error if precision is lost
+        # (i.e., nanoseconds cannot be represented in microseconds)
         pdf = pd.DataFrame(
             {
                 "naive": [datetime(2019, 1, 1, 0)],
                 "aware": [
                     Timestamp(
-                        year=2019, month=1, day=1, nanosecond=500, tz=timezone(timedelta(hours=-8))
+                        year=2019, month=1, day=1, nanosecond=0, tz=timezone(timedelta(hours=-8))
                     )
                 ],
             }

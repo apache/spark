@@ -517,7 +517,10 @@ class ScalarPandasUDFTestsMixin:
 
         def _scalar_f(id):
             return pd.DataFrame(
-                {"ts": id.apply(lambda i: pd.Timestamp(i)), "arr": id.apply(lambda i: [i, i + 1])}
+                {
+                    "ts": id.apply(lambda i: pd.Timestamp(i, unit="s")),
+                    "arr": id.apply(lambda i: [i, i + 1]),
+                }
             )
 
         scalar_f = pandas_udf(_scalar_f, returnType=return_type)
@@ -532,7 +535,7 @@ class ScalarPandasUDFTestsMixin:
             for i, row in enumerate(actual):
                 id, f = row
                 self.assertEqual(i, id)
-                self.assertEqual(pd.Timestamp(i).to_pydatetime(), f[0])
+                self.assertEqual(pd.Timestamp(i, unit="s").to_pydatetime(), f[0])
                 self.assertListEqual([i, i + 1], f[1])
 
     def test_vectorized_udf_struct_empty(self):
