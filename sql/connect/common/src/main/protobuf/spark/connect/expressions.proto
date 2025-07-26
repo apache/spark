@@ -196,6 +196,9 @@ message Expression {
 
       SpecializedArray specialized_array = 25;
       Time time = 26;
+      Variant variant = 27;
+      Char char = 28;
+      Varchar varchar = 29;
     }
 
     message Decimal {
@@ -259,6 +262,32 @@ message Expression {
       int64 nano = 1;
       // The precision of this time, if omitted, uses the default value of MICROS_PRECISION.
       optional int32 precision = 2;
+    }
+
+    message Variant {
+      // Encodes the value's type and data (without field names).
+      bytes value = 1;
+
+      // Metadata contains version identifier and field name information.
+      bytes metadata = 2;
+    }
+
+    message Char {
+      string value = 1;
+      // The fixed length for this Char type.
+      // - If omitted, uses the actual length of `value`.
+      // - If provided but smaller than `value`'s length, an error will be thrown.
+      // - If provided and larger than `value`'s length, the `value` will be right-padded with spaces.
+      optional int32 length = 2;
+    }
+
+    message Varchar {
+      string value = 1;
+      // Specifies the maximum length for this Varchar type.
+      // - If omitted, uses the actual length of `value`.
+      // - If provided but smaller than `value`'s length, an error will be thrown.
+      // - If provided and larger than `value`'s length, stores exact value without padding.
+      optional int32 length = 2;
     }
   }
 

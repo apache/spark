@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
 import org.apache.spark.sql.{AnalysisException, Row}
@@ -37,8 +37,9 @@ import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.execution.arrow.ArrowConverters
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType, TimeType}
+import org.apache.spark.sql.types.{CharType, IntegerType, StringType, StructField, StructType, TimeType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -1005,5 +1006,64 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         "23:59:59.999999999",
         "23:59:59.999999999",
         "23:59:59.999999999").toString)
+  }
+
+  test("Char/Varchar literal") {
+    // CharType/VarcharType will be converted to StringType without this config
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      val project = proto.Project.newBuilder
+        .addExpressions(
+          proto.Expression.newBuilder
+            .setLiteral(proto.Expression.Literal.newBuilder.setChar(
+              proto.Expression.Literal.newBuilder.getCharBuilder.setValue("spark").setLength(6)))
+            .build())
+        .addExpressions(proto.Expression.newBuilder
+          .setLiteral(proto.Expression.Literal.newBuilder.setChar(
+            proto.Expression.Literal.newBuilder.getCharBuilder.setValue("spark")))
+          .build())
+        .addExpressions(proto.Expression.newBuilder
+          .setLiteral(proto.Expression.Literal.newBuilder.setVarchar(
+            proto.Expression.Literal.newBuilder.getVarcharBuilder.setValue("spark").setLength(6)))
+          .build())
+        .addExpressions(proto.Expression.newBuilder
+          .setLiteral(proto.Expression.Literal.newBuilder.setVarchar(
+            proto.Expression.Literal.newBuilder.getVarcharBuilder.setValue("spark")))
+          .build())
+        .build()
+
+      val logical = transform(proto.Relation.newBuilder.setProject(project).build())
+      val df = Dataset.ofRows(spark, logical)
+      assertResult(df.schema.fields(0).dataType)(CharType(6))
+      assertResult(df.schema.fields(1).dataType)(CharType(5))
+      assertResult(df.schema.fields(2).dataType)(VarcharType(6))
+      assertResult(df.schema.fields(3).dataType)(VarcharType(5))
+      assertResult(df.collect()(0).toString)(
+        InternalRow("spark ", "spark", "spark", "spark").toString)
+
+      def checkExceedLimit(expr: proto.Expression): Unit = {
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            val project = proto.Project.newBuilder
+              .addExpressions(expr)
+              .build()
+            val logical = transform(proto.Relation.newBuilder.setProject(project).build())
+            val df = Dataset.ofRows(spark, logical)
+            df.collect()
+          },
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "4"))
+      }
+
+      checkExceedLimit(
+        proto.Expression.newBuilder
+          .setLiteral(proto.Expression.Literal.newBuilder.setChar(
+            proto.Expression.Literal.newBuilder.getCharBuilder.setValue("spark").setLength(4)))
+          .build())
+      checkExceedLimit(
+        proto.Expression.newBuilder
+          .setLiteral(proto.Expression.Literal.newBuilder.setVarchar(
+            proto.Expression.Literal.newBuilder.getVarcharBuilder.setValue("spark").setLength(4)))
+          .build())
+    }
   }
 }

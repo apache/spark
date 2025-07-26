@@ -708,6 +708,90 @@ class Expression(google.protobuf.message.Message):
                 self, oneof_group: typing_extensions.Literal["_precision", b"_precision"]
             ) -> typing_extensions.Literal["precision"] | None: ...
 
+        class Variant(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            VALUE_FIELD_NUMBER: builtins.int
+            METADATA_FIELD_NUMBER: builtins.int
+            value: builtins.bytes
+            """Encodes the value's type and data (without field names)."""
+            metadata: builtins.bytes
+            """Metadata contains version identifier and field name information."""
+            def __init__(
+                self,
+                *,
+                value: builtins.bytes = ...,
+                metadata: builtins.bytes = ...,
+            ) -> None: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal["metadata", b"metadata", "value", b"value"],
+            ) -> None: ...
+
+        class Char(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            VALUE_FIELD_NUMBER: builtins.int
+            LENGTH_FIELD_NUMBER: builtins.int
+            value: builtins.str
+            length: builtins.int
+            """The fixed length for this Char type.
+            - If omitted, uses the actual length of `value`.
+            - If provided but smaller than `value`'s length, an error will be thrown.
+            - If provided and larger than `value`'s length, the `value` will be right-padded with spaces.
+            """
+            def __init__(
+                self,
+                *,
+                value: builtins.str = ...,
+                length: builtins.int | None = ...,
+            ) -> None: ...
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal["_length", b"_length", "length", b"length"],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "_length", b"_length", "length", b"length", "value", b"value"
+                ],
+            ) -> None: ...
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["_length", b"_length"]
+            ) -> typing_extensions.Literal["length"] | None: ...
+
+        class Varchar(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            VALUE_FIELD_NUMBER: builtins.int
+            LENGTH_FIELD_NUMBER: builtins.int
+            value: builtins.str
+            length: builtins.int
+            """Specifies the maximum length for this Varchar type.
+            - If omitted, uses the actual length of `value`.
+            - If provided but smaller than `value`'s length, an error will be thrown.
+            - If provided and larger than `value`'s length, stores exact value without padding.
+            """
+            def __init__(
+                self,
+                *,
+                value: builtins.str = ...,
+                length: builtins.int | None = ...,
+            ) -> None: ...
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal["_length", b"_length", "length", b"length"],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "_length", b"_length", "length", b"length", "value", b"value"
+                ],
+            ) -> None: ...
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["_length", b"_length"]
+            ) -> typing_extensions.Literal["length"] | None: ...
+
         NULL_FIELD_NUMBER: builtins.int
         BINARY_FIELD_NUMBER: builtins.int
         BOOLEAN_FIELD_NUMBER: builtins.int
@@ -730,6 +814,9 @@ class Expression(google.protobuf.message.Message):
         STRUCT_FIELD_NUMBER: builtins.int
         SPECIALIZED_ARRAY_FIELD_NUMBER: builtins.int
         TIME_FIELD_NUMBER: builtins.int
+        VARIANT_FIELD_NUMBER: builtins.int
+        CHAR_FIELD_NUMBER: builtins.int
+        VARCHAR_FIELD_NUMBER: builtins.int
         @property
         def null(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
         binary: builtins.bytes
@@ -763,6 +850,12 @@ class Expression(google.protobuf.message.Message):
         def specialized_array(self) -> global___Expression.Literal.SpecializedArray: ...
         @property
         def time(self) -> global___Expression.Literal.Time: ...
+        @property
+        def variant(self) -> global___Expression.Literal.Variant: ...
+        @property
+        def char(self) -> global___Expression.Literal.Char: ...
+        @property
+        def varchar(self) -> global___Expression.Literal.Varchar: ...
         def __init__(
             self,
             *,
@@ -788,6 +881,9 @@ class Expression(google.protobuf.message.Message):
             struct: global___Expression.Literal.Struct | None = ...,
             specialized_array: global___Expression.Literal.SpecializedArray | None = ...,
             time: global___Expression.Literal.Time | None = ...,
+            variant: global___Expression.Literal.Variant | None = ...,
+            char: global___Expression.Literal.Char | None = ...,
+            varchar: global___Expression.Literal.Varchar | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -802,6 +898,8 @@ class Expression(google.protobuf.message.Message):
                 b"byte",
                 "calendar_interval",
                 b"calendar_interval",
+                "char",
+                b"char",
                 "date",
                 b"date",
                 "day_time_interval",
@@ -836,6 +934,10 @@ class Expression(google.protobuf.message.Message):
                 b"timestamp",
                 "timestamp_ntz",
                 b"timestamp_ntz",
+                "varchar",
+                b"varchar",
+                "variant",
+                b"variant",
                 "year_month_interval",
                 b"year_month_interval",
             ],
@@ -853,6 +955,8 @@ class Expression(google.protobuf.message.Message):
                 b"byte",
                 "calendar_interval",
                 b"calendar_interval",
+                "char",
+                b"char",
                 "date",
                 b"date",
                 "day_time_interval",
@@ -887,6 +991,10 @@ class Expression(google.protobuf.message.Message):
                 b"timestamp",
                 "timestamp_ntz",
                 b"timestamp_ntz",
+                "varchar",
+                b"varchar",
+                "variant",
+                b"variant",
                 "year_month_interval",
                 b"year_month_interval",
             ],
@@ -917,6 +1025,9 @@ class Expression(google.protobuf.message.Message):
                 "struct",
                 "specialized_array",
                 "time",
+                "variant",
+                "char",
+                "varchar",
             ]
             | None
         ): ...
