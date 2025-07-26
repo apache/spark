@@ -104,6 +104,7 @@ from pyspark.pandas.missing.series import MissingPandasLikeSeries
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
 from pyspark.pandas.utils import (
     combine_frames,
+    is_ansi_mode_enabled,
     is_name_like_tuple,
     is_name_like_value,
     name_like_string,
@@ -5685,11 +5686,21 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         y   -14
         dtype: int64
         """
+        spark_session = self._internal.spark_frame.sparkSession
         if not same_anchor(self, other):
-            if get_option("compute.eager_check") and not cast(
-                ps.Index, self.index.sort_values()
-            ).equals(cast(ps.Index, other.index.sort_values())):
-                raise ValueError("matrices are not aligned")
+            if get_option("compute.eager_check"):
+                if is_ansi_mode_enabled(spark_session):
+                    # In ANSI, "equals" leads to implicit casting which may cause CAST_INVALID_INPUT
+                    # Instead, we compare raw index objects collected to the driver
+                    if sorted(ps.Index(self.index).tolist()) != sorted(
+                        ps.Index(other.index).tolist()
+                    ):
+                        raise ValueError("matrices are not aligned")
+                else:
+                    if not cast(ps.Index, self.index.sort_values()).equals(
+                        cast(ps.Index, other.index.sort_values())
+                    ):
+                        raise ValueError("matrices are not aligned")
             elif len(self.index) != len(other.index):
                 raise ValueError("matrices are not aligned")
 
