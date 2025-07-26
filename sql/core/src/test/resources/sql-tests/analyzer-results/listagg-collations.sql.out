@@ -2,7 +2,7 @@
 -- !query
 SELECT listagg(c1) WITHIN GROUP (ORDER BY c1 COLLATE utf8_binary) FROM (VALUES ('a'), ('A'), ('b'), ('B')) AS t(c1)
 -- !query analysis
-Aggregate [listagg(c1#x, null, collate(c1#x, utf8_binary) ASC NULLS FIRST, 0, 0) AS listagg(c1, NULL) WITHIN GROUP (ORDER BY collate(c1, utf8_binary) ASC NULLS FIRST)#x]
+Aggregate [listagg(c1#x, null, collate(c1#x, utf8_binary), Ascending, NullsFirst, Vector(), 0, 0) AS listagg(c1, NULL) WITHIN GROUP (ORDER BY collate(c1, utf8_binary) ASC NULLS FIRST)#x]
 +- SubqueryAlias t
    +- Project [col1#x AS c1#x]
       +- LocalRelation [col1#x]
@@ -30,7 +30,7 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [listagg(col1, NULL) WITHIN GROUP (ORDER BY col1 ASC NULLS FIRST)#x AS c1#x]
-:        +- Aggregate [listagg(col1#x, null, col1#x ASC NULLS FIRST, 0, 0) AS listagg(col1, NULL) WITHIN GROUP (ORDER BY col1 ASC NULLS FIRST)#x]
+:        +- Aggregate [listagg(col1#x, null, col1#x, Ascending, NullsFirst, Vector(), 0, 0) AS listagg(col1, NULL) WITHIN GROUP (ORDER BY col1 ASC NULLS FIRST)#x]
 :           +- SubqueryAlias __auto_generated_subquery_name
 :              +- LocalRelation [col1#x]
 +- Project [replace(replace(c1#x,  , ), 
@@ -43,7 +43,7 @@ WithCTE
 -- !query
 SELECT lower(listagg(c1) WITHIN GROUP (ORDER BY c1 COLLATE utf8_lcase)) FROM (VALUES ('a'), ('A'), ('b'), ('B')) AS t(c1)
 -- !query analysis
-Aggregate [lower(listagg(c1#x, null, collate(c1#x, utf8_lcase) ASC NULLS FIRST, 0, 0)) AS lower(listagg(c1, NULL) WITHIN GROUP (ORDER BY collate(c1, utf8_lcase) ASC NULLS FIRST))#x]
+Aggregate [lower(listagg(c1#x, null, collate(c1#x, utf8_lcase), Ascending, NullsFirst, Vector(), 0, 0)) AS lower(listagg(c1, NULL) WITHIN GROUP (ORDER BY collate(c1, utf8_lcase) ASC NULLS FIRST))#x]
 +- SubqueryAlias t
    +- Project [col1#x AS c1#x]
       +- LocalRelation [col1#x]
@@ -67,7 +67,7 @@ WithCTE
 -- !query
 SELECT lower(listagg(DISTINCT c1 COLLATE utf8_lcase) WITHIN GROUP (ORDER BY c1 COLLATE utf8_lcase)) FROM (VALUES ('a'), ('B'), ('b'), ('A')) AS t(c1)
 -- !query analysis
-Aggregate [lower(listagg(distinct collate(c1#x, utf8_lcase), null, collate(c1#x, utf8_lcase) ASC NULLS FIRST, 0, 0)) AS lower(listagg(DISTINCT collate(c1, utf8_lcase), NULL) WITHIN GROUP (ORDER BY collate(c1, utf8_lcase) ASC NULLS FIRST))#x]
+Aggregate [lower(listagg(distinct collate(c1#x, utf8_lcase), null, collate(c1#x, utf8_lcase), Ascending, NullsFirst, Vector(), 0, 0)) AS lower(listagg(DISTINCT collate(c1, utf8_lcase), NULL) WITHIN GROUP (ORDER BY collate(c1, utf8_lcase) ASC NULLS FIRST))#x]
 +- SubqueryAlias t
    +- Project [col1#x AS c1#x]
       +- LocalRelation [col1#x]
@@ -95,7 +95,7 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [listagg(col1, NULL) WITHIN GROUP (ORDER BY collate(col1, unicode_rtrim) ASC NULLS FIRST)#x AS c1#x]
-:        +- Aggregate [listagg(col1#x, null, collate(col1#x, unicode_rtrim) ASC NULLS FIRST, 0, 0) AS listagg(col1, NULL) WITHIN GROUP (ORDER BY collate(col1, unicode_rtrim) ASC NULLS FIRST)#x]
+:        +- Aggregate [listagg(col1#x, null, collate(col1#x, unicode_rtrim), Ascending, NullsFirst, Vector(), 0, 0) AS listagg(col1, NULL) WITHIN GROUP (ORDER BY collate(col1, unicode_rtrim) ASC NULLS FIRST)#x]
 :           +- SubqueryAlias __auto_generated_subquery_name
 :              +- LocalRelation [col1#x]
 +- Project [replace(replace(c1#x,  , ), 
