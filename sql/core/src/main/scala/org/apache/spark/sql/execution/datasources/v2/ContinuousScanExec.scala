@@ -38,7 +38,7 @@ case class ContinuousScanExec(
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
-    case other: ContinuousScanExec => this.stream == other.stream
+    case other: ContinuousScanExec => this.getClass == other.getClass && this.stream == other.stream
     case _ => false
   }
 
