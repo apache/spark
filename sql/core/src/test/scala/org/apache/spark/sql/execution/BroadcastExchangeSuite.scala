@@ -99,7 +99,7 @@ class BroadcastExchangeSuite extends SparkPlanTest
     }
   }
 
-  test("broadcast exchange should not reset metrics") {
+  test("SPARK-52962: broadcast exchange should not reset metrics") {
     val df = spark.range(1).toDF()
     val joinDF = df.join(broadcast(df), "id")
     joinDF.collect()
