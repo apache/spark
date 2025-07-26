@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit._
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
+import scala.util.control.NonFatal
 
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
 import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD}
@@ -31,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{LongType, StructType}
@@ -699,8 +701,42 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
     }
   }
 
+  private lazy val childrenRDDs = children.map(_.execute())
+
+  override def outputPartitioning: Partitioning = {
+    if (conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING)) {
+      // Commands like `AppendDataExec` have side effects when creating RDDs, so we
+      // cannot call `execute` on them to determine the partitioning.
+      if (children.exists(_.containsPattern(COMMAND))) {
+        return super.outputPartitioning
+      }
+
+      try {
+        val nonEmptyRdds = childrenRDDs.filter(!_.partitions.isEmpty)
+        if (sparkContext.isPartitionerAwareUnion(nonEmptyRdds)) {
+          // `isPartitionerAwareUnion` ensures that at least one child is non-empty.
+          children.head.outputPartitioning
+        } else {
+          super.outputPartitioning
+        }
+      } catch {
+        // If any child operator doesn't support `execute`, we cannot determine the
+        // partitioning. Even if it is other exception, we also simply fall back to
+        // the default partitioning. Note that for such cases, it means that these
+        // child operator will be replaced by Spark in query planning later, in other
+        // words, `execute` won't be actually called on them during the execution of
+        // this plan. So we can safely return the default partitioning. If it is a
+        // real exception, when `doExecute` is called to access `childrenRDDs`, the
+        // exception will be thrown again.
+        case e if NonFatal(e) => super.outputPartitioning
+      }
+    } else {
+      super.outputPartitioning
+    }
+  }
+
   protected override def doExecute(): RDD[InternalRow] =
-    sparkContext.union(children.map(_.execute()))
+    sparkContext.union(childrenRDDs)
 
   override def supportsColumnar: Boolean = children.forall(_.supportsColumnar)
 
