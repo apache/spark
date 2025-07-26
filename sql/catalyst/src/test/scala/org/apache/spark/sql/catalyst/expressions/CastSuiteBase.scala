@@ -568,7 +568,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     } else {
       Map("functionNames" -> "`DATE_FROM_UNIX_DATE`")
     }
-    // All numeric types: `CAST_WITHOUT_SUGGESTION`
     Seq(1.toByte, 1.toShort, 1, 1L, 1.0.toFloat, 1.0).foreach { testValue =>
       val expectedError =
         createCastMismatch(Literal(testValue).dataType, DateType, errorSubClass, funcParams)
