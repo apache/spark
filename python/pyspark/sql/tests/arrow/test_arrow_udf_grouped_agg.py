@@ -777,6 +777,40 @@ class GroupedAggArrowUDFTestsMixin:
 
         self.assertEqual(expected1.collect(), result1.collect())
 
+    def test_return_type_coercion(self):
+        import pyarrow as pa
+
+        df = self.spark.range(10)
+
+        @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
+        def agg_long(id: pa.Array) -> int:
+            assert isinstance(id, pa.Array), str(type(id))
+            return pa.scalar(value=len(id), type=pa.int64())
+
+        result1 = df.select(agg_long("id").alias("res"))
+        self.assertEqual(1, len(result1.collect()))
+
+        # long -> int coercion
+        @arrow_udf("int", ArrowUDFType.GROUPED_AGG)
+        def agg_int1(id: pa.Array) -> int:
+            assert isinstance(id, pa.Array), str(type(id))
+            return pa.scalar(value=len(id), type=pa.int64())
+
+        result2 = df.select(agg_int1("id").alias("res"))
+        self.assertEqual(1, len(result2.collect()))
+
+        # long -> int coercion, overflow
+        @arrow_udf("int", ArrowUDFType.GROUPED_AGG)
+        def agg_int2(id: pa.Array) -> int:
+            assert isinstance(id, pa.Array), str(type(id))
+            return pa.scalar(value=len(id) + 2147483647, type=pa.int64())
+
+        result3 = df.select(agg_int2("id").alias("res"))
+        with self.assertRaises(Exception):
+            # pyarrow.lib.ArrowInvalid:
+            # Integer value 2147483657 not in range: -2147483648 to 2147483647
+            result3.collect()
+
 
 class GroupedAggArrowUDFTests(GroupedAggArrowUDFTestsMixin, ReusedSQLTestCase):
     pass

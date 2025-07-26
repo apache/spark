@@ -969,6 +969,28 @@ class ScalarArrowUDFTestsMixin:
         result = df.select(multiple("a", "b", "c").alias("res"))
         self.assertEqual(expected, result.collect())
 
+    def test_return_type_coercion(self):
+        import pyarrow as pa
+
+        df = self.spark.range(10)
+
+        scalar_long = arrow_udf(lambda x: pa.compute.add(x, 1), LongType())
+        result1 = df.select(scalar_long("id").alias("res"))
+        self.assertEqual(10, len(result1.collect()))
+
+        # long -> int coercion
+        scalar_int1 = arrow_udf(lambda x: pa.compute.add(x, 1), IntegerType())
+        result2 = df.select(scalar_int1("id").alias("res"))
+        self.assertEqual(10, len(result2.collect()))
+
+        # long -> int coercion, overflow
+        scalar_int2 = arrow_udf(lambda x: pa.compute.add(x, 2147483647), IntegerType())
+        result3 = df.select(scalar_int2("id").alias("res"))
+        with self.assertRaises(Exception):
+            # pyarrow.lib.ArrowInvalid:
+            # Integer value 2147483652 not in range: -2147483648 to 2147483647
+            result3.collect()
+
 
 class ScalarArrowUDFTests(ScalarArrowUDFTestsMixin, ReusedSQLTestCase):
     @classmethod
