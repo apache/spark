@@ -98,6 +98,21 @@ class BroadcastExchangeSuite extends SparkPlanTest
       assert(joinDF.collect().length == 1)
     }
   }
+
+  test("SPARK-52962: broadcast exchange should not reset metrics") {
+    val df = spark.range(1).toDF()
+    val joinDF = df.join(broadcast(df), "id")
+    joinDF.collect()
+    val broadcastExchangeExec = collect(
+      joinDF.queryExecution.executedPlan) { case p: BroadcastExchangeExec => p }
+    assert(broadcastExchangeExec.size == 1, "one and only BroadcastExchangeExec")
+
+    val broadcastExchangeNode = broadcastExchangeExec.head
+    val metrics = broadcastExchangeNode.metrics
+    assert(metrics("numOutputRows").value == 1)
+    broadcastExchangeNode.resetMetrics()
+    assert(metrics("numOutputRows").value == 1)
+  }
 }
 
 // Additional tests run in 'local-cluster' mode.
