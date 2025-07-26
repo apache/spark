@@ -114,6 +114,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   val colStatIntSkewHgm = ColumnStat(distinctCount = Some(5), min = Some(1), max = Some(10),
     nullCount = Some(0), avgLen = Some(4), maxLen = Some(4), histogram = Some(hgmIntSkew))
 
+  val attrIntNdvOnly = AttributeReference("cIntNdvOnly", IntegerType)()
+  val colStatIntNdvOnly = ColumnStat(distinctCount = Some(15))
+
   val attributeMap = AttributeMap(Seq(
     attrInt -> colStatInt,
     attrBool -> colStatBool,
@@ -125,7 +128,8 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     attrInt3 -> colStatInt3,
     attrInt4 -> colStatInt4,
     attrIntHgm -> colStatIntHgm,
-    attrIntSkewHgm -> colStatIntSkewHgm
+    attrIntSkewHgm -> colStatIntSkewHgm,
+    attrIntNdvOnly -> colStatIntNdvOnly
   ))
 
   test("true") {
@@ -856,6 +860,27 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Seq(attrString -> colStatString),
       expectedRowCount = 10)
   }
+
+  test("SPARK-52868: EqualTo filter should not shrink row count when only ndv stat is available") {
+    val condition = Filter(EqualTo(attrIntNdvOnly, Literal(42)),
+      childStatsTestPlan(Seq(attrIntNdvOnly), tableRowCount = 10,
+        attributeMap = AttributeMap(Seq(attrIntNdvOnly -> colStatIntNdvOnly))))
+    validateEstimatedStats(
+      condition,
+      Seq(attrIntNdvOnly -> colStatIntNdvOnly),
+      expectedRowCount = 10)
+  }
+
+  test("SPARK-52868: InSet filter should not shrink row count when only ndv stat is available") {
+    val condition = Filter(InSet(attrIntNdvOnly, Set(1, 2, 3)),
+      childStatsTestPlan(Seq(attrIntNdvOnly), tableRowCount = 10,
+        attributeMap = AttributeMap(Seq(attrIntNdvOnly -> colStatIntNdvOnly))))
+    validateEstimatedStats(
+      condition,
+      Seq(attrIntNdvOnly -> colStatIntNdvOnly),
+      expectedRowCount = 10)
+  }
+
 
   test("ColumnStatsMap tests") {
     val attrNoDistinct = AttributeReference("att_without_distinct", IntegerType)()
