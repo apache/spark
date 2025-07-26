@@ -26,6 +26,7 @@ import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -544,7 +545,20 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast("0", false)
   }
 
-  protected def checkInvalidCastFromNumericType(to: DataType): Unit
+  protected def createCastMismatch(
+      srcType: DataType,
+      targetType: DataType,
+      errorSubClass: String,
+      extraParams: Map[String, String] = Map.empty): DataTypeMismatch = {
+    val baseParams = Map(
+      "srcType" -> toSQLType(srcType),
+      "targetType" -> toSQLType(targetType)
+    )
+    DataTypeMismatch(errorSubClass, baseParams ++ extraParams)
+  }
+
+  protected def checkInvalidCastFromNumericTypeToDateType(): Unit
+  protected def checkInvalidCastFromNumericTypeToTimestampNTZType(): Unit
 
   test("SPARK-16729 type checking for casting to date type") {
     assert(cast("1234", DateType).checkInputDataTypes().isSuccess)
@@ -558,7 +572,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         )
       )
     )
-    checkInvalidCastFromNumericType(DateType)
+    checkInvalidCastFromNumericTypeToDateType()
   }
 
   test("SPARK-20302 cast with same structure") {
@@ -942,7 +956,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
   test("disallow type conversions between Numeric types and Timestamp without time zone type") {
     import DataTypeTestUtils.numericTypes
-    checkInvalidCastFromNumericType(TimestampNTZType)
+    checkInvalidCastFromNumericTypeToTimestampNTZType()
     verifyCastFailure(
       cast(Literal(0L), TimestampNTZType),
       DataTypeMismatch(
