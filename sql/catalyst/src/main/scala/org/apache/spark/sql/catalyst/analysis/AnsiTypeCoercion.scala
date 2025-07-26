@@ -185,8 +185,8 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       // Ideally the implicit cast rule should be the same as `Cast.canANSIStoreAssign` so that it's
       // consistent with table insertion. To avoid breaking too many existing Spark SQL queries,
       // we make the system to allow implicitly converting String type as other primitive types.
-      case (_: StringType, a @ (_: AtomicType | NumericType | DecimalType | AnyTimestampType)) =>
-        Some(a.defaultConcreteType)
+      case (_: StringType, a @ (_: AtomicType | NumericType | DecimalType | AnyTimestampType |
+          AnyTimeType)) => Some(a.defaultConcreteType)
 
       case (ArrayType(fromType, _), AbstractArrayType(toType)) =>
         implicitCast(fromType, toType).map(ArrayType(_, true))
