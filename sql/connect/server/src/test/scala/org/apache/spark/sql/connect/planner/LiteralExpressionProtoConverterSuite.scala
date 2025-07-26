@@ -21,15 +21,31 @@ import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.ToLiteralProtoOptions
 import org.apache.spark.sql.types._
 
 class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
 
+  private def toLiteralProto(v: Any): proto.Expression.Literal = {
+    LiteralValueProtoConverter
+      .toLiteralProtoWithOptions(
+        v,
+        None,
+        ToLiteralProtoOptions(useDeprecatedDataTypeFields = false))
+  }
+
+  private def toLiteralProto(v: Any, t: DataType): proto.Expression.Literal = {
+    LiteralValueProtoConverter
+      .toLiteralProtoWithOptions(
+        v,
+        Some(t),
+        ToLiteralProtoOptions(useDeprecatedDataTypeFields = false))
+  }
+
   test("basic proto value and catalyst value conversion") {
     val values = Array(null, true, 1.toByte, 1.toShort, 1, 1L, 1.1d, 1.1f, "spark")
     for (v <- values) {
-      assertResult(v)(
-        LiteralValueProtoConverter.toCatalystValue(LiteralValueProtoConverter.toLiteralProto(v)))
+      assertResult(v)(LiteralValueProtoConverter.toCatalystValue(toLiteralProto(v)))
     }
   }
 
@@ -62,9 +78,101 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
       test(s"complex proto value and catalyst value conversion #$idx") {
         assertResult(v)(
           LiteralValueProtoConverter.toCatalystValue(
-            LiteralValueProtoConverter.toLiteralProto(v, t)))
+            LiteralValueProtoConverter.toLiteralProtoWithOptions(
+              v,
+              Some(t),
+              ToLiteralProtoOptions(useDeprecatedDataTypeFields = false))))
+      }
+
+      test(s"complex proto value and catalyst value conversion #$idx - backward compatibility") {
+        assertResult(v)(
+          LiteralValueProtoConverter.toCatalystValue(
+            LiteralValueProtoConverter.toLiteralProtoWithOptions(
+              v,
+              Some(t),
+              ToLiteralProtoOptions(useDeprecatedDataTypeFields = true))))
       }
     }
+
+  test("backward compatibility for array literal proto") {
+    // Test the old way of defining arrays with elementType field and elements
+    val arrayTypeProto = proto.DataType.Array
+      .newBuilder()
+      .setElementType(
+        proto.DataType
+          .newBuilder()
+          .setInteger(proto.DataType.Integer.newBuilder())
+          .build())
+      .setContainsNull(true)
+      .build()
+
+    val arrayProto = proto.Expression.Literal.Array
+      .newBuilder()
+      .setElementType(
+        proto.DataType
+          .newBuilder()
+          .setInteger(proto.DataType.Integer.newBuilder())
+          .build())
+      .addElements(toLiteralProto(1))
+      .addElements(toLiteralProto(2))
+      .addElements(toLiteralProto(3))
+      .build()
+
+    val result = LiteralValueProtoConverter.toCatalystArray(arrayProto)
+
+    // Verify the result is an array with correct values
+    assert(result.isInstanceOf[Array[_]])
+    val array = result.asInstanceOf[Array[Any]]
+    assert(array.length == 3)
+    assert(array(0) == 1)
+    assert(array(1) == 2)
+    assert(array(2) == 3)
+  }
+
+  test("backward compatibility for map literal proto") {
+    // Test the old way of defining maps with keyType and valueType fields
+    val mapTypeProto = proto.DataType.Map
+      .newBuilder()
+      .setKeyType(
+        proto.DataType
+          .newBuilder()
+          .setString(proto.DataType.String.newBuilder())
+          .build())
+      .setValueType(
+        proto.DataType
+          .newBuilder()
+          .setInteger(proto.DataType.Integer.newBuilder())
+          .build())
+      .setValueContainsNull(true)
+      .build()
+
+    val mapProto = proto.Expression.Literal.Map
+      .newBuilder()
+      .setKeyType(
+        proto.DataType
+          .newBuilder()
+          .setString(proto.DataType.String.newBuilder())
+          .build())
+      .setValueType(
+        proto.DataType
+          .newBuilder()
+          .setInteger(proto.DataType.Integer.newBuilder())
+          .build())
+      .addKeys(toLiteralProto("a"))
+      .addKeys(toLiteralProto("b"))
+      .addValues(toLiteralProto(1))
+      .addValues(toLiteralProto(2))
+      .build()
+
+    val result = LiteralValueProtoConverter.toCatalystMap(mapProto)
+
+    // Verify the result is a map with correct key-value pairs
+    assert(result.isInstanceOf[scala.collection.mutable.Map[_, _]])
+    val map = result.asInstanceOf[scala.collection.mutable.Map[String, Int]]
+    assert(map.size == 2)
+    assert(map("a") == 1)
+    assert(map("b") == 2)
+  }
 
   test("backward compatibility for struct literal proto") {
     // Test the old way of defining structs with structType field and elements
@@ -95,8 +203,8 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     val structProto = proto.Expression.Literal.Struct
       .newBuilder()
       .setStructType(proto.DataType.newBuilder().setStruct(structTypeProto).build())
-      .addElements(LiteralValueProtoConverter.toLiteralProto(1))
-      .addElements(LiteralValueProtoConverter.toLiteralProto("test"))
+      .addElements(toLiteralProto(1))
+      .addElements(toLiteralProto("test"))
       .build()
 
     val (result, resultType) = LiteralValueProtoConverter.toCatalystStruct(structProto)
@@ -119,7 +227,7 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
   }
 
   test("data types of struct fields are not set for inferable types") {
-    val literalProto = LiteralValueProtoConverter.toLiteralProto(
+    val literalProto = toLiteralProto(
       (1, 2.0, true, (1, 2)),
       StructType(
         Seq(
@@ -136,7 +244,7 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
   }
 
   test("data types of struct fields are set for non-inferable types") {
-    val literalProto = LiteralValueProtoConverter.toLiteralProto(
+    val literalProto = toLiteralProto(
       ("string", Decimal(1)),
       StructType(Seq(StructField("a", StringType), StructField("b", DecimalType(10, 2)))))
     assert(literalProto.getStruct.getDataTypeStruct.getFieldsList.get(0).hasDataType)
@@ -144,7 +252,7 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
   }
 
   test("nullable and metadata fields are set for struct literal proto") {
-    val literalProto = LiteralValueProtoConverter.toLiteralProto(
+    val literalProto = toLiteralProto(
       ("string", Decimal(1)),
       StructType(Seq(
         StructField("a", StringType, nullable = true, Metadata.fromJson("""{"key": "value"}""")),

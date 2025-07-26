@@ -215,15 +215,46 @@ message Expression {
     }
 
     message Array {
-      DataType element_type = 1;
+      // (Deprecated) The element type of the array.
+      //
+      // This field is deprecated since Spark 4.1+ and should only be set
+      // if the data_type_array field is not set. Use data_type_array field instead.
+      DataType element_type = 1 [deprecated = true];
+
+      // (Required) The literal values that make up the array elements.
       repeated Literal elements = 2;
+
+      // The type of the array.
+      //
+      // Whether data_type_array.element_type should be set depends on
+      // whether the element type can be inferred from the elements field.
+      DataType.Array data_type_array = 3;
     }
 
     message Map {
-      DataType key_type = 1;
-      DataType value_type = 2;
+      // (Deprecated) The key type of the map.
+      //
+      // This field is deprecated since Spark 4.1+ and should only be set
+      // if the data_type_map field is not set. Use data_type_map field instead.
+      DataType key_type = 1 [deprecated = true];
+
+      // (Deprecated) The value type of the map.
+      //
+      // This field is deprecated since Spark 4.1+ and should only be set
+      // if the data_type_map field is not set. Use data_type_map field instead.
+      DataType value_type = 2 [deprecated = true];
+
+      // (Required) The literal keys that make up the map.
       repeated Literal keys = 3;
+
+      // (Required) The literal values that make up the map.
       repeated Literal values = 4;
+
+      // The type of the map.
+      //
+      // Whether data_type_map.key_type and data_type_map.value_type should be set depends on
+      // whether the key and value types can be inferred from the keys and values fields.
+      DataType.Map data_type_map = 5;
     }
 
     message Struct {
