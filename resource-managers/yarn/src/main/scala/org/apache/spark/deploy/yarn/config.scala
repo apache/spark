@@ -214,7 +214,7 @@ package object config extends Logging {
     .doc("Interval between reports of the current app status.")
     .version("0.9.0")
     .timeConf(TimeUnit.MILLISECONDS)
-    .createWithDefaultString("1s")
+    .createWithDefaultString("10s")
 
   private[spark] val REPORT_LOG_FREQUENCY = {
     ConfigBuilder("spark.yarn.report.loggingFrequency")
