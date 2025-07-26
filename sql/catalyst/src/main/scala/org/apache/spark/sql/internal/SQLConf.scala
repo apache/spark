@@ -6018,7 +6018,7 @@ object SQLConf {
     buildConf("spark.sql.unionOutputPartitioning")
       .internal()
       .doc("When set to true, the output partitioning of UnionExec will be the same as the " +
-        "input partitioning if its children have same partitioner. Otherwise, it will be a " +
+        "input partitioning if its children have same partitioning. Otherwise, it will be a " +
         "default partitioning.")
       .version("4.1.0")
       .booleanConf

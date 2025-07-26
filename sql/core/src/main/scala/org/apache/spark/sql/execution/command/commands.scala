@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Command, ExecutableDuringAnalysis, LogicalPlan, SupervisingCommand}
-import org.apache.spark.sql.catalyst.trees.{LeafLike, TreePattern, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.connector.ExternalCommandRunner
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{CommandExecutionMode, ExplainMode, LeafExecNode, SparkPlan, UnaryExecNode}
@@ -109,8 +109,6 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
  */
 case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
   extends UnaryExecNode {
-
-  final override val nodePatterns: Seq[TreePattern.TreePattern] = Seq(TreePattern.COMMAND)
 
   override lazy val metrics: Map[String, SQLMetric] = cmd.metrics
 

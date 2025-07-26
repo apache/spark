@@ -1606,16 +1606,11 @@ class SparkContext(config: SparkConf) extends Logging {
     new ReliableCheckpointRDD[T](this, path)
   }
 
-  // Note that input rdds must be all non-empty, i.e., rdds.filter(_.partitions.isEmpty).isEmpty
-  protected[spark] def isPartitionerAwareUnion[T: ClassTag](rdds: Seq[RDD[T]]): Boolean = {
-    assert(!rdds.exists(_.partitions.isEmpty), "Must not have empty RDDs")
-    rdds.forall(_.partitioner.isDefined) && rdds.flatMap(_.partitioner).toSet.size == 1
-  }
-
   /** Build the union of a list of RDDs. */
   def union[T: ClassTag](rdds: Seq[RDD[T]]): RDD[T] = withScope {
     val nonEmptyRdds = rdds.filter(!_.partitions.isEmpty)
-    if (isPartitionerAwareUnion(nonEmptyRdds)) {
+    val partitioners = nonEmptyRdds.flatMap(_.partitioner).toSet
+    if (nonEmptyRdds.forall(_.partitioner.isDefined) && partitioners.size == 1) {
       new PartitionerAwareUnionRDD(this, nonEmptyRdds)
     } else {
       new UnionRDD(this, nonEmptyRdds)

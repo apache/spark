@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeSet, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.trees.LeafLike
-import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.SparkPlan
 
@@ -31,7 +30,6 @@ import org.apache.spark.sql.execution.SparkPlan
  * Any V2 commands that do not require triggering a spark job should extend this class.
  */
 abstract class V2CommandExec extends SparkPlan {
-  final override val nodePatterns: Seq[TreePattern] = Seq(COMMAND)
 
   /**
    * Abstract method that each concrete command needs to implement to compute the result.
