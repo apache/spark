@@ -52,6 +52,7 @@ from pyspark.pandas.typedef.typehints import (
     extension_object_dtypes_available,
     spark_type_to_pandas_dtype,
 )
+from pyspark.pandas.utils import is_ansi_mode_enabled
 
 if extension_dtypes_available:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
@@ -189,7 +190,10 @@ def _as_other_type(index_ops: IndexOpsLike, dtype: Dtype, spark_type: DataType) 
     )
     assert not need_pre_process, "Pre-processing is needed before the type casting."
 
-    scol = index_ops.spark.column.cast(spark_type)
+    if is_ansi_mode_enabled(index_ops._internal.spark_frame.sparkSession):
+        scol = index_ops.spark.column.try_cast(spark_type)
+    else:
+        scol = index_ops.spark.column.cast(spark_type)
     return index_ops._with_new_scol(scol, field=InternalField(dtype=dtype))
 
 
