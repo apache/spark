@@ -1366,7 +1366,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`tb`, false
 INSERT INTO tb VALUES (0), (1)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/tb, false, JSON, [path=file:[not included in comparison]/{warehouse_dir}/tb], Append, `spark_catalog`.`default`.`tb`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/tb), [next]
-+- Project [cast(col1#x as int) AS next#x]
++- Project [col1#x AS next#x]
    +- LocalRelation [col1#x]
 
 

@@ -597,7 +597,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
     // If the alias name is different from attribute name, we can't strip it either, or we
     // may accidentally change the output schema name of the root plan.
     case a @ Alias(attr: Attribute, name)
-      if (a.metadata == Metadata.empty || a.metadata == attr.metadata) &&
+      if (a.metadata == attr.metadata) &&
         name == attr.name &&
         !excludeList.contains(attr) &&
         !excludeList.contains(a) =>

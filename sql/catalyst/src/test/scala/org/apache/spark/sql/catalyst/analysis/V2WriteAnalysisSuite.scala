@@ -331,6 +331,31 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       ArrayType(new StructType().add("x", "int").add("y", "int")),
       ArrayType(new StructType().add("y", "int").add("x", "byte")),
       hasTransform = true)
+
+    withSQLConf("spark.sql.preserveCharVarcharTypeInfo" -> "true") {
+      // exact match on VARCHAR does not need transform
+      assertArrayField(ArrayType(VarcharType(7)), ArrayType(VarcharType(7)), hasTransform = false)
+      // VARCHAR length increase could avoid transform
+      assertArrayField(ArrayType(VarcharType(7)), ArrayType(VarcharType(8)), hasTransform = true)
+      // VARCHAR length decrease requires length check
+      assertArrayField(ArrayType(VarcharType(8)), ArrayType(VarcharType(7)), hasTransform = true)
+      // Widening doesn't really require transform, but does require type change.
+      assertArrayField(ArrayType(VarcharType(7)), ArrayType(StringType), hasTransform = true)
+      // CHAR length increase needs transform to add padding
+      assertArrayField(ArrayType(CharType(7)), ArrayType(CharType(8)), hasTransform = true)
+      // VARCHAR to STRING widening doesn't really require transform, but does require type change.
+      assertArrayField(ArrayType(VarcharType(7)), ArrayType(StringType), hasTransform = true)
+      // Exact match could avoid transform, but structs always transform today...
+      assertArrayField(
+        ArrayType(new StructType().add("x", VarcharType(7)).add("y", CharType(2))),
+        ArrayType(new StructType().add("x", VarcharType(7)).add("y", CharType(2))),
+        hasTransform = true)
+      // struct needs to be reordered
+      assertArrayField(
+        ArrayType(new StructType().add("x", VarcharType(7)).add("y", CharType(2))),
+        ArrayType(new StructType().add("y", CharType(2)).add("x", CharType(7))),
+        hasTransform = true)
+    }
   }
 
   test("SPARK-48922: Avoid redundant array transform of identical expression for map type") {
@@ -487,7 +512,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val y = query.output.last
 
     val parsedPlan = byName(table, query)
-    val expectedPlan = byName(table, Project(Seq(X.withName("x"), y), query))
+    val expectedPlan = byName(table, Project(Seq(Alias(X, "x")(), y), query))
 
     assertNotResolved(parsedPlan)
     checkAnalysis(parsedPlan, expectedPlan, caseSensitive = false)
@@ -620,8 +645,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = byPosition(table, query)
     val expectedPlan = byPosition(table,
       Project(Seq(
-        Alias(Cast(a, FloatType, Some(conf.sessionLocalTimeZone)), "x")(),
-        Alias(Cast(b, FloatType, Some(conf.sessionLocalTimeZone)), "y")()),
+        Alias(a, "x")(),
+        Alias(b, "y")()),
         query))
 
     assertNotResolved(parsedPlan)
@@ -641,8 +666,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = byPosition(table, query)
     val expectedPlan = byPosition(table,
       Project(Seq(
-        Alias(Cast(y, FloatType, Some(conf.sessionLocalTimeZone)), "x")(),
-        Alias(Cast(x, FloatType, Some(conf.sessionLocalTimeZone)), "y")()),
+        Alias(y, "x")(),
+        Alias(x, "y")()),
         query))
 
     assertNotResolved(parsedPlan)
@@ -796,14 +821,11 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
           IsNull(queryCol),
           Literal(null, expectedColType),
           CreateNamedStruct(Seq(
-            Literal("a"), Cast(
+            Literal("a"),
               GetStructField(queryCol, 0, name = Some("x")),
-              IntegerType,
-              Some(conf.sessionLocalTimeZone)),
-            Literal("b"), Cast(
-              GetStructField(queryCol, 1, name = Some("y")),
-              IntegerType,
-              Some(conf.sessionLocalTimeZone))))),
+            Literal("b"),
+              GetStructField(queryCol, 1, name = Some("y"))
+          ))),
         "col")()),
         query)
       checkAnalysis(parsedPlan, byPosition(tableWithStructCol, expectedQuery))
@@ -1376,8 +1398,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
     val expectedPlan = OverwriteByExpression.byPosition(table,
       Project(Seq(
-        Alias(Cast(a, DoubleType, Some(conf.sessionLocalTimeZone)), "x")(),
-        Alias(Cast(b, DoubleType, Some(conf.sessionLocalTimeZone)), "y")()),
+        Alias(a, "x")(),
+        Alias(b, "y")()),
         query),
       LessThanOrEqual(x, Literal(15.0d)))
 

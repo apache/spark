@@ -16,7 +16,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t`, false
 insert into t values (0, 'abc'), (1, 'def')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/t], Append, `spark_catalog`.`default`.`t`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t), [x, y]
-+- Project [cast(col1#x as int) AS x#x, cast(col2#x as string) AS y#x]
++- Project [col1#x AS x#x, col2#x AS y#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -37,7 +37,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`other`, false
 insert into other values (1, 1), (1, 2), (2, 4)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/other, false, JSON, [path=file:[not included in comparison]/{warehouse_dir}/other], Append, `spark_catalog`.`default`.`other`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/other), [a, b]
-+- Project [cast(col1#x as int) AS a#x, cast(col2#x as int) AS b#x]
++- Project [col1#x AS a#x, col2#x AS b#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -58,7 +58,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`st`, false
 insert into st values (1, (2, 3))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/st, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/st], Append, `spark_catalog`.`default`.`st`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/st), [x, col]
-+- Project [cast(col1#x as int) AS x#x, named_struct(i1, cast(col2#x.col1 as int), i2, cast(col2#x.col2 as int)) AS col#x]
++- Project [col1#x AS x#x, named_struct(i1, col2#x.col1, i2, col2#x.col2) AS col#x]
    +- LocalRelation [col1#x, col2#x]
 
 

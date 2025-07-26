@@ -9,7 +9,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t1`, false
 insert into t1 values('aaa', 'aaa')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t1], Append, `spark_catalog`.`default`.`t1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t1), [utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS utf8_binary#x, cast(col2#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -17,7 +17,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t1 values('AAA', 'AAA')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t1], Append, `spark_catalog`.`default`.`t1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t1), [utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS utf8_binary#x, cast(col2#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -25,7 +25,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t1 values('bbb', 'bbb')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t1], Append, `spark_catalog`.`default`.`t1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t1), [utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS utf8_binary#x, cast(col2#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -33,7 +33,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t1 values('BBB', 'BBB')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t1], Append, `spark_catalog`.`default`.`t1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t1), [utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS utf8_binary#x, cast(col2#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -118,7 +118,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t2`, false
 insert into t2 values('aaa', 'aaa')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t2, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t2], Append, `spark_catalog`.`default`.`t2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t2), [utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS utf8_binary#x, cast(col2#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -126,7 +126,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t2 values('bbb', 'bbb')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t2, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t2], Append, `spark_catalog`.`default`.`t2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t2), [utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS utf8_binary#x, cast(col2#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -526,7 +526,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t4`, false
 insert into t4 values('a:1,b:2,c:3', ',', ':')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t4, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t4], Append, `spark_catalog`.`default`.`t4`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t4), [text, pairDelim, keyValueDelim]
-+- Project [cast(col1#x as string) AS text#x, cast(col2#x as string collate UTF8_LCASE) AS pairDelim#x, cast(col3#x as string) AS keyValueDelim#x]
++- Project [col1#x AS text#x, cast(col2#x as string collate UTF8_LCASE) AS pairDelim#x, col3#x AS keyValueDelim#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -600,7 +600,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t5`, false
 insert into t5 values ('Spark', 'Spark', 'SQL')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t5], Append, `spark_catalog`.`default`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t5), [s, utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS s#x, cast(col2#x as string) AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS s#x, col2#x AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -608,7 +608,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t5 values ('aaAaAAaA', 'aaAaAAaA', 'aaAaAAaA')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t5], Append, `spark_catalog`.`default`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t5), [s, utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS s#x, cast(col2#x as string) AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS s#x, col2#x AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -616,7 +616,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t5 values ('aaAaAAaA', 'aaAaAAaA', 'aaAaaAaA')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t5], Append, `spark_catalog`.`default`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t5), [s, utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS s#x, cast(col2#x as string) AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS s#x, col2#x AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -624,7 +624,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t5 values ('aaAaAAaA', 'aaAaAAaA', 'aaAaaAaAaaAaaAaAaaAaaAaA')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t5], Append, `spark_catalog`.`default`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t5), [s, utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS s#x, cast(col2#x as string) AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS s#x, col2#x AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -632,7 +632,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t5 values ('bbAbaAbA', 'bbAbAAbA', 'a')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t5], Append, `spark_catalog`.`default`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t5), [s, utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS s#x, cast(col2#x as string) AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS s#x, col2#x AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -640,7 +640,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t5 values ('İo', 'İo', 'İo')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t5], Append, `spark_catalog`.`default`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t5), [s, utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS s#x, cast(col2#x as string) AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS s#x, col2#x AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -648,7 +648,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t5 values ('İo', 'İo', 'İo ')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t5], Append, `spark_catalog`.`default`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t5), [s, utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS s#x, cast(col2#x as string) AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS s#x, col2#x AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -656,7 +656,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t5 values ('İo', 'İo ', 'İo')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t5], Append, `spark_catalog`.`default`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t5), [s, utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS s#x, cast(col2#x as string) AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS s#x, col2#x AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -664,7 +664,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t5 values ('İo', 'İo', 'i̇o')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t5], Append, `spark_catalog`.`default`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t5), [s, utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS s#x, cast(col2#x as string) AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS s#x, col2#x AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -672,7 +672,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t5 values ('efd2', 'efd2', 'efd2')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t5], Append, `spark_catalog`.`default`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t5), [s, utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS s#x, cast(col2#x as string) AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS s#x, col2#x AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -680,7 +680,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t5 values ('Hello, world! Nice day.', 'Hello, world! Nice day.', 'Hello, world! Nice day.')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t5], Append, `spark_catalog`.`default`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t5), [s, utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS s#x, cast(col2#x as string) AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS s#x, col2#x AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -688,7 +688,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t5 values ('Something else. Nothing here.', 'Something else. Nothing here.', 'Something else. Nothing here.')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t5], Append, `spark_catalog`.`default`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t5), [s, utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS s#x, cast(col2#x as string) AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS s#x, col2#x AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -696,7 +696,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t5 values ('kitten', 'kitten', 'sitTing')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t5], Append, `spark_catalog`.`default`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t5), [s, utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS s#x, cast(col2#x as string) AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS s#x, col2#x AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -704,7 +704,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t5 values ('abc', 'abc', 'abc')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t5], Append, `spark_catalog`.`default`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t5), [s, utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS s#x, cast(col2#x as string) AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS s#x, col2#x AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -712,7 +712,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t5 values ('abcdcba', 'abcdcba', 'aBcDCbA')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t5], Append, `spark_catalog`.`default`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t5), [s, utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS s#x, cast(col2#x as string) AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS s#x, col2#x AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -770,7 +770,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t8`, false
 insert into t8 values ('%s%s', 'abCdE', 'abCdE')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t8, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t8], Append, `spark_catalog`.`default`.`t8`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t8), [format, utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS format#x, cast(col2#x as string) AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS format#x, col2#x AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -806,7 +806,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t10`, false
 insert into t10 values ('aaAaAAaA', 'aaAaaAaA')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t10, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t10], Append, `spark_catalog`.`default`.`t10`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t10), [utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS utf8_binary#x, cast(col2#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -814,7 +814,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 insert into t10 values ('efd2', 'efd2')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t10, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t10], Append, `spark_catalog`.`default`.`t10`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t10), [utf8_binary, utf8_lcase]
-+- Project [cast(col1#x as string) AS utf8_binary#x, cast(col2#x as string collate UTF8_LCASE) AS utf8_lcase#x]
++- Project [col1#x AS utf8_binary#x, cast(col2#x as string collate UTF8_LCASE) AS utf8_lcase#x]
    +- LocalRelation [col1#x, col2#x]
 
 
