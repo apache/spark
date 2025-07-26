@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.concurrent.{Future, Promise}
 
+import org.apache.spark.SparkAQEStageCancelException
 import org.apache.spark.internal.Logging
 
 /**
@@ -49,8 +50,8 @@ private[spark] class JobWaiter[T](
    * cancellation itself is handled asynchronously. After the low level scheduler cancels
    * all the tasks belonging to this job, it will fail this job with a SparkException.
    */
-  def cancel(reason: Option[String]): Unit = {
-    dagScheduler.cancelJob(jobId, reason)
+  def cancel(reason: Option[String] = None, quiet: Boolean = false): Unit = {
+    dagScheduler.cancelJob(jobId, reason, quiet)
   }
 
   /**
@@ -72,6 +73,12 @@ private[spark] class JobWaiter[T](
 
   override def jobFailed(exception: Exception): Unit = {
     if (!jobPromise.tryFailure(exception)) {
+      logWarning("Ignore failure", exception)
+    }
+  }
+
+  override def jobCancel(exception: Exception): Unit = {
+    if (!jobPromise.tryFailure(new SparkAQEStageCancelException())) {
       logWarning("Ignore failure", exception)
     }
   }
