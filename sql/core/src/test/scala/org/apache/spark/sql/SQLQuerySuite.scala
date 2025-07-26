@@ -4962,6 +4962,50 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     )
   }
 
+  test("SPARK-52956: Preserve alias metadata when collapsing projects") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(col1 TIMESTAMP);")
+
+      val query = """WITH cte AS (
+                    |      SELECT col1, col1 FROM t1
+                    |    UNION ALL
+                    |      SELECT col1, col1 FROM t1
+                    |    )
+                    |    SELECT * FROM cte;""".stripMargin
+
+      withSQLConf(
+        SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true",
+        SQLConf.PRESERVE_ALIAS_METADATA_WHEN_COLLAPSING_PROJECTS.key -> "true"
+      ) {
+        val basePlan = sql(query)
+        val finalPlan =
+          basePlan.toDF("col_0", "col_1").select("col_0", "col_1").toDF("col1", "col1")
+        finalPlan.queryExecution.assertOptimized()
+      }
+
+      withSQLConf(
+        SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true",
+        SQLConf.PRESERVE_ALIAS_METADATA_WHEN_COLLAPSING_PROJECTS.key -> "false"
+      ) {
+        // With the flag set to false, __is_duplicate metadata will not be preserved in Project
+        // nodes under Union. This will cause RemoveRedundantAliases to remove aliases of duplicate
+        // columns and leave Union unresolved.
+        val e = intercept[SparkException] {
+          val basePlan = sql(query)
+          val finalPlan =
+            basePlan.toDF("col_0", "col_1").select("col_0", "col_1").toDF("col1", "col1")
+          finalPlan.queryExecution.assertOptimized()
+        }
+        assert(e.getCondition.contains("PLAN_VALIDATION_FAILED_RULE_IN_BATCH"))
+        assert(
+          e.getMessage.contains(
+            "org.apache.spark.sql.catalyst.optimizer.RemoveRedundantAliases"
+          )
+        )
+      }
+    }
+  }
+
   test("SPARK-52686: Union should be resolved only if there are no duplicates") {
     // Different implementations of `WidenSetOperationTypes` cause an additional Project with ANSI
     // off.
