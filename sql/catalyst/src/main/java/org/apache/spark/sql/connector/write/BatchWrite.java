@@ -87,7 +87,6 @@ public interface BatchWrite {
    * disable this behavior by overriding {@link #useCommitCoordinator()}. If disabled, multiple
    * tasks may have committed successfully and one successful commit message per task will be
    * passed to this commit method. The remaining commit messages are ignored by Spark.
-   *
    */
   void commit(WriterCommitMessage[] messages);
 
