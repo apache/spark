@@ -983,21 +983,20 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(l0.array.elements[2].string, "z")
 
         l1 = LiteralExpression._from_value([3, -3]).to_plan(None).literal
-        self.assertTrue(l1.array.element_type.HasField("integer"))
+        self.assertFalse(l1.array.element_type.HasField("integer"))
         self.assertEqual(len(l1.array.elements), 2)
         self.assertEqual(l1.array.elements[0].integer, 3)
         self.assertEqual(l1.array.elements[1].integer, -3)
 
         l2 = LiteralExpression._from_value([float("nan"), -3.0, 0.0]).to_plan(None).literal
-        self.assertTrue(l2.array.element_type.HasField("double"))
+        self.assertFalse(l2.array.element_type.HasField("double"))
         self.assertEqual(len(l2.array.elements), 3)
         self.assertTrue(math.isnan(l2.array.elements[0].double))
         self.assertEqual(l2.array.elements[1].double, -3.0)
         self.assertEqual(l2.array.elements[2].double, 0.0)
 
         l3 = LiteralExpression._from_value([[3, 4], [5, 6, 7]]).to_plan(None).literal
-        self.assertTrue(l3.array.element_type.HasField("array"))
-        self.assertTrue(l3.array.element_type.array.element_type.HasField("integer"))
+        self.assertFalse(l3.array.element_type.HasField("array"))
         self.assertEqual(len(l3.array.elements), 2)
         self.assertEqual(len(l3.array.elements[0].array.elements), 2)
         self.assertEqual(len(l3.array.elements[1].array.elements), 3)
@@ -1007,8 +1006,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             .to_plan(None)
             .literal
         )
-        self.assertTrue(l4.array.element_type.HasField("array"))
-        self.assertTrue(l4.array.element_type.array.element_type.HasField("double"))
+        self.assertFalse(l4.array.element_type.HasField("array"))
         self.assertEqual(len(l4.array.elements), 3)
         self.assertEqual(len(l4.array.elements[0].array.elements), 2)
         self.assertEqual(len(l4.array.elements[1].array.elements), 2)

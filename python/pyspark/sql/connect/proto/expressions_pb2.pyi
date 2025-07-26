@@ -475,7 +475,11 @@ class Expression(google.protobuf.message.Message):
             ELEMENT_TYPE_FIELD_NUMBER: builtins.int
             ELEMENTS_FIELD_NUMBER: builtins.int
             @property
-            def element_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            def element_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+                """(Optional) The element type of the array. Only need to set this when the elements are
+                empty or the element type is not inferable, since spark 4.1+ supports
+                inferring the element type from the elements.
+                """
             @property
             def elements(
                 self,
@@ -506,9 +510,17 @@ class Expression(google.protobuf.message.Message):
             KEYS_FIELD_NUMBER: builtins.int
             VALUES_FIELD_NUMBER: builtins.int
             @property
-            def key_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            def key_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+                """(Optional) The key type of the map. Only need to set this when the keys are
+                empty or the key type is not inferable, since spark 4.1+ supports
+                inferring the key type from the keys
+                """
             @property
-            def value_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            def value_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+                """(Optional) The value type of the map. Only need to set this when the values are
+                empty or the value type is not inferable, since spark 4.1+ supports
+                inferring the value type from the values.
+                """
             @property
             def keys(
                 self,

@@ -29,9 +29,9 @@ from typing import (
     Optional,
 )
 
-import json
-import decimal
 import datetime
+import decimal
+import json
 import warnings
 from threading import Lock
 
@@ -385,6 +385,52 @@ class LiteralExpression(Expression):
         return LiteralExpression(value=value, dataType=LiteralExpression._infer_type(value))
 
     @classmethod
+    def _infer_type_from_literal(cls, literal: "proto.Expression.Literal") -> Optional[DataType]:
+        if literal.HasField("null"):
+            return NullType()
+        elif literal.HasField("binary"):
+            return BinaryType()
+        elif literal.HasField("boolean"):
+            return BooleanType()
+        elif literal.HasField("byte"):
+            return ByteType()
+        elif literal.HasField("short"):
+            return ShortType()
+        elif literal.HasField("integer"):
+            return IntegerType()
+        elif literal.HasField("long"):
+            return LongType()
+        elif literal.HasField("float"):
+            return FloatType()
+        elif literal.HasField("double"):
+            return DoubleType()
+        elif literal.HasField("date"):
+            return DateType()
+        elif literal.HasField("timestamp"):
+            return TimestampType()
+        elif literal.HasField("timestamp_ntz"):
+            return TimestampNTZType()
+        elif literal.HasField("array"):
+            if literal.array.HasField("element_type"):
+                return ArrayType(
+                    proto_schema_to_pyspark_data_type(literal.array.element_type), True
+                )
+            element_type = None
+            if len(literal.array.elements) > 0:
+                element_type = LiteralExpression._infer_type_from_literal(literal.array.elements[0])
+
+            if element_type is None:
+                raise PySparkTypeError(
+                    errorClass="CANNOT_INFER_ARRAY_ELEMENT_TYPE",
+                    messageParameters={},
+                )
+            return ArrayType(element_type, True)
+        # Not all data types support inferring the data type from the literal at the moment.
+        # e.g. the type of DayTimeInterval contains extra information like start_field and
+        # end_field and cannot be inferred from the literal.
+        return None
+
+    @classmethod
     def _to_value(
         cls, literal: "proto.Expression.Literal", dataType: Optional[DataType] = None
     ) -> Any:
@@ -436,10 +482,20 @@ class LiteralExpression(Expression):
             assert dataType is None or isinstance(dataType, DayTimeIntervalType)
             return DayTimeIntervalType().fromInternal(literal.day_time_interval)
         elif literal.HasField("array"):
-            elementType = proto_schema_to_pyspark_data_type(literal.array.element_type)
-            if dataType is not None:
-                assert isinstance(dataType, ArrayType)
-                assert elementType == dataType.elementType
+            elementType = None
+            if literal.array.HasField("element_type"):
+                elementType = proto_schema_to_pyspark_data_type(literal.array.element_type)
+                if dataType is not None:
+                    assert isinstance(dataType, ArrayType)
+                    assert elementType == dataType.elementType
+            elif len(literal.array.elements) > 0:
+                elementType = LiteralExpression._infer_type_from_literal(literal.array.elements[0])
+
+            if elementType is None:
+                raise PySparkTypeError(
+                    errorClass="CANNOT_INFER_ARRAY_ELEMENT_TYPE",
+                    messageParameters={},
+                )
             return [LiteralExpression._to_value(v, elementType) for v in literal.array.elements]
 
         raise PySparkTypeError(
@@ -488,11 +544,17 @@ class LiteralExpression(Expression):
         elif isinstance(self._dataType, DayTimeIntervalType):
             expr.literal.day_time_interval = int(self._value)
         elif isinstance(self._dataType, ArrayType):
-            element_type = self._dataType.elementType
-            expr.literal.array.element_type.CopyFrom(pyspark_types_to_proto_types(element_type))
             for v in self._value:
                 expr.literal.array.elements.append(
-                    LiteralExpression(v, element_type).to_plan(session).literal
+                    LiteralExpression(v, self._dataType.elementType).to_plan(session).literal
+                )
+            if (
+                len(self._value) == 0
+                or LiteralExpression._infer_type_from_literal(expr.literal.array.elements[0])
+                is None
+            ):
+                expr.literal.array.element_type.CopyFrom(
+                    pyspark_types_to_proto_types(self._dataType.elementType)
                 )
         else:
             raise PySparkTypeError(
