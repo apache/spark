@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
 import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
@@ -52,8 +53,8 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
 
     // Integer types: suggest config change
     val configParams = Map(
-      "config" -> "\"spark.sql.ansi.enabled\"",
-      "configVal" -> "'false'"
+      "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key),
+      "configVal" -> toSQLValue("false", StringType)
     )
     checkNumericTypeCast(1.toByte, ByteType, BinaryType, "CAST_WITH_CONF_SUGGESTION", configParams)
     checkNumericTypeCast(
