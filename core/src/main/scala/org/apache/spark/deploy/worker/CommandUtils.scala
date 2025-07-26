@@ -20,6 +20,7 @@ package org.apache.spark.deploy.worker
 import java.io.{File, FileOutputStream, InputStream, IOException}
 
 import scala.collection.Map
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SecurityManager, SSLOptions}
@@ -79,20 +80,24 @@ object CommandUtils extends Logging {
     val libraryPathEntries = command.libraryPathEntries
     val cmdLibraryPath = command.environment.get(libraryPathName)
 
-    var newEnvironment = if (libraryPathEntries.nonEmpty && libraryPathName.nonEmpty) {
+    val newEnvironment = new mutable.HashMap[String, String]()
+    newEnvironment.addAll(env)
+
+    if (libraryPathEntries.nonEmpty && libraryPathName.nonEmpty) {
       val libraryPaths = libraryPathEntries ++ cmdLibraryPath ++ env.get(libraryPathName)
-      command.environment ++ Map(libraryPathName -> libraryPaths.mkString(File.pathSeparator))
-    } else {
-      command.environment
+      newEnvironment.put(libraryPathName, libraryPaths.mkString(File.pathSeparator))
+    }
+
+    for ((k, v) <- command.environment) {
+      newEnvironment.getOrElseUpdate(k, v)
     }
 
     // set auth secret to env variable if needed
     if (securityMgr.isAuthenticationEnabled()) {
-      newEnvironment = newEnvironment ++
-        Map(SecurityManager.ENV_AUTH_SECRET -> securityMgr.getSecretKey())
+      newEnvironment.put(SecurityManager.ENV_AUTH_SECRET, securityMgr.getSecretKey())
     }
     // set SSL env variables if needed
-    newEnvironment ++= securityMgr.getEnvironmentForSslRpcPasswords
+    newEnvironment.addAll(securityMgr.getEnvironmentForSslRpcPasswords)
 
     Command(
       command.mainClass,
