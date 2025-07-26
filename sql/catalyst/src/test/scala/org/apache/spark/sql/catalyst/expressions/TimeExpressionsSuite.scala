@@ -418,4 +418,58 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
+
+  test("TruncateTime") {
+    val fullTime = Literal(localTime(12, 34, 56, 789123), TimeType())
+
+    // foldable, invalid/null units
+    checkEvaluation(
+      TruncateTime(Literal("FOO"), fullTime),
+      null)
+
+    checkEvaluation(
+      TruncateTime(Literal.create(null, StringType), fullTime),
+      null)
+
+    // foldable, valid units
+    checkEvaluation(
+      TruncateTime(Literal("hour"), fullTime),
+      localTime(12))
+
+    checkEvaluation(
+      TruncateTime(Literal("minute"), fullTime),
+      localTime(12, 34))
+
+    checkEvaluation(
+      TruncateTime(Literal("second"), fullTime),
+      localTime(12, 34, 56))
+
+    checkEvaluation(
+      TruncateTime(Literal("millisecond"), fullTime),
+      localTime(12, 34, 56, 789000))
+
+    checkEvaluation(
+      TruncateTime(Literal("microsecond"), fullTime),
+      localTime(12, 34, 56, 789123))
+
+    // non-foldable, invalid/null units
+    checkEvaluation(
+      TruncateTime(NonFoldableLiteral("NULL"), fullTime),
+      null)
+
+    checkEvaluation(
+      TruncateTime(NonFoldableLiteral("BAR"), fullTime),
+      null)
+
+    // non-foldable, valid unit
+    checkEvaluation(
+      TruncateTime(NonFoldableLiteral("minute"), fullTime),
+      localTime(12, 34))
+
+    // test precision preservation
+    val millisTime = Literal(localTime(23, 59, 0, 123456), TimeType(3))
+    checkEvaluation(
+      TruncateTime(Literal("hour"), millisTime),
+      localTime(23))
+  }
 }
