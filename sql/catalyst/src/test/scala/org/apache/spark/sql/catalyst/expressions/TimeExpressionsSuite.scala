@@ -19,11 +19,12 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.time.{Duration, LocalTime}
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkDateTimeException, SparkFunSuite}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkDateTimeException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLValue}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.localTimeToNanos
 import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, IntegerType, StringType, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, SECOND}
 
@@ -417,5 +418,109 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           TimeType(i), TimeType(j))
       }
     }
+  }
+
+  test("SPARK-51554: TimeTrunc") {
+    // Test cases for different truncation units - 09:32:05.359123.
+    val testTime = localTime(9, 32, 5, 359123)
+
+    // Test HOUR truncation.
+    checkEvaluation(
+      TimeTrunc(Literal("HOUR"), Literal(testTime, TimeType())),
+      localTime(9, 0, 0, 0)
+    )
+    // Test MINUTE truncation.
+    checkEvaluation(
+      TimeTrunc(Literal("MINUTE"), Literal(testTime, TimeType())),
+      localTime(9, 32, 0, 0)
+    )
+    // Test SECOND truncation.
+    checkEvaluation(
+      TimeTrunc(Literal("SECOND"), Literal(testTime, TimeType())),
+      localTime(9, 32, 5, 0)
+    )
+    // Test MILLISECOND truncation.
+    checkEvaluation(
+      TimeTrunc(Literal("MILLISECOND"), Literal(testTime, TimeType())),
+      localTime(9, 32, 5, 359000)
+    )
+    // Test MICROSECOND truncation.
+    checkEvaluation(
+      TimeTrunc(Literal("MICROSECOND"), Literal(testTime, TimeType())),
+      testTime
+    )
+
+    // Test case-insensitive units.
+    checkEvaluation(
+      TimeTrunc(Literal("hour"), Literal(testTime, TimeType())),
+      localTime(9, 0, 0, 0)
+    )
+    checkEvaluation(
+      TimeTrunc(Literal("Hour"), Literal(testTime, TimeType())),
+      localTime(9, 0, 0, 0)
+    )
+    checkEvaluation(
+      TimeTrunc(Literal("hoUR"), Literal(testTime, TimeType())),
+      localTime(9, 0, 0, 0)
+    )
+
+    // Test invalid units.
+    val invalidUnits: Seq[String] = Seq("MS", "INVALID", "ABC", "XYZ", " ", "")
+    invalidUnits.foreach { unit =>
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          TimeTrunc(Literal(unit), Literal(testTime, TimeType())).eval()
+        },
+        condition = "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+        parameters = Map(
+          "functionName" -> "`time_trunc`",
+          "parameter" -> "`unit`",
+          "invalidValue" -> s"'$unit'"
+        )
+      )
+    }
+
+    // Test null inputs.
+    checkEvaluation(
+      TimeTrunc(Literal.create(null, StringType), Literal(testTime, TimeType())),
+      null
+    )
+    checkEvaluation(
+      TimeTrunc(Literal("HOUR"), Literal.create(null, TimeType())),
+      null
+    )
+    checkEvaluation(
+      TimeTrunc(Literal.create(null, StringType), Literal.create(null, TimeType())),
+      null
+    )
+
+    // Test edge cases.
+    val midnightTime = localTime(0, 0, 0, 0)
+    val supportedUnits: Seq[String] = Seq("HOUR", "MINUTE", "SECOND", "MILLISECOND", "MICROSECOND")
+    supportedUnits.foreach { unit =>
+      checkEvaluation(
+        TimeTrunc(Literal(unit), Literal(midnightTime, TimeType())),
+        midnightTime
+      )
+    }
+
+    val maxTime = localTimeToNanos(LocalTime.of(23, 59, 59, 999999999))
+    checkEvaluation(
+      TimeTrunc(Literal("HOUR"), Literal(maxTime, TimeType())),
+      localTime(23, 0, 0, 0)
+    )
+    checkEvaluation(
+      TimeTrunc(Literal("MICROSECOND"), Literal(maxTime, TimeType())),
+      localTimeToNanos(LocalTime.of(23, 59, 59, 999999000))
+    )
+
+    // Test precision loss.
+    val timeWithMicroPrecision = localTime(15, 30, 45, 123456)
+    val timeTruncMin = TimeTrunc(Literal("MINUTE"), Literal(timeWithMicroPrecision, TimeType(3)))
+    assert(timeTruncMin.dataType == TimeType(3))
+    checkEvaluation(timeTruncMin, localTime(15, 30, 0, 0))
+    val timeTruncSec = TimeTrunc(Literal("SECOND"), Literal(timeWithMicroPrecision, TimeType(3)))
+    assert(timeTruncSec.dataType == TimeType(3))
+    checkEvaluation(timeTruncSec, localTime(15, 30, 45, 0))
   }
 }
