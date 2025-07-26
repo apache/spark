@@ -10130,7 +10130,7 @@ def hour(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
-        target date/timestamp column to work on.
+        target date/time/timestamp column to work on.
 
     Returns
     -------
@@ -10194,7 +10194,7 @@ def minute(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
-        target date/timestamp column to work on.
+        target date/time/timestamp column to work on.
 
     See Also
     --------
@@ -10258,7 +10258,7 @@ def second(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
-        target date/timestamp column to work on.
+        target date/time/timestamp column to work on.
 
     Returns
     -------
