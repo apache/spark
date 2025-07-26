@@ -99,9 +99,6 @@
             <includes>
               <include>*:*</include>
             </includes>
-            <excludes>
-              <exclude>org.scala-lang:scala-library</exclude>
-            </excludes>
           </artifactSet>
           <filters>
             <filter>
