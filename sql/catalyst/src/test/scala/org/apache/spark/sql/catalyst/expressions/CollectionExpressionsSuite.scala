@@ -29,7 +29,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingZoneIds, LA, UTC}
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
@@ -770,8 +770,15 @@ class CollectionExpressionsSuite
     val a5 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
 
     checkEvaluation(ArrayContains(a0, Literal(1)), true)
+    checkEvaluation(InSet(Literal(1), a0.value.asInstanceOf[GenericArrayData].array.toSet), true)
+
     checkEvaluation(ArrayContains(a0, Literal(0)), false)
+    checkEvaluation(InSet(Literal(0), a0.value.asInstanceOf[GenericArrayData].array.toSet), false)
+
     checkEvaluation(ArrayContains(a0, Literal.create(null, IntegerType)), null)
+    checkEvaluation(InSet(Literal.create(null, IntegerType),
+      a0.value.asInstanceOf[GenericArrayData].array.toSet), null)
+
     checkEvaluation(ArrayContains(a5, Literal(1)), true)
 
     checkEvaluation(ArrayContains(a1, Literal("")), true)
@@ -779,7 +786,11 @@ class CollectionExpressionsSuite
     checkEvaluation(ArrayContains(a1, Literal.create(null, StringType)), null)
 
     checkEvaluation(ArrayContains(a2, Literal(1L)), null)
+    checkEvaluation(InSet(Literal(1L), a2.value.asInstanceOf[GenericArrayData].array.toSet), null)
+
     checkEvaluation(ArrayContains(a2, Literal.create(null, LongType)), null)
+    checkEvaluation(InSet(Literal.create(null, LongType),
+      a2.value.asInstanceOf[GenericArrayData].array.toSet), null)
 
     checkEvaluation(ArrayContains(a3, Literal("")), null)
     checkEvaluation(ArrayContains(a3, Literal.create(null, StringType)), null)
