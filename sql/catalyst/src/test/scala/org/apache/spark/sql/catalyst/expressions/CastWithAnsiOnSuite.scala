@@ -39,24 +39,17 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
 
   override def evalMode: EvalMode.Value = EvalMode.ANSI
 
-  override protected def checkInvalidCastFromNumericTypeToDateType(): Unit = {
-    // All numeric types: `CAST_WITH_FUNC_SUGGESTION`
-    val funcParams = Map("functionNames" -> "`DATE_FROM_UNIX_DATE`")
-    Seq(1.toByte, 1.toShort, 1, 1L, 1.0.toFloat, 1.0).foreach { testValue =>
-      checkNumericTypeCast(
-        testValue, Literal(testValue).dataType, DateType, "CAST_WITH_FUNC_SUGGESTION", funcParams)
-    }
-  }
-
-  override protected def checkInvalidCastFromNumericTypeToTimestampNTZType(): Unit = {
-    // All numeric types: `CAST_WITHOUT_SUGGESTION`
-    Seq(1.toByte, 1.toShort, 1, 1L, 1.0.toFloat, 1.0).foreach { testValue =>
-      checkNumericTypeCast(
-        testValue, Literal(testValue).dataType, TimestampNTZType, "CAST_WITHOUT_SUGGESTION")
-    }
-  }
-
   protected def checkInvalidCastFromNumericTypeToBinaryType(): Unit = {
+    def checkNumericTypeCast(
+        testValue: Any,
+        srcType: DataType,
+        to: DataType,
+        expectedErrorClass: String,
+        extraParams: Map[String, String] = Map.empty): Unit = {
+      val expectedError = createCastMismatch(srcType, to, expectedErrorClass, extraParams)
+      assert(cast(testValue, to).checkInputDataTypes() == expectedError)
+    }
+
     // Integer types: suggest config change
     val configParams = Map(
       "config" -> "\"spark.sql.ansi.enabled\"",
@@ -71,16 +64,6 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     // Floating types: no suggestion
     checkNumericTypeCast(1.0.toFloat, FloatType, BinaryType, "CAST_WITHOUT_SUGGESTION")
     checkNumericTypeCast(1.0, DoubleType, BinaryType, "CAST_WITHOUT_SUGGESTION")
-  }
-
-  protected def checkNumericTypeCast(
-      testValue: Any,
-      srcType: DataType,
-      to: DataType,
-      expectedErrorClass: String,
-      extraParams: Map[String, String] = Map.empty): Unit = {
-    val expectedError = createCastMismatch(srcType, to, expectedErrorClass, extraParams)
-    assert(cast(testValue, to).checkInputDataTypes() == expectedError)
   }
 
   private def isTryCast = evalMode == EvalMode.TRY

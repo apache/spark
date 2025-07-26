@@ -40,23 +40,6 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
 
   override def evalMode: EvalMode.Value = EvalMode.LEGACY
 
-  private def checkInvalidCastFromNumericType(to: DataType): Unit = {
-    // All numeric types: `CAST_WITHOUT_SUGGESTION`
-    Seq(1.toByte, 1.toShort, 1, 1L, 1.0.toFloat, 1.0).foreach { testValue =>
-      val expectedError =
-        createCastMismatch(Literal(testValue).dataType, to, "CAST_WITHOUT_SUGGESTION")
-      assert(cast(testValue, to).checkInputDataTypes() == expectedError)
-    }
-  }
-
-  override protected def checkInvalidCastFromNumericTypeToDateType(): Unit = {
-    checkInvalidCastFromNumericType(DateType)
-  }
-
-  override protected def checkInvalidCastFromNumericTypeToTimestampNTZType(): Unit = {
-    checkInvalidCastFromNumericType(TimestampNTZType)
-  }
-
   test("null cast #2") {
     import DataTypeTestUtils._
 

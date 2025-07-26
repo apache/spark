@@ -557,8 +557,32 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     DataTypeMismatch(errorSubClass, baseParams ++ extraParams)
   }
 
-  protected def checkInvalidCastFromNumericTypeToDateType(): Unit
-  protected def checkInvalidCastFromNumericTypeToTimestampNTZType(): Unit
+  protected def checkInvalidCastFromNumericTypeToDateType(): Unit = {
+    val errorSubClass = if (evalMode == EvalMode.LEGACY) {
+      "CAST_WITHOUT_SUGGESTION"
+    } else {
+      "CAST_WITH_FUNC_SUGGESTION"
+    }
+    val funcParams = if (evalMode == EvalMode.LEGACY) {
+      Map.empty[String, String]
+    } else {
+      Map("functionNames" -> "`DATE_FROM_UNIX_DATE`")
+    }
+    // All numeric types: `CAST_WITHOUT_SUGGESTION`
+    Seq(1.toByte, 1.toShort, 1, 1L, 1.0.toFloat, 1.0).foreach { testValue =>
+      val expectedError =
+        createCastMismatch(Literal(testValue).dataType, DateType, errorSubClass, funcParams)
+      assert(cast(testValue, DateType).checkInputDataTypes() == expectedError)
+    }
+  }
+  protected def checkInvalidCastFromNumericTypeToTimestampNTZType(): Unit = {
+    // All numeric types: `CAST_WITHOUT_SUGGESTION`
+    Seq(1.toByte, 1.toShort, 1, 1L, 1.0.toFloat, 1.0).foreach { testValue =>
+      val expectedError =
+        createCastMismatch(Literal(testValue).dataType, TimestampNTZType, "CAST_WITHOUT_SUGGESTION")
+      assert(cast(testValue, TimestampNTZType).checkInputDataTypes() == expectedError)
+    }
+  }
 
   test("SPARK-16729 type checking for casting to date type") {
     assert(cast("1234", DateType).checkInputDataTypes().isSuccess)
