@@ -335,7 +335,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def mapSizeExceedArraySizeWhenZipMapError(size: Int): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2003",
+      errorClass = "MAP_ZIP_WITH_SIZE_LIMIT_EXCEEDED",
       messageParameters = Map(
         "size" -> size.toString(),
         "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))

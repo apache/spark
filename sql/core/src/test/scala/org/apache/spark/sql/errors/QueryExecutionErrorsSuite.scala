@@ -1277,6 +1277,29 @@ class QueryExecutionErrorsSuite
     }
   }
 
+  test("MAP_ZIP_WITH_SIZE_LIMIT_EXCEEDED: map_zip_with unique keys exceed array size limit") {
+    // Since we cannot realistically create maps with Integer.MAX_VALUE unique keys in tests,
+    // and not worth modifing the MAX_ROUNDED_ARRAY_LENGTH constant via reflection,
+    // we directly test the error.
+
+    import org.apache.spark.sql.errors.QueryExecutionErrors
+    import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
+
+    val exceedingSize = MAX_ROUNDED_ARRAY_LENGTH + 1
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        throw QueryExecutionErrors.mapSizeExceedArraySizeWhenZipMapError(exceedingSize)
+      },
+      condition = "MAP_ZIP_WITH_SIZE_LIMIT_EXCEEDED",
+      parameters = Map(
+        "size" -> exceedingSize.toString,
+        "maxRoundedArrayLength" -> MAX_ROUNDED_ARRAY_LENGTH.toString
+      ),
+      sqlState = Some("22023")
+    )
+  }
+  
   test("SPARK-42841: SQL query with unsupported data types for ordering") {
     import org.apache.spark.sql.catalyst.types.PhysicalDataType
     import org.apache.spark.sql.types.CalendarIntervalType
@@ -1291,7 +1314,6 @@ class QueryExecutionErrorsSuite
       condition = "DATATYPE_CANNOT_ORDER",
       parameters = Map("dataType" -> "PhysicalCalendarIntervalType"))
   }
-
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {
