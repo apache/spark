@@ -3888,6 +3888,190 @@ struct<>
 
 
 -- !query
+CREATE FUNCTION foo3_4a(x INT) RETURNS INT RETURN 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_4b(x INT) RETURNS INT RETURN foo3_4a(x)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_4c(x INT) RETURNS INT RETURN foo3_4b(x)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_4d(x INT) RETURNS INT RETURN (SELECT foo3_4c(x))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_4e(x INT) RETURNS TABLE(a INT) RETURN SELECT foo3_4a(x)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_4f(x INT) RETURNS TABLE(b INT) RETURN SELECT * FROM foo3_4e(x)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMP FUNCTION foo3_4g(x INT) RETURN x + 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE TEMP FUNCTION foo3_4h(x INT) RETURN foo3_4g(x) + 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo3_4a(x INT) RETURNS INT RETURN foo3_4b(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "path" : "spark_catalog.default.foo3_4a -> spark_catalog.default.foo3_4b -> spark_catalog.default.foo3_4a"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo3_4a(x INT) RETURNS INT RETURN foo3_4c(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "path" : "spark_catalog.default.foo3_4a -> spark_catalog.default.foo3_4c -> spark_catalog.default.foo3_4b -> spark_catalog.default.foo3_4a"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo3_4a(x INT) RETURNS INT RETURN foo3_4d(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "path" : "spark_catalog.default.foo3_4a -> spark_catalog.default.foo3_4d -> spark_catalog.default.foo3_4c -> spark_catalog.default.foo3_4b -> spark_catalog.default.foo3_4a"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo3_4a(x INT) RETURN FoO3_4b(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "path" : "spark_catalog.default.foo3_4a -> spark_catalog.default.foo3_4b -> spark_catalog.default.foo3_4a"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo3_4a(x INT) RETURNS INT RETURN SELECT SUM(a) FROM foo3_4e(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "path" : "spark_catalog.default.foo3_4a -> spark_catalog.default.foo3_4e -> spark_catalog.default.foo3_4a"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo3_4e(x INT) RETURNS TABLE (c INT) RETURN SELECT * FROM foo3_4f(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "path" : "spark_catalog.default.foo3_4e -> spark_catalog.default.foo3_4f -> spark_catalog.default.foo3_4e"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo3_4e(x INT) RETURNS TABLE RETURN SELECT * FROM fOo3_4F(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "path" : "spark_catalog.default.foo3_4e -> spark_catalog.default.foo3_4f -> spark_catalog.default.foo3_4e"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE TEMP FUNCTION foo3_4g(x INT) RETURN foo3_4h(x) + 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "path" : "foo3_4g -> foo3_4h -> foo3_4g"
+  }
+}
+
+
+-- !query
 CREATE TEMPORARY VIEW t AS VALUES (0) t(a)
 -- !query schema
 struct<>
@@ -5163,6 +5347,54 @@ struct<>
 
 -- !query
 DROP FUNCTION IF EXISTS foo3_3dt
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_4a
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_4b
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_4c
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_4d
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_4e
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_4f
 -- !query schema
 struct<>
 -- !query output

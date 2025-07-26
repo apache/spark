@@ -3748,6 +3748,158 @@ ResetCommand spark.sql.ansi.enabled
 
 
 -- !query
+CREATE FUNCTION foo3_4a(x INT) RETURNS INT RETURN 1
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_4a, x INT, INT, 1, false, false, false, false
+
+
+-- !query
+CREATE FUNCTION foo3_4b(x INT) RETURNS INT RETURN foo3_4a(x)
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_4b, x INT, INT, foo3_4a(x), false, false, false, false
+
+
+-- !query
+CREATE FUNCTION foo3_4c(x INT) RETURNS INT RETURN foo3_4b(x)
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_4c, x INT, INT, foo3_4b(x), false, false, false, false
+
+
+-- !query
+CREATE FUNCTION foo3_4d(x INT) RETURNS INT RETURN (SELECT foo3_4c(x))
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_4d, x INT, INT, (SELECT foo3_4c(x)), false, false, false, false
+
+
+-- !query
+CREATE FUNCTION foo3_4e(x INT) RETURNS TABLE(a INT) RETURN SELECT foo3_4a(x)
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_4e, x INT, a INT, SELECT foo3_4a(x), true, false, false, false
+
+
+-- !query
+CREATE FUNCTION foo3_4f(x INT) RETURNS TABLE(b INT) RETURN SELECT * FROM foo3_4e(x)
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_4f, x INT, b INT, SELECT * FROM foo3_4e(x), true, false, false, false
+
+
+-- !query
+CREATE OR REPLACE TEMP FUNCTION foo3_4g(x INT) RETURN x + 1
+-- !query analysis
+CreateSQLFunctionCommand foo3_4g, x INT, , x + 1, false, true, false, true
+
+
+-- !query
+CREATE OR REPLACE TEMP FUNCTION foo3_4h(x INT) RETURN foo3_4g(x) + 1
+-- !query analysis
+CreateSQLFunctionCommand foo3_4h, x INT, , foo3_4g(x) + 1, false, true, false, true
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo3_4a(x INT) RETURNS INT RETURN foo3_4b(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "path" : "spark_catalog.default.foo3_4a -> spark_catalog.default.foo3_4b -> spark_catalog.default.foo3_4a"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo3_4a(x INT) RETURNS INT RETURN foo3_4c(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "path" : "spark_catalog.default.foo3_4a -> spark_catalog.default.foo3_4c -> spark_catalog.default.foo3_4b -> spark_catalog.default.foo3_4a"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo3_4a(x INT) RETURNS INT RETURN foo3_4d(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "path" : "spark_catalog.default.foo3_4a -> spark_catalog.default.foo3_4d -> spark_catalog.default.foo3_4c -> spark_catalog.default.foo3_4b -> spark_catalog.default.foo3_4a"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo3_4a(x INT) RETURN FoO3_4b(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "path" : "spark_catalog.default.foo3_4a -> spark_catalog.default.foo3_4b -> spark_catalog.default.foo3_4a"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo3_4a(x INT) RETURNS INT RETURN SELECT SUM(a) FROM foo3_4e(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "path" : "spark_catalog.default.foo3_4a -> spark_catalog.default.foo3_4e -> spark_catalog.default.foo3_4a"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo3_4e(x INT) RETURNS TABLE (c INT) RETURN SELECT * FROM foo3_4f(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "path" : "spark_catalog.default.foo3_4e -> spark_catalog.default.foo3_4f -> spark_catalog.default.foo3_4e"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE FUNCTION foo3_4e(x INT) RETURNS TABLE RETURN SELECT * FROM fOo3_4F(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "path" : "spark_catalog.default.foo3_4e -> spark_catalog.default.foo3_4f -> spark_catalog.default.foo3_4e"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE TEMP FUNCTION foo3_4g(x INT) RETURN foo3_4h(x) + 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CYCLIC_FUNCTION_REFERENCE",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "path" : "foo3_4g -> foo3_4h -> foo3_4g"
+  }
+}
+
+
+-- !query
 CREATE TEMPORARY VIEW t AS VALUES (0) t(a)
 -- !query analysis
 CreateViewCommand `t`, VALUES (0) t(a), false, false, LocalTempView, UNSUPPORTED, true
@@ -4894,6 +5046,42 @@ DropFunctionCommand spark_catalog.default.foo3_3d, true, false
 DROP FUNCTION IF EXISTS foo3_3dt
 -- !query analysis
 DropFunctionCommand spark_catalog.default.foo3_3dt, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_4a
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_4a, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_4b
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_4b, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_4c
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_4c, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_4d
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_4d, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_4e
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_4e, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_4f
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_4f, true, false
 
 
 -- !query
