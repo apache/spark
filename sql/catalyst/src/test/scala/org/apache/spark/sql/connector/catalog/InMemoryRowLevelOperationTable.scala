@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import java.util
+import java.{lang, util}
+import java.time.Instant
+
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
@@ -111,7 +114,21 @@ class InMemoryRowLevelOperationTable(
     override def description(): String = "InMemoryPartitionReplaceOperation"
   }
 
-  private case class PartitionBasedReplaceData(scan: InMemoryBatchScan) extends TestBatchWrite {
+  abstract class RowLevelOperationBatchWrite extends TestBatchWrite {
+
+    override def commit(messages: Array[WriterCommitMessage],
+                                            metrics: util.Map[String, lang.Long]): Unit = {
+      metrics.asScala.map {
+        case (key, value) => commitProperties += key -> String.valueOf(value)
+      }
+      commit(messages)
+      commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
+      commitProperties.clear()
+    }
+  }
+
+  private case class PartitionBasedReplaceData(scan: InMemoryBatchScan)
+    extends RowLevelOperationBatchWrite {
 
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
@@ -165,7 +182,7 @@ class InMemoryRowLevelOperationTable(
     }
   }
 
-  private object TestDeltaBatchWrite extends DeltaBatchWrite {
+  private object TestDeltaBatchWrite extends RowLevelOperationBatchWrite with DeltaBatchWrite{
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DeltaWriterFactory = {
       DeltaBufferedRowsWriterFactory
     }
