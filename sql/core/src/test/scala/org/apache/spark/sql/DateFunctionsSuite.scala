@@ -668,6 +668,16 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(e.getCause.isInstanceOf[IllegalArgumentException])
     assert(e.getMessage.contains("You may get a different result due to the upgrading to Spark"))
 
+    // Format is invalid when input is not StringType.
+    checkAnswer(
+      df.select(to_date(col("t"), "yyyy-MM")),
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")),
+        Row(Date.valueOf("2014-12-31"))))
+    checkAnswer(
+      df.select(to_date(col("d"), "yyyy-MM")),
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01")),
+        Row(Date.valueOf("2014-12-31"))))
+
     // February
     val x1 = "2016-02-29"
     val x2 = "2017-02-29"
@@ -1014,6 +1024,10 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
           Row(ts1), Row(ts2)))
         checkAnswer(df.select(to_timestamp(col("d"), "yyyy-MM-dd")), Seq(
           Row(ts_date1), Row(ts_date2)))
+
+        // Format is invalid when input is not StringType.
+        checkAnswer(df.select(to_timestamp(col("ts"), "yyyy-MM-dd")), Seq(
+          Row(ts1), Row(ts2)))
       }
     }
   }
