@@ -9344,10 +9344,10 @@ def current_time(precision: Optional[int] = None) -> Column:
     |  21:23:22.716|
     +--------------+
     """
-    if precision is not None:
-        return _invoke_function("current_time", precision)
-    else:
+    if precision is None:
         return _invoke_function("current_time")
+    else:
+        return _invoke_function("current_time", precision)
 
 
 @_try_remote_functions

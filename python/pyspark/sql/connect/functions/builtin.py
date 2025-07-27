@@ -3151,10 +3151,10 @@ def current_time(precision: int) -> Column:
 
 
 def current_time(precision: Optional[int] = None) -> Column:
-    if precision is not None:
-        return _invoke_function("current_time", precision)
-    else:
+    if precision is None:
         return _invoke_function("current_time")
+    else:
+        return _invoke_function("current_time", precision)
 
 
 current_time.__doc__ = pysparkfuncs.current_time.__doc__
