@@ -66,8 +66,11 @@ class ThetasketchesAggSuite extends SparkFunSuite {
       })
 
     val estimator = ThetaSketchEstimate(BoundReference(0, BinaryType, nullable = true))
-    val estimate = estimator.eval(InternalRow(mergedBuf.toByteArray)).asInstanceOf[Long]
-    (estimate, mergedBuf.getLowerBound(3).toLong to mergedBuf.getUpperBound(3).toLong)
+    val estimate = estimator.eval(InternalRow(mergedBuf.getResult.toByteArray)).asInstanceOf[Long]
+    (
+      estimate,
+      mergedBuf.getResult.getLowerBound(3).toLong to mergedBuf.getResult.getUpperBound(3).toLong
+    )
   }
 
   test("SPARK-52407: Test min/max values of supported datatypes") {
@@ -107,7 +110,8 @@ class ThetasketchesAggSuite extends SparkFunSuite {
       arrayIntEstimate == arrayIntRange.size ||
         arrayIntRangeEst.contains(arrayIntRange.size.toLong))
 
-    val arrayLongRange = (1 to 500).map(i => ArrayData.toArrayData(Array(i.toLong, (i + 1).toLong)))
+    val arrayLongRange =
+      (1 to 500).map(i => ArrayData.toArrayData(Array(i.toLong, (i + 1).toLong)))
     val (arrayLongEstimate, arrayLongRangeEst) =
       simulateUpdateMerge(ArrayType(LongType), arrayLongRange)
     assert(
