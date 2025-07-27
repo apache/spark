@@ -51,7 +51,6 @@ import com.google.common.net.InetAddresses
 import jakarta.ws.rs.core.UriBuilder
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.io.IOUtils
-import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.fs.audit.CommonAuditContext.currentAuditContext
@@ -67,7 +66,7 @@ import org.apache.logging.log4j.core.config.LoggerConfig
 import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
 
-import org.apache.spark._
+import org.apache.spark.{SPARK_VERSION, _}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
 import org.apache.spark.internal.LogKeys
@@ -105,7 +104,8 @@ private[spark] object Utils
   with SparkFileUtils
   with SparkSerDeUtils
   with SparkStreamUtils
-  with SparkStringUtils {
+  with SparkStringUtils
+  with SparkSystemUtils {
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
   @volatile private var cachedLocalDir: String = ""
@@ -1858,21 +1858,6 @@ private[spark] object Utils
   }
 
   /**
-   * Whether the underlying operating system is UNIX.
-   */
-  val isUnix = SystemUtils.IS_OS_UNIX
-
-  /**
-   * Whether the underlying operating system is Windows.
-   */
-  val isWindows = SystemUtils.IS_OS_WINDOWS
-
-  /**
-   * Whether the underlying operating system is Mac OS X.
-   */
-  val isMac = SystemUtils.IS_OS_MAC_OSX
-
-  /**
    * Whether the underlying Java version is at most 17.
    */
   val isJavaVersionAtMost17 = Runtime.version().feature() <= 17
@@ -1881,11 +1866,6 @@ private[spark] object Utils
    * Whether the underlying Java version is at least 21.
    */
   val isJavaVersionAtLeast21 = Runtime.version().feature() >= 21
-
-  /**
-   * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.
-   */
-  val isMacOnAppleSilicon = SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64")
 
   /**
    * Whether the underlying JVM prefer IPv6 addresses.
@@ -2927,6 +2907,13 @@ private[spark] object Utils
    */
   def substituteAppId(opt: String, appId: String): String = {
     opt.replace("{{APP_ID}}", appId)
+  }
+
+  /**
+   * Replaces all the {{SPARK_VERSION}} occurrences with the Spark version.
+   */
+  def substituteSparkVersion(opt: String): String = {
+    opt.replace("{{SPARK_VERSION}}", SPARK_VERSION)
   }
 
   def createSecret(conf: SparkConf): String = {

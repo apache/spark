@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 
 import org.apache.spark.SparkException
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -400,6 +401,16 @@ object WindowFunctionType {
     // To handle this case, if a window expression doesn't have a regular window function, we
     // consider its type to be SQL as literal(0) is also a SQL expression.
     t.getOrElse(SQL)
+  }
+
+  def pythonEvalType(windowExpression: NamedExpression): Option[Int] = {
+    windowExpression.collectFirst {
+      case udf: PythonUDAF => udf.evalType match {
+        // Infer the eval type of window operation, from the input aggregation type
+        case PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF => PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF
+        case PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF => PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF
+      }
+    }
   }
 }
 
