@@ -22,6 +22,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion
 import org.apache.spark.sql.catalyst.plans.logical.Union
+import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.execution.{SparkPlan, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -1584,6 +1585,35 @@ class DataFrameSetOperationsSuite extends QueryTest
           assert(shuffleNumBefore.size + 1 == shuffleNumAfter.size)
         }
         checkAnswer(union, shuffledUnion)
+      }
+    }
+  }
+
+  test("SPARK-52921: union partitioning - range partitioning") {
+    val df1 = Seq((1, 2, 4), (1, 3, 5), (2, 2, 3), (2, 4, 5)).toDF("a", "b", "c")
+    val df2 = Seq((4, 1, 5), (2, 4, 6), (1, 4, 2), (3, 5, 1)).toDF("d", "e", "f")
+
+    val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+      df1.repartitionByRange($"a").union(df2.repartitionByRange($"d")).collect()
+    }
+
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.UNION_OUTPUT_PARTITIONING.key -> enabled.toString) {
+
+        val union = df1.repartitionByRange($"a").union(df2.repartitionByRange($"d"))
+        val unionExec = union.queryExecution.executedPlan.collect {
+          case u: UnionExec => u
+        }
+        assert(unionExec.size == 1)
+
+        // For range partitioning, even children have the same partitioning,
+        // the union output partitioning is still UnknownPartitioning.
+        val partitioning = unionExec.head.outputPartitioning
+        assert(partitioning.isInstanceOf[UnknownPartitioning])
+
+        checkAnswer(union, correctResult)
       }
     }
   }
