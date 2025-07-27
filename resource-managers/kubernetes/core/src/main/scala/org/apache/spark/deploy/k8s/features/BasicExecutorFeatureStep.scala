@@ -226,6 +226,10 @@ private[spark] class BasicExecutorFeatureStep(
     val containerWithLimitCores = if (isDefaultProfile) {
       executorLimitCores.map { limitCores =>
         val executorCpuLimitQuantity = new Quantity(limitCores)
+        if (executorCpuLimitQuantity.compareTo(executorCpuQuantity) < 0) {
+          throw new SparkException(
+              "The executor cpu request should be less than or equal to cpu limit")
+        }
         new ContainerBuilder(executorContainerWithConfVolume)
           .editResources()
           .addToLimits("cpu", executorCpuLimitQuantity)
