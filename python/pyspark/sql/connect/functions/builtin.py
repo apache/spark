@@ -3140,6 +3140,13 @@ def current_date() -> Column:
 current_date.__doc__ = pysparkfuncs.current_date.__doc__
 
 
+def current_time() -> Column:
+    return _invoke_function("current_time")
+
+
+current_time.__doc__ = pysparkfuncs.current_time.__doc__
+
+
 def current_timestamp() -> Column:
     return _invoke_function("current_timestamp")
 
