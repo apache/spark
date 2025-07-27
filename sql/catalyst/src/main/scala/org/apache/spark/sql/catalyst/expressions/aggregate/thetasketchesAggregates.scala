@@ -190,7 +190,8 @@ case class ThetaSketchAgg(
     }
 
   /**
-   * Merges an input Compact sketch into the UpdateSketch which is acting as the aggregation buffer.
+   * Merges an input Compact sketch into the UpdateSketch which is acting as the aggregation
+   * buffer.
    *
    * @param updateBuffer
    *   the UpdateSketch instance used to store the aggregation result
@@ -589,8 +590,8 @@ case class ThetaIntersectionAgg(
   }
 
   /**
-   * Merges an input Compact sketch into the Intersection which is
-   * acting as the aggregation buffer.
+   * Merges an input Compact sketch into the Intersection which is acting as the aggregation
+   * buffer.
    *
    * @param intersectionBuffer
    *   The Intersection instance used to store the aggregation result
@@ -637,7 +638,8 @@ case class ThetaIntersectionAgg(
    */
   override def eval(sketchState: ThetaSketchState): Any = {
     sketchState match {
-      case IntersectionAggregationBuffer(intersection) => intersection.getResult.toByteArrayCompressed
+      case IntersectionAggregationBuffer(intersection) =>
+        intersection.getResult.toByteArrayCompressed
       case FinalizedSketch(s) => s.toByteArrayCompressed
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
@@ -646,7 +648,8 @@ case class ThetaIntersectionAgg(
   /** Convert the underlying Intersection into an Compact byte array */
   override def serialize(sketchState: ThetaSketchState): Array[Byte] = {
     sketchState match {
-      case IntersectionAggregationBuffer(intersection) => intersection.getResult.toByteArrayCompressed
+      case IntersectionAggregationBuffer(intersection) =>
+        intersection.getResult.toByteArrayCompressed
       case FinalizedSketch(s) => s.toByteArrayCompressed
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
