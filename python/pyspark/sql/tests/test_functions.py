@@ -636,7 +636,7 @@ class FunctionsTestsMixin:
     def test_make_time(self):
         # SPARK-52888: test the make_time function.
         df = self.spark.createDataFrame([(1, 2, 3)], ["hour", "minute", "second"])
-        result = "01:02:03"
+        result = datetime.time(1, 2, 3)
         row_from_col = df.select(F.make_time(df.hour, df.minute, df.second)).first()
         self.assertIsInstance(row_from_col[0], datetime.time)
         self.assertEqual(row_from_col[0], result)
