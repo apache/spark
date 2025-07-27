@@ -582,24 +582,27 @@ class FunctionsTestsMixin:
 
     def test_hour(self):
         # SPARK-52892: test the hour function with time.
-        dt = datetime.time(12, 34, 56)
-        df = self.spark.createDataFrame([Row(date=dt)])
-        row = df.select(F.hour(df.date)).first()
-        self.assertEqual(row[0], 12)
+        df = self.spark.range(1).select(F.lit(datetime.time(12, 34, 56)).alias("time"))
+        row_from_col = df.select(F.hour(df.time)).first()
+        self.assertEqual(row_from_col[0], 12)
+        row_from_name = df.select(F.hour("time")).first()
+        self.assertEqual(row_from_name[0], 12)
 
     def test_minute(self):
         # SPARK-52893: test the minute function with time.
-        dt = datetime.time(12, 34, 56)
-        df = self.spark.createDataFrame([Row(date=dt)])
-        row = df.select(F.minute(df.date)).first()
-        self.assertEqual(row[0], 34)
+        df = self.spark.range(1).select(F.lit(datetime.time(12, 34, 56)).alias("time"))
+        row_from_col = df.select(F.minute(df.time)).first()
+        self.assertEqual(row_from_col[0], 34)
+        row_from_name = df.select(F.minute("time")).first()
+        self.assertEqual(row_from_name[0], 34)
 
     def test_second(self):
         # SPARK-52894: test the second function with time.
-        dt = datetime.time(12, 34, 56)
-        df = self.spark.createDataFrame([Row(date=dt)])
-        row = df.select(F.second(df.date)).first()
-        self.assertEqual(row[0], 56)
+        df = self.spark.range(1).select(F.lit(datetime.time(12, 34, 56)).alias("time"))
+        row_from_col = df.select(F.second(df.time)).first()
+        self.assertEqual(row_from_col[0], 56)
+        row_from_name = df.select(F.second("time")).first()
+        self.assertEqual(row_from_name[0], 56)
 
     # Test added for SPARK-37738; change Python API to accept both col & int as input
     def test_date_add_function(self):
