@@ -10127,6 +10127,9 @@ def hour(col: "ColumnOrName") -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.1.0
+        Added support for time type.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
@@ -10177,6 +10180,21 @@ def hour(col: "ColumnOrName") -> Column:
     |2015-04-08 13:08:15| timestamp|      13|
     |2024-10-31 10:09:16| timestamp|      10|
     +-------------------+----------+--------+
+
+    Example 3: Extract the hours from a time column
+
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     (datetime.time(13, 8, 15),),
+    ...     (datetime.time(10, 9, 16),)], ['t'])
+    >>> df.select("*", sf.typeof('t'), sf.hour('t')).show()
+    +--------+---------+-------+
+    |       t|typeof(t)|hour(t)|
+    +--------+---------+-------+
+    |13:08:15|     time|     13|
+    |10:09:16|     time|     10|
+    +--------+---------+-------+
     """
     return _invoke_function_over_columns("hour", col)
 
@@ -10190,6 +10208,9 @@ def minute(col: "ColumnOrName") -> Column:
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    .. versionchanged:: 4.1.0
+        Added support for time type.
 
     Parameters
     ----------
@@ -10241,6 +10262,21 @@ def minute(col: "ColumnOrName") -> Column:
     |2015-04-08 13:08:15| timestamp|         8|
     |2024-10-31 10:09:16| timestamp|         9|
     +-------------------+----------+----------+
+
+    Example 3: Extract the minutes from a time column
+
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     (datetime.time(13, 8, 15),),
+    ...     (datetime.time(10, 9, 16),)], ['t'])
+    >>> df.select("*", sf.typeof('t'), sf.minute('t')).show()
+    +--------+---------+---------+
+    |       t|typeof(t)|minute(t)|
+    +--------+---------+---------+
+    |13:08:15|     time|        8|
+    |10:09:16|     time|        9|
+    +--------+---------+---------+
     """
     return _invoke_function_over_columns("minute", col)
 
@@ -10254,6 +10290,9 @@ def second(col: "ColumnOrName") -> Column:
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    .. versionchanged:: 4.1.0
+        Added support for time type.
 
     Parameters
     ----------
@@ -10305,6 +10344,21 @@ def second(col: "ColumnOrName") -> Column:
     |2015-04-08 13:08:15| timestamp|        15|
     |2024-10-31 10:09:16| timestamp|        16|
     +-------------------+----------+----------+
+
+    Example 3: Extract the seconds from a time column
+
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     (datetime.time(13, 8, 15),),
+    ...     (datetime.time(10, 9, 16),)], ['t'])
+    >>> df.select("*", sf.typeof('t'), sf.second('t')).show()
+    +--------+---------+---------+
+    |       t|typeof(t)|second(t)|
+    +--------+---------+---------+
+    |13:08:15|     time|       15|
+    |10:09:16|     time|       16|
+    +--------+---------+---------+
     """
     return _invoke_function_over_columns("second", col)
 
