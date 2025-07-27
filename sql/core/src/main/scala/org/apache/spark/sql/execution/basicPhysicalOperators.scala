@@ -729,10 +729,20 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
     Seq(firstPartitioning) ++ convertedOtherPartitionings
   }
 
+  private def comparePartitioning(left: Partitioning, right: Partitioning): Boolean = {
+    (left, right) match {
+      case (SinglePartition, SinglePartition) => true
+      case (l: HashPartitioningLike, r: HashPartitioningLike) => l == r
+      // Note: two `RangePartitioning`s with even same ordering and number of partitions
+      // are not equal, because they might have different partition bounds.
+      case _ => false
+    }
+  }
+
   override def outputPartitioning: Partitioning = {
     if (conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING)) {
       val partitionings = prepareOutputPartitioning()
-      if (partitionings.forall(_ == partitionings.head)) {
+      if (partitionings.forall(comparePartitioning(_, partitionings.head))) {
         val partitioner = partitionings.head
 
         // Take the output attributes of this union and map the partitioner to them.
