@@ -638,8 +638,10 @@ class FunctionsTestsMixin:
         df = self.spark.createDataFrame([(1, 2, 3)], ["hour", "minute", "second"])
         result = "01:02:03"
         row_from_col = df.select(F.make_time(df.hour, df.minute, df.second)).first()
+        self.assertIsInstance(row_from_col[0], datetime.time)
         self.assertEqual(row_from_col[0], result)
         row_from_name = df.select(F.make_time("hour", "minute", "second")).first()
+        self.assertIsInstance(row_from_name[0], datetime.time)
         self.assertEqual(row_from_name[0], result)
 
     def test_make_date(self):
