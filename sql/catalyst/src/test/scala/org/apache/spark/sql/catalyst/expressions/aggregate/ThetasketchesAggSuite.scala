@@ -57,7 +57,7 @@ class ThetasketchesAggSuite extends SparkFunSuite {
 
     // simulate serialization -> deserialization -> merge
     val mapValues = aggFunctionMap.values
-    val (mergedAgg, FinalizedSketch(mergedBuf)) =
+    val (mergedAgg, UnionAggregationBuffer(mergedBuf)) =
       mapValues.tail.foldLeft(mapValues.head)((prev, cur) => {
         val (prevAgg, prevBuf) = serializeDeserialize(prev)
         val (_, curBuf) = serializeDeserialize(cur)
