@@ -11585,7 +11585,7 @@ def to_time(str: "ColumnOrName") -> Column:
 
 
 @overload
-def to_time(str: "ColumnOrName", format: str) -> Column:
+def to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column:
     ...
 
 
