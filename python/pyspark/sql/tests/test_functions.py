@@ -81,7 +81,13 @@ class FunctionsTestsMixin:
         missing_in_py = jvm_fn_set.difference(py_fn_set)
 
         # Functions that we expect to be missing in python until they are added to pyspark
-        expected_missing_in_py = set()
+        expected_missing_in_py = set(
+            # TODO(SPARK-52888): Implement the make_time function in Python
+            # TODO(SPARK-52889): Implement the current_time function in Python
+            # TODO(SPARK-52890): Implement the to_time function in Python
+            # TODO(SPARK-52891): Implement the try_to_time function in Python
+            ["current_time", "make_time", "to_time", "try_to_time"]
+        )
 
         self.assertEqual(
             expected_missing_in_py, missing_in_py, "Missing functions in pyspark not as expected"
@@ -1275,6 +1281,11 @@ class FunctionsTestsMixin:
         parse_result = df.select(F.to_date(F.col("dateCol"))).first()
         self.assertEqual(datetime.date(2017, 1, 22), parse_result["to_date(dateCol)"])
 
+    def test_try_datetime_functions(self):
+        df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
+        parse_result = df.select(F.try_to_date(F.col("dateCol")).alias("tryToDateCol")).first()
+        self.assertEqual(datetime.date(2017, 1, 22), parse_result["tryToDateCol"])
+
     def test_assert_true(self):
         self.check_assert_true(SparkRuntimeException)
 
@@ -1343,6 +1354,11 @@ class FunctionsTestsMixin:
                 F.shiftRightUnsigned(F.col("id"), 2) == F.shiftrightunsigned(F.col("id"), 2)
             )
         ).collect()
+
+    def test_lit_time(self):
+        t = datetime.time(12, 34, 56)
+        actual = self.spark.range(1).select(F.lit(t)).first()[0]
+        self.assertEqual(actual, t)
 
     def test_lit_day_time_interval(self):
         td = datetime.timedelta(days=1, hours=12, milliseconds=123)

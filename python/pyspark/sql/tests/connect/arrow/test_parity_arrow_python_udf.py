@@ -33,6 +33,64 @@ class ArrowPythonUDFParityTests(UDFParityTests, ArrowPythonUDFTestsMixin):
             super(ArrowPythonUDFParityTests, cls).tearDownClass()
 
 
+class ArrowPythonUDFParityLegacyTestsMixin(ArrowPythonUDFTestsMixin):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.spark.conf.set("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "true")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled")
+        finally:
+            super().tearDownClass()
+
+
+class ArrowPythonUDFParityNonLegacyTestsMixin(ArrowPythonUDFTestsMixin):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.spark.conf.set(
+            "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "false"
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled")
+        finally:
+            super().tearDownClass()
+
+
+class ArrowPythonUDFParityLegacyTests(UDFParityTests, ArrowPythonUDFParityLegacyTestsMixin):
+    @classmethod
+    def setUpClass(cls):
+        super(ArrowPythonUDFParityLegacyTests, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
+        finally:
+            super(ArrowPythonUDFParityLegacyTests, cls).tearDownClass()
+
+
+class ArrowPythonUDFParityNonLegacyTests(UDFParityTests, ArrowPythonUDFParityNonLegacyTestsMixin):
+    @classmethod
+    def setUpClass(cls):
+        super(ArrowPythonUDFParityNonLegacyTests, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
+        finally:
+            super(ArrowPythonUDFParityNonLegacyTests, cls).tearDownClass()
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.sql.tests.connect.arrow.test_parity_arrow_python_udf import *  # noqa: F401

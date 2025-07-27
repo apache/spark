@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.arrow
 import org.apache.arrow.vector.VectorSchemaRoot
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.YearUDT
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
@@ -39,6 +40,7 @@ class ArrowWriterSuite extends SparkFunSuite {
         case _: DayTimeIntervalType => DayTimeIntervalType()
         case _: YearMonthIntervalType => YearMonthIntervalType()
         case _: TimeType => TimeType()
+        case u: UserDefinedType[_] => u.sqlType
         case tpe => tpe
       }
       val schema = new StructType().add("value", datatype, nullable = true)
@@ -54,7 +56,7 @@ class ArrowWriterSuite extends SparkFunSuite {
       data.zipWithIndex.foreach {
         case (null, rowId) => assert(reader.isNullAt(rowId))
         case (datum, rowId) =>
-          val value = dt match {
+          val value = datatype match {
             case BooleanType => reader.getBoolean(rowId)
             case ByteType => reader.getByte(rowId)
             case ShortType => reader.getShort(rowId)
@@ -105,17 +107,19 @@ class ArrowWriterSuite extends SparkFunSuite {
         new CalendarInterval(-1, -2, -3),
         new CalendarInterval(-11, -22, -33),
         null))
+    check(new YearUDT, Seq(2020, 2021, null, 2022))
   }
 
   test("get multiple") {
     def check(dt: DataType, data: Seq[Any], timeZoneId: String = null): Unit = {
-      val avroDatatype = dt match {
+      val datatype = dt match {
         case _: DayTimeIntervalType => DayTimeIntervalType()
         case _: YearMonthIntervalType => YearMonthIntervalType()
         case _: TimeType => TimeType()
+        case u: UserDefinedType[_] => u.sqlType
         case tpe => tpe
       }
-      val schema = new StructType().add("value", avroDatatype, nullable = false)
+      val schema = new StructType().add("value", datatype, nullable = false)
       val writer = ArrowWriter.create(schema, timeZoneId)
       assert(writer.schema === schema)
 
@@ -125,7 +129,7 @@ class ArrowWriterSuite extends SparkFunSuite {
       writer.finish()
 
       val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
-      val values = dt match {
+      val values = datatype match {
         case BooleanType => reader.getBooleans(0, data.size)
         case ByteType => reader.getBytes(0, data.size)
         case ShortType => reader.getShorts(0, data.size)
@@ -157,6 +161,7 @@ class ArrowWriterSuite extends SparkFunSuite {
     DataTypeTestUtils.timeTypes.foreach(check(_, (0 until 10).map(_ * 4.32e10.toLong)))
     DataTypeTestUtils.yearMonthIntervalTypes.foreach(check(_, (0 until 14)))
     DataTypeTestUtils.dayTimeIntervalTypes.foreach(check(_, (-10 until 10).map(_ * 1000.toLong)))
+    check(new YearUDT, 2018 to 2029)
   }
 
   test("write multiple, over initial capacity") {

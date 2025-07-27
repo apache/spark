@@ -201,6 +201,11 @@ private[spark] class SparkUI private (
     ))
   }
 
+  override def getApplicationInfoList(max: Int)(
+      filter: ApplicationInfo => Boolean): Iterator[ApplicationInfo] = {
+    getApplicationInfoList.filter(filter).take(max)
+  }
+
   def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
     getApplicationInfoList.find(_.id == appId)
   }

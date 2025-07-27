@@ -369,6 +369,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     pandas-on-Spark Series that corresponds to pandas Series logically. This holds Spark Column
     internally.
 
+    .. versionchanged:: 4.1.0
+        Support construction from a pandas-on-Spark Series input, which can be used with
+        additional parameters index, dtype, and name for overriding the original value.
+
     :ivar _internal: an internal immutable Frame to manage metadata.
     :type _internal: InternalFrame
     :ivar _psdf: Parent's pandas-on-Spark DataFrame
@@ -376,9 +380,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     Parameters
     ----------
-    data : array-like, dict, or scalar value, pandas Series
+    data : array-like, dict, or scalar value, pandas Series, pandas-on-Spark Series
         Contains data stored in Series
-        Note that if `data` is a pandas Series, other arguments should not be used.
+        Note that if `data` is a Series, index, dtype, or name can also be
+        specified to override the original value.
     index : array-like or Index (1d)
         Values must be hashable and have the same length as `data`.
         Non-unique index values are allowed. Will default to
@@ -387,6 +392,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dict.
     dtype : numpy.dtype or None
         If None, dtype will be inferred
+    name : str, default None
+        The name to give to the Series.
     copy : boolean, default False
         Copy input data
     """
@@ -406,6 +413,24 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
             self._anchor = data
             self._col_label = index
+
+        elif isinstance(data, Series):
+            assert not copy
+            assert not fastpath
+
+            if name:
+                data = data.rename(name)
+
+            if index:
+                data = data.reindex(index)
+
+            if dtype:
+                data = data.astype(dtype)
+
+            anchor = DataFrame(data)
+            self._anchor = anchor
+            self._col_label = anchor._internal.column_labels[0]
+            object.__setattr__(anchor, "_psseries", {self._column_label: self})
         else:
             if isinstance(data, pd.Series):
                 assert index is None

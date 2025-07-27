@@ -19,8 +19,6 @@ package org.apache.spark.network.protocol;
 
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 /**
  * Request to find the meta information for the specified merged block. The meta information
@@ -94,12 +92,7 @@ public class MergedBlockMetaRequest extends AbstractMessage implements RequestMe
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("requestId", requestId)
-      .append("appId", appId)
-      .append("shuffleId", shuffleId)
-      .append("shuffleMergeId", shuffleMergeId)
-      .append("reduceId", reduceId)
-      .toString();
+    return "MergedBlockMetaRequest[requestId=" + requestId + ",appId=" + appId + ",shuffleId=" +
+        shuffleId + ",shuffleMergeId=" + shuffleMergeId + ",reduceId=" + reduceId + "]";
   }
 }

@@ -233,7 +233,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     extends JdbcSQLQueryBuilder(dialect, options) {
 
     override def build(): String = {
-      val selectStmt = s"SELECT $hintClause$columnList FROM ${options.tableOrQuery}" +
+      val selectStmt = s"SELECT $hintClause$columnList FROM $tableOrQuery" +
         s" $tableSampleClause $whereClause $groupByClause $orderByClause"
       val finalSelectStmt = if (limit > 0) {
         if (offset > 0) {
@@ -267,6 +267,8 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   override def supportsOffset: Boolean = true
 
   override def supportsHint: Boolean = true
+
+  override def supportsJoin: Boolean = true
 
   override def classifyException(
       e: Throwable,
