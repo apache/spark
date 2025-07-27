@@ -11731,7 +11731,7 @@ def try_to_time(str: "ColumnOrName") -> Column:
 
 
 @overload
-def try_to_time(str: "ColumnOrName", format: str) -> Column:
+def try_to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column:
     ...
 
 
