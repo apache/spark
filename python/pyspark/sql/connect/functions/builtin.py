@@ -3414,20 +3414,20 @@ unix_seconds.__doc__ = pysparkfuncs.unix_seconds.__doc__
 
 
 @overload
-def to_time(col: "ColumnOrName") -> Column:
+def to_time(str: "ColumnOrName") -> Column:
     ...
 
 
 @overload
-def to_time(col: "ColumnOrName", format: str) -> Column:
+def to_time(str: "ColumnOrName", format: str) -> Column:
     ...
 
 
-def to_time(col: "ColumnOrName", format: Optional[str] = None) -> Column:
+def to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
     if format is None:
-        return _invoke_function_over_columns("to_time", col)
+        return _invoke_function_over_columns("to_time", str)
     else:
-        return _invoke_function("to_time", _to_col(col), lit(format))
+        return _invoke_function_over_columns("to_time", str, format)
 
 
 to_time.__doc__ = pysparkfuncs.to_time.__doc__
@@ -3454,20 +3454,20 @@ to_timestamp.__doc__ = pysparkfuncs.to_timestamp.__doc__
 
 
 @overload
-def try_to_timestamp(col: "ColumnOrName") -> Column:
+def try_to_timestamp(str: "ColumnOrName") -> Column:
     ...
 
 
 @overload
-def try_to_timestamp(col: "ColumnOrName", format: str) -> Column:
+def try_to_timestamp(str: "ColumnOrName", format: "ColumnOrName") -> Column:
     ...
 
 
-def try_to_time(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
-    if format is not None:
-        return _invoke_function_over_columns("try_to_time", col, format)
+def try_to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
+    if format is None:
+        return _invoke_function_over_columns("try_to_time", str)
     else:
-        return _invoke_function_over_columns("try_to_time", col)
+        return _invoke_function_over_columns("try_to_time", str, format)
 
 
 try_to_time.__doc__ = pysparkfuncs.try_to_time.__doc__

@@ -11580,17 +11580,17 @@ def unix_seconds(col: "ColumnOrName") -> Column:
 
 
 @overload
-def to_time(col: "ColumnOrName") -> Column:
+def to_time(str: "ColumnOrName") -> Column:
     ...
 
 
 @overload
-def to_time(col: "ColumnOrName", format: str) -> Column:
+def to_time(str: "ColumnOrName", format: str) -> Column:
     ...
 
 
 @_try_remote_functions
-def to_time(col: "ColumnOrName", format: Optional[str] = None) -> Column:
+def to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
     """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.TimeType` using the
     optionally specified format. Specify formats according to `datetime pattern`_. By default, it
     follows casting rules to :class:`pyspark.sql.types.TimeType` if the format is omitted.
@@ -11602,10 +11602,10 @@ def to_time(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or column name
-        column values to convert.
-    format: literal string, optional
-        format to use to convert time values.
+    str : :class:`~pyspark.sql.Column` or column name
+        string to be parsed to time.
+    format: :class:`~pyspark.sql.Column` or column name, optional
+        time format pattern to follow.
 
     Returns
     -------
@@ -11622,31 +11622,29 @@ def to_time(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     Example 1: Convert string to a time
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([('10:30:00',)], ['t'])
-    >>> df.select(sf.to_time(df.t)).show()
-    +----------+
-    |to_time(t)|
-    +----------+
-    |  10:30:00|
-    +----------+
+    >>> df = spark.createDataFrame([("10:30:00",)], ["str"])
+    >>> df.select(sf.to_time(df.str)).show()
+    +------------+
+    |to_time(str)|
+    +------------+
+    |    10:30:00|
+    +------------+
 
     Example 2: Convert string to a time with a format
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([('10:30:00',)], ['t'])
-    >>> df.select(sf.to_time(df.t, 'HH:mm:ss')).show()
+    >>> df = spark.createDataFrame([("10:30:00", "HH:mm:ss")], ["str", "format"])
+    >>> df.select(sf.to_time(df.str, df.format)).show()
     +--------------------+
-    |to_time(t, HH:mm:ss)|
+    |to_time(str, format)|
     +--------------------+
     |            10:30:00|
     +--------------------+
     """
-    from pyspark.sql.classic.column import _to_java_column
-
     if format is None:
-        return _invoke_function_over_columns("to_time", col)
+        return _invoke_function_over_columns("to_time", str)
     else:
-        return _invoke_function("to_time", _to_java_column(col), _enum_to_value(format))
+        return _invoke_function_over_columns("to_time", str, format)
 
 
 @overload
@@ -11728,17 +11726,17 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
 
 @overload
-def try_to_time(col: "ColumnOrName") -> Column:
+def try_to_time(str: "ColumnOrName") -> Column:
     ...
 
 
 @overload
-def try_to_time(col: "ColumnOrName", format: str) -> Column:
+def try_to_time(str: "ColumnOrName", format: str) -> Column:
     ...
 
 
 @_try_remote_functions
-def try_to_time(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
+def try_to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
     """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.TimeType` using the
     optionally specified format. Specify formats according to `datetime pattern`_. By default, it
     follows casting rules to :class:`pyspark.sql.types.TimeType` if the format is omitted.
@@ -11750,10 +11748,10 @@ def try_to_time(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) ->
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or column name
-        column values to convert.
-    format: literal string, optional
-        format to use to convert time values.
+    str : :class:`~pyspark.sql.Column` or column name
+        string to be parsed to time.
+    format: :class:`~pyspark.sql.Column` or column name, optional
+        time format pattern to follow.
 
     Returns
     -------
@@ -11770,21 +11768,21 @@ def try_to_time(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) ->
     Example 1: Convert string to a time
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([('10:30:00',)], ['t'])
-    >>> df.select(sf.try_to_time(df.t)).show()
-    +--------------+
-    |try_to_time(t)|
-    +--------------+
-    |      10:30:00|
-    +--------------+
+    >>> df = spark.createDataFrame([("10:30:00",)], ["str"])
+    >>> df.select(sf.try_to_time(df.str)).show()
+    +----------------+
+    |try_to_time(str)|
+    +----------------+
+    |        10:30:00|
+    +----------------+
 
     Example 2: Convert string to a time with a format
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([('10:30:00',)], ['t'])
-    >>> df.select(sf.try_to_time(df.t, sf.lit('HH:mm:ss'))).show()
+    >>> df = spark.createDataFrame([("10:30:00", "HH:mm:ss")], ["str", "format"])
+    >>> df.select(sf.try_to_time(df.str, df.format)).show()
     +------------------------+
-    |try_to_time(t, HH:mm:ss)|
+    |try_to_time(str, format)|
     +------------------------+
     |                10:30:00|
     +------------------------+
@@ -11792,18 +11790,18 @@ def try_to_time(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) ->
     Example 3: Converion failure results in NULL
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([('malformed',)], ['t'])
-    >>> df.select(sf.try_to_time(df.t)).show()
-    +--------------+
-    |try_to_time(t)|
-    +--------------+
-    |          NULL|
-    +--------------+
+    >>> df = spark.createDataFrame([("malformed",)], ["str"])
+    >>> df.select(sf.try_to_time(df.str)).show()
+    +----------------+
+    |try_to_time(str)|
+    +----------------+
+    |            NULL|
+    +----------------+
     """
-    if format is not None:
-        return _invoke_function_over_columns("try_to_time", col, format)
+    if format is None:
+        return _invoke_function_over_columns("try_to_time", str)
     else:
-        return _invoke_function_over_columns("try_to_time", col)
+        return _invoke_function_over_columns("try_to_time", str, format)
 
 
 @_try_remote_functions

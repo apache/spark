@@ -1630,22 +1630,22 @@ class FunctionsTestsMixin:
 
     def test_try_to_time(self):
         # SPARK-52891: test the try_to_time function.
-        test_time = "10:30:00"
-        df = self.spark.createDataFrame([(test_time, "HH:mm:ss")], ["time", "format"])
+        df = self.spark.createDataFrame([("10:30:00", "HH:mm:ss")], ["time", "format"])
+        result = datetime.time(10, 30, 0)
         # Test without format.
         row_from_col_no_format = df.select(F.try_to_time(df.time)).first()
         self.assertIsInstance(row_from_col_no_format[0], datetime.time)
-        self.assertEqual(row_from_col_no_format[0], test_time)
+        self.assertEqual(row_from_col_no_format[0], result)
         row_from_name_no_format = df.select(F.try_to_time("time")).first()
         self.assertIsInstance(row_from_name_no_format[0], datetime.time)
-        self.assertEqual(row_from_name_no_format[0], test_time)
+        self.assertEqual(row_from_name_no_format[0], result)
         # Test with format.
         row_from_col_with_format = df.select(F.try_to_time(df.time, df.format)).first()
         self.assertIsInstance(row_from_col_with_format[0], datetime.time)
-        self.assertEqual(row_from_col_with_format[0], test_time)
+        self.assertEqual(row_from_col_with_format[0], result)
         row_from_name_with_format = df.select(F.try_to_time("time", "format")).first()
         self.assertIsInstance(row_from_name_with_format[0], datetime.time)
-        self.assertEqual(row_from_name_with_format[0], test_time)
+        self.assertEqual(row_from_name_with_format[0], result)
         # Test with malformed time.
         df = self.spark.createDataFrame([("malformed", "HH:mm:ss")], ["time", "format"])
         row_from_col_no_format_malformed = df.select(F.try_to_time(df.time)).first()
@@ -1768,22 +1768,22 @@ class FunctionsTestsMixin:
 
     def test_to_time(self):
         # SPARK-52890: test the to_time function.
-        test_time = "10:30:00"
-        df = self.spark.createDataFrame([(test_time, "HH:mm:ss")], ["time", "format"])
+        df = self.spark.createDataFrame([("10:30:00", "HH:mm:ss")], ["time", "format"])
+        result = datetime.time(10, 30, 0)
         # Test without format.
         row_from_col_no_format = df.select(F.to_time(df.time)).first()
         self.assertIsInstance(row_from_col_no_format[0], datetime.time)
-        self.assertEqual(row_from_col_no_format[0], test_time)
+        self.assertEqual(row_from_col_no_format[0], result)
         row_from_name_no_format = df.select(F.to_time("time")).first()
         self.assertIsInstance(row_from_name_no_format[0], datetime.time)
-        self.assertEqual(row_from_name_no_format[0], test_time)
+        self.assertEqual(row_from_name_no_format[0], result)
         # Test with format.
         row_from_col_with_format = df.select(F.to_time(df.time, df.format)).first()
         self.assertIsInstance(row_from_col_with_format[0], datetime.time)
-        self.assertEqual(row_from_col_with_format[0], test_time)
+        self.assertEqual(row_from_col_with_format[0], result)
         row_from_name_with_format = df.select(F.to_time("time", "format")).first()
         self.assertIsInstance(row_from_name_with_format[0], datetime.time)
-        self.assertEqual(row_from_name_with_format[0], test_time)
+        self.assertEqual(row_from_name_with_format[0], result)
 
     def test_to_timestamp_ltz(self):
         df = self.spark.createDataFrame([("2016-12-31",)], ["e"])
