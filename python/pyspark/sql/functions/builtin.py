@@ -9288,14 +9288,29 @@ def current_timezone() -> Column:
     return _invoke_function("current_timezone")
 
 
-@_try_remote_functions
+@overload
 def current_time() -> Column:
+    ...
+
+
+@overload
+def current_time(precision: int) -> Column:
+    ...
+
+
+@_try_remote_functions
+def current_time(precision: Optional[int] = None) -> Column:
     """
-    Returns the current time at the start of query evaluation as a :class:`TimeType` column. Note
-    that the result will contain 6 fractional digits of seconds. All calls of current_time within
-    the same query return the same value.
+    Returns the current time at the start of query evaluation as a :class:`TimeType` column. All
+    calls of current_time within the same query return the same value.
 
     .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    precision: literal int, optional
+        number in the range [0..6], indicating how many fractional digits of seconds to include.
+        If omitted, the default is 6.
 
     Returns
     -------
@@ -9309,6 +9324,8 @@ def current_time() -> Column:
 
     Examples
     --------
+    Example 1: Current time with default precision
+
     >>> from pyspark.sql import functions as sf
     >>> spark.range(1).select(sf.current_time()).show(truncate=False) # doctest: +SKIP
     +---------------+
@@ -9316,8 +9333,21 @@ def current_time() -> Column:
     +---------------+
     |21:23:22.716514|
     +---------------+
+
+    Example 2: Current time with specified precision
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.current_time(3)).show(truncate=False) # doctest: +SKIP
+    +--------------+
+    |current_time()|
+    +--------------+
+    |  21:23:22.716|
+    +--------------+
     """
-    return _invoke_function("current_time")
+    if precision is not None:
+        return _invoke_function("current_time", precision)
+    else:
+        return _invoke_function("current_time")
 
 
 @_try_remote_functions

@@ -1781,10 +1781,14 @@ class FunctionsTestsMixin:
             self.assertEqual(res[0][i * 2], res[0][i * 2 + 1])
 
     def test_current_time(self):
-        # SPARK-52889: test the current_time function.
+        # SPARK-52889: test the current_time function without precision.
         df = self.spark.range(1).select(F.current_time())
         self.assertIsInstance(df.first()[0], datetime.time)
-        self.assertEqual(df.schema.names[0], "current_time()")
+        self.assertEqual(df.schema.names[0], "current_time(6)")
+        # SPARK-52889: test the current_time function with precision.
+        df = self.spark.range(1).select(F.current_time(3))
+        self.assertIsInstance(df.first()[0], datetime.time)
+        self.assertEqual(df.schema.names[0], "current_time(3)")
 
     def test_current_timestamp(self):
         df = self.spark.range(1).select(F.current_timestamp())
