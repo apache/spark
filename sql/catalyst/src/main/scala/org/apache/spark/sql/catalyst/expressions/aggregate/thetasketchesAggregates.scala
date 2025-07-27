@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.datasketches.common.SketchesArgumentException
 import org.apache.datasketches.memory.Memory
-import org.apache.datasketches.theta.{CompactSketch, Intersection, SetOperation, Union, UpdateSketch, UpdateSketchBuilder}
+import org.apache.datasketches.theta.{CompactSketch, Intersection, SetOperation, Sketch, Union, UpdateSketch, UpdateSketchBuilder}
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
@@ -194,36 +194,52 @@ case class ThetaSketchAgg(
    * buffer.
    *
    * @param updateBuffer
-   *   the UpdateSketch instance used to store the aggregation result
+   *   the UpdateSketch or Union instance used to store the aggregation result
    * @param input
    *   An input UpdateSketch or Compact sketch instance
    */
   override def merge(
       updateBuffer: ThetaSketchState,
       input: ThetaSketchState): ThetaSketchState = {
-    val union = SetOperation.builder
-      .setLogNominalEntries(lgNomEntries)
-      .buildUnion
 
-    // match all the possible Theta Sketch states possible in this class
+    // Helper function to create union only when needed
+    def createUnionWith(sketch1: Sketch, sketch2: Sketch): UnionAggregationBuffer = {
+      val union = SetOperation.builder.setLogNominalEntries(lgNomEntries).buildUnion
+      union.union(sketch1)
+      union.union(sketch2)
+      UnionAggregationBuffer(union)
+    }
+
     (updateBuffer, input) match {
+
+      // REUSE existing union - this is the most efficient path
+      case (UnionAggregationBuffer(existingUnion), UpdatableSketchBuffer(sketch)) =>
+        existingUnion.union(sketch.compact)
+        UnionAggregationBuffer(existingUnion)
+
+      case (UnionAggregationBuffer(existingUnion), FinalizedSketch(sketch)) =>
+        existingUnion.union(sketch)
+        UnionAggregationBuffer(existingUnion)
+
+      case (UnionAggregationBuffer(union1), UnionAggregationBuffer(union2)) =>
+        union1.union(union2.getResult)
+        UnionAggregationBuffer(union1)
+
+      // CREATE new union only when necessary
       case (UpdatableSketchBuffer(sketch1), UpdatableSketchBuffer(sketch2)) =>
-        union.union(sketch1.compact)
-        union.union(sketch2.compact)
+        createUnionWith(sketch1.compact, sketch2.compact)
+
       case (UpdatableSketchBuffer(sketch1), FinalizedSketch(sketch2)) =>
-        union.union(sketch1.compact)
-        union.union(sketch2)
+        createUnionWith(sketch1.compact, sketch2)
+
       case (FinalizedSketch(sketch1), UpdatableSketchBuffer(sketch2)) =>
-        union.union(sketch1)
-        union.union(sketch2.compact)
+        createUnionWith(sketch1, sketch2.compact)
+
       case (FinalizedSketch(sketch1), FinalizedSketch(sketch2)) =>
-        union.union(sketch1)
-        union.union(sketch2)
-      // Should never make it to here
+        createUnionWith(sketch1, sketch2)
+
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
-    // Compact the result before returning for a more efficient serialized representation
-    FinalizedSketch(union.getResult)
   }
 
   /**
@@ -237,6 +253,7 @@ case class ThetaSketchAgg(
   override def eval(sketchState: ThetaSketchState): Any = {
     sketchState match {
       case UpdatableSketchBuffer(s) => s.rebuild.compact.toByteArrayCompressed
+      case UnionAggregationBuffer(union) => union.getResult.toByteArrayCompressed
       case FinalizedSketch(s) => s.toByteArrayCompressed
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
@@ -246,6 +263,7 @@ case class ThetaSketchAgg(
   override def serialize(sketchState: ThetaSketchState): Array[Byte] = {
     sketchState match {
       case UpdatableSketchBuffer(s) => s.rebuild.compact.toByteArrayCompressed
+      case UnionAggregationBuffer(union) => union.getResult.toByteArrayCompressed
       case FinalizedSketch(s) => s.toByteArrayCompressed
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
@@ -399,20 +417,20 @@ case class ThetaUnionAgg(
       // Both are unions, merge them directly
       case (UnionAggregationBuffer(unionLeft), UnionAggregationBuffer(unionRight)) =>
         unionLeft.union(unionRight.getResult)
-        FinalizedSketch(unionLeft.getResult)
+        UnionAggregationBuffer(unionLeft)
 
       // One or both are immutable sketches
       case (FinalizedSketch(sketch1), FinalizedSketch(sketch2)) =>
         val union = SetOperation.builder.setLogNominalEntries(lgNomEntries).buildUnion
         union.union(sketch1)
         union.union(sketch2)
-        FinalizedSketch(union.getResult)
+        UnionAggregationBuffer(union)
       case (FinalizedSketch(sketch), UnionAggregationBuffer(union)) =>
         union.union(sketch)
-        FinalizedSketch(union.getResult)
+        UnionAggregationBuffer(union)
       case (UnionAggregationBuffer(union), FinalizedSketch(sketch)) =>
         union.union(sketch)
-        FinalizedSketch(union.getResult)
+        UnionAggregationBuffer(union)
 
       // Should never make it here
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
@@ -607,7 +625,7 @@ case class ThetaIntersectionAgg(
             IntersectionAggregationBuffer(intersectLeft),
             IntersectionAggregationBuffer(intersectRight)) =>
         intersectLeft.intersect(intersectRight.getResult)
-        FinalizedSketch(intersectLeft.getResult)
+        IntersectionAggregationBuffer(intersectLeft)
 
       // One or both are immutable sketches
       case (FinalizedSketch(sketch1), FinalizedSketch(sketch2)) =>
@@ -615,13 +633,13 @@ case class ThetaIntersectionAgg(
           SetOperation.builder.setLogNominalEntries(lgNomEntries).buildIntersection
         intersection.intersect(sketch1)
         intersection.intersect(sketch2)
-        FinalizedSketch(intersection.getResult)
+        IntersectionAggregationBuffer(intersection)
       case (FinalizedSketch(sketch), IntersectionAggregationBuffer(intersection)) =>
         intersection.intersect(sketch)
-        FinalizedSketch(intersection.getResult)
+        IntersectionAggregationBuffer(intersection)
       case (IntersectionAggregationBuffer(intersection), FinalizedSketch(sketch)) =>
         intersection.intersect(sketch)
-        FinalizedSketch(intersection.getResult)
+        IntersectionAggregationBuffer(intersection)
 
       // Should never make it here
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
