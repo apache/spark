@@ -196,7 +196,7 @@ case class ThetaSketchAgg(
    * @param updateBuffer
    *   the UpdateSketch or Union instance used to store the aggregation result
    * @param input
-   *   An input UpdateSketch or Compact sketch instance
+   *   An input UpdateSketch, UnionAggregationBuffer, or Compact sketch instance
    */
   override def merge(
       updateBuffer: ThetaSketchState,
@@ -271,7 +271,14 @@ case class ThetaSketchAgg(
 
   /** Wrap the byte array into a Compact sketch instance */
   override def deserialize(buffer: Array[Byte]): ThetaSketchState = {
-    FinalizedSketch(CompactSketch.heapify(Memory.wrap(buffer)))
+    if (buffer.nonEmpty) {
+      FinalizedSketch(CompactSketch.heapify(Memory.wrap(buffer)))
+    } else {
+      UnionAggregationBuffer(
+        SetOperation.builder
+          .setLogNominalEntries(lgNomEntries)
+          .buildUnion)
+    }
   }
 }
 
