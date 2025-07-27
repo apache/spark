@@ -1629,7 +1629,7 @@ class FunctionsTestsMixin:
         self.assertEqual(None, actual[1]["var"])
 
     def test_try_to_time(self):
-        # SPARK-52889: test the try_to_time function.
+        # SPARK-52891: test the try_to_time function.
         test_time = "10:30:00"
         df = self.spark.createDataFrame([(test_time, "HH:mm:ss")], ["time", "format"])
         # Test without format.
@@ -1767,7 +1767,7 @@ class FunctionsTestsMixin:
         )
 
     def test_to_time(self):
-        # SPARK-52888: test the to_time function.
+        # SPARK-52890: test the to_time function.
         test_time = "10:30:00"
         df = self.spark.createDataFrame([(test_time, "HH:mm:ss")], ["time", "format"])
         # Test without format.
