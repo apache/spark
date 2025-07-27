@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.util.SparkStringUtils
+import org.apache.spark.util.SparkStringUtils
 
 object ExpressionSet {
   /**

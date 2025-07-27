@@ -202,7 +202,6 @@
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.0.17</jersey.version>
     <joda.version>2.13.0</joda.version>
-    <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <jaxb.version>2.2.11</jaxb.version>
     <libthrift.version>0.16.0</libthrift.version>
@@ -2450,11 +2449,6 @@
         <version>${joda.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.jodd</groupId>
-        <artifactId>jodd-core</artifactId>
-        <version>${jodd.version}</version>
-      </dependency>
-      <dependency>
         <groupId>org.datanucleus</groupId>
         <artifactId>datanucleus-core</artifactId>
         <version>${datanucleus-core.version}</version>
@@ -2630,8 +2624,7 @@
                     <version>${maven.version}</version>
                   </requireMavenVersion>
                   <requireJavaVersion>
-                    <version>[${java.minimum.version},)</version>
-                    <message>The Java version used to build the project is outdated. Please use ${java.minimum.version} or later.</message>
+                    <version>${java.version}</version>
                   </requireJavaVersion>
                   <bannedDependencies>
                     <excludes>

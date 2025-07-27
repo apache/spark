@@ -1189,14 +1189,14 @@ class SparkSubmitSuite
 
             val appArgs = new SparkSubmitArguments(args)
             val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
-            conf.get("spark.yarn.dist.jars").split(",").toSet should be
-            (Set(jar1.toURI.toString, jar2.toURI.toString))
-            conf.get("spark.yarn.dist.files").split(",").toSet should be
-            (Set(file1.toURI.toString, file2.toURI.toString))
-            conf.get("spark.yarn.dist.pyFiles").split(",").toSet should be
-            (Set(pyFile1.getAbsolutePath, pyFile2.getAbsolutePath))
-            conf.get("spark.yarn.dist.archives").split(",").toSet should be
-            (Set(archive1.toURI.toString, archive2.toURI.toString))
+            conf.get("spark.yarn.dist.jars").split(",").toSet should be(
+              Set(jar1.toURI.toString, jar2.toURI.toString))
+            conf.get("spark.yarn.dist.files").split(",").toSet should be(
+              Set(file1.toURI.toString, file2.toURI.toString))
+            conf.get("spark.yarn.dist.pyFiles").split(",").toSet should be(
+              Set(pyFile1.toURI.toString, pyFile2.toURI.toString))
+            conf.get("spark.yarn.dist.archives").split(",").toSet should be(
+              Set(archive1.toURI.toString, archive2.toURI.toString))
           }
         }
       }

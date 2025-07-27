@@ -23,7 +23,6 @@ from pyspark import pandas as ps
 from pyspark.pandas import set_option, reset_option
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.testing.utils import is_ansi_mode_test, ansi_mode_not_supported_message
 
 
 class NumPyCompatTestsMixin:
@@ -132,7 +131,6 @@ class NumPyCompatTestsMixin:
         finally:
             reset_option("compute.ops_on_diff_frames")
 
-    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_np_spark_compat_frame(self):
         from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
 

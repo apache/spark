@@ -310,6 +310,7 @@ Date and Timestamp Functions
     try_make_timestamp_ltz
     try_make_timestamp_ntz
     try_to_timestamp
+    try_to_date
     unix_date
     unix_micros
     unix_millis

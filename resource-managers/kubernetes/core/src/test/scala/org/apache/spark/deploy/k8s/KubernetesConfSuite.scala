@@ -276,4 +276,14 @@ class KubernetesConfSuite extends SparkFunSuite {
       assert(KubernetesConf.getResourceNamePrefix(appName).matches("[a-z]([-a-z0-9]*[a-z0-9])?"))
     }
   }
+
+  test("SPARK-52902: K8s image configs support {{SPARK_VERSION}} placeholder") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set(CONTAINER_IMAGE, "apache/spark:{{SPARK_VERSION}}")
+    sparkConf.set(EXECUTOR_CONTAINER_IMAGE, Some("foo.com/spark:{{SPARK_VERSION}}-corp"))
+    val driverUnsetConf = KubernetesTestConf.createDriverConf(sparkConf)
+    val execUnsetConf = KubernetesTestConf.createExecutorConf(sparkConf)
+    assert(driverUnsetConf.image === s"apache/spark:$SPARK_VERSION")
+    assert(execUnsetConf.image === s"foo.com/spark:$SPARK_VERSION-corp")
+  }
 }
