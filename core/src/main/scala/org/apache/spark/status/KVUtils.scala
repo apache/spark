@@ -213,6 +213,20 @@ private[spark] object KVUtils extends Logging {
     }
   }
 
+  /**
+   * Maps all values of KVStoreView to new values using a transformation function
+   * and filtered by a filter function.
+   */
+  def mapToSeqWithFilter[T, B](
+      view: KVStoreView[T],
+      max: Int)
+      (mapFunc: T => B)
+      (filterFunc: B => Boolean): Seq[B] = {
+    Utils.tryWithResource(view.closeableIterator()) { iter =>
+      iter.asScala.map(mapFunc).filter(filterFunc).take(max).toList
+    }
+  }
+
   def size[T](view: KVStoreView[T]): Int = {
     Utils.tryWithResource(view.closeableIterator()) { iter =>
       iter.asScala.size

@@ -1124,7 +1124,7 @@ class AdaptiveQueryExecSuite
         assert(reads.length == 1)
         val read = reads.head
         assert(read.isLocalRead)
-        assert(read.metrics.keys.toSeq == Seq("numPartitions"))
+        assert(read.metrics.keys.toSeq == Seq("numPartitions", "numEmptyPartitions"))
         assert(read.metrics("numPartitions").value == read.partitionSpecs.length)
       }
 

@@ -74,6 +74,7 @@
 | org.apache.spark.sql.catalyst.expressions.Cast | int | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.Cast | smallint | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.Cast | string | N/A | N/A |
+| org.apache.spark.sql.catalyst.expressions.Cast | time | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.Cast | timestamp | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.Cast | tinyint | N/A | N/A |
 | org.apache.spark.sql.catalyst.expressions.Cbrt | cbrt | SELECT cbrt(27.0) | struct<CBRT(27.0):double> |
@@ -369,6 +370,7 @@
 | org.apache.spark.sql.catalyst.expressions.TryReflect | try_reflect | SELECT try_reflect('java.util.UUID', 'randomUUID') | struct<try_reflect(java.util.UUID, randomUUID):string> |
 | org.apache.spark.sql.catalyst.expressions.TrySubtract | try_subtract | SELECT try_subtract(2, 1) | struct<try_subtract(2, 1):int> |
 | org.apache.spark.sql.catalyst.expressions.TryToBinary | try_to_binary | SELECT try_to_binary('abc', 'utf-8') | struct<try_to_binary(abc, utf-8):binary> |
+| org.apache.spark.sql.catalyst.expressions.TryToDateExpressionBuilder | try_to_date | SELECT try_to_date('2016-12-31') | struct<try_to_date(2016-12-31):date> |
 | org.apache.spark.sql.catalyst.expressions.TryToNumber | try_to_number | SELECT try_to_number('454', '999') | struct<try_to_number(454, 999):decimal(3,0)> |
 | org.apache.spark.sql.catalyst.expressions.TryToTimeExpressionBuilder | try_to_time | SELECT try_to_time('00:12:00.001') | struct<try_to_time(to_time(00:12:00.001)):time(6)> |
 | org.apache.spark.sql.catalyst.expressions.TryToTimestampExpressionBuilder | try_to_timestamp | SELECT try_to_timestamp('2016-12-31 00:12:00') | struct<try_to_timestamp(2016-12-31 00:12:00):timestamp> |

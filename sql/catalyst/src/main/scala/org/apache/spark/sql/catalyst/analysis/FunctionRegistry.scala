@@ -463,6 +463,7 @@ object FunctionRegistry {
     expressionBuilder("try_sum", TrySumExpressionBuilder, setAlias = true),
     expression[TryToBinary]("try_to_binary"),
     expressionBuilder("try_to_timestamp", TryToTimestampExpressionBuilder, setAlias = true),
+    expressionBuilder("try_to_date", TryToDateExpressionBuilder, setAlias = true),
     expressionBuilder("try_to_time", TryToTimeExpressionBuilder, setAlias = true),
     expression[TryAesDecrypt]("try_aes_decrypt"),
     expression[TryReflect]("try_reflect"),
@@ -873,6 +874,7 @@ object FunctionRegistry {
     castAlias("decimal", DecimalType.USER_DEFAULT),
     castAlias("date", DateType),
     castAlias("timestamp", TimestampType),
+    castAlias("time", TimeType()),
     castAlias("binary", BinaryType),
     castAlias("string", StringType),
 

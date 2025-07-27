@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
@@ -52,6 +51,7 @@ import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkStringUtils
 
 class DataSourceV2Strategy(session: SparkSession) extends Strategy with PredicateHelper {
 
@@ -391,7 +391,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       AlterNamespaceSetPropertiesExec(catalog.asNamespaceCatalog, ns, properties) :: Nil
 
     case SetNamespaceLocation(ResolvedNamespace(catalog, ns, _), location) =>
-      if (StringUtils.isEmpty(location)) {
+      if (SparkStringUtils.isEmpty(location)) {
         throw QueryExecutionErrors.invalidEmptyLocationError(location)
       }
       AlterNamespaceSetPropertiesExec(

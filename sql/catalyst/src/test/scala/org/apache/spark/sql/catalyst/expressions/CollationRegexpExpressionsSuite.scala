@@ -57,25 +57,37 @@ class CollationRegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
   }
 
   test("StringSplit expression with collated strings") {
-    case class StringSplitTestCase[R](s: String, r: String, collation: String, expected: R)
+    case class StringSplitTestCase[R](s: String, r: String, collation: String,
+      expected: R, limit: Int)
     val testCases = Seq(
-      StringSplitTestCase("1A2B3C", "[ABC]", "UTF8_BINARY", Seq("1", "2", "3", "")),
-      StringSplitTestCase("1A2B3C", "[abc]", "UTF8_BINARY", Seq("1A2B3C")),
-      StringSplitTestCase("1A2B3C", "[ABC]", "UTF8_LCASE", Seq("1", "2", "3", "")),
-      StringSplitTestCase("1A2B3C", "[abc]", "UTF8_LCASE", Seq("1", "2", "3", "")),
-      StringSplitTestCase("1A2B3C", "[1-9]+", "UTF8_BINARY", Seq("", "A", "B", "C")),
-      StringSplitTestCase("", "", "UTF8_BINARY", Seq("")),
-      StringSplitTestCase("1A2B3C", "", "UTF8_BINARY", Seq("1", "A", "2", "B", "3", "C")),
-      StringSplitTestCase("", "[1-9]+", "UTF8_BINARY", Seq("")),
-      StringSplitTestCase(null, "[1-9]+", "UTF8_BINARY", null),
-      StringSplitTestCase("1A2B3C", null, "UTF8_BINARY", null),
-      StringSplitTestCase(null, null, "UTF8_BINARY", null)
+      StringSplitTestCase("1A2B3C", "[ABC]", "UTF8_BINARY", Seq("1", "2", "3", ""), -1),
+      StringSplitTestCase("1A2B3C", "[abc]", "UTF8_BINARY", Seq("1A2B3C"), -1),
+      StringSplitTestCase("1A2B3C", "[ABC]", "UTF8_LCASE", Seq("1", "2", "3", ""), -1),
+      StringSplitTestCase("1A2B3C", "[abc]", "UTF8_LCASE", Seq("1", "2", "3", ""), -1),
+      StringSplitTestCase("1A2B3C", "[1-9]+", "UTF8_BINARY", Seq("", "A", "B", "C"), -1),
+      StringSplitTestCase("", "", "UTF8_BINARY", Seq(""), -1),
+      StringSplitTestCase("1A2B3C", "", "UTF8_BINARY", Seq("1", "A", "2", "B", "3", "C"), -1),
+      StringSplitTestCase("1A2B3C", "", "UTF8_LCASE", Seq("1", "A", "2", "B", "3", "C"), -1),
+      StringSplitTestCase("1A2B3C", "", "UTF8_BINARY", Seq("1", "A", "2", "B", "3", "C"), 0),
+      StringSplitTestCase("1A2B3C", "", "UTF8_LCASE", Seq("1", "A", "2", "B", "3", "C"), 0),
+      StringSplitTestCase("1A2B3C", "", "UTF8_BINARY", Seq("1A2B3C"), 1),
+      StringSplitTestCase("1A2B3C", "", "UTF8_LCASE", Seq("1A2B3C"), 1),
+      StringSplitTestCase("1A2B3C", "", "UTF8_BINARY", Seq("1", "A", "2B3C"), 3),
+      StringSplitTestCase("1A2B3C", "", "UTF8_LCASE", Seq("1", "A", "2B3C"), 3),
+      StringSplitTestCase("1A2B3C", "", "UTF8_BINARY", Seq("1", "A", "2", "B", "3", "C"), 6),
+      StringSplitTestCase("1A2B3C", "", "UTF8_LCASE", Seq("1", "A", "2", "B", "3", "C"), 6),
+      StringSplitTestCase("1A2B3C", "", "UTF8_BINARY", Seq("1", "A", "2", "B", "3", "C"), 100),
+      StringSplitTestCase("1A2B3C", "", "UTF8_LCASE", Seq("1", "A", "2", "B", "3", "C"), 100),
+      StringSplitTestCase("", "[1-9]+", "UTF8_BINARY", Seq(""), -1),
+      StringSplitTestCase(null, "[1-9]+", "UTF8_BINARY", null, -1),
+      StringSplitTestCase("1A2B3C", null, "UTF8_BINARY", null, -1),
+      StringSplitTestCase(null, null, "UTF8_BINARY", null, -1)
     )
     testCases.foreach(t => {
       // StringSplit
       checkEvaluation(StringSplit(
         Literal.create(t.s, StringType(CollationFactory.collationNameToId(t.collation))),
-        Literal.create(t.r, StringType), -1), t.expected)
+        Literal.create(t.r, StringType), t.limit), t.expected)
     })
   }
 

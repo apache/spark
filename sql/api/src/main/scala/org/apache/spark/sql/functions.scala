@@ -872,6 +872,22 @@ object functions {
     Column.fn("last_value", e, ignoreNulls)
 
   /**
+   * Create time from hour, minute and second fields. For invalid inputs it will throw an error.
+   *
+   * @param hour
+   *   the hour to represent, from 0 to 23
+   * @param minute
+   *   the minute to represent, from 0 to 59
+   * @param second
+   *   the second to represent, from 0 to 59.999999
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def make_time(hour: Column, minute: Column, second: Column): Column = {
+    Column.fn("make_time", hour, minute, second)
+  }
+
+  /**
    * Aggregate function: returns the most frequent value in a group.
    *
    * @group agg_funcs
@@ -1375,6 +1391,36 @@ object functions {
    * @since 3.5.0
    */
   def count_if(e: Column): Column = Column.fn("count_if", e)
+
+  /**
+   * Returns the current time at the start of query evaluation. Note that the result will contain
+   * 6 fractional digits of seconds.
+   *
+   * @return
+   *   A time.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def current_time(): Column = {
+    Column.fn("current_time")
+  }
+
+  /**
+   * Returns the current time at the start of query evaluation.
+   *
+   * @param precision
+   *   An integer literal in the range [0..6], indicating how many fractional digits of seconds to
+   *   include in the result.
+   * @return
+   *   A time.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def current_time(precision: Int): Column = {
+    Column.fn("current_time", lit(precision))
+  }
 
   /**
    * Aggregate function: computes a histogram on numeric 'expr' using nb bins. The return value is
@@ -5400,7 +5446,7 @@ object functions {
   def dayofyear(e: Column): Column = Column.fn("dayofyear", e)
 
   /**
-   * Extracts the hours as an integer from a given date/timestamp/string.
+   * Extracts the hours as an integer from a given date/time/timestamp/string.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -5473,7 +5519,7 @@ object functions {
   def last_day(e: Column): Column = Column.fn("last_day", e)
 
   /**
-   * Extracts the minutes as an integer from a given date/timestamp/string.
+   * Extracts the minutes as an integer from a given date/time/timestamp/string.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -5579,7 +5625,7 @@ object functions {
     Column.fn("next_day", date, dayOfWeek)
 
   /**
-   * Extracts the seconds as an integer from a given date/timestamp/string.
+   * Extracts the seconds as an integer from a given date/time/timestamp/string.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a timestamp
    * @group datetime_funcs
@@ -5684,6 +5730,41 @@ object functions {
     Column.fn("unix_timestamp", s, lit(p))
 
   /**
+   * Parses a string value to a time value.
+   *
+   * @param str
+   *   A string to be parsed to time.
+   * @return
+   *   A time, or raises an error if the input is malformed.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def to_time(str: Column): Column = {
+    Column.fn("to_time", str)
+  }
+
+  /**
+   * Parses a string value to a time value.
+   *
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime
+   * Patterns</a> for valid time format patterns.
+   *
+   * @param str
+   *   A string to be parsed to time.
+   * @param format
+   *   A time format pattern to follow.
+   * @return
+   *   A time, or raises an error if the input is malformed.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def to_time(str: Column, format: Column): Column = {
+    Column.fn("to_time", str, format)
+  }
+
+  /**
    * Converts to a timestamp by casting rules to `TimestampType`.
    *
    * @param s
@@ -5714,6 +5795,41 @@ object functions {
    * @since 2.2.0
    */
   def to_timestamp(s: Column, fmt: String): Column = Column.fn("to_timestamp", s, lit(fmt))
+
+  /**
+   * Parses a string value to a time value.
+   *
+   * @param str
+   *   A string to be parsed to time.
+   * @return
+   *   A time, or null if the input is malformed.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def try_to_time(str: Column): Column = {
+    Column.fn("try_to_time", str)
+  }
+
+  /**
+   * Parses a string value to a time value.
+   *
+   * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime
+   * Patterns</a> for valid time format patterns.
+   *
+   * @param str
+   *   A string to be parsed to time.
+   * @param format
+   *   A time format pattern to follow.
+   * @return
+   *   A time, or null if the input is malformed.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def try_to_time(str: Column, format: Column): Column = {
+    Column.fn("try_to_time", str, format)
+  }
 
   /**
    * Parses the `s` with the `format` to a timestamp. The function always returns null on an
@@ -5762,6 +5878,24 @@ object functions {
    * @since 2.2.0
    */
   def to_date(e: Column, fmt: String): Column = Column.fn("to_date", e, lit(fmt))
+
+  /**
+   * This is a special version of `to_date` that performs the same operation, but returns a NULL
+   * value instead of raising an error if date cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_to_date(e: Column): Column = Column.fn("try_to_date", e)
+
+  /**
+   * This is a special version of `to_date` that performs the same operation, but returns a NULL
+   * value instead of raising an error if date cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_to_date(e: Column, fmt: String): Column = Column.fn("try_to_date", e, lit(fmt))
 
   /**
    * Returns the number of days since 1970-01-01.
