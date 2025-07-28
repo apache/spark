@@ -34,8 +34,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorianDays
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
-import org.apache.spark.sql.execution.datasources.DaysWritableV2
 import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -635,7 +635,8 @@ private[hive] trait HiveInspectors {
         case x: DateObjectInspector if x.preferWritable() =>
           data: Any => {
             if (data != null) {
-              new DaysWritableV2(x.getPrimitiveWritableObject(data)).getGregorianDays
+              val d = rebaseJulianToGregorianDays(x.getPrimitiveWritableObject(data).getDays)
+              d
             } else {
               null
             }
@@ -1100,7 +1101,8 @@ private[hive] trait HiveInspectors {
     if (value == null) {
       null
     } else {
-      new DaysWritableV2(value.asInstanceOf[Int])
+      val d = new hiveIo.DateWritableV2(value.asInstanceOf[Int])
+      d
     }
 
   private def getTimestampWritableV2(value: Any): hiveIo.TimestampWritableV2 =

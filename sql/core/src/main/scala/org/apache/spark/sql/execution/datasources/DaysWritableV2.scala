@@ -40,12 +40,11 @@ class DaysWritableV2 extends DateWritableV2 {
   def this(d: Date) = {
     this()
     gregorianDays = d
-    super.set(rebaseGregorianToJulianDays(d.toEpochDay))
+    super.set(d)
   }
 
   def this(d: Int) = {
     this(Date.ofEpochDay(d))
-    super.set(rebaseGregorianToJulianDays(d))
   }
 
   def this(dateWritableV2: DateWritableV2) = {
@@ -68,12 +67,12 @@ class DaysWritableV2 extends DateWritableV2 {
 
   override def set(d: Date): Unit = {
     gregorianDays = d
-    super.set(rebaseGregorianToJulianDays(d.toEpochDay))
+    super.set(d.toEpochDay)
   }
 
   override def set(d: Int): Unit = {
     gregorianDays = Date.ofEpochDay(d)
-    super.set(rebaseGregorianToJulianDays(d))
+    super.set(d)
   }
 
   @throws[IOException]
