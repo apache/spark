@@ -1334,14 +1334,13 @@ def read_udtf(pickleSer, infile, eval_type):
             ser = ArrowStreamUDTFSerializer()
     elif eval_type == PythonEvalType.SQL_ARROW_UDTF:
         runner_conf = {}
-        # Load conf used for PyArrow native evaluation.
         num_conf = read_int(infile)
         for i in range(num_conf):
             k = utf8_deserializer.loads(infile)
             v = utf8_deserializer.loads(infile)
             runner_conf[k] = v
         prefers_large_var_types = use_large_var_types(runner_conf)
-        # Use PyArrow-native serializer for native PyArrow UDTFs
+        # Use PyArrow-native serializer for Arrow UDTFs
         ser = ArrowStreamArrowUDTFSerializer()
     else:
         # Each row is a group so do not batch but send one by one.
@@ -2079,12 +2078,13 @@ def read_udtf(pickleSer, infile, eval_type):
                             ) from e
                 return batches
 
-            def evaluate(*args: pa.Table):
+            def evaluate(*args: pa.RecordBatch):
                 if len(args) == 0:
                     for batch in convert_to_arrow(func()):
                         yield verify_result(batch), arrow_return_type
                 else:
-                    # For PyArrow UDTFs, pass the Table(s) directly to the function
+                    # For Arrow UDTFs, unpack the RecordBatches and pass them to the function
+                    # TODO: support table arguments
                     for batch in convert_to_arrow(func(*args)):
                         yield verify_result(batch), arrow_return_type
 
@@ -2105,7 +2105,7 @@ def read_udtf(pickleSer, infile, eval_type):
         def mapper(_, it):
             try:
                 for a in it:
-                    # For PyArrow UDTFs, pass Tables directly (no row conversion needed)
+                    # For PyArrow UDTFs, pass RecordBatches directly (no row conversion needed)
                     yield from eval(*[a[o] for o in args_kwargs_offsets])
                 if terminate is not None:
                     yield from terminate()

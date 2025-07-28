@@ -1574,7 +1574,6 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
         self.init_key_offsets = None
 
     def load_stream(self, stream):
-        import itertools
         import pyarrow as pa
         from pyspark.sql.streaming.stateful_processor_util import (
             TransformWithStateInPandasFuncMode,
@@ -1582,7 +1581,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
 
         def generate_data_batches(batches):
             """
-            Deserialize ArrowRecordBatches and return a generator of Row.
+            Deserialize ArrowRecordBatches and return a generator of pandas.Series list.
             The deserialization logic assumes that Arrow RecordBatches contain the data with the
             ordering that data chunks for same grouping key will appear sequentially.
             See `TransformWithStateInPandasPythonInitialStateRunner` for arrow batch schema sent

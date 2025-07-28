@@ -27225,7 +27225,8 @@ def arrow_udtf(
     """Creates a PyArrow-native user defined table function (UDTF).
 
     This function provides a PyArrow-native interface for UDTFs, where the eval method
-    receives PyArrow Tables or Arrays and returns an Iterator of PyArrow Tables.
+    receives PyArrow RecordBatches or Arrays and returns an Iterator of PyArrow Tables
+    or RecordBatches.
     This enables true vectorized computation without row-by-row processing overhead.
 
     .. versionadded:: 4.1.0
@@ -27240,13 +27241,13 @@ def arrow_udtf(
 
     Examples
     --------
-    UDTF with PyArrow Table input:
+    UDTF with PyArrow RecordBatch input:
 
     >>> import pyarrow as pa
     >>> from pyspark.sql.functions import arrow_udtf
     >>> @arrow_udtf(returnType="x int, y int")
     ... class MyUDTF:
-    ...     def eval(self, batch: pa.Table):
+    ...     def eval(self, batch: pa.RecordBatch):
     ...         # Process the entire batch vectorized
     ...         x_array = batch.column('x')
     ...         y_array = batch.column('y')
@@ -27271,14 +27272,12 @@ def arrow_udtf(
     ...         })
     ...         yield result_table
     ...
-    >>> MyUDTF2(col("x"), col("y")).show()  # doctest: +SKIP
+    >>> MyUDTF2(lit(1), lit(2)).show()  # doctest: +SKIP
 
     Notes
     -----
-    - The eval method must accept PyArrow Tables or Arrays as input
-    - The eval method must yield PyArrow Tables as output
-    - PyArrow must be installed and available
-    - This provides better performance than regular UDTFs for vectorized operations
+    - The eval method must accept PyArrow RecordBatches or Arrays as input
+    - The eval method must yield PyArrow Tables or RecordBatches as output
     """
     if cls is None:
         return functools.partial(_create_pyarrow_udtf, returnType=returnType)

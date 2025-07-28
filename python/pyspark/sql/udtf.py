@@ -259,7 +259,7 @@ def _create_pyarrow_udtf(
         ) from e
 
     # Validate the handler class with PyArrow-specific checks
-    _validate_pyarrow_udtf_handler(cls, returnType)
+    _validate_arrow_udtf_handler(cls, returnType)
 
     return _create_udtf(
         cls=cls,
@@ -270,7 +270,7 @@ def _create_pyarrow_udtf(
     )
 
 
-def _validate_pyarrow_udtf_handler(cls: Any, returnType: Optional[Union[StructType, str]]) -> None:
+def _validate_arrow_udtf_handler(cls: Any, returnType: Optional[Union[StructType, str]]) -> None:
     """Validate the handler class of a PyArrow UDTF."""
     # First run standard UDTF validation
     _validate_udtf_handler(cls, returnType)
@@ -281,9 +281,9 @@ def _validate_pyarrow_udtf_handler(cls: Any, returnType: Optional[Union[StructTy
     # Check that eval method signature looks appropriate for PyArrow
     if hasattr(cls, "eval"):
         sig = inspect.signature(cls.eval)
-        params = list(sig.parameters.values())[1:]  # Skip 'self'
+        params = list(sig.parameters.values())[1:]
 
-        # Check for type hints that suggest PyArrow usage
+        # Check that eval method signature looks appropriate for PyArrow
         for param in params:
             if param.annotation != inspect.Parameter.empty:
                 annotation_str = str(param.annotation)
@@ -292,7 +292,7 @@ def _validate_pyarrow_udtf_handler(cls: Any, returnType: Optional[Union[StructTy
 
                     warnings.warn(
                         f"PyArrow UDTF parameter '{param.name}' does not have PyArrow type hints. "
-                        f"Consider using 'pa.Table' or 'pa.Array' for better clarity.",
+                        f"Consider using 'pa.RecordBatch' or 'pa.Array' for better clarity.",
                         UserWarning,
                     )
 
