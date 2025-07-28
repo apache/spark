@@ -19,23 +19,39 @@
 
 """
 PySpark UDF dev util for @udf, to test the type coercion difference for different
-Spark configs (e.g. arrow enabled, legacy pandas conversion enabled). 
+Spark configs (e.g. arrow enabled, legacy pandas conversion enabled).
 
 Usage (see optional configs below):
 # prereq: build Spark locally
 python ./type_coercion_udf.py
 """
 
-import sys
 import array
 import datetime
 from decimal import Decimal
 import argparse
-from typing import Dict, List, Any
+from typing import List, Any
 
 from pyspark.sql import Row, SparkSession
-from pyspark.sql.types import *
 from pyspark.sql.functions import udf
+from pyspark.sql.types import (
+    ArrayType,
+    BinaryType,
+    BooleanType,
+    ByteType,
+    DateType,
+    DecimalType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
+    MapType,
+    ShortType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
+)
 
 TEST_DATA = [
     None,
@@ -100,7 +116,7 @@ def run_type_coercion_tests(
     count = 0
     total = len(test_types) * len(test_data)
 
-    print(f"\nTesting configs:")
+    print("\nTesting configs:")
     print(f"  Arrow enabled: {use_arrow}")
     print(f"  Legacy pandas: {legacy_pandas}")
     print()
