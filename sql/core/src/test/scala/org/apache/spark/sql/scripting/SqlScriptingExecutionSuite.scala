@@ -2207,6 +2207,46 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
+        |  DECLARE system INT;
+        |END
+        |""".stripMargin
+
+    val e = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+    }
+
+    checkError(
+      exception = e,
+      condition = "INVALID_VARIABLE_DECLARATION.NAME_FORBIDDEN",
+      sqlState = "42K0M",
+      parameters = Map("varName" -> toSQLId("system"))
+    )
+  }
+
+  test("local variable - declare - session name forbidden in sql scripts") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE session INT;
+        |END
+        |""".stripMargin
+
+    val e = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+    }
+
+    checkError(
+      exception = e,
+      condition = "INVALID_VARIABLE_DECLARATION.NAME_FORBIDDEN",
+      sqlState = "42K0M",
+      parameters = Map("varName" -> toSQLId("session"))
+    )
+  }
+
+  test("local variable - declare - system name forbidden in sql scripts via declare proxy") {
+    val sqlScript =
+      """
+        |BEGIN
         |  DECLARE proxy = "system";
         |  DECLARE IDENTIFIER(proxy) = 1;
         |END
@@ -2224,7 +2264,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("local variable - declare - session name forbidden in sql scripts") {
+  test("local variable - declare - session name forbidden in sql scripts via declare proxy") {
     val sqlScript =
       """
         |BEGIN
