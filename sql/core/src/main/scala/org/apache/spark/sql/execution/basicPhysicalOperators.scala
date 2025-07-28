@@ -704,24 +704,24 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
    * the first child's attributes at the same position.
    */
   private def prepareOutputPartitioning(): Seq[Partitioning] = {
-    val attributesMap = children.map(_.output).transpose.flatMap { attrs =>
-      val firstAttr = attrs.head
-      val otherAttrs = attrs.tail
-
-      otherAttrs.map { attr =>
+    // Create a map of attributes from the other children to the first child.
+    val firstAttrs = children.head.output
+    val attributesMap = children.tail.map(_.output).map { otherAttrs =>
+      otherAttrs.zip(firstAttrs).map { case (attr, firstAttr) =>
         attr -> firstAttr
       }.toMap
-    }.toMap
+    }
 
     val partitionings = children.map(_.outputPartitioning)
     val firstPartitioning = partitionings.head
     val otherPartitionings = partitionings.tail
 
-    val convertedOtherPartitionings = otherPartitionings.map { p =>
+    val convertedOtherPartitionings = otherPartitionings.zipWithIndex.map { case (p, idx) =>
+      val attributeMap = attributesMap(idx)
       p match {
         case e: Expression =>
           e.transform {
-            case a: Attribute if attributesMap.contains(a) => attributesMap(a)
+            case a: Attribute if attributeMap.contains(a) => attributeMap(a)
           }.asInstanceOf[Partitioning]
         case _ => p
       }
