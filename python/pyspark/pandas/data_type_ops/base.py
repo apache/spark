@@ -392,10 +392,6 @@ class DataTypeOps(object, metaclass=ABCMeta):
         raise TypeError(">= can not be applied to %s." % self.pretty_name)
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if isinstance(right, (pd.Series, pd.Index, np.ndarray)):
-            raise TypeError(
-                f"Operand of type {type(right).__name__} is not supported for this operation. "
-            )
         if isinstance(right, (list, tuple)):
             from pyspark.pandas.series import first_series, scol_for
             from pyspark.pandas.frame import DataFrame

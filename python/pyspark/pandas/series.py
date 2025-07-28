@@ -755,6 +755,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         d    False
         Name: b, dtype: bool
         """
+        if isinstance(other, (pd.Series, pd.Index, np.ndarray)):
+            raise TypeError(
+                f"Operand of type {type(other).__name__} is not supported for this operation. "
+            )
         return self == other
 
     equals = eq
