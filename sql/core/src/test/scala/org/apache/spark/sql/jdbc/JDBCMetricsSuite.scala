@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
-trait JDBCMetricsSuite extends QueryTest with SharedSparkSession {
+class JDBCMetricsSuite extends QueryTest with SharedSparkSession {
 
   val tempDir = Utils.createTempDir()
   val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
@@ -42,6 +42,16 @@ trait JDBCMetricsSuite extends QueryTest with SharedSparkSession {
       conn.close()
     }
   }
+
+  override def sparkConf: SparkConf =
+    super.sparkConf
+      .set("spark.sql.catalog.h2", classOf[JDBCTableCatalog].getName)
+      .set("spark.sql.catalog.h2.url", url)
+      .set("spark.sql.catalog.h2.driver", "org.h2.Driver")
+      .set("spark.sql.catalog.h2.pushDownAggregate", "true")
+      .set("spark.sql.catalog.h2.pushDownLimit", "true")
+      .set("spark.sql.catalog.h2.pushDownOffset", "true")
+      .set("spark.sql.catalog.h2.pushDownJoin", "true")
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -62,9 +72,7 @@ trait JDBCMetricsSuite extends QueryTest with SharedSparkSession {
     Utils.deleteRecursively(tempDir)
     super.afterAll()
   }
-}
 
-class JDBCQueryMetricsSuite extends JDBCMetricsSuite {
   test("Test logging of schema fetch time") {
     val df = spark.read
       .format("jdbc")
@@ -89,18 +97,6 @@ class JDBCQueryMetricsSuite extends JDBCMetricsSuite {
       .load()
     assert(df.collect().length === 3)
   }
-}
-
-class JDBCV2QueryMetricsSuite extends JDBCMetricsSuite {
-  override def sparkConf: SparkConf =
-    super.sparkConf
-      .set("spark.sql.catalog.h2", classOf[JDBCTableCatalog].getName)
-      .set("spark.sql.catalog.h2.url", url)
-      .set("spark.sql.catalog.h2.driver", "org.h2.Driver")
-      .set("spark.sql.catalog.h2.pushDownAggregate", "true")
-      .set("spark.sql.catalog.h2.pushDownLimit", "true")
-      .set("spark.sql.catalog.h2.pushDownOffset", "true")
-      .set("spark.sql.catalog.h2.pushDownJoin", "true")
 
   test("Test logging of schema fetch time for V2 api") {
     val df = sql("SELECT * FROM h2.TEST.PEOPLE")
