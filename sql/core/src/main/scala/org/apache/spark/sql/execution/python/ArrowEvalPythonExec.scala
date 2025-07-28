@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.{StructType, UserDefinedType}
+import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
 
 /**
  * Grouped a iterator into batches.
@@ -128,7 +129,7 @@ class ArrowEvalPythonEvaluatorFactory(
 
     columnarBatchIter.flatMap { batch =>
       val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-      if (outputTypes != actualDataTypes) {
+      if (!equalsIgnoreCompatibleCollation(outputTypes, actualDataTypes)) {
         throw QueryExecutionErrors.arrowDataTypeMismatchError(
           "pandas_udf()", outputTypes, actualDataTypes)
       }
