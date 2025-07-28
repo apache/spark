@@ -229,6 +229,7 @@ __all__ = [  # noqa: F405
     "make_date",
     "make_dt_interval",
     "make_interval",
+    "make_time",
     "make_timestamp",
     "make_timestamp_ltz",
     "make_timestamp_ntz",

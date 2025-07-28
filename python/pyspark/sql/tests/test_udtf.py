@@ -176,6 +176,26 @@ class BaseUDTFTestsMixin:
             self.spark.sql("SELECT * FROM values (0, 1), (1, 2) t(a, b), LATERAL testUDTF(a, b)"),
         )
 
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self):
+                yield 1,
+                yield 2,
+
+        self.spark.udtf.register("testUDTF", TestUDTF)
+
+        assertDataFrameEqual(
+            self.spark.range(3, numPartitions=1).lateralJoin(TestUDTF()),
+            [
+                Row(id=0, a=1),
+                Row(id=0, a=2),
+                Row(id=1, a=1),
+                Row(id=1, a=2),
+                Row(id=2, a=1),
+                Row(id=2, a=2),
+            ],
+        )
+
     def test_udtf_eval_with_return_stmt(self):
         class TestUDTF:
             def eval(self, a: int, b: int):

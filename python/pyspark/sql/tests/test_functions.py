@@ -82,10 +82,9 @@ class FunctionsTestsMixin:
 
         # Functions that we expect to be missing in python until they are added to pyspark
         expected_missing_in_py = set(
-            # TODO(SPARK-52888): Implement the make_time function in Python
             # TODO(SPARK-52890): Implement the to_time function in Python
             # TODO(SPARK-52891): Implement the try_to_time function in Python
-            ["make_time", "to_time", "try_to_time"]
+            ["to_time", "try_to_time"]
         )
 
         self.assertEqual(
@@ -579,6 +578,30 @@ class FunctionsTestsMixin:
         row = df.select(F.dayname(df.date)).first()
         self.assertEqual(row[0], "Mon")
 
+    def test_hour(self):
+        # SPARK-52892: test the hour function with time.
+        df = self.spark.range(1).select(F.lit(datetime.time(12, 34, 56)).alias("time"))
+        row_from_col = df.select(F.hour(df.time)).first()
+        self.assertEqual(row_from_col[0], 12)
+        row_from_name = df.select(F.hour("time")).first()
+        self.assertEqual(row_from_name[0], 12)
+
+    def test_minute(self):
+        # SPARK-52893: test the minute function with time.
+        df = self.spark.range(1).select(F.lit(datetime.time(12, 34, 56)).alias("time"))
+        row_from_col = df.select(F.minute(df.time)).first()
+        self.assertEqual(row_from_col[0], 34)
+        row_from_name = df.select(F.minute("time")).first()
+        self.assertEqual(row_from_name[0], 34)
+
+    def test_second(self):
+        # SPARK-52894: test the second function with time.
+        df = self.spark.range(1).select(F.lit(datetime.time(12, 34, 56)).alias("time"))
+        row_from_col = df.select(F.second(df.time)).first()
+        self.assertEqual(row_from_col[0], 56)
+        row_from_name = df.select(F.second("time")).first()
+        self.assertEqual(row_from_name[0], 56)
+
     # Test added for SPARK-37738; change Python API to accept both col & int as input
     def test_date_add_function(self):
         dt = datetime.date(2021, 12, 27)
@@ -632,6 +655,17 @@ class FunctionsTestsMixin:
                 ).first()
             )
         )
+
+    def test_make_time(self):
+        # SPARK-52888: test the make_time function.
+        df = self.spark.createDataFrame([(1, 2, 3)], ["hour", "minute", "second"])
+        result = datetime.time(1, 2, 3)
+        row_from_col = df.select(F.make_time(df.hour, df.minute, df.second)).first()
+        self.assertIsInstance(row_from_col[0], datetime.time)
+        self.assertEqual(row_from_col[0], result)
+        row_from_name = df.select(F.make_time("hour", "minute", "second")).first()
+        self.assertIsInstance(row_from_name[0], datetime.time)
+        self.assertEqual(row_from_name[0], result)
 
     def test_make_date(self):
         # SPARK-36554: expose make_date expression

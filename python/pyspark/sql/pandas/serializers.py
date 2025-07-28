@@ -701,13 +701,10 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
 
         # TODO: should we handle timezone here?
 
-        try:
+        if arr.type == arrow_type:
             return arr
-        except pa.lib.ArrowException:
-            if arrow_cast:
-                return arr.cast(target_type=arrow_type, safe=self._safecheck)
-            else:
-                raise
+        else:
+            return arr.cast(target_type=arrow_type, safe=self._safecheck)
 
     def dump_stream(self, iterator, stream):
         """
