@@ -31,30 +31,19 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.write.WriterCommitMessage
-import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
+import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
 
 /** A helper object for writing FileFormat data out to a location. */
-object DefaultFileFormatWriter extends Logging {
-  /** Describes how output files should be placed in the filesystem. */
-  case class OutputSpec(
-      outputPath: String,
-      customPartitionLocations: Map[TablePartitionSpec, String],
-      outputColumns: Seq[Attribute])
-
-  /** Describes how concurrent output writers should be executed. */
-  case class ConcurrentOutputWriterSpec(
-      maxWriters: Int,
-      createSorter: () => UnsafeExternalRowSorter)
+object DefaultFileFormatWriter extends FileFormatWriter with Logging {
 
   /**
    * A variable used in tests to check whether the output ordering of the query matches the
@@ -82,12 +71,12 @@ object DefaultFileFormatWriter extends Logging {
    *    processing statistics.
    * @return The set of all partition paths that were updated during this write job.
    */
-  def write(
+  override def write(
       sparkSession: SparkSession,
       plan: SparkPlan,
       fileFormat: FileFormat,
       committer: FileCommitProtocol,
-      outputSpec: OutputSpec,
+      outputSpec: FileFormatWriter.OutputSpec,
       hadoopConf: Configuration,
       partitionColumns: Seq[Attribute],
       bucketSpec: Option[BucketSpec],
@@ -200,7 +189,7 @@ object DefaultFileFormatWriter extends Logging {
       job: Job,
       description: WriteJobDescription,
       committer: FileCommitProtocol,
-      outputSpec: OutputSpec,
+      outputSpec: FileFormatWriter.OutputSpec,
       requiredOrdering: Seq[Expression],
       partitionColumns: Seq[Attribute],
       sortColumns: Seq[Attribute],
@@ -276,7 +265,7 @@ object DefaultFileFormatWriter extends Logging {
       logInfo(log"Write Job ${MDC(LogKeys.UUID, description.uuid)} committed. " +
         log"Elapsed time: ${MDC(LogKeys.ELAPSED_TIME, duration)} ms.")
 
-      processStats(
+      DefaultFileFormatWriter.processStats(
         description.statsTrackers, ret.map(_.summary.stats).toImmutableArraySeq, duration)
       logInfo(log"Finished processing stats for write job ${MDC(LogKeys.UUID, description.uuid)}.")
 
@@ -328,7 +317,7 @@ object DefaultFileFormatWriter extends Logging {
   private def createSortPlan(
       plan: SparkPlan,
       requiredOrdering: Seq[Expression],
-      outputSpec: OutputSpec): SortExec = {
+      outputSpec: FileFormatWriter.OutputSpec): SortExec = {
     // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
     // the physical plan may have different attribute ids due to optimizer removing some
     // aliases. Here we bind the expression ahead to avoid potential attribute ids mismatch.
@@ -343,18 +332,18 @@ object DefaultFileFormatWriter extends Logging {
   private def createConcurrentOutputWriterSpec(
       sparkSession: SparkSession,
       sortPlan: SortExec,
-      sortColumns: Seq[Attribute]): Option[ConcurrentOutputWriterSpec] = {
+      sortColumns: Seq[Attribute]): Option[FileFormatWriter.ConcurrentOutputWriterSpec] = {
     val maxWriters = sparkSession.sessionState.conf.maxConcurrentOutputFileWriters
     val concurrentWritersEnabled = maxWriters > 0 && sortColumns.isEmpty
     if (concurrentWritersEnabled) {
-      Some(ConcurrentOutputWriterSpec(maxWriters, () => sortPlan.createSorter()))
+      Some(FileFormatWriter.ConcurrentOutputWriterSpec(maxWriters, () => sortPlan.createSorter()))
     } else {
       None
     }
   }
 
   /** Writes data out in a single Spark task. */
-  private[spark] def executeTask(
+  private[spark] override def executeTask(
       description: WriteJobDescription,
       jobTrackerID: String,
       sparkStageId: Int,
@@ -362,7 +351,8 @@ object DefaultFileFormatWriter extends Logging {
       sparkAttemptNumber: Int,
       committer: FileCommitProtocol,
       iterator: Iterator[InternalRow],
-      concurrentOutputWriterSpec: Option[ConcurrentOutputWriterSpec]): WriteTaskResult = {
+      concurrentOutputWriterSpec: Option[FileFormatWriter.ConcurrentOutputWriterSpec]):
+  WriteTaskResult = {
 
     val jobId = SparkHadoopWriterUtils.createJobID(jobTrackerID, sparkStageId)
     val taskId = new TaskID(jobId, TaskType.MAP, sparkPartitionId)

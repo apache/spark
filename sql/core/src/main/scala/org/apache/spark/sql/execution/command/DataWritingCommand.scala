@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, LogicalPlan, 
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
-import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
+import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, FileFormatWriter}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.SerializableConfiguration
@@ -40,11 +40,15 @@ trait DataWritingCommand extends UnaryCommand with CTEInChildren {
   /**
    * The input query plan that produces the data to be written.
    * IMPORTANT: the input query plan MUST be analyzed, so that we can carry its output columns
-   *            to [[org.apache.spark.sql.execution.datasources.DefaultFileFormatWriter]].
+   *            to [[org.apache.spark.sql.execution.datasources.FileFormatWriter]].
    */
   def query: LogicalPlan
 
   override final def child: LogicalPlan = query
+
+  protected val fileFormatWriter: FileFormatWriter = {
+    FileFormatWriter.create(conf)
+  }
 
   // Output column names of the analyzed input query plan.
   def outputColumnNames: Seq[String]

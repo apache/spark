@@ -30,7 +30,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, FileFormat, DefaultFileFormatWriter}
+import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, FileFormat, FileFormatWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -172,13 +172,14 @@ class FileStreamSink(
         }
       }
       val qe = data.queryExecution
+      val writer = FileFormatWriter.create(sparkSession.sessionState.conf)
 
-      DefaultFileFormatWriter.write(
+      writer.write(
         sparkSession = sparkSession,
         plan = qe.executedPlan,
         fileFormat = fileFormat,
         committer = committer,
-        outputSpec = DefaultFileFormatWriter.OutputSpec(path, Map.empty, qe.analyzed.output),
+        outputSpec = FileFormatWriter.OutputSpec(path, Map.empty, qe.analyzed.output),
         hadoopConf = hadoopConf,
         partitionColumns = partitionColumns,
         bucketSpec = None,

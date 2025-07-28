@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.datasources.DefaultFileFormatWriter.ConcurrentOutputWriterSpec
+import org.apache.spark.sql.execution.datasources.FileFormatWriter.ConcurrentOutputWriterSpec
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -96,7 +96,8 @@ case class WriteFilesExec(
       val sparkPartitionId = TaskContext.get().partitionId()
       val sparkAttemptNumber = TaskContext.get().taskAttemptId().toInt & Int.MaxValue
 
-      val ret = DefaultFileFormatWriter.executeTask(
+      val writer = FileFormatWriter.create(conf)
+      val ret = writer.executeTask(
         description,
         jobTrackerID,
         sparkStageId,

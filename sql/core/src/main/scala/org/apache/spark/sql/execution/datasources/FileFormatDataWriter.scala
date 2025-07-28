@@ -33,7 +33,6 @@ import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.DefaultFileFormatWriter.ConcurrentOutputWriterSpec
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
@@ -407,7 +406,7 @@ class DynamicPartitionDataConcurrentWriter(
     description: WriteJobDescription,
     taskAttemptContext: TaskAttemptContext,
     committer: FileCommitProtocol,
-    concurrentOutputWriterSpec: ConcurrentOutputWriterSpec,
+    concurrentOutputWriterSpec: FileFormatWriter.ConcurrentOutputWriterSpec,
     customMetrics: Map[String, SQLMetric] = Map.empty)
   extends BaseDynamicPartitionDataWriter(description, taskAttemptContext, committer, customMetrics)
   with Logging {
