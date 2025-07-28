@@ -2401,6 +2401,103 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  test("load metrics are populated correctly") {
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      val conf = dbConf
+
+      withDB(remoteDir, conf = conf) { db =>
+        db.load(0)
+        db.put("a", "5")
+        db.put("b", "5")
+        db.commit()
+
+        db.doMaintenance() // upload snapshot
+        db.rollback() // invalidate the db, so next load will reload from dfs
+
+        db.load(1)
+        db.put("a", "10")
+        db.put("b", "25")
+        db.commit()
+
+        val m1 = db.metricsOpt.get
+        assert(m1.lastLoadMetrics("load") > 0)
+        // since we called load, loadFromSnapshot should not be populated
+        assert(!m1.lastLoadMetrics.contains("loadFromSnapshot"))
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("load from snapshot metrics are populated correctly") {
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      // We want a snapshot for every two delta files
+      val conf = dbConf.copy(minDeltasForSnapshot = 1)
+
+      withDB(remoteDir, conf = conf) { db =>
+        db.load(0)
+        db.put("a", "5")
+        db.commit()
+        db.doMaintenance()
+
+        db.load(1)
+        db.put("b", "10")
+        db.commit()
+        db.doMaintenance()
+
+        db.loadFromSnapshot(0, 1)
+
+        val m1 = db.metricsOpt.get
+        assert(m1.lastLoadMetrics("loadFromSnapshot") > 0)
+        // since we called loadFromSnapshot, load should not be populated
+        assert(!m1.lastLoadMetrics.contains("load"))
+        assert(m1.lastLoadMetrics("replayChangelog") > 0)
+        assert(m1.lastLoadMetrics("numReplayChangeLogFiles") == 1)
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("commit metrics are populated correctly") {
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      val conf = dbConf.copy()
+
+      withDB(remoteDir, conf = conf) { db =>
+        db.load(0)
+        db.put("a", "5")
+        db.put("b", "5")
+        db.commit()
+        db.doMaintenance() // upload snapshot
+
+        val m1 = db.metricsOpt.get
+        assert(m1.lastCommitLatencyMs("fileSync") > 0)
+        // Since changelog checkpoint is enabled, we should populate this metric
+        assert(m1.lastCommitLatencyMs("changeLogWriterCommit") > 0)
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingDisabled("commit metrics are populated correctly") {
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      val conf = dbConf.copy()
+
+      withDB(remoteDir, conf = conf) { db =>
+        db.load(0)
+        db.put("a", "5")
+        db.put("b", "5")
+        db.commit()
+        db.doMaintenance() // upload snapshot
+
+        val m1 = db.metricsOpt.get
+        assert(m1.lastCommitLatencyMs("fileSync") > 0)
+        // When changelog checkpoint is NOT enabled we should
+        // always populate this metric in the snapshot
+        assert(m1.lastCommitLatencyMs("saveZipFiles") > 0)
+      }
+    }
+  }
+
   // Add tests to check valid and invalid values for max_open_files passed to the underlying
   // RocksDB instance.
   Seq("-1", "100", "1000").foreach { maxOpenFiles =>

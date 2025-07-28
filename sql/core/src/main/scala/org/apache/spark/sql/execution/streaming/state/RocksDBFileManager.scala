@@ -45,6 +45,7 @@ import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
+import org.apache.spark.util.Utils.timeTakenMs
 
 /**
  * Class responsible for syncing RocksDB checkpoint files from local disk to DFS.
@@ -267,7 +268,7 @@ class RocksDBFileManager(
       fileMapping: Map[String, RocksDBSnapshotFile],
       columnFamilyMapping: Option[Map[String, ColumnFamilyInfo]] = None,
       maxColumnFamilyId: Option[Short] = None,
-      checkpointUniqueId: Option[String] = None): Unit = {
+      checkpointUniqueId: Option[String] = None): RocksDBCheckpointMetadata = {
     logFilesInDir(checkpointDir, log"Saving checkpoint files " +
       log"for version ${MDC(LogKeys.VERSION_NUM, version)}")
     val (localImmutableFiles, localOtherFiles) = listRocksDBFiles(checkpointDir)
@@ -299,22 +300,33 @@ class RocksDBFileManager(
     logDebug(log"Written metadata for version ${MDC(LogKeys.VERSION_NUM, version)}:\n" +
       log"${MDC(LogKeys.METADATA_JSON, metadata.prettyJson)}")
 
-    if (version <= 1 && numKeys <= 0) {
-      // If we're writing the initial version and there's no data, we have to explicitly initialize
-      // the root directory. Normally saveImmutableFilesToDfs will do this initialization, but
-      // when there's no data that method won't write any files, and zipToDfsFile uses the
-      // CheckpointFileManager.createAtomic API which doesn't auto-initialize parent directories.
-      // Moreover, once we disable to track the number of keys, in which the numKeys is -1, we
-      // still need to create the initial dfs root directory anyway.
-      if (!rootDirChecked) {
-        val path = new Path(dfsRootDir)
-        if (!fm.exists(path)) fm.mkdirs(path)
-        rootDirChecked = true
+    val (_, zipFilesTimeMs) = timeTakenMs {
+      if (version <= 1 && numKeys <= 0) {
+        // If we're writing the initial version and there's no data, we have to initialize
+        // the root directory. Normally saveImmutableFilesToDfs will do this initialization, but
+        // when there's no data that method won't write any files, and zipToDfsFile uses the
+        // CheckpointFileManager.createAtomic API which doesn't auto-initialize parent directories.
+        // Moreover, once we disable to track the number of keys, in which the numKeys is -1, we
+        // still need to create the initial dfs root directory anyway.
+        if (!rootDirChecked) {
+          val path = new Path(dfsRootDir)
+          if (!fm.exists(path)) fm.mkdirs(path)
+          rootDirChecked = true
+        }
       }
+      zipToDfsFile(localOtherFiles :+ metadataFile, dfsBatchZipFile(version, checkpointUniqueId))
+      logInfo(log"Saved checkpoint file for version ${MDC(LogKeys.VERSION_NUM, version)} " +
+        log"checkpointUniqueId: ${MDC(LogKeys.UUID, checkpointUniqueId.getOrElse(""))}")
     }
-    zipToDfsFile(localOtherFiles :+ metadataFile, dfsBatchZipFile(version, checkpointUniqueId))
-    logInfo(log"Saved checkpoint file for version ${MDC(LogKeys.VERSION_NUM, version)} " +
-      log"checkpointUniqueId: ${MDC(LogKeys.UUID, checkpointUniqueId.getOrElse(""))}")
+
+    // populate the SaveCheckpointMetrics
+    saveCheckpointMetrics =
+      saveCheckpointMetrics.copy(
+        // Round up to 1ms to reassure that we've logged successfully and avoid flaky tests
+        saveZipFilesTimeMs = Some(Math.max(zipFilesTimeMs, 1L))
+      )
+
+    metadata
   }
 
   /**
@@ -962,7 +974,9 @@ case class RocksDBFileManagerMetrics(
     bytesCopied: Long,
     filesReused: Long,
     @JsonDeserialize(contentAs = classOf[java.lang.Long])
-    zipFileBytesUncompressed: Option[Long] = None)
+    zipFileBytesUncompressed: Option[Long] = None,
+    @JsonDeserialize(contentAs = classOf[java.lang.Long])
+    saveZipFilesTimeMs: Option[Long] = None)
 
 /**
  * Metrics to return when requested but no operation has been performed.
