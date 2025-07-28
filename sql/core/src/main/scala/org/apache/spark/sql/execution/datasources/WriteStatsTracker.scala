@@ -30,7 +30,7 @@ trait WriteTaskStats extends Serializable
 
 /**
  * A trait for classes that are capable of collecting statistics on data that's being processed by
- * a single write task in [[FileFormatWriter]] - i.e. there should be one instance per executor.
+ * a single write task in [[DefaultFileFormatWriter]] - i.e. there should be one instance per executor.
  *
  * newPartition event is only triggered if the relation to be written out is partitioned.
  */

@@ -40,7 +40,7 @@ trait DataWritingCommand extends UnaryCommand with CTEInChildren {
   /**
    * The input query plan that produces the data to be written.
    * IMPORTANT: the input query plan MUST be analyzed, so that we can carry its output columns
-   *            to [[org.apache.spark.sql.execution.datasources.FileFormatWriter]].
+   *            to [[org.apache.spark.sql.execution.datasources.DefaultFileFormatWriter]].
    */
   def query: LogicalPlan
 

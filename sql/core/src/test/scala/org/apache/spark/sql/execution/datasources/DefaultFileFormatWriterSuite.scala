@@ -21,7 +21,7 @@ import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.test.SharedSparkSession
 
-class FileFormatWriterSuite
+class DefaultFileFormatWriterSuite
   extends QueryTest
   with SharedSparkSession
   with CodegenInterpretedPlanTest {

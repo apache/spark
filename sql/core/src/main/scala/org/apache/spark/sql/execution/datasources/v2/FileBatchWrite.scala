@@ -22,7 +22,7 @@ import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, PhysicalWriteInfo, WriterCommitMessage}
 import org.apache.spark.sql.execution.datasources.{WriteJobDescription, WriteTaskResult}
-import org.apache.spark.sql.execution.datasources.FileFormatWriter.processStats
+import org.apache.spark.sql.execution.datasources.DefaultFileFormatWriter.processStats
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 

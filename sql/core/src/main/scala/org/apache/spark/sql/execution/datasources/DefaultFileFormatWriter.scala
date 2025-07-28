@@ -44,7 +44,7 @@ import org.apache.spark.util.ArrayImplicits._
 
 
 /** A helper object for writing FileFormat data out to a location. */
-object FileFormatWriter extends Logging {
+object DefaultFileFormatWriter extends Logging {
   /** Describes how output files should be placed in the filesystem. */
   case class OutputSpec(
       outputPath: String,

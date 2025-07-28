@@ -86,8 +86,8 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils with AdaptiveSparkPlanHelper 
     query
 
     // Check whether the output ordering is matched before FileFormatWriter executes rdd.
-    assert(FileFormatWriter.outputOrderingMatched == orderingMatched,
-      s"Expect: $orderingMatched, Actual: ${FileFormatWriter.outputOrderingMatched}")
+    assert(DefaultFileFormatWriter.outputOrderingMatched == orderingMatched,
+      s"Expect: $orderingMatched, Actual: ${DefaultFileFormatWriter.outputOrderingMatched}")
 
     sparkContext.listenerBus.waitUntilEmpty()
 
@@ -211,8 +211,8 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
           }
 
           // inspect the actually executed plan (that is different to executeAndCheckOrdering)
-          assert(FileFormatWriter.executedPlan.isDefined)
-          val executedPlan = FileFormatWriter.executedPlan.get
+          assert(DefaultFileFormatWriter.executedPlan.isDefined)
+          val executedPlan = DefaultFileFormatWriter.executedPlan.get
 
           val plan = if (enabled) {
             assert(executedPlan.isInstanceOf[WriteFilesExecBase])
@@ -258,8 +258,8 @@ class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1Write
         }
 
         // inspect the actually executed plan (that is different to executeAndCheckOrdering)
-        assert(FileFormatWriter.executedPlan.isDefined)
-        val executedPlan = FileFormatWriter.executedPlan.get
+        assert(DefaultFileFormatWriter.executedPlan.isDefined)
+        val executedPlan = DefaultFileFormatWriter.executedPlan.get
 
         val plan = if (enabled) {
           assert(executedPlan.isInstanceOf[WriteFilesExecBase])

@@ -180,12 +180,12 @@ case class InsertIntoHadoopFsRelationCommand(
       }
 
       val updatedPartitionPaths =
-        FileFormatWriter.write(
+        DefaultFileFormatWriter.write(
           sparkSession = sparkSession,
           plan = child,
           fileFormat = fileFormat,
           committer = committer,
-          outputSpec = FileFormatWriter.OutputSpec(
+          outputSpec = DefaultFileFormatWriter.OutputSpec(
             committerOutputPath.toString, customPartitionLocations, outputColumns),
           hadoopConf = hadoopConf,
           partitionColumns = partitionColumns,
