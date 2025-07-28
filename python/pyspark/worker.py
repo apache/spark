@@ -1947,6 +1947,7 @@ def read_udtf(pickleSer, infile, eval_type):
         return mapper, None, ser, ser
 
     elif eval_type == PythonEvalType.SQL_ARROW_UDTF:
+
         def wrap_pyarrow_udtf(f, return_type):
             import pyarrow as pa
 
@@ -1966,14 +1967,17 @@ def read_udtf(pickleSer, infile, eval_type):
                         },
                     )
 
-                # Convert Table to RecordBatch for consistency
                 if isinstance(result, pa.Table):
                     if result.num_rows == 0:
-                        # Create empty RecordBatch with correct schema
-                        return pa.RecordBatch.from_pylist([], schema=pa.schema(list(arrow_return_type)))
+                        return pa.RecordBatch.from_pylist(
+                            [], schema=pa.schema(list(arrow_return_type))
+                        )
                     else:
-                        # Convert to single RecordBatch (assuming small enough to fit in memory)
-                        result = result.to_batches()[0] if result.to_batches() else pa.RecordBatch.from_pylist([], schema=result.schema)
+                        result = (
+                            result.to_batches()[0]
+                            if result.to_batches()
+                            else pa.RecordBatch.from_pylist([], schema=result.schema)
+                        )
 
                 # Validate the output schema when the result has columns
                 if result.num_columns > 0:
@@ -2023,10 +2027,15 @@ def read_udtf(pickleSer, infile, eval_type):
                     if check_output_row_against_schema is not None:
                         # For PyArrow UDTFs, we need to convert the result to rows for validation
                         if isinstance(res, (pa.Table, pa.RecordBatch)):
-                            table = res if isinstance(res, pa.Table) else pa.Table.from_batches([res])
+                            table = (
+                                res if isinstance(res, pa.Table) else pa.Table.from_batches([res])
+                            )
                             for batch in table.to_batches():
                                 for row_idx in range(batch.num_rows):
-                                    row_data = tuple(batch.column(i)[row_idx].as_py() for i in range(batch.num_columns))
+                                    row_data = tuple(
+                                        batch.column(i)[row_idx].as_py()
+                                        for i in range(batch.num_columns)
+                                    )
                                     check_output_row_against_schema(row_data)
                         else:
                             for row in res:
@@ -2034,7 +2043,7 @@ def read_udtf(pickleSer, infile, eval_type):
                                     check_output_row_against_schema(row)
                             yield from res
                             return
-                    
+
                     yield from res
 
             def convert_to_arrow(data: Iterable):
@@ -2043,7 +2052,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     return [
                         pa.RecordBatch.from_pylist([], schema=pa.schema(list(arrow_return_type)))
                     ]
-                
+
                 # Handle PyArrow Tables/RecordBatches directly
                 batches = []
                 for item in data_list:
@@ -2053,6 +2062,8 @@ def read_udtf(pickleSer, infile, eval_type):
                         batches.append(item)
                     else:
                         # Fallback for other data types
+                        # TODO: shall we be strict here and throw exceptions?
+                        # This can support pandas dataframe too
                         try:
                             return LocalDataToArrowConversion.convert(
                                 data_list, return_type, prefers_large_var_types
@@ -2863,7 +2874,11 @@ def main(infile, outfile):
         eval_type = read_int(infile)
         if eval_type == PythonEvalType.NON_UDF:
             func, profiler, deserializer, serializer = read_command(pickleSer, infile)
-        elif eval_type in (PythonEvalType.SQL_TABLE_UDF, PythonEvalType.SQL_ARROW_TABLE_UDF, PythonEvalType.SQL_ARROW_UDTF):
+        elif eval_type in (
+            PythonEvalType.SQL_TABLE_UDF,
+            PythonEvalType.SQL_ARROW_TABLE_UDF,
+            PythonEvalType.SQL_ARROW_UDTF,
+        ):
             func, profiler, deserializer, serializer = read_udtf(pickleSer, infile, eval_type)
         else:
             func, profiler, deserializer, serializer = read_udfs(pickleSer, infile, eval_type)

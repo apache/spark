@@ -274,21 +274,22 @@ def _validate_pyarrow_udtf_handler(cls: Any, returnType: Optional[Union[StructTy
     """Validate the handler class of a PyArrow UDTF."""
     # First run standard UDTF validation
     _validate_udtf_handler(cls, returnType)
-    
+
     # Additional PyArrow-specific validation
     import inspect
-    
+
     # Check that eval method signature looks appropriate for PyArrow
     if hasattr(cls, "eval"):
         sig = inspect.signature(cls.eval)
         params = list(sig.parameters.values())[1:]  # Skip 'self'
-        
+
         # Check for type hints that suggest PyArrow usage
         for param in params:
             if param.annotation != inspect.Parameter.empty:
                 annotation_str = str(param.annotation)
                 if "pyarrow" not in annotation_str.lower() and "pa." not in annotation_str:
                     import warnings
+
                     warnings.warn(
                         f"PyArrow UDTF parameter '{param.name}' does not have PyArrow type hints. "
                         f"Consider using 'pa.Table' or 'pa.Array' for better clarity.",
@@ -538,7 +539,11 @@ class UDTFRegistration:
                 },
             )
 
-        if f.evalType not in [PythonEvalType.SQL_TABLE_UDF, PythonEvalType.SQL_ARROW_TABLE_UDF, PythonEvalType.SQL_ARROW_UDTF]:
+        if f.evalType not in [
+            PythonEvalType.SQL_TABLE_UDF,
+            PythonEvalType.SQL_ARROW_TABLE_UDF,
+            PythonEvalType.SQL_ARROW_UDTF,
+        ]:
             raise PySparkTypeError(
                 errorClass="INVALID_UDTF_EVAL_TYPE",
                 messageParameters={
