@@ -2203,6 +2203,20 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("local variable - declare - system name forbidden outside sql scripts") {
+    val sqlScript =
+      "DECLARE system INT"
+
+    sql(sqlScript)
+  }
+
+  test("local variable - declare - session name forbidden outside sql scripts") {
+    val sqlScript =
+      "DECLARE session INT"
+
+    sql(sqlScript)
+  }
+
   test("local variable - declare - system name forbidden in sql scripts") {
     val sqlScript =
       """
