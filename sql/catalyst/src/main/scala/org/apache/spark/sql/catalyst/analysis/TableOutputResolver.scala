@@ -224,14 +224,23 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     // Make sure that the result has the requiredMetadata and only that.
     // If the expr is an Attribute or NamedLambdaVariable with the proper name and metadata,
     // it should remain stable, but we do not trust that other NamedAttributes will
-    // remain stable.
+    // remain stable (namely Alias).
     expr match {
       case a: Attribute if a.name == column.name && a.metadata == requiredMetadata =>
         a
       case v: NamedLambdaVariable if v.name == column.name && v.metadata == requiredMetadata =>
         v
       case _ =>
-        Alias(expr, column.name)(explicitMetadata = Some(requiredMetadata))
+        // We cannot keep an Alias with the correct name and metadata because the
+        // metadata might be derived, and derived metadata is not stable upon rewrites.
+        // eg:
+        //   Alias(cast(attr, attr.dataType), n).metadata is empty =>
+        //   Alias(attr, n).metadata == attr.metadata.
+        val stripAlias = expr match {
+          case a: Alias => a.child
+          case _ => expr
+        }
+        Alias(stripAlias, column.name)(explicitMetadata = Some(requiredMetadata))
     }
   }
 
@@ -590,6 +599,9 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     if (canWriteExpr) {
       val prepared =
         if (DataTypeUtils.sameType(tableAttr.dataType, queryExpr.dataType)) {
+          // If the types are an exact match, we can leave UDTs alone,
+          // we obviously do not need a cast, and the constraints of the target
+          // table char/varchar types must be met.
           queryExpr
         } else {
           val udtUnwrapped = unwrapUDT(queryExpr)
