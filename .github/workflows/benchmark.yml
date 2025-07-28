@@ -214,12 +214,14 @@ jobs:
           git rebase origin/${{ github.ref_name }}
           if git push origin ${{ github.ref_name }}:${{ github.ref_name }}; then
             echo "Push successful."
-            break
+            exit 0
           else
             echo "Push failed, retrying in 3 seconds..."
             sleep 3
           fi
         done
+        echo "Error: Failed to push after 5 attempts."
+        exit 1
     - name: Upload benchmark results
       uses: actions/upload-artifact@v4
       with:
