@@ -252,7 +252,6 @@ class NumericOps(DataTypeOps):
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         # We can directly use `super().eq` when given object is list, tuple, dict or set.
-
         if not isinstance(right, IndexOpsMixin) and is_list_like(right):
             return super().eq(left, right)
         else:
