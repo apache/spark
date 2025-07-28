@@ -17,60 +17,92 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.DriverManager
+import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
-class JDBCMetricsSuite extends QueryTest with SharedSparkSession {
+trait JDBCMetricsSuite extends QueryTest with SharedSparkSession {
 
-  val url = "jdbc:h2:mem:testdb0"
-  var conn: java.sql.Connection = null
+  val tempDir = Utils.createTempDir()
+  val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
   val properties = new Properties()
   properties.setProperty("user", "testUser")
   properties.setProperty("password", "testPass")
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    Utils.classForName("org.h2.Driver")
-
-    conn = DriverManager.getConnection(url, properties)
-    conn.prepareStatement("create schema test").executeUpdate()
-    conn.prepareStatement("drop table if exists test.people").executeUpdate()
-    conn.prepareStatement(
-      "create table test.people (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
-    conn.prepareStatement("insert into test.people values ('dany', 1)").executeUpdate()
-    conn.prepareStatement("insert into test.people values ('mary', 2)").executeUpdate()
-    conn.prepareStatement("insert into test.people values ('alex', 3)").executeUpdate()
-    conn.commit()
-    sql(
-      s"""
-         |CREATE OR REPLACE TEMPORARY VIEW people
-         |USING org.apache.spark.sql.jdbc
-         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass')
-       """.stripMargin.replaceAll("\n", " "))
-  }
-
-  override def afterAll(): Unit = {
-    conn.close()
-    super.afterAll()
-  }
-
-  test("Test logging of schema fetch time") {
-    val df = sql("SELECT * FROM people")
-    val leaves = df.queryExecution.executedPlan.collectLeaves().head.metrics
-    val testKey = "remoteSchemaFetchTime"
-    val optionMetric = leaves.get(testKey)
-    assert(optionMetric != null)
-    if(optionMetric.isDefined) {
-      val metric = optionMetric.get
-      assert(metric.value >= 0)
+  private def withConnection[T](f: Connection => T): T = {
+    val conn = DriverManager.getConnection(url, new Properties())
+    try {
+      f(conn)
+    } finally {
+      conn.close()
     }
   }
 
-  test("Select *") {
-    assert(sql("SELECT * FROM people").collect().length === 3)
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    Utils.classForName("org.h2.Driver")
+    withConnection { conn =>
+      conn.prepareStatement("create schema test").executeUpdate()
+      conn.prepareStatement("drop table if exists test.people").executeUpdate()
+      conn.prepareStatement(
+        "create table test.people (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
+      conn.prepareStatement("insert into test.people values ('dany', 1)").executeUpdate()
+      conn.prepareStatement("insert into test.people values ('mary', 2)").executeUpdate()
+      conn.prepareStatement("insert into test.people values ('alex', 3)").executeUpdate()
+      conn.commit()
+    }
   }
+
+  override def afterAll(): Unit = {
+    Utils.deleteRecursively(tempDir)
+    super.afterAll()
+  }
+
+  class JDBCQueryMetricsSuite extends JDBCMetricsSuite {
+    test("Test logging of schema fetch time") {
+      val df = sql("SELECT * FROM people")
+      val leaves = df.queryExecution.executedPlan.collectLeaves().head.metrics
+      val testKey = "remoteSchemaFetchTime"
+      val optionMetric = leaves.get(testKey)
+      assert(optionMetric != null)
+      if(optionMetric.isDefined) {
+        val metric = optionMetric.get
+        assert(metric.value >= 0)
+      }
+    }
+
+    test("Select *") {
+      assert(sql("SELECT * FROM test.people").collect().length === 3)
+    }
+  }
+
+  class JDBCV2QueryMetricsSuite extends JDBCMetricsSuite {
+    override def sparkConf: SparkConf =
+      super.sparkConf
+        .set("spark.sql.catalog.h2", classOf[JDBCTableCatalog].getName)
+        .set("spark.sql.catalog.h2.url", url)
+        .set("spark.sql.catalog.h2.driver", "org.h2.Driver")
+        .set("spark.sql.catalog.h2.pushDownAggregate", "true")
+        .set("spark.sql.catalog.h2.pushDownLimit", "true")
+        .set("spark.sql.catalog.h2.pushDownOffset", "true")
+        .set("spark.sql.catalog.h2.pushDownJoin", "true")
+
+    test("Test logging of schema fetch time for V2 api") {
+      val df = sql("SELECT * FROM h2.test.people")
+      val leaves = df.queryExecution.executedPlan.collectLeaves().head.metrics
+      val testKey = "remoteSchemaFetchTime"
+      val optionMetric = leaves.get(testKey)
+      assert(optionMetric != null)
+      if(optionMetric.isDefined) {
+        val metric = optionMetric.get
+        assert(metric.value >= 0)
+      }
+    }
+  }
+
 }
