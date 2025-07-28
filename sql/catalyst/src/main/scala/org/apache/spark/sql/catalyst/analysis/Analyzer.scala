@@ -2525,9 +2525,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             // Extract the function input project list from the SQL function plan and
             // inline the SQL function expression.
             plan match {
-              case Project(body :: Nil, Project(aliases, _: LocalRelation)) =>
-                projectList ++= aliases
-                SQLScalarFunction(f.function, aliases.map(_.toAttribute), body)
+              case Project(body :: Nil, Project(aliases, _: OneRowRelation)) =>
+                val inputs = aliases.map(stripOuterReference)
+                projectList ++= inputs
+                SQLScalarFunction(f.function, inputs.map(_.toAttribute), body)
               case o =>
                 throw new AnalysisException(
                   errorClass = "INVALID_SQL_FUNCTION_PLAN_STRUCTURE",

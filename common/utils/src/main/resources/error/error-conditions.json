@@ -821,6 +821,12 @@
     },
     "sqlState" : "21S01"
   },
+  "CYCLIC_FUNCTION_REFERENCE" : {
+    "message" : [
+      "Cyclic function reference detected: <path>."
+    ],
+    "sqlState" : "42887"
+  },
   "DATATYPE_MISMATCH" : {
     "message" : [
       "Cannot resolve <sqlExpr> due to data type mismatch:"
