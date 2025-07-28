@@ -3454,12 +3454,12 @@ to_timestamp.__doc__ = pysparkfuncs.to_timestamp.__doc__
 
 
 @overload
-def try_to_timestamp(str: "ColumnOrName") -> Column:
+def try_to_time(str: "ColumnOrName") -> Column:
     ...
 
 
 @overload
-def try_to_timestamp(str: "ColumnOrName", format: "ColumnOrName") -> Column:
+def try_to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column:
     ...
 
 
