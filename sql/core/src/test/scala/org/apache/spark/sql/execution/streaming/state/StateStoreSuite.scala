@@ -1759,7 +1759,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
           checkError(
             e,
             condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
-            parameters = Map("fileToRead" -> ".*", "clazz" -> ".*"),
+            parameters = Map("fileToRead" -> ".*"),
             matchPVals = true
           )
         }

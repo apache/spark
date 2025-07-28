@@ -579,9 +579,9 @@ private[spark] object LogKeys {
   case object OLD_GENERATION_GC extends LogKey
   case object OLD_VALUE extends LogKey
   case object OPEN_COST_IN_BYTES extends LogKey
+  case object OPERATION extends LogKey
   case object OPERATION_HANDLE extends LogKey
   case object OPERATION_HANDLE_ID extends LogKey
-  case object OPERATION extends LogKey
   case object OPERATION_ID extends LogKey
   case object OPTIMIZED_PLAN_COLUMNS extends LogKey
   case object OPTIMIZER_CLASS_NAME extends LogKey

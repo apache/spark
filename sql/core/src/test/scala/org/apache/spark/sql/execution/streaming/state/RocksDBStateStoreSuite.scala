@@ -1987,10 +1987,12 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         val metricPair = store
           .metrics.customMetrics.find(_._1.name == "rocksdbNumInternalColFamiliesKeys")
         assert(metricPair.isDefined && metricPair.get._2 === 4)
-        assert(rowPairsToDataSet(store.iterator(cfName)) ===
+        val store1 = provider.getStore(1)
+        assert(rowPairsToDataSet(store1.iterator(cfName)) ===
           Set(("a", 0) -> 1, ("b", 0) -> 2, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
-        assert(rowPairsToDataSet(store.iterator(internalCfName)) ===
+        assert(rowPairsToDataSet(store1.iterator(internalCfName)) ===
           Set(("a", 0) -> 1, ("m", 0) -> 2, ("n", 0) -> 3, ("b", 0) -> 4))
+        store1.abort()
 
         // Reload the store and remove some keys
         val reloadedProvider = newStoreProvider(store.id, colFamiliesEnabled)
@@ -2012,7 +2014,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           Set(("a", 0) -> 1, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
         assert(rowPairsToDataSet(reloadedStore1.iterator(internalCfName)) ===
           Set(("a", 0) -> 1, ("n", 0) -> 3, ("b", 0) -> 4))
-        reloadedStore.commit()
+        reloadedStore1.commit()
       }
     }
   }
@@ -2144,7 +2146,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         condition = "STATE_STORE_OPERATION_OUT_OF_ORDER",
         parameters = Map("errorMsg" ->
           ("Expected possible states " +
-          "(UPDATING, COMMITTING, ABORTED) but found COMMITTED"))
+          "(UPDATING, ABORTED) but found COMMITTED"))
       )
 
       // Get a new store and verify data was committed
