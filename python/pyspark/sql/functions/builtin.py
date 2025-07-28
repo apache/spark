@@ -10186,14 +10186,14 @@ def hour(col: "ColumnOrName") -> Column:
     >>> import datetime
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([
-    ...     (datetime.time(13, 8, 15),),
-    ...     (datetime.time(10, 9, 16),)], ['t'])
+    ...     ("13:08:15",),
+    ...     ("10:09:16",)], ['t']).withColumn("t", sf.col("t").cast("time"))
     >>> df.select("*", sf.typeof('t'), sf.hour('t')).show()
     +--------+---------+-------+
     |       t|typeof(t)|hour(t)|
     +--------+---------+-------+
-    |13:08:15|     time|     13|
-    |10:09:16|     time|     10|
+    |13:08:15|  time(6)|     13|
+    |10:09:16|  time(6)|     10|
     +--------+---------+-------+
     """
     return _invoke_function_over_columns("hour", col)
@@ -10268,14 +10268,14 @@ def minute(col: "ColumnOrName") -> Column:
     >>> import datetime
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([
-    ...     (datetime.time(13, 8, 15),),
-    ...     (datetime.time(10, 9, 16),)], ['t'])
+    ...     ("13:08:15",),
+    ...     ("10:09:16",)], ['t']).withColumn("t", sf.col("t").cast("time"))
     >>> df.select("*", sf.typeof('t'), sf.minute('t')).show()
     +--------+---------+---------+
     |       t|typeof(t)|minute(t)|
     +--------+---------+---------+
-    |13:08:15|     time|        8|
-    |10:09:16|     time|        9|
+    |13:08:15|  time(6)|        8|
+    |10:09:16|  time(6)|        9|
     +--------+---------+---------+
     """
     return _invoke_function_over_columns("minute", col)
@@ -10350,14 +10350,14 @@ def second(col: "ColumnOrName") -> Column:
     >>> import datetime
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([
-    ...     (datetime.time(13, 8, 15),),
-    ...     (datetime.time(10, 9, 16),)], ['t'])
+    ...     ("13:08:15",),
+    ...     ("10:09:16",)], ['t']).withColumn("t", sf.col("t").cast("time"))
     >>> df.select("*", sf.typeof('t'), sf.second('t')).show()
     +--------+---------+---------+
     |       t|typeof(t)|second(t)|
     +--------+---------+---------+
-    |13:08:15|     time|       15|
-    |10:09:16|     time|       16|
+    |13:08:15|  time(6)|       15|
+    |10:09:16|  time(6)|       16|
     +--------+---------+---------+
     """
     return _invoke_function_over_columns("second", col)
