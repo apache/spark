@@ -84,16 +84,16 @@ case class LogicalQueryStage(
   }
 
   override def generateTreeString(
-    depth: Int,
-    lastChildren: java.util.ArrayList[Boolean],
-    append: String => Unit,
-    verbose: Boolean,
-    prefix: String = "",
-    addSuffix: Boolean = false,
-    maxFields: Int,
-    printNodeId: Boolean,
-    printOutputColumns: Boolean,
-    indent: Int = 0): Unit = {
+      depth: Int,
+      lastChildren: java.util.ArrayList[Boolean],
+      append: String => Unit,
+      verbose: Boolean,
+      prefix: String = "",
+      addSuffix: Boolean = false,
+      maxFields: Int,
+      printNodeId: Boolean,
+      printOutputColumns: Boolean,
+      indent: Int = 0): Unit = {
     super.generateTreeString(depth,
       lastChildren,
       append,
