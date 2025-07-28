@@ -1473,7 +1473,9 @@ class SessionCatalog(
    * @param ignoreIfExists: When true, ignore if the function with the specified name exists
    *                        in the specified database.
    */
-  def createFunction(funcDefinition: CatalogFunction, ignoreIfExists: Boolean): Unit = {
+  def createFunction(
+      funcDefinition: CatalogFunction,
+      ignoreIfExists: Boolean): Unit = synchronized {
     val qualifiedIdent = qualifyIdentifier(funcDefinition.identifier)
     val db = qualifiedIdent.database.get
     requireDbExists(db)
@@ -1489,7 +1491,7 @@ class SessionCatalog(
    * Drop a metastore function.
    * If no database is specified, assume the function is in the current database.
    */
-  def dropFunction(name: FunctionIdentifier, ignoreIfNotExists: Boolean): Unit = {
+  def dropFunction(name: FunctionIdentifier, ignoreIfNotExists: Boolean): Unit = synchronized {
     val qualifiedIdent = qualifyIdentifier(name)
     val db = qualifiedIdent.database.get
     val funcName = qualifiedIdent.funcName
@@ -1514,7 +1516,7 @@ class SessionCatalog(
    * overwrite a metastore function in the database specified in `funcDefinition`..
    * If no database is specified, assume the function is in the current database.
    */
-  def alterFunction(funcDefinition: CatalogFunction): Unit = {
+  def alterFunction(funcDefinition: CatalogFunction): Unit = synchronized {
     val qualifiedIdent = qualifyIdentifier(funcDefinition.identifier)
     val db = qualifiedIdent.database.get
     requireDbExists(db)
