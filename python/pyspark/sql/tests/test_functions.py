@@ -82,11 +82,10 @@ class FunctionsTestsMixin:
 
         # Functions that we expect to be missing in python until they are added to pyspark
         expected_missing_in_py = set(
-            # TODO(SPARK-52888): Implement the make_time function in Python
             # TODO(SPARK-52889): Implement the current_time function in Python
             # TODO(SPARK-52890): Implement the to_time function in Python
             # TODO(SPARK-52891): Implement the try_to_time function in Python
-            ["current_time", "make_time", "to_time", "try_to_time"]
+            ["current_time", "to_time", "try_to_time"]
         )
 
         self.assertEqual(
@@ -633,6 +632,17 @@ class FunctionsTestsMixin:
                 ).first()
             )
         )
+
+    def test_make_time(self):
+        # SPARK-52888: test the make_time function.
+        df = self.spark.createDataFrame([(1, 2, 3)], ["hour", "minute", "second"])
+        result = datetime.time(1, 2, 3)
+        row_from_col = df.select(F.make_time(df.hour, df.minute, df.second)).first()
+        self.assertIsInstance(row_from_col[0], datetime.time)
+        self.assertEqual(row_from_col[0], result)
+        row_from_name = df.select(F.make_time("hour", "minute", "second")).first()
+        self.assertIsInstance(row_from_name[0], datetime.time)
+        self.assertEqual(row_from_name[0], result)
 
     def test_make_date(self):
         # SPARK-36554: expose make_date expression
