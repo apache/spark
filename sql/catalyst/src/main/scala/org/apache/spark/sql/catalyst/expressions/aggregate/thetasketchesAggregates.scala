@@ -274,10 +274,7 @@ case class ThetaSketchAgg(
     if (buffer.nonEmpty) {
       FinalizedSketch(CompactSketch.heapify(Memory.wrap(buffer)))
     } else {
-      UnionAggregationBuffer(
-        SetOperation.builder
-          .setLogNominalEntries(lgNomEntries)
-          .buildUnion)
+      this.createAggregationBuffer()
     }
   }
 }
@@ -474,10 +471,7 @@ case class ThetaUnionAgg(
     if (buffer.nonEmpty) {
       FinalizedSketch(CompactSketch.heapify(Memory.wrap(buffer)))
     } else {
-      UnionAggregationBuffer(
-        SetOperation.builder
-          .setLogNominalEntries(lgNomEntries)
-          .buildUnion)
+      this.createAggregationBuffer()
     }
   }
 }
@@ -685,10 +679,7 @@ case class ThetaIntersectionAgg(
     if (buffer.nonEmpty) {
       FinalizedSketch(CompactSketch.heapify(Memory.wrap(buffer)))
     } else {
-      IntersectionAggregationBuffer(
-        SetOperation.builder
-          .setLogNominalEntries(lgNomEntries)
-          .buildIntersection)
+      this.createAggregationBuffer()
     }
   }
 }

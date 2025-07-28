@@ -66,11 +66,11 @@ class ThetasketchesAggSuite extends SparkFunSuite {
       })
 
     val estimator = ThetaSketchEstimate(BoundReference(0, BinaryType, nullable = true))
-    val estimate = estimator.eval(InternalRow(mergedBuf.getResult.toByteArray)).asInstanceOf[Long]
+    val estimate =
+      estimator.eval(InternalRow(mergedBuf.getResult.toByteArrayCompressed)).asInstanceOf[Long]
     (
       estimate,
-      mergedBuf.getResult.getLowerBound(3).toLong to mergedBuf.getResult.getUpperBound(3).toLong
-    )
+      mergedBuf.getResult.getLowerBound(3).toLong to mergedBuf.getResult.getUpperBound(3).toLong)
   }
 
   test("SPARK-52407: Test min/max values of supported datatypes") {
