@@ -9327,22 +9327,22 @@ def current_time(precision: Optional[int] = None) -> Column:
     Example 1: Current time with default precision
 
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(1).select(sf.current_time()).show(truncate=False) # doctest: +SKIP
+    >>> spark.range(1).select(sf.current_time().alias("time")).show() # doctest: +SKIP
     +---------------+
-    |current_time() |
+    |           time|
     +---------------+
-    |21:23:22.716514|
+    |16:57:04.304361|
     +---------------+
 
     Example 2: Current time with specified precision
 
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(1).select(sf.current_time(3)).show(truncate=False) # doctest: +SKIP
-    +--------------+
-    |current_time()|
-    +--------------+
-    |  21:23:22.716|
-    +--------------+
+    >>> spark.range(1).select(sf.current_time(3).alias("time")).show() # doctest: +SKIP
+    +------------+
+    |        time|
+    +------------+
+    |16:57:04.304|
+    +------------+
     """
     if precision is None:
         return _invoke_function("current_time")
