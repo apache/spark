@@ -270,9 +270,10 @@ def numpy_column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
 
 
 def _exclude_pd_np_operand(other):
-    if isinstance(other, (pd.Series, pd.Index, np.ndarray)):
+    if isinstance(other, (pd.Series, pd.Index, pd.DataFrame, np.ndarray)):
         raise TypeError(
-            f"Operand of type {type(other).__name__} is not supported for this operation. "
+            f"Operand of type {type(other).__module__}.{type(other).__qualname__} "
+            f"is not supported for this operation. "
         )
 
 
