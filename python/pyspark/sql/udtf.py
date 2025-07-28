@@ -538,7 +538,7 @@ class UDTFRegistration:
                 },
             )
 
-        if f.evalType not in [PythonEvalType.SQL_TABLE_UDF, PythonEvalType.SQL_ARROW_TABLE_UDF]:
+        if f.evalType not in [PythonEvalType.SQL_TABLE_UDF, PythonEvalType.SQL_ARROW_TABLE_UDF, PythonEvalType.SQL_ARROW_UDTF]:
             raise PySparkTypeError(
                 errorClass="INVALID_UDTF_EVAL_TYPE",
                 messageParameters={

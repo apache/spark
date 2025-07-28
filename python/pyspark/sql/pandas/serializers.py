@@ -196,46 +196,12 @@ class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
         return ArrowStreamSerializer.load_stream(self, stream)
 
 
-class PyArrowStreamUDTFSerializer(ArrowStreamSerializer):
+class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
     """
-    Serializer for PyArrow-native UDTFs that work directly with PyArrow Tables and Arrays.
-    
-    This serializer handles conversion between Spark's Arrow data and PyArrow objects,
-    enabling true vectorized computation without row-by-row processing overhead.
+    Serializer for PyArrow-native UDTFs that work directly with PyArrow RecordBatches and Arrays.
     """
-
-    def load_stream(self, stream):
-        """
-        Load PyArrow RecordBatch from stream and yield as PyArrow Table or individual Arrays
-        based on the number of columns.
-        """
-        import pyarrow as pa
-        
-        for batch in ArrowStreamSerializer.load_stream(self, stream):
-            yield pa.Table.from_batches([batch])
-
-    def dump_stream(self, iterator, stream):
-        """
-        Serialize PyArrow Tables from iterator to stream.
-        """
-        import pyarrow as pa
-        
-        def batch_iterator():
-            for result in iterator:
-                if isinstance(result, pa.Table):
-                    # Convert PyArrow Table to RecordBatch
-                    for batch in result.to_batches():
-                        yield batch
-                elif isinstance(result, pa.RecordBatch):
-                    # Already a RecordBatch
-                    yield result
-                else:
-                    raise ValueError(
-                        f"PyArrow UDTF must yield PyArrow Tables or RecordBatches, "
-                        f"but got {type(result)}"
-                    )
-        
-        ArrowStreamSerializer.dump_stream(self, batch_iterator(), stream)
+    # TODO: support table arguments
+    ...
 
 
 class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
@@ -1607,6 +1573,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
         self.init_key_offsets = None
 
     def load_stream(self, stream):
+        import itertools
         import pyarrow as pa
         from pyspark.sql.streaming.stateful_processor_util import (
             TransformWithStateInPandasFuncMode,
@@ -1614,7 +1581,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
 
         def generate_data_batches(batches):
             """
-            Deserialize ArrowRecordBatches and return a generator of pandas.Series list.
+            Deserialize ArrowRecordBatches and return a generator of Row.
             The deserialization logic assumes that Arrow RecordBatches contain the data with the
             ordering that data chunks for same grouping key will appear sequentially.
             See `TransformWithStateInPandasPythonInitialStateRunner` for arrow batch schema sent

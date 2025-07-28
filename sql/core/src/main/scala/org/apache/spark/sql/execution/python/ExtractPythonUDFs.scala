@@ -408,6 +408,9 @@ object ExtractPythonUDTFs extends Rule[LogicalPlan] {
           ArrowEvalPythonUDTF(func, g.requiredChildOutput, g.generatorOutput, child, func.evalType)
         case PythonEvalType.SQL_ARROW_UDTF =>
           ArrowEvalPythonUDTF(func, g.requiredChildOutput, g.generatorOutput, child, func.evalType)
+        case _ =>
+          throw SparkException.internalError(
+            s"Unsupported UDTF eval type: ${func.evalType} (${PythonEvalType.toString(func.evalType)})")
       }
     }
   }
