@@ -119,7 +119,7 @@ object FileFormatWriter {
    * be returned.
    */
   def create(conf: SQLConf): FileFormatWriter = {
-    conf.getConf(SQLConf.FILE_FORMAT_WRITER_CLASS)
+    conf.fileFormatWriterClass
       .map {
         fileFormatWriterClass =>
           if (!Utils.classIsLoadableAndAssignableFrom(
@@ -127,7 +127,7 @@ object FileFormatWriter {
             throw new UnsupportedOperationException(s"Class must inherit " +
               s"${classOf[FileFormatWriter].getName}, but it doesn't: $fileFormatWriterClass")
           }
-          val clazz = Utils.classForName(fileFormatWriterClass)
+          val clazz = Utils.classForName[FileFormatWriter](fileFormatWriterClass)
           clazz.getDeclaredConstructor().newInstance()
       }
       .getOrElse(DefaultFileFormatWriter)

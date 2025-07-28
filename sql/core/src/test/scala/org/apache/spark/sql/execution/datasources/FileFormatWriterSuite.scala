@@ -17,8 +17,19 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.concurrent.atomic.AtomicInteger
+
+import org.apache.hadoop.conf.Configuration
+
+import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
+import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class FileFormatWriterSuite
@@ -76,5 +87,79 @@ class FileFormatWriterSuite
         checkAnswer(spark.table(t), Seq(Row(0), Row(100)))
       }
     }
+  }
+
+  test("SPARK-52978: Customized FileFormatWriter") {
+    withSQLConf(SQLConf.FILE_FORMAT_WRITER_CLASS.key ->
+      classOf[FileFormatWriterSuite.MyFileFormatWriter].getName) {
+      withTable("t1") {
+        spark.range(100).write.saveAsTable("t1")
+        assert(spark.table("t1").count() == 100)
+      }
+      assert(FileFormatWriterSuite.MyFileFormatWriter.instantiationCount.get() > 0)
+      assert(FileFormatWriterSuite.MyFileFormatWriter.writePlanCount.get() > 0)
+    }
+  }
+}
+
+object FileFormatWriterSuite {
+  class MyFileFormatWriter extends FileFormatWriter {
+    MyFileFormatWriter.instantiationCount.getAndIncrement()
+
+    // scalastyle:off argcount
+    override def write(
+      sparkSession: SparkSession,
+      plan: SparkPlan,
+      fileFormat: FileFormat,
+      committer: FileCommitProtocol,
+      outputSpec: FileFormatWriter.OutputSpec,
+      hadoopConf: Configuration,
+      partitionColumns: Seq[Attribute],
+      bucketSpec: Option[BucketSpec],
+      statsTrackers: Seq[WriteJobStatsTracker],
+      options: Map[String, String], numStaticPartitionCols: Int): Set[String] = {
+      val partitionPaths = DefaultFileFormatWriter.write(
+        sparkSession,
+        plan,
+        fileFormat,
+        committer,
+        outputSpec,
+        hadoopConf,
+        partitionColumns,
+        bucketSpec,
+        statsTrackers,
+        options
+      )
+      MyFileFormatWriter.writePlanCount.getAndIncrement()
+      partitionPaths
+    }
+    // scalastyle:on argcount
+
+    override private[spark] def executeTask(
+      description: WriteJobDescription,
+      jobTrackerID: String,
+      sparkStageId: Int,
+      sparkPartitionId: Int,
+      sparkAttemptNumber: Int,
+      committer: FileCommitProtocol,
+      iterator: Iterator[InternalRow],
+      concurrentOutputWriterSpec: Option[FileFormatWriter.ConcurrentOutputWriterSpec]):
+    WriteTaskResult = {
+      DefaultFileFormatWriter.executeTask(
+        description,
+        jobTrackerID,
+        sparkStageId,
+        sparkPartitionId,
+        sparkAttemptNumber,
+        committer,
+        iterator,
+        concurrentOutputWriterSpec
+      )
+    }
+  }
+
+  object MyFileFormatWriter {
+    val instantiationCount: AtomicInteger = new AtomicInteger(0)
+    val writePlanCount: AtomicInteger = new AtomicInteger(0)
   }
 }
