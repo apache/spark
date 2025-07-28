@@ -111,7 +111,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-34678: describe functions for table-valued functions") {
-    sql("describe function range").show(false)
     checkKeywordsExist(sql("describe function range"),
       "Function: range",
       "Class: org.apache.spark.sql.catalyst.plans.logical.Range",
@@ -4961,6 +4960,48 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       condition = "UNSUPPORTED_GENERATOR.OUTSIDE_SELECT",
       parameters = Map("plan" -> "'Aggregate [groupingsets(Vector(0), posexplode(array(col)))]")
     )
+  }
+
+  test("SPARK-52686: Union should be resolved only if there are no duplicates") {
+    // Different implementations of `WidenSetOperationTypes` cause an additional Project with ANSI
+    // off.
+    val expectedResult = if (conf.ansiEnabled) { 7 } else { 8 }
+    withTable("t1", "t2", "t3") {
+      sql("CREATE TABLE t1 (col1 STRING, col2 STRING, col3 STRING)")
+      sql("CREATE TABLE t2 (col1 STRING, col2 DOUBLE, col3 STRING)")
+      sql("CREATE TABLE t3 (col1 STRING, col2 DOUBLE, a STRING, col3 STRING)")
+
+      for (confValue <- Seq(false, true)) {
+        withSQLConf(
+          SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> confValue.toString
+        ) {
+          val analyzedPlan = sql(
+            """SELECT
+              |    *
+              |FROM (
+              |    SELECT col1, col2, NULL AS a, col1 FROM t1
+              |    UNION
+              |    SELECT col1, col2, NULL AS a, col3 FROM t2
+              |    UNION
+              |    SELECT * FROM t3
+              |)""".stripMargin
+          ).queryExecution.analyzed
+
+          val projectCount = analyzedPlan.collect {
+            case project: Project => project
+          }.size
+
+          // When UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED is disabled, we resolve
+          // outer Union before deduplicating ExprIds in inner union. Because of this we get an
+          // additional unnecessary Project (see SPARK-52686).
+          if (confValue) {
+            assert(projectCount == expectedResult)
+          } else {
+            assert(projectCount == expectedResult + 1)
+          }
+        }
+      }
+    }
   }
 
   Seq(true, false).foreach { codegenEnabled =>

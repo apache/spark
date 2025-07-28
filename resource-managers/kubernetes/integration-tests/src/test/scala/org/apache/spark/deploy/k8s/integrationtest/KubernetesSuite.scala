@@ -17,12 +17,12 @@
 package org.apache.spark.deploy.k8s.integrationtest
 
 import java.io.File
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Path, Paths}
 import java.util.UUID
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.base.Charsets
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.{Watcher, WatcherException}
@@ -129,7 +129,7 @@ class KubernetesSuite extends SparkFunSuite
         val tagFile = new File(path)
         require(tagFile.isFile,
           s"No file found for image tag at ${tagFile.getAbsolutePath}.")
-        Files.asCharSource(tagFile, Charsets.UTF_8).read().trim
+        Files.asCharSource(tagFile, StandardCharsets.UTF_8).read().trim
       }
       .orElse(sys.props.get(CONFIG_KEY_IMAGE_TAG))
       .getOrElse {

@@ -28,10 +28,11 @@ import os
 import yaml
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Generator, Mapping, Optional, Sequence
+from typing import Any, Generator, List, Mapping, Optional, Sequence
 
 from pyspark.errors import PySparkException, PySparkTypeError
 from pyspark.sql import SparkSession
+from pyspark.pipelines.block_session_mutations import block_session_mutations
 from pyspark.pipelines.graph_element_registry import (
     graph_element_registration_context,
     GraphElementRegistry,
@@ -61,12 +62,14 @@ class DefinitionsGlob:
 class PipelineSpec:
     """Spec for a pipeline.
 
+    :param name: The name of the pipeline.
     :param catalog: The default catalog to use for the pipeline.
     :param database: The default database to use for the pipeline.
     :param configuration: A dictionary of Spark configuration properties to set for the pipeline.
     :param definitions: A list of glob patterns for finding pipeline definitions files.
     """
 
+    name: str
     catalog: Optional[str]
     database: Optional[str]
     configuration: Mapping[str, str]
@@ -110,13 +113,23 @@ def load_pipeline_spec(spec_path: Path) -> PipelineSpec:
 
 
 def unpack_pipeline_spec(spec_data: Mapping[str, Any]) -> PipelineSpec:
+    ALLOWED_FIELDS = {"name", "catalog", "database", "schema", "configuration", "definitions"}
+    REQUIRED_FIELDS = ["name"]
     for key in spec_data.keys():
-        if key not in ["catalog", "database", "schema", "configuration", "definitions"]:
+        if key not in ALLOWED_FIELDS:
             raise PySparkException(
                 errorClass="PIPELINE_SPEC_UNEXPECTED_FIELD", messageParameters={"field_name": key}
             )
 
+    for key in REQUIRED_FIELDS:
+        if key not in spec_data:
+            raise PySparkException(
+                errorClass="PIPELINE_SPEC_MISSING_REQUIRED_FIELD",
+                messageParameters={"field_name": key},
+            )
+
     return PipelineSpec(
+        name=spec_data["name"],
         catalog=spec_data.get("catalog"),
         database=spec_data.get("database", spec_data.get("schema")),
         configuration=validate_str_dict(spec_data.get("configuration", {}), "configuration"),
@@ -180,7 +193,8 @@ def register_definitions(
                         assert (
                             module_spec.loader is not None
                         ), f"Module spec has no loader for {file}"
-                        module_spec.loader.exec_module(module)
+                        with block_session_mutations():
+                            module_spec.loader.exec_module(module)
                     elif file.suffix == ".sql":
                         log_with_curr_timestamp(f"Registering SQL file {file}...")
                         with file.open("r") as f:
@@ -205,8 +219,37 @@ def change_dir(path: Path) -> Generator[None, None, None]:
         os.chdir(prev)
 
 
-def run(spec_path: Path) -> None:
-    """Run the pipeline defined with the given spec."""
+def run(
+    spec_path: Path,
+    full_refresh: Sequence[str],
+    full_refresh_all: bool,
+    refresh: Sequence[str],
+    dry: bool,
+) -> None:
+    """Run the pipeline defined with the given spec.
+
+    :param spec_path: Path to the pipeline specification file.
+    :param full_refresh: List of datasets to reset and recompute.
+    :param full_refresh_all: Perform a full graph reset and recompute.
+    :param refresh: List of datasets to update.
+    """
+    # Validate conflicting arguments
+    if full_refresh_all:
+        if full_refresh:
+            raise PySparkException(
+                errorClass="CONFLICTING_PIPELINE_REFRESH_OPTIONS",
+                messageParameters={
+                    "conflicting_option": "--full_refresh",
+                },
+            )
+        if refresh:
+            raise PySparkException(
+                errorClass="CONFLICTING_PIPELINE_REFRESH_OPTIONS",
+                messageParameters={
+                    "conflicting_option": "--refresh",
+                },
+            )
+
     log_with_curr_timestamp(f"Loading pipeline spec from {spec_path}...")
     spec = load_pipeline_spec(spec_path)
 
@@ -230,11 +273,23 @@ def run(spec_path: Path) -> None:
     register_definitions(spec_path, registry, spec)
 
     log_with_curr_timestamp("Starting run...")
-    result_iter = start_run(spark, dataflow_graph_id)
+    result_iter = start_run(
+        spark,
+        dataflow_graph_id,
+        full_refresh=full_refresh,
+        full_refresh_all=full_refresh_all,
+        refresh=refresh,
+        dry=dry,
+    )
     try:
         handle_pipeline_events(result_iter)
     finally:
         spark.stop()
+
+
+def parse_table_list(value: str) -> List[str]:
+    """Parse a comma-separated list of table names, handling whitespace."""
+    return [table.strip() for table in value.split(",") if table.strip()]
 
 
 if __name__ == "__main__":
@@ -242,8 +297,36 @@ if __name__ == "__main__":
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # "run" subcommand
-    run_parser = subparsers.add_parser("run", help="Run a pipeline.")
+    run_parser = subparsers.add_parser(
+        "run",
+        help="Run a pipeline. If no refresh options specified, "
+        "a default incremental update is performed.",
+    )
     run_parser.add_argument("--spec", help="Path to the pipeline spec.")
+    run_parser.add_argument(
+        "--full-refresh",
+        type=parse_table_list,
+        action="extend",
+        help="List of datasets to reset and recompute (comma-separated).",
+        default=[],
+    )
+    run_parser.add_argument(
+        "--full-refresh-all", action="store_true", help="Perform a full graph reset and recompute."
+    )
+    run_parser.add_argument(
+        "--refresh",
+        type=parse_table_list,
+        action="extend",
+        help="List of datasets to update (comma-separated).",
+        default=[],
+    )
+
+    # "dry-run" subcommand
+    dry_run_parser = subparsers.add_parser(
+        "dry-run",
+        help="Launch a run that just validates the graph and checks for errors.",
+    )
+    dry_run_parser.add_argument("--spec", help="Path to the pipeline spec.")
 
     # "init" subcommand
     init_parser = subparsers.add_parser(
@@ -258,9 +341,9 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    assert args.command in ["run", "init"]
+    assert args.command in ["run", "dry-run", "init"]
 
-    if args.command == "run":
+    if args.command in ["run", "dry-run"]:
         if args.spec is not None:
             spec_path = Path(args.spec)
             if not spec_path.is_file():
@@ -271,6 +354,22 @@ if __name__ == "__main__":
         else:
             spec_path = find_pipeline_spec(Path.cwd())
 
-        run(spec_path=spec_path)
+        if args.command == "run":
+            run(
+                spec_path=spec_path,
+                full_refresh=args.full_refresh,
+                full_refresh_all=args.full_refresh_all,
+                refresh=args.refresh,
+                dry=args.command == "dry-run",
+            )
+        else:
+            assert args.command == "dry-run"
+            run(
+                spec_path=spec_path,
+                full_refresh=[],
+                full_refresh_all=False,
+                refresh=[],
+                dry=True,
+            )
     elif args.command == "init":
         init(args.name)

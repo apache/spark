@@ -44,6 +44,7 @@ from typing import (
 )
 
 import copy
+import os
 import sys
 import random
 import pyarrow as pa
@@ -1740,7 +1741,9 @@ class DataFrame(ParentDataFrame):
                 # }
 
                 # validate the column name
-                if not hasattr(self._session, "is_mock_session"):
+                if os.environ.get("PYSPARK_VALIDATE_COLUMN_NAME_LEGACY") == "1" and not hasattr(
+                    self._session, "is_mock_session"
+                ):
                     from pyspark.sql.connect.types import verify_col_name
 
                     # Try best to verify the column name with cached schema

@@ -546,6 +546,23 @@ abstract class UnionBase extends LogicalPlan {
       .map(child => rewriteConstraints(children.head.output, child.output, child.constraints))
       .reduce(merge(_, _))
   }
+
+
+
+
+  /**
+   * Checks whether the child outputs are compatible by using `DataType.equalsStructurally`. Do
+   * that by comparing the size of the output with the size of the first child's output and by
+   * comparing output data types with the data types of the first child's output.
+   *
+   * This method needs to be evaluated after `childrenResolved`.
+   */
+  def allChildrenCompatible: Boolean = childrenResolved && children.tail.forall { child =>
+    child.output.length == children.head.output.length &&
+      child.output.zip(children.head.output).forall {
+        case (l, r) => DataType.equalsStructurally(l.dataType, r.dataType, true)
+      }
+  }
 }
 
 /**
@@ -597,27 +614,20 @@ case class Union(
     Some(sum.toLong)
   }
 
-  def duplicateResolved: Boolean = {
+  private def duplicatesResolvedPerBranch: Boolean =
+    children.forall(child => child.outputSet.size == child.output.size)
+
+  def duplicatesResolvedBetweenBranches: Boolean = {
     children.map(_.outputSet.size).sum ==
       AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
   }
 
   override lazy val resolved: Boolean = {
-    children.length > 1 && !(byName || allowMissingCol) && childrenResolved && allChildrenCompatible
-  }
-
-  /**
-   * Checks whether the child outputs are compatible by using `DataType.equalsStructurally`. Do
-   * that by comparing the size of the output with the size of the first child's output and by
-   * comparing output data types with the data types of the first child's output.
-   *
-   * This method needs to be evaluated after `childrenResolved`.
-   */
-  def allChildrenCompatible: Boolean = childrenResolved && children.tail.forall { child =>
-    child.output.length == children.head.output.length &&
-    child.output.zip(children.head.output).forall {
-      case (l, r) => DataType.equalsStructurally(l.dataType, r.dataType, true)
-    }
+    children.length > 1 &&
+    !(byName || allowMissingCol) &&
+    childrenResolved &&
+    allChildrenCompatible &&
+    (!conf.unionIsResolvedWhenDuplicatesPerChildResolved || duplicatesResolvedPerBranch)
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): Union =

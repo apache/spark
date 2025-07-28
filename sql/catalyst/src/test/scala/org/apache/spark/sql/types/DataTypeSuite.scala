@@ -339,11 +339,11 @@ class DataTypeSuite extends SparkFunSuite {
         |""".stripMargin
     val dt = DataType.fromJson(schema)
 
-    dt.simpleString equals "struct<c1:string>"
-    dt.json equals
+    assert(dt.simpleString equals "struct<c1:string>")
+    assert(dt.json equals
       """
-        |{"type":"struct","fields":[{"name":"c1","type":"string","nullable":false,"metadata":{}}]}
-        |""".stripMargin
+        |{"type":"struct","fields":[{"name":"c1","type":"string","nullable":true,"metadata":{}}]}
+        |""".stripMargin.trim)
   }
 
   def checkDefaultSize(dataType: DataType, expectedDefaultSize: Int): Unit = {
@@ -1338,7 +1338,7 @@ class DataTypeSuite extends SparkFunSuite {
     assert(DataType.parseDataType(JsonMethods.parse(arrayJson)) === ArrayType(StringType))
 
     val parsedWithCollations = DataType.parseDataType(
-        JsonMethods.parse(arrayJson), collationsMap = collationsMap)
+        JsonMethods.parse(arrayJson), fieldPath = "", collationsMap = collationsMap)
     assert(parsedWithCollations === ArrayType(StringType(unicodeCollationId)))
   }
 
@@ -1360,7 +1360,7 @@ class DataTypeSuite extends SparkFunSuite {
     assert(DataType.parseDataType(JsonMethods.parse(mapJson)) === MapType(StringType, StringType))
 
     val parsedWithCollations = DataType.parseDataType(
-      JsonMethods.parse(mapJson), collationsMap = collationsMap)
+      JsonMethods.parse(mapJson), fieldPath = "", collationsMap = collationsMap)
     assert(parsedWithCollations ===
       MapType(StringType(unicodeCollationId), StringType(unicodeCollationId)))
   }

@@ -51,7 +51,6 @@ import com.google.common.net.InetAddresses
 import jakarta.ws.rs.core.UriBuilder
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.io.IOUtils
-import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.fs.audit.CommonAuditContext.currentAuditContext
@@ -59,7 +58,7 @@ import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompres
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.hadoop.ipc.CallerContext.{Builder => HadoopCallerContextBuilder}
 import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hadoop.util.{RunJar, StringUtils}
+import org.apache.hadoop.util.RunJar
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.LoggerContext
@@ -67,7 +66,7 @@ import org.apache.logging.log4j.core.config.LoggerConfig
 import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
 
-import org.apache.spark._
+import org.apache.spark.{SPARK_VERSION, _}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
 import org.apache.spark.internal.LogKeys
@@ -105,7 +104,8 @@ private[spark] object Utils
   with SparkFileUtils
   with SparkSerDeUtils
   with SparkStreamUtils
-  with SparkStringUtils {
+  with SparkStringUtils
+  with SparkSystemUtils {
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
   @volatile private var cachedLocalDir: String = ""
@@ -435,7 +435,7 @@ private[spark] object Utils
     if (!source.exists()) {
       throw new FileNotFoundException(source.getAbsolutePath)
     }
-    val lowerSrc = StringUtils.toLowerCase(source.getName)
+    val lowerSrc = source.getName.toLowerCase(Locale.ENGLISH)
     if (lowerSrc.endsWith(".jar")) {
       RunJar.unJar(source, dest, RunJar.MATCH_ANY)
     } else if (lowerSrc.endsWith(".zip")) {
@@ -458,7 +458,7 @@ private[spark] object Utils
    * to work around a security issue, see also SPARK-38631.
    */
   private def unTarUsingJava(source: File, dest: File): Unit = {
-    if (!dest.mkdirs && !dest.isDirectory) {
+    if (!Utils.createDirectory(dest) && !dest.isDirectory) {
       throw new IOException(s"Mkdirs failed to create $dest")
     } else {
       try {
@@ -810,7 +810,7 @@ private[spark] object Utils
     configuredLocalDirs.flatMap { root =>
       try {
         val rootDir = new File(root)
-        if (rootDir.exists || rootDir.mkdirs()) {
+        if (rootDir.exists || Utils.createDirectory(rootDir)) {
           val dir = createTempDir(root)
           chmod700(dir)
           Some(dir.getAbsolutePath)
@@ -1858,16 +1858,6 @@ private[spark] object Utils
   }
 
   /**
-   * Whether the underlying operating system is Windows.
-   */
-  val isWindows = SystemUtils.IS_OS_WINDOWS
-
-  /**
-   * Whether the underlying operating system is Mac OS X.
-   */
-  val isMac = SystemUtils.IS_OS_MAC_OSX
-
-  /**
    * Whether the underlying Java version is at most 17.
    */
   val isJavaVersionAtMost17 = Runtime.version().feature() <= 17
@@ -1876,11 +1866,6 @@ private[spark] object Utils
    * Whether the underlying Java version is at least 21.
    */
   val isJavaVersionAtLeast21 = Runtime.version().feature() >= 21
-
-  /**
-   * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.
-   */
-  val isMacOnAppleSilicon = SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64")
 
   /**
    * Whether the underlying JVM prefer IPv6 addresses.
@@ -2924,6 +2909,13 @@ private[spark] object Utils
     opt.replace("{{APP_ID}}", appId)
   }
 
+  /**
+   * Replaces all the {{SPARK_VERSION}} occurrences with the Spark version.
+   */
+  def substituteSparkVersion(opt: String): String = {
+    opt.replace("{{SPARK_VERSION}}", SPARK_VERSION)
+  }
+
   def createSecret(conf: SparkConf): String = {
     val bits = conf.get(AUTH_SECRET_BIT_LENGTH)
     val rnd = new SecureRandom()
@@ -3060,9 +3052,9 @@ private[spark] object Utils
   }
 
   /** Returns a string message about delegation token generation failure */
-  def createFailedToGetTokenMessage(serviceName: String, e: scala.Throwable): MessageWithContext = {
-    log"Failed to get token from service ${MDC(SERVICE_NAME, serviceName)} " +
-      log"due to ${MDC(ERROR, e)}. If ${MDC(SERVICE_NAME, serviceName)} is not used, " +
+  def createFailedToGetTokenMessage(serviceName: String): MessageWithContext = {
+    log"Failed to get token from service ${MDC(SERVICE_NAME, serviceName)}. " +
+      log"If ${MDC(SERVICE_NAME, serviceName)} is not used, " +
       log"set spark.security.credentials.${MDC(SERVICE_NAME, serviceName)}.enabled to false."
   }
 
@@ -3160,6 +3152,17 @@ private[spark] object Utils
       val useG1GC = valueMethod.invoke(useG1GCObject).asInstanceOf[String]
       "true".equals(useG1GC)
     }.getOrElse(false)
+  }
+
+  /**
+   * Return a string of printStackTrace result.
+   */
+  def stringifyException(e: Throwable): String = {
+    val stm = new StringWriter()
+    val wrt = new PrintWriter(stm)
+    e.printStackTrace(wrt)
+    wrt.close()
+    stm.toString()
   }
 }
 

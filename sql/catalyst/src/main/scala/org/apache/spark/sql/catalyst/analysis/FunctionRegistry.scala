@@ -463,6 +463,7 @@ object FunctionRegistry {
     expressionBuilder("try_sum", TrySumExpressionBuilder, setAlias = true),
     expression[TryToBinary]("try_to_binary"),
     expressionBuilder("try_to_timestamp", TryToTimestampExpressionBuilder, setAlias = true),
+    expressionBuilder("try_to_date", TryToDateExpressionBuilder, setAlias = true),
     expressionBuilder("try_to_time", TryToTimeExpressionBuilder, setAlias = true),
     expression[TryAesDecrypt]("try_aes_decrypt"),
     expression[TryReflect]("try_reflect"),
@@ -527,6 +528,8 @@ object FunctionRegistry {
     expressionBuilder("mode", ModeBuilder),
     expression[HllSketchAgg]("hll_sketch_agg"),
     expression[HllUnionAgg]("hll_union_agg"),
+    expression[ApproxTopK]("approx_top_k"),
+    expression[ApproxTopKAccumulate]("approx_top_k_accumulate"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -672,7 +675,7 @@ object FunctionRegistry {
     expression[WindowTime]("window_time"),
     expression[MakeDate]("make_date"),
     expression[MakeTime]("make_time"),
-    expression[MakeTimestamp]("make_timestamp"),
+    expressionBuilder("make_timestamp", MakeTimestampExpressionBuilder),
     expression[TryMakeTimestamp]("try_make_timestamp"),
     expression[MonthName]("monthname"),
     // We keep the 2 expression builders below to have different function docs.
@@ -785,6 +788,7 @@ object FunctionRegistry {
     expression[EqualNull]("equal_null"),
     expression[HllSketchEstimate]("hll_sketch_estimate"),
     expression[HllUnion]("hll_union"),
+    expression[ApproxTopKEstimate]("approx_top_k_estimate"),
 
     // grouping sets
     expression[Grouping]("grouping"),
@@ -870,6 +874,7 @@ object FunctionRegistry {
     castAlias("decimal", DecimalType.USER_DEFAULT),
     castAlias("date", DateType),
     castAlias("timestamp", TimestampType),
+    castAlias("time", TimeType()),
     castAlias("binary", BinaryType),
     castAlias("string", StringType),
 

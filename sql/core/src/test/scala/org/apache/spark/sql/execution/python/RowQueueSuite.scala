@@ -68,7 +68,7 @@ class RowQueueSuite extends SparkFunSuite with EncryptionFunSuite {
   encryptionTest("disk queue") { conf =>
     val serManager = createSerializerManager(conf)
     val dir = Utils.createTempDir().getCanonicalFile
-    dir.mkdirs()
+    Utils.createDirectory(dir)
     val queue = DiskRowQueue(new File(dir, "buffer"), 1, serManager)
     val row = new UnsafeRow(1)
     row.pointTo(new Array[Byte](16), 16)

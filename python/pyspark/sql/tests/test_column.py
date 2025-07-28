@@ -133,8 +133,8 @@ class ColumnTestsMixin:
         self.assertTrue(isinstance(df["key"], Column))
         self.assertTrue(isinstance(df[0], Column))
         self.assertRaises(IndexError, lambda: df[2])
-        self.assertRaises(AnalysisException, lambda: df["bad_key"])
         self.assertRaises(TypeError, lambda: df[{}])
+        self.assertRaises(AnalysisException, lambda: df.select(df["bad_key"]).schema)
 
     def test_column_name_with_non_ascii(self):
         columnName = "数量"
@@ -360,6 +360,9 @@ class ColumnTestsMixin:
 
         ts = datetime.datetime(2021, 3, 4, 12, 34, 56, 1234)
         self.assertEqual(str(sf.lit(ts)), "Column<'2021-03-04 12:34:56.001234'>")
+
+        ts = datetime.time(12, 34, 56, 1234)
+        self.assertEqual(str(sf.lit(ts)), "Column<'12:34:56.001234'>")
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_lit_delta_representation(self):

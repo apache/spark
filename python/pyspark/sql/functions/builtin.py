@@ -10127,10 +10127,13 @@ def hour(col: "ColumnOrName") -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.1.0
+        Added support for time type.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
-        target date/timestamp column to work on.
+        target date/time/timestamp column to work on.
 
     Returns
     -------
@@ -10177,6 +10180,21 @@ def hour(col: "ColumnOrName") -> Column:
     |2015-04-08 13:08:15| timestamp|      13|
     |2024-10-31 10:09:16| timestamp|      10|
     +-------------------+----------+--------+
+
+    Example 3: Extract the hours from a time column
+
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     ("13:08:15",),
+    ...     ("10:09:16",)], ['t']).withColumn("t", sf.col("t").cast("time"))
+    >>> df.select("*", sf.typeof('t'), sf.hour('t')).show()
+    +--------+---------+-------+
+    |       t|typeof(t)|hour(t)|
+    +--------+---------+-------+
+    |13:08:15|  time(6)|     13|
+    |10:09:16|  time(6)|     10|
+    +--------+---------+-------+
     """
     return _invoke_function_over_columns("hour", col)
 
@@ -10191,10 +10209,13 @@ def minute(col: "ColumnOrName") -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.1.0
+        Added support for time type.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
-        target date/timestamp column to work on.
+        target date/time/timestamp column to work on.
 
     See Also
     --------
@@ -10241,6 +10262,21 @@ def minute(col: "ColumnOrName") -> Column:
     |2015-04-08 13:08:15| timestamp|         8|
     |2024-10-31 10:09:16| timestamp|         9|
     +-------------------+----------+----------+
+
+    Example 3: Extract the minutes from a time column
+
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     ("13:08:15",),
+    ...     ("10:09:16",)], ['t']).withColumn("t", sf.col("t").cast("time"))
+    >>> df.select("*", sf.typeof('t'), sf.minute('t')).show()
+    +--------+---------+---------+
+    |       t|typeof(t)|minute(t)|
+    +--------+---------+---------+
+    |13:08:15|  time(6)|        8|
+    |10:09:16|  time(6)|        9|
+    +--------+---------+---------+
     """
     return _invoke_function_over_columns("minute", col)
 
@@ -10255,10 +10291,13 @@ def second(col: "ColumnOrName") -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.1.0
+        Added support for time type.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
-        target date/timestamp column to work on.
+        target date/time/timestamp column to work on.
 
     Returns
     -------
@@ -10305,6 +10344,21 @@ def second(col: "ColumnOrName") -> Column:
     |2015-04-08 13:08:15| timestamp|        15|
     |2024-10-31 10:09:16| timestamp|        16|
     +-------------------+----------+----------+
+
+    Example 3: Extract the seconds from a time column
+
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     ("13:08:15",),
+    ...     ("10:09:16",)], ['t']).withColumn("t", sf.col("t").cast("time"))
+    >>> df.select("*", sf.typeof('t'), sf.second('t')).show()
+    +--------+---------+---------+
+    |       t|typeof(t)|second(t)|
+    +--------+---------+---------+
+    |13:08:15|  time(6)|       15|
+    |10:09:16|  time(6)|       16|
+    +--------+---------+---------+
     """
     return _invoke_function_over_columns("second", col)
 
@@ -11342,6 +11396,70 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
         return _invoke_function_over_columns("to_date", col)
     else:
         return _invoke_function("to_date", _to_java_column(col), _enum_to_value(format))
+
+
+@_try_remote_functions
+def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
+    """This is a special version of `try_to_date` that performs the same operation, but returns a
+    NULL value instead of raising an error if date cannot be created.
+
+    .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        input column of values to convert.
+    format: literal string, optional
+        format to use to convert date values.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        date value as :class:`pyspark.sql.types.DateType` type.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_timestamp`
+    :meth:`pyspark.sql.functions.to_timestamp_ltz`
+    :meth:`pyspark.sql.functions.to_timestamp_ntz`
+    :meth:`pyspark.sql.functions.to_utc_timestamp`
+    :meth:`pyspark.sql.functions.try_to_timestamp`
+    :meth:`pyspark.sql.functions.date_format`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('1997-02-28',)], ['ts'])
+    >>> df.select('*', sf.try_to_date(df.ts)).show()
+    +----------+---------------+
+    |        ts|try_to_date(ts)|
+    +----------+---------------+
+    |1997-02-28|     1997-02-28|
+    +----------+---------------+
+
+    >>> df.select('*', sf.try_to_date('ts', 'yyyy-MM-dd')).show()
+    +----------+---------------------------+
+    |        ts|try_to_date(ts, yyyy-MM-dd)|
+    +----------+---------------------------+
+    |1997-02-28|                 1997-02-28|
+    +----------+---------------------------+
+
+    >>> df = spark.createDataFrame([('foo',)], ['ts'])
+    >>> df.select(sf.try_to_date(df.ts)).show()
+    +---------------+
+    |try_to_date(ts)|
+    +---------------+
+    |           NULL|
+    +---------------+
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    if format is None:
+        return _invoke_function_over_columns("try_to_date", col)
+    else:
+        return _invoke_function("try_to_date", _to_java_column(col), _enum_to_value(format))
 
 
 @_try_remote_functions
@@ -24303,6 +24421,41 @@ def make_interval(
     return _invoke_function_over_columns(
         "make_interval", _years, _months, _weeks, _days, _hours, _mins, _secs
     )
+
+
+@_try_remote_functions
+def make_time(hour: "ColumnOrName", minute: "ColumnOrName", second: "ColumnOrName") -> Column:
+    """
+    Create time from hour, minute and second fields. For invalid inputs it will throw an error.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    hour : :class:`~pyspark.sql.Column` or column name
+        The hour to represent, from 0 to 23.
+    minute : :class:`~pyspark.sql.Column` or column name
+        The minute to represent, from 0 to 59.
+    second : :class:`~pyspark.sql.Column` or column name
+        The second to represent, from 0 to 59.999999.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A column representing the created time.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(6, 30, 45.887)], ["hour", "minute", "second"])
+    >>> df.select(sf.make_time("hour", "minute", "second").alias("time")).show()
+    +------------+
+    |        time|
+    +------------+
+    |06:30:45.887|
+    +------------+
+    """
+    return _invoke_function_over_columns("make_time", hour, minute, second)
 
 
 @_try_remote_functions

@@ -25,8 +25,6 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -35,6 +33,7 @@ import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, MetadataBuilder, ShortType, StringType, TimestampType}
+import org.apache.spark.util.SparkStringUtils
 
 private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
   override def canHandle(url: String): Boolean =
@@ -181,7 +180,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
             indexMap += (indexName -> newIndex)
           } else {
             val properties = new util.Properties()
-            if (StringUtils.isNotEmpty(indexComment)) properties.put("COMMENT", indexComment)
+            if (SparkStringUtils.isNotEmpty(indexComment)) properties.put("COMMENT", indexComment)
             val index = new TableIndex(indexName, indexType, Array(FieldReference(colName)),
               new util.HashMap[NamedReference, util.Properties](), properties)
             indexMap += (indexName -> index)
@@ -307,4 +306,6 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
   override def supportsLimit: Boolean = true
 
   override def supportsOffset: Boolean = true
+
+  override def supportsJoin: Boolean = true
 }
