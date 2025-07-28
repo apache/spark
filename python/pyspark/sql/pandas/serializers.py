@@ -762,7 +762,6 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
             timezone=timezone,
             safecheck=safecheck,
             assign_cols_by_name=False,
-            arrow_cast=True,
         )
         self._input_types = input_types
 
