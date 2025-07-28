@@ -27,7 +27,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
-import org.apache.spark.sql.types.{StructType, UserDefinedType}
+import org.apache.spark.sql.types.{StringType, StructType, UserDefinedType}
 
 /**
  * Grouped a iterator into batches.
@@ -109,6 +109,10 @@ class ArrowEvalPythonEvaluatorFactory(
 
     val outputTypes = output.drop(childOutput.length).map(_.dataType.transformRecursively {
       case udt: UserDefinedType[_] => udt.sqlType
+      // We change each StringType, with StringType companion object, to ignore collations.
+      // This is because Python doesn't know about collations, and will always return non-collated
+      // strings.
+      case _: StringType => StringType
     })
 
     val batchIter = Iterator(iter)
