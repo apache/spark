@@ -1784,10 +1784,10 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
       val store1_ = provider.getStore(1)
       assert(rowPairsToDataSet(store1_.iterator()) === Set(("a", 0) -> 1))
+      store1_.abort()
 
       checkInvalidVersion(-1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
       checkInvalidVersion(2, provider.isInstanceOf[HDFSBackedStateStoreProvider])
-      store1_.abort()
 
       // Update store version with some data
       val store1 = provider.getStore(1)
