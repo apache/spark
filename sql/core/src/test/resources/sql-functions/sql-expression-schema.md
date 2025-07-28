@@ -209,7 +209,7 @@
 | org.apache.spark.sql.catalyst.expressions.MakeDate | make_date | SELECT make_date(2013, 7, 15) | struct<make_date(2013, 7, 15):date> |
 | org.apache.spark.sql.catalyst.expressions.MakeInterval | make_interval | SELECT make_interval(100, 11, 1, 1, 12, 30, 01.001001) | struct<make_interval(100, 11, 1, 1, 12, 30, 1.001001):interval> |
 | org.apache.spark.sql.catalyst.expressions.MakeTime | make_time | SELECT make_time(6, 30, 45.887) | struct<make_time(6, 30, 45.887):time(6)> |
-| org.apache.spark.sql.catalyst.expressions.MakeTimestamp | make_timestamp | SELECT make_timestamp(2014, 12, 28, 6, 30, 45.887) | struct<make_timestamp(2014, 12, 28, 6, 30, 45.887):timestamp> |
+| org.apache.spark.sql.catalyst.expressions.MakeTimestampExpressionBuilder | make_timestamp | SELECT make_timestamp(2014, 12, 28, 6, 30, 45.887) | struct<make_timestamp(2014, 12, 28, 6, 30, 45.887):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.MakeTimestampLTZExpressionBuilder | make_timestamp_ltz | SELECT make_timestamp_ltz(2014, 12, 28, 6, 30, 45.887) | struct<make_timestamp_ltz(2014, 12, 28, 6, 30, 45.887):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.MakeTimestampNTZExpressionBuilder | make_timestamp_ntz | SELECT make_timestamp_ntz(2014, 12, 28, 6, 30, 45.887) | struct<make_timestamp_ntz(2014, 12, 28, 6, 30, 45.887):timestamp_ntz> |
 | org.apache.spark.sql.catalyst.expressions.MakeValidUTF8 | make_valid_utf8 | SELECT make_valid_utf8('Spark') | struct<make_valid_utf8(Spark):string> |
@@ -371,6 +371,7 @@
 | org.apache.spark.sql.catalyst.expressions.TryReflect | try_reflect | SELECT try_reflect('java.util.UUID', 'randomUUID') | struct<try_reflect(java.util.UUID, randomUUID):string> |
 | org.apache.spark.sql.catalyst.expressions.TrySubtract | try_subtract | SELECT try_subtract(2, 1) | struct<try_subtract(2, 1):int> |
 | org.apache.spark.sql.catalyst.expressions.TryToBinary | try_to_binary | SELECT try_to_binary('abc', 'utf-8') | struct<try_to_binary(abc, utf-8):binary> |
+| org.apache.spark.sql.catalyst.expressions.TryToDateExpressionBuilder | try_to_date | SELECT try_to_date('2016-12-31') | struct<try_to_date(2016-12-31):date> |
 | org.apache.spark.sql.catalyst.expressions.TryToNumber | try_to_number | SELECT try_to_number('454', '999') | struct<try_to_number(454, 999):decimal(3,0)> |
 | org.apache.spark.sql.catalyst.expressions.TryToTimeExpressionBuilder | try_to_time | SELECT try_to_time('00:12:00.001') | struct<try_to_time(to_time(00:12:00.001)):time(6)> |
 | org.apache.spark.sql.catalyst.expressions.TryToTimestampExpressionBuilder | try_to_timestamp | SELECT try_to_timestamp('2016-12-31 00:12:00') | struct<try_to_timestamp(2016-12-31 00:12:00):timestamp> |

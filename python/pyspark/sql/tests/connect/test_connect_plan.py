@@ -893,7 +893,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertIsNotNone(inf_lit.to_plan(None))
 
     def test_datetime_literal_types(self):
-        """Test the different timestamp, date, and timedelta types."""
+        """Test the different timestamp, date, time, and timedelta types."""
         datetime_lit = lit(datetime.datetime.now())
 
         p = datetime_lit.to_plan(None)
@@ -907,6 +907,10 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertIsNotNone(time_delta.to_plan(None))
         # (24 * 3600 + 2) * 1000000 + 3
         self.assertEqual(86402000003, time_delta.to_plan(None).literal.day_time_interval)
+
+        time_lit = lit(datetime.time(23, 59, 59, 999999))
+        self.assertIsNotNone(time_lit.to_plan(None))
+        self.assertEqual(time_lit.to_plan(None).literal.time.nano, 86399999999000)
 
     def test_list_to_literal(self):
         """Test conversion of lists to literals"""
@@ -1024,6 +1028,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             decimal.Decimal(1.234567),
             "sss",
             datetime.date(2022, 12, 13),
+            datetime.time(12, 13, 14),
             datetime.datetime.now(),
             datetime.timedelta(1, 2, 3),
             [1, 2, 3, 4, 5, 6],

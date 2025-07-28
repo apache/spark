@@ -4056,15 +4056,15 @@
     ],
     "sqlState" : "42K0L"
   },
-  "LABEL_ALREADY_EXISTS" : {
+  "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS" : {
     "message" : [
-      "The label <label> already exists. Choose another name or rename the existing label."
+      "The label or FOR variable <label> already exists. Choose another name or rename the existing one."
     ],
     "sqlState" : "42K0L"
   },
-  "LABEL_NAME_FORBIDDEN" : {
+  "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN" : {
     "message" : [
-      "The label name <label> is forbidden."
+      "The label or FOR variable name <label> is forbidden."
     ],
     "sqlState" : "42K0L"
   },

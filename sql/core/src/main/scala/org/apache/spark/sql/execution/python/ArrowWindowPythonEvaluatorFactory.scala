@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{JobArtifactSet, PartitionEvaluator, PartitionEvaluatorFactory, SparkEnv, TaskContext}
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
+import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, EmptyRow, Expression, JoinedRow, NamedArgumentExpression, NamedExpression, PythonFuncExpression, PythonUDAF, SortOrder, SpecificInternalRow, UnsafeProjection, UnsafeRow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -37,11 +37,12 @@ import org.apache.spark.sql.types.{DataType, IntegerType, StructField, StructTyp
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
-class WindowInPandasEvaluatorFactory(
+class ArrowWindowPythonEvaluatorFactory(
     val windowExpression: Seq[NamedExpression],
     val partitionSpec: Seq[Expression],
     val orderSpec: Seq[SortOrder],
     val childOutput: Seq[Attribute],
+    val evalType: Int,
     val spillSize: SQLMetric,
     pythonMetrics: Map[String, SQLMetric],
     profiler: Option[String])
@@ -67,7 +68,7 @@ class WindowInPandasEvaluatorFactory(
 
   private object BoundedWindow extends WindowBoundType("bounded")
 
-  private val windowBoundTypeConf = "pandas_window_bound_types"
+  private val windowBoundTypeConf = "window_bound_types"
 
   private def collectFunctions(
       udf: PythonFuncExpression): ((ChainedPythonFunctions, Long), Seq[Expression]) = {
@@ -364,7 +365,7 @@ class WindowInPandasEvaluatorFactory(
 
       val windowFunctionResult = new ArrowPythonWithNamedArgumentRunner(
         pyFuncs,
-        PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+        evalType,
         argMetas,
         pythonInputSchema,
         sessionLocalTimeZone,

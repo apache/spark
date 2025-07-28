@@ -437,15 +437,6 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               errorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
               messageParameters = Map("funcName" -> toSQLExpr(w)))
 
-          case w @ WindowExpression(wf: FrameLessOffsetWindowFunction,
-            WindowSpecDefinition(_, order, frame: SpecifiedWindowFrame))
-             if order.isEmpty || !frame.isOffset =>
-            w.failAnalysis(
-              errorClass = "WINDOW_FUNCTION_AND_FRAME_MISMATCH",
-              messageParameters = Map(
-                "funcName" -> toSQLExpr(wf),
-                "windowExpr" -> toSQLExpr(w)))
-
           case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
             if agg.isDistinct && listAgg.needSaveOrderValue =>
             throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(

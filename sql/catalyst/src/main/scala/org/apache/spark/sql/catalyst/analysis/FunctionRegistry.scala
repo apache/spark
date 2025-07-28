@@ -463,6 +463,7 @@ object FunctionRegistry {
     expressionBuilder("try_sum", TrySumExpressionBuilder, setAlias = true),
     expression[TryToBinary]("try_to_binary"),
     expressionBuilder("try_to_timestamp", TryToTimestampExpressionBuilder, setAlias = true),
+    expressionBuilder("try_to_date", TryToDateExpressionBuilder, setAlias = true),
     expressionBuilder("try_to_time", TryToTimeExpressionBuilder, setAlias = true),
     expression[TryAesDecrypt]("try_aes_decrypt"),
     expression[TryReflect]("try_reflect"),
@@ -675,7 +676,7 @@ object FunctionRegistry {
     expression[MakeDate]("make_date"),
     expression[MakeTime]("make_time"),
     expression[TimeTrunc]("time_trunc"),
-    expression[MakeTimestamp]("make_timestamp"),
+    expressionBuilder("make_timestamp", MakeTimestampExpressionBuilder),
     expression[TryMakeTimestamp]("try_make_timestamp"),
     expression[MonthName]("monthname"),
     // We keep the 2 expression builders below to have different function docs.

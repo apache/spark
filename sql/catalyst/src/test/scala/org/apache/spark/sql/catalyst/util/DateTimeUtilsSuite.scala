@@ -1353,6 +1353,33 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("SPARK-51415: makeTimestamp with days, nanos, and zoneId") {
+    Seq(
+      (MIT, -34200000000L), // -09:30
+      (PST, -28800000000L), // -08:00
+      (UTC, 0L), // +00:00
+      (CET, 3600000000L), // +01:00
+      (JST, 32400000000L) // +09:00
+    ).foreach({ case (zoneId: ZoneId, microsOffset: Long) =>
+      assert(makeTimestamp(0, 0, zoneId) ==
+        0 - microsOffset)
+      assert(makeTimestamp(0, localTime(23, 59, 59), zoneId) * NANOS_PER_MICROS ==
+        localTime(23, 59, 59) - microsOffset * NANOS_PER_MICROS)
+      assert(makeTimestamp(-1, 0, zoneId) ==
+        -1 * MICROS_PER_DAY - microsOffset)
+      assert(makeTimestamp(-1, localTime(23, 59, 59, 999999), zoneId) ==
+        -1 - microsOffset)
+      assert(makeTimestamp(days(9999, 12, 31), localTime(23, 59, 59, 999999), zoneId) ==
+        date(9999, 12, 31, 23, 59, 59, 999999) - microsOffset)
+      assert(makeTimestamp(days(1, 1, 1), localTime(0, 0, 0), zoneId) ==
+        date(1, 1, 1, 0, 0, 0) - microsOffset)
+      val msg = intercept[DateTimeException] {
+        makeTimestamp(0, -1, zoneId)
+      }.getMessage
+      assert(msg.contains("Invalid value"))
+    })
+  }
+
   test("makeTimestampNTZ") {
     assert(makeTimestampNTZ(0, 0) == 0)
     assert(makeTimestampNTZ(0, localTime(23, 59, 59)) * NANOS_PER_MICROS == localTime(23, 59, 59))
