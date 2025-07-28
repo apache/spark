@@ -11623,23 +11623,23 @@ def to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Col
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("10:30:00",)], ["str"])
-    >>> df.select(sf.to_time(df.str)).show()
-    +------------+
-    |to_time(str)|
-    +------------+
-    |    10:30:00|
-    +------------+
+    >>> df.select(sf.to_time(df.str).alias("time")).show()
+    +--------+
+    |    time|
+    +--------+
+    |10:30:00|
+    +--------+
 
     Example 2: Convert string to a time with a format
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("10:30:00", "HH:mm:ss")], ["str", "format"])
-    >>> df.select(sf.to_time(df.str, df.format)).show()
-    +--------------------+
-    |to_time(str, format)|
-    +--------------------+
-    |            10:30:00|
-    +--------------------+
+    >>> df.select(sf.to_time(df.str, df.format).alias("time")).show()
+    +--------+
+    |    time|
+    +--------+
+    |10:30:00|
+    +--------+
     """
     if format is None:
         return _invoke_function_over_columns("to_time", str)
@@ -11769,34 +11769,34 @@ def try_to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) ->
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("10:30:00",)], ["str"])
-    >>> df.select(sf.try_to_time(df.str)).show()
-    +----------------+
-    |try_to_time(str)|
-    +----------------+
-    |        10:30:00|
-    +----------------+
+    >>> df.select(sf.try_to_time(df.str).alias("time")).show()
+    +--------+
+    |    time|
+    +--------+
+    |10:30:00|
+    +--------+
 
     Example 2: Convert string to a time with a format
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("10:30:00", "HH:mm:ss")], ["str", "format"])
-    >>> df.select(sf.try_to_time(df.str, df.format)).show()
-    +------------------------+
-    |try_to_time(str, format)|
-    +------------------------+
-    |                10:30:00|
-    +------------------------+
+    >>> df.select(sf.try_to_time(df.str, df.format).alias("time")).show()
+    +--------+
+    |    time|
+    +--------+
+    |10:30:00|
+    +--------+
 
     Example 3: Converion failure results in NULL
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("malformed",)], ["str"])
-    >>> df.select(sf.try_to_time(df.str)).show()
-    +----------------+
-    |try_to_time(str)|
-    +----------------+
-    |            NULL|
-    +----------------+
+    >>> df.select(sf.try_to_time(df.str).alias("time")).show()
+    +----+
+    |time|
+    +----+
+    |NULL|
+    +----+
     """
     if format is None:
         return _invoke_function_over_columns("try_to_time", str)
