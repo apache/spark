@@ -60,6 +60,10 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("SPARK-51955: ReadStateStore reuse and upgrade to WriteStore") {
+
+    // Use the same queryRunId for both operations to ensure provider reuse
+    val queryRunId = UUID.randomUUID()
+
     withSparkSession(SparkSession.builder()
       .config(sparkConf)
       .config(SQLConf.STATE_STORE_PROVIDER_CLASS.key, classOf[RocksDBStateStoreProvider].getName)
@@ -72,7 +76,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
       val initialData = makeRDD(spark.sparkContext, Seq(("a", 0), ("b", 0)))
       val setupRDD = initialData.mapPartitionsWithStateStore(
         sqlContext,
-        operatorStateInfo(path, version = 0),
+        operatorStateInfo(path, queryRunId, version = 0),
         keySchema,
         valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema)
@@ -97,7 +101,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
       val chainedResults = inputData
         // First pass: read-only state store access
         .mapPartitionsWithReadStateStore(
-          operatorStateInfo(path, version = 1),
+          operatorStateInfo(path, queryRunId, version = 1),
           keySchema,
           valueSchema,
           NoPrefixKeyStateEncoderSpec(keySchema),
@@ -123,7 +127,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
         }
         // Second pass: use StateStore to write updates (should reuse the read store)
         .mapPartitionsWithStateStore(
-          operatorStateInfo(path, version = 1),
+          operatorStateInfo(path, queryRunId, version = 1),
           keySchema,
           valueSchema,
           NoPrefixKeyStateEncoderSpec(keySchema),

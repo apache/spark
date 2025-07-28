@@ -1166,6 +1166,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
       assert(get(result, "a", 2).get == 2)
       assert(get(result, "a", 3).get == 3)
       assert(get(result, "a", 4).isEmpty)
+      result.release()
 
       provider.close()
     }
