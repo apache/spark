@@ -25,11 +25,12 @@ from pyspark.testing.connectutils import (
     connect_requirement_message,
 )
 
-from pyspark.pipelines.block_session_mutations import (
-    block_session_mutations,
-    BLOCKED_METHODS,
-    ERROR_CLASS,
-)
+if should_test_connect:
+    from pyspark.pipelines.block_session_mutations import (
+        block_session_mutations,
+        BLOCKED_METHODS,
+        ERROR_CLASS,
+    )
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message or "Connect not available")
