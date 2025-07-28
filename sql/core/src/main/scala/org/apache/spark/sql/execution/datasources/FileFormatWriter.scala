@@ -112,10 +112,10 @@ object FileFormatWriter {
     createSorter: () => UnsafeExternalRowSorter)
 
   /**
-   * Create a file format writer instance using given SQL config. If
-   * the configuration option [[SQLConf.FILE_FORMAT_WRITER_CLASS]] is present
+   * Creates a file format writer instance using given SQL config. If
+   * the option [[SQLConf.FILE_FORMAT_WRITER_CLASS]] is present
    * in the config, the default constructor of the writer class will be called to
-   * create a writer instance. Otherwise, the [[DefaultFileFormatWriter]] will
+   * create a custom writer instance. Otherwise, [[DefaultFileFormatWriter]] will
    * be returned.
    */
   def create(conf: SQLConf): FileFormatWriter = {
