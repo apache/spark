@@ -65,8 +65,7 @@ class QueryExecution(
     val logical: LogicalPlan,
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
     val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
-    val shuffleCleanupMode: ShuffleCleanupMode =
-      determineShuffleCleanupMode(SQLConf.get)) extends Logging {
+    val specifiedShuffleCleanupMode: Option[ShuffleCleanupMode] = None) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
 
@@ -77,6 +76,9 @@ class QueryExecution(
     // Only check the main query as subquery expression can be resolved now with the main query.
     logical.exists(_.expressions.exists(_.exists(_.isInstanceOf[LazyExpression])))
   }
+
+  def shuffleCleanupMode: ShuffleCleanupMode = specifiedShuffleCleanupMode.getOrElse(
+    determineShuffleCleanupMode(sparkSession.sessionState.conf))
 
   def assertAnalyzed(): Unit = {
     try {

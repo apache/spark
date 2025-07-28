@@ -121,7 +121,8 @@ private[sql] object Dataset {
       shuffleCleanupMode: ShuffleCleanupMode): DataFrame =
     sparkSession.withActive {
       val qe = new QueryExecution(
-        sparkSession, logicalPlan, shuffleCleanupMode = shuffleCleanupMode)
+        sparkSession, logicalPlan, specifiedShuffleCleanupMode
+        = Option(shuffleCleanupMode))
       if (!qe.isLazyAnalysis) qe.assertAnalyzed()
       new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
     }
@@ -134,7 +135,7 @@ private[sql] object Dataset {
       shuffleCleanupMode: ShuffleCleanupMode = DoNotCleanup)
     : DataFrame = sparkSession.withActive {
     val qe = new QueryExecution(
-      sparkSession, logicalPlan, tracker, shuffleCleanupMode = shuffleCleanupMode)
+      sparkSession, logicalPlan, tracker, specifiedShuffleCleanupMode = Option(shuffleCleanupMode))
     if (!qe.isLazyAnalysis) qe.assertAnalyzed()
     new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
   }
