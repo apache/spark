@@ -1787,6 +1787,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
       checkInvalidVersion(-1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
       checkInvalidVersion(2, provider.isInstanceOf[HDFSBackedStateStoreProvider])
+      store1_.abort()
 
       // Update store version with some data
       val store1 = provider.getStore(1)
