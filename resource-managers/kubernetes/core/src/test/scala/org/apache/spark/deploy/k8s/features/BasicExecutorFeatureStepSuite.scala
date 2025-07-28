@@ -129,7 +129,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
         defaultProfile)
       val executor = step.configurePod(SparkPod.initialPod())
     }.getMessage()
-    assert(error.contains("The executor cpu request should be less than or equal to cpu limit"))
+    assert(error.contains("cpu request (2) should be less than or equal to cpu limit (1)"))
   }
 
   test("basic executor pod with resources") {
