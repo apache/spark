@@ -394,7 +394,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, (pd.Series, pd.Index, np.ndarray)):
             raise TypeError(
-                f"Operand of type {type(operand).__name__} is not supported for this operation. "
+                f"Operand of type {type(right).__name__} is not supported for this operation. "
             )
         if isinstance(right, (list, tuple)):
             from pyspark.pandas.series import first_series, scol_for
