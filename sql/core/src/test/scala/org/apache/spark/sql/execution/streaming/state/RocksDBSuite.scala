@@ -2401,6 +2401,36 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  testWithChangelogCheckpointingEnabled("RocksDB metric Maps do not change after retrieved") {
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      val conf = dbConf
+
+      withDB(remoteDir, conf = conf) { db =>
+        db.load(0)
+        db.put("a", "5")
+        db.put("b", "5")
+        db.commit()
+
+        // These should not change after retrieval
+        val m1 = db.metricsOpt.get
+
+        db.load(1)
+        db.put("a", "5")
+        db.put("b", "5")
+        db.commit()
+
+        val m2 = db.metricsOpt.get
+
+        // verify that the metrics maps are not shared
+        assert(!m1.lastCommitLatencyMs.eq(m2.lastCommitLatencyMs))
+        assert(!m1.lastLoadMetrics.eq(m2.lastLoadMetrics))
+        assert(!m1.nativeOpsHistograms.eq(m2.nativeOpsHistograms))
+        assert(!m1.nativeOpsMetrics.eq(m2.nativeOpsMetrics))
+      }
+    }
+  }
+
   test("load metrics are populated correctly") {
     withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
@@ -2424,6 +2454,14 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         assert(m1.lastLoadMetrics("load") > 0)
         // since we called load, loadFromSnapshot should not be populated
         assert(!m1.lastLoadMetrics.contains("loadFromSnapshot"))
+
+        if (conf.enableChangelogCheckpointing) {
+          assert(m1.lastLoadMetrics("replayChangelog") > 0)
+          assert(m1.lastLoadMetrics("numReplayChangeLogFiles") == 1)
+        } else {
+          assert(!m1.lastLoadMetrics.contains("replayChangelog"))
+          assert(!m1.lastLoadMetrics.contains("numReplayChangeLogFiles"))
+        }
       }
     }
   }
@@ -2457,7 +2495,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
-  testWithChangelogCheckpointingEnabled("commit metrics are populated correctly") {
+  test("commit metrics are populated correctly") {
     withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
       val conf = dbConf.copy()
@@ -2471,29 +2509,19 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
 
         val m1 = db.metricsOpt.get
         assert(m1.lastCommitLatencyMs("fileSync") > 0)
-        // Since changelog checkpoint is enabled, we should populate this metric
-        assert(m1.lastCommitLatencyMs("changeLogWriterCommit") > 0)
-      }
-    }
-  }
 
-  testWithChangelogCheckpointingDisabled("commit metrics are populated correctly") {
-    withTempDir { dir =>
-      val remoteDir = dir.getCanonicalPath
-      val conf = dbConf.copy()
-
-      withDB(remoteDir, conf = conf) { db =>
-        db.load(0)
-        db.put("a", "5")
-        db.put("b", "5")
-        db.commit()
-        db.doMaintenance() // upload snapshot
-
-        val m1 = db.metricsOpt.get
-        assert(m1.lastCommitLatencyMs("fileSync") > 0)
-        // When changelog checkpoint is NOT enabled we should
-        // always populate this metric in the snapshot
-        assert(m1.lastCommitLatencyMs("saveZipFiles") > 0)
+        if (conf.enableChangelogCheckpointing) {
+          // Since changelog checkpoint is enabled, we should populate this metric
+          assert(m1.lastCommitLatencyMs("changeLogWriterCommit") > 0)
+          // A snapshot is not forced when changelog checkpointing is enabled so this will be 0
+          assert(m1.lastCommitLatencyMs("saveZipFiles") == 0)
+        } else {
+          // When changelog checkpoint is NOT enabled we should
+          // always populate this metric in the snapshot
+          assert(m1.lastCommitLatencyMs("saveZipFiles") > 0)
+          // This metric is not populated when changelog checkpointing is disabled
+          assert(!m1.lastCommitLatencyMs.contains("changeLogWriterCommit"))
+        }
       }
     }
   }

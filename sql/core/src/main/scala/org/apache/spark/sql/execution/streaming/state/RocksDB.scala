@@ -607,6 +607,8 @@ class RocksDB(
       "load" -> duration
     )
 
+    // Refresh the recorded metrics after loading from snapshot
+    recordedMetrics = Some(metrics)
     this
   }
 
@@ -1391,8 +1393,8 @@ class RocksDB(
       pinnedBlocksMemUsage,
       totalSSTFilesBytes,
       nativeOpsLatencyMicros,
-      commitLatencyMs,
-      loadMetrics,
+      commitLatencyMs.clone(),
+      loadMetrics.clone(),
       bytesCopied = fileManagerMetrics.bytesCopied,
       filesCopied = fileManagerMetrics.filesCopied,
       filesReused = fileManagerMetrics.filesReused,
