@@ -373,7 +373,7 @@ case class CreateSQLFunctionCommand(
     }
   }
 
-    /**
+  /**
    * Check if the given plan contains cyclic function references.
    */
   private def checkCyclicFunctionReference(
