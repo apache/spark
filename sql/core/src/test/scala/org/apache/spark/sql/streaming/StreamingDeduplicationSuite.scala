@@ -319,7 +319,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
         },
         AssertOnQuery { q =>
           eventually(timeout(streamingTimeout)) {
-            q.lastProgress.sink.numOutputRows == 0L
+            assert(q.lastProgress.sink.numOutputRows == 0L)
             true
           }
         }
