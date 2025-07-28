@@ -268,7 +268,7 @@ class RocksDBFileManager(
       fileMapping: Map[String, RocksDBSnapshotFile],
       columnFamilyMapping: Option[Map[String, ColumnFamilyInfo]] = None,
       maxColumnFamilyId: Option[Short] = None,
-      checkpointUniqueId: Option[String] = None): RocksDBCheckpointMetadata = {
+      checkpointUniqueId: Option[String] = None): Unit = {
     logFilesInDir(checkpointDir, log"Saving checkpoint files " +
       log"for version ${MDC(LogKeys.VERSION_NUM, version)}")
     val (localImmutableFiles, localOtherFiles) = listRocksDBFiles(checkpointDir)
@@ -325,8 +325,6 @@ class RocksDBFileManager(
         // Round up to 1ms to reassure that we've logged successfully and avoid flaky tests
         saveZipFilesTimeMs = Some(Math.max(zipFilesTimeMs, 1L))
       )
-
-    metadata
   }
 
   /**
