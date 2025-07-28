@@ -33,6 +33,12 @@ import org.apache.spark.util.ThreadUtils
 // Tests for PythonWorkerFactory.
 class PythonWorkerFactorySuite extends SparkFunSuite with SharedSparkContext {
 
+  private def getIdleWorkerCount(factory: PythonWorkerFactory): Int = {
+    val field = factory.getClass.getDeclaredField("idleWorkers")
+    field.setAccessible(true)
+    field.get(factory).asInstanceOf[scala.collection.mutable.Queue[PythonWorker]].size
+  }
+
   test("createSimpleWorker() fails with a timeout error if worker does not connect back") {
     // It verifies that server side times out in accept(), if the worker does not connect back.
     // E.g. the worker might fail at the beginning before it tries to connect back.
@@ -55,5 +61,50 @@ class PythonWorkerFactorySuite extends SparkFunSuite with SharedSparkContext {
 
     // Timeout ensures that the test fails in 5 minutes if createSimplerWorker() doesn't return.
     ThreadUtils.awaitReady(createFuture, 5.minutes)
+  }
+
+  test("idle worker pool is unbounded when idleWorkerMaxPoolSize is not set") {
+    sc.conf.remove("spark.python.factory.idleWorkerMaxPoolSize")
+
+    val factory = new PythonWorkerFactory("python3", "pyspark.worker", Map.empty, true)
+
+    assert(getIdleWorkerCount(factory) === 0)
+
+    val mockWorkers = (1 to 3).map { _ =>
+      val mockChannel = java.nio.channels.SocketChannel.open()
+      mockChannel.configureBlocking(false)
+      PythonWorker(mockChannel)
+    }
+    mockWorkers.foreach(factory.releaseWorker)
+    assert(getIdleWorkerCount(factory) === 3)
+
+    mockWorkers.foreach(_.stop())
+  }
+
+  test("idle worker pool is bounded when idleWorkerMaxPoolSize is set") {
+    sc.conf.set("spark.python.factory.idleWorkerMaxPoolSize", "2")
+
+    val factory = new PythonWorkerFactory("python3", "pyspark.worker", Map.empty, true)
+
+    assert(getIdleWorkerCount(factory) === 0)
+
+    val mockWorkers = (1 to 2).map { _ =>
+      val mockChannel = java.nio.channels.SocketChannel.open()
+      mockChannel.configureBlocking(false)
+      PythonWorker(mockChannel)
+    }
+    mockWorkers.foreach(factory.releaseWorker)
+    assert(getIdleWorkerCount(factory) === 2)
+
+    val worker3 = {
+      val mockChannel = java.nio.channels.SocketChannel.open()
+      mockChannel.configureBlocking(false)
+      PythonWorker(mockChannel)
+    }
+    factory.releaseWorker(worker3)
+    assert(getIdleWorkerCount(factory) === 2)
+
+    mockWorkers.foreach(_.stop())
+    worker3.stop()
   }
 }
