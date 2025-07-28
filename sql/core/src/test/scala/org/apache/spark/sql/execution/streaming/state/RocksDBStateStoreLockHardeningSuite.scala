@@ -131,7 +131,7 @@ class RocksDBStateStoreLockHardeningSuite extends RocksDBStateStoreSuite {
         condition = "STATE_STORE_OPERATION_OUT_OF_ORDER",
         parameters = Map("errorMsg" ->
           ("Expected possible states (" +
-            "UPDATING, COMMITTING, ABORTED) but found COMMITTED"))
+            "UPDATING, ABORTED) but found COMMITTED"))
       )
     }
   }
