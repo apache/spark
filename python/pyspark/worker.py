@@ -1706,18 +1706,19 @@ def read_udtf(pickleSer, infile, eval_type):
                     else:
                         yield from res
 
-            def evaluate(*args: pd.Series):
+            def evaluate(*args: pd.Series, num_rows=1):
                 if len(args) == 0:
-                    res = func()
-                    yield verify_result(pd.DataFrame(check_return_value(res))), arrow_return_type
+                    for _ in range(num_rows):
+                        yield verify_result(
+                            pd.DataFrame(check_return_value(func()))
+                        ), arrow_return_type
                 else:
                     # Create tuples from the input pandas Series, each tuple
                     # represents a row across all Series.
                     row_tuples = zip(*args)
                     for row in row_tuples:
-                        res = func(*row)
                         yield verify_result(
-                            pd.DataFrame(check_return_value(res))
+                            pd.DataFrame(check_return_value(func(*row)))
                         ), arrow_return_type
 
             return evaluate
@@ -1739,7 +1740,7 @@ def read_udtf(pickleSer, infile, eval_type):
                 for a in it:
                     # The eval function yields an iterator. Each element produced by this
                     # iterator is a tuple in the form of (pandas.DataFrame, arrow_return_type).
-                    yield from eval(*[a[o] for o in args_kwargs_offsets])
+                    yield from eval(*[a[o] for o in args_kwargs_offsets], num_rows=len(a[0]))
                 if terminate is not None:
                     yield from terminate()
             except SkipRestOfInputTableException:
@@ -1867,10 +1868,11 @@ def read_udtf(pickleSer, infile, eval_type):
                 except Exception as e:
                     raise_conversion_error(e)
 
-            def evaluate(*args: pa.ChunkedArray):
+            def evaluate(*args: pa.ChunkedArray, num_rows=1):
                 if len(args) == 0:
-                    for batch in verify_result(convert_to_arrow(func())).to_batches():
-                        yield batch, arrow_return_type
+                    for _ in range(num_rows):
+                        for batch in verify_result(convert_to_arrow(func())).to_batches():
+                            yield batch, arrow_return_type
 
                 else:
                     list_args = list(args)
@@ -1903,7 +1905,7 @@ def read_udtf(pickleSer, infile, eval_type):
                 for a in it:
                     # The eval function yields an iterator. Each element produced by this
                     # iterator is a tuple in the form of (pyarrow.RecordBatch, arrow_return_type).
-                    yield from eval(*[a[o] for o in args_kwargs_offsets])
+                    yield from eval(*[a[o] for o in args_kwargs_offsets], num_rows=a.num_rows)
                 if terminate is not None:
                     yield from terminate()
             except SkipRestOfInputTableException:
@@ -2144,8 +2146,8 @@ def read_udfs(pickleSer, infile, eval_type):
             PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
             PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
         ):
-            # Arrow cast for type coercion is disabled by default
-            ser = ArrowStreamArrowUDFSerializer(timezone, safecheck, _assign_cols_by_name, False)
+            # Arrow cast for type coercion is enabled by default
+            ser = ArrowStreamArrowUDFSerializer(timezone, safecheck, _assign_cols_by_name, True)
         elif (
             eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             and not use_legacy_pandas_udf_conversion(runner_conf)

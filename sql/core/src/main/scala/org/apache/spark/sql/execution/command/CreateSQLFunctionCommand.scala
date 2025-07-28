@@ -20,13 +20,14 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, SQLFunctionNode, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{withPosition, Analyzer, SQLFunctionExpression, SQLFunctionNode, SQLTableFunction, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, SQLFunction, UserDefinedFunction, UserDefinedFunctionErrors}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{LateralJoin, LogicalPlan, OneRowRelation, Project, UnresolvedWith}
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand._
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
@@ -150,6 +151,9 @@ case class CreateSQLFunctionCommand(
           Project(outputAlias, inputPlan)
         }
 
+        // Check cyclic function reference before running the analyzer.
+        checkCyclicFunctionReference(catalog, name, plan)
+
         // Check the function body can be analyzed correctly.
         val analyzed = analyzer.execute(plan)
         val (resolved, resolvedReturnType) = analyzed match {
@@ -172,6 +176,8 @@ case class CreateSQLFunctionCommand(
         if (query.isEmpty) {
           throw UserDefinedFunctionErrors.bodyIsNotAQueryForSqlTableUdf(name.funcName)
         }
+        // Check cyclic function reference before running the analyzer.
+        checkCyclicFunctionReference(catalog, name, query.get)
 
         // Construct a lateral join to analyze the function body.
         val plan = LateralJoin(inputPlan, LateralSubquery(query.get), Inner, None)
@@ -365,6 +371,61 @@ case class CreateSQLFunctionCommand(
           routineName = name.asMultipart, varName = varName)
       }
     }
+  }
+
+  /**
+   * Check if the given plan contains cyclic function references.
+   */
+  private def checkCyclicFunctionReference(
+      catalog: SessionCatalog,
+      identifier: FunctionIdentifier,
+      plan: LogicalPlan): Unit = {
+
+    def checkPlan(plan: LogicalPlan, path: Seq[FunctionIdentifier]): Unit = {
+      plan.foreach {
+        case u @ UnresolvedTableValuedFunction(nameParts, arguments, _) =>
+          val funcId = nameParts.asFunctionIdentifier
+          val info = catalog.lookupFunctionInfo(funcId)
+          if (isSQLFunction(info.getClassName)) {
+            val f = withPosition(u) {
+              catalog.lookupTableFunction(funcId, arguments).asInstanceOf[SQLTableFunction]
+            }
+            // Check cyclic reference using qualified function names.
+            val newPath = path :+ f.function.name
+            if (f.function.name == name) {
+              throw UserDefinedFunctionErrors.cyclicFunctionReference(newPath.mkString(" -> "))
+            }
+            val plan = catalog.makeSQLTableFunctionPlan(f.name, f.function, f.inputs, f.output)
+            checkPlan(plan, newPath)
+        }
+        case p: LogicalPlan =>
+          p.expressions.foreach(checkExpression(_, path))
+      }
+    }
+
+    def checkExpression(expression: Expression, path: Seq[FunctionIdentifier]): Unit = {
+      expression.foreach {
+        case s: SubqueryExpression => checkPlan(s.plan, path)
+        case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _) =>
+          val funcId = nameParts.asFunctionIdentifier
+          val info = catalog.lookupFunctionInfo(funcId)
+          if (isSQLFunction(info.getClassName)) {
+            val f = withPosition(u) {
+              catalog.lookupFunction(funcId, arguments).asInstanceOf[SQLFunctionExpression]
+            }
+            // Check cyclic reference using qualified function names.
+            val newPath = path :+ f.function.name
+            if (f.function.name == name) {
+              throw UserDefinedFunctionErrors.cyclicFunctionReference(newPath.mkString(" -> "))
+            }
+            val plan = catalog.makeSQLFunctionPlan(f.name, f.function, f.inputs)
+            checkPlan(plan, newPath)
+          }
+        case _ =>
+      }
+    }
+
+    checkPlan(plan, Seq(identifier))
   }
 
   /**
