@@ -1745,7 +1745,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
   testWithAllCodec(s"getStore with invalid versions") { colFamiliesEnabled =>
     tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
-      def checkInvalidVersion(version: Int): Unit = {
+      def checkInvalidVersion(version: Int, isHDFSBackedStoreProvider: Boolean): Unit = {
         val e = intercept[SparkException] {
           provider.getStore(version)
         }
@@ -1756,17 +1756,26 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
             parameters = Map("version" -> version.toString)
           )
         } else {
-          checkError(
-            e,
-            condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
-            parameters = Map("fileToRead" -> ".*"),
-            matchPVals = true
-          )
+          if (isHDFSBackedStoreProvider) {
+            checkError(
+              e,
+              condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
+              parameters = Map("fileToRead" -> ".*", "clazz" -> ".*"),
+              matchPVals = true
+            )
+          } else {
+            checkError(
+              e,
+              condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
+              parameters = Map("fileToRead" -> ".*"),
+              matchPVals = true
+            )
+          }
         }
       }
 
-      checkInvalidVersion(-1)
-      checkInvalidVersion(1)
+      checkInvalidVersion(-1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
+      checkInvalidVersion(1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
 
       val store = provider.getStore(0)
       put(store, "a", 0, 1)
@@ -1775,10 +1784,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
       val store1_ = provider.getStore(1)
       assert(rowPairsToDataSet(store1_.iterator()) === Set(("a", 0) -> 1))
-      store1_.abort()
 
-      checkInvalidVersion(-1)
-      checkInvalidVersion(2)
+      checkInvalidVersion(-1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
+      checkInvalidVersion(2, provider.isInstanceOf[HDFSBackedStateStoreProvider])
 
       // Update store version with some data
       val store1 = provider.getStore(1)
@@ -1787,8 +1795,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       assert(rowPairsToDataSet(store1.iterator()) === Set(("a", 0) -> 1, ("b", 0) -> 1))
       assert(store1.commit() === 2)
 
-      checkInvalidVersion(-1)
-      checkInvalidVersion(3)
+      checkInvalidVersion(-1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
+      checkInvalidVersion(3, provider.isInstanceOf[HDFSBackedStateStoreProvider])
     }
   }
 
@@ -1812,7 +1820,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       store.commit()
       val store1 = provider0.getStore(1)
       assert(rowPairsToDataSet(store1.iterator()) === Set((key1, key2) -> 1))
-      store1.abort()    }
+      store1.abort()
+    }
 
     // two state stores
     tryWithProviderResource(newStoreProvider(storeId, colFamiliesEnabled)) { provider1 =>
