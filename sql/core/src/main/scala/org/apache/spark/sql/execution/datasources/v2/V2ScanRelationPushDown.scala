@@ -152,7 +152,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val leftSideRequiredColumnsWithAliases = leftSideRequiredColumnNames.map { name =>
         val aliasName =
           if (leftSideNameCounts(name) > 1 || rightSideColumnNamesSet.contains(name)) {
-            generateJoinOutputAlias(name)
+            JoinPushdownOutputAliasGenerator.generateJoinOutputAlias(name)
           } else {
             null
           }
@@ -166,7 +166,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val rightSideRequiredColumnsWithAliases = rightSideRequiredColumnNames.map { name =>
         val aliasName =
           if (rightSideNameCounts(name) > 1) {
-            generateJoinOutputAlias(name)
+            JoinPushdownOutputAliasGenerator.generateJoinOutputAlias(name)
           } else {
             null
           }
@@ -225,9 +225,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         node
       }
   }
-
-  def generateJoinOutputAlias(name: String): String =
-    s"${name}_${java.util.UUID.randomUUID().toString.replace("-", "_")}"
 
   // projections' names are maybe not up to date if the joins have been previously pushed down.
   // For this reason, we need to use pushedJoinOutputMap to get up to date names.
@@ -735,6 +732,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       case _ => scan
     }
   }
+}
+
+object JoinPushdownOutputAliasGenerator {
+  private val aliasId = new java.util.concurrent.atomic.AtomicLong()
+
+  def generateJoinOutputAlias(name: String): String =
+    s"${name}_${aliasId.getAndIncrement()}"
 }
 
 case class ScanBuilderHolder(
