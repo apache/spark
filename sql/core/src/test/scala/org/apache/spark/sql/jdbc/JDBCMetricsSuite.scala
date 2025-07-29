@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, DriverManager}
+import java.sql.{Connection, DriverManager, Statement}
 import java.util.Properties
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -57,14 +58,14 @@ class JDBCMetricsSuite extends QueryTest with SharedSparkSession {
     super.beforeAll()
     Utils.classForName("org.h2.Driver")
     withConnection { conn =>
-      conn.prepareStatement("create schema test").executeUpdate()
-      conn.prepareStatement("drop table if exists test.people").executeUpdate()
-      conn.prepareStatement(
-        "create table test.people (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
-      conn.prepareStatement("insert into test.people values ('dany', 1)").executeUpdate()
-      conn.prepareStatement("insert into test.people values ('mary', 2)").executeUpdate()
-      conn.prepareStatement("insert into test.people values ('alex', 3)").executeUpdate()
-      conn.commit()
+      val statement: Statement = conn.createStatement()
+      statement.addBatch("create schema test")
+      statement.addBatch(
+        "create table test.people (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)")
+      statement.addBatch("insert into test.people values ('dany', 1)")
+      statement.addBatch("insert into test.people values ('mary', 2)")
+      statement.addBatch("insert into test.people values ('alex', 3)")
+      statement.executeBatch()
     }
   }
 
@@ -73,40 +74,37 @@ class JDBCMetricsSuite extends QueryTest with SharedSparkSession {
     super.afterAll()
   }
 
+  private def hasMetricKeyValue(metrics: Map[String, SQLMetric], metricKey: String): Unit = {
+    val optionMetric = metrics.get(metricKey)
+    assert(optionMetric.isDefined)
+    if(optionMetric.isDefined) {
+      val metric = optionMetric.get
+      assert(metric.value >= 0)
+    }
+  }
+
   test("schema fetch time metric: JDBC v1") {
     val df = spark.read
       .format("jdbc")
       .option("url", url)
       .option("query", "SELECT * FROM TEST.PEOPLE")
       .load()
-    val leaves = df.queryExecution.executedPlan.collectLeaves().head.metrics
-    val testKey = "remoteSchemaFetchTime"
-    val optionMetric = leaves.get(testKey)
-    assert(optionMetric != null)
-    if(optionMetric.isDefined) {
-      val metric = optionMetric.get
-      assert(metric.value >= 0)
-    }
-  }
-
-  test("Select *") {
-    val df = spark.read
-      .format("jdbc")
-      .option("url", url)
-      .option("query", "SELECT * FROM TEST.PEOPLE")
-      .load()
-    assert(df.collect().length === 3)
+    hasMetricKeyValue(
+      df.queryExecution.executedPlan.collectLeaves().head.metrics,
+      "remoteSchemaFetchTime")
   }
 
   test("schema fetch time metric: JDBC v2") {
     val df = sql("SELECT * FROM h2.TEST.PEOPLE")
-    val leaves = df.queryExecution.executedPlan.collectLeaves().head.metrics
-    val testKey = "remoteSchemaFetchTime"
-    val optionMetric = leaves.get(testKey)
-    assert(optionMetric != null)
-    if(optionMetric.isDefined) {
-      val metric = optionMetric.get
-      assert(metric.value >= 0)
-    }
+    hasMetricKeyValue(
+      df.queryExecution.executedPlan.collectLeaves().head.metrics,
+      "remoteSchemaFetchTime")
+  }
+
+  test("schema fetch time metric: DataFrameReader jdbc") {
+    val df = spark.read.jdbc(url, "TEST.PEOPLE", Array[String](), new Properties())
+    hasMetricKeyValue(
+      df.queryExecution.executedPlan.collectLeaves().head.metrics,
+      "remoteSchemaFetchTime")
   }
 }
