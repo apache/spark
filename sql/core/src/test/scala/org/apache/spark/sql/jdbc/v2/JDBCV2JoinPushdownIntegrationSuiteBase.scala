@@ -668,5 +668,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
       checkJoinPushed(df)
     }
+
+    sql(s"drop table $catalogAndNamespace.t1")
+    sql(s"drop table $catalogAndNamespace.t2")
   }
 }
