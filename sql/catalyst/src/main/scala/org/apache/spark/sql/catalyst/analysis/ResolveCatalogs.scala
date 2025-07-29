@@ -18,14 +18,13 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
-
 import scala.collection.immutable
 import scala.jdk.CollectionConverters._
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.parser.SqlScriptingContext
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.SparkCharVarcharUtils.replaceCharVarcharWithString
@@ -60,10 +59,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
             Map("varName" -> toSQLId(nameParts)))
         }
 
-        val forbiddenVariableNames: immutable.Set[String] =
-          immutable.Set("system", "session")
-
-        if (forbiddenVariableNames.contains(nameParts.head.toLowerCase(Locale.ROOT))) {
+        if (SqlScriptingContext.isForbiddenName(nameParts.head.toLowerCase(Locale.ROOT))) {
           throw new AnalysisException(
             "INVALID_VARIABLE_DECLARATION.NAME_FORBIDDEN",
             Map("varName" -> toSQLId(nameParts)))

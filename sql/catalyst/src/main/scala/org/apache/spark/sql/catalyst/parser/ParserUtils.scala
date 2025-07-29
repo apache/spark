@@ -342,7 +342,7 @@ class SqlScriptingLabelContext {
       // Do not add the label to the seenLabels set if it is not defined.
       java.util.UUID.randomUUID.toString.toLowerCase(Locale.ROOT)
     }
-    if (SqlScriptingLabelContext.isForbiddenLabelName(labelText)) {
+    if (SqlScriptingContext.isForbiddenName(labelText)) {
       withOrigin(beginLabelCtx.get) {
         throw SqlScriptingErrors.labelNameForbidden(CurrentOrigin.get, labelText)
       }
@@ -361,12 +361,12 @@ class SqlScriptingLabelContext {
   }
 }
 
-object SqlScriptingLabelContext {
-  private val forbiddenLabelNames: immutable.Set[Regex] =
+object SqlScriptingContext {
+  private val forbiddenNames: immutable.Set[Regex] =
     immutable.Set("builtin".r, "session".r, "sys.*".r)
 
-  def isForbiddenLabelName(labelName: String): Boolean = {
-    forbiddenLabelNames.exists(_.matches(labelName.toLowerCase(Locale.ROOT)))
+  def isForbiddenName(labelName: String): Boolean = {
+    forbiddenNames.exists(_.matches(labelName.toLowerCase(Locale.ROOT)))
   }
 }
 
