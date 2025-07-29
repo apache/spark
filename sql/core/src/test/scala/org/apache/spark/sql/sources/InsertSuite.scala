@@ -2217,11 +2217,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       Config(
         "parquet",
         useDataFrames = true),
-      // SPARK-47029: ALTER COLUMN DROP DEFAULT fails to work correctly with JSON data sources.
-      /*
       Config(
         "json"),
-        */
       Config(
         "json",
         useDataFrames = true),
