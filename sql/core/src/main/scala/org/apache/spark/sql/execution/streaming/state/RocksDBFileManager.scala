@@ -45,7 +45,6 @@ import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
-import org.apache.spark.util.Utils.timeTakenMs
 
 /**
  * Class responsible for syncing RocksDB checkpoint files from local disk to DFS.
@@ -300,7 +299,7 @@ class RocksDBFileManager(
     logDebug(log"Written metadata for version ${MDC(LogKeys.VERSION_NUM, version)}:\n" +
       log"${MDC(LogKeys.METADATA_JSON, metadata.prettyJson)}")
 
-    val (_, zipFilesTimeMs) = timeTakenMs {
+    val (_, zipFilesTimeMs) = Utils.timeTakenMs {
       if (version <= 1 && numKeys <= 0) {
         // If we're writing the initial version and there's no data, we have to initialize
         // the root directory. Normally saveImmutableFilesToDfs will do this initialization, but

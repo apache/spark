@@ -2424,7 +2424,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
 
         // verify that the metrics maps are not shared
         assert(!m1.lastCommitLatencyMs.eq(m2.lastCommitLatencyMs))
-        assert(!m1.lastLoadMetrics.eq(m2.lastLoadMetrics))
+        assert(!m1.loadMetrics.eq(m2.loadMetrics))
         assert(!m1.nativeOpsHistograms.eq(m2.nativeOpsHistograms))
         assert(!m1.nativeOpsMetrics.eq(m2.nativeOpsMetrics))
       }
@@ -2451,16 +2451,16 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.commit()
 
         val m1 = db.metricsOpt.get
-        assert(m1.lastLoadMetrics("load") > 0)
+        assert(m1.loadMetrics("load") > 0)
         // since we called load, loadFromSnapshot should not be populated
-        assert(!m1.lastLoadMetrics.contains("loadFromSnapshot"))
+        assert(!m1.loadMetrics.contains("loadFromSnapshot"))
 
         if (conf.enableChangelogCheckpointing) {
-          assert(m1.lastLoadMetrics("replayChangelog") > 0)
-          assert(m1.lastLoadMetrics("numReplayChangeLogFiles") == 1)
+          assert(m1.loadMetrics("replayChangelog") > 0)
+          assert(m1.loadMetrics("numReplayChangeLogFiles") == 1)
         } else {
-          assert(!m1.lastLoadMetrics.contains("replayChangelog"))
-          assert(!m1.lastLoadMetrics.contains("numReplayChangeLogFiles"))
+          assert(!m1.loadMetrics.contains("replayChangelog"))
+          assert(!m1.loadMetrics.contains("numReplayChangeLogFiles"))
         }
       }
     }
@@ -2486,11 +2486,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.loadFromSnapshot(0, 1)
 
         val m1 = db.metricsOpt.get
-        assert(m1.lastLoadMetrics("loadFromSnapshot") > 0)
+        assert(m1.loadMetrics("loadFromSnapshot") > 0)
         // since we called loadFromSnapshot, load should not be populated
-        assert(!m1.lastLoadMetrics.contains("load"))
-        assert(m1.lastLoadMetrics("replayChangelog") > 0)
-        assert(m1.lastLoadMetrics("numReplayChangeLogFiles") == 1)
+        assert(!m1.loadMetrics.contains("load"))
+        assert(m1.loadMetrics("replayChangelog") > 0)
+        assert(m1.loadMetrics("numReplayChangeLogFiles") == 1)
       }
     }
   }

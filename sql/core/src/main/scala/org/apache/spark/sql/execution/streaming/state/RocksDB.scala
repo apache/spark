@@ -607,7 +607,10 @@ class RocksDB(
       "load" -> duration
     )
 
-    // Refresh the recorded metrics after loading from snapshot
+    // Refresh the recorded metrics after loading from snapshot. metricsOpt is how the
+    // RocksDBMetrics is accessed. It uses recordedMetrics which was previously only updated in
+    // commit(). This caused metrics from load to not be up to date if it is used as read-only
+    // and does not commit()
     recordedMetrics = Some(metrics)
     this
   }
@@ -653,7 +656,10 @@ class RocksDB(
       "loadFromSnapshot" -> (System.currentTimeMillis() - startTime)
     )
 
-    // Refresh the recorded metrics after loading from snapshot
+    // Refresh the recorded metrics after loading from snapshot. metricsOpt is how the
+    // RocksDBMetrics is accessed. It uses recordedMetrics which was previously only updated in
+    // commit(). This caused metrics from loadFromSnapshot to not be up to date if it is used as
+    // read-only and does not commit()
     recordedMetrics = Some(metrics)
     this
   }
@@ -1255,6 +1261,8 @@ class RocksDB(
       changelogWriter.foreach(_.abort())
       // Make sure changelogWriter gets recreated next time.
       changelogWriter = None
+      // If we roll back we clear the recorded metrics
+      recordedMetrics = None
       logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
     } finally {
       release(RollbackStore)
@@ -2072,7 +2080,7 @@ case class RocksDBMetrics(
     totalSSTFilesBytes: Long,
     nativeOpsHistograms: Map[String, RocksDBNativeHistogram],
     lastCommitLatencyMs: Map[String, Long],
-    lastLoadMetrics: Map[String, Long],
+    loadMetrics: Map[String, Long],
     filesCopied: Long,
     bytesCopied: Long,
     filesReused: Long,

@@ -297,7 +297,7 @@ private[sql] class RocksDBStateStoreProvider
           rocksDBMetrics.lastCommitLatencyMs.getOrElse(typ, 0L)
 
         def loadMetrics(typ: String): Long =
-          rocksDBMetrics.lastLoadMetrics.getOrElse(typ, 0L)
+          rocksDBMetrics.loadMetrics.getOrElse(typ, 0L)
 
         def nativeOpsLatencyMillis(typ: String): Long = {
           rocksDBMetrics.nativeOpsMetrics.get(typ).map(_ * 1000).getOrElse(0)
@@ -939,7 +939,7 @@ object RocksDBStateStoreProvider {
     "rocksdbZipFileBytesUncompressed", "RocksDB: file manager - uncompressed zip file bytes")
   val CUSTOM_METRIC_CHANGE_LOG_WRITER_COMMIT_TIME = StateStoreCustomTimingMetric(
     "rocksdbChangeLogWriterCommitLatencyMs",
-    "RocksDB: commit - changelog checkpoint time")
+    "RocksDB: commit - changelog commit time")
   val CUSTOM_METRIC_SAVE_ZIP_FILES_TIME = StateStoreCustomTimingMetric(
     "rocksdbSaveZipFilesLatencyMs",
     "RocksDB: commit - zip files sync to external storage time")
@@ -952,10 +952,10 @@ object RocksDBStateStoreProvider {
     "RocksDB: load - time taken to load the store")
   val CUSTOM_METRIC_REPLAY_CHANGE_LOG = StateStoreCustomTimingMetric(
     "rocksdbReplayChangeLogLatencyMs",
-    "RocksDB: load replay change log - time taken to replay the change log")
+    "RocksDB: load - time taken to replay the change log")
   val CUSTOM_METRIC_NUM_REPLAY_CHANGE_LOG_FILES = StateStoreCustomSizeMetric(
     "rocksdbNumReplayChangelogFiles",
-    "RocksDB: load replay change log - number of change log files replayed")
+    "RocksDB: load - number of change log files replayed")
 
   val CUSTOM_METRIC_BLOCK_CACHE_MISS = StateStoreCustomSumMetric(
     "rocksdbReadBlockCacheMissCount",
