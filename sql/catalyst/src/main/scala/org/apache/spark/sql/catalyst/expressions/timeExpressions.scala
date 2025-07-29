@@ -634,17 +634,17 @@ case class SubtractTimes(left: Expression, right: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(unit, expr) - Returns time `expr` truncated to the unit specified by the unit `unit`.
+    _FUNC_(unit, time) - Returns `time` truncated to the `unit`.
   """,
   arguments = """
     Arguments:
-      * unit - the unit representing the unit to be truncated to
+      * unit - the unit to truncate to
           - "HOUR" - zero out the minutes and seconds with fraction part
           - "MINUTE" - zero out the seconds with fraction part
           - "SECOND" - zero out the fraction part of seconds
           - "MILLISECOND" - zero out the microseconds
           - "MICROSECOND" - zero out the nanoseconds
-      * expr - a TIME with a valid time format
+      * time - a TIME expression
   """,
   examples = """
     Examples:

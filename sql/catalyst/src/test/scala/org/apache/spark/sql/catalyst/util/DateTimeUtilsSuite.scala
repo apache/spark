@@ -782,15 +782,11 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
     // 00:00:00
     val midnight = localTimeToNanos(LocalTime.MIDNIGHT)
-    // Truncate the minutes, seconds, and fractions of seconds. Result is: 00:00:00.
+    // Midnight time remains the same for any truncation.
     assert(DateTimeUtils.timeTrunc(UTF8String.fromString("HOUR"), midnight) === 0)
-    // Truncate the seconds and fractions of seconds. Result is: 00:00:00.
     assert(DateTimeUtils.timeTrunc(UTF8String.fromString("MINUTE"), midnight) === 0)
-    // Truncate the fractions of seconds. Result is: 00:00:00.
     assert(DateTimeUtils.timeTrunc(UTF8String.fromString("SECOND"), midnight) === 0)
-    // Truncate the milliseconds. Result is: Result is: 00:00:00.
     assert(DateTimeUtils.timeTrunc(UTF8String.fromString("MILLISECOND"), midnight) === 0)
-    // Truncate the microseconds. Result is: Result is: 00:00:00.
     assert(DateTimeUtils.timeTrunc(UTF8String.fromString("MICROSECOND"), midnight) === 0)
 
     // Unsupported truncation levels.
