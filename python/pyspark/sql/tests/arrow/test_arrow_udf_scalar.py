@@ -25,8 +25,7 @@ from typing import Iterator, Tuple
 
 from pyspark.util import PythonEvalType
 
-# TODO: import arrow_udf from public API
-from pyspark.sql.pandas.functions import arrow_udf, ArrowUDFType
+from pyspark.sql.functions import arrow_udf, ArrowUDFType
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
     IntegerType,
