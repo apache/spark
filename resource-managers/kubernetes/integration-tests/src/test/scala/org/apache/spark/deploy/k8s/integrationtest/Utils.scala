@@ -90,9 +90,9 @@ object Utils extends Logging {
       .withTTY()
       .usingListener(listener)
       .exec(cmd.toArray: _*)
-    System.in.transferTo(watch.getInput)
     // under load sometimes the stdout isn't connected by the time we try to read from it.
     listener.waitForInputStreamToConnect()
+    System.in.transferTo(watch.getInput)
     listener.waitForClose()
     watch.close()
     out.flush()
