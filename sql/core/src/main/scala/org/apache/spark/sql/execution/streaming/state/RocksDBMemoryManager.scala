@@ -97,6 +97,31 @@ object RocksDBMemoryManager extends Logging with UnmanagedMemoryConsumer {
     logDebug(s"Unregistered instance $uniqueId")
   }
 
+
+  def getNumRocksDBInstances(boundedMemory: Boolean): Long = {
+    instanceMemoryMap.values().asScala.count(_.isBoundedMemory == boundedMemory)
+  }
+
+  /**
+   * Get the memory usage for a specific instance, accounting for bounded memory sharing.
+   * @param uniqueId The instance's unique identifier
+   * @param totalMemoryUsage The total memory usage of this instance
+   * @return The adjusted memory usage accounting for sharing in bounded memory mode
+   */
+  def getInstanceMemoryUsage(uniqueId: String, totalMemoryUsage: Long): Long = {
+    val instanceInfo = instanceMemoryMap.get(uniqueId)
+    if (instanceInfo.isBoundedMemory) {
+      // In bounded memory mode, divide by the number of bounded instances
+      // since they share the same memory pool
+      val numBoundedInstances = getNumRocksDBInstances(true)
+      totalMemoryUsage / numBoundedInstances
+    } else {
+      // In unbounded memory mode, each instance has its own memory
+      totalMemoryUsage
+    }
+  }
+
+
   def getOrCreateRocksDBMemoryManagerAndCache(conf: RocksDBConf): (WriteBufferManager, Cache)
     = synchronized {
     // Register with UnifiedMemoryManager (idempotent operation)
