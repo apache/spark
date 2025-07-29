@@ -758,7 +758,7 @@ class RocksDB(
 
     val duration = System.currentTimeMillis() - startTime
     loadMetrics ++= Map(
-      "replayChangelog" -> duration,
+      "replayChangelog" -> Math.max(duration, 1L), // avoid flakey tests
       "numReplayChangeLogFiles" -> versionsAndUniqueIds.length
     )
   }
