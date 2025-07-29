@@ -388,7 +388,7 @@ class SqlScriptingLabelContext {
       assertIdentifierNotInSeenLabels(identifierCtx)
       seenLabels.add(identifierName.toLowerCase(Locale.ROOT))
 
-      if (SqlScriptingLabelContext.isForbiddenLabelOrForVariableName(identifierName)) {
+      if (SqlScriptingContext.isForbiddenName(identifierName)) {
         withOrigin(ctx) {
           throw SqlScriptingErrors.labelOrForVariableNameForbidden(
             CurrentOrigin.get,
