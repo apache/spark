@@ -21,7 +21,6 @@ from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.testing.utils import is_ansi_mode_test, ansi_mode_not_supported_message
 
 
 class DiffFramesDotFrameMixin:
@@ -35,7 +34,6 @@ class DiffFramesDotFrameMixin:
         reset_option("compute.ops_on_diff_frames")
         super().tearDownClass()
 
-    @unittest.skipIf(is_ansi_mode_test, ansi_mode_not_supported_message)
     def test_frame_dot(self):
         pdf = pd.DataFrame([[0, 1, -2, -1], [1, 1, 1, 1]])
         psdf = ps.from_pandas(pdf)
