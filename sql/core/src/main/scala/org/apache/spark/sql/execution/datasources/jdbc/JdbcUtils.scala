@@ -402,7 +402,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     }
   }
 
-  def schemaFetchMetric(sparkContext: SparkContext): SQLMetric = {
+  def createSchemaFetchMetric(sparkContext: SparkContext): SQLMetric = {
     SQLMetrics.createNanoTimingMetric(
       sparkContext,
       JDBCRelation.schemaFetchName
