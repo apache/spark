@@ -56,6 +56,9 @@ private[spark] trait SparkStringUtils {
     import org.apache.spark.util.ArrayImplicits._
     str.split(",").map(_.trim()).filter(_.nonEmpty).toImmutableArraySeq
   }
+
+  /** Try to strip prefix and suffix with the given string 's' */
+  def strip(str: String, s: String): String = str.stripPrefix(s).stripSuffix(s)
 }
 
 private[spark] object SparkStringUtils extends SparkStringUtils with Logging {
