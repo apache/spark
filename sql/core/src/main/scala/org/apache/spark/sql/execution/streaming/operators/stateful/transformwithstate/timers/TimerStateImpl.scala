@@ -200,7 +200,7 @@ class TimerStateImpl(
       }
 
       override protected def close(): Unit = {
-        iter.close()
+        iter.closeIfNeeded()
       }
     }
   }
