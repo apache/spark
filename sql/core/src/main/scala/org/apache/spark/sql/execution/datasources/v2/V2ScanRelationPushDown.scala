@@ -153,20 +153,27 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         // that appears only once to ensure they have highest priority.
         val allClaimedAliases = mutable.HashSet.empty ++ allNameCounts.filter(_._2 == 1).keySet
 
+        // Track the next suffix index for each column name (starts at 0) to avoid extreme worst
+        // case of O(n^2) alias generation.
+        val aliasSuffixIndex = mutable.HashMap[String, Int]().withDefaultValue(0)
+
         def processColumn(name: String): SupportsPushDownJoin.ColumnWithAlias = {
           // Ensure a name that appears only once does not require an alias.
           if (allNameCounts(name) == 1) {
             new SupportsPushDownJoin.ColumnWithAlias(name, null)
           } else {
-            var attempt = 0
+            var attempt = aliasSuffixIndex(name)
+
             // Generate candidate alias: use original name for the first attempt, then append
             // suffix for more attempts.
-            var candidate = name
+            var candidate = if (attempt == 0) name else s"${name}_$attempt"
             // Ensure candidate alias is unique by checking against existing names.
             while (allClaimedAliases.contains(candidate)) {
               attempt += 1
               candidate = s"${name}_$attempt"
             }
+            // Update state: next suffix index and mark alias as used
+            aliasSuffixIndex(name) = attempt + 1
             allClaimedAliases.add(candidate)
             new SupportsPushDownJoin.ColumnWithAlias(name, candidate)
           }
