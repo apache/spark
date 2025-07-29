@@ -23,10 +23,11 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic
 import org.apache.hadoop.net._
-import org.apache.hadoop.util.{ReflectionUtils, SparkStringUtils}
+import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.NODE_LOCATION
+import org.apache.spark.util.SparkStringUtils
 
 /**
  * Re-implement YARN's [[RackResolver]] for hadoop releases without YARN-9332.
@@ -72,7 +73,7 @@ private[spark] class SparkRackResolver(conf: Configuration) extends Logging {
         log"Falling back to ${MDC(NODE_LOCATION, NetworkTopology.DEFAULT_RACK)} for all")
     } else {
       for ((hostName, rName) <- hostNames.zip(rNameList)) {
-        if (Utils.isEmpty(rName)) {
+        if (SparkStringUtils.isEmpty(rName)) {
           nodes += new NodeBase(hostName, NetworkTopology.DEFAULT_RACK)
           logDebug(s"Could not resolve $hostName. " +
             s"Falling back to ${NetworkTopology.DEFAULT_RACK}")
