@@ -77,7 +77,12 @@ class NoPrefixHDFSBackedStateStoreMap extends HDFSBackedStateStoreMap {
     }
     new NextIterator[UnsafeRowPair] {
       override protected def getNext(): UnsafeRowPair = {
-        iter.next()
+        if (iter.hasNext) {
+          iter.next()
+        } else {
+          finished = true
+          null.asInstanceOf[UnsafeRowPair]
+        }
       }
       override protected def close(): Unit = {}
     }
@@ -168,7 +173,12 @@ class PrefixScannableHDFSBackedStateStoreMap(
     }
     new NextIterator[UnsafeRowPair] {
       override protected def getNext(): UnsafeRowPair = {
-        iter.next()
+        if (iter.hasNext) {
+          iter.next()
+        } else {
+          finished = true
+          null.asInstanceOf[UnsafeRowPair]
+        }
       }
       override protected def close(): Unit = {}
     }
@@ -181,7 +191,12 @@ class PrefixScannableHDFSBackedStateStoreMap(
       .map { key => unsafeRowPair.withRows(key, map.get(key)) }
     new NextIterator[UnsafeRowPair] {
       override protected def getNext(): UnsafeRowPair = {
-        iter.next()
+        if (iter.hasNext) {
+          iter.next()
+        } else {
+          finished = true
+          null.asInstanceOf[UnsafeRowPair]
+        }
       }
       override protected def close(): Unit = {}
     }

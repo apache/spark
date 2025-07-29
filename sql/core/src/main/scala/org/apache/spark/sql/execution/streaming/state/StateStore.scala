@@ -771,7 +771,15 @@ object StateStoreProvider extends Logging {
     iter : NextIterator[A],
     f: A => B): NextIterator[B] = {
     new NextIterator[B] {
-      override def getNext(): B = f(iter.next())
+      override def getNext(): B = {
+        if (iter.hasNext) {
+          f(iter.next())
+        } else {
+          finished = true
+          close()
+          null.asInstanceOf[B]
+        }
+      }
 
       override def close(): Unit = {
         iter.closeIfNeeded()

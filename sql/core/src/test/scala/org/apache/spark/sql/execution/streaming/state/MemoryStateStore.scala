@@ -33,7 +33,12 @@ class MemoryStateStore extends StateStore() {
 
     new NextIterator[UnsafeRowPair] {
       override protected def getNext(): UnsafeRowPair = {
-        iter.next()
+        if (iter.hasNext) {
+          iter.next()
+        } else {
+          finished = true
+          null.asInstanceOf[UnsafeRowPair]
+        }
       }
       override protected def close(): Unit = {}
     }
