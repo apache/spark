@@ -35,6 +35,7 @@ import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.OutputMode.Update
 import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.NextIterator
 
 object CkptIdCollectingStateStoreWrapper {
   // Internal list to hold checkpoint IDs (strings)
@@ -76,12 +77,12 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
 
   override def prefixScan(
       prefixKey: UnsafeRow,
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair] = {
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): NextIterator[UnsafeRowPair] = {
     innerStore.prefixScan(prefixKey, colFamilyName)
   }
 
   override def iterator(
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair] = {
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): NextIterator[UnsafeRowPair] = {
     innerStore.iterator(colFamilyName)
   }
 

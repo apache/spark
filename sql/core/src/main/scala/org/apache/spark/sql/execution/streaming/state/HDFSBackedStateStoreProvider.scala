@@ -39,7 +39,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.{SizeEstimator, Utils}
+import org.apache.spark.util.{NextIterator, SizeEstimator, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
 
@@ -83,7 +83,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = map.get(key)
 
-    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
+    override def iterator(colFamilyName: String): NextIterator[UnsafeRowPair] = {
       map.iterator()
     }
 
@@ -96,7 +96,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
 
     override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
-      Iterator[UnsafeRowPair] = {
+      NextIterator[UnsafeRowPair] = {
       map.prefixScan(prefixKey)
     }
 
@@ -209,13 +209,13 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
      * Get an iterator of all the store data.
      * This can be called only after committing all the updates made in the current thread.
      */
-    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
+    override def iterator(colFamilyName: String): NextIterator[UnsafeRowPair] = {
       assertUseOfDefaultColFamily(colFamilyName)
       mapToUpdate.iterator()
     }
 
     override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
-      Iterator[UnsafeRowPair] = {
+      NextIterator[UnsafeRowPair] = {
       assertUseOfDefaultColFamily(colFamilyName)
       mapToUpdate.prefixScan(prefixKey)
     }

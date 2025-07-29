@@ -116,10 +116,11 @@ trait ReadStateStore {
    */
   def prefixScan(
       prefixKey: UnsafeRow,
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair]
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): NextIterator[UnsafeRowPair]
 
   /** Return an iterator containing all the key-value pairs in the StateStore. */
-  def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair]
+  def iterator(
+    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): NextIterator[UnsafeRowPair]
 
   /**
    * Clean up the resource.
@@ -227,7 +228,7 @@ trait StateStore extends ReadStateStore {
    * calling this method if all updates should be visible in the returned iterator.
    */
   override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
-    Iterator[UnsafeRowPair]
+    NextIterator[UnsafeRowPair]
 
   /** Current metrics of the state store */
   def metrics: StateStoreMetrics
@@ -260,14 +261,14 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
     colFamilyName)
 
   override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
-    Iterator[UnsafeRowPair] = store.iterator(colFamilyName)
+    NextIterator[UnsafeRowPair] = store.iterator(colFamilyName)
 
   override def abort(): Unit = store.abort()
 
   override def release(): Unit = store.release()
 
   override def prefixScan(prefixKey: UnsafeRow,
-    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair] =
+    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): NextIterator[UnsafeRowPair] =
     store.prefixScan(prefixKey, colFamilyName)
 
   override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
@@ -757,6 +758,24 @@ object StateStoreProvider extends Logging {
     } else {
       stateStoreCoordinatorRef = null
       None
+    }
+  }
+
+  /**
+   * Creates a new [[NextIterator]] that applies the given function `f` to each element of the
+   * provided `iter`. The resulting iterator will yield the transformed elements.
+   *
+   * This is a utility method to avoid boilerplate when creating iterators that transform data.
+   */
+  private[state] def createNextIteratorHelper[A, B](
+    iter : NextIterator[A],
+    f: A => B): NextIterator[B] = {
+    new NextIterator[B] {
+      override def getNext(): B = f(iter.next())
+
+      override def close(): Unit = {
+        iter.closeIfNeeded()
+      }
     }
   }
 }

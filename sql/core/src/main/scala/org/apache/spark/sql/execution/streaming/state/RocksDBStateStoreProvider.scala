@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.state.StateStoreEncoding.Avro
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.util.{NonFateSharingCache, Utils}
+import org.apache.spark.util.{NextIterator, NonFateSharingCache, Utils}
 
 private[sql] class RocksDBStateStoreProvider
   extends StateStoreProvider with Logging with Closeable
@@ -200,7 +200,7 @@ private[sql] class RocksDBStateStoreProvider
       rocksDB.remove(kvEncoder._1.encodeKey(key), colFamilyName)
     }
 
-    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
+    override def iterator(colFamilyName: String): NextIterator[UnsafeRowPair] = {
       // Note this verify function only verify on the colFamilyName being valid,
       // we are actually doing prefix when useColumnFamilies,
       // but pass "iterator" to throw correct error message
@@ -209,7 +209,9 @@ private[sql] class RocksDBStateStoreProvider
       val rowPair = new UnsafeRowPair()
 
       if (useColumnFamilies) {
-        rocksDB.iterator(colFamilyName).map { kv =>
+        val iter = rocksDB.iterator(colFamilyName)
+
+        val f = (kv : ByteArrayPair) => {
           rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
             kvEncoder._2.decodeValue(kv.value))
           if (!isValidated && rowPair.value != null && !useColumnFamilies) {
@@ -219,8 +221,11 @@ private[sql] class RocksDBStateStoreProvider
           }
           rowPair
         }
+
+        StateStoreProvider.createNextIteratorHelper(iter, f)
       } else {
-        rocksDB.iterator().map { kv =>
+        val iter = rocksDB.iterator()
+        val f = (kv: ByteArrayPair) => {
           rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
             kvEncoder._2.decodeValue(kv.value))
           if (!isValidated && rowPair.value != null && !useColumnFamilies) {
@@ -230,11 +235,12 @@ private[sql] class RocksDBStateStoreProvider
           }
           rowPair
         }
+        StateStoreProvider.createNextIteratorHelper(iter, f)
       }
     }
 
     override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
-      Iterator[UnsafeRowPair] = {
+      NextIterator[UnsafeRowPair] = {
       verifyColFamilyOperations("prefixScan", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
@@ -243,11 +249,16 @@ private[sql] class RocksDBStateStoreProvider
 
       val rowPair = new UnsafeRowPair()
       val prefix = kvEncoder._1.encodePrefixKey(prefixKey)
-      rocksDB.prefixScan(prefix, colFamilyName).map { kv =>
+
+      val iter = rocksDB.prefixScan(prefix, colFamilyName)
+
+      val f = (kv: ByteArrayPair) => {
         rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
           kvEncoder._2.decodeValue(kv.value))
         rowPair
       }
+
+      StateStoreProvider.createNextIteratorHelper(iter, f)
     }
 
     var checkpointInfo: Option[StateStoreCheckpointInfo] = None

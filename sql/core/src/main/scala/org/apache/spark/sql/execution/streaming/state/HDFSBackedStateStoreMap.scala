@@ -23,6 +23,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.util.NextIterator
 
 trait HDFSBackedStateStoreMap {
   def size(): Int
@@ -30,8 +31,8 @@ trait HDFSBackedStateStoreMap {
   def put(key: UnsafeRow, value: UnsafeRow): UnsafeRow
   def putAll(map: HDFSBackedStateStoreMap): Unit
   def remove(key: UnsafeRow): UnsafeRow
-  def iterator(): Iterator[UnsafeRowPair]
-  def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair]
+  def iterator(): NextIterator[UnsafeRowPair]
+  def prefixScan(prefixKey: UnsafeRow): NextIterator[UnsafeRowPair]
 }
 
 object HDFSBackedStateStoreMap {
@@ -69,14 +70,20 @@ class NoPrefixHDFSBackedStateStoreMap extends HDFSBackedStateStoreMap {
 
   override def remove(key: UnsafeRow): UnsafeRow = map.remove(key)
 
-  override def iterator(): Iterator[UnsafeRowPair] = {
+  override def iterator(): NextIterator[UnsafeRowPair] = {
     val unsafeRowPair = new UnsafeRowPair()
-    map.entrySet.asScala.iterator.map { entry =>
+    val iter = map.entrySet.asScala.iterator.map { entry =>
       unsafeRowPair.withRows(entry.getKey, entry.getValue)
+    }
+    new NextIterator[UnsafeRowPair] {
+      override protected def getNext(): UnsafeRowPair = {
+        iter.next()
+      }
+      override protected def close(): Unit = {}
     }
   }
 
-  override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] = {
+  override def prefixScan(prefixKey: UnsafeRow): NextIterator[UnsafeRowPair] = {
     throw SparkUnsupportedOperationException()
   }
 }
@@ -154,17 +161,29 @@ class PrefixScannableHDFSBackedStateStoreMap(
     ret
   }
 
-  override def iterator(): Iterator[UnsafeRowPair] = {
+  override def iterator(): NextIterator[UnsafeRowPair] = {
     val unsafeRowPair = new UnsafeRowPair()
-    map.entrySet.asScala.iterator.map { entry =>
+    val iter = map.entrySet.asScala.iterator.map { entry =>
       unsafeRowPair.withRows(entry.getKey, entry.getValue)
+    }
+    new NextIterator[UnsafeRowPair] {
+      override protected def getNext(): UnsafeRowPair = {
+        iter.next()
+      }
+      override protected def close(): Unit = {}
     }
   }
 
-  override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] = {
+  override def prefixScan(prefixKey: UnsafeRow): NextIterator[UnsafeRowPair] = {
     val unsafeRowPair = new UnsafeRowPair()
-    prefixKeyToKeysMap.getOrDefault(prefixKey, mutable.Set.empty[UnsafeRow])
+    val iter = prefixKeyToKeysMap.getOrDefault(prefixKey, mutable.Set.empty[UnsafeRow])
       .iterator
       .map { key => unsafeRowPair.withRows(key, map.get(key)) }
+    new NextIterator[UnsafeRowPair] {
+      override protected def getNext(): UnsafeRowPair = {
+        iter.next()
+      }
+      override protected def close(): Unit = {}
+    }
   }
 }

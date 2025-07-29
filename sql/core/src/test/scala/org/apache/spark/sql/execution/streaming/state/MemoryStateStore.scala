@@ -21,13 +21,22 @@ import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.NextIterator
 
 class MemoryStateStore extends StateStore() {
   import scala.jdk.CollectionConverters._
   private val map = new ConcurrentHashMap[UnsafeRow, UnsafeRow]
 
-  override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
-    map.entrySet.iterator.asScala.map { case e => new UnsafeRowPair(e.getKey, e.getValue) }
+  override def iterator(colFamilyName: String): NextIterator[UnsafeRowPair] = {
+    val iter =
+      map.entrySet.iterator.asScala.map { case e => new UnsafeRowPair(e.getKey, e.getValue) }
+
+    new NextIterator[UnsafeRowPair] {
+      override protected def getNext(): UnsafeRowPair = {
+        iter.next()
+      }
+      override protected def close(): Unit = {}
+    }
   }
 
   override def createColFamilyIfAbsent(
@@ -66,7 +75,9 @@ class MemoryStateStore extends StateStore() {
 
   override def hasCommitted: Boolean = true
 
-  override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String): Iterator[UnsafeRowPair] = {
+  override def prefixScan(
+    prefixKey: UnsafeRow,
+    colFamilyName: String): NextIterator[UnsafeRowPair] = {
     throw new UnsupportedOperationException("Doesn't support prefix scan!")
   }
 
