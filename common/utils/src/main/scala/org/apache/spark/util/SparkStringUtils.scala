@@ -38,6 +38,18 @@ private[spark] trait SparkStringUtils {
     SPACE_DELIMITED_UPPERCASE_HEX.parseHex(hex.stripPrefix("[").stripSuffix("]"))
   }
 
+  def abbreviate(str: String, abbrevMarker: String, len: Int): String = {
+    if (str == null || abbrevMarker == null) {
+      null
+    } else if (str.length() <= len || str.length() <= abbrevMarker.length()) {
+      str
+    } else {
+      str.substring(0, len - abbrevMarker.length()) + abbrevMarker
+    }
+  }
+
+  def abbreviate(str: String, len: Int): String = abbreviate(str, "...", len)
+
   def sideBySide(left: String, right: String): Seq[String] = {
     sideBySide(left.split("\n").toImmutableArraySeq, right.split("\n").toImmutableArraySeq)
   }
