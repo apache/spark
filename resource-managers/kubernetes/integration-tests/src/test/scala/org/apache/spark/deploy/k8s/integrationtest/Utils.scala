@@ -107,8 +107,9 @@ object Utils extends Logging {
     listener.waitForInputStreamToConnect()
     val inputTransferFuture = CompletableFuture.runAsync(() => {
       try {
-        val inputStream = watch.getInput
-        if (inputStream != null) System.in.transferTo(inputStream)
+        // The return type of `watch.getInput` is `OutputStream`.
+        val outputStream = watch.getInput
+        if (outputStream != null) System.in.transferTo(outputStream)
       } catch {
         case _: InterruptedException =>
         case e: Exception =>
