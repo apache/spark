@@ -564,7 +564,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       StringSplit(Literal("hello"), Literal(""), 5), Seq("h", "e", "l", "l", "o"), row1)
     checkEvaluation(
-      StringSplit(Literal("hello"), Literal(""), 3), Seq("h", "e", "l"), row1)
+      StringSplit(Literal("hello"), Literal(""), 3), Seq("h", "e", "llo"), row1)
     checkEvaluation(
       StringSplit(Literal("hello"), Literal(""), 100), Seq("h", "e", "l", "l", "o"), row1)
     checkEvaluation(

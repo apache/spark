@@ -66,7 +66,7 @@ import org.apache.logging.log4j.core.config.LoggerConfig
 import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
 
-import org.apache.spark._
+import org.apache.spark.{SPARK_VERSION, _}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
 import org.apache.spark.internal.LogKeys
@@ -2907,6 +2907,13 @@ private[spark] object Utils
    */
   def substituteAppId(opt: String, appId: String): String = {
     opt.replace("{{APP_ID}}", appId)
+  }
+
+  /**
+   * Replaces all the {{SPARK_VERSION}} occurrences with the Spark version.
+   */
+  def substituteSparkVersion(opt: String): String = {
+    opt.replace("{{SPARK_VERSION}}", SPARK_VERSION)
   }
 
   def createSecret(conf: SparkConf): String = {

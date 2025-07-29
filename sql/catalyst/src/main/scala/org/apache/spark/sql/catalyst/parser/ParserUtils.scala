@@ -28,7 +28,7 @@ import org.antlr.v4.runtime.tree.{ParseTree, TerminalNodeImpl}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
-import org.apache.spark.sql.catalyst.parser.SqlBaseParser.{BeginLabelContext, EndLabelContext}
+import org.apache.spark.sql.catalyst.parser.SqlBaseParser.{BeginLabelContext, EndLabelContext, MultipartIdentifierContext}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, ErrorCondition}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.SparkParserUtils
@@ -317,6 +317,23 @@ class SqlScriptingLabelContext {
   }
 
   /**
+   * Assert the identifier is not contained within seenLabels.
+   * If the identifier is contained within seenLabels, raise an exception.
+   */
+  private def assertIdentifierNotInSeenLabels(
+      identifierCtx: Option[MultipartIdentifierContext]): Unit = {
+    identifierCtx.foreach { ctx =>
+      val identifierName = ctx.getText
+      if (seenLabels.contains(identifierName.toLowerCase(Locale.ROOT))) {
+        withOrigin(ctx) {
+          throw SqlScriptingErrors
+            .duplicateLabels(CurrentOrigin.get, identifierName.toLowerCase(Locale.ROOT))
+        }
+      }
+    }
+  }
+
+  /**
    * Enter a labeled scope and return the label text.
    * If the label is defined, it will be returned and added to seenLabels.
    * If the label is not defined, a random UUID will be returned.
@@ -344,7 +361,7 @@ class SqlScriptingLabelContext {
     }
     if (SqlScriptingContext.isForbiddenName(labelText)) {
       withOrigin(beginLabelCtx.get) {
-        throw SqlScriptingErrors.labelNameForbidden(CurrentOrigin.get, labelText)
+        throw SqlScriptingErrors.labelOrForVariableNameForbidden(CurrentOrigin.get, labelText)
       }
     }
     labelText
@@ -359,6 +376,39 @@ class SqlScriptingLabelContext {
       seenLabels.remove(beginLabelCtx.get.multipartIdentifier().getText.toLowerCase(Locale.ROOT))
     }
   }
+
+  /**
+   * Enter a for loop scope.
+   * If the for loop variable is defined, it will be asserted to not be inside seenLabels;
+   * Then, if the for loop variable is defined, it will be added to seenLabels.
+   */
+  def enterForScope(identifierCtx: Option[MultipartIdentifierContext]): Unit = {
+    identifierCtx.foreach { ctx =>
+      val identifierName = ctx.getText
+      assertIdentifierNotInSeenLabels(identifierCtx)
+      seenLabels.add(identifierName.toLowerCase(Locale.ROOT))
+
+      if (SqlScriptingLabelContext.isForbiddenLabelOrForVariableName(identifierName)) {
+        withOrigin(ctx) {
+          throw SqlScriptingErrors.labelOrForVariableNameForbidden(
+            CurrentOrigin.get,
+            identifierName.toLowerCase(Locale.ROOT))
+        }
+      }
+    }
+  }
+
+  /**
+   * Exit a for loop scope.
+   * If the for loop variable is defined, it will be removed from seenLabels.
+   */
+  def exitForScope(identifierCtx: Option[MultipartIdentifierContext]): Unit = {
+    identifierCtx.foreach { ctx =>
+      val identifierName = ctx.getText
+      seenLabels.remove(identifierName.toLowerCase(Locale.ROOT))
+    }
+  }
+
 }
 
 object SqlScriptingContext {

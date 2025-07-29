@@ -21,7 +21,7 @@ import java.util.{Locale, UUID}
 import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferenceBuilder, Pod}
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.{SPARK_VERSION, SparkConf}
+import org.apache.spark.{SPARK_VERSION, SparkConf, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
@@ -46,6 +46,7 @@ private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
   def volumes: Seq[KubernetesVolumeSpec]
   def schedulerName: Option[String]
   def appId: String
+  def image: String
 
   def appName: String = get("spark.app.name", "spark")
 
@@ -173,6 +174,12 @@ class KubernetesDriverConf(
   override def schedulerName: Option[String] = {
     Option(get(KUBERNETES_DRIVER_SCHEDULER_NAME).getOrElse(get(KUBERNETES_SCHEDULER_NAME).orNull))
   }
+
+  override def image: String = {
+    get(DRIVER_CONTAINER_IMAGE).map(Utils.substituteSparkVersion).getOrElse {
+      throw new SparkException("Must specify the driver container image")
+    }
+  }
 }
 
 private[spark] class KubernetesExecutorConf(
@@ -235,6 +242,12 @@ private[spark] class KubernetesExecutorConf(
 
   override def schedulerName: Option[String] = {
     Option(get(KUBERNETES_EXECUTOR_SCHEDULER_NAME).getOrElse(get(KUBERNETES_SCHEDULER_NAME).orNull))
+  }
+
+  override def image: String = {
+    get(EXECUTOR_CONTAINER_IMAGE).map(Utils.substituteSparkVersion).getOrElse {
+      throw new SparkException("Must specify the executor container image")
+    }
   }
 
   private def checkExecutorEnvKey(key: String): Boolean = {

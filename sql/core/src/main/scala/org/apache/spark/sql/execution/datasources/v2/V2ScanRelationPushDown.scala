@@ -179,8 +179,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         node.output
           .zip(leftSideRequiredColumnsWithAliases ++ rightSideRequiredColumnsWithAliases)
           .collect {
-            case (attr, columnWithAlias) if columnWithAlias.alias() != null =>
-              (attr, attr.withName(columnWithAlias.alias()))
+            case (attr, columnWithAlias) =>
+              if (columnWithAlias.alias() != null) {
+                (attr, attr.withName(columnWithAlias.alias()))
+              } else {
+                (attr, attr.withName(columnWithAlias.colName()))
+              }
           }
           .toMap
       )

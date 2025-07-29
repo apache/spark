@@ -34,6 +34,10 @@ private[spark] trait SparkStringUtils {
     s"[${SPACE_DELIMITED_UPPERCASE_HEX.formatHex(bytes)}]"
   }
 
+  def fromHexString(hex: String): Array[Byte] = {
+    SPACE_DELIMITED_UPPERCASE_HEX.parseHex(hex.stripPrefix("[").stripSuffix("]"))
+  }
+
   def sideBySide(left: String, right: String): Seq[String] = {
     sideBySide(left.split("\n").toImmutableArraySeq, right.split("\n").toImmutableArraySeq)
   }
@@ -101,4 +105,12 @@ private[spark] object SparkStringUtils extends SparkStringUtils with Logging {
   def truncatedString[T](seq: Seq[T], sep: String, maxFields: Int): String = {
     truncatedString(seq, "", sep, "", maxFields)
   }
+
+  def isEmpty(str: String): Boolean = str == null || str.length() == 0
+
+  def isNotEmpty(str: String): Boolean = !isEmpty(str)
+
+  def isBlank(str: String): Boolean = str == null || str.isBlank
+
+  def isNotBlank(str: String): Boolean = !isBlank(str)
 }

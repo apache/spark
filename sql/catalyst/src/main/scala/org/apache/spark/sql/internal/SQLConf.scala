@@ -440,6 +440,15 @@ object SQLConf {
       .intConf
       .createWithDefault(3)
 
+  val PRESERVE_ALIAS_METADATA_WHEN_COLLAPSING_PROJECTS =
+    buildConf("spark.sql.optimizer.preserveAliasMetadataWhenCollapsingProjects")
+    .internal()
+    .doc("When true, make sure to explicitly copy the metadata of the aliases from lower " +
+      "project list.")
+    .version("4.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
       "specified by their rule names and separated by comma. It is not guaranteed that all the " +
@@ -3928,6 +3937,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED =
+    buildConf("spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled")
+      .doc("When true, convert int to Decimal python objects before converting " +
+        "Pandas.Series to Arrow array during serialization." +
+        "Disabled by default, impacts performance.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PYTHON_TABLE_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDTF.arrow.enabled")
       .doc("Enable Arrow optimization for Python UDTFs.")
@@ -3940,6 +3958,18 @@ object SQLConf {
       .internal()
       .doc(s"When true and ${PYTHON_TABLE_UDF_ARROW_ENABLED.key} is enabled, extra pandas " +
         "conversion happens during (de)serialization between JVM and Python workers. " +
+        "This matters especially when the produced output has a schema different from " +
+        "specified schema, resulting in a different type coercion.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED =
+    buildConf("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled")
+      .internal()
+      .doc(s"When true and ${PYTHON_UDF_ARROW_ENABLED.key} is enabled, matches the " +
+        "default Arrow Python UDF behavior before 4.1.0. With this behavior, extra" +
+        "pandas conversion happens during (de)serialization between JVM and Python workers. " +
         "This matters especially when the produced output has a schema different from " +
         "specified schema, resulting in a different type coercion.")
       .version("4.1.0")
@@ -3978,7 +4008,7 @@ object SQLConf {
         "check and do type conversions anyway. This config only works for Arrow 0.11.0+.")
       .version("3.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PYSPARK_WORKER_PYTHON_EXECUTABLE =
     buildConf("spark.sql.execution.pyspark.python")
@@ -5993,6 +6023,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val UNION_OUTPUT_PARTITIONING =
+    buildConf("spark.sql.unionOutputPartitioning")
+      .internal()
+      .doc("When set to true, the output partitioning of UnionExec will be the same as the " +
+        "input partitioning if its children have same partitioning. Otherwise, it will be a " +
+        "default partitioning.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_PARSE_QUERY_WITHOUT_EOF = buildConf("spark.sql.legacy.parseQueryWithoutEof")
     .internal()
     .doc(
@@ -6145,6 +6185,21 @@ object SQLConf {
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  val LEGACY_TRUNCATE_FOR_EMPTY_REGEX_SPLIT =
+    buildConf("spark.sql.legacy.truncateForEmptyRegexSplit")
+      .internal()
+      .doc("When set to true, splitting a string of length n using an empty regex with a " +
+        "positive limit discards the last n - limit characters." +
+        "For example: SELECT split('abcd', '', 2) returns ['a', 'b']." +
+        "When set to false, the last element of the resulting array contains all input beyond " +
+        "the last matched regex." +
+        "For example: SELECT split('abcd', '', 2) returns ['a', 'bcd']." +
+        "According to the description of the split function, this should be set to false by " +
+        "default. See SPARK-49968 for details.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -6973,6 +7028,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(SQLConf.PYSPARK_WORKER_PYTHON_EXECUTABLE)
 
   def legacyPandasConversion: Boolean = getConf(PYTHON_TABLE_UDF_LEGACY_PANDAS_CONVERSION_ENABLED)
+
+  def legacyPandasConversionUDF: Boolean = getConf(PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED)
 
   def pythonPlannerExecMemory: Option[Long] = getConf(PYTHON_PLANNER_EXEC_MEMORY)
 
