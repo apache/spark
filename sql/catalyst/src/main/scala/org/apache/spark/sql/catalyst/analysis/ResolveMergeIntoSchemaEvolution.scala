@@ -53,6 +53,7 @@ object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
     EliminateSubqueryAliases(m.targetTable) match {
       case r @ DataSourceV2Relation(t: SupportsRowLevelOperations, _, _, _, _) =>
         DataTypeUtils.fromAttributes(r.output) == t.mergeSchema(m.sourceTable.schema)
+      case _ => false
     }
   }
 }
