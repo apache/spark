@@ -4176,6 +4176,210 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+CREATE FUNCTION foo3_12a(x INT) RETURNS INT CONTAINS SQL RETURN x
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_12b(x INT) RETURNS INT READS SQL DATA RETURN x
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_12c(x INT) RETURNS INT CONTAINS SQL RETURN (SELECT x)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_12d(x INT) RETURNS INT CONTAINS SQL RETURN (SELECT COUNT(*) FROM range(0, 3))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_12e(x INT) RETURNS INT CONTAINS SQL RETURN (SELECT COUNT(*) FROM VALUES (0, 1))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_12f(x INT) RETURNS INT CONTAINS SQL RETURN SELECT SUM(c2) FROM t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_FUNCTION_DATA_ACCESS",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+CREATE FUNCTION foo3_12f(x INT) RETURNS INT CONTAINS SQL RETURN foo3_12b(x) + 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_FUNCTION_DATA_ACCESS",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+CREATE FUNCTION foo3_12f(x INT) RETURNS INT CONTAINS SQL RETURN 1 + (SELECT SUM(c2) FROM t1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_FUNCTION_DATA_ACCESS",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+CREATE FUNCTION foo3_12g(x INT) RETURNS TABLE (a INT, b INT) CONTAINS SQL RETURN SELECT x, x + 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_12h(x INT) RETURNS TABLE (a INT, b INT) READS SQL DATA RETURN SELECT x, x + 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_12i(x INT) RETURNS TABLE (a INT, b INT) CONTAINS SQL RETURN SELECT * FROM VALUES (0, 1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_12j(x INT) RETURNS TABLE (a INT, b INT) CONTAINS SQL RETURN SELECT id, id + 1 FROM RANGE(3)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_12k(x INT) RETURNS TABLE (a INT, b INT) RETURN SELECT c1, c2 FROM t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_12f(x INT) RETURNS TABLE (a INT, b INT) CONTAINS SQL RETURN SELECT c1, c2 FROM t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_FUNCTION_DATA_ACCESS",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+CREATE FUNCTION foo3_12f(x INT) RETURNS TABLE (a INT, b INT) CONTAINS SQL RETURN SELECT foo3_12b(x), x
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_FUNCTION_DATA_ACCESS",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+CREATE FUNCTION foo3_12f(x INT) RETURNS TABLE (a INT, b INT) CONTAINS SQL RETURN SELECT * FROM foo3_12h(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_FUNCTION_DATA_ACCESS",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+CREATE FUNCTION foo3_12f(x INT) RETURNS TABLE (a INT, b INT) CONTAINS SQL RETURN SELECT * FROM foo3_12k(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_FUNCTION_DATA_ACCESS",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+CREATE TABLE tbl USING PARQUET AS SELECT c1 FROM t2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE FUNCTION foo3_12f(x INT) RETURNS INT CONTAINS SQL RETURN SELECT SUM(c1) FROM tbl
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_FUNCTION_DATA_ACCESS",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+CREATE FUNCTION foo3_12f(x INT) RETURNS TABLE (a INT) CONTAINS SQL RETURN SELECT * FROM tbl
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_SQL_FUNCTION_DATA_ACCESS",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+DROP TABLE tbl
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 CREATE FUNCTION foo3_14a() RETURNS INT RETURN 1
 -- !query schema
 struct<>
@@ -5395,6 +5599,94 @@ struct<>
 
 -- !query
 DROP FUNCTION IF EXISTS foo3_4f
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12a
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12b
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12c
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12d
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12e
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12f
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12g
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12h
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12i
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12j
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_12k
 -- !query schema
 struct<>
 -- !query output
