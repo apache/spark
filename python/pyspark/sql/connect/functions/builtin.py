@@ -3454,11 +3454,13 @@ to_time.__doc__ = pysparkfuncs.to_time.__doc__
 
 
 @overload
-def to_timestamp(col: "ColumnOrName") -> Column: ...
+def to_timestamp(col: "ColumnOrName") -> Column:
+    ...
 
 
 @overload
-def to_timestamp(col: "ColumnOrName", format: str) -> Column: ...
+def to_timestamp(col: "ColumnOrName", format: str) -> Column:
+    ...
 
 
 def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
@@ -3600,11 +3602,13 @@ from_unixtime.__doc__ = pysparkfuncs.from_unixtime.__doc__
 
 
 @overload
-def unix_timestamp(timestamp: "ColumnOrName", format: str = ...) -> Column: ...
+def unix_timestamp(timestamp: "ColumnOrName", format: str = ...) -> Column:
+    ...
 
 
 @overload
-def unix_timestamp() -> Column: ...
+def unix_timestamp() -> Column:
+    ...
 
 
 def unix_timestamp(
