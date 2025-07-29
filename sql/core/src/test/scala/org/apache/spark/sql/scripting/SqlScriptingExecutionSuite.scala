@@ -2530,6 +2530,12 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       val sqlScript =
       """
         |BEGIN
+        |  lbl: BEGIN
+        |    DECLARE localVar = 1;
+        |    SET (localVar, session.localVar) = (select 2, 3);
+        |    SELECT localVar;
+        |    SELECT session.localVar;
+        |  END;
         |  DECLARE x, y, z, w = 2;
         |END
         |""".stripMargin
