@@ -181,11 +181,38 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
   }
 
   override def getReadStore(version: Long, uniqueId: Option[String] = None): ReadStateStore = {
-    new WrappedReadStateStore(
-      CkptIdCollectingStateStoreWrapper(innerProvider.getReadStore(version, uniqueId)))
+    // Don't wrap the read store with WrappedReadStateStore since it makes upgrading difficult
+    // Just return the wrapped store directly
+    CkptIdCollectingStateStoreWrapper(innerProvider.getReadStore(version, uniqueId))
   }
 
-  override def doMaintenance(): Unit = innerProvider.doMaintenance()
+  override def upgradeReadStoreToWriteStore(
+      readStore: ReadStateStore,
+      version: Long,
+      uniqueId: Option[String] = None): StateStore = {
+    // Following the pattern from RocksDBStateStoreProvider, we verify version and id match
+    assert(version == readStore.version,
+      s"Can only upgrade readStore to writeStore with the same version," +
+        s" readStoreVersion: ${readStore.version}, writeStoreVersion: ${version}")
+    assert(this.stateStoreId == readStore.id, "Can only upgrade readStore to writeStore with" +
+      " the same stateStoreId")
+
+    // Extract the inner store from our wrapper
+    val innerReadStore = readStore match {
+      case wrapper: CkptIdCollectingStateStoreWrapper => wrapper.innerStore
+      case _ =>
+        throw new IllegalStateException(
+          s"Expected CkptIdCollectingStateStoreWrapper" +
+            s" but got ${readStore.getClass}")
+    }
+
+    // Delegate to inner provider to upgrade the store
+    val upgradedStore = innerProvider.upgradeReadStoreToWriteStore(
+      innerReadStore, version, uniqueId)
+
+    // Wrap the upgraded store with CkptIdCollectingStateStoreWrapper
+    CkptIdCollectingStateStoreWrapper(upgradedStore)
+  }
 
   override def supportedCustomMetrics: Seq[StateStoreCustomMetric] =
     innerProvider.supportedCustomMetrics

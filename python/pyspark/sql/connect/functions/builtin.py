@@ -3140,6 +3140,26 @@ def current_date() -> Column:
 current_date.__doc__ = pysparkfuncs.current_date.__doc__
 
 
+@overload
+def current_time() -> Column:
+    ...
+
+
+@overload
+def current_time(precision: int) -> Column:
+    ...
+
+
+def current_time(precision: Optional[int] = None) -> Column:
+    if precision is None:
+        return _invoke_function("current_time")
+    else:
+        return _invoke_function("current_time", lit(precision))
+
+
+current_time.__doc__ = pysparkfuncs.current_time.__doc__
+
+
 def current_timestamp() -> Column:
     return _invoke_function("current_timestamp")
 

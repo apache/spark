@@ -81,10 +81,7 @@ class FunctionsTestsMixin:
         missing_in_py = jvm_fn_set.difference(py_fn_set)
 
         # Functions that we expect to be missing in python until they are added to pyspark
-        expected_missing_in_py = set(
-            # TODO(SPARK-52889): Implement the current_time function in Python
-            ["current_time"]
-        )
+        expected_missing_in_py = set()
 
         self.assertEqual(
             expected_missing_in_py, missing_in_py, "Missing functions in pyspark not as expected"
@@ -1860,6 +1857,16 @@ class FunctionsTestsMixin:
         res = df.select(r, r, r2, r2, r3, r3).collect()
         for i in range(3):
             self.assertEqual(res[0][i * 2], res[0][i * 2 + 1])
+
+    def test_current_time(self):
+        # SPARK-52889: test the current_time function without precision.
+        df = self.spark.range(1).select(F.current_time())
+        self.assertIsInstance(df.first()[0], datetime.time)
+        self.assertEqual(df.schema.names[0], "current_time(6)")
+        # SPARK-52889: test the current_time function with precision.
+        df = self.spark.range(1).select(F.current_time(3))
+        self.assertIsInstance(df.first()[0], datetime.time)
+        self.assertEqual(df.schema.names[0], "current_time(3)")
 
     def test_current_timestamp(self):
         df = self.spark.range(1).select(F.current_timestamp())

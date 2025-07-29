@@ -26,8 +26,6 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.Strings
-
 import org.apache.spark.{SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
@@ -354,7 +352,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   @Since("2.3.0")
   protected[jdbc] def escapeSql(value: String): String =
-    if (value == null) null else Strings.CS.replace(value, "'", "''")
+    if (value == null) null else value.replace("'", "''")
 
   /**
    * Converts value to SQL expression.
