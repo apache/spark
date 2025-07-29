@@ -230,7 +230,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         // Update state: next suffix index and mark alias as used
         aliasSuffixIndex(name) = attempt + 1
         allClaimedAliases.add(candidate)
-        new SupportsPushDownJoin.ColumnWithAlias(name, candidate)
+        if (name == candidate) {
+          new SupportsPushDownJoin.ColumnWithAlias(name, null)
+        } else {
+          new SupportsPushDownJoin.ColumnWithAlias(name, candidate)
+        }
       }
     }
 
