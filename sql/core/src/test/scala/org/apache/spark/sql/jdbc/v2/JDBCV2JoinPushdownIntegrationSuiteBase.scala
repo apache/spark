@@ -21,9 +21,10 @@ import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.connector.DataSourcePushdownTestUtils
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialect
@@ -638,6 +639,34 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
       checkJoinPushed(df)
       checkAnswer(df, rows)
+    }
+  }
+
+  test("Test complex duplicate column name alias") {
+    sql(s"create table $catalogAndNamespace.t1(id int, id_1 int, id_2 int, id_1_1 int)")
+    sql(s"create table $catalogAndNamespace.t2(id int, id_1 int, id_2 int, id_2_1 int)")
+    sql(s"insert into $catalogAndNamespace.t1 values (0, 1, 2, 3)")
+    sql(s"insert into $catalogAndNamespace.t2 values (0, -1, -2, -3)")
+    val sqlQuery = s"""
+                      |SELECT
+                      |    *
+                      |FROM $catalogAndNamespace.t1 a
+                      |JOIN $catalogAndNamespace.t2 b
+                      |ON a.id = b.id""".stripMargin
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+      val row = df.collect()(0)
+      assert(row == Row(0, 1, 2, 3, 0, -1, -2, -3))
+
+      assert(df.schema.fields.map(_.name) sameElements
+        Array("id", "id_1", "id_2", "id_1_1", "id", "id_1", "id_2", "id_2_1"))
+      assert(df.queryExecution.optimizedPlan.collectFirst {
+        case j: DataSourceV2ScanRelation => j
+      }.get.schema.fields.map(_.name) sameElements
+        Array("id", "id_1", "id_2", "id_1_1", "id_3", "id_1_2", "id_2_2", "id_2_1"))
+
+      checkJoinPushed(df)
     }
   }
 }
