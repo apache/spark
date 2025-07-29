@@ -17,19 +17,17 @@
 
 package org.apache.spark.sql.connector
 
-import java.util
-
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCapability, TableCatalog, TableChange, TableSummary}
-import org.apache.spark.sql.connector.expressions.{LogicalExpressions, Transform}
+import org.apache.spark.sql.connector.catalog.{DataSourceTableOrView, Identifier, Table, TableCatalog, TableChange, TableSummary}
+import org.apache.spark.sql.connector.expressions.LogicalExpressions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class DataSourceV2GeneralTableSuite extends QueryTest with SharedSparkSession {
+class DataSourceV2DataSourceTableOrViewSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   override def sparkConf: SparkConf = super.sparkConf
@@ -96,10 +94,33 @@ class TestingGeneralCatalog extends TableCatalog {
 
   override def loadTable(ident: Identifier): Table = {
     ident.name() match {
-      case "test_json" => new TestingGeneralJsonTable(ident.namespace().head)
-      case "test_partitioned_json" => new TestingGeneralPartitionedJsonTable(ident.namespace().head)
-      case "test_v2" => new TestingGeneralV2Table
-      case "test_view" => new TestingGeneralViewTable(ident.namespace().head == "ansi")
+      case "test_json" =>
+        new DataSourceTableOrView.Builder(new StructType().add("col", "string"))
+          .withProvider("json")
+          .withLocation(ident.namespace().head)
+          .withTableType(TableSummary.EXTERNAL_TABLE_TYPE)
+          .build()
+      case "test_partitioned_json" =>
+        val partitioning = LogicalExpressions.identity(LogicalExpressions.reference(Seq("c2")))
+        new DataSourceTableOrView.Builder(new StructType().add("c1", "int").add("c2", "int"))
+          .withProvider("json")
+          .withLocation(ident.namespace().head)
+          .withTableType(TableSummary.EXTERNAL_TABLE_TYPE)
+          .withPartitioning(Array(partitioning))
+          .build()
+      case "test_v2" =>
+        new DataSourceTableOrView.Builder(FakeV2Provider.schema)
+          .withProvider(classOf[FakeV2Provider].getName)
+          .build()
+      case "test_view" =>
+        val viewProps = java.util.Map.of(
+          TableCatalog.VIEW_CONF_PREFIX + SQLConf.ANSI_ENABLED.key,
+          (ident.namespace().head == "ansi").toString
+        )
+        new DataSourceTableOrView.Builder(new StructType().add("col", "string").add("i", "int"))
+          .withViewText("SELECT col, col::int AS i FROM spark_catalog.default.t WHERE col = 'b'")
+          .withTableProps(viewProps)
+          .build()
       case _ => throw new NoSuchTableException(ident)
     }
   }
@@ -122,67 +143,4 @@ class TestingGeneralCatalog extends TableCatalog {
     catalogName = name
   }
   override def name(): String = catalogName
-}
-
-class TestingGeneralJsonTable(path: String) extends Table {
-  override def name(): String = "test_json"
-
-  override def schema(): StructType = new StructType().add("col", "string")
-
-  override def capabilities(): util.Set[TableCapability] =
-    util.EnumSet.of(TableCapability.SPARK_TABLE_OR_VIEW)
-
-  override def properties(): util.Map[String, String] = util.Map.ofEntries(
-    util.Map.entry(TableCatalog.PROP_PROVIDER, "json"),
-    util.Map.entry(TableCatalog.PROP_LOCATION, path)
-  );
-}
-
-class TestingGeneralPartitionedJsonTable(path: String) extends Table {
-  override def name(): String = "test_partitioned_json"
-
-  override def schema(): StructType = new StructType().add("c1", "int").add("c2", "int")
-
-  override def capabilities(): util.Set[TableCapability] =
-    util.EnumSet.of(TableCapability.SPARK_TABLE_OR_VIEW)
-
-  override def partitioning(): Array[Transform] =
-    Array(LogicalExpressions.identity(LogicalExpressions.reference(Seq("c2"))))
-
-  override def properties(): util.Map[String, String] = util.Map.ofEntries(
-    util.Map.entry(TableCatalog.PROP_PROVIDER, "json"),
-    util.Map.entry(TableCatalog.PROP_LOCATION, path)
-  );
-}
-
-class TestingGeneralV2Table extends Table {
-  override def name(): String = "test_v2"
-
-  override def schema(): StructType = FakeV2Provider.schema
-
-  override def capabilities(): util.Set[TableCapability] =
-    util.EnumSet.of(TableCapability.SPARK_TABLE_OR_VIEW)
-
-  override def properties(): util.Map[String, String] = util.Map.ofEntries(
-    util.Map.entry(TableCatalog.PROP_PROVIDER, classOf[FakeV2Provider].getName)
-  );
-}
-
-class TestingGeneralViewTable(ansi: Boolean) extends Table {
-  override def name(): String = "test_view"
-
-  override def schema(): StructType = new StructType().add("col", "string").add("i", "int")
-
-  override def capabilities(): util.Set[TableCapability] =
-    util.EnumSet.of(TableCapability.SPARK_TABLE_OR_VIEW)
-
-  override def properties(): util.Map[String, String] = util.Map.ofEntries(
-    util.Map.entry(TableCatalog.PROP_TABLE_TYPE, TableSummary.VIEW_TABLE_TYPE),
-    util.Map.entry(
-      TableCatalog.PROP_VIEW_TEXT,
-      "SELECT col, col::int AS i FROM spark_catalog.default.t WHERE col = 'b'"),
-    util.Map.entry(
-      TableCatalog.VIEW_CONF_PREFIX + SQLConf.ANSI_ENABLED.key,
-      ansi.toString)
-  );
 }
