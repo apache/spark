@@ -5181,6 +5181,18 @@
     ],
     "sqlState" : "42K06"
   },
+  "STATE_STORE_INVALID_STAMP" : {
+    "message" : [
+      "Invalid stamp <providedStamp>, current stamp: <currentStamp>."
+    ],
+    "sqlState" : "XXKST"
+  },
+  "STATE_STORE_INVALID_STATE_MACHINE_TRANSITION" : {
+    "message" : [
+      "Invalid state machine transition detected for state store <storeId>. Old state: <oldState>, New state: <newState>, Operation: <operation>."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION" : {
     "message" : [
       "Schema evolution is not possible new value_schema=<newValueSchema> and old value_schema=<oldValueSchema>",
