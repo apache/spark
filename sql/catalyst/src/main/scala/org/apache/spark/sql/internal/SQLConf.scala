@@ -2691,6 +2691,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val STATE_STORE_COMMIT_VALIDATION_ENABLED =
+    buildConf("spark.sql.streaming.stateStore.commitValidation.enabled")
+      .doc("When true, Spark will validate that all StateStore instances have committed for " +
+        "stateful streaming queries using foreachBatch. This helps detect cases where " +
+        "user-defined functions in foreachBatch (e.g., show(), limit()) don't process all " +
+        "partitions, which can lead to incorrect results. The validation only applies to " +
+        "foreachBatch sinks without global aggregates or limits.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val CHECKPOINT_RENAMEDFILE_CHECK_ENABLED =
     buildConf("spark.sql.streaming.checkpoint.renamedFileCheck.enabled")
       .doc("When true, Spark will validate if renamed checkpoint file exists.")
@@ -6551,6 +6562,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def maxBatchesToRetainInMemory: Int = getConf(MAX_BATCHES_TO_RETAIN_IN_MEMORY)
 
   def stateStoreUnloadOnCommit: Boolean = getConf(STATE_STORE_UNLOAD_ON_COMMIT)
+
+  def stateStoreCommitValidationEnabled: Boolean = getConf(STATE_STORE_COMMIT_VALIDATION_ENABLED)
 
   def streamingMaintenanceInterval: Long = getConf(STREAMING_MAINTENANCE_INTERVAL)
 

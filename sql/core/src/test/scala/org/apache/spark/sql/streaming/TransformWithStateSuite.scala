@@ -1532,7 +1532,8 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
 
         var index = 0
         val foreachBatchDf = df.writeStream
-          .foreachBatch((_: Dataset[(String, String)], _: Long) => {
+          .foreachBatch((ds: Dataset[(String, String)], _: Long) => {
+            ds.collect()
             index += 1
           })
           .trigger(Trigger.AvailableNow())
@@ -1559,7 +1560,8 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
 
         def startTriggerAvailableNowQueryAndCheck(expectedIdx: Int): Unit = {
           val q = df.writeStream
-            .foreachBatch((_: Dataset[(String, String)], _: Long) => {
+            .foreachBatch((ds: Dataset[(String, String)], _: Long) => {
+              ds.collect()
               index += 1
             })
             .trigger(Trigger.AvailableNow)
@@ -2024,7 +2026,8 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
         var index = 0
 
         val q = df.writeStream
-          .foreachBatch((_: Dataset[(String, String)], _: Long) => {
+          .foreachBatch((ds: Dataset[(String, String)], _: Long) => {
+            ds.collect()
             index += 1
           })
           .trigger(Trigger.AvailableNow)

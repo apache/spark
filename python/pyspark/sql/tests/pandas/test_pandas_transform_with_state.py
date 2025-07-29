@@ -195,6 +195,7 @@ class TransformWithStateTestsMixin:
 
     def test_transform_with_state_basic(self):
         def check_results(batch_df, batch_id):
+            batch_df.collect()
             if batch_id == 0:
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="0", countAsString="2"),

@@ -19,11 +19,13 @@ package org.apache.spark.sql.execution.streaming
 
 import scala.collection.mutable.{Map => MutableMap}
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.apache.spark.internal.{LogKeys, MDC}
+import org.apache.spark.internal.LogKeys.BATCH_ID
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, GlobalLimit, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -35,7 +37,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
-import org.apache.spark.sql.execution.streaming.sources.{WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
+import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchSink, WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
 import org.apache.spark.sql.execution.streaming.state.StateSchemaBroadcast
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.Trigger
@@ -303,6 +305,15 @@ class MicroBatchExecution(
   }
 
   private val watermarkPropagator = WatermarkPropagator(sparkSession.sessionState.conf)
+  private lazy val hasGlobalAggregateOrLimit = containsGlobalAggregateOrLimit(logicalPlan)
+
+  private def containsGlobalAggregateOrLimit(logicalPlan: LogicalPlan): Boolean = {
+    logicalPlan.collect {
+      case agg: Aggregate if agg.groupingExpressions.isEmpty => agg
+      case limit: GlobalLimit => limit
+    }.nonEmpty
+  }
+
 
   override def cleanup(): Unit = {
     super.cleanup()
@@ -862,6 +873,8 @@ class MicroBatchExecution(
         isTerminatingTrigger = trigger.isInstanceOf[AvailableNowTrigger.type])
       execCtx.executionPlan.executedPlan // Force the lazy generation of execution plan
     }
+    // Set up StateStore commit tracking before execution begins
+    setupStateStoreCommitTracking(execCtx)
 
     markMicroBatchExecutionStart(execCtx)
 
@@ -962,6 +975,50 @@ class MicroBatchExecution(
           execCtx,
           e.stateInfo.get.operatorId,
           e.getStateStoreCheckpointInfo())
+    }
+  }
+
+
+  /**
+   * Set up tracking for StateStore commits before batch execution begins.
+   * This collects information about expected stateful operators and initializes
+   * commit tracking, but only for ForeachBatchSink without global aggregates or limits.
+   */
+  private def setupStateStoreCommitTracking(execCtx: MicroBatchExecutionContext): Unit = {
+    try {
+      // Collect stateful operators from the executed plan
+      val statefulOps = execCtx.executionPlan.executedPlan.collect {
+        case s: StateStoreWriter => s
+      }
+
+      if (statefulOps.nonEmpty &&
+        sparkSession.sessionState.conf.stateStoreCommitValidationEnabled) {
+
+        // Start tracking before execution begins
+        // We only validate commits for ForeachBatchSink because it's the only sink where
+        // user-defined functions can cause partial processing (e.g., using show() or limit()).
+        // We exclude queries with global aggregates or limits because they naturally don't
+        // process all partitions, making commit validation unnecessary and potentially noisy.
+        if (sink.isInstanceOf[ForeachBatchSink[_]] && !hasGlobalAggregateOrLimit) {
+          progressReporter.shouldValidateStateStoreCommit.set(true)
+          // Build expected stores map: operatorId -> (storeName -> numPartitions)
+          val expectedStores = statefulOps.map { op =>
+            val operatorId = op.getStateInfo.operatorId
+            val numPartitions = op.getStateInfo.numPartitions
+            val storeNames = op.stateStoreNames.map(_ -> numPartitions).toMap
+            operatorId -> storeNames
+          }.toMap
+          sparkSession.streams.stateStoreCoordinator
+            .startStateStoreCommitTrackingForBatch(runId, execCtx.batchId, expectedStores)
+        }
+        // TODO: Find out how to dynamically set the SQLConf at this point to disable
+        //  the commit tracking
+      }
+    } catch {
+      case NonFatal(e) =>
+        // Log but don't fail the query for tracking setup errors
+        logWarning(log"Error during StateStore commit tracking setup for batch " +
+          log"${MDC(BATCH_ID, execCtx.batchId)}", e)
     }
   }
 

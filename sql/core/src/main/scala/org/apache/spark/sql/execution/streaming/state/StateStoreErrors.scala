@@ -216,6 +216,14 @@ object StateStoreErrors {
     new StateStoreInvalidConfigAfterRestart(configName, oldConfig, newConfig)
   }
 
+  def stateStoreCommitValidationFailed(
+      batchId: Long,
+      expectedCommits: Int,
+      actualCommits: Int,
+      missingCommits: String): StateStoreCommitValidationFailed = {
+    new StateStoreCommitValidationFailed(batchId, expectedCommits, actualCommits, missingCommits)
+  }
+
   def duplicateStateVariableDefined(stateName: String):
     StateStoreDuplicateStateVariableDefined = {
     new StateStoreDuplicateStateVariableDefined(stateName)
@@ -523,4 +531,19 @@ class StateStoreOperationOutOfOrder(errorMsg: String)
   extends SparkRuntimeException(
     errorClass = "STATE_STORE_OPERATION_OUT_OF_ORDER",
     messageParameters = Map("errorMsg" -> errorMsg)
+  )
+
+class StateStoreCommitValidationFailed(
+    batchId: Long,
+    expectedCommits: Int,
+    actualCommits: Int,
+    missingCommits: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_COMMIT_VALIDATION_FAILED",
+    messageParameters = Map(
+      "batchId" -> batchId.toString,
+      "expectedCommits" -> expectedCommits.toString,
+      "actualCommits" -> actualCommits.toString,
+      "missingCommits" -> missingCommits
+    )
   )
