@@ -211,6 +211,7 @@ class TransformWithStateTestsMixin:
 
     def test_transform_with_state_non_exist_value_state(self):
         def check_results(batch_df, _):
+            batch_df.collect()
             assert set(batch_df.sort("id").collect()) == {
                 Row(id="0", countAsString="0"),
                 Row(id="1", countAsString="0"),
@@ -296,6 +297,7 @@ class TransformWithStateTestsMixin:
 
     def test_transform_with_state_list_state(self):
         def check_results(batch_df, _):
+            batch_df.collect()
             assert set(batch_df.sort("id").collect()) == {
                 Row(id="0", countAsString="2"),
                 Row(id="1", countAsString="2"),
@@ -307,6 +309,7 @@ class TransformWithStateTestsMixin:
 
     def test_transform_with_state_list_state_large_list(self):
         def check_results(batch_df, batch_id):
+            batch_df.collect()
             if batch_id == 0:
                 expected_prev_elements = ""
                 expected_updated_elements = ",".join(map(lambda x: str(x), range(90)))
@@ -381,6 +384,7 @@ class TransformWithStateTestsMixin:
     # test list state with ttl has the same behavior as list state when state doesn't expire.
     def test_transform_with_state_list_state_large_ttl(self):
         def check_results(batch_df, batch_id):
+            batch_df.collect()
             assert set(batch_df.sort("id").collect()) == {
                 Row(id="0", countAsString="2"),
                 Row(id="1", countAsString="2"),
@@ -392,6 +396,7 @@ class TransformWithStateTestsMixin:
 
     def test_transform_with_state_map_state(self):
         def check_results(batch_df, _):
+            batch_df.collect()
             assert set(batch_df.sort("id").collect()) == {
                 Row(id="0", countAsString="2"),
                 Row(id="1", countAsString="2"),
@@ -402,6 +407,7 @@ class TransformWithStateTestsMixin:
     # test map state with ttl has the same behavior as map state when state doesn't expire.
     def test_transform_with_state_map_state_large_ttl(self):
         def check_results(batch_df, batch_id):
+            batch_df.collect()
             assert set(batch_df.sort("id").collect()) == {
                 Row(id="0", countAsString="2"),
                 Row(id="1", countAsString="2"),
@@ -415,6 +421,7 @@ class TransformWithStateTestsMixin:
     # state doesn't expire.
     def test_value_state_ttl_basic(self):
         def check_results(batch_df, batch_id):
+            batch_df.collect()
             if batch_id == 0:
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="0", countAsString="2"),
@@ -434,6 +441,7 @@ class TransformWithStateTestsMixin:
     @unittest.skip("test is flaky and it is only a timing issue, skipping until we can resolve")
     def test_value_state_ttl_expiration(self):
         def check_results(batch_df, batch_id):
+            batch_df.collect()
             if batch_id == 0:
                 assertDataFrameEqual(
                     batch_df,
@@ -582,6 +590,7 @@ class TransformWithStateTestsMixin:
 
     def test_transform_with_state_proc_timer(self):
         def check_results(batch_df, batch_id):
+            batch_df.collect()
             # helper function to check expired timestamp is smaller than current processing time
             def check_timestamp(batch_df):
                 expired_df = (
@@ -697,6 +706,7 @@ class TransformWithStateTestsMixin:
 
     def test_transform_with_state_event_time(self):
         def check_results(batch_df, batch_id):
+            batch_df.collect()
             if batch_id == 0:
                 # watermark for late event = 0
                 # watermark for eviction = 0
@@ -728,6 +738,7 @@ class TransformWithStateTestsMixin:
 
     def test_transform_with_state_with_wmark_and_non_event_time(self):
         def check_results(batch_df, batch_id):
+            batch_df.collect()
             if batch_id == 0:
                 # watermark for late event = 0 and min event = 20
                 assert set(batch_df.sort("id").collect()) == {
@@ -825,6 +836,7 @@ class TransformWithStateTestsMixin:
 
     def test_transform_with_state_init_state(self):
         def check_results(batch_df, batch_id):
+            batch_df.collect()
             if batch_id == 0:
                 # for key 0, initial state was processed and it was only processed once;
                 # for key 1, it did not appear in the initial state df;
@@ -848,6 +860,7 @@ class TransformWithStateTestsMixin:
 
     def test_transform_with_state_init_state_with_extra_transformation(self):
         def check_results(batch_df, batch_id):
+            batch_df.collect()
             if batch_id == 0:
                 # for key 0, initial state was processed and it was only processed once;
                 # for key 1, it did not appear in the initial state df;
@@ -926,6 +939,7 @@ class TransformWithStateTestsMixin:
 
     def test_transform_with_state_non_contiguous_grouping_cols(self):
         def check_results(batch_df, batch_id):
+            batch_df.collect()
             assert set(batch_df.collect()) == {
                 Row(id1="0", id2="1", value=str(123 + 46)),
                 Row(id1="1", id2="2", value=str(146 + 346)),
@@ -937,6 +951,7 @@ class TransformWithStateTestsMixin:
 
     def test_transform_with_state_non_contiguous_grouping_cols_with_init_state(self):
         def check_results(batch_df, batch_id):
+            batch_df.collect()
             # initial state for key (0, 1) is processed
             assert set(batch_df.collect()) == {
                 Row(id1="0", id2="1", value=str(789 + 123 + 46)),
@@ -1019,6 +1034,7 @@ class TransformWithStateTestsMixin:
 
     def test_transform_with_state_chaining_ops(self):
         def check_results(batch_df, batch_id):
+            batch_df.collect()
             import datetime
 
             if batch_id == 0:
@@ -1054,6 +1070,7 @@ class TransformWithStateTestsMixin:
 
     def test_transform_with_state_init_state_with_timers(self):
         def check_results(batch_df, batch_id):
+            batch_df.collect()
             if batch_id == 0:
                 # timers are registered and handled in the first batch for
                 # rows in initial state; For key=0 and key=3 which contains
@@ -1178,6 +1195,7 @@ class TransformWithStateTestsMixin:
             expected_operator_name = "transformWithStateInPySparkExec"
 
         def check_results(batch_df, batch_id):
+            batch_df.collect()
             if batch_id == 0:
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="0", countAsString="2"),
@@ -1294,6 +1312,7 @@ class TransformWithStateTestsMixin:
         checkpoint_path = tempfile.mktemp()
 
         def check_results(batch_df, batch_id):
+            batch_df.collect()
             if batch_id == 0:
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="0", countAsString="2"),
@@ -1373,6 +1392,7 @@ class TransformWithStateTestsMixin:
         checkpoint_path = tempfile.mktemp()
 
         def check_results(batch_df, batch_id):
+            batch_df.collect()
             if batch_id == 0:
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="0", countAsString="2"),
@@ -1460,12 +1480,14 @@ class TransformWithStateTestsMixin:
 
     def test_transform_with_state_restart_with_multiple_rows_init_state(self):
         def check_results(batch_df, _):
+            batch_df.collect()
             assert set(batch_df.sort("id").collect()) == {
                 Row(id="0", countAsString="2"),
                 Row(id="1", countAsString="2"),
             }
 
         def check_results_for_new_query(batch_df, batch_id):
+            batch_df.collect()
             if batch_id == 0:
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="0", value=str(123 + 46)),
