@@ -269,6 +269,14 @@ def numpy_column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
     return wrapper
 
 
+def _exclude_pd_np_operand(other: Any) -> None:
+    if isinstance(other, (pd.Series, pd.Index, pd.DataFrame, np.ndarray)):
+        raise TypeError(
+            f"Operand of type {type(other).__module__}.{type(other).__qualname__} "
+            f"is not supported for this operation. "
+        )
+
+
 class IndexOpsMixin(object, metaclass=ABCMeta):
     """common ops mixin to support a unified interface / docs for Series / Index
 
@@ -397,24 +405,30 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     # comparison operators
     def __eq__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
         # pandas always returns False for all items with dict and set.
+        _exclude_pd_np_operand(other)
         if isinstance(other, (dict, set)):
             return self != self
         else:
             return self._dtype_op.eq(self, other)
 
     def __ne__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
+        _exclude_pd_np_operand(other)
         return self._dtype_op.ne(self, other)
 
     def __lt__(self, other: Any) -> SeriesOrIndex:
+        _exclude_pd_np_operand(other)
         return self._dtype_op.lt(self, other)
 
     def __le__(self, other: Any) -> SeriesOrIndex:
+        _exclude_pd_np_operand(other)
         return self._dtype_op.le(self, other)
 
     def __ge__(self, other: Any) -> SeriesOrIndex:
+        _exclude_pd_np_operand(other)
         return self._dtype_op.ge(self, other)
 
     def __gt__(self, other: Any) -> SeriesOrIndex:
+        _exclude_pd_np_operand(other)
         return self._dtype_op.gt(self, other)
 
     def __invert__(self: IndexOpsLike) -> IndexOpsLike:
