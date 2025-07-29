@@ -27,6 +27,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.SerializeFromObjectExec
 import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.state.StateStoreCommitValidationFailed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
@@ -260,7 +261,7 @@ class ForeachBatchSinkSuite extends StreamTest {
 
   test("SPARK-52008: foreachBatch with show() should fail with appropriate error") {
     // This test verifies that commit validation is enabled by default
-    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "200") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
       withTempDir { tempDir =>
         val checkpointPath = tempDir.getCanonicalPath
         // Create a simple streaming DataFrame
@@ -305,8 +306,17 @@ class ForeachBatchSinkSuite extends StreamTest {
         }
 
         // Verify we get the StateStore commit validation error
-        // The error is wrapped in multiple exceptions, so we need to check the message
-        val errorMessage = queryEx.cause.getMessage
+        // The error is wrapped by RPC framework, so we need to check the cause chain
+        val rootCause = queryEx.getCause
+        assert(rootCause != null, "Expected a root cause for the StreamingQueryException")
+
+        // The RPC framework wraps our exception, so check the cause of the cause
+        val actualException = rootCause.getCause
+        assert(actualException != null, "Expected a cause for the RPC exception")
+        assert(actualException.isInstanceOf[StateStoreCommitValidationFailed],
+          s"Expected StateStoreCommitValidationFailed but got ${actualException.getClass.getName}")
+
+        val errorMessage = actualException.getMessage
         assert(errorMessage.contains("[STATE_STORE_COMMIT_VALIDATION_FAILED]"),
           s"Expected STATE_STORE_COMMIT_VALIDATION_FAILED error, but got: $errorMessage")
         assert(errorMessage.contains("State store commit validation failed"),
@@ -355,7 +365,7 @@ class ForeachBatchSinkSuite extends StreamTest {
   }
 
   test("StateStore commit validation should detect missing commits") {
-    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "200") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
       withTempDir { tempDir =>
         val checkpointPath = tempDir.getCanonicalPath
 
@@ -398,22 +408,24 @@ class ForeachBatchSinkSuite extends StreamTest {
         }
 
         // Should fail with either our new validation error or the simulated RuntimeException
-        // The reason we can't use checkError is because our exception
-        // is wrapped in the SparkException
-        val errorMessage = queryEx.getMessage
-        val hasCommitValidationError = errorMessage.contains(
-          "[STATE_STORE_COMMIT_VALIDATION_FAILED]") ||
-          errorMessage.contains("State store commit validation failed")
-        val hasSimulatedError = errorMessage.contains("Simulated batch processing failure")
+        // Check the cause chain since RPC wraps exceptions
+        val rootCause = queryEx.getCause
+        val actualException = if (rootCause != null) rootCause.getCause else null
+
+        val hasCommitValidationError = actualException != null && (
+          actualException.isInstanceOf[StateStoreCommitValidationFailed] ||
+          actualException.getMessage.contains("[STATE_STORE_COMMIT_VALIDATION_FAILED]"))
+        val hasSimulatedError = queryEx.getMessage.contains("Simulated batch processing failure")
 
         assert(hasCommitValidationError || hasSimulatedError,
-          s"Expected StateStore commit validation error or simulated error, but got: $errorMessage")
+          s"Expected StateStore commit validation error or simulated error," +
+            s" but got: ${queryEx.getMessage}")
       }
     }
   }
 
   test("StateStore commit validation with AvailableNow trigger") {
-    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "200") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
       withTempDir { tempDir =>
         val checkpointPath = tempDir.getCanonicalPath
 
@@ -457,15 +469,22 @@ class ForeachBatchSinkSuite extends StreamTest {
           query.awaitTermination()
         }
 
-        assert(queryEx.getMessage.contains("[STATE_STORE_COMMIT_VALIDATION_FAILED]") ||
-          queryEx.getMessage.contains("State store commit validation failed"),
-          s"Expected STATE_STORE_COMMIT_VALIDATION_FAILED error, but got: ${queryEx.getMessage}")
+        // Check the cause chain since RPC wraps exceptions
+        val rootCause = queryEx.getCause
+        assert(rootCause != null, "Expected a root cause for the StreamingQueryException")
+        val actualException = rootCause.getCause
+        assert(actualException != null, "Expected a cause for the RPC exception")
+
+        assert(actualException.isInstanceOf[StateStoreCommitValidationFailed] ||
+          actualException.getMessage.contains("[STATE_STORE_COMMIT_VALIDATION_FAILED]"),
+          s"Expected STATE_STORE_COMMIT_VALIDATION_FAILED error," +
+            s" but got: ${actualException.getMessage}")
       }
     }
   }
 
   test("StateStore commit validation with swallowed exceptions in foreachBatch") {
-    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "200") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
       withTempDir { tempDir =>
         val checkpointPath = tempDir.getCanonicalPath
 
@@ -514,15 +533,22 @@ class ForeachBatchSinkSuite extends StreamTest {
           query.awaitTermination()
         }
 
-        assert(queryEx.getMessage.contains("[STATE_STORE_COMMIT_VALIDATION_FAILED]") ||
-          queryEx.getMessage.contains("State store commit validation failed"),
-          s"Expected STATE_STORE_COMMIT_VALIDATION_FAILED error, but got: ${queryEx.getMessage}")
+        // Check the cause chain since RPC wraps exceptions
+        val rootCause = queryEx.getCause
+        assert(rootCause != null, "Expected a root cause for the StreamingQueryException")
+        val actualException = rootCause.getCause
+        assert(actualException != null, "Expected a cause for the RPC exception")
+
+        assert(actualException.isInstanceOf[StateStoreCommitValidationFailed] ||
+          actualException.getMessage.contains("[STATE_STORE_COMMIT_VALIDATION_FAILED]"),
+          s"Expected STATE_STORE_COMMIT_VALIDATION_FAILED error," +
+            s" but got: ${actualException.getMessage}")
       }
     }
   }
 
   test("StateStore commit validation with multiple swallowed exceptions") {
-    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "200") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
       withTempDir { tempDir =>
         val checkpointPath = tempDir.getCanonicalPath
 
@@ -589,15 +615,23 @@ class ForeachBatchSinkSuite extends StreamTest {
           query.awaitTermination()
         }
 
-        assert(queryEx.getMessage.contains("[STATE_STORE_COMMIT_VALIDATION_FAILED]"),
-          s"Expected STATE_STORE_COMMIT_VALIDATION_FAILED error, but got: ${queryEx.getMessage}")
+        // Check the cause chain since RPC wraps exceptions
+        val rootCause = queryEx.getCause
+        assert(rootCause != null, "Expected a root cause for the StreamingQueryException")
+        val actualException = rootCause.getCause
+        assert(actualException != null, "Expected a cause for the RPC exception")
+
+        assert(actualException.isInstanceOf[StateStoreCommitValidationFailed] ||
+          actualException.getMessage.contains("[STATE_STORE_COMMIT_VALIDATION_FAILED]"),
+          s"Expected STATE_STORE_COMMIT_VALIDATION_FAILED error," +
+            s" but got: ${actualException.getMessage}")
       }
     }
   }
 
   test("StateStore commit validation can be disabled via configuration") {
     withSQLConf(
-      SQLConf.SHUFFLE_PARTITIONS.key -> "200",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
       SQLConf.STATE_STORE_COMMIT_VALIDATION_ENABLED.key -> "false") {
       withTempDir { tempDir =>
         val checkpointPath = tempDir.getCanonicalPath
