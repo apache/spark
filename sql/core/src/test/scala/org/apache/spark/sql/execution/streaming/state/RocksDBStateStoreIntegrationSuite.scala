@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters.SetHasAsScala
 import org.scalatest.time.{Minute, Span}
 
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
-import org.apache.spark.sql.functions.count
+import org.apache.spark.sql.functions.{count, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.OutputMode.Update
@@ -313,5 +313,81 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
     )
     assert(changelogVersionsPresent(dirForPartition0) == List(3L, 4L))
     assert(snapshotVersionsPresent(dirForPartition0).contains(5L))
+  }
+
+  // Test with both bounded memory enabled and disabled
+  Seq(true, false).foreach { boundedMemoryEnabled =>
+    test(s"RocksDB memory tracking integration with UnifiedMemoryManager" +
+      s" with boundedMemory=$boundedMemoryEnabled") {
+      withTempDir { dir =>
+        withSQLConf(
+          (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName),
+          (SQLConf.CHECKPOINT_LOCATION.key -> dir.getCanonicalPath),
+          (SQLConf.SHUFFLE_PARTITIONS.key -> "5"),
+          (SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> (5 * 60 * 1000).toString),
+          ("spark.memory.unmanagedMemoryPollingInterval" -> "100ms"),
+          ("spark.sql.streaming.stateStore.rocksdb.boundedMemoryUsage" ->
+            boundedMemoryEnabled.toString)) {
+
+          import org.apache.spark.memory.UnifiedMemoryManager
+          import org.apache.spark.sql.streaming.Trigger
+
+          // Use rate stream to ensure continuous state operations that trigger memory updates
+          val query = spark.readStream
+            .format("rate")
+            .option("rowsPerSecond", "10") // Continuous but not overwhelming
+            .load()
+            .selectExpr("value % 100 as key", "value")
+            .groupBy("key")
+            .agg(count("*").as("count"), max("value").as("max_value"))
+            .writeStream
+            .format("console")
+            .outputMode("update")
+            .trigger(Trigger.ProcessingTime(200)) // Regular triggers to ensure state operations
+            .start()
+
+          try {
+            // Let the stream run to establish RocksDB instances and generate state operations
+            Thread.sleep(2000) // 2 seconds should be enough for several processing cycles
+
+            // Now check for memory tracking - the continuous stream should trigger memory updates
+            var rocksDBMemory = 0L
+            var attempts = 0
+            val maxAttempts = 15 // 15 attempts with 1-second intervals = 15 seconds max
+
+            while (rocksDBMemory <= 0L && attempts < maxAttempts) {
+              Thread.sleep(1000) // Wait between checks to allow memory updates
+              rocksDBMemory = UnifiedMemoryManager.getMemoryByComponentType("RocksDB")
+              attempts += 1
+
+              if (rocksDBMemory > 0L) {
+                logInfo(s"RocksDB memory detected: $rocksDBMemory bytes " +
+                  s"after $attempts attempts with boundedMemory=$boundedMemoryEnabled")
+              }
+            }
+
+            // Verify memory tracking remains stable during continued operation
+            Thread.sleep(2000) // Let stream continue running
+
+            val finalMemory = UnifiedMemoryManager.getMemoryByComponentType("RocksDB")
+
+            // Memory should still be tracked (allow for some fluctuation)
+            assert(finalMemory > 0L,
+              s"RocksDB memory tracking should remain active during stream processing: " +
+                s"got $finalMemory bytes (initial: $rocksDBMemory) " +
+                s"with boundedMemory=$boundedMemoryEnabled")
+
+            logInfo(s"RocksDB memory tracking test completed successfully: " +
+              s"initial=$rocksDBMemory bytes, final=$finalMemory bytes " +
+              s"with boundedMemory=$boundedMemoryEnabled")
+
+          } finally {
+            query.stop()
+            // Clean up unmanaged memory users
+            UnifiedMemoryManager.clearUnmanagedMemoryUsers()
+          }
+        }
+      }
+    }
   }
 }

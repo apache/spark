@@ -556,6 +556,7 @@ private[sql] class RocksDBStateStoreProvider
     this.rocksDBEventForwarder =
       Some(RocksDBEventForwarder(StateStoreProvider.getRunId(hadoopConf), stateStoreId))
 
+    // Initialize StateStoreProviderId for memory tracking
     val queryRunId = UUID.fromString(StateStoreProvider.getRunId(hadoopConf))
     this.stateStoreProviderId = StateStoreProviderId(stateStoreId, queryRunId)
 
@@ -769,7 +770,8 @@ private[sql] class RocksDBStateStoreProvider
       useColumnFamilies: Boolean,
       enableStateStoreCheckpointIds: Boolean,
       partitionId: Int = 0,
-      eventForwarder: Option[RocksDBEventForwarder] = None): RocksDB = {
+      eventForwarder: Option[RocksDBEventForwarder] = None,
+      uniqueId: String = ""): RocksDB = {
     new RocksDB(
       dfsRootDir,
       conf,
@@ -779,7 +781,8 @@ private[sql] class RocksDBStateStoreProvider
       useColumnFamilies,
       enableStateStoreCheckpointIds,
       partitionId,
-      eventForwarder)
+      eventForwarder,
+      uniqueId)
   }
 
   private[sql] lazy val rocksDB = {
@@ -791,7 +794,7 @@ private[sql] class RocksDBStateStoreProvider
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
     createRocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, loggingId,
       useColumnFamilies, storeConf.enableStateStoreCheckpointIds, stateStoreId.partitionId,
-      rocksDBEventForwarder)
+      rocksDBEventForwarder, stateStoreProviderId.toString)
   }
 
   private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
