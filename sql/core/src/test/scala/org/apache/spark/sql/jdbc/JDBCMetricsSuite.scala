@@ -73,7 +73,7 @@ class JDBCMetricsSuite extends QueryTest with SharedSparkSession {
     super.afterAll()
   }
 
-  test("Test logging of schema fetch time") {
+  test("schema fetch time metric: JDBC v1") {
     val df = spark.read
       .format("jdbc")
       .option("url", url)
@@ -98,7 +98,7 @@ class JDBCMetricsSuite extends QueryTest with SharedSparkSession {
     assert(df.collect().length === 3)
   }
 
-  test("Test logging of schema fetch time for V2 api") {
+  test("schema fetch time metric: JDBC v2") {
     val df = sql("SELECT * FROM h2.TEST.PEOPLE")
     val leaves = df.queryExecution.executedPlan.collectLeaves().head.metrics
     val testKey = "remoteSchemaFetchTime"
