@@ -17,15 +17,13 @@
 
 package org.apache.spark.memory
 
-import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, Executors, ScheduledExecutorService, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ScheduledExecutorService, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
-import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkIllegalArgumentException}
+import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.Tests._
@@ -298,7 +296,7 @@ object UnifiedMemoryManager extends Logging {
    * @param unmanagedMemoryConsumer The consumer to unregister. Only used in tests
    */
   private[spark] def unregisterUnmanagedMemoryConsumer(
-                                                        unmanagedMemoryConsumer: UnmanagedMemoryConsumer): Unit = {
+      unmanagedMemoryConsumer: UnmanagedMemoryConsumer): Unit = {
     val id = unmanagedMemoryConsumer.unmanagedMemoryConsumerId
     unmanagedMemoryConsumers.remove(id)
   }
@@ -377,7 +375,7 @@ object UnifiedMemoryManager extends Logging {
             log"is no longer active, marking for removal")
           (userId, memoryUser, None) // Mark for removal
         } else if (memoryUsed < 0L) {
-          logWarning(log"Invalid memory usage value ${MDC(LogKeys.BYTES, memoryUsed)} " +
+          logWarning(log"Invalid memory usage value ${MDC(LogKeys.NUM_BYTES, memoryUsed)} " +
             log"from unmanaged memory user ${MDC(LogKeys.OBJECT_ID, userId.toString)}")
           (userId, memoryUser, Some(0L)) // Treat as 0
         } else {

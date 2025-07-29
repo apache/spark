@@ -1396,7 +1396,8 @@ class RocksDB(
    * @return Total memory usage in bytes across all tracked components
    */
   def getMemoryUsage: Long = {
-    require(db != null && db.isOpen, "RocksDB must be open to get memory usage")
+
+    require(db != null && !db.isClosed, "RocksDB must be open to get memory usage")
     RocksDB.mainMemorySources.map { memorySource =>
       getDBProperty(memorySource)
     }.sum
@@ -1412,7 +1413,7 @@ class RocksDB(
     val currentTime = System.currentTimeMillis()
     val timeSinceLastUpdate = currentTime - lastMemoryUpdateTime.get()
 
-    if (timeSinceLastUpdate >= memoryUpdateIntervalMs && db != null && db.isOpen) {
+    if (timeSinceLastUpdate >= memoryUpdateIntervalMs && db != null && !db.isClosed) {
       try {
         val usage = getMemoryUsage
         lastMemoryUpdateTime.set(currentTime)
