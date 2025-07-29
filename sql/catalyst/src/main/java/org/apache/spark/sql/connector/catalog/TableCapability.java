@@ -100,16 +100,5 @@ public enum TableCapability {
    * write modes, like {@link #TRUNCATE}, and {@link #OVERWRITE_BY_FILTER}, but cannot support
    * {@link #OVERWRITE_DYNAMIC}.
    */
-  V1_BATCH_WRITE,
-
-  /**
-   * Signals that the table is a general Spark data source table or a Spark view, which does not
-   * implement read/write directly, but relies on Spark to interpret the table metadata and
-   * resolve the table provider into a data source, or read it as a view. This affects the table
-   * read/write operations but not DDL operations.
-   * <p>
-   * If this table capacity is present, other read/write capacities are ignored as this table
-   * instance is only used to store table metadata.
-   */
-  SPARK_TABLE_OR_VIEW
+  V1_BATCH_WRITE
 }

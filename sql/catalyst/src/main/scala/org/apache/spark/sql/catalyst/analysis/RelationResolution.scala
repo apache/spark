@@ -32,10 +32,10 @@ import org.apache.spark.sql.connector.catalog.{
   CatalogManager,
   CatalogPlugin,
   CatalogV2Util,
+  DataSourceTableOrView,
   Identifier,
   LookupCatalog,
   Table,
-  TableCapability,
   V1Table,
   V2TableWithV1Fallback
 }
@@ -193,7 +193,7 @@ class RelationResolution(override val catalogManager: CatalogManager)
           || !v1Table.catalogTable.tracksPartitionsInCatalog =>
         createDataSourceV1Scan(v1Table.v1Table)
 
-      case t if t.capabilities().contains(TableCapability.SPARK_TABLE_OR_VIEW) =>
+      case t: DataSourceTableOrView =>
         createDataSourceV1Scan(V1Table.toCatalogTable(catalog, ident, t))
 
       case table =>

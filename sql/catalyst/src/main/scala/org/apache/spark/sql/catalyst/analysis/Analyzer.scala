@@ -1257,17 +1257,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
                 ResolvedPersistentView(
                   catalog, v2Ident, v1Table.catalogTable)
-              case table =>
-                if (table.capabilities().contains(TableCapability.SPARK_TABLE_OR_VIEW)) {
-                  val catalogTable = V1Table.toCatalogTable(catalog, ident, table)
-                  if (catalogTable.tableType == CatalogTableType.VIEW) {
-                    ResolvedPersistentView(catalog, ident, catalogTable)
-                  } else {
-                    ResolvedTable.create(catalog.asTableCatalog, ident, table)
-                  }
+              case t: DataSourceTableOrView =>
+                val catalogTable = V1Table.toCatalogTable(catalog, ident, t)
+                if (catalogTable.tableType == CatalogTableType.VIEW) {
+                  ResolvedPersistentView(catalog, ident, catalogTable)
                 } else {
-                  ResolvedTable.create(catalog.asTableCatalog, ident, table)
+                  ResolvedTable.create(catalog.asTableCatalog, ident, t)
                 }
+              case table =>
+                ResolvedTable.create(catalog.asTableCatalog, ident, table)
             }
           case _ => None
         }

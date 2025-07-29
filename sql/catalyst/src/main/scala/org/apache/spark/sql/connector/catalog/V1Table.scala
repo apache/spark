@@ -70,7 +70,7 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
   override def name: String = v1Table.identifier.quoted
 
   override def capabilities: util.Set[TableCapability] =
-    util.EnumSet.of(TableCapability.SPARK_TABLE_OR_VIEW)
+    util.EnumSet.noneOf(classOf[TableCapability])
 
   override def toString: String = s"V1Table($name)"
 }
@@ -110,20 +110,17 @@ private[sql] object V1Table {
     }
   }
 
-  def toCatalogTable(catalog: CatalogPlugin, ident: Identifier, t: Table): CatalogTable = {
-    if (t.isInstanceOf[V1Table]) {
-      return t.asInstanceOf[V1Table].v1Table
-    }
-    assert(t.capabilities().contains(TableCapability.SPARK_TABLE_OR_VIEW))
-    val tableType = t.properties().get(TableCatalog.PROP_TABLE_TYPE) match {
+  def toCatalogTable(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      t: DataSourceTableOrView): CatalogTable = {
+    val tableType = t.getTableType() match {
       case TableSummary.VIEW_TABLE_TYPE => CatalogTableType.VIEW
       case TableSummary.MANAGED_TABLE_TYPE => CatalogTableType.MANAGED
       case _ => CatalogTableType.EXTERNAL
     }
-    val location = Option(t.properties().get(TableCatalog.PROP_LOCATION))
-    val viewText = Option(t.properties().get(TableCatalog.PROP_VIEW_TEXT))
-    val (serdeProps, tableProps) = t.properties().asScala
-      .partition(_._1.startsWith(TableCatalog.OPTION_PREFIX))
+    val viewText = Option(t.getViewText())
+    val tableProps = t.getTableProps().asScala.toMap
     val (partCols, bucketSpec, clusterBySpec) = t.partitioning().toSeq.convertTransforms
     CatalogTable(
       identifier = TableIdentifier(
@@ -132,23 +129,23 @@ private[sql] object V1Table {
         catalog = Some(catalog.name())),
       tableType = tableType,
       storage = CatalogStorageFormat.empty.copy(
-        locationUri = location.map(CatalogUtils.stringToURI),
+        locationUri = Option(t.getLocation()).map(CatalogUtils.stringToURI),
         // v2 table properties should be put into the serde properties as well in case
         // it contains data source options.
-        properties = tableProps.toMap ++ serdeProps.map {
-          case (k, v) => k.drop(TableCatalog.OPTION_PREFIX.length) -> v
-        }
+        properties = tableProps ++ t.getSerdeProps().asScala
       ),
       schema = CatalogV2Util.v2ColumnsToStructType(t.columns()),
-      provider = Option(t.properties().get(TableCatalog.PROP_PROVIDER)),
+      provider = Option(t.getProvider),
       partitionColumnNames = partCols,
       bucketSpec = bucketSpec,
-      owner = Option(t.properties().get(TableCatalog.PROP_OWNER)).getOrElse("unknown"),
+      owner = Option(t.getOwner()).getOrElse("unknown"),
+      createTime = t.getCreateTime(),
+      createVersion = t.getCreateVersion(),
       viewText = viewText,
       viewOriginalText = viewText,
-      comment = Option(t.properties().get(TableCatalog.PROP_COMMENT)),
-      collation = Option(t.properties().get(TableCatalog.PROP_COLLATION)),
-      properties = tableProps.toMap ++ clusterBySpec.map(ClusterBySpec.toPropertyWithoutValidation)
+      comment = Option(t.getComment()),
+      collation = Option(t.getCollation()),
+      properties = tableProps ++ clusterBySpec.map(ClusterBySpec.toPropertyWithoutValidation)
     )
   }
 }
