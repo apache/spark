@@ -17,8 +17,9 @@
 package org.apache.spark.deploy.k8s.integrationtest
 
 import java.io.{Closeable, File, FileInputStream, FileOutputStream, PrintWriter}
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{CompletableFuture, CountDownLatch}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.jdk.CollectionConverters._
@@ -27,7 +28,7 @@ import io.fabric8.kubernetes.client.dsl.ExecListener
 import io.fabric8.kubernetes.client.dsl.ExecListener.Response
 import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveOutputStream}
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
-import org.apache.commons.compress.utils.IOUtils
+import org.apache.commons.io.IOUtils
 import org.apache.commons.io.output.ByteArrayOutputStream
 
 import org.apache.spark.{SPARK_VERSION, SparkException}
@@ -61,16 +62,23 @@ object Utils extends Logging {
     class ReadyListener extends ExecListener {
       val openLatch: CountDownLatch = new CountDownLatch(1)
       val closeLatch: CountDownLatch = new CountDownLatch(1)
+      @volatile var inputStreamTransferFuture: CompletableFuture[Void] = _
 
       override def onOpen(): Unit = {
         openLatch.countDown()
       }
 
       override def onClose(a: Int, b: String): Unit = {
+        if (inputStreamTransferFuture != null && !inputStreamTransferFuture.isDone) {
+          inputStreamTransferFuture.cancel(true)
+        }
         closeLatch.countDown()
       }
 
       override def onFailure(e: Throwable, r: Response): Unit = {
+        if (inputStreamTransferFuture != null && !inputStreamTransferFuture.isDone) {
+          inputStreamTransferFuture.cancel(true)
+        }
       }
 
       def waitForInputStreamToConnect(): Unit = {
@@ -80,10 +88,16 @@ object Utils extends Logging {
       def waitForClose(): Unit = {
         closeLatch.await()
       }
+
+      def setInputStreamTransferFuture(future: CompletableFuture[Void]): Unit = {
+        this.inputStreamTransferFuture = future
+      }
     }
+
     val listener = new ReadyListener()
+
     val watch = pod
-      .readingInput(System.in)
+      .redirectingInput()
       .writingOutput(out)
       .writingError(System.err)
       .withTTY()
@@ -91,10 +105,21 @@ object Utils extends Logging {
       .exec(cmd.toArray: _*)
     // under load sometimes the stdout isn't connected by the time we try to read from it.
     listener.waitForInputStreamToConnect()
+    val inputTransferFuture = CompletableFuture.runAsync(() => {
+      try {
+        val inputStream = watch.getInput
+        if (inputStream != null) System.in.transferTo(inputStream)
+      } catch {
+        case _: InterruptedException =>
+        case e: Exception =>
+          logError(s"Error transferring input: ${e.getMessage}")
+      }
+    })
+    listener.setInputStreamTransferFuture(inputTransferFuture)
     listener.waitForClose()
     watch.close()
     out.flush()
-    val result = out.toString()
+    val result = out.toString(StandardCharsets.UTF_8)
     result
   }
 
