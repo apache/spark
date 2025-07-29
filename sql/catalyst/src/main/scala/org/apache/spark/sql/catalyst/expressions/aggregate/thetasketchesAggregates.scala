@@ -62,7 +62,7 @@ case class IntersectionAggregationBuffer(sketch: Intersection) extends ThetaSket
        3
   """,
   group = "agg_funcs",
-  since = "3.5.5")
+  since = "4.1.0")
 // scalastyle:on line.size.limit
 case class ThetaSketchAgg(
     left: Expression,
@@ -302,7 +302,7 @@ case class ThetaSketchAgg(
        1
   """,
   group = "agg_funcs",
-  since = "3.5.5")
+  since = "4.1.0")
 // scalastyle:on line.size.limit
 case class ThetaUnionAgg(
     left: Expression,
@@ -499,7 +499,7 @@ case class ThetaUnionAgg(
        1
   """,
   group = "agg_funcs",
-  since = "3.5.5")
+  since = "4.1.0")
 // scalastyle:on line.size.limit
 case class ThetaIntersectionAgg(
     left: Expression,

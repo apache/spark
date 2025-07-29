@@ -37,7 +37,7 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, Integ
        3
   """,
   group = "misc_funcs",
-  since = "3.5.5")
+  since = "4.1.0")
 case class ThetaSketchEstimate(child: Expression)
     extends UnaryExpression
     with CodegenFallback
@@ -77,7 +77,7 @@ case class ThetaSketchEstimate(child: Expression)
        6
   """,
   group = "misc_funcs",
-  since = "3.5.5")
+  since = "4.1.0")
 // scalastyle:on line.size.limit
 case class ThetaUnion(first: Expression, second: Expression, third: Expression)
     extends TernaryExpression
@@ -144,7 +144,7 @@ case class ThetaUnion(first: Expression, second: Expression, third: Expression)
        2
   """,
   group = "misc_funcs",
-  since = "3.5.5")
+  since = "4.1.0")
 // scalastyle:on line.size.limit
 case class ThetaDifference(first: Expression, second: Expression, third: Expression)
     extends TernaryExpression
@@ -211,7 +211,7 @@ case class ThetaDifference(first: Expression, second: Expression, third: Express
        2
   """,
   group = "misc_funcs",
-  since = "3.5.5")
+  since = "4.1.0")
 // scalastyle:on line.size.limit
 case class ThetaIntersection(first: Expression, second: Expression, third: Expression)
     extends TernaryExpression
