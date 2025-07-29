@@ -319,6 +319,11 @@ This file is divided into 3 sections:
     <customMessage>Use Java String methods instead</customMessage>
   </check>
 
+  <check customId="commonstextstringsubstitutor" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.commons\.text\.StringSubstitutor</parameter></parameters>
+    <customMessage>Use org.apache.spark.StringSubstitutor instead</customMessage>
+  </check>
+
   <check customId="uribuilder" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">UriBuilder\.fromUri</parameter></parameters>
     <customMessage>Use Utils.getUriBuilder instead.</customMessage>
