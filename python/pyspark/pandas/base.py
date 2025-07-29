@@ -269,7 +269,7 @@ def numpy_column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
     return wrapper
 
 
-def _exclude_pd_np_operand(other):
+def _exclude_pd_np_operand(other: Any) -> None:
     if isinstance(other, (pd.Series, pd.Index, pd.DataFrame, np.ndarray)):
         raise TypeError(
             f"Operand of type {type(other).__module__}.{type(other).__qualname__} "
