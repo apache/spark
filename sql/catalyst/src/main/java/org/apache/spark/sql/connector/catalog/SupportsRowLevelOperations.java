@@ -21,12 +21,7 @@ import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.connector.write.RowLevelOperationBuilder;
 import org.apache.spark.sql.connector.write.RowLevelOperation;
 import org.apache.spark.sql.connector.write.RowLevelOperationInfo;
-import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
-
-import java.util.Arrays;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * A mix-in interface for {@link Table} row-level operations support. Data sources can implement
@@ -48,7 +43,8 @@ public interface SupportsRowLevelOperations extends Table {
 
 
   /**
-   * Calculate target table schema for MERGE INTO schema evolution.
+   * Calculate target table schema for MERGE INTO schema evolution.  Data source should take into
+   * account spark.sql.caseSensitive when determining if columns are new or existing.
    * @param sourceTableSchema schema of the source table for MERGE INTO operation.
    * @return new schema for the target table
    */
