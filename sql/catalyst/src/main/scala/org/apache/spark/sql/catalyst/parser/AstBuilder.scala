@@ -6384,7 +6384,7 @@ class AstBuilder extends DataTypeAstBuilder
    * }}}
    *
    * We will add CREATE VARIABLE for persisted variable definitions to this, hence the name.
-   *
+   */
   override def visitCreateVariables(ctx: CreateVariablesContext): LogicalPlan = withOrigin(ctx) {
     val dataTypeOpt = Option(ctx.dataType()).map(typedVisit[DataType])
     val defaultExpression = if (ctx.variableDefaultExpression() == null) {
