@@ -73,7 +73,7 @@ from pyspark.sql.utils import enum_to_value as _enum_to_value
 
 # The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
 # for code reuse.
-from pyspark.sql.functions import pandas_udf  # noqa: F401
+from pyspark.sql.functions import arrow_udf, pandas_udf  # noqa: F401
 
 
 if TYPE_CHECKING:
