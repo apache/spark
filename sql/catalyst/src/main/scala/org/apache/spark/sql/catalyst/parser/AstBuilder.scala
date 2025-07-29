@@ -349,8 +349,8 @@ class AstBuilder extends DataTypeAstBuilder
 
         case statement =>
           statement match {
-            case SingleStatement(createVariable: CreateVariable) =>
-              compoundBodyParserContext.variable(createVariable, isScope)
+            case SingleStatement(createVariables: CreateVariables) =>
+              compoundBodyParserContext.variable(createVariables, isScope)
             case _ => compoundBodyParserContext.statement()
           }
           buff += statement
@@ -6375,32 +6375,36 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Create a [[CreateVariable]] command.
+   * Create a [[CreateVariables]] command.
    *
    * For example:
    * {{{
-   *   DECLARE [OR REPLACE] [VARIABLE] [db_name.]variable_name
+   *   DECLARE [OR REPLACE] [COMMA SEPARATED VARIABLES] [db_name.]variable_name
    *   [dataType] [defaultExpression];
    * }}}
    *
    * We will add CREATE VARIABLE for persisted variable definitions to this, hence the name.
-   */
-  override def visitCreateVariable(ctx: CreateVariableContext): LogicalPlan = withOrigin(ctx) {
+   *
+  override def visitCreateVariables(ctx: CreateVariablesContext): LogicalPlan = withOrigin(ctx) {
     val dataTypeOpt = Option(ctx.dataType()).map(typedVisit[DataType])
     val defaultExpression = if (ctx.variableDefaultExpression() == null) {
       if (dataTypeOpt.isEmpty) {
         throw new ParseException(
           errorClass = "INVALID_SQL_SYNTAX.VARIABLE_TYPE_OR_DEFAULT_REQUIRED",
           messageParameters = Map.empty,
-          ctx.identifierReference)
+          ctx.identifierReferences.get(0))
       }
       DefaultValueExpression(Literal(null, dataTypeOpt.get), "null")
     } else {
       val default = visitVariableDefaultExpression(ctx.variableDefaultExpression())
       dataTypeOpt.map { dt => default.copy(child = Cast(default.child, dt)) }.getOrElse(default)
     }
-    CreateVariable(
-      withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
+    CreateVariables(
+      ctx.identifierReferences.asScala.map (
+        ctx => {
+          withIdentClause(ctx, UnresolvedIdentifier(_))
+        }
+      ).toIndexedSeq,
       defaultExpression,
       ctx.REPLACE() != null
     )

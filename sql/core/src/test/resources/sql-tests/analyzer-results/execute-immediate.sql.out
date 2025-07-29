@@ -33,7 +33,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`x`, false
 -- !query
 DECLARE sql_string STRING
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), false
+CreateVariables defaultvalueexpression(null, null), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.sql_string
 
 

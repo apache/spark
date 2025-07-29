@@ -20,7 +20,7 @@ package org.apache.spark.sql.scripting
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, LeafNode, OneRowRelation, Project, SetVariable}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariables, LeafNode, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -177,7 +177,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       case forStmt: TestForStatement => forStmt.label.get
       case _: NoOpStatementExec => "NOOP"
       case createStmt: SingleStatementExec
-        if createStmt.parsedPlan.isInstanceOf[CreateVariable] => "CreateVariable"
+        if createStmt.parsedPlan.isInstanceOf[CreateVariables] => "CreateVariables"
       case setStmt: SingleStatementExec
         if setStmt.parsedPlan.isInstanceOf[SetVariable] => "SetVariable"
       case project: SingleStatementExec if project.parsedPlan.isInstanceOf[Project]
@@ -884,7 +884,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "body",
       "NOOP"
@@ -905,12 +905,12 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "statement1",
       "statement2",
       "NOOP",
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "statement1",
       "statement2",
@@ -953,24 +953,24 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     ).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
-      "CreateVariable",
-      "SetVariable",
-      "body",
-      "NOOP",
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "body",
       "NOOP",
-      "NOOP",
-      "CreateVariable",
-      "SetVariable",
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "body",
       "NOOP",
-      "CreateVariable",
+      "NOOP",
+      "CreateVariables",
+      "SetVariable",
+      "CreateVariables",
+      "SetVariable",
+      "body",
+      "NOOP",
+      "CreateVariables",
       "SetVariable",
       "body",
       "NOOP",
@@ -990,7 +990,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "body",
       "NOOP"
@@ -1011,12 +1011,12 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "statement1",
       "statement2",
       "NOOP",
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "statement1",
       "statement2",
@@ -1058,24 +1058,24 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
-      "CreateVariable",
-      "SetVariable",
-      "body",
-      "NOOP",
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "body",
       "NOOP",
-      "NOOP",
-      "CreateVariable",
-      "SetVariable",
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "body",
       "NOOP",
-      "CreateVariable",
+      "NOOP",
+      "CreateVariables",
+      "SetVariable",
+      "CreateVariables",
+      "SetVariable",
+      "body",
+      "NOOP",
+      "CreateVariables",
       "SetVariable",
       "body",
       "NOOP",
@@ -1098,11 +1098,11 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "statement1",
       "lbl1",
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "statement1",
       "lbl1"
@@ -1124,7 +1124,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "statement1",
       "lbl1"))
@@ -1154,17 +1154,17 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "outer_body",
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "body1",
       "lbl1",
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "outer_body",
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "body1",
       "lbl1"
@@ -1194,9 +1194,9 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "body1",
       "lbl1"))
@@ -1217,11 +1217,11 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "statement1",
       "lbl1",
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "statement1",
       "lbl1"
@@ -1243,7 +1243,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "statement1",
       "lbl1"))
@@ -1273,16 +1273,16 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "outer_body",
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "body1", "lbl1",
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "outer_body",
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "body1",
       "lbl1"
@@ -1312,9 +1312,9 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
-      "CreateVariable",
+      "CreateVariables",
       "SetVariable",
       "body1",
       "lbl1"))

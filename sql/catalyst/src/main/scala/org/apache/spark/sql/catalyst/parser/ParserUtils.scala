@@ -29,7 +29,7 @@ import org.antlr.v4.runtime.tree.{ParseTree, TerminalNodeImpl}
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser.{BeginLabelContext, EndLabelContext, MultipartIdentifierContext}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, ErrorCondition}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariables, ErrorCondition}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.SparkParserUtils
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.withOrigin
@@ -148,12 +148,13 @@ class CompoundBodyParsingContext {
   private var currentState: State.State = State.INIT
 
   /** Transition to VARIABLE state. */
-  def variable(createVariable: CreateVariable, allowVarDeclare: Boolean): Unit = {
+  def variable(createVariables: CreateVariables, allowVarDeclare: Boolean): Unit = {
     if (!allowVarDeclare) {
       throw SqlScriptingErrors.variableDeclarationNotAllowedInScope(
-        createVariable.origin, createVariable.name.asInstanceOf[UnresolvedIdentifier].nameParts)
+        createVariables.origin,
+        createVariables.name(0).asInstanceOf[UnresolvedIdentifier].nameParts)
     }
-    transitionTo(State.VARIABLE, createVariable = Some(createVariable), None)
+    transitionTo(State.VARIABLE, createVariables = Some(createVariables), None)
   }
 
   /** Transition to CONDITION state. */
@@ -190,7 +191,7 @@ class CompoundBodyParsingContext {
    */
   private def transitionTo(
       newState: State.State,
-      createVariable: Option[CreateVariable] = None,
+      createVariables: Option[CreateVariables] = None,
       errorCondition: Option[ErrorCondition] = None): Unit = {
     (currentState, newState) match {
       // VALID TRANSITIONS
@@ -228,13 +229,13 @@ class CompoundBodyParsingContext {
       // Invalid transitions to VARIABLE state.
       case (State.STATEMENT, State.VARIABLE) =>
         throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
-          createVariable.get.origin,
-          createVariable.get.name.asInstanceOf[UnresolvedIdentifier].nameParts)
+          createVariables.get.origin,
+          createVariables.get.name(0).asInstanceOf[UnresolvedIdentifier].nameParts)
 
       case (State.HANDLER, State.VARIABLE) =>
         throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
-          createVariable.get.origin,
-          createVariable.get.name.asInstanceOf[UnresolvedIdentifier].nameParts)
+          createVariables.get.origin,
+          createVariables.get.name(0).asInstanceOf[UnresolvedIdentifier].nameParts)
 
       // Invalid transitions to CONDITION state.
       case (State.STATEMENT, State.CONDITION) =>
@@ -244,8 +245,8 @@ class CompoundBodyParsingContext {
 
       case (State.HANDLER, State.CONDITION) =>
         throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
-          createVariable.get.origin,
-          createVariable.get.name.asInstanceOf[UnresolvedIdentifier].nameParts)
+          createVariables.get.origin,
+          createVariables.get.name(0).asInstanceOf[UnresolvedIdentifier].nameParts)
 
       // Invalid transitions to HANDLER state.
       case (State.STATEMENT, State.HANDLER) =>
