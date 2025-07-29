@@ -2438,8 +2438,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         if (conf.enableChangelogCheckpointing) {
           // Since changelog checkpoint is enabled, we should populate this metric
           assert(m1.lastCommitLatencyMs("changeLogWriterCommit") > 0)
-          // A snapshot is not forced when changelog checkpointing is enabled so this will be 0
-          assert(m1.lastCommitLatencyMs("saveZipFiles") == 0)
+          // A snapshot is not forced when changelog checkpointing is enabled
+          assert(!m1.lastCommitLatencyMs.contains("saveZipFiles"))
         } else {
           // When changelog checkpoint is NOT enabled we should
           // always populate this metric in the snapshot

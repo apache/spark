@@ -1066,6 +1066,8 @@ class RocksDB(
         commitLatencyMs ++= snapshotLatency
       }
 
+      var uploadSnapshotCalled = false
+
       logInfo(log"Syncing checkpoint for ${MDC(LogKeys.VERSION_NUM, newVersion)} to DFS")
       val fileSyncTimeMs = timeTakenMs {
         if (enableChangelogCheckpointing) {
@@ -1076,6 +1078,7 @@ class RocksDB(
           if (shouldForceSnapshot.get()) {
             assert(snapshot.isDefined)
             uploadSnapshot(snapshot.get)
+            uploadSnapshotCalled = true
             isUploaded = true
             shouldForceSnapshot.set(false)
           }
@@ -1101,7 +1104,17 @@ class RocksDB(
           assert(changelogWriter.isEmpty)
           assert(snapshot.isDefined)
           uploadSnapshot(snapshot.get)
+          uploadSnapshotCalled = true
         }
+      }
+
+      if (uploadSnapshotCalled) {
+        // If we have uploaded the snapshot, the fileManagerMetrics will be cleared and updated
+        // in uploadSnapshot. If there are new metrics needed to be added specific to this commit,
+        // add them here to not accidentally use old fileManagerMetrics from the maintenance threads
+        commitLatencyMs ++= Map(
+          "saveZipFiles" -> fileManagerMetrics.saveZipFilesTimeMs.getOrElse(0L)
+        )
       }
 
       if (enableStateStoreCheckpointIds) {
@@ -1125,8 +1138,7 @@ class RocksDB(
       numInternalKeysOnLoadedVersion = numInternalKeysOnWritingVersion
       loadedVersion = newVersion
       commitLatencyMs ++= Map(
-        "fileSync" -> fileSyncTimeMs,
-        "saveZipFiles" -> fileManagerMetrics.saveZipFilesTimeMs.getOrElse(0L)
+        "fileSync" -> fileSyncTimeMs
       )
       recordedMetrics = Some(metrics)
       logInfo(log"Committed ${MDC(LogKeys.VERSION_NUM, newVersion)}, " +
