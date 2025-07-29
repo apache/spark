@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
-import scala.collection.immutable
+
 import scala.jdk.CollectionConverters._
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
