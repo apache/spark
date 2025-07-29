@@ -215,9 +215,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       session.sparkContext.setLocalProperty(
         "callSite.short",
         s"Spark Connect - ${Utils.abbreviate(debugString, 128)}")
-      session.sparkContext.setLocalProperty(
-        "callSite.long",
-        Utils.abbreviate(debugString, 2048))
+      session.sparkContext.setLocalProperty("callSite.long", Utils.abbreviate(debugString, 2048))
 
       executeHolder.request.getPlan.getOpTypeCase match {
         case proto.Plan.OpTypeCase.COMMAND => handleCommand(executeHolder.request)
