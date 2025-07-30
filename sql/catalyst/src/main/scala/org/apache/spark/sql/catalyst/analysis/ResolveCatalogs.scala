@@ -73,7 +73,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
           }
         case plan => plan
       }
-      c.copy(name = resolved)
+      c.copy(names = resolved)
     case d @ DropVariable(UnresolvedIdentifier(nameParts, _), _) =>
       if (withinSqlScript) {
         throw new AnalysisException(

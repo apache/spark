@@ -152,7 +152,7 @@ class CompoundBodyParsingContext {
     if (!allowVarDeclare) {
       throw SqlScriptingErrors.variableDeclarationNotAllowedInScope(
         createVariables.origin,
-        createVariables.name(0).asInstanceOf[UnresolvedIdentifier].nameParts)
+        createVariables.names(0).asInstanceOf[UnresolvedIdentifier].nameParts)
     }
     transitionTo(State.VARIABLE, createVariables = Some(createVariables), None)
   }
@@ -230,12 +230,12 @@ class CompoundBodyParsingContext {
       case (State.STATEMENT, State.VARIABLE) =>
         throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
           createVariables.get.origin,
-          createVariables.get.name(0).asInstanceOf[UnresolvedIdentifier].nameParts)
+          createVariables.get.names(0).asInstanceOf[UnresolvedIdentifier].nameParts)
 
       case (State.HANDLER, State.VARIABLE) =>
         throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
           createVariables.get.origin,
-          createVariables.get.name(0).asInstanceOf[UnresolvedIdentifier].nameParts)
+          createVariables.get.names(0).asInstanceOf[UnresolvedIdentifier].nameParts)
 
       // Invalid transitions to CONDITION state.
       case (State.STATEMENT, State.CONDITION) =>
@@ -246,7 +246,7 @@ class CompoundBodyParsingContext {
       case (State.HANDLER, State.CONDITION) =>
         throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
           createVariables.get.origin,
-          createVariables.get.name(0).asInstanceOf[UnresolvedIdentifier].nameParts)
+          createVariables.get.names(0).asInstanceOf[UnresolvedIdentifier].nameParts)
 
       // Invalid transitions to HANDLER state.
       case (State.STATEMENT, State.HANDLER) =>

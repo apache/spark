@@ -1375,12 +1375,11 @@ trait NaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   @transient override final lazy val children: Seq[T] = naryChildren
 
   override final def mapChildren(f: T => T): T = {
-    // Map and optimize to keep identity if nothing changed
     val newChildren = naryChildren.map { child =>
       val mapped = f(child)
       if (mapped fastEquals child) child else mapped
     }
-    // Check if all are the same instance as before
+
     val allUnchanged = naryChildren.iterator.zip(newChildren.iterator).forall {
       case (orig, mapped) => orig.eq(mapped)
     }

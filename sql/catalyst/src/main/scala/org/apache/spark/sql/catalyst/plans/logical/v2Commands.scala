@@ -1681,15 +1681,15 @@ case class TableSpec(
 }
 
 /**
- * The logical plan of the DECLARE [OR REPLACE] TEMPORARY VARIABLE (COMMA TEMPORARY VARIABLE)+ command.
+ * The logical plan of the DECLARE [OR REPLACE] TEMPORARY VARIABLES command.
  */
 case class CreateVariables(
-    name: IndexedSeq[LogicalPlan],
+    names: IndexedSeq[LogicalPlan],
     defaultExpr: DefaultValueExpression,
     replace: Boolean) extends NaryCommand with SupportsSubquery {
-  override def naryChildren: IndexedSeq[LogicalPlan] = name
+  override def naryChildren: IndexedSeq[LogicalPlan] = names
   override protected def withNaryChildren(newChildren: IndexedSeq[LogicalPlan]): LogicalPlan =
-    copy(name = newChildren)
+    copy(names = newChildren)
 }
 
 /**

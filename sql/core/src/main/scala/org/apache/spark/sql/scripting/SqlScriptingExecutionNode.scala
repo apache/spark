@@ -1173,12 +1173,12 @@ class ForStatementExec(
   private def createDeclareVarExec(varName: String): SingleStatementExec = {
     val defaultExpression = DefaultValueExpression(
       Literal(null, queryColumnNameToDataType(varName)), "null")
-    val declareVariable = CreateVariables(
+    val declareVariables = CreateVariables(
       IndexedSeq(UnresolvedIdentifier(Seq(varName))),
       defaultExpression,
       replace = false
     )
-    new SingleStatementExec(declareVariable, Origin(), Map.empty, isInternal = true, context)
+    new SingleStatementExec(declareVariables, Origin(), Map.empty, isInternal = true, context)
   }
 
   private def createSetVarExec(varName: String, variable: Expression): SingleStatementExec = {
