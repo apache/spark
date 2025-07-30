@@ -551,7 +551,7 @@ class IndexedRow:
 
     def __init__(self, index: int, vector: "VectorLike") -> None:
         self.index = int(index)
-        self.vector = _convert_to_vector(vector)
+        self.vector = _convert_to_vector(vector)  # type: ignore[arg-type]
 
     def __repr__(self) -> str:
         return "IndexedRow(%s, %s)" % (self.index, self.vector)
