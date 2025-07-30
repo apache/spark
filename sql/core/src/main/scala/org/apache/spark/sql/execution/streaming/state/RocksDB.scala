@@ -1242,8 +1242,6 @@ class RocksDB(
     changelogWriter.foreach(_.abort())
     // Make sure changelogWriter gets recreated next time.
     changelogWriter = None
-    // If we roll back we clear the recorded metrics
-    recordedMetrics = None
     logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
   }
 
