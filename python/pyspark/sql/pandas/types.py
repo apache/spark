@@ -678,11 +678,11 @@ def _check_series_convert_timestamps_localize(
         return cast(
             "PandasSeriesLike",
             s.apply(
-                lambda ts: ts.tz_localize(from_tz, ambiguous=False)
-                .tz_convert(to_tz)
-                .tz_localize(None)
-                if ts is not pd.NaT
-                else pd.NaT
+                lambda ts: (
+                    ts.tz_localize(from_tz, ambiguous=False).tz_convert(to_tz).tz_localize(None)
+                    if ts is not pd.NaT
+                    else pd.NaT
+                )
             ),
         )
     else:
@@ -1208,9 +1208,11 @@ def _create_converter_from_pandas(
                             return [
                                 (
                                     _key_conv(k) if _key_conv is not None and k is not None else k,
-                                    _value_conv(v)
-                                    if _value_conv is not None and v is not None
-                                    else v,
+                                    (
+                                        _value_conv(v)
+                                        if _value_conv is not None and v is not None
+                                        else v
+                                    ),
                                 )
                                 for k, v in value.items()
                             ]
