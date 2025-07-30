@@ -654,7 +654,7 @@ object FunctionRegistry {
     expressionBuilder("second", SecondExpressionBuilder),
     expression[ParseToTimestamp]("to_timestamp"),
     expression[ParseToDate]("to_date"),
-    expression[TimeDiff]("timediff"),
+    expression[TimeDiff]("time_diff"),
     expression[ToTime]("to_time"),
     expression[ToBinary]("to_binary"),
     expression[ToUnixTimestamp]("to_unix_timestamp"),

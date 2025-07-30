@@ -652,11 +652,11 @@ case class SubtractTimes(left: Expression, right: Expression)
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(HOUR, TIME'20:30:29', TIME'21:30:28');
+      > SELECT _FUNC_('HOUR', TIME'20:30:29', TIME'21:30:28');
        0
-      > SELECT _FUNC_(HOUR, TIME'20:30:29', TIME'21:30:29');
+      > SELECT _FUNC_('HOUR', TIME'20:30:29', TIME'21:30:29');
        1
-      > SELECT _FUNC_(HOUR, TIME'20:30:29', TIME'12:00:00');
+      > SELECT _FUNC_('HOUR', TIME'20:30:29', TIME'12:00:00');
        -8
   """,
   group = "datetime_funcs",
@@ -679,7 +679,7 @@ case class TimeDiff(
 
   override def dataType: DataType = LongType
 
-  override def prettyName: String = "timediff"
+  override def prettyName: String = "time_diff"
 
   override protected def withNewChildrenInternal(
       newUnit: Expression, newStart: Expression, newEnd: Expression): TimeDiff = {
