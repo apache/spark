@@ -319,9 +319,19 @@ This file is divided into 3 sections:
     <customMessage>Use Java String methods instead</customMessage>
   </check>
 
+  <check customId="commonslang3strip" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">StringUtils\.strip\(</parameter></parameters>
+    <customMessage>Use Utils.strip method instead</customMessage>
+  </check>
+
   <check customId="commonstextstringsubstitutor" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.text\.StringSubstitutor</parameter></parameters>
     <customMessage>Use org.apache.spark.StringSubstitutor instead</customMessage>
+  </check>
+
+  <check customId="commonslang3abbreviate" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">StringUtils\.abbreviate\(</parameter></parameters>
+    <customMessage>Use Utils.abbreviate method instead</customMessage>
   </check>
 
   <check customId="uribuilder" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
@@ -505,5 +515,10 @@ This file is divided into 3 sections:
   <check customId="configName" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">buildConf\("spark.databricks.</parameter></parameters>
     <customMessage>Use Apache Spark config namespace.</customMessage>
+  </check>
+
+  <check customId="googleStrings" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">com\.google\.common\.base\.Strings</parameter></parameters>
+    <customMessage>Use Java built-in methods or SparkStringUtils instead</customMessage>
   </check>
 </scalastyle>
