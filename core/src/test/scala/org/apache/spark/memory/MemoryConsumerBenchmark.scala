@@ -82,22 +82,22 @@ object MemoryConsumerBenchmark extends BenchmarkBase {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val onHeapBenchmark = new Benchmark(s"On-heap allocations", N, output = output)
-    onHeapBenchmark.addCase("use and free - test", 3) { _ =>
+    onHeapBenchmark.addCase("use and free - TestMemoryManager", 3) { _ =>
       testOnHeapConsumer.use(1L)
       testOnHeapConsumer.free(1L)
     }
-    onHeapBenchmark.addCase("use and free - user", 3) { _ =>
+    onHeapBenchmark.addCase("use and free - UnifiedMemoryManager", 3) { _ =>
       userOnHeapConsumer.use(1L)
       userOnHeapConsumer.free(1L)
     }
     onHeapBenchmark.run()
 
     val offHeapBenchmark = new Benchmark(s"Off-heap allocations", N, output = output)
-    offHeapBenchmark.addCase("use and free - test", 3) { _ =>
+    offHeapBenchmark.addCase("use and free - TestMemoryManager", 3) { _ =>
       testOffHeapConsumer.use(1L)
       testOffHeapConsumer.free(1L)
     }
-    offHeapBenchmark.addCase("use and free - user", 3) { _ =>
+    offHeapBenchmark.addCase("use and free - UnifiedMemoryManager", 3) { _ =>
       userOffHeapConsumer.use(1L)
       userOffHeapConsumer.free(1L)
     }
