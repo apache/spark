@@ -41,6 +41,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
   val joinTableName1: String = "join_table_1"
   val joinTableName2: String = "join_table_2"
+  val joinTableName3: String = "join_table_3"
+  val joinTableName4: String = "join_table_4"
 
   val jdbcDialect: JdbcDialect
 
@@ -57,6 +59,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   private def catalogAndNamespace = s"$catalogName.${caseConvert(namespace)}"
   private def casedJoinTableName1 = caseConvert(joinTableName1)
   private def casedJoinTableName2 = caseConvert(joinTableName2)
+  private def casedJoinTableName3 = caseConvert(joinTableName3)
+  private def casedJoinTableName4 = caseConvert(joinTableName4)
 
   def qualifyTableName(tableName: String): String = {
     val fullyQualifiedCasedNamespace = jdbcDialect.quoteIdentifier(caseConvert(namespace))
@@ -68,8 +72,9 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     jdbcDialect.quoteIdentifier(caseConvert(namespace))
 
   private lazy val fullyQualifiedTableName1: String = qualifyTableName(joinTableName1)
-
   private lazy val fullyQualifiedTableName2: String = qualifyTableName(joinTableName2)
+  private lazy val fullyQualifiedTableName3: String = qualifyTableName(joinTableName3)
+  private lazy val fullyQualifiedTableName4: String = qualifyTableName(joinTableName4)
 
   protected def getJDBCTypeString(dt: DataType): String = {
     JdbcUtils.getJdbcType(dt, jdbcDialect).databaseTypeDefinition.toUpperCase()
@@ -133,6 +138,24 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
            |  SURNAME ${getJDBCTypeString(stringType)}
            |)""".stripMargin
       ).executeUpdate()
+
+      // Complex situations with different capitalization and quotation marks.
+      conn.prepareStatement(
+        s"""CREATE TABLE $fullyQualifiedTableName3(
+           |"id" ${getJDBCTypeString(integerType)},
+           |"id_1" ${getJDBCTypeString(integerType)},
+           |"id_2" ${getJDBCTypeString(integerType)},
+           |"id_1_1" ${getJDBCTypeString(integerType)}
+           |)""".stripMargin
+      ).executeUpdate()
+      conn.prepareStatement(
+        s"""CREATE TABLE $fullyQualifiedTableName4 (
+           |"id" ${getJDBCTypeString(integerType)},
+           |"id_1" ${getJDBCTypeString(integerType)},
+           |"id_2" ${getJDBCTypeString(integerType)},
+           |"id_2_1" ${getJDBCTypeString(integerType)}
+           |)""".stripMargin
+      ).executeUpdate()
     }
   }
 
@@ -182,6 +205,10 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       insertStmt2.executeBatch()
       insertStmt2.close()
 
+      conn.createStatement().execute(
+        s"""insert into $fullyQualifiedTableName3 values (0, 1, 2, 3)""")
+      conn.createStatement().execute(
+        s"""insert into $fullyQualifiedTableName4 values (0, -1, -2, -3)""")
     }
   }
 
@@ -643,15 +670,11 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   }
 
   test("Test complex duplicate column name alias") {
-    sql(s"create table $catalogAndNamespace.t1(id int, id_1 int, id_2 int, id_1_1 int)")
-    sql(s"create table $catalogAndNamespace.t2(id int, id_1 int, id_2 int, id_2_1 int)")
-    sql(s"insert into $catalogAndNamespace.t1 values (0, 1, 2, 3)")
-    sql(s"insert into $catalogAndNamespace.t2 values (0, -1, -2, -3)")
     val sqlQuery = s"""
                       |SELECT
                       |    *
-                      |FROM $catalogAndNamespace.t1 a
-                      |JOIN $catalogAndNamespace.t2 b
+                      |FROM $catalogAndNamespace.$casedJoinTableName3 a
+                      |JOIN $catalogAndNamespace.$casedJoinTableName4 b
                       |ON a.id = b.id""".stripMargin
 
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
@@ -668,8 +691,5 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
       checkJoinPushed(df)
     }
-
-    sql(s"drop table $catalogAndNamespace.t1")
-    sql(s"drop table $catalogAndNamespace.t2")
   }
 }

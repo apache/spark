@@ -206,7 +206,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       allRequiredColumnNames.groupBy(identity).view.mapValues(_.size).toMap
     // Use Set for O(1) lookups when checking existing column names, claim all names
     // that appears only once to ensure they have highest priority.
-    val allClaimedAliases = mutable.HashSet.empty ++ allNameCounts.filter(_._2 == 1).keySet
+    val allClaimedAliases = mutable.Set.from(allNameCounts.filter(_._2 == 1).keys)
 
     // Track the next suffix index for each column name (starts at 0) to avoid extreme worst
     // case of O(n^2) alias generation.
