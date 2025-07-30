@@ -399,6 +399,11 @@ This file is divided into 3 sections:
     <customMessage>Use Utils.strip method instead</customMessage>
   </check>
 
+  <check customId="commonslang3systemutils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.commons\.lang3\.SystemUtils\b</parameter></parameters>
+    <customMessage>Use SparkSystemUtils or Utils instead</customMessage>
+  </check>
+
   <check customId="commonstextstringsubstitutor" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.text\.StringSubstitutor\b</parameter></parameters>
     <customMessage>Use org.apache.spark.StringSubstitutor instead</customMessage>
