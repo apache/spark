@@ -99,6 +99,7 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
 
     String mem = firstNonEmpty(memKey != null ? System.getenv(memKey) : null, DEFAULT_MEM);
     cmd.add("-Xmx" + mem);
+    addOptionString(cmd, JavaModuleOptions.defaultModuleOptions());
     cmd.add(className);
     cmd.addAll(classArgs);
     return cmd;
