@@ -2744,6 +2744,66 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected = expected)
   }
 
+  test("local variable - multiple variables declared at once") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  lbl1: BEGIN
+        |    DECLARE localVar1, localVar2, localVar3, localVar4 = 1;
+        |    SELECT localVar1;
+        |    SELECT lbl1.localVar1;
+        |    SELECT localVar2;
+        |    SELECT lbl1.localVar2;
+        |    SELECT localVar3;
+        |    SELECT lbl1.localVar3;
+        |    SELECT localVar4;
+        |    SELECT lbl1.localVar4;
+        |  END;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq(Row(1)), // select localVar1
+      Seq(Row(1)), // select lbl1.localVar1
+      Seq(Row(1)), // select localVar2
+      Seq(Row(1)), // select lbl1.localVar2
+      Seq(Row(1)), // select localVar3
+      Seq(Row(1)), // select lbl1.localVar3
+      Seq(Row(1)), // select localVar4
+      Seq(Row(1)), // select lbl1.localVar4
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("local variable - variable declared via IDENTIFIER construct," +
+    "as well as a regular variable within the same DECLARE") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  lbl1: BEGIN
+        |    DECLARE proxy = "var1";
+        |    DECLARE IDENTIFIER(proxy), var2 = 3;
+        |    SELECT proxy;
+        |    SELECT lbl1.proxy;
+        |    SELECT var1;
+        |    SELECT lbl1.var1;
+        |    SELECT var2;
+        |    SELECT lbl1.var2;
+        |  END;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq(Row("var1")), // select proxy
+      Seq(Row("var1")), // select lbl1.proxy
+      Seq(Row(3)), // select var1
+      Seq(Row(3)), // select lbl1.var1
+      Seq(Row(3)), // select var2
+      Seq(Row(3)), // select lbl1.var2
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
   test("Exception handler in a FOR loop - with condition") {
     withTable("t") {
       withView("v") {
