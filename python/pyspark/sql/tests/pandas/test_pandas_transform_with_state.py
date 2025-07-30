@@ -591,6 +591,7 @@ class TransformWithStateTestsMixin:
     def test_transform_with_state_proc_timer(self):
         def check_results(batch_df, batch_id):
             batch_df.collect()
+
             # helper function to check expired timestamp is smaller than current processing time
             def check_timestamp(batch_df):
                 expired_df = (
