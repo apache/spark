@@ -758,7 +758,7 @@ class RocksDB(
 
     val duration = System.currentTimeMillis() - startTime
     loadMetrics ++= Map(
-      "replayChangelog" -> Math.max(duration, 1L), // avoid flakey tests
+      "replayChangelog" -> Math.max(duration, 1L), // avoid flaky tests
       "numReplayChangeLogFiles" -> versionsAndUniqueIds.length
     )
   }
@@ -1376,6 +1376,7 @@ class RocksDB(
       pinnedBlocksMemUsage,
       totalSSTFilesBytes,
       nativeOpsLatencyMicros,
+      // Ensure that the maps are cloned to avoid sharing these Maps
       commitLatencyMs.clone(),
       loadMetrics.clone(),
       bytesCopied = fileManagerMetrics.bytesCopied,
