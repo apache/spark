@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.expressions
 
 import org.apache.commons.codec.binary.Hex
-import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst
@@ -390,7 +389,7 @@ private[sql] object HoursTransform {
 
 private[sql] final case class LiteralValue[T](value: T, dataType: DataType) extends Literal[T] {
   override def toString: String = dataType match {
-    case StringType => s"'${StringUtils.replace(s"$value", "'", "''")}'"
+    case StringType => s"'${s"$value".replace("'", "''")}'"
     case BinaryType =>
       assert(value.isInstanceOf[Array[Byte]])
       val bytes = value.asInstanceOf[Array[Byte]]

@@ -134,8 +134,10 @@ class SortResolver(operatorResolver: Resolver, expressionResolver: ExpressionRes
       val (resolvedOrderExpressionsWithAliasesReplaced, filteredMissingExpressions) =
         tryReplaceSortOrderWithAlias(resolvedOrderExpressions, missingExpressions)
 
+      val deduplicatedMissingExpressions = deduplicateMissingExpressions(filteredMissingExpressions)
+
       val resolvedChildWithMissingAttributes =
-        insertMissingExpressions(resolvedChild, filteredMissingExpressions)
+        insertMissingExpressions(resolvedChild, deduplicatedMissingExpressions)
 
       val isChildChangedByMissingExpressions = !resolvedChildWithMissingAttributes.eq(resolvedChild)
 

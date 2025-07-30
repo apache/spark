@@ -185,7 +185,7 @@
     <fasterxml.jackson.version>2.19.0</fasterxml.jackson.version>
     <fasterxml.jackson.databind.version>2.19.0</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
-    <snappy.version>1.1.10.7</snappy.version>
+    <snappy.version>1.1.10.8</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.18.0</commons-codec.version>
     <commons-compress.version>1.27.1</commons-compress.version>
@@ -202,7 +202,6 @@
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.0.17</jersey.version>
     <joda.version>2.13.0</joda.version>
-    <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <jaxb.version>2.2.11</jaxb.version>
     <libthrift.version>0.16.0</libthrift.version>
@@ -216,7 +215,7 @@
     <bouncycastle.version>1.80</bouncycastle.version>
     <tink.version>1.16.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.1.122.Final</netty.version>
+    <netty.version>4.1.123.Final</netty.version>
     <netty-tcnative.version>2.0.72.Final</netty-tcnative.version>
     <icu4j.version>77.1</icu4j.version>
     <junit-jupiter.version>5.13.1</junit-jupiter.version>
@@ -1239,13 +1238,13 @@
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy</artifactId>
-        <version>1.17.0</version>
+        <version>1.17.6</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy-agent</artifactId>
-        <version>1.17.0</version>
+        <version>1.17.6</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2450,11 +2449,6 @@
         <version>${joda.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.jodd</groupId>
-        <artifactId>jodd-core</artifactId>
-        <version>${jodd.version}</version>
-      </dependency>
-      <dependency>
         <groupId>org.datanucleus</groupId>
         <artifactId>datanucleus-core</artifactId>
         <version>${datanucleus-core.version}</version>
@@ -2630,8 +2624,7 @@
                     <version>${maven.version}</version>
                   </requireMavenVersion>
                   <requireJavaVersion>
-                    <version>[${java.minimum.version},)</version>
-                    <message>The Java version used to build the project is outdated. Please use ${java.minimum.version} or later.</message>
+                    <version>${java.version}</version>
                   </requireJavaVersion>
                   <bannedDependencies>
                     <excludes>

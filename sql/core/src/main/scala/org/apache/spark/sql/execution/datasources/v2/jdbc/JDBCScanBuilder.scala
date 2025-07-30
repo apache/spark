@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownAggrega
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
-import org.apache.spark.sql.jdbc.{JdbcDialects, JdbcSQLQueryBuilder}
+import org.apache.spark.sql.jdbc.{JdbcDialects, JdbcSQLQueryBuilder, JoinPushdownAliasGenerator}
 import org.apache.spark.sql.types.StructType
 
 case class JDBCScanBuilder(
@@ -334,12 +334,4 @@ case class JDBCScanBuilder(
       pushedAggregateList, pushedGroupBys, tableSample, pushedLimit, sortOrders, pushedOffset)
   }
 
-}
-
-object JoinPushdownAliasGenerator {
-  private val subQueryId = new java.util.concurrent.atomic.AtomicLong()
-
-  def getSubqueryQualifier: String = {
-    "join_subquery_" + subQueryId.getAndIncrement()
-  }
 }

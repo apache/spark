@@ -71,13 +71,15 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
     kubernetesTestComponents
       .kubernetesClient
       .persistentVolumes()
-      .create(pvBuilder.build())
+      .resource(pvBuilder.build())
+      .create()
 
     kubernetesTestComponents
       .kubernetesClient
       .persistentVolumeClaims()
       .inNamespace(kubernetesTestComponents.namespace)
-      .create(pvcBuilder.build())
+      .resource(pvcBuilder.build())
+      .create()
   }
 
   private def deleteLocalStorage(): Unit = {

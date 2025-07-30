@@ -19,6 +19,8 @@ package org.apache.spark.sql.connector.write;
 
 import org.apache.spark.annotation.Evolving;
 
+import java.util.Map;
+
 /**
  * An interface that defines how to write the data to data source for batch processing.
  * <p>
@@ -87,6 +89,49 @@ public interface BatchWrite {
    * passed to this commit method. The remaining commit messages are ignored by Spark.
    */
   void commit(WriterCommitMessage[] messages);
+
+  /**
+   * Commits this writing job with a list of commit messages and operation metrics.
+   * <p>
+   * If this method fails (by throwing an exception), this writing job is considered to to have been
+   * failed, and {@link #abort(WriterCommitMessage[])} would be called. The state of the destination
+   * is undefined and @{@link #abort(WriterCommitMessage[])} may not be able to deal with it.
+   * <p>
+   * Note that speculative execution may cause multiple tasks to run for a partition. By default,
+   * Spark uses the commit coordinator to allow at most one task to commit. Implementations can
+   * disable this behavior by overriding {@link #useCommitCoordinator()}. If disabled, multiple
+   * tasks may have committed successfully and one successful commit message per task will be
+   * passed to this commit method. The remaining commit messages are ignored by Spark.
+   * <p>
+   * @param messages a list of commit messages from successful data writers, produced by
+   *                 {@link DataWriter#commit()}.
+   * @param metrics a map of operation metrics collected from the query producing write.
+   *                The keys will be prefixed by operation type, eg `merge`.
+   *                <p>
+   *                Currently supported metrics are:
+   *                <ul>
+   *                  <li>Operation Type = `merge`
+   *                    <ul>
+   *                      <li>`numTargetRowsCopied`: number of target rows copied unmodified because
+   *                      they did not match any action</li>
+   *                      <li>`numTargetRowsDeleted`: number of target rows deleted</li>
+   *                      <li>`numTargetRowsUpdated`: number of target rows updated</li>
+   *                      <li>`numTargetRowsInserted`: number of target rows inserted</li>
+   *                      <li>`numTargetRowsMatchedUpdated`: number of target rows updated by a
+   *                      matched clause</li>
+   *                      <li>`numTargetRowsMatchedDeleted`: number of target rows deleted by a
+   *                      matched clause</li>
+   *                      <li>`numTargetRowsNotMatchedBySourceUpdated`: number of target rows
+   *                      updated by a not matched by source clause</li>
+   *                      <li>`numTargetRowsNotMatchedBySourceDeleted`: number of target rows
+   *                      deleted by a not matched by source clause</li>
+   *                    </ul>
+   *                  </li>
+   *                </ul>
+   */
+  default void commit(WriterCommitMessage[] messages, Map<String, Long> metrics) {
+    commit(messages);
+  }
 
   /**
    * Aborts this writing job because some data writers are failed and keep failing when retry,

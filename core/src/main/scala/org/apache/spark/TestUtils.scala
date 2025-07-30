@@ -38,7 +38,6 @@ import scala.sys.process.Process
 import scala.util.Try
 
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.commons.lang3.StringUtils
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.core.LoggerContext
 import org.apache.logging.log4j.core.appender.ConsoleAppender
@@ -234,7 +233,7 @@ private[spark] object TestUtils extends SparkTestUtils {
       Some(Paths.get(command).toAbsolutePath.toString)
     } else {
       sys.env("PATH").split(Pattern.quote(File.pathSeparator))
-        .map(path => Paths.get(s"${StringUtils.strip(path, "\"")}${File.separator}$command"))
+        .map(path => Paths.get(s"${Utils.strip(path, "\"")}${File.separator}$command"))
         .find(p => JavaFiles.isRegularFile(p) && JavaFiles.isExecutable(p))
         .map(_.toString)
     }

@@ -63,13 +63,24 @@ abstract class BaseConstraint implements Constraint {
 
   @Override
   public String toDDL() {
+    // The validation status is not included in the DDL output as it's not part of
+    // the Spark SQL syntax for constraints.
     return String.format(
-        "CONSTRAINT %s %s %s %s %s",
+        "CONSTRAINT %s %s %s %s",
         name,
         definition(),
         enforced ? "ENFORCED" : "NOT ENFORCED",
-        validationStatus,
         rely ? "RELY" : "NORELY");
+  }
+
+  public String toDescription() {
+    StringJoiner joiner = new StringJoiner(" ");
+    joiner.add(definition());
+    joiner.add(enforced ? "ENFORCED" : "NOT ENFORCED");
+    if (rely) {
+      joiner.add("RELY");
+    }
+    return joiner.toString();
   }
 
   @Override

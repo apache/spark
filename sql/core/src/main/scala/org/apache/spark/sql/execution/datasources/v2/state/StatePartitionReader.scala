@@ -124,6 +124,7 @@ abstract class StatePartitionReaderBase(
         stateStoreColFamilySchema.keyStateEncoderSpec.get,
         useMultipleValuesPerKey = useMultipleValuesPerKey,
         isInternal = isInternal)
+      store.abort()
     }
     provider
   }
@@ -204,7 +205,7 @@ class StatePartitionReader(
   }
 
   override def close(): Unit = {
-    store.abort()
+    store.release()
     super.close()
   }
 }
