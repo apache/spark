@@ -56,7 +56,8 @@ class DataFrameCallbackSuite extends QueryTest
 
     val confsToSet = Map(
       SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED -> false,
-      SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED -> false
+      SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED -> false,
+      SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED -> false
     )
 
     confsToSet.foreach { case (key, newValue) =>
