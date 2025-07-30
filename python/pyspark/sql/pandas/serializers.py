@@ -703,8 +703,13 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
 
         if arr.type == arrow_type:
             return arr
-        else:
+        elif arrow_cast:
             return arr.cast(target_type=arrow_type, safe=self._safecheck)
+        else:
+            raise PySparkTypeError(
+                "Arrow UDFs require the return type to match the expected Arrow type. "
+                f"Expected: {arrow_type}, but got: {arr.type}."
+            )
 
     def dump_stream(self, iterator, stream):
         """
