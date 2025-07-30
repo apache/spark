@@ -20,14 +20,14 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.connector.catalog.{DataSourceTableOrView, Identifier, Table, TableCatalog, TableChange, TableSummary}
+import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, Table, TableCatalog, TableChange, TableSummary}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class DataSourceV2DataSourceTableOrViewSuite extends QueryTest with SharedSparkSession {
+class DataSourceV2MetadataOnlyTableSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   override def sparkConf: SparkConf = super.sparkConf
@@ -95,21 +95,21 @@ class TestingGeneralCatalog extends TableCatalog {
   override def loadTable(ident: Identifier): Table = {
     ident.name() match {
       case "test_json" =>
-        new DataSourceTableOrView.Builder(new StructType().add("col", "string"))
+        new MetadataOnlyTable.Builder(new StructType().add("col", "string"))
           .withProvider("json")
           .withLocation(ident.namespace().head)
           .withTableType(TableSummary.EXTERNAL_TABLE_TYPE)
           .build()
       case "test_partitioned_json" =>
         val partitioning = LogicalExpressions.identity(LogicalExpressions.reference(Seq("c2")))
-        new DataSourceTableOrView.Builder(new StructType().add("c1", "int").add("c2", "int"))
+        new MetadataOnlyTable.Builder(new StructType().add("c1", "int").add("c2", "int"))
           .withProvider("json")
           .withLocation(ident.namespace().head)
           .withTableType(TableSummary.EXTERNAL_TABLE_TYPE)
           .withPartitioning(Array(partitioning))
           .build()
       case "test_v2" =>
-        new DataSourceTableOrView.Builder(FakeV2Provider.schema)
+        new MetadataOnlyTable.Builder(FakeV2Provider.schema)
           .withProvider(classOf[FakeV2Provider].getName)
           .build()
       case "test_view" =>
@@ -117,7 +117,7 @@ class TestingGeneralCatalog extends TableCatalog {
           TableCatalog.VIEW_CONF_PREFIX + SQLConf.ANSI_ENABLED.key,
           (ident.namespace().head == "ansi").toString
         )
-        new DataSourceTableOrView.Builder(new StructType().add("col", "string").add("i", "int"))
+        new MetadataOnlyTable.Builder(new StructType().add("col", "string").add("i", "int"))
           .withViewText("SELECT col, col::int AS i FROM spark_catalog.default.t WHERE col = 'b'")
           .withTableProps(viewProps)
           .build()

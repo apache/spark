@@ -1257,7 +1257,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
                 ResolvedPersistentView(
                   catalog, v2Ident, v1Table.catalogTable)
-              case t: DataSourceTableOrView =>
+              case t: MetadataOnlyTable =>
                 val catalogTable = V1Table.toCatalogTable(catalog, ident, t)
                 if (catalogTable.tableType == CatalogTableType.VIEW) {
                   ResolvedPersistentView(catalog, ident, catalogTable)

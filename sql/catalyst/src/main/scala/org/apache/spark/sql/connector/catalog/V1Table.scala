@@ -113,7 +113,7 @@ private[sql] object V1Table {
   def toCatalogTable(
       catalog: CatalogPlugin,
       ident: Identifier,
-      t: DataSourceTableOrView): CatalogTable = {
+      t: MetadataOnlyTable): CatalogTable = {
     val tableType = t.getTableType() match {
       case TableSummary.VIEW_TABLE_TYPE => CatalogTableType.VIEW
       case TableSummary.MANAGED_TABLE_TYPE => CatalogTableType.MANAGED
