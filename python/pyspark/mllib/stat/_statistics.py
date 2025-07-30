@@ -186,7 +186,7 @@ class Statistics:
 
         if not y:
             return cast(
-                JavaObject, callMLlibFunc("corr", x.map(_convert_to_vector), method)
+                JavaObject, callMLlibFunc("corr", x.map(_convert_to_vector), method)  # type: ignore[arg-type]
             ).toArray()
         else:
             return cast(
