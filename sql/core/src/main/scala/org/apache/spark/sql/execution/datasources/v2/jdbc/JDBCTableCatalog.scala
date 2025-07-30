@@ -158,8 +158,9 @@ class JDBCTableCatalog extends TableCatalog
       val schema = SQLMetrics.withTimingNs(remoteSchemaFetchMetric) {
         JDBCRDD.resolveTable(optionsWithTableName)
       }
-      JDBCTable(ident, schema, optionsWithTableName,
-        Map(JDBCRelation.schemaFetchKey -> remoteSchemaFetchMetric))
+      val table = JDBCTable(ident, schema, optionsWithTableName)
+      table.setAdditionalMetrics(Map(JDBCRelation.schemaFetchKey -> remoteSchemaFetchMetric))
+      table
     }
   }
 

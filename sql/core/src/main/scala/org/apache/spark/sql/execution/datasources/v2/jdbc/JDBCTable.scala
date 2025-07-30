@@ -36,13 +36,18 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 case class JDBCTable(
     ident: Identifier,
     override val schema: StructType,
-    jdbcOptions: JDBCOptions,
-    additionalMetrics: Map[String, SQLMetric] = Map())
+    jdbcOptions: JDBCOptions)
   extends Table
   with SupportsRead
   with SupportsWrite
   with SupportsIndex
   with DataTypeErrorsBase {
+
+  private var additionalMetrics: Map[String, SQLMetric] = Map()
+
+  def setAdditionalMetrics(metrics: Map[String, SQLMetric]): Unit = {
+    additionalMetrics = metrics
+  }
 
   override def name(): String = ident.toString
 
