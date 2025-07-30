@@ -20,19 +20,24 @@ package org.apache.spark.sql.connector.catalog;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
 
 /**
- * A concrete {@code Table} implementation that represents a general Spark data source table or
- * a Spark view, which does not implement read/write directly, but relies on Spark to interpret
- * the table metadata and resolve the table provider into a data source, or read it as a view.
+ * A concrete {@code Table} implementation that only contains the table metadata without
+ * implementing read/write directly. It represents a general Spark data source table or
+ * a Spark view, and relies on Spark to interpret the table metadata, resolve the table
+ * provider into a data source, or read it as a view.
  * This affects the table read/write operations but not DDL operations.
+ *
+ * @since 4.1.0
  */
-public class DataSourceTableOrView implements Table {
+@Evolving
+public class MetadataOnlyTable implements Table {
   private final Builder builder;
 
-  private DataSourceTableOrView(Builder builder) {
+  private MetadataOnlyTable(Builder builder) {
     this.builder = builder;
   }
 
@@ -128,8 +133,8 @@ public class DataSourceTableOrView implements Table {
       return this;
     }
 
-    public DataSourceTableOrView build() {
-      return new DataSourceTableOrView(this);
+    public MetadataOnlyTable build() {
+      return new MetadataOnlyTable(this);
     }
   }
 
