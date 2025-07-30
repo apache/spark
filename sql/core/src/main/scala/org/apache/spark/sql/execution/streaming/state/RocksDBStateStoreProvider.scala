@@ -410,6 +410,12 @@ private[sql] class RocksDBStateStoreProvider
         validateAndTransitionState(COMMIT)
         logInfo(log"Committed ${MDC(VERSION_NUM, newVersion)} " +
           log"for ${MDC(STATE_STORE_ID, id)}")
+
+        // Report the commit to StateStoreCoordinator for tracking
+        if (storeConf.commitValidationEnabled) {
+          StateStore.reportCommitToCoordinator(newVersion, stateStoreId, hadoopConf)
+        }
+
         newVersion
       } catch {
         case e: Throwable =>

@@ -28,6 +28,7 @@ import org.apache.spark.{SparkContext, SparkException, TaskContext}
 import org.apache.spark.sql.{DataFrame, ForeachWriter}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.{CommitLog, MemoryStream, StreamExecution}
+import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorSuite.withCoordinatorRef
 import org.apache.spark.sql.execution.streaming.state.StateStoreTestsHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -166,7 +167,6 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false,
       stateSchemaProvider: Option[StateSchemaProvider] = None): Unit = {
-    hadoopConf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
     innerProvider.init(
       stateStoreId,
       keySchema,
@@ -1212,28 +1212,30 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
   test("checkpointFormatVersion2 racing commits don't return incorrect checkpointInfo") {
     val sqlConf = new SQLConf()
     sqlConf.setConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 2)
-
-    withTempDir { checkpointDir =>
-      val provider = new CkptIdCollectingStateStoreProviderWrapper()
-      provider.init(
-        StateStoreId(checkpointDir.toString, 0, 0),
-        StateStoreTestsHelper.keySchema,
-        StateStoreTestsHelper.valueSchema,
-        PrefixKeyScanStateEncoderSpec(StateStoreTestsHelper.keySchema, 1),
-        useColumnFamilies = false,
-        new StateStoreConf(sqlConf),
-        new Configuration
-      )
-
-      val store1 = provider.getStore(0)
-      val store1NewVersion = store1.commit()
-      val store2 = provider.getStore(1)
-      val store2NewVersion = store2.commit()
-      val store1CheckpointInfo = store1.getStateStoreCheckpointInfo()
-      val store2CheckpointInfo = store2.getStateStoreCheckpointInfo()
-
-      assert(store1CheckpointInfo.batchVersion == store1NewVersion)
-      assert(store2CheckpointInfo.batchVersion == store2NewVersion)
+    val sc = spark.sparkContext
+    withCoordinatorRef(sc) { _ =>
+      withTempDir { checkpointDir =>
+        val hadoopConf = new Configuration()
+        hadoopConf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
+        val provider = new CkptIdCollectingStateStoreProviderWrapper()
+        provider.init(
+          StateStoreId(checkpointDir.toString, 0, 0),
+          StateStoreTestsHelper.keySchema,
+          StateStoreTestsHelper.valueSchema,
+          PrefixKeyScanStateEncoderSpec(StateStoreTestsHelper.keySchema, 1),
+          useColumnFamilies = false,
+          new StateStoreConf(sqlConf),
+          hadoopConf
+        )
+        val store1 = provider.getStore(0)
+        val store1NewVersion = store1.commit()
+        val store2 = provider.getStore(1)
+        val store2NewVersion = store2.commit()
+        val store1CheckpointInfo = store1.getStateStoreCheckpointInfo()
+        val store2CheckpointInfo = store2.getStateStoreCheckpointInfo()
+        assert(store1CheckpointInfo.batchVersion == store1NewVersion)
+        assert(store2CheckpointInfo.batchVersion == store2NewVersion)
+      }
     }
   }
 }

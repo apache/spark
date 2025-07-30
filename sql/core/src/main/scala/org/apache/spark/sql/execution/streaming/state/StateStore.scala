@@ -35,6 +35,7 @@ import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.{SparkContext, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.LogKeys.{EXCEPTION, STATE_STORE_ID, VERSION_NUM}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -917,6 +918,28 @@ object StateStore extends Logging {
   // to prevent the same partition from being processed concurrently.
   @GuardedBy("maintenanceThreadPoolLock")
   private val maintenancePartitions = new mutable.HashSet[StateStoreProviderId]
+
+  /** Reports to the coordinator that a StateStore has committed */
+  def reportCommitToCoordinator(
+      version: Long,
+      stateStoreId: StateStoreId,
+      hadoopConf: Configuration): Unit = {
+    try {
+      val runId = UUID.fromString(StateStoreProvider.getRunId(hadoopConf))
+      val providerId = StateStoreProviderId(stateStoreId, runId)
+      // The coordinator will handle whether tracking is active for this batch
+      // If tracking is not active, it will just reply without processing
+      StateStoreProvider.coordinatorRef.foreach(
+        _.reportStateStoreCommit(providerId, version, stateStoreId.storeName)
+      )
+      logDebug(log"Reported commit for store " +
+        log"${MDC(STATE_STORE_ID, stateStoreId)} at version ${MDC(VERSION_NUM, version)}")
+    } catch {
+      case NonFatal(e) =>
+        // Log but don't fail the commit if reporting fails
+        logWarning(log"Failed to report StateStore commit: ${MDC(EXCEPTION, e)}")
+    }
+  }
 
   /**
    * Runs the `task` periodically and bubbles any exceptions that it encounters.
