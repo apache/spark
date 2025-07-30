@@ -329,6 +329,11 @@ This file is divided into 3 sections:
     <customMessage>Use org.apache.spark.StringSubstitutor instead</customMessage>
   </check>
 
+  <check customId="commonslang3abbreviate" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">StringUtils\.abbreviate\(</parameter></parameters>
+    <customMessage>Use Utils.abbreviate method instead</customMessage>
+  </check>
+
   <check customId="uribuilder" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">UriBuilder\.fromUri</parameter></parameters>
     <customMessage>Use Utils.getUriBuilder instead.</customMessage>

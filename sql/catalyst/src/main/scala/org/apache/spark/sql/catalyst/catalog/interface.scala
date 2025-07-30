@@ -27,7 +27,6 @@ import scala.util.control.NonFatal
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
-import org.apache.commons.lang3.StringUtils
 import org.json4s.JsonAST.{JArray, JBool, JDecimal, JDouble, JInt, JLong, JNull, JObject, JString, JValue}
 import org.json4s.jackson.JsonMethods._
 
@@ -50,6 +49,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 /**
  * Interface providing util to convert JValue to String representation of catalog entities.
@@ -1150,7 +1150,7 @@ case class HiveTableRelation(
     val metadataEntries = metadata.toSeq.map {
       case (key, value) if key == "CatalogTable" => value
       case (key, value) =>
-        key + ": " + StringUtils.abbreviate(value, SQLConf.get.maxMetadataStringLength)
+        key + ": " + Utils.abbreviate(value, SQLConf.get.maxMetadataStringLength)
     }
 
     val metadataStr = truncatedString(metadataEntries, "[", ", ", "]", maxFields)
