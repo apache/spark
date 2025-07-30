@@ -150,9 +150,11 @@ def _convert_exception(
                 error_class = root_error.spark_throwable.error_class
             message_parameters = dict(root_error.spark_throwable.message_parameters)
             contexts = [
-                SQLQueryContext(c)
-                if c.context_type == pb2.FetchErrorDetailsResponse.QueryContext.SQL
-                else DataFrameQueryContext(c)
+                (
+                    SQLQueryContext(c)
+                    if c.context_type == pb2.FetchErrorDetailsResponse.QueryContext.SQL
+                    else DataFrameQueryContext(c)
+                )
                 for c in root_error.spark_throwable.query_contexts
             ]
             # Extract breaking change info if present

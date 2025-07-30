@@ -648,9 +648,11 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
                     InternalField(
                         dtype=index_dtype,
                         struct_field=types.StructField(
-                            name=index_name
-                            if index_name is not None
-                            else SPARK_INDEX_NAME_FORMAT(level),
+                            name=(
+                                index_name
+                                if index_name is not None
+                                else SPARK_INDEX_NAME_FORMAT(level)
+                            ),
                             dataType=index_spark_type,
                         ),
                     )
@@ -661,9 +663,11 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
 
         data_dtypes, data_spark_types = zip(
             *(
-                pandas_on_spark_type(p.tpe)
-                if isclass(p) and issubclass(p, NameTypeHolder)
-                else pandas_on_spark_type(p)
+                (
+                    pandas_on_spark_type(p.tpe)
+                    if isclass(p) and issubclass(p, NameTypeHolder)
+                    else pandas_on_spark_type(p)
+                )
                 for p in data_parameters
             )
         )
