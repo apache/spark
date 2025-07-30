@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.io.Closeable
 import java.util.UUID
 import java.util.concurrent.{ConcurrentLinkedQueue, ScheduledFuture, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
@@ -116,11 +117,13 @@ trait ReadStateStore {
    */
   def prefixScan(
       prefixKey: UnsafeRow,
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): NextIterator[UnsafeRowPair]
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
+  Iterator[UnsafeRowPair] with Closeable
 
   /** Return an iterator containing all the key-value pairs in the StateStore. */
   def iterator(
-    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): NextIterator[UnsafeRowPair]
+    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
+  Iterator[UnsafeRowPair] with Closeable
 
   /**
    * Clean up the resource.
@@ -228,7 +231,7 @@ trait StateStore extends ReadStateStore {
    * calling this method if all updates should be visible in the returned iterator.
    */
   override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
-    NextIterator[UnsafeRowPair]
+  Iterator[UnsafeRowPair] with Closeable
 
   /** Current metrics of the state store */
   def metrics: StateStoreMetrics
@@ -261,14 +264,15 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
     colFamilyName)
 
   override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
-    NextIterator[UnsafeRowPair] = store.iterator(colFamilyName)
+  Iterator[UnsafeRowPair] with Closeable = store.iterator(colFamilyName)
 
   override def abort(): Unit = store.abort()
 
   override def release(): Unit = store.release()
 
   override def prefixScan(prefixKey: UnsafeRow,
-    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): NextIterator[UnsafeRowPair] =
+    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
+  Iterator[UnsafeRowPair] with Closeable =
     store.prefixScan(prefixKey, colFamilyName)
 
   override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {

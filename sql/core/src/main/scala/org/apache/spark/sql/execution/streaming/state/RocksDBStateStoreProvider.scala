@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.state.StateStoreEncoding.Avro
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.util.{NextIterator, NonFateSharingCache, Utils}
+import org.apache.spark.util.{NonFateSharingCache, Utils}
 
 private[sql] class RocksDBStateStoreProvider
   extends StateStoreProvider with Logging with Closeable
@@ -315,7 +315,7 @@ private[sql] class RocksDBStateStoreProvider
       rocksDB.remove(kvEncoder._1.encodeKey(key), colFamilyName)
     }
 
-    override def iterator(colFamilyName: String): NextIterator[UnsafeRowPair] = {
+    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] with Closeable = {
       validateAndTransitionState(UPDATE)
       // Note this verify function only verify on the colFamilyName being valid,
       // we are actually doing prefix when useColumnFamilies,
@@ -324,7 +324,7 @@ private[sql] class RocksDBStateStoreProvider
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val rowPair = new UnsafeRowPair()
       if (useColumnFamilies) {
-        val iter = rocksDB.iterator(colFamilyName)
+        val rocksDBIter = rocksDB.iterator(colFamilyName)
 
         val f = (kv : ByteArrayPair) => {
           rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
@@ -337,9 +337,17 @@ private[sql] class RocksDBStateStoreProvider
           rowPair
         }
 
-        iter.map(f)
+        val iter = rocksDBIter.map(f)
+
+        new Iterator[UnsafeRowPair] with Closeable {
+          override def hasNext: Boolean = iter.hasNext
+
+          override def next(): UnsafeRowPair = iter.next()
+
+          override def close(): Unit = rocksDBIter.closeIfNeeded()
+        }
       } else {
-        val iter = rocksDB.iterator()
+        val rocksDBIter = rocksDB.iterator()
         val f = (kv: ByteArrayPair) => {
           rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
             kvEncoder._2.decodeValue(kv.value))
@@ -350,12 +358,19 @@ private[sql] class RocksDBStateStoreProvider
           }
           rowPair
         }
-        iter.map(f)
+        val iter = rocksDBIter.map(f)
+        new Iterator[UnsafeRowPair] with Closeable {
+          override def hasNext: Boolean = iter.hasNext
+
+          override def next(): UnsafeRowPair = iter.next()
+
+          override def close(): Unit = rocksDBIter.closeIfNeeded()
+        }
       }
     }
 
     override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
-      NextIterator[UnsafeRowPair] = {
+    Iterator[UnsafeRowPair] with Closeable = {
       validateAndTransitionState(UPDATE)
       verifyColFamilyOperations("prefixScan", colFamilyName)
 
@@ -366,7 +381,7 @@ private[sql] class RocksDBStateStoreProvider
       val rowPair = new UnsafeRowPair()
       val prefix = kvEncoder._1.encodePrefixKey(prefixKey)
 
-      val iter = rocksDB.prefixScan(prefix, colFamilyName)
+      val rocksDBiter = rocksDB.prefixScan(prefix, colFamilyName)
 
       val f = (kv: ByteArrayPair) => {
         rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
@@ -374,7 +389,15 @@ private[sql] class RocksDBStateStoreProvider
         rowPair
       }
 
-      iter.map(f)
+      val iter = rocksDBiter.map(f)
+
+      new Iterator[UnsafeRowPair] with Closeable {
+          override def hasNext: Boolean = iter.hasNext
+
+          override def next(): UnsafeRowPair = iter.next()
+
+          override def close(): Unit = rocksDBiter.closeIfNeeded()
+      }
     }
 
     var checkpointInfo: Option[StateStoreCheckpointInfo] = None

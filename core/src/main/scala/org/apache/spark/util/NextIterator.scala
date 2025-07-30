@@ -87,17 +87,4 @@ private[spark] abstract class NextIterator[U] extends Iterator[U] {
     gotNext = false
     nextValue
   }
-
-  override def map[B](f: (U) => B): NextIterator[B] =
-    new NextIterator[B] {
-      override def getNext(): B = {
-        if (NextIterator.this.hasNext) {
-          f(NextIterator.this.next())
-        } else {
-          finished = true
-          null.asInstanceOf[B]
-        }
-      }
-      override def close(): Unit = NextIterator.this.close()
-    }
 }

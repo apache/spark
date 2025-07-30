@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.io.File
+import java.io.{Closeable, File}
 import java.util.UUID
 
 import org.apache.hadoop.conf.Configuration
@@ -35,7 +35,6 @@ import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.OutputMode.Update
 import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.NextIterator
 
 object CkptIdCollectingStateStoreWrapper {
   // Internal list to hold checkpoint IDs (strings)
@@ -77,13 +76,22 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
 
   override def prefixScan(
       prefixKey: UnsafeRow,
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): NextIterator[UnsafeRowPair] = {
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
+  Iterator[UnsafeRowPair] with Closeable = {
     innerStore.prefixScan(prefixKey, colFamilyName)
   }
 
   override def iterator(
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): NextIterator[UnsafeRowPair] = {
-    innerStore.iterator(colFamilyName)
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
+  Iterator[UnsafeRowPair] with Closeable = {
+    val iter = innerStore.iterator(colFamilyName)
+    new Iterator[UnsafeRowPair] with Closeable {
+      override def hasNext: Boolean = iter.hasNext
+
+      override def next(): UnsafeRowPair = iter.next()
+
+      override def close(): Unit = {}
+    }
   }
 
   override def abort(): Unit = innerStore.abort()

@@ -58,7 +58,7 @@ class MapStateImpl[K, V](
   override def exists(): Boolean = {
     val iter = store.prefixScan(stateTypesEncoder.encodeGroupingKey(), stateName)
     val nonEmpty = iter.nonEmpty
-    iter.closeIfNeeded()
+    iter.close()
     nonEmpty
   }
 

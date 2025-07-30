@@ -17,30 +17,26 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.io.Closeable
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.NextIterator
 
 class MemoryStateStore extends StateStore() {
   import scala.jdk.CollectionConverters._
   private val map = new ConcurrentHashMap[UnsafeRow, UnsafeRow]
 
-  override def iterator(colFamilyName: String): NextIterator[UnsafeRowPair] = {
+  override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] with Closeable = {
     val iter =
       map.entrySet.iterator.asScala.map { case e => new UnsafeRowPair(e.getKey, e.getValue) }
 
-    new NextIterator[UnsafeRowPair] {
-      override protected def getNext(): UnsafeRowPair = {
-        if (iter.hasNext) {
-          iter.next()
-        } else {
-          finished = true
-          null.asInstanceOf[UnsafeRowPair]
-        }
-      }
-      override protected def close(): Unit = {}
+    new Iterator[UnsafeRowPair] with Closeable {
+      override def hasNext: Boolean = iter.hasNext
+
+      override def next(): UnsafeRowPair = iter.next()
+
+      override def close(): Unit = {}
     }
   }
 
@@ -82,7 +78,7 @@ class MemoryStateStore extends StateStore() {
 
   override def prefixScan(
     prefixKey: UnsafeRow,
-    colFamilyName: String): NextIterator[UnsafeRowPair] = {
+    colFamilyName: String): Iterator[UnsafeRowPair] with Closeable = {
     throw new UnsupportedOperationException("Doesn't support prefix scan!")
   }
 
