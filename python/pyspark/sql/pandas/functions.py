@@ -220,8 +220,8 @@ def arrow_udf(f=None, returnType=None, functionType=None):
         `pyarrow.Array`, ... -> `Any`
 
         The function takes `pyarrow.Array` and returns a scalar value. The returned scalar
-        can be either a python primitive type, (e.g., int or float), a numpy data type
-        (e.g., numpy.int64 or numpy.float64), or a pyarrow.Scalar instance which support complex
+        can be a python primitive type, (e.g., int or float), a numpy data type (e.g.,
+        numpy.int64 or numpy.float64), or a pyarrow.Scalar instance which supports complex
         return types.
         `Any` should ideally be a specific scalar type accordingly.
 
@@ -241,7 +241,7 @@ def arrow_udf(f=None, returnType=None, functionType=None):
 
         The retun type can also be a complex type such as struct, list, or map.
         >>> @arrow_udf("struct<m1: double, m2: double>")
-        ... def mean_max_udf(v: pa.Array) -> pa.Scalar:
+        ... def min_max_udf(v: pa.Array) -> pa.Scalar:
         ...     m1 = pa.compute.min(v)
         ...     m2 = pa.compute.max(v)
         ...     t = pa.struct([pa.field("m1", pa.float64()), pa.field("m2", pa.float64())])
@@ -249,13 +249,13 @@ def arrow_udf(f=None, returnType=None, functionType=None):
         ...
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v"))
-        >>> df.groupby("id").agg(mean_max_udf(df['v'])).show()
-        +---+---------------+
-        | id|mean_max_udf(v)|
-        +---+---------------+
-        |  1|     {1.0, 2.0}|
-        |  2|    {3.0, 10.0}|
-        +---+---------------+
+        >>> df.groupby("id").agg(min_max_udf(df['v'])).show()
+        +---+--------------+
+        | id|min_max_udf(v)|
+        +---+--------------+
+        |  1|    {1.0, 2.0}|
+        |  2|   {3.0, 10.0}|
+        +---+--------------+
 
         This type of Pandas UDF can use keyword arguments:
 
