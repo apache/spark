@@ -1771,6 +1771,19 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       cached.unpersist()
     }
   }
+
+  test("SPARK-52873") {
+    val query =
+      """select /*+ SHUFFLE_HASH(r) */ * from
+        |testData2 l
+        |left semi join testData2 r
+        |on cast(l.a / 100 as long) + 1  = cast(r.a / 100 as int) + 1
+        |and r.a >= cast(l.a/1000 as int) + 3""".stripMargin
+    val df = sql(query)
+    val expected = Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) ::
+      Row (3, 1) :: Row(3, 2) :: Nil;
+    checkAnswer(df, expected)
+  }
 }
 
 class ThreadLeakInSortMergeJoinSuite
