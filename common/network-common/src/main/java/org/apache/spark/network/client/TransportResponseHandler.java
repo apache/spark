@@ -26,8 +26,6 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.Channel;
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.lang3.tuple.Pair;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
@@ -45,6 +43,7 @@ import org.apache.spark.network.protocol.StreamResponse;
 import org.apache.spark.network.server.MessageHandler;
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 import org.apache.spark.network.util.TransportFrameDecoder;
+import org.apache.spark.util.Pair;
 
 /**
  * Handler that processes server responses, in response to requests issued from a
@@ -96,7 +95,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
   public void addStreamCallback(String streamId, StreamCallback callback) {
     updateTimeOfLastRequest();
-    streamCallbacks.offer(ImmutablePair.of(streamId, callback));
+    streamCallbacks.offer(Pair.of(streamId, callback));
   }
 
   @VisibleForTesting
@@ -125,7 +124,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     }
     for (Pair<String, StreamCallback> entry : streamCallbacks) {
       try {
-        entry.getValue().onFailure(entry.getKey(), cause);
+        entry.getRight().onFailure(entry.getLeft(), cause);
       } catch (Exception e) {
         logger.warn("StreamCallback.onFailure throws exception", e);
       }
@@ -236,7 +235,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     } else if (message instanceof StreamResponse resp) {
       Pair<String, StreamCallback> entry = streamCallbacks.poll();
       if (entry != null) {
-        StreamCallback callback = entry.getValue();
+        StreamCallback callback = entry.getRight();
         if (resp.byteCount > 0) {
           StreamInterceptor<ResponseMessage> interceptor = new StreamInterceptor<>(
             this, resp.streamId, resp.byteCount, callback);
@@ -262,7 +261,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     } else if (message instanceof StreamFailure resp) {
       Pair<String, StreamCallback> entry = streamCallbacks.poll();
       if (entry != null) {
-        StreamCallback callback = entry.getValue();
+        StreamCallback callback = entry.getRight();
         try {
           callback.onFailure(resp.streamId, new RuntimeException(resp.error));
         } catch (IOException ioe) {

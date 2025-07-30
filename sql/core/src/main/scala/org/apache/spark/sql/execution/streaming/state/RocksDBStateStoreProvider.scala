@@ -26,8 +26,8 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkConf, SparkEnv}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.{SparkConf, SparkEnv, TaskContext}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -43,19 +43,148 @@ private[sql] class RocksDBStateStoreProvider
   with SupportsFineGrainedReplay {
   import RocksDBStateStoreProvider._
 
-  class RocksDBStateStore(lastVersion: Long) extends StateStore {
+  class RocksDBStateStore(
+      lastVersion: Long,
+      private[RocksDBStateStoreProvider] val stamp: Long,
+      private[RocksDBStateStoreProvider] var readOnly: Boolean) extends StateStore {
+
+    private sealed trait OPERATION
+    private case object UPDATE extends OPERATION
+    private case object ABORT extends OPERATION
+    private case object RELEASE extends OPERATION
+    private case object COMMIT extends OPERATION
+    private case object METRICS extends OPERATION
+
     /** Trait and classes representing the internal state of the store */
     trait STATE
     case object UPDATING extends STATE
     case object COMMITTED extends STATE
     case object ABORTED extends STATE
+    case object RELEASED extends STATE
 
     @volatile private var state: STATE = UPDATING
     @volatile private var isValidated = false
 
+    /**
+     * Map defining all valid state transitions for the RocksDB state store.
+     * Key: (currentState, operation) -> Value: nextState
+     *
+     * Valid transitions:
+     * - (UPDATING, UPDATE) -> UPDATING: Continue updating
+     * - (UPDATING, ABORT) -> ABORTED: Abort during update
+     * - (UPDATING, RELEASE) -> RELEASED: Release during update
+     * - (UPDATING, COMMIT) -> COMMITTED: Direct commit
+     * - (COMMITTED, METRICS) -> COMMITTED: Allow metrics after commit
+     * - (ABORTED, ABORT) -> ABORTED: Abort is idempotent
+     * - (ABORTED, METRICS) -> ABORTED: Allow metrics after abort
+     * - (RELEASED, RELEASE) -> RELEASED: Release is idempotent
+     * - (RELEASED, METRICS) -> RELEASED: Allow metrics after release
+     */
+    private val allowedStateTransitions: Map[(STATE, OPERATION), STATE] = Map(
+      // From UPDATING state
+      (UPDATING, UPDATE) -> UPDATING,
+      (UPDATING, ABORT) -> ABORTED,
+      (UPDATING, RELEASE) -> RELEASED,
+      (UPDATING, COMMIT) -> COMMITTED,
+      // From COMMITTED state
+      (COMMITTED, METRICS) -> COMMITTED,
+      // From ABORTED state
+      (ABORTED, ABORT) -> ABORTED,  // Idempotent
+      (ABORTED, METRICS) -> ABORTED,
+      // From RELEASED state
+      (RELEASED, RELEASE) -> RELEASED,  // Idempotent
+      (RELEASED, METRICS) -> RELEASED
+    )
+
     override def id: StateStoreId = RocksDBStateStoreProvider.this.stateStoreId
 
     override def version: Long = lastVersion
+
+    /**
+     * Validates the expected state, throws exception if state is not as expected.
+     * Returns the current state
+     *
+     * @param possibleStates Expected possible states
+     * @return current state of StateStore
+     */
+    private def validateState(possibleStates: STATE*): STATE = {
+      if (!possibleStates.contains(state)) {
+        throw StateStoreErrors.stateStoreOperationOutOfOrder(
+          s"Expected possible states ${possibleStates.mkString("(", ", ", ")")} but found $state")
+      }
+      state
+    }
+
+    /**
+     * Throws error if transition is illegal.
+     * MUST be called for every StateStore method.
+     *
+     * @param operation The transition type of the operation.
+     */
+    private def validateAndTransitionState(operation: OPERATION): Unit = {
+      val oldState = state
+
+      // Operations requiring stamp verification
+      val needsStampVerification = operation match {
+        case ABORT if state == ABORTED => false     // ABORT is idempotent
+        case RELEASE if state == RELEASED => false  // RELEASE is idempotent
+        case UPDATE | ABORT | RELEASE | COMMIT => true
+        case METRICS => false
+      }
+
+      if (needsStampVerification) {
+        stateMachine.verifyStamp(stamp)
+      }
+
+      val newState = allowedStateTransitions.get((oldState, operation)) match {
+        case Some(nextState) => nextState
+        case None =>
+          val errorMsg = operation match {
+            case UPDATE => s"Cannot update after ${oldState.toString}"
+            case ABORT => s"Cannot abort after ${oldState.toString}"
+            case RELEASE => s"Cannot release after ${oldState.toString}"
+            case COMMIT => s"Cannot commit after ${oldState.toString}"
+            case METRICS => s"Cannot get metrics in ${oldState} state"
+          }
+          throw StateStoreErrors.stateStoreOperationOutOfOrder(errorMsg)
+      }
+
+      // Special handling for COMMIT operation - release the store
+      if (operation == COMMIT || operation == RELEASE) {
+        stateMachine.releaseStamp(stamp)
+      }
+
+      if (operation != UPDATE) {
+        logInfo(log"Transitioned state from ${MDC(LogKeys.STATE_STORE_STATE, oldState)} " +
+          log"to ${MDC(LogKeys.STATE_STORE_STATE, newState)} " +
+          log"for StateStoreId ${MDC(LogKeys.STATE_STORE_ID, stateStoreId)} " +
+          log"with transition ${MDC(LogKeys.OPERATION, operation.toString)}")
+      }
+      state = newState
+    }
+
+    Option(TaskContext.get()).foreach { ctxt =>
+      ctxt.addTaskCompletionListener[Unit](ctx => {
+        try {
+          if (state == UPDATING) {
+            if (readOnly) {
+              release()
+            } else {
+              abort() // Abort since this is an error if stateful task completes
+            }
+          }
+        } catch {
+          case NonFatal(e) =>
+            logWarning("Failed to abort or release state store", e)
+        } finally {
+          stateMachine.releaseStamp(stamp, throwEx = false)
+        }
+      })
+      // Abort the async commit stores only when the task has failed and store is not committed.
+      ctxt.addTaskFailureListener((_, _) => {
+        if (!hasCommitted) abort()
+      })
+    }
 
     override def createColFamilyIfAbsent(
         colFamilyName: String,
@@ -64,6 +193,7 @@ private[sql] class RocksDBStateStoreProvider
         keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
         isInternal: Boolean = false): Unit = {
+      validateAndTransitionState(UPDATE)
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
       val cfId = rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
       val dataEncoderCacheKey = StateRowEncoderCacheKey(
@@ -105,6 +235,7 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
+      validateAndTransitionState(UPDATE)
       verify(key != null, "Key cannot be null")
       verifyColFamilyOperations("get", colFamilyName)
 
@@ -131,6 +262,7 @@ private[sql] class RocksDBStateStoreProvider
      * values per key.
      */
     override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
+      validateAndTransitionState(UPDATE)
       verify(key != null, "Key cannot be null")
       verifyColFamilyOperations("valuesIterator", colFamilyName)
 
@@ -147,6 +279,7 @@ private[sql] class RocksDBStateStoreProvider
 
     override def merge(key: UnsafeRow, value: UnsafeRow,
         colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+      validateAndTransitionState(UPDATE)
       verify(state == UPDATING, "Cannot merge after already committed or aborted")
       verifyColFamilyOperations("merge", colFamilyName)
 
@@ -162,6 +295,7 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
+      validateAndTransitionState(UPDATE)
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       verify(key != null, "Key cannot be null")
       require(value != null, "Cannot put a null value")
@@ -172,6 +306,7 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def remove(key: UnsafeRow, colFamilyName: String): Unit = {
+      validateAndTransitionState(UPDATE)
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       verify(key != null, "Key cannot be null")
       verifyColFamilyOperations("remove", colFamilyName)
@@ -181,6 +316,7 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
+      validateAndTransitionState(UPDATE)
       // Note this verify function only verify on the colFamilyName being valid,
       // we are actually doing prefix when useColumnFamilies,
       // but pass "iterator" to throw correct error message
@@ -215,6 +351,7 @@ private[sql] class RocksDBStateStoreProvider
 
     override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
       Iterator[UnsafeRowPair] = {
+      validateAndTransitionState(UPDATE)
       verifyColFamilyOperations("prefixScan", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
@@ -231,12 +368,16 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     var checkpointInfo: Option[StateStoreCheckpointInfo] = None
+    private var storedMetrics: Option[RocksDBMetrics] = None
+
     override def commit(): Long = synchronized {
+      validateState(UPDATING)
       try {
-        verify(state == UPDATING, "Cannot commit after already committed or aborted")
+        stateMachine.verifyStamp(stamp)
         val (newVersion, newCheckpointInfo) = rocksDB.commit()
         checkpointInfo = Some(newCheckpointInfo)
-        state = COMMITTED
+        storedMetrics = rocksDB.metricsOpt
+        validateAndTransitionState(COMMIT)
         logInfo(log"Committed ${MDC(VERSION_NUM, newVersion)} " +
           log"for ${MDC(STATE_STORE_ID, id)}")
         newVersion
@@ -246,16 +387,38 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
+    override def release(): Unit = {
+      assert(readOnly, "Release can only be called on a read-only store")
+      if (state != RELEASED) {
+        logInfo(log"Releasing ${MDC(VERSION_NUM, version + 1)} " +
+          log"for ${MDC(STATE_STORE_ID, id)}")
+        rocksDB.release()
+        validateAndTransitionState(RELEASE)
+      } else {
+        // Optionally log at DEBUG level that it's already released
+        logDebug(log"State store already released")
+      }
+    }
+
     override def abort(): Unit = {
-      verify(state == UPDATING || state == ABORTED, "Cannot abort after already committed")
-      logInfo(log"Aborting ${MDC(VERSION_NUM, version + 1)} " +
-        log"for ${MDC(STATE_STORE_ID, id)}")
-      rocksDB.rollback()
-      state = ABORTED
+      if (validateState(UPDATING, ABORTED) != ABORTED) {
+        try {
+          validateAndTransitionState(ABORT)
+          logInfo(log"Aborting ${MDC(VERSION_NUM, version + 1)} " +
+            log"for ${MDC(STATE_STORE_ID, id)}")
+          rocksDB.rollback()
+        } finally {
+          stateMachine.releaseStamp(stamp)
+        }
+      } else {
+        logInfo(log"Skipping abort for ${MDC(VERSION_NUM, version + 1)} " +
+          log"for ${MDC(STATE_STORE_ID, id)} as we already aborted")
+      }
     }
 
     override def metrics: StateStoreMetrics = {
-      val rocksDBMetricsOpt = rocksDB.metricsOpt
+      validateAndTransitionState(METRICS)
+      val rocksDBMetricsOpt = storedMetrics
 
       if (rocksDBMetricsOpt.isDefined) {
         val rocksDBMetrics = rocksDBMetricsOpt.get
@@ -337,6 +500,7 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
+      validateAndTransitionState(METRICS)
       checkpointInfo match {
         case Some(info) => info
         case None => throw StateStoreErrors.stateStoreOperationOutOfOrder(
@@ -347,8 +511,7 @@ private[sql] class RocksDBStateStoreProvider
     override def hasCommitted: Boolean = state == COMMITTED
 
     override def toString: String = {
-      s"RocksDBStateStore[id=(op=${id.operatorId},part=${id.partitionId})," +
-        s"dir=${id.storeCheckpointLocation()}]"
+      s"RocksDBStateStore[stateStoreId=$stateStoreId_, version=$version]"
     }
 
     /** Return the [[RocksDB]] instance in this store. This is exposed mainly for testing. */
@@ -392,6 +555,9 @@ private[sql] class RocksDBStateStoreProvider
     this.stateSchemaProvider = stateSchemaProvider
     this.rocksDBEventForwarder =
       Some(RocksDBEventForwarder(StateStoreProvider.getRunId(hadoopConf), stateStoreId))
+
+    val queryRunId = UUID.fromString(StateStoreProvider.getRunId(hadoopConf))
+    this.stateStoreProviderId = StateStoreProviderId(stateStoreId, queryRunId)
 
     if (useMultipleValuesPerKey) {
       require(useColumnFamilies, "Multiple values per key support requires column families to be" +
@@ -446,48 +612,120 @@ private[sql] class RocksDBStateStoreProvider
 
   override def stateStoreId: StateStoreId = stateStoreId_
 
-  override def getStore(version: Long, uniqueId: Option[String] = None): StateStore = {
-    try {
-      if (version < 0) {
-        throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
-      }
-      rocksDB.load(
-        version,
-        stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None)
-      new RocksDBStateStore(version)
-    }
-    catch {
-      case e: OutOfMemoryError =>
-        throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
-          stateStoreId.toString,
-          "ROCKSDB_STORE_PROVIDER",
-          e)
-      case e: Throwable => throw StateStoreErrors.cannotLoadStore(e)
-    }
-  }
+  private lazy val stateMachine: RocksDBStateMachine =
+    new RocksDBStateMachine(stateStoreId, RocksDBConf(storeConf))
 
-  override def getReadStore(version: Long, uniqueId: Option[String] = None): StateStore = {
+  override protected def logName: String = s"${super.logName} ${stateStoreProviderId}"
+
+  /**
+   * Creates and returns a state store with the specified parameters.
+   *
+   * @param version The version of the state store to load
+   * @param uniqueId Optional unique identifier for checkpoint
+   * @param readOnly Whether to open the store in read-only mode
+   * @param existingStore Optional existing store to reuse instead of creating a new one
+   * @return The loaded state store
+   */
+  private def loadStateStore(
+      version: Long,
+      uniqueId: Option[String] = None,
+      readOnly: Boolean,
+      existingStore: Option[RocksDBStateStore] = None): StateStore = {
+    var acquiredStamp: Option[Long] = None
+    var storeLoaded = false
     try {
       if (version < 0) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
       }
+
+      // Early validation of the existing store type before loading RocksDB
+      existingStore.foreach { store =>
+        if (!store.readOnly) {
+          throw new IllegalArgumentException(
+            s"Existing store must be readOnly, but got a read-write store")
+        }
+      }
+
+      // if the existing store is None, then we need to acquire the stamp before
+      // loading RocksDB
+      val stamp = existingStore match {
+        case None =>
+          val s = stateMachine.acquireStamp()
+          acquiredStamp = Some(s)
+          Some(s)
+        case Some(store: RocksDBStateStore) =>
+          val s = store.stamp
+          stateMachine.verifyStamp(s)
+          Some(s)
+      }
+
       rocksDB.load(
         version,
         stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
-        readOnly = true)
-      new RocksDBStateStore(version)
-    }
-    catch {
+        readOnly = readOnly)
+
+      // Create or reuse store instance
+      val store = existingStore match {
+        case Some(store: RocksDBStateStore) =>
+          // Mark store as being used for write operations
+          store.readOnly = readOnly
+          store
+        case None =>
+          // Create new store instance. The stamp should be defined
+          // in this case
+          new RocksDBStateStore(version, stamp.get, readOnly)
+      }
+      storeLoaded = true
+      store
+    } catch {
       case e: OutOfMemoryError =>
         throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
           stateStoreId.toString,
           "ROCKSDB_STORE_PROVIDER",
           e)
+      case e: StateStoreInvalidStateMachineTransition =>
+        throw e
       case e: Throwable => throw StateStoreErrors.cannotLoadStore(e)
+    } finally {
+      // If we acquired a stamp but failed to load the store, release it.
+      // Note: We cannot rely on the task completion listener to clean up the stamp in this case
+      // because the listener is only registered in the RocksDBStateStore constructor. If the
+      // store fails to load (e.g., rocksDB.load() throws an exception), the RocksDBStateStore
+      // instance is never created, so no completion listener exists to release the stamp.
+      // This finally block ensures proper cleanup even when store creation fails early.
+      if (!storeLoaded && acquiredStamp.isDefined) {
+        acquiredStamp.foreach(stamp => stateMachine.releaseStamp(stamp, throwEx = false))
+      }
     }
   }
 
+  override def getStore(
+      version: Long, uniqueId: Option[String] = None): StateStore = {
+    loadStateStore(version, uniqueId, readOnly = false)
+  }
+
+  override def upgradeReadStoreToWriteStore(
+      readStore: ReadStateStore,
+      version: Long,
+      uniqueId: Option[String] = None): StateStore = {
+    assert(version == readStore.version,
+      s"Can only upgrade readStore to writeStore with the same version," +
+        s" readStoreVersion: ${readStore.version}, writeStoreVersion: ${version}")
+    assert(this.stateStoreId == readStore.id, "Can only upgrade readStore to writeStore with" +
+      " the same stateStoreId")
+    assert(readStore.isInstanceOf[RocksDBStateStore], "Can only upgrade state store if it is a " +
+      "RocksDBStateStore")
+    loadStateStore(version, uniqueId, readOnly = false, existingStore =
+      Some(readStore.asInstanceOf[RocksDBStateStore]))
+  }
+
+  override def getReadStore(
+      version: Long, uniqueId: Option[String] = None): StateStore = {
+    loadStateStore(version, uniqueId, readOnly = true)
+  }
+
   override def doMaintenance(): Unit = {
+    stateMachine.verifyForMaintenance()
     try {
       rocksDB.doMaintenance()
     } catch {
@@ -520,6 +758,7 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var stateStoreEncoding: String = _
   @volatile private var stateSchemaProvider: Option[StateSchemaProvider] = _
   @volatile private var rocksDBEventForwarder: Option[RocksDBEventForwarder] = _
+  @volatile private var stateStoreProviderId: StateStoreProviderId = _
 
   protected def createRocksDB(
       dfsRootDir: String,
@@ -547,9 +786,10 @@ private[sql] class RocksDBStateStoreProvider
     val dfsRootDir = stateStoreId.storeCheckpointLocation().toString
     val storeIdStr = s"StateStoreId(opId=${stateStoreId.operatorId}," +
       s"partId=${stateStoreId.partitionId},name=${stateStoreId.storeName})"
+    val loggingId = stateStoreProviderId.toString
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
-    createRocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
+    createRocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, loggingId,
       useColumnFamilies, storeConf.enableStateStoreCheckpointIds, stateStoreId.partitionId,
       rocksDBEventForwarder)
   }
@@ -572,7 +812,8 @@ private[sql] class RocksDBStateStoreProvider
    * @param endVersion   checkpoint version to end with
    * @return [[StateStore]]
    */
-  override def replayStateFromSnapshot(snapshotVersion: Long, endVersion: Long): StateStore = {
+  override def replayStateFromSnapshot(
+      snapshotVersion: Long, endVersion: Long, readOnly: Boolean): StateStore = {
     try {
       if (snapshotVersion < 1) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(snapshotVersion)
@@ -580,8 +821,15 @@ private[sql] class RocksDBStateStoreProvider
       if (endVersion < snapshotVersion) {
         throw QueryExecutionErrors.unexpectedStateStoreVersion(endVersion)
       }
-      rocksDB.loadFromSnapshot(snapshotVersion, endVersion)
-      new RocksDBStateStore(endVersion)
+      val stamp = stateMachine.acquireStamp()
+      try {
+        rocksDB.loadFromSnapshot(snapshotVersion, endVersion)
+        new RocksDBStateStore(endVersion, stamp, readOnly)
+      } catch {
+        case e: Throwable =>
+          stateMachine.releaseStamp(stamp)
+          throw e
+      }
     }
     catch {
       case e: OutOfMemoryError =>

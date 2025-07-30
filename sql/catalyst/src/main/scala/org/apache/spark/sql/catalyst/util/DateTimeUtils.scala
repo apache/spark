@@ -509,6 +509,30 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Returns time truncated to the unit specified by the level.
+   */
+  private def parseTimeTruncLevel(level: UTF8String): ChronoUnit = {
+    assert(level != null, "Truncation level cannot be null")
+    level.toString.toUpperCase(Locale.ROOT) match {
+      case "HOUR" => ChronoUnit.HOURS
+      case "MINUTE" => ChronoUnit.MINUTES
+      case "SECOND" => ChronoUnit.SECONDS
+      case "MILLISECOND" => ChronoUnit.MILLIS
+      case "MICROSECOND" => ChronoUnit.MICROS
+      case _ =>
+        throw QueryExecutionErrors.invalidTimeTruncUnitError("time_trunc", level.toString)
+    }
+  }
+
+  /**
+   * Returns time truncated to the unit specified by the level. Trunc level is parsed directly to
+   * corresponding ChronoUnits. Note that only levels from 'MICROSECOND' to 'HOUR' are supported.
+   */
+  def timeTrunc(level: UTF8String, nanos: Long): Long = {
+    localTimeToNanos(nanosToLocalTime(nanos).truncatedTo(parseTimeTruncLevel(level)))
+  }
+
+  /**
    * Returns the truncate level, could be from TRUNC_TO_MICROSECOND to TRUNC_TO_YEAR,
    * or TRUNC_INVALID, TRUNC_INVALID means unsupported truncate level.
    */
@@ -839,13 +863,41 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Makes a timestamp without time zone from a date and a local time.
    *
-   * @param days The number of days since the epoch. 1970-01-01.
+   * @param days The number of days since the epoch 1970-01-01.
    *             Negative numbers represent earlier days.
    * @param nanos The number of nanoseconds within the day since the midnight.
-   * @return The number of microseconds since the epoch of 1970-01-01 00:00:00Z.
+   * @return The number of microseconds since the epoch 1970-01-01 00:00:00Z.
    */
   def makeTimestampNTZ(days: Int, nanos: Long): Long = {
     localDateTimeToMicros(LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos)))
+  }
+
+  /**
+   * Makes a timestamp from a date and a local time.
+   *
+   * @param days The number of days since the epoch 1970-01-01.
+   *             Negative numbers represent earlier days.
+   * @param nanos The number of nanoseconds within the day since the midnight.
+   * @param zoneId The time zone ID at which the operation is performed.
+   * @return The number of microseconds since the epoch 1970-01-01 00:00:00Z.
+   */
+  def makeTimestamp(days: Int, nanos: Long, zoneId: ZoneId): Long = {
+    val ldt = LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos))
+    instantToMicros(ldt.atZone(zoneId).toInstant)
+  }
+
+  /**
+   * Makes a timestamp from a date and a local time with timezone string.
+   *
+   * @param days The number of days since the epoch 1970-01-01.
+   *             Negative numbers represent earlier days.
+   * @param nanos The number of nanoseconds within the day since the midnight.
+   * @param timezone The time zone string.
+   * @return The number of microseconds since the epoch 1970-01-01 00:00:00Z.
+   */
+  def makeTimestamp(days: Int, nanos: Long, timezone: UTF8String): Long = {
+    val zoneId = getZoneId(timezone.toString)
+    makeTimestamp(days, nanos, zoneId)
   }
 
   /**

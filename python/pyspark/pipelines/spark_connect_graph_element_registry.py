@@ -95,7 +95,6 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             target_dataset_name=flow.target,
             relation=relation,
             sql_conf=flow.spark_conf,
-            once=flow.once,
         )
         command = pb2.Command()
         command.pipeline_command.define_flow.CopyFrom(inner_command)

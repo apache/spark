@@ -1546,3 +1546,16 @@ trait SchemaValidationUtils extends Logging {
         schemaEvolutionEnabled = usingAvro && schemaEvolutionEnabledForOperator))
   }
 }
+
+object StatefulOperatorsUtils {
+  val TRANSFORM_WITH_STATE_EXEC_OP_NAME = "transformWithStateExec"
+  val TRANSFORM_WITH_STATE_IN_PANDAS_EXEC_OP_NAME = "transformWithStateInPandasExec"
+  val TRANSFORM_WITH_STATE_IN_PYSPARK_EXEC_OP_NAME = "transformWithStateInPySparkExec"
+  // Seq of operator names who uses state schema v3 and TWS related options.
+  val TRANSFORM_WITH_STATE_OP_NAMES: Seq[String] = Seq(
+    TRANSFORM_WITH_STATE_EXEC_OP_NAME,
+    TRANSFORM_WITH_STATE_IN_PANDAS_EXEC_OP_NAME,
+    TRANSFORM_WITH_STATE_IN_PYSPARK_EXEC_OP_NAME
+  )
+  val SYMMETRIC_HASH_JOIN_EXEC_OP_NAME = "symmetricHashJoin"
+}

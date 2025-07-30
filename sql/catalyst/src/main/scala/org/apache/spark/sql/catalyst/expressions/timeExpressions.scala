@@ -630,3 +630,56 @@ case class SubtractTimes(left: Expression, right: Expression)
       newLeft: Expression, newRight: Expression): SubtractTimes =
     copy(left = newLeft, right = newRight)
 }
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(unit, time) - Returns `time` truncated to the `unit`.
+  """,
+  arguments = """
+    Arguments:
+      * unit - the unit to truncate to
+          - "HOUR" - zero out the minutes and seconds with fraction part
+          - "MINUTE" - zero out the seconds with fraction part
+          - "SECOND" - zero out the fraction part of seconds
+          - "MILLISECOND" - zero out the microseconds
+          - "MICROSECOND" - zero out the nanoseconds
+      * time - a TIME expression
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('HOUR', TIME'09:32:05.359');
+       09:00:00
+      > SELECT _FUNC_('MILLISECOND', TIME'09:32:05.123456');
+       09:32:05.123
+  """,
+  group = "datetime_funcs",
+  since = "4.1.0")
+// scalastyle:on line.size.limit
+case class TimeTrunc(unit: Expression, time: Expression)
+  extends BinaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
+
+  override def left: Expression = unit
+  override def right: Expression = time
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true), AnyTimeType)
+
+  override def dataType: DataType = time.dataType
+
+  override def prettyName: String = "time_trunc"
+
+  override protected def withNewChildrenInternal(
+      newUnit: Expression, newTime: Expression): TimeTrunc =
+    copy(unit = newUnit, time = newTime)
+
+  override def replacement: Expression = {
+    StaticInvoke(
+      classOf[DateTimeUtils.type],
+      dataType,
+      "timeTrunc",
+      Seq(unit, time),
+      Seq(unit.dataType, time.dataType)
+    )
+  }
+}

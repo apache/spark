@@ -54,5 +54,10 @@ SELECT MAX(a) + SUM(b) FROM testData ORDER BY SUM(b) + MAX(a);
 SELECT SUM(a) + 1 + MIN(a) FROM testData ORDER BY 1 + 1 + 1 + MIN(a) + 1 + SUM(a);
 SELECT SUM(b) + 1 FROM testData HAVING SUM(b) + 1 > 0 ORDER BY SUM(b) + 1;
 
+-- Missing attribute (col2) in ORDER BY is added only once
+
+SELECT col1 FROM VALUES(1,2) GROUP BY col1, col2 ORDER BY col2, col2;
+SELECT col1 AS a, a AS b FROM VALUES(1,2) GROUP BY col1, col2 ORDER BY col2, col2;
+
 -- Clean up
 DROP VIEW IF EXISTS testData;

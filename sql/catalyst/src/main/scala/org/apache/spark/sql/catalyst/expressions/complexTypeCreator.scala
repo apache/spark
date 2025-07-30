@@ -71,6 +71,8 @@ case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolea
 
   override def foldable: Boolean = children.forall(_.foldable)
 
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
+
   override def stringArgs: Iterator[Any] = super.stringArgs.take(1)
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -203,6 +205,8 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
   }
 
   override def foldable: Boolean = children.forall(_.foldable)
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def stringArgs: Iterator[Any] = super.stringArgs.take(1)
 
@@ -450,6 +454,8 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
 
   override def foldable: Boolean = valExprs.forall(_.foldable)
 
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
+
   final override val nodePatterns: Seq[TreePattern] = Seq(CREATE_NAMED_STRUCT)
 
   override lazy val dataType: StructType = {
@@ -591,18 +597,21 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 
   private final lazy val collationId: Int = text.dataType.asInstanceOf[StringType].collationId
 
+  private lazy val legacySplitTruncate =
+    SQLConf.get.getConf(SQLConf.LEGACY_TRUNCATE_FOR_EMPTY_REGEX_SPLIT)
+
   override def nullSafeEval(
       inputString: Any,
       stringDelimiter: Any,
       keyValueDelimiter: Any): Any = {
     val keyValues = CollationAwareUTF8String.splitSQL(inputString.asInstanceOf[UTF8String],
-      stringDelimiter.asInstanceOf[UTF8String], -1, collationId)
+      stringDelimiter.asInstanceOf[UTF8String], -1, collationId, legacySplitTruncate)
     val keyValueDelimiterUTF8String = keyValueDelimiter.asInstanceOf[UTF8String]
 
     var i = 0
     while (i < keyValues.length) {
       val keyValueArray = CollationAwareUTF8String.splitSQL(
-        keyValues(i), keyValueDelimiterUTF8String, 2, collationId)
+        keyValues(i), keyValueDelimiterUTF8String, 2, collationId, legacySplitTruncate)
       val key = keyValueArray(0)
       val value = if (keyValueArray.length < 2) null else keyValueArray(1)
       mapBuilder.put(key, value)
@@ -617,9 +626,11 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 
     nullSafeCodeGen(ctx, ev, (text, pd, kvd) =>
       s"""
-         |UTF8String[] $keyValues = CollationAwareUTF8String.splitSQL($text, $pd, -1, $collationId);
+         |UTF8String[] $keyValues =
+         |  CollationAwareUTF8String.splitSQL($text, $pd, -1, $collationId, $legacySplitTruncate);
          |for(UTF8String kvEntry: $keyValues) {
-         |  UTF8String[] kv = CollationAwareUTF8String.splitSQL(kvEntry, $kvd, 2, $collationId);
+         |  UTF8String[] kv = CollationAwareUTF8String.splitSQL(
+         |    kvEntry, $kvd, 2, $collationId, $legacySplitTruncate);
          |  $builderTerm.put(kv[0], kv.length == 2 ? kv[1] : null);
          |}
          |${ev.value} = $builderTerm.build();

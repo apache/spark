@@ -46,6 +46,7 @@ import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
+import org.apache.spark.util.Utils;
 
 /**
  * ThriftCLIService.
@@ -593,8 +594,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       if (opException != null) {
         resp.setSqlState(opException.getSQLState());
         resp.setErrorCode(opException.getErrorCode());
-        resp.setErrorMessage(org.apache.hadoop.util.StringUtils
-            .stringifyException(opException));
+        resp.setErrorMessage(Utils.stringifyException(opException));
       }
       resp.setStatus(OK_STATUS);
     } catch (Exception e) {

@@ -59,6 +59,12 @@ public interface Constraint {
   String toDDL();
 
   /**
+   * Returns the constraint description for DESCRIBE TABLE output, excluding the constraint
+   * name (shown separately).
+   */
+  String toDescription();
+
+  /**
    * Instantiates a builder for a CHECK constraint.
    *
    * @param name the constraint name

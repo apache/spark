@@ -423,7 +423,7 @@ object ParquetReadSupport extends Logging {
       caseSensitiveParquetFieldMap
           .get(f.name)
           .map(clipParquetType(_, f.dataType, caseSensitive, useFieldId))
-          .getOrElse(toParquet.convertField(f))
+          .getOrElse(toParquet.convertField(f, inShredded = false))
     }
 
     def matchCaseInsensitiveField(f: StructField): Type = {
@@ -439,7 +439,7 @@ object ParquetReadSupport extends Logging {
             } else {
               clipParquetType(parquetTypes.head, f.dataType, caseSensitive, useFieldId)
             }
-          }.getOrElse(toParquet.convertField(f))
+          }.getOrElse(toParquet.convertField(f, inShredded = false))
     }
 
     def matchIdField(f: StructField): Type = {
@@ -458,7 +458,7 @@ object ParquetReadSupport extends Logging {
         }.getOrElse {
           // When there is no ID match, we use a fake name to avoid a name match by accident
           // We need this name to be unique as well, otherwise there will be type conflicts
-          toParquet.convertField(f.copy(name = generateFakeColumnName))
+          toParquet.convertField(f.copy(name = generateFakeColumnName), inShredded = false)
         }
     }
 

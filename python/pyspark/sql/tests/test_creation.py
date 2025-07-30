@@ -24,6 +24,7 @@ from typing import cast
 from pyspark.sql import Row
 import pyspark.sql.functions as F
 from pyspark.sql.types import (
+    DecimalType,
     StructType,
     StructField,
     StringType,
@@ -35,6 +36,7 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkValueError,
 )
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -144,6 +146,12 @@ class DataFrameCreationTestsMixin:
             [Row(value=None)],
         )
 
+    def test_check_decimal_nan(self):
+        data = [Row(dec=Decimal("NaN"))]
+        schema = StructType([StructField("dec", DecimalType(), False)])
+        with self.assertRaises(PySparkValueError):
+            self.spark.createDataFrame(data=data, schema=schema)
+
     def test_invalid_argument_create_dataframe(self):
         with self.assertRaises(PySparkTypeError) as pe:
             self.spark.createDataFrame([(1, 2)], schema=123)
@@ -227,6 +235,13 @@ class DataFrameCreationTestsMixin:
                 sdf.withColumn("test", F.col("dict_col")[F.col("str_col")]).collect(),
                 [Row(str_col="second", dict_col={"first": 0.7, "second": 0.3}, test=0.3)],
             )
+
+    def test_empty_schema(self):
+        schema = StructType()
+        for data in [[], [Row()]]:
+            with self.subTest(data=data):
+                sdf = self.spark.createDataFrame(data, schema)
+                assertDataFrameEqual(sdf, data)
 
 
 class DataFrameCreationTests(

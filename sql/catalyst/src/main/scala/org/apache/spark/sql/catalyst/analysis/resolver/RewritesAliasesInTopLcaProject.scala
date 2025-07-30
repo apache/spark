@@ -1,0 +1,256 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.catalyst.analysis.resolver
+
+import java.util.{HashMap, HashSet}
+
+import org.apache.spark.sql.catalyst.expressions.{
+  Alias,
+  AttributeReference,
+  Expression,
+  ExprId,
+  NamedExpression
+}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, ATTRIBUTE_REFERENCE}
+
+/**
+ * During LCA resolution some aliases may be rewritten as new aliases with new [[ExprId]]s. This
+ * trait handles remapping of old aliases to new ones, when these attributes appear in
+ * [[SortOrder]] expressions and Having conditions.
+ */
+trait RewritesAliasesInTopLcaProject {
+
+  /**
+   * When resolving lateral column references in [[Aggregate]] below [[Sort]] or HAVING operators,
+   * fixed-point first resolves [[SortOrder]] expressions and HAVING conditions using
+   * [[TempResolvedColumn]] and only after that resolves lateral column references. For example,
+   * consider the following query:
+   *
+   * {{{ SELECT avg(col1) AS a, a AS b FROM VALUES(1,2,3) GROUP BY col2 ORDER BY max(col3) }}}
+   *
+   * Fixed-point plan before resolving [[SortOrder]]:
+   *
+   * Sort [max(tempresolvedcolumn(col3#5, col3, false)) ASC NULLS FIRST], true
+   * +- Aggregate [col2#4], [avg(col1#3) AS a#6, lateralAliasReference(a) AS b#7]
+   *    +- LocalRelation [col1#3, col2#4, col3#5]
+   *
+   * After resolving [[TempResolvedColumn]]:
+   *
+   * Project [a#6, b#7]
+   * +- Sort [max(col3)#10 ASC NULLS FIRST], true
+   *    +- Aggregate [col2#4], [avg(col1#3) AS a#6, lca(a) AS b#7, max(col3#5) AS max(col3)#10]
+   *       +- LocalRelation [col1#3, col2#4, col3#5]
+   *
+   * In the above case fixed-point first resolves [[SortOrder]] to `max(col3)#10` and only then
+   * resolves LCAs. However, while resolving LCAs in [[Aggregate]], fixed-point first constructs
+   * a base [[Aggregate]] by pushing down all aggregate expressions with new aliases. It then
+   * places a [[Project]] on top reinstating the original alias on top of a newly created one,
+   * in order to still match the attribute reference from [[SortOrder]]:
+   *
+   * Project [a#6, b#7]
+   * +- Sort [max(col3)#10 ASC NULLS FIRST], true
+   *    +- Project [avg(col1)#11 AS a#6, lca(a) AS b#7, max(col3)#12 AS max(col3)#10]
+   *       +- Aggregate [col2#4], [avg(col1#3) AS avg(col1)#11, max(col3#5) AS max(col3)#12]
+   *          +- LocalRelation [col1#3, col2#4, col3#5]
+   *
+   * In the example above, `max(col3#5)` gets pushed down and aliased as `max(col3)#12`, even
+   * though `max(col3)#10` attribute reference already exists. Because of that `max(col3)#12` needs
+   * to be remapped back to `max(col3)#10`.
+   *
+   * However, in single-pass analyzer, we will first resolve all lateral column references before
+   * starting the resolution of [[SortOrder]] resulting in the following plan:
+   *
+   * Project [a#6, b#7]
+   * +- Sort [max(col3)#16 ASC NULLS FIRST], true
+   *    +- Project [a#6, a#6 AS b#7, max(col3)#16]
+   *       +- Project [avg(col1)#14, avg(col1)#14 AS a#6, max(col3)#16]
+   *          +- Aggregate [col2#4], [avg(col1#3) AS avg(col1)#14, max(col3#5) AS max(col3)#16]
+   *             +- LocalRelation [col1#3, col2#4, col3#5]
+   *
+   * In the above case, rewriting `max(col3)#16` with an [[Alias]] is not necessary from
+   * correctness perspective, but we need to do it in order to stay compatible with fixed-point
+   * analyzer. Because fixed-point only regenerates aliases from original aggregate list, in
+   * single-pass we need to handle the following:
+   *  1. all aliases from top-level [[Project]] (because they originate from the unresolved
+   *  aggregate list);
+   *  2. all references to aliases from the base aggregate (because they are became attribute
+   *  references during LCA resolution);
+   *
+   * This same issue also applies to HAVING resolution.
+   */
+  def rewriteNamedExpressionsInTopLcaProject[ExpressionType <: Expression](
+      projectToRewrite: Project,
+      baseAggregate: Aggregate,
+      expressionsToRewrite: Seq[ExpressionType],
+      rewriteCandidates: Seq[NamedExpression],
+      autoGeneratedAliasProvider: AutoGeneratedAliasProvider): (Project, Seq[ExpressionType]) = {
+    val candidateExpressions = getCandidateExpressionsForRewrite(
+      baseAggregate = baseAggregate,
+      oldExpressions = rewriteCandidates,
+      autoGeneratedAliasProvider = autoGeneratedAliasProvider
+    )
+    val newProject = rewriteNamedExpressionsInProject(projectToRewrite, candidateExpressions)
+    val newExpressions = updateAttributeReferencesInExpressions[ExpressionType](
+      expressionsToRewrite,
+      candidateExpressions
+    )
+
+    (newProject, newExpressions)
+  }
+
+  /**
+   * When resolving [[Sort]] or Having on top of an [[Aggregate]] that has lateral column
+   * references, aggregate and grouping expressions might not be correctly replaced in
+   * [[SortOrder]] and HAVING condition, because of [[Project]] nodes created when resolving
+   * lateral column references. Because of that, we need to additionally try and replace
+   * [[SortOrder]] expressions and HAVING conditions that don't appear in the child [[Project]],
+   * but the aliases of semantically equivalent expressions do. In case both the attribute and its
+   * alias exist in the output, don't replace the attribute in [[SortOrder]] / HAVING condition,
+   * because there is no missing input in that case.
+   * For example, consider the following query:
+   *
+   * {{{ SELECT col1 AS a, a FROM VALUES(1) GROUP BY col1 ORDER BY col1 }}}
+   *
+   * After resolving lateral column references and partially resolving [[SortOrder]] expression, we
+   * get the following plan:
+   *
+   * !Sort [col1#3 ASC NULLS FIRST], true
+   * +- Project [a#4, a#4]
+   *    +- Project [col1#3, col1#3 AS a#4]
+   *       +- Aggregate [col1#3], [col1#3]
+   *          +- LocalRelation [col1#3]
+   *
+   * In the above plan, [[Sort]] has a missing input `col1#3`. Because of LCA resolution this
+   * attribute is pushed down into the [[Project]] stack and aliased as `a#4`. Instead of using
+   * `col1#3` we can reference its semantically equivalent alias `a#4` in the [[SortOrder]]. The
+   * resolved plan looks like:
+   *
+   * Sort [a#4 ASC NULLS FIRST], true
+   * +- Project [a#4, a#4]
+   *    +- Project [col1#3, col1#3 AS a#4]
+   *       +- Aggregate [col1#3], [col1#3]
+   *          +- LocalRelation [col1#3]
+   *
+   * Because we used `a#4` alias instead of `col1#3`, we do not need to insert `col1#3` to the
+   * child [[Project]] as a missing expression. Therefore, `missingExpressions` need to be updated
+   * in order not to insert unnecessary attributes in
+   * [[ResolvesNameByHiddenOutput.insertMissingExpressions]]
+   *
+   * However, for a query like:
+   *
+   * {{{ SELECT col1, col1 AS a FROM VALUES(1) GROUP BY col1 ORDER BY col1 }}}
+   *
+   * The resolved plan will be:
+   *
+   * Sort [col1#4 ASC NULLS FIRST], true
+   * +- Aggregate [col1#4], [col1#4, col1#4 AS a#5]
+   *    +- LocalRelation [col1#4]
+   *
+   * In the above example, we do not replace `col1#4` with `a#5` because `col1#4` is present in the
+   * output.
+   */
+  def tryReplaceSortOrderOrHavingConditionWithAlias(
+      sortOrderOrCondition: Expression,
+      scopes: NameScopeStack,
+      missingExpressions: Seq[NamedExpression]): (Expression, Seq[NamedExpression]) = {
+    val replacedAttributeReferences = new HashSet[ExprId]
+    val expressionWithReplacedAliases = sortOrderOrCondition.transformDownWithPruning(
+      _.containsAnyPattern(AGGREGATE_EXPRESSION, ATTRIBUTE_REFERENCE)
+    ) {
+      case attributeReference: AttributeReference =>
+        scopes.current.aggregateListAliases
+          .collectFirst {
+            case alias
+                if alias.child.semanticEquals(attributeReference) &&
+                scopes.current.getAttributeById(attributeReference.exprId).isEmpty =>
+              replacedAttributeReferences.add(attributeReference.exprId)
+              alias.toAttribute
+          }
+          .getOrElse(attributeReference)
+      case aggregateExpression: AggregateExpression =>
+        scopes.current.aggregateListAliases
+          .collectFirst {
+            case alias if alias.child.semanticEquals(aggregateExpression) =>
+              alias.toAttribute
+          }
+          .getOrElse(aggregateExpression)
+    }
+    val filteredMissingExpressions = missingExpressions.filter(
+      expression => !replacedAttributeReferences.contains(expression.exprId)
+    )
+
+    (expressionWithReplacedAliases, filteredMissingExpressions)
+  }
+
+  private def getCandidateExpressionsForRewrite(
+      baseAggregate: Aggregate,
+      oldExpressions: Seq[NamedExpression],
+      autoGeneratedAliasProvider: AutoGeneratedAliasProvider): HashMap[ExprId, NamedExpression] = {
+    val expressionsToRewrite = new HashMap[ExprId, NamedExpression](oldExpressions.size)
+    val baseAggregateOutputLookup = new HashSet[ExprId](baseAggregate.aggregateExpressions.size)
+    baseAggregate.aggregateExpressions.foreach {
+      case alias: Alias => baseAggregateOutputLookup.add(alias.exprId)
+      case _ =>
+    }
+    oldExpressions.foreach {
+      case oldAlias: Alias =>
+        expressionsToRewrite.put(
+          oldAlias.exprId,
+          autoGeneratedAliasProvider.newAlias(oldAlias.toAttribute)
+        )
+      case oldAttributeReference: AttributeReference
+          if baseAggregateOutputLookup.contains(oldAttributeReference.exprId) =>
+        expressionsToRewrite.put(
+          oldAttributeReference.exprId,
+          autoGeneratedAliasProvider.newAlias(oldAttributeReference.toAttribute)
+        )
+      case other => expressionsToRewrite.put(other.exprId, other)
+    }
+
+    expressionsToRewrite
+  }
+
+  private def rewriteNamedExpressionsInProject(
+      project: Project,
+      candiidateExpressions: HashMap[ExprId, NamedExpression]): Project = {
+    val newProjectList = project.projectList.map {
+      case namedExpression: NamedExpression =>
+        candiidateExpressions.getOrDefault(namedExpression.exprId, namedExpression)
+      case other => other
+    }
+    project.copy(projectList = newProjectList)
+  }
+
+  private def updateAttributeReferencesInExpressions[ExpressionType <: Expression](
+      expressions: Seq[ExpressionType],
+      candidateAliases: HashMap[ExprId, NamedExpression]
+  ): Seq[ExpressionType] = {
+    expressions.map { expression =>
+      expression
+        .transformDownWithPruning(_.containsPattern(ATTRIBUTE_REFERENCE)) {
+          case attributeReference: AttributeReference =>
+            val newAliasOrOldAttribute =
+              candidateAliases.getOrDefault(attributeReference.exprId, attributeReference)
+            newAliasOrOldAttribute.toAttribute
+        }
+        .asInstanceOf[ExpressionType]
+    }
+  }
+}

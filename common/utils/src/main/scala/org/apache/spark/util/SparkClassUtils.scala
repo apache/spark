@@ -18,6 +18,7 @@ package org.apache.spark.util
 
 import java.util.Random
 
+import scala.collection.mutable.LinkedHashSet
 import scala.util.Try
 
 private[spark] trait SparkClassUtils {
@@ -134,6 +135,33 @@ private[spark] trait SparkClassUtils {
             stripDollars(s.substring(0, lastNonDollarIndex + 1))
           }
       }
+    }
+  }
+
+  /**
+   * Gets a list of all interfaces implemented by the given class and its superclasses.
+   */
+  def getAllInterfaces(cls: Class[_]): List[Class[_]] = {
+    if (cls == null) {
+      return null
+    }
+    val interfacesFound = LinkedHashSet[Class[_]]()
+    getAllInterfacesHelper(cls, interfacesFound)
+    interfacesFound.toList
+  }
+
+  private def getAllInterfacesHelper(
+      clazz: Class[_],
+      interfacesFound: LinkedHashSet[Class[_]]): Unit = {
+    var currentClass = clazz
+    while (currentClass != null) {
+      val interfaces = currentClass.getInterfaces
+      for (i <- interfaces) {
+        if (interfacesFound.add(i)) {
+          getAllInterfacesHelper(i, interfacesFound)
+        }
+      }
+      currentClass = currentClass.getSuperclass
     }
   }
 }

@@ -554,27 +554,51 @@ class Expression(google.protobuf.message.Message):
 
             STRUCT_TYPE_FIELD_NUMBER: builtins.int
             ELEMENTS_FIELD_NUMBER: builtins.int
+            DATA_TYPE_STRUCT_FIELD_NUMBER: builtins.int
             @property
-            def struct_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            def struct_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+                """(Deprecated) The type of the struct.
+
+                This field is deprecated since Spark 4.1+ because using DataType as the type of a struct
+                is ambiguous. This field should only be set if the data_type_struct field is not set.
+                Use data_type_struct field instead.
+                """
             @property
             def elements(
                 self,
             ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
                 global___Expression.Literal
-            ]: ...
+            ]:
+                """(Required) The literal values that make up the struct elements."""
+            @property
+            def data_type_struct(self) -> pyspark.sql.connect.proto.types_pb2.DataType.Struct:
+                """The type of the struct.
+
+                Whether data_type_struct.fields.data_type should be set depends on
+                whether each field's type can be inferred from the elements field.
+                """
             def __init__(
                 self,
                 *,
                 struct_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
                 elements: collections.abc.Iterable[global___Expression.Literal] | None = ...,
+                data_type_struct: pyspark.sql.connect.proto.types_pb2.DataType.Struct | None = ...,
             ) -> None: ...
             def HasField(
-                self, field_name: typing_extensions.Literal["struct_type", b"struct_type"]
+                self,
+                field_name: typing_extensions.Literal[
+                    "data_type_struct", b"data_type_struct", "struct_type", b"struct_type"
+                ],
             ) -> builtins.bool: ...
             def ClearField(
                 self,
                 field_name: typing_extensions.Literal[
-                    "elements", b"elements", "struct_type", b"struct_type"
+                    "data_type_struct",
+                    b"data_type_struct",
+                    "elements",
+                    b"elements",
+                    "struct_type",
+                    b"struct_type",
                 ],
             ) -> None: ...
 
@@ -654,6 +678,36 @@ class Expression(google.protobuf.message.Message):
                 | None
             ): ...
 
+        class Time(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            NANO_FIELD_NUMBER: builtins.int
+            PRECISION_FIELD_NUMBER: builtins.int
+            nano: builtins.int
+            precision: builtins.int
+            """The precision of this time, if omitted, uses the default value of MICROS_PRECISION."""
+            def __init__(
+                self,
+                *,
+                nano: builtins.int = ...,
+                precision: builtins.int | None = ...,
+            ) -> None: ...
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "_precision", b"_precision", "precision", b"precision"
+                ],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "_precision", b"_precision", "nano", b"nano", "precision", b"precision"
+                ],
+            ) -> None: ...
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["_precision", b"_precision"]
+            ) -> typing_extensions.Literal["precision"] | None: ...
+
         NULL_FIELD_NUMBER: builtins.int
         BINARY_FIELD_NUMBER: builtins.int
         BOOLEAN_FIELD_NUMBER: builtins.int
@@ -675,6 +729,7 @@ class Expression(google.protobuf.message.Message):
         MAP_FIELD_NUMBER: builtins.int
         STRUCT_FIELD_NUMBER: builtins.int
         SPECIALIZED_ARRAY_FIELD_NUMBER: builtins.int
+        TIME_FIELD_NUMBER: builtins.int
         @property
         def null(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
         binary: builtins.bytes
@@ -706,6 +761,8 @@ class Expression(google.protobuf.message.Message):
         def struct(self) -> global___Expression.Literal.Struct: ...
         @property
         def specialized_array(self) -> global___Expression.Literal.SpecializedArray: ...
+        @property
+        def time(self) -> global___Expression.Literal.Time: ...
         def __init__(
             self,
             *,
@@ -730,6 +787,7 @@ class Expression(google.protobuf.message.Message):
             map: global___Expression.Literal.Map | None = ...,
             struct: global___Expression.Literal.Struct | None = ...,
             specialized_array: global___Expression.Literal.SpecializedArray | None = ...,
+            time: global___Expression.Literal.Time | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -772,6 +830,8 @@ class Expression(google.protobuf.message.Message):
                 b"string",
                 "struct",
                 b"struct",
+                "time",
+                b"time",
                 "timestamp",
                 b"timestamp",
                 "timestamp_ntz",
@@ -821,6 +881,8 @@ class Expression(google.protobuf.message.Message):
                 b"string",
                 "struct",
                 b"struct",
+                "time",
+                b"time",
                 "timestamp",
                 b"timestamp",
                 "timestamp_ntz",
@@ -854,6 +916,7 @@ class Expression(google.protobuf.message.Message):
                 "map",
                 "struct",
                 "specialized_array",
+                "time",
             ]
             | None
         ): ...
