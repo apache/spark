@@ -325,13 +325,11 @@ class ArrowUDTFTests(ReusedSQLTestCase):
                 )
                 yield result_table
 
-
         with self.assertRaisesRegex(PythonException, "Schema at index 0 was different"):
             result_df = LongToIntUDTF()
             result_df.collect()
 
     def test_arrow_udtf_type_coercion_string_to_int(self):
-        """Test that incompatible type coercion fails appropriately"""
         @arrow_udtf(returnType="id int")
         class StringToIntUDTF:
             def eval(self) -> Iterator["pa.Table"]:
@@ -343,14 +341,12 @@ class ArrowUDTFTests(ReusedSQLTestCase):
                 )
                 yield result_table
 
-
         with self.assertRaisesRegex(PythonException, "Schema at index 0 was different"):
             result_df = StringToIntUDTF()
             result_df.collect()
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_arrow_udtf import *
 
     try:
         import xmlrunner

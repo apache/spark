@@ -24,7 +24,12 @@ import sys
 import warnings
 from typing import Any, Type, TYPE_CHECKING, Optional, Sequence, Union
 
-from pyspark.errors import PySparkAttributeError, PySparkPicklingError, PySparkTypeError
+from pyspark.errors import (
+    PySparkAttributeError,
+    PySparkPicklingError,
+    PySparkTypeError,
+    PySparkImportError,
+)
 from pyspark.util import PythonEvalType
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import DataType, StructType, _parse_datatype_string
@@ -254,7 +259,7 @@ def _create_pyarrow_udtf(
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
     except ImportError as e:
-        raise ImportError(
+        raise PySparkImportError(
             f"PyArrow UDTF requires both pandas and pyarrow dependencies: {str(e)}"
         ) from e
 

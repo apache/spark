@@ -75,6 +75,7 @@ if typing.TYPE_CHECKING:
         SQLArrowTableUDFType,
         SQLBatchedUDFType,
         SQLTableUDFType,
+        SQLArrowUDTFType,
     )
     from pyspark.serializers import Serializer
     from pyspark.sql import SparkSession
