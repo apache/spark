@@ -314,6 +314,40 @@ class ArrowUDTFTests(ReusedSQLTestCase):
         expected_df_false = self.spark.createDataFrame([], "value int")
         assertDataFrameEqual(result_df_false, expected_df_false)
 
+    def test_arrow_udtf_type_coercion_long_to_int(self):
+        @arrow_udtf(returnType="id int")
+        class LongToIntUDTF:
+            def eval(self) -> Iterator["pa.Table"]:
+                result_table = pa.table(
+                    {
+                        "id": pa.array([1, 2, 3], type=pa.int64()),  # long values
+                    }
+                )
+                yield result_table
+
+
+        with self.assertRaisesRegex(PythonException, "Schema at index 0 was different"):
+            result_df = LongToIntUDTF()
+            result_df.collect()
+
+    def test_arrow_udtf_type_coercion_string_to_int(self):
+        """Test that incompatible type coercion fails appropriately"""
+        @arrow_udtf(returnType="id int")
+        class StringToIntUDTF:
+            def eval(self) -> Iterator["pa.Table"]:
+                # Return string values that cannot be coerced to int
+                result_table = pa.table(
+                    {
+                        "id": pa.array(["abc", "def", "xyz"], type=pa.string()),
+                    }
+                )
+                yield result_table
+
+
+        with self.assertRaisesRegex(PythonException, "Schema at index 0 was different"):
+            result_df = StringToIntUDTF()
+            result_df.collect()
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_arrow_udtf import *

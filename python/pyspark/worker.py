@@ -2060,22 +2060,15 @@ def read_udtf(pickleSer, infile, eval_type):
                     elif isinstance(item, pa.RecordBatch):
                         batches.append(item)
                     else:
-                        # Fallback for other data types
-                        # TODO: shall we be strict here and throw exceptions?
-                        # This can support pandas dataframe too
-                        try:
-                            return LocalDataToArrowConversion.convert(
-                                data_list, return_type, prefers_large_var_types
-                            ).to_batches()
-                        except Exception as e:
-                            raise PySparkRuntimeError(
-                                errorClass="UDTF_ARROW_TYPE_CONVERSION_ERROR",
-                                messageParameters={
-                                    "data": str(data_list),
-                                    "schema": return_type.simpleString(),
-                                    "arrow_schema": str(arrow_return_type),
-                                },
-                            ) from e
+                        # Arrow UDTF should only return Arrow types (RecordBatch/Table)
+                        raise PySparkRuntimeError(
+                            errorClass="UDTF_ARROW_TYPE_CONVERSION_ERROR",
+                            messageParameters={
+                                "data": str(item),
+                                "schema": return_type.simpleString(),
+                                "arrow_schema": str(arrow_return_type),
+                            },
+                        )
                 return batches
 
             def evaluate(*args: pa.RecordBatch):
