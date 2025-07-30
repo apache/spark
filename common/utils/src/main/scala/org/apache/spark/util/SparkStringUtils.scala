@@ -70,7 +70,8 @@ private[spark] trait SparkStringUtils {
   }
 
   /** Try to strip prefix and suffix with the given string 's' */
-  def strip(str: String, s: String): String = str.stripPrefix(s).stripSuffix(s)
+  def strip(str: String, s: String): String =
+    if (str == null || s == null) str else str.stripPrefix(s).stripSuffix(s)
 }
 
 private[spark] object SparkStringUtils extends SparkStringUtils with Logging {
