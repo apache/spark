@@ -8,6 +8,14 @@ CreateViewCommand `time_view`, select '11:53:26.038344' time_str, 'HH:mm:ss.SSSS
 
 
 -- !query
+create temporary view trunc_time_view as select time'11:53:26.038344' time_val, 'MINUTE' unit
+-- !query analysis
+CreateViewCommand `trunc_time_view`, select time'11:53:26.038344' time_val, 'MINUTE' unit, false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [11:53:26.038344 AS time_val#x, MINUTE AS unit#x]
+      +- OneRowRelation
+
+
+-- !query
 select time '16:39:45\t'
 -- !query analysis
 Project [16:39:45 AS TIME '16:39:45'#x]
@@ -448,6 +456,403 @@ SELECT cast(time'11:59:59.999999' as time without time zone)
 -- !query analysis
 Project [cast(11:59:59.999999 as time(6)) AS CAST(TIME '11:59:59.999999' AS TIME(6))#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('HOUR', time'12:34:56')
+-- !query analysis
+Project [time_trunc(HOUR, 12:34:56) AS time_trunc(HOUR, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MINUTE', time'12:34:56')
+-- !query analysis
+Project [time_trunc(MINUTE, 12:34:56) AS time_trunc(MINUTE, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('SECOND', time'12:34:56')
+-- !query analysis
+Project [time_trunc(SECOND, 12:34:56) AS time_trunc(SECOND, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MILLISECOND', time'12:34:56')
+-- !query analysis
+Project [time_trunc(MILLISECOND, 12:34:56) AS time_trunc(MILLISECOND, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MICROSECOND', time'12:34:56')
+-- !query analysis
+Project [time_trunc(MICROSECOND, 12:34:56) AS time_trunc(MICROSECOND, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('HOUR', time'12:34:56.1')
+-- !query analysis
+Project [time_trunc(HOUR, 12:34:56.1) AS time_trunc(HOUR, TIME '12:34:56.1')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MINUTE', time'12:34:56.1')
+-- !query analysis
+Project [time_trunc(MINUTE, 12:34:56.1) AS time_trunc(MINUTE, TIME '12:34:56.1')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('SECOND', time'12:34:56.1')
+-- !query analysis
+Project [time_trunc(SECOND, 12:34:56.1) AS time_trunc(SECOND, TIME '12:34:56.1')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MILLISECOND', time'12:34:56.1')
+-- !query analysis
+Project [time_trunc(MILLISECOND, 12:34:56.1) AS time_trunc(MILLISECOND, TIME '12:34:56.1')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MICROSECOND', time'12:34:56.1')
+-- !query analysis
+Project [time_trunc(MICROSECOND, 12:34:56.1) AS time_trunc(MICROSECOND, TIME '12:34:56.1')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('HOUR', time'12:34:56.123456')
+-- !query analysis
+Project [time_trunc(HOUR, 12:34:56.123456) AS time_trunc(HOUR, TIME '12:34:56.123456')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MINUTE', time'12:34:56.123456')
+-- !query analysis
+Project [time_trunc(MINUTE, 12:34:56.123456) AS time_trunc(MINUTE, TIME '12:34:56.123456')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('SECOND', time'12:34:56.123456')
+-- !query analysis
+Project [time_trunc(SECOND, 12:34:56.123456) AS time_trunc(SECOND, TIME '12:34:56.123456')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MILLISECOND', time'12:34:56.123456')
+-- !query analysis
+Project [time_trunc(MILLISECOND, 12:34:56.123456) AS time_trunc(MILLISECOND, TIME '12:34:56.123456')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MICROSECOND', time'12:34:56.123456')
+-- !query analysis
+Project [time_trunc(MICROSECOND, 12:34:56.123456) AS time_trunc(MICROSECOND, TIME '12:34:56.123456')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('HOUR', time'12:34:56.123456789')
+-- !query analysis
+Project [time_trunc(HOUR, 12:34:56.123456) AS time_trunc(HOUR, TIME '12:34:56.123456')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MINUTE', time'12:34:56.123456789')
+-- !query analysis
+Project [time_trunc(MINUTE, 12:34:56.123456) AS time_trunc(MINUTE, TIME '12:34:56.123456')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('SECOND', time'12:34:56.123456789')
+-- !query analysis
+Project [time_trunc(SECOND, 12:34:56.123456) AS time_trunc(SECOND, TIME '12:34:56.123456')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MILLISECOND', time'12:34:56.123456789')
+-- !query analysis
+Project [time_trunc(MILLISECOND, 12:34:56.123456) AS time_trunc(MILLISECOND, TIME '12:34:56.123456')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MICROSECOND', time'12:34:56.123456789')
+-- !query analysis
+Project [time_trunc(MICROSECOND, 12:34:56.123456) AS time_trunc(MICROSECOND, TIME '12:34:56.123456')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('hour', time'12:34:56')
+-- !query analysis
+Project [time_trunc(hour, 12:34:56) AS time_trunc(hour, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MiNuTe', time'12:34:56')
+-- !query analysis
+Project [time_trunc(MiNuTe, 12:34:56) AS time_trunc(MiNuTe, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('sEcOnD', time'12:34:56')
+-- !query analysis
+Project [time_trunc(sEcOnD, 12:34:56) AS time_trunc(sEcOnD, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('Millisecond', time'12:34:56')
+-- !query analysis
+Project [time_trunc(Millisecond, 12:34:56) AS time_trunc(Millisecond, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('microseconD', time'12:34:56')
+-- !query analysis
+Project [time_trunc(microseconD, 12:34:56) AS time_trunc(microseconD, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('HOUR', time'00:00:00')
+-- !query analysis
+Project [time_trunc(HOUR, 00:00:00) AS time_trunc(HOUR, TIME '00:00:00')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MINUTE', time'00:00:00')
+-- !query analysis
+Project [time_trunc(MINUTE, 00:00:00) AS time_trunc(MINUTE, TIME '00:00:00')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('SECOND', time'00:00:00')
+-- !query analysis
+Project [time_trunc(SECOND, 00:00:00) AS time_trunc(SECOND, TIME '00:00:00')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MILLISECOND', time'00:00:00')
+-- !query analysis
+Project [time_trunc(MILLISECOND, 00:00:00) AS time_trunc(MILLISECOND, TIME '00:00:00')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MICROSECOND', time'00:00:00')
+-- !query analysis
+Project [time_trunc(MICROSECOND, 00:00:00) AS time_trunc(MICROSECOND, TIME '00:00:00')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('HOUR', time'00:00:00.000000001')
+-- !query analysis
+Project [time_trunc(HOUR, 00:00:00) AS time_trunc(HOUR, TIME '00:00:00')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MINUTE', time'00:00:00.000000001')
+-- !query analysis
+Project [time_trunc(MINUTE, 00:00:00) AS time_trunc(MINUTE, TIME '00:00:00')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('SECOND', time'00:00:00.000000001')
+-- !query analysis
+Project [time_trunc(SECOND, 00:00:00) AS time_trunc(SECOND, TIME '00:00:00')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MILLISECOND', time'00:00:00.000000001')
+-- !query analysis
+Project [time_trunc(MILLISECOND, 00:00:00) AS time_trunc(MILLISECOND, TIME '00:00:00')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MICROSECOND', time'00:00:00.000000001')
+-- !query analysis
+Project [time_trunc(MICROSECOND, 00:00:00) AS time_trunc(MICROSECOND, TIME '00:00:00')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('HOUR', time'23:59:59.999999999')
+-- !query analysis
+Project [time_trunc(HOUR, 23:59:59.999999) AS time_trunc(HOUR, TIME '23:59:59.999999')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MINUTE', time'23:59:59.999999999')
+-- !query analysis
+Project [time_trunc(MINUTE, 23:59:59.999999) AS time_trunc(MINUTE, TIME '23:59:59.999999')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('SECOND', time'23:59:59.999999999')
+-- !query analysis
+Project [time_trunc(SECOND, 23:59:59.999999) AS time_trunc(SECOND, TIME '23:59:59.999999')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MILLISECOND', time'23:59:59.999999999')
+-- !query analysis
+Project [time_trunc(MILLISECOND, 23:59:59.999999) AS time_trunc(MILLISECOND, TIME '23:59:59.999999')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MICROSECOND', time'23:59:59.999999999')
+-- !query analysis
+Project [time_trunc(MICROSECOND, 23:59:59.999999) AS time_trunc(MICROSECOND, TIME '23:59:59.999999')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('', time'12:34:56')
+-- !query analysis
+Project [time_trunc(, 12:34:56) AS time_trunc(, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc(' ', time'12:34:56')
+-- !query analysis
+Project [time_trunc( , 12:34:56) AS time_trunc( , TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('MS', time'12:34:56')
+-- !query analysis
+Project [time_trunc(MS, 12:34:56) AS time_trunc(MS, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('DAY', time'12:34:56')
+-- !query analysis
+Project [time_trunc(DAY, 12:34:56) AS time_trunc(DAY, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('WEEK', time'12:34:56')
+-- !query analysis
+Project [time_trunc(WEEK, 12:34:56) AS time_trunc(WEEK, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('ABCD', time'12:34:56')
+-- !query analysis
+Project [time_trunc(ABCD, 12:34:56) AS time_trunc(ABCD, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('QUARTER', time'12:34:56')
+-- !query analysis
+Project [time_trunc(QUARTER, 12:34:56) AS time_trunc(QUARTER, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('INVALID', time'12:34:56')
+-- !query analysis
+Project [time_trunc(INVALID, 12:34:56) AS time_trunc(INVALID, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('INVALID_UNIT', time'12:34:56')
+-- !query analysis
+Project [time_trunc(INVALID_UNIT, 12:34:56) AS time_trunc(INVALID_UNIT, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('HOUR', NULL)
+-- !query analysis
+Project [time_trunc(HOUR, cast(null as time(6))) AS time_trunc(HOUR, NULL)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc(NULL, time'12:34:56')
+-- !query analysis
+Project [time_trunc(cast(null as string), 12:34:56) AS time_trunc(NULL, TIME '12:34:56')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc(NULL, NULL)
+-- !query analysis
+Project [time_trunc(cast(null as string), cast(null as time(6))) AS time_trunc(NULL, NULL)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_trunc('HOUR', time_val) FROM trunc_time_view
+-- !query analysis
+Project [time_trunc(HOUR, time_val#x) AS time_trunc(HOUR, time_val)#x]
++- SubqueryAlias trunc_time_view
+   +- View (`trunc_time_view`, [time_val#x, unit#x])
+      +- Project [cast(time_val#x as time(6)) AS time_val#x, cast(unit#x as string) AS unit#x]
+         +- Project [11:53:26.038344 AS time_val#x, MINUTE AS unit#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT time_trunc(unit, time'12:34:56') FROM trunc_time_view
+-- !query analysis
+Project [time_trunc(unit#x, 12:34:56) AS time_trunc(unit, TIME '12:34:56')#x]
++- SubqueryAlias trunc_time_view
+   +- View (`trunc_time_view`, [time_val#x, unit#x])
+      +- Project [cast(time_val#x as time(6)) AS time_val#x, cast(unit#x as string) AS unit#x]
+         +- Project [11:53:26.038344 AS time_val#x, MINUTE AS unit#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT time_trunc(unit, time_val) FROM trunc_time_view
+-- !query analysis
+Project [time_trunc(unit#x, time_val#x) AS time_trunc(unit, time_val)#x]
++- SubqueryAlias trunc_time_view
+   +- View (`trunc_time_view`, [time_val#x, unit#x])
+      +- Project [cast(time_val#x as time(6)) AS time_val#x, cast(unit#x as string) AS unit#x]
+         +- Project [11:53:26.038344 AS time_val#x, MINUTE AS unit#x]
+            +- OneRowRelation
 
 
 -- !query

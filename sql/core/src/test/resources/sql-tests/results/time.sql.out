@@ -8,6 +8,14 @@ struct<>
 
 
 -- !query
+create temporary view trunc_time_view as select time'11:53:26.038344' time_val, 'MINUTE' unit
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 select time '16:39:45\t'
 -- !query schema
 struct<TIME '16:39:45':time(6)>
@@ -554,6 +562,527 @@ SELECT cast(time'11:59:59.999999' as time without time zone)
 struct<CAST(TIME '11:59:59.999999' AS TIME(6)):time(6)>
 -- !query output
 11:59:59.999999
+
+
+-- !query
+SELECT time_trunc('HOUR', time'12:34:56')
+-- !query schema
+struct<time_trunc(HOUR, TIME '12:34:56'):time(6)>
+-- !query output
+12:00:00
+
+
+-- !query
+SELECT time_trunc('MINUTE', time'12:34:56')
+-- !query schema
+struct<time_trunc(MINUTE, TIME '12:34:56'):time(6)>
+-- !query output
+12:34:00
+
+
+-- !query
+SELECT time_trunc('SECOND', time'12:34:56')
+-- !query schema
+struct<time_trunc(SECOND, TIME '12:34:56'):time(6)>
+-- !query output
+12:34:56
+
+
+-- !query
+SELECT time_trunc('MILLISECOND', time'12:34:56')
+-- !query schema
+struct<time_trunc(MILLISECOND, TIME '12:34:56'):time(6)>
+-- !query output
+12:34:56
+
+
+-- !query
+SELECT time_trunc('MICROSECOND', time'12:34:56')
+-- !query schema
+struct<time_trunc(MICROSECOND, TIME '12:34:56'):time(6)>
+-- !query output
+12:34:56
+
+
+-- !query
+SELECT time_trunc('HOUR', time'12:34:56.1')
+-- !query schema
+struct<time_trunc(HOUR, TIME '12:34:56.1'):time(6)>
+-- !query output
+12:00:00
+
+
+-- !query
+SELECT time_trunc('MINUTE', time'12:34:56.1')
+-- !query schema
+struct<time_trunc(MINUTE, TIME '12:34:56.1'):time(6)>
+-- !query output
+12:34:00
+
+
+-- !query
+SELECT time_trunc('SECOND', time'12:34:56.1')
+-- !query schema
+struct<time_trunc(SECOND, TIME '12:34:56.1'):time(6)>
+-- !query output
+12:34:56
+
+
+-- !query
+SELECT time_trunc('MILLISECOND', time'12:34:56.1')
+-- !query schema
+struct<time_trunc(MILLISECOND, TIME '12:34:56.1'):time(6)>
+-- !query output
+12:34:56.1
+
+
+-- !query
+SELECT time_trunc('MICROSECOND', time'12:34:56.1')
+-- !query schema
+struct<time_trunc(MICROSECOND, TIME '12:34:56.1'):time(6)>
+-- !query output
+12:34:56.1
+
+
+-- !query
+SELECT time_trunc('HOUR', time'12:34:56.123456')
+-- !query schema
+struct<time_trunc(HOUR, TIME '12:34:56.123456'):time(6)>
+-- !query output
+12:00:00
+
+
+-- !query
+SELECT time_trunc('MINUTE', time'12:34:56.123456')
+-- !query schema
+struct<time_trunc(MINUTE, TIME '12:34:56.123456'):time(6)>
+-- !query output
+12:34:00
+
+
+-- !query
+SELECT time_trunc('SECOND', time'12:34:56.123456')
+-- !query schema
+struct<time_trunc(SECOND, TIME '12:34:56.123456'):time(6)>
+-- !query output
+12:34:56
+
+
+-- !query
+SELECT time_trunc('MILLISECOND', time'12:34:56.123456')
+-- !query schema
+struct<time_trunc(MILLISECOND, TIME '12:34:56.123456'):time(6)>
+-- !query output
+12:34:56.123
+
+
+-- !query
+SELECT time_trunc('MICROSECOND', time'12:34:56.123456')
+-- !query schema
+struct<time_trunc(MICROSECOND, TIME '12:34:56.123456'):time(6)>
+-- !query output
+12:34:56.123456
+
+
+-- !query
+SELECT time_trunc('HOUR', time'12:34:56.123456789')
+-- !query schema
+struct<time_trunc(HOUR, TIME '12:34:56.123456'):time(6)>
+-- !query output
+12:00:00
+
+
+-- !query
+SELECT time_trunc('MINUTE', time'12:34:56.123456789')
+-- !query schema
+struct<time_trunc(MINUTE, TIME '12:34:56.123456'):time(6)>
+-- !query output
+12:34:00
+
+
+-- !query
+SELECT time_trunc('SECOND', time'12:34:56.123456789')
+-- !query schema
+struct<time_trunc(SECOND, TIME '12:34:56.123456'):time(6)>
+-- !query output
+12:34:56
+
+
+-- !query
+SELECT time_trunc('MILLISECOND', time'12:34:56.123456789')
+-- !query schema
+struct<time_trunc(MILLISECOND, TIME '12:34:56.123456'):time(6)>
+-- !query output
+12:34:56.123
+
+
+-- !query
+SELECT time_trunc('MICROSECOND', time'12:34:56.123456789')
+-- !query schema
+struct<time_trunc(MICROSECOND, TIME '12:34:56.123456'):time(6)>
+-- !query output
+12:34:56.123456
+
+
+-- !query
+SELECT time_trunc('hour', time'12:34:56')
+-- !query schema
+struct<time_trunc(hour, TIME '12:34:56'):time(6)>
+-- !query output
+12:00:00
+
+
+-- !query
+SELECT time_trunc('MiNuTe', time'12:34:56')
+-- !query schema
+struct<time_trunc(MiNuTe, TIME '12:34:56'):time(6)>
+-- !query output
+12:34:00
+
+
+-- !query
+SELECT time_trunc('sEcOnD', time'12:34:56')
+-- !query schema
+struct<time_trunc(sEcOnD, TIME '12:34:56'):time(6)>
+-- !query output
+12:34:56
+
+
+-- !query
+SELECT time_trunc('Millisecond', time'12:34:56')
+-- !query schema
+struct<time_trunc(Millisecond, TIME '12:34:56'):time(6)>
+-- !query output
+12:34:56
+
+
+-- !query
+SELECT time_trunc('microseconD', time'12:34:56')
+-- !query schema
+struct<time_trunc(microseconD, TIME '12:34:56'):time(6)>
+-- !query output
+12:34:56
+
+
+-- !query
+SELECT time_trunc('HOUR', time'00:00:00')
+-- !query schema
+struct<time_trunc(HOUR, TIME '00:00:00'):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT time_trunc('MINUTE', time'00:00:00')
+-- !query schema
+struct<time_trunc(MINUTE, TIME '00:00:00'):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT time_trunc('SECOND', time'00:00:00')
+-- !query schema
+struct<time_trunc(SECOND, TIME '00:00:00'):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT time_trunc('MILLISECOND', time'00:00:00')
+-- !query schema
+struct<time_trunc(MILLISECOND, TIME '00:00:00'):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT time_trunc('MICROSECOND', time'00:00:00')
+-- !query schema
+struct<time_trunc(MICROSECOND, TIME '00:00:00'):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT time_trunc('HOUR', time'00:00:00.000000001')
+-- !query schema
+struct<time_trunc(HOUR, TIME '00:00:00'):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT time_trunc('MINUTE', time'00:00:00.000000001')
+-- !query schema
+struct<time_trunc(MINUTE, TIME '00:00:00'):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT time_trunc('SECOND', time'00:00:00.000000001')
+-- !query schema
+struct<time_trunc(SECOND, TIME '00:00:00'):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT time_trunc('MILLISECOND', time'00:00:00.000000001')
+-- !query schema
+struct<time_trunc(MILLISECOND, TIME '00:00:00'):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT time_trunc('MICROSECOND', time'00:00:00.000000001')
+-- !query schema
+struct<time_trunc(MICROSECOND, TIME '00:00:00'):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT time_trunc('HOUR', time'23:59:59.999999999')
+-- !query schema
+struct<time_trunc(HOUR, TIME '23:59:59.999999'):time(6)>
+-- !query output
+23:00:00
+
+
+-- !query
+SELECT time_trunc('MINUTE', time'23:59:59.999999999')
+-- !query schema
+struct<time_trunc(MINUTE, TIME '23:59:59.999999'):time(6)>
+-- !query output
+23:59:00
+
+
+-- !query
+SELECT time_trunc('SECOND', time'23:59:59.999999999')
+-- !query schema
+struct<time_trunc(SECOND, TIME '23:59:59.999999'):time(6)>
+-- !query output
+23:59:59
+
+
+-- !query
+SELECT time_trunc('MILLISECOND', time'23:59:59.999999999')
+-- !query schema
+struct<time_trunc(MILLISECOND, TIME '23:59:59.999999'):time(6)>
+-- !query output
+23:59:59.999
+
+
+-- !query
+SELECT time_trunc('MICROSECOND', time'23:59:59.999999999')
+-- !query schema
+struct<time_trunc(MICROSECOND, TIME '23:59:59.999999'):time(6)>
+-- !query output
+23:59:59.999999
+
+
+-- !query
+SELECT time_trunc('', time'12:34:56')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`time_trunc`",
+    "invalidValue" : "''",
+    "parameter" : "`unit`"
+  }
+}
+
+
+-- !query
+SELECT time_trunc(' ', time'12:34:56')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`time_trunc`",
+    "invalidValue" : "' '",
+    "parameter" : "`unit`"
+  }
+}
+
+
+-- !query
+SELECT time_trunc('MS', time'12:34:56')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`time_trunc`",
+    "invalidValue" : "'MS'",
+    "parameter" : "`unit`"
+  }
+}
+
+
+-- !query
+SELECT time_trunc('DAY', time'12:34:56')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`time_trunc`",
+    "invalidValue" : "'DAY'",
+    "parameter" : "`unit`"
+  }
+}
+
+
+-- !query
+SELECT time_trunc('WEEK', time'12:34:56')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`time_trunc`",
+    "invalidValue" : "'WEEK'",
+    "parameter" : "`unit`"
+  }
+}
+
+
+-- !query
+SELECT time_trunc('ABCD', time'12:34:56')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`time_trunc`",
+    "invalidValue" : "'ABCD'",
+    "parameter" : "`unit`"
+  }
+}
+
+
+-- !query
+SELECT time_trunc('QUARTER', time'12:34:56')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`time_trunc`",
+    "invalidValue" : "'QUARTER'",
+    "parameter" : "`unit`"
+  }
+}
+
+
+-- !query
+SELECT time_trunc('INVALID', time'12:34:56')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`time_trunc`",
+    "invalidValue" : "'INVALID'",
+    "parameter" : "`unit`"
+  }
+}
+
+
+-- !query
+SELECT time_trunc('INVALID_UNIT', time'12:34:56')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`time_trunc`",
+    "invalidValue" : "'INVALID_UNIT'",
+    "parameter" : "`unit`"
+  }
+}
+
+
+-- !query
+SELECT time_trunc('HOUR', NULL)
+-- !query schema
+struct<time_trunc(HOUR, NULL):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_trunc(NULL, time'12:34:56')
+-- !query schema
+struct<time_trunc(NULL, TIME '12:34:56'):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_trunc(NULL, NULL)
+-- !query schema
+struct<time_trunc(NULL, NULL):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT time_trunc('HOUR', time_val) FROM trunc_time_view
+-- !query schema
+struct<time_trunc(HOUR, time_val):time(6)>
+-- !query output
+11:00:00
+
+
+-- !query
+SELECT time_trunc(unit, time'12:34:56') FROM trunc_time_view
+-- !query schema
+struct<time_trunc(unit, TIME '12:34:56'):time(6)>
+-- !query output
+12:34:00
+
+
+-- !query
+SELECT time_trunc(unit, time_val) FROM trunc_time_view
+-- !query schema
+struct<time_trunc(unit, time_val):time(6)>
+-- !query output
+11:53:00
 
 
 -- !query
