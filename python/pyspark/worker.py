@@ -2413,9 +2413,11 @@ def read_udtf(pickleSer, infile, eval_type, runner_conf):
                 ]
                 for a in it:
                     pylist = [
-                        [conv(v) for v in column.to_pylist()]
-                        if conv is not None
-                        else column.to_pylist()
+                        (
+                            [conv(v) for v in column.to_pylist()]
+                            if conv is not None
+                            else column.to_pylist()
+                        )
                         for column, conv in zip(a.columns, converters)
                     ]
                     # The eval function yields an iterator. Each element produced by this
