@@ -657,7 +657,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
       val row = df.collect()(0)
-      assert(row == Row(0, 1, 2, 3, 0, -1, -2, -3))
+      assert(row.toString == Row(0, 1, 2, 3, 0, -1, -2, -3).toString)
 
       assert(df.schema.fields.map(_.name) sameElements
         Array("id", "id_1", "id_2", "id_1_1", "id", "id_1", "id_2", "id_2_1"))
