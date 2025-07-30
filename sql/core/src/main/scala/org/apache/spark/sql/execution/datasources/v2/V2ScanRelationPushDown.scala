@@ -209,29 +209,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       logInfo(log"DSv2 Join pushdown - translated join type " +
         log"${MDC(JOIN_TYPE, translatedJoinType)}")
 
-      val prettyLeftSideRequiredColumnsWithAliases = leftSideRequiredColumnsWithAliases
-        .map(e => s"(${e.colName()}, ${e.alias()})")
-        .mkString(", ")
-      val prettyRightSideRequiredColumnsWithAliases = rightSideRequiredColumnsWithAliases
-        .map(e => s"(${e.colName()}, ${e.alias()})")
-        .mkString(", ")
-
-      def columnsWithAliasesPrettyString(
-          cols: Seq[SupportsPushDownJoin.ColumnWithAlias]): String = {
-        cols
-          .map(e => s"(${e.colName()}, ${e.alias()})")
-          .mkString(", ")
-      }
-
       logInfo(log"DSv2 Join pushdown - left side required columns with aliases: " +
         log"${MDC(
           COLUMN_NAMES,
-          columnsWithAliasesPrettyString(leftSideRequiredColumnsWithAliases)
+          leftSideRequiredColumnsWithAliases.map(_.prettyString()).mkString(", ")
         )}")
       logInfo(log"DSv2 Join pushdown - right side required columns with aliases: " +
         log"${MDC(
           COLUMN_NAMES,
-          columnsWithAliasesPrettyString(rightSideRequiredColumnsWithAliases)
+          rightSideRequiredColumnsWithAliases.map(_.prettyString()).mkString(", ")
         )}")
 
       if (translatedJoinType.isDefined &&

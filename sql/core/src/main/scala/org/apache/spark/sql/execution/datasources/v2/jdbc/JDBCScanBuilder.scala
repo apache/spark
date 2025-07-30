@@ -240,7 +240,7 @@ case class JDBCScanBuilder(
     jdbcOptions = new JDBCOptions(newJdbcOptionsMap)
     finalSchema = requiredSchema
     logInfo(log"Updated JDBC schema due to join pushdown. " +
-      log"New schema: ${MDC(SCHEMA, finalSchema.simpleString)}")
+      log"New schema: ${MDC(SCHEMA, finalSchema.toDDL)}")
 
     // We need to reset the pushedPredicate because it has already been consumed in previously
     // crafted SQL query.
