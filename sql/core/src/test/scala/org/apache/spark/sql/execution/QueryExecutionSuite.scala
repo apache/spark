@@ -458,23 +458,30 @@ class QueryExecutionSuite extends SharedSparkSession {
 
   test("determineShuffleCleanupMode should return correct mode based on SQL configuration") {
     val conf = new SQLConf()
-
+    def checkMode(connectShuffleCleanupEnabled: Boolean, classicShuffleEnabled: Boolean,
+                  skipMigrationEnabled: Boolean, cleanupMode: ShuffleCleanupMode): Unit = {
+      conf.setConf(SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, connectShuffleCleanupEnabled)
+      conf.setConf(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, classicShuffleEnabled)
+      conf.setConf(SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED, skipMigrationEnabled)
+      assert(QueryExecution.determineShuffleCleanupMode(conf) === cleanupMode)
+    }
     // Defaults to doNotCleanup
-    conf.setConf(SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, false)
-    conf.setConf(SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED, false)
-    assert(QueryExecution.determineShuffleCleanupMode(conf) === DoNotCleanup)
+    checkMode(connectShuffleCleanupEnabled = false, classicShuffleEnabled = false,
+      skipMigrationEnabled = false, DoNotCleanup)
 
     // Test RemoveShuffleFiles
-    conf.setConf(SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, true)
-    conf.setConf(SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED, false)
-    assert(QueryExecution.determineShuffleCleanupMode(conf) === RemoveShuffleFiles)
+    checkMode(connectShuffleCleanupEnabled = false, classicShuffleEnabled = true,
+      skipMigrationEnabled = false, RemoveShuffleFiles)
+    checkMode(connectShuffleCleanupEnabled = true, classicShuffleEnabled = false,
+      skipMigrationEnabled = false, RemoveShuffleFiles)
+    checkMode(connectShuffleCleanupEnabled = true, classicShuffleEnabled = true,
+      skipMigrationEnabled = false, RemoveShuffleFiles)
 
     // Test SkipMigration
-    conf.setConf(SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, false)
-    conf.setConf(SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED, true)
-    assert(QueryExecution.determineShuffleCleanupMode(conf) === SkipMigration)
+    checkMode(connectShuffleCleanupEnabled = false, classicShuffleEnabled = false,
+      skipMigrationEnabled = true, SkipMigration)
 
-    // TODO, when both enabled, RemoveShuffle tasks Precedence, log a warning?
+    // TODO: when both enabled, RemoveShuffle tasks Precedence, log a warning, ?
   }
 
   case class MockCallbackEagerCommand(

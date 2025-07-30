@@ -690,7 +690,8 @@ object QueryExecution {
   }
 
   def determineShuffleCleanupMode(conf: SQLConf): ShuffleCleanupMode = {
-    if (conf.getConf(SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)) {
+    if (conf.getConf(SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED) ||
+      conf.getConf(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)) {
       RemoveShuffleFiles
     } else if (conf.getConf(SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED)) {
       SkipMigration

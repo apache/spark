@@ -1873,6 +1873,7 @@ class AdaptiveQueryExecSuite
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.SHUFFLE_PARTITIONS.key -> "5",
       SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED.key -> "false",
+      SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key -> "false",
       SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key -> "false") {
       val df = sql(
         """

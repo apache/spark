@@ -3573,6 +3573,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(Utils.isTesting)
 
+  // TODO: Change name based on PR discussion
+  val CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED =
+    buildConf("spark.sql.classic.shuffleDependency.fileCleanup.enabled")
+      .doc("When enabled, shuffle files will be cleaned up at the end of classic " +
+        "SQL executions.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
+
   val SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.in.memory.threshold")
       .internal()
