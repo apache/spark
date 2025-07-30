@@ -217,16 +217,13 @@ class SparkSession(SparkConversionMixin):
             self._options: Dict[str, Any] = {}
 
         @overload
-        def config(self, *, conf: SparkConf) -> "SparkSession.Builder":
-            ...
+        def config(self, *, conf: SparkConf) -> "SparkSession.Builder": ...
 
         @overload
-        def config(self, key: str, value: Any) -> "SparkSession.Builder":
-            ...
+        def config(self, key: str, value: Any) -> "SparkSession.Builder": ...
 
         @overload
-        def config(self, *, map: Dict[str, "OptionalPrimitiveType"]) -> "SparkSession.Builder":
-            ...
+        def config(self, *, map: Dict[str, "OptionalPrimitiveType"]) -> "SparkSession.Builder": ...
 
         def config(
             self,
@@ -1277,8 +1274,7 @@ class SparkSession(SparkConversionMixin):
         data: Iterable["RowLike"],
         schema: Union[List[str], Tuple[str, ...]] = ...,
         samplingRatio: Optional[float] = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
@@ -1286,8 +1282,7 @@ class SparkSession(SparkConversionMixin):
         data: "RDD[RowLike]",
         schema: Union[List[str], Tuple[str, ...]] = ...,
         samplingRatio: Optional[float] = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
@@ -1296,8 +1291,7 @@ class SparkSession(SparkConversionMixin):
         schema: Union[StructType, str],
         *,
         verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
@@ -1306,8 +1300,7 @@ class SparkSession(SparkConversionMixin):
         schema: Union[StructType, str],
         *,
         verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
@@ -1315,8 +1308,7 @@ class SparkSession(SparkConversionMixin):
         data: "RDD[AtomicValue]",
         schema: Union[AtomicType, str],
         verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
@@ -1324,18 +1316,17 @@ class SparkSession(SparkConversionMixin):
         data: Iterable["AtomicValue"],
         schema: Union[AtomicType, str],
         verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
         self, data: "PandasDataFrameLike", samplingRatio: Optional[float] = ...
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
-    def createDataFrame(self, data: "pa.Table", samplingRatio: Optional[float] = ...) -> DataFrame:
-        ...
+    def createDataFrame(
+        self, data: "pa.Table", samplingRatio: Optional[float] = ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
@@ -1343,8 +1334,7 @@ class SparkSession(SparkConversionMixin):
         data: "PandasDataFrameLike",
         schema: Union[StructType, str],
         verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     @overload
     def createDataFrame(
@@ -1352,8 +1342,7 @@ class SparkSession(SparkConversionMixin):
         data: "pa.Table",
         schema: Union[StructType, str],
         verifySchema: bool = ...,
-    ) -> DataFrame:
-        ...
+    ) -> DataFrame: ...
 
     def createDataFrame(  # type: ignore[misc]
         self,
