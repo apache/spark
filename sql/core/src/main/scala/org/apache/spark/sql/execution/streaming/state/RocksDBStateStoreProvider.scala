@@ -324,9 +324,9 @@ private[sql] class RocksDBStateStoreProvider
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val rowPair = new UnsafeRowPair()
       if (useColumnFamilies) {
-        val rocksDBIter = rocksDB.iterator(colFamilyName)
+        val rocksDbIter = rocksDB.iterator(colFamilyName)
 
-        val f = (kv : ByteArrayPair) => {
+        val iter = rocksDbIter.map { kv =>
           rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
             kvEncoder._2.decodeValue(kv.value))
           if (!isValidated && rowPair.value != null && !useColumnFamilies) {
@@ -336,19 +336,18 @@ private[sql] class RocksDBStateStoreProvider
           }
           rowPair
         }
-
-        val iter = rocksDBIter.map(f)
 
         new Iterator[UnsafeRowPair] with Closeable {
           override def hasNext: Boolean = iter.hasNext
 
           override def next(): UnsafeRowPair = iter.next()
 
-          override def close(): Unit = rocksDBIter.closeIfNeeded()
+          override def close(): Unit = rocksDbIter.closeIfNeeded()
         }
       } else {
         val rocksDBIter = rocksDB.iterator()
-        val f = (kv: ByteArrayPair) => {
+
+        val iter = rocksDBIter.map { kv =>
           rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
             kvEncoder._2.decodeValue(kv.value))
           if (!isValidated && rowPair.value != null && !useColumnFamilies) {
@@ -358,7 +357,7 @@ private[sql] class RocksDBStateStoreProvider
           }
           rowPair
         }
-        val iter = rocksDBIter.map(f)
+
         new Iterator[UnsafeRowPair] with Closeable {
           override def hasNext: Boolean = iter.hasNext
 
@@ -383,13 +382,11 @@ private[sql] class RocksDBStateStoreProvider
 
       val rocksDBiter = rocksDB.prefixScan(prefix, colFamilyName)
 
-      val f = (kv: ByteArrayPair) => {
+      val iter = rocksDBiter.map { kv =>
         rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
           kvEncoder._2.decodeValue(kv.value))
         rowPair
       }
-
-      val iter = rocksDBiter.map(f)
 
       new Iterator[UnsafeRowPair] with Closeable {
           override def hasNext: Boolean = iter.hasNext
