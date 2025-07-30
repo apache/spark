@@ -587,11 +587,6 @@ class RocksDB(
       "load" -> duration
     )
 
-    // Refresh the recorded metrics after loading from snapshot. metricsOpt is how the
-    // RocksDBMetrics is accessed. It uses recordedMetrics which was previously only updated in
-    // commit(). This caused metrics from load to not be up to date if it is used as read-only
-    // and does not commit()
-    recordedMetrics = Some(metrics)
     this
   }
 
@@ -635,11 +630,6 @@ class RocksDB(
       "loadFromSnapshot" -> (System.currentTimeMillis() - startTime)
     )
 
-    // Refresh the recorded metrics after loading from snapshot. metricsOpt is how the
-    // RocksDBMetrics is accessed. It uses recordedMetrics which was previously only updated in
-    // commit(). This caused metrics from loadFromSnapshot to not be up to date if it is used as
-    // read-only and does not commit()
-    recordedMetrics = Some(metrics)
     this
   }
 
@@ -1066,7 +1056,7 @@ class RocksDB(
         commitLatencyMs ++= snapshotLatency
       }
 
-      var uploadSnapshotCalled = false
+      var isUploaded = false
 
       logInfo(log"Syncing checkpoint for ${MDC(LogKeys.VERSION_NUM, newVersion)} to DFS")
       val fileSyncTimeMs = timeTakenMs {
@@ -1074,11 +1064,9 @@ class RocksDB(
           // If we have changed the columnFamilyId mapping, we have set a new
           // snapshot and need to upload this to the DFS even if changelog checkpointing
           // is enabled.
-          var isUploaded = false
           if (shouldForceSnapshot.get()) {
             assert(snapshot.isDefined)
             uploadSnapshot(snapshot.get)
-            uploadSnapshotCalled = true
             isUploaded = true
             shouldForceSnapshot.set(false)
           }
@@ -1104,11 +1092,11 @@ class RocksDB(
           assert(changelogWriter.isEmpty)
           assert(snapshot.isDefined)
           uploadSnapshot(snapshot.get)
-          uploadSnapshotCalled = true
+          isUploaded = true
         }
       }
 
-      if (uploadSnapshotCalled) {
+      if (isUploaded) {
         // If we have uploaded the snapshot, the fileManagerMetrics will be cleared and updated
         // in uploadSnapshot. If there are new metrics needed to be added specific to this commit,
         // add them here to not accidentally use old fileManagerMetrics from the maintenance threads
@@ -1399,6 +1387,13 @@ class RocksDB(
         logInfo(log"Failed to acquire metrics with exception=${MDC(LogKeys.ERROR, ex)}")
     }
     rocksDBMetricsOpt
+  }
+
+  /**
+   * Refresh the recorded metrics with the latest metrics.
+   */
+  def refreshRecordedMetrics(): Unit = {
+    recordedMetrics = Some(metrics)
   }
 
   private def getDBProperty(property: String): Long = db.getProperty(property).toLong
