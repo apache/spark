@@ -305,14 +305,14 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
 
-      val expectedSchemaWithoutNames = StructType(
+      val expectedSchema = StructType(
         Seq(
-          StructField("", integerType), // ID
-          StructField("", integerType), // NEXT_ID
+          StructField(caseConvert("id"), integerType), // ID
+          StructField(caseConvert("id_1"), integerType), // ID
           StructField(caseConvert("amount"), decimalType) // AMOUNT
         )
       )
-      checkPrunedColumnsDataTypeAndNullability(df, expectedSchemaWithoutNames)
+      checkPrunedColumnsDataTypeAndNullability(df, expectedSchema)
       checkJoinPushed(
         df,
         expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
@@ -337,13 +337,13 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
 
-      val expectedSchemaWithoutNames = StructType(
+      val expectedSchema = StructType(
         Seq(
           StructField(caseConvert("id"), integerType), // ID
           StructField(caseConvert("next_id"), integerType) // NEXT_ID
         )
       )
-      checkPrunedColumnsDataTypeAndNullability(df, expectedSchemaWithoutNames)
+      checkPrunedColumnsDataTypeAndNullability(df, expectedSchema)
       checkJoinPushed(
         df,
         expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}",
@@ -372,18 +372,18 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
 
-      val expectedSchemaWithoutNames = StructType(
+      val expectedSchema = StructType(
         Seq(
-          StructField("", integerType), // ID_UUID
-          StructField("", decimalType), // AMOUNT_UUID
-          StructField("", integerType), // ID_UUID
-          StructField("", decimalType), // AMOUNT_UUID
-          StructField(caseConvert("address"), stringType), // ADDRESS
           StructField(caseConvert("id"), integerType), // ID
-          StructField(caseConvert("amount"), decimalType) // AMOUNT
+          StructField(caseConvert("amount"), decimalType), // AMOUNT
+          StructField(caseConvert("id_1"), integerType), // ID
+          StructField(caseConvert("amount_1"), decimalType), // AMOUNT
+          StructField(caseConvert("address"), stringType), // ADDRESS
+          StructField(caseConvert("id_2"), integerType), // ID
+          StructField(caseConvert("amount_2"), decimalType) // AMOUNT
         )
       )
-      checkPrunedColumnsDataTypeAndNullability(df, expectedSchemaWithoutNames)
+      checkPrunedColumnsDataTypeAndNullability(df, expectedSchema)
       checkJoinPushed(
         df,
         expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
