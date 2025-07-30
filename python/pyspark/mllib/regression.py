@@ -85,7 +85,7 @@ class LabeledPoint:
 
     def __init__(self, label: float, features: "VectorLike"):
         self.label = float(label)
-        self.features = _convert_to_vector(features)
+        self.features = _convert_to_vector(features)  # type: ignore[arg-type]
 
     def __reduce__(self) -> Tuple[Type["LabeledPoint"], Tuple[float, Vector]]:
         return (LabeledPoint, (self.label, self.features))
