@@ -43,6 +43,7 @@ from pyspark.pandas.data_type_ops.base import (
     _sanitize_list_like,
     _is_valid_for_logical_operator,
     _is_boolean_type,
+    _should_return_all_false,
 )
 from pyspark.pandas.typedef.typehints import extension_dtypes, pandas_on_spark_type, as_spark_type
 from pyspark.pandas.utils import is_ansi_mode_enabled
@@ -253,7 +254,16 @@ class NumericOps(DataTypeOps):
         # We can directly use `super().eq` when given object is list, tuple, dict or set.
         if not isinstance(right, IndexOpsMixin) and is_list_like(right):
             return super().eq(left, right)
-        return pyspark_column_op("__eq__", left, right, fillna=False)
+        else:
+            if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession):
+                if _should_return_all_false(left, right):
+                    left_scol = left._with_new_scol(F.lit(False))
+                    return left_scol.rename(None)  # type: ignore[attr-defined]
+                if _is_boolean_type(right):  # numeric vs. bool
+                    right = transform_boolean_operand_to_numeric(
+                        right, spark_type=left.spark.data_type
+                    )
+            return pyspark_column_op("__eq__", left, right, fillna=False)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)

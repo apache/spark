@@ -50,6 +50,15 @@ object TaskContext {
     }
   }
 
+  def withTaskContext[T](context: TaskContext)(task: => T): T = {
+    try {
+      TaskContext.setTaskContext(context)
+      task
+    } finally {
+      TaskContext.unset()
+    }
+  }
+
   private[this] val taskContext: ThreadLocal[TaskContext] = new ThreadLocal[TaskContext]
 
   // Note: protected[spark] instead of private[spark] to prevent the following two from

@@ -63,6 +63,7 @@ from pyspark.sql.types import (
     VariantVal,
 )
 from pyspark.testing import assertDataFrameEqual, assertSchemaEqual
+from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import (
     have_pandas,
     have_pyarrow,
@@ -176,6 +177,26 @@ class BaseUDTFTestsMixin:
             self.spark.sql("SELECT * FROM values (0, 1), (1, 2) t(a, b), LATERAL testUDTF(a, b)"),
         )
 
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self):
+                yield 1,
+                yield 2,
+
+        self.spark.udtf.register("testUDTF", TestUDTF)
+
+        assertDataFrameEqual(
+            self.spark.range(3, numPartitions=1).lateralJoin(TestUDTF()),
+            [
+                Row(id=0, a=1),
+                Row(id=0, a=2),
+                Row(id=1, a=1),
+                Row(id=1, a=2),
+                Row(id=2, a=1),
+                Row(id=2, a=2),
+            ],
+        )
+
     def test_udtf_eval_with_return_stmt(self):
         class TestUDTF:
             def eval(self, a: int, b: int):
@@ -210,6 +231,14 @@ class BaseUDTFTestsMixin:
         with self.assertRaisesRegex(PythonException, "UDTF_INVALID_OUTPUT_ROW_TYPE"):
             TestUDTF(lit(1)).collect()
 
+        @udtf(returnType=StructType().add("point", ExamplePointUDT()))
+        class TestUDTF:
+            def eval(self, x: float, y: float):
+                yield ExamplePoint(x=x * 10, y=y * 10)
+
+        with self.assertRaisesRegex(PythonException, "UDTF_INVALID_OUTPUT_ROW_TYPE"):
+            TestUDTF(lit(1.0), lit(2.0)).collect()
+
     def test_udtf_eval_returning_tuple_with_struct_type(self):
         @udtf(returnType="a: struct<b: int, c: int>")
         class TestUDTF:
@@ -225,6 +254,30 @@ class BaseUDTFTestsMixin:
 
         with self.assertRaisesRegex(PythonException, "UDTF_RETURN_SCHEMA_MISMATCH"):
             TestUDTF(lit(1)).collect()
+
+    def test_udtf_eval_returning_udt(self):
+        @udtf(returnType=StructType().add("point", ExamplePointUDT()))
+        class TestUDTF:
+            def eval(self, x: float, y: float):
+                yield ExamplePoint(x=x * 10, y=y * 10),
+
+        assertDataFrameEqual(
+            TestUDTF(lit(1.0), lit(2.0)), [Row(point=ExamplePoint(x=10.0, y=20.0))]
+        )
+
+    def test_udtf_eval_taking_udt(self):
+        @udtf(returnType="x: double, y: double")
+        class TestUDTF:
+            def eval(self, point: ExamplePoint):
+                yield point.x * 10, point.y * 10
+
+        df = self.spark.createDataFrame(
+            [(ExamplePoint(x=1.0, y=2.0),)], schema=StructType().add("point", ExamplePointUDT())
+        )
+        assertDataFrameEqual(
+            df.lateralJoin(TestUDTF(col("point").outer())),
+            [Row(point=ExamplePoint(x=1.0, y=2.0), x=10.0, y=20.0)],
+        )
 
     def test_udtf_with_invalid_return_value(self):
         @udtf(returnType="x: int")
@@ -2934,6 +2987,13 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
                 return [a]
 
         assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=1)])
+
+        @udtf(returnType=StructType().add("udt", ExamplePointUDT()))
+        class TestUDTF:
+            def eval(self, x: float, y: float):
+                yield ExamplePoint(x=x * 10, y=y * 10)
+
+        assertDataFrameEqual(TestUDTF(lit(1.0), lit(2.0)), [Row(udt=ExamplePoint(x=10.0, y=20.0))])
 
     def test_udtf_use_large_var_types(self):
         for use_large_var_types in [True, False]:

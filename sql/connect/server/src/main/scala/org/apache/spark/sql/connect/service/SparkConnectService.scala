@@ -29,7 +29,6 @@ import io.grpc.netty.NettyServerBuilder
 import io.grpc.protobuf.ProtoUtils
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
-import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.connect.proto
@@ -504,7 +503,7 @@ object SparkConnectService extends Logging {
   }
 
   def extractErrorMessage(st: Throwable): String = {
-    val message = StringUtils.abbreviate(st.getMessage, 2048)
+    val message = Utils.abbreviate(st.getMessage, 2048)
     convertNullString(message)
   }
 
