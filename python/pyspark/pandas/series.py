@@ -5099,12 +5099,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                         else:
                             cond = self.spark.column.isNull()
                     else:
-                        lit = (
+                        to_replace_lit = (
                             F.lit(to_replace_).try_cast(col_type)
                             if ansi_mode
                             else F.lit(to_replace_)
                         )
-                        cond = self.spark.column == lit
+                        cond = self.spark.column == to_replace_lit
                     value_expr = F.lit(value).try_cast(col_type) if ansi_mode else F.lit(value)
                     if is_start:
                         current = F.when(cond, value_expr)
@@ -5118,12 +5118,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 cond = self.spark.column.rlike(cast(str, to_replace))
             else:
                 if ansi_mode:
-                    to_replace_values = (
+                    to_replace_values: List[Any] = (
                         [to_replace]
                         if not is_list_like(to_replace) or isinstance(to_replace, str)
                         else to_replace
                     )
-                    to_replace_values = cast(List[Any], to_replace_values)
                     literals = [F.lit(v).try_cast(col_type) for v in to_replace_values]
                     cond = self.spark.column.isin(literals)
                 else:
