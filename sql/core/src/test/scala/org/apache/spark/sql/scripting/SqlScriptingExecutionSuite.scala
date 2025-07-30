@@ -2203,21 +2203,21 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("local variable - declare - system name forbidden outside sql scripts") {
+  test("local variable - declare - system name not forbidden outside sql scripts") {
     withSessionVariable("system") {
-      val sqlScript =
+      val sqlQuery =
         "DECLARE system INT"
 
-      sql(sqlScript)
+      sql(sqlQuery)
     }
   }
 
-  test("local variable - declare - session name forbidden outside sql scripts") {
+  test("local variable - declare - session name not forbidden outside sql scripts") {
    withSessionVariable("session") {
-     val sqlScript =
+     val sqlQuery =
        "DECLARE session INT"
 
-     sql(sqlScript)
+     sql(sqlQuery)
    }
   }
 
@@ -2235,7 +2235,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
 
     checkError(
       exception = e,
-      condition = "INVALID_VARIABLE_DECLARATION.NAME_FORBIDDEN",
+      condition = "INVALID_VARIABLE_DECLARATION.LOCAL_VARIABLE_NAME_FORBIDDEN",
       sqlState = "42K0M",
       parameters = Map("varName" -> toSQLId("system"))
     )
@@ -2255,7 +2255,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
 
     checkError(
       exception = e,
-      condition = "INVALID_VARIABLE_DECLARATION.NAME_FORBIDDEN",
+      condition = "INVALID_VARIABLE_DECLARATION.LOCAL_VARIABLE_NAME_FORBIDDEN",
       sqlState = "42K0M",
       parameters = Map("varName" -> toSQLId("session"))
     )
@@ -2276,7 +2276,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
 
     checkError(
       exception = e,
-      condition = "INVALID_VARIABLE_DECLARATION.NAME_FORBIDDEN",
+      condition = "INVALID_VARIABLE_DECLARATION.LOCAL_VARIABLE_NAME_FORBIDDEN",
       sqlState = "42K0M",
       parameters = Map("varName" -> toSQLId("system"))
     )
@@ -2297,7 +2297,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
 
     checkError(
       exception = e,
-      condition = "INVALID_VARIABLE_DECLARATION.NAME_FORBIDDEN",
+      condition = "INVALID_VARIABLE_DECLARATION.LOCAL_VARIABLE_NAME_FORBIDDEN",
       sqlState = "42K0M",
       parameters = Map("varName" -> toSQLId("session"))
     )

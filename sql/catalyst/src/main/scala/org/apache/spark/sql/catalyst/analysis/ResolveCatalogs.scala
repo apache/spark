@@ -25,7 +25,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.parser.SqlScriptingContext
+import org.apache.spark.sql.catalyst.parser.SqlScriptingParsingContext
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.SparkCharVarcharUtils.replaceCharVarcharWithString
@@ -60,9 +60,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
             Map("varName" -> toSQLId(nameParts)))
         }
 
-        if (SqlScriptingContext.isForbiddenName(nameParts.head.toLowerCase(Locale.ROOT))) {
+        if (SqlScriptingParsingContext.isForbiddenLabelOrVariableName(nameParts.head.toLowerCase(Locale.ROOT))) {
           throw new AnalysisException(
-            "INVALID_VARIABLE_DECLARATION.NAME_FORBIDDEN",
+            "INVALID_VARIABLE_DECLARATION.LOCAL_VARIABLE_NAME_FORBIDDEN",
             Map("varName" -> toSQLId(nameParts)))
         }
 

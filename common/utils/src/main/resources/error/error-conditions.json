@@ -3880,11 +3880,6 @@
       "Invalid variable declaration."
     ],
     "subClass" : {
-      "NAME_FORBIDDEN" : {
-        "message" : [
-          "Variable name <varName> is forbidden."
-        ]
-      },
       "NOT_ALLOWED_IN_SCOPE" : {
         "message" : [
           "Declaration of the variable <varName> is not allowed in this scope."
@@ -3903,6 +3898,11 @@
       "REPLACE_LOCAL_VARIABLE" : {
         "message" : [
           "The variable <varName> does not support DECLARE OR REPLACE, as local variables cannot be replaced."
+        ]
+      },
+      "LOCAL_VARIABLE_NAME_FORBIDDEN" : {
+        "message" : [
+          "Local variable name <varName> is forbidden."
         ]
       }
     },
