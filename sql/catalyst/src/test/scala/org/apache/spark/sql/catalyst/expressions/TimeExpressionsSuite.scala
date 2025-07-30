@@ -518,7 +518,7 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         exception = intercept[SparkIllegalArgumentException] {
           TimeTrunc(Literal(unit), Literal(testTime, TimeType())).eval()
         },
-        condition = "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+        condition = "INVALID_PARAMETER_VALUE.TIME_UNIT",
         parameters = Map(
           "functionName" -> "`time_trunc`",
           "parameter" -> "`unit`",

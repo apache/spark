@@ -520,7 +520,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
       case "MILLISECOND" => ChronoUnit.MILLIS
       case "MICROSECOND" => ChronoUnit.MICROS
       case _ =>
-        throw QueryExecutionErrors.invalidTimeTruncUnitError("time_trunc", level.toString)
+        throw QueryExecutionErrors.invalidTimeUnitError("time_trunc", level.toString)
     }
   }
 

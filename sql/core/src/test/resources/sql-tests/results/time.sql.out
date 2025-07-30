@@ -899,7 +899,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+  "errorClass" : "INVALID_PARAMETER_VALUE.TIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`time_trunc`",
@@ -916,7 +916,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+  "errorClass" : "INVALID_PARAMETER_VALUE.TIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`time_trunc`",
@@ -933,7 +933,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+  "errorClass" : "INVALID_PARAMETER_VALUE.TIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`time_trunc`",
@@ -950,7 +950,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+  "errorClass" : "INVALID_PARAMETER_VALUE.TIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`time_trunc`",
@@ -967,7 +967,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+  "errorClass" : "INVALID_PARAMETER_VALUE.TIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`time_trunc`",
@@ -984,7 +984,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+  "errorClass" : "INVALID_PARAMETER_VALUE.TIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`time_trunc`",
@@ -1001,7 +1001,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+  "errorClass" : "INVALID_PARAMETER_VALUE.TIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`time_trunc`",
@@ -1018,7 +1018,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+  "errorClass" : "INVALID_PARAMETER_VALUE.TIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`time_trunc`",
@@ -1035,7 +1035,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+  "errorClass" : "INVALID_PARAMETER_VALUE.TIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`time_trunc`",
