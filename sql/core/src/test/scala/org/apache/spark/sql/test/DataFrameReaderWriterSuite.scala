@@ -21,6 +21,7 @@ import java.io.File
 import java.util.{Locale, Random}
 import java.util.concurrent.ConcurrentLinkedQueue
 
+import scala.collection.parallel.CollectionConverters._
 import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
@@ -1474,5 +1475,15 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     checkError(
       exception = intercept[SparkIllegalArgumentException](dataFrameWriter.save()),
       condition = "_LEGACY_ERROR_TEMP_2047")
+  }
+
+  test("SPARK-53019: Fix job attempt path conflicts in o.a.hadoop..FileOutputCommitter") {
+    withTempDir { dir =>
+      (1 to 5).par.foreach { i =>
+        spark.range(i).write.mode("append").json(dir.getAbsolutePath)
+      }
+      checkAnswer(spark.read.json(dir.getAbsolutePath).where("id = 0"),
+        Seq(Row(0), Row(0), Row(0), Row(0), Row(0)))
+    }
   }
 }
