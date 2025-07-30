@@ -182,9 +182,7 @@ trait DataSourcePushdownTestUtils extends ExplainSuiteHelper {
 
           assert(dfSchema.length == schema.length)
           dfSchema.fields.zip(schema.fields).foreach { case (f1, f2) =>
-            if (f2.name.nonEmpty) {
-              assert(f1.name == f2.name)
-            }
+            assert(f1.name == f2.name)
             assert(f1.dataType == f2.dataType)
             assert(f1.nullable == f2.nullable)
           }
