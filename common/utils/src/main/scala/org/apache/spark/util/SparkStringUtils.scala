@@ -38,6 +38,18 @@ private[spark] trait SparkStringUtils {
     SPACE_DELIMITED_UPPERCASE_HEX.parseHex(hex.stripPrefix("[").stripSuffix("]"))
   }
 
+  def abbreviate(str: String, abbrevMarker: String, len: Int): String = {
+    if (str == null || abbrevMarker == null) {
+      null
+    } else if (str.length() <= len || str.length() <= abbrevMarker.length()) {
+      str
+    } else {
+      str.substring(0, len - abbrevMarker.length()) + abbrevMarker
+    }
+  }
+
+  def abbreviate(str: String, len: Int): String = abbreviate(str, "...", len)
+
   def sideBySide(left: String, right: String): Seq[String] = {
     sideBySide(left.split("\n").toImmutableArraySeq, right.split("\n").toImmutableArraySeq)
   }
@@ -56,6 +68,10 @@ private[spark] trait SparkStringUtils {
     import org.apache.spark.util.ArrayImplicits._
     str.split(",").map(_.trim()).filter(_.nonEmpty).toImmutableArraySeq
   }
+
+  /** Try to strip prefix and suffix with the given string 's' */
+  def strip(str: String, s: String): String =
+    if (str == null || s == null) str else str.stripPrefix(s).stripSuffix(s)
 }
 
 private[spark] object SparkStringUtils extends SparkStringUtils with Logging {

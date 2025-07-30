@@ -3436,6 +3436,11 @@
           "expects a string literal, but got <invalidValue>."
         ]
       },
+      "TIMETRUNC_UNIT" : {
+        "message" : [
+          "expects one of the units 'HOUR', 'MINUTE', 'SECOND', 'MILLISECOND', 'MICROSECOND', but got '<invalidValue>'."
+        ]
+      },
       "ZERO_INDEX" : {
         "message" : [
           "expects %1$, %2$ and so on, but got %0$."

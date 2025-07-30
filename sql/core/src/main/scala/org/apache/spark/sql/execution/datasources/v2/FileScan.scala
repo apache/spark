@@ -18,7 +18,6 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{Locale, OptionalLong}
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.{Logging, MDC}
@@ -122,7 +121,7 @@ trait FileScan extends Scan
       case (key, value) =>
         val redactedValue =
           Utils.redact(conf.stringRedactionPattern, value)
-        key + ": " + StringUtils.abbreviate(redactedValue, maxMetadataValueLength)
+        key + ": " + Utils.abbreviate(redactedValue, maxMetadataValueLength)
     }.mkString(", ")
     s"${this.getClass.getSimpleName} $metadataStr"
   }

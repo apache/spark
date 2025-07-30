@@ -56,20 +56,11 @@ def arrow_udf(f=None, returnType=None, functionType=None):
 
 
 def pandas_udf(f=None, returnType=None, functionType=None):
-    return vectorized_udf(f, returnType, functionType, "pandas")
-
-
-def vectorized_udf(
-    f=None,
-    returnType=None,
-    functionType=None,
-    kind: str = "pandas",
-):
     """
-    Creates a vectorized user defined function.
+    Creates a pandas user defined function.
 
     Pandas UDFs are user defined functions that are executed by Spark using Arrow to transfer
-    data and Pandas to work with the data, which allows vectorized operations. A Pandas UDF
+    data and Pandas to work with the data, which allows pandas operations. A Pandas UDF
     is defined using the `pandas_udf` as a decorator or to wrap the function, and no
     additional configuration is required. A Pandas UDF behaves as a regular PySpark function
     API in general.
@@ -392,6 +383,15 @@ def vectorized_udf(
     # Note: Python 3.11.9, Pandas 2.2.3 and PyArrow 17.0.0 are used.
     # Note: Timezone is KST.
     # Note: 'X' means it throws an exception during the conversion.
+    return vectorized_udf(f, returnType, functionType, "pandas")
+
+
+def vectorized_udf(
+    f=None,
+    returnType=None,
+    functionType=None,
+    kind: str = "pandas",
+):
     require_minimum_pandas_version()
     require_minimum_pyarrow_version()
 

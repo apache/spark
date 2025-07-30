@@ -2171,8 +2171,8 @@ def read_udfs(pickleSer, infile, eval_type):
             PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
             PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
         ):
-            # Arrow cast for type coercion is enabled by default
-            ser = ArrowStreamArrowUDFSerializer(timezone, safecheck, _assign_cols_by_name, True)
+            # Arrow cast and safe check are always enabled
+            ser = ArrowStreamArrowUDFSerializer(timezone, True, _assign_cols_by_name, True)
         elif (
             eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             and not use_legacy_pandas_udf_conversion(runner_conf)

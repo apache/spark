@@ -135,7 +135,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       .kubernetesClient
       .services()
       .inNamespace(kubernetesTestComponents.namespace)
-      .create(minioService))
+      .resource(minioService).create())
 
     // try until the stateful set of a previous test is deleted
     Eventually.eventually(TIMEOUT, INTERVAL) (kubernetesTestComponents
@@ -143,7 +143,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       .apps()
       .statefulSets()
       .inNamespace(kubernetesTestComponents.namespace)
-      .create(minioStatefulSet))
+      .resource(minioStatefulSet).create())
   }
 
   private def deleteMinioStorage(): Unit = {
