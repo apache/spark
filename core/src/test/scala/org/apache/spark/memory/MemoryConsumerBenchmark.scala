@@ -23,7 +23,7 @@ import org.apache.spark.internal.config.{MEMORY_FRACTION, MEMORY_OFFHEAP_ENABLED
 import org.apache.spark.internal.config.Tests.{IS_TESTING, TEST_MEMORY}
 
 /**
- * Benchmark for Spark memory consumer. To run this benchmark:
+ * Benchmark for Spark memory consumer and its downstream memory APIs. To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar> <sql core test jar>
