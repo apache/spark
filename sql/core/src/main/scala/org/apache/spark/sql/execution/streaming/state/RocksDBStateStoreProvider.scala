@@ -323,7 +323,6 @@ private[sql] class RocksDBStateStoreProvider
       verifyColFamilyOperations("iterator", colFamilyName)
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val rowPair = new UnsafeRowPair()
-
       if (useColumnFamilies) {
         val iter = rocksDB.iterator(colFamilyName)
 
@@ -338,7 +337,7 @@ private[sql] class RocksDBStateStoreProvider
           rowPair
         }
 
-        StateStoreProvider.createNextIteratorHelper(iter, f)
+        iter.map(f)
       } else {
         val iter = rocksDB.iterator()
         val f = (kv: ByteArrayPair) => {
@@ -351,7 +350,7 @@ private[sql] class RocksDBStateStoreProvider
           }
           rowPair
         }
-        StateStoreProvider.createNextIteratorHelper(iter, f)
+        iter.map(f)
       }
     }
 
@@ -375,7 +374,7 @@ private[sql] class RocksDBStateStoreProvider
         rowPair
       }
 
-      StateStoreProvider.createNextIteratorHelper(iter, f)
+      iter.map(f)
     }
 
     var checkpointInfo: Option[StateStoreCheckpointInfo] = None
