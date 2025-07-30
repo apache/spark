@@ -145,7 +145,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
            |"id" ${getJDBCTypeString(integerType)},
            |"id_1" ${getJDBCTypeString(integerType)},
            |"id_2" ${getJDBCTypeString(integerType)},
-           |"id_1_1" ${getJDBCTypeString(integerType)}
+           |"id_1_1" ${getJDBCTypeString(integerType)},
+           |"sid" ${getJDBCTypeString(integerType)}
            |)""".stripMargin
       ).executeUpdate()
       conn.prepareStatement(
@@ -153,7 +154,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
            |"id" ${getJDBCTypeString(integerType)},
            |"id_1" ${getJDBCTypeString(integerType)},
            |"id_2" ${getJDBCTypeString(integerType)},
-           |"id_2_1" ${getJDBCTypeString(integerType)}
+           |"id_2_1" ${getJDBCTypeString(integerType)},
+           |"Sid" ${getJDBCTypeString(integerType)}
            |)""".stripMargin
       ).executeUpdate()
     }
@@ -206,9 +208,9 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       insertStmt2.close()
 
       conn.createStatement().execute(
-        s"""insert into $fullyQualifiedTableName3 values (0, 1, 2, 3)""")
+        s"""insert into $fullyQualifiedTableName3 values (0, 1, 2, 3, 4)""")
       conn.createStatement().execute(
-        s"""insert into $fullyQualifiedTableName4 values (0, -1, -2, -3)""")
+        s"""insert into $fullyQualifiedTableName4 values (0, -1, -2, -3, -4)""")
     }
   }
 
@@ -680,14 +682,16 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
       val row = df.collect()(0)
-      assert(row.toString == Row(0, 1, 2, 3, 0, -1, -2, -3).toString)
+      assert(row.toString == Row(0, 1, 2, 3, 4, 0, -1, -2, -3, -4).toString)
 
       assert(df.schema.fields.map(_.name) sameElements
-        Array("id", "id_1", "id_2", "id_1_1", "id", "id_1", "id_2", "id_2_1"))
+        Array("id", "id_1", "id_2", "id_1_1", "sid",
+          "id", "id_1", "id_2", "id_2_1", "Sid"))
       assert(df.queryExecution.optimizedPlan.collectFirst {
         case j: DataSourceV2ScanRelation => j
       }.get.schema.fields.map(_.name) sameElements
-        Array("id", "id_1", "id_2", "id_1_1", "id_3", "id_1_2", "id_2_2", "id_2_1"))
+        Array("id", "id_1", "id_2", "id_1_1", "sid",
+          "id_3", "id_1_2", "id_2_2", "id_2_1", "Sid"))
 
       checkJoinPushed(df)
     }
