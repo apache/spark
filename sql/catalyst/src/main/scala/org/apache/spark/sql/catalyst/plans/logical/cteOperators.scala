@@ -152,10 +152,6 @@ case class CTERelationDef(
   }
   lazy val hasSelfReferenceInSubCTE: Boolean = {
     val withCTENode: Option[WithCTE] = child match {
-      case SubqueryAlias(_, _: Union) =>
-        None
-      case SubqueryAlias(_, UnresolvedSubqueryColumnAliases(_, _: Union)) =>
-        None
       case SubqueryAlias(_, withCTE @ WithCTE(_, _)) =>
         Some(withCTE)
       case SubqueryAlias(_, UnresolvedSubqueryColumnAliases(_, withCTE @ WithCTE(_, _))) =>
