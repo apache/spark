@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.FileNotFoundException
+import java.lang.invoke.MethodHandles
+
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapreduce.{OutputCommitter, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.{JobContext, OutputCommitter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.CLASS_NAME
-import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
+import org.apache.spark.internal.io.{FileCommitProtocol, HadoopMapReduceCommitProtocol}
+import org.apache.spark.internal.io.FileCommitProtocol.SPARK_WRITE_JOB_ID
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -65,9 +69,90 @@ class SQLHadoopMapReduceCommitProtocol(
         val ctor = clazz.getDeclaredConstructor()
         committer = ctor.newInstance()
       }
+    } else if (clazz == classOf[FileOutputCommitter]) {
+      committer = new UniqueJobPathOutputCommitter(new Path(path), context)
     }
     logInfo(log"Using output committer class " +
       log"${MDC(CLASS_NAME, committer.getClass.getCanonicalName)}")
     committer
+  }
+}
+
+/**
+ * An implementation of [[FileOutputCommitter]] that uses the Spark write ID to create
+ * a staging directory for job attempts instead of static `_temporary` as root.
+ *
+ */
+class UniqueJobPathOutputCommitter(outputPath: Path, context: TaskAttemptContext)
+  extends FileOutputCommitter(outputPath, context)
+  with Logging {
+
+  MethodHandles.lookup()
+    .findVarHandle(classOf[FileOutputCommitter], "workPath", classOf[Path])
+    .set(this, getTaskAttemptPath(context))
+
+  private def getSparkWriteId: String = {
+    context.getConfiguration.get(SPARK_WRITE_JOB_ID, FileOutputCommitter.PENDING_DIR_NAME)
+  }
+
+  private def getPendingJobAttemptsPath: Path = {
+    FileCommitProtocol.getStagingDir(this.getOutputPath, getSparkWriteId)
+  }
+
+  override def getJobAttemptPath(context: JobContext): Path = {
+    val appAttemptId = context.getConfiguration.getInt("mapreduce.job.application.attempt.id", 0)
+    getJobAttemptPath(appAttemptId)
+  }
+
+  /**
+   * Returns the path for the job attempt directory, which modifies the parent'output path from
+   *   OutputPath/_temporary/{{ appAttemptId }}/
+   * to
+   *   OutputPath/.spark-staging-{{ sparkWriteId }}/{{ appAttemptId }}/
+   *
+   * @param appAttemptId The application attempt ID.
+   * @return The path for the job attempt directory.
+   */
+  override protected def getJobAttemptPath(appAttemptId: Int): Path = {
+    new Path(getPendingJobAttemptsPath, String.valueOf(appAttemptId))
+  }
+
+  override def cleanupJob(context: JobContext): Unit = {
+    if (hasOutputPath) {
+      val pendingJobAttemptsPath = getPendingJobAttemptsPath
+      val fs = pendingJobAttemptsPath.getFileSystem(context.getConfiguration)
+      try {
+        fs.delete(pendingJobAttemptsPath, true)
+      } catch {
+        case _: FileNotFoundException if isCommitJobRepeatable(context) =>
+      }
+    } else {
+      logWarning("Output Path is null in cleanupJob()")
+    }
+  }
+
+  private def getPendingTaskAttemptsPath(context: TaskAttemptContext): Path = {
+    new Path(getJobAttemptPath(context), FileOutputCommitter.PENDING_DIR_NAME)
+  }
+
+  override def getTaskAttemptPath(context: TaskAttemptContext): Path = {
+    val taskAttemptId = String.valueOf(context.getTaskAttemptID)
+    new Path(getPendingTaskAttemptsPath(context), taskAttemptId)
+  }
+
+  override def abortTask(context: TaskAttemptContext): Unit = {
+    abortTask(context, getTaskAttemptPath(context))
+  }
+
+  override def needsTaskCommit(context: TaskAttemptContext): Boolean = {
+    needsTaskCommit(context, getTaskAttemptPath(context))
+  }
+
+  override def getCommittedTaskPath(context: TaskAttemptContext): Path = {
+    new Path(getJobAttemptPath(context), String.valueOf(context.getTaskAttemptID.getTaskID))
+  }
+
+  override def getCommittedTaskPath(appAttemptId: Int, context: TaskAttemptContext): Path = {
+    new Path(getJobAttemptPath(appAttemptId), String.valueOf(context.getTaskAttemptID.getTaskID))
   }
 }

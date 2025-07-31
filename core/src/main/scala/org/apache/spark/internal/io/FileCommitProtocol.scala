@@ -17,8 +17,6 @@
 
 package org.apache.spark.internal.io
 
-import java.util.concurrent.atomic.AtomicInteger
-
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapreduce._
 
@@ -231,14 +229,15 @@ object FileCommitProtocol extends Logging {
     }
   }
 
-  def getStagingDir(path: String, jobId: String): Path = {
+  def getStagingDir(path: Path, jobId: String): Path = {
     new Path(path, ".spark-staging-" + jobId)
   }
 
-  private val NEXT_JOB_ATTEMPT_ID = new AtomicInteger(0)
-  def nextJobAttemptId(): Int = {
-    NEXT_JOB_ATTEMPT_ID.getAndIncrement()
+  def getStagingDir(path: String, jobId: String): Path = {
+    getStagingDir(new Path(path), jobId)
   }
+
+  val SPARK_WRITE_JOB_ID: String = "spark.write.job.id"
 }
 
 /**
