@@ -616,9 +616,10 @@ class WindowArrowUDFTestsMixin:
         )
 
         expected1 = df.select(
-            sf.map_from_arrays(sf.collect_list("k").over(w), sf.collect_list("v").over(w)).alias(
-                "map"
-            ),
+            sf.map_from_arrays(
+                sf.collect_list("k").over(w),
+                sf.collect_list("v").over(w),
+            ).alias("map")
         )
 
         self.assertEqual(expected1.collect(), result1.collect())
@@ -643,9 +644,10 @@ class WindowArrowUDFTestsMixin:
         )
 
         expected1 = df.select(
-            sf.struct(sf.min("id").over(w).alias("m1"), sf.max("v").over(w).alias("m2")).alias(
-                "struct"
-            ),
+            sf.struct(
+                sf.min("id").over(w).alias("m1"),
+                sf.max("v").over(w).alias("m2"),
+            ).alias("struct")
         )
 
         self.assertEqual(expected1.collect(), result1.collect())
