@@ -84,15 +84,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = map.get(key)
 
     override def iterator(colFamilyName: String):
-    Iterator[UnsafeRowPair] with Closeable = {
+    StateStoreIterator[UnsafeRowPair] = {
       val iter = map.iterator()
-      new Iterator[UnsafeRowPair] with Closeable {
-          override def hasNext: Boolean = iter.hasNext
-
-          override def next(): UnsafeRowPair = iter.next()
-
-          override def close(): Unit = {}
-      }
+      new StateStoreIterator(iter)
     }
 
     override def abort(): Unit = {}
@@ -104,15 +98,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
 
     override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
-    Iterator[UnsafeRowPair] with Closeable = {
+    StateStoreIterator[UnsafeRowPair] = {
       val iter = map.prefixScan(prefixKey)
-      new Iterator[UnsafeRowPair] with Closeable {
-          override def hasNext: Boolean = iter.hasNext
-
-          override def next(): UnsafeRowPair = iter.next()
-
-          override def close(): Unit = {}
-      }
+      new StateStoreIterator(iter)
     }
 
     override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
@@ -230,29 +218,18 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
      * Get an iterator of all the store data.
      * This can be called only after committing all the updates made in the current thread.
      */
-    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] with Closeable = {
+    override def iterator(colFamilyName: String):
+    StateStoreIterator[UnsafeRowPair] = {
       assertUseOfDefaultColFamily(colFamilyName)
       val iter = mapToUpdate.iterator()
-      new Iterator[UnsafeRowPair] with Closeable {
-        override def hasNext: Boolean = iter.hasNext
-
-        override def next(): UnsafeRowPair = iter.next()
-
-        override def close(): Unit = {}
-      }
+      new StateStoreIterator(iter)
     }
 
     override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
-      Iterator[UnsafeRowPair] with Closeable = {
+    StateStoreIterator[UnsafeRowPair] = {
       assertUseOfDefaultColFamily(colFamilyName)
       val iter = mapToUpdate.prefixScan(prefixKey)
-      new Iterator[UnsafeRowPair] with Closeable {
-          override def hasNext: Boolean = iter.hasNext
-
-          override def next(): UnsafeRowPair = iter.next()
-
-          override def close(): Unit = {}
-      }
+      new StateStoreIterator(iter)
     }
 
     override def metrics: StateStoreMetrics = {

@@ -78,21 +78,14 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
   override def prefixScan(
       prefixKey: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
-  Iterator[UnsafeRowPair] with Closeable = {
+  StateStoreIterator[UnsafeRowPair] = {
     innerStore.prefixScan(prefixKey, colFamilyName)
   }
 
   override def iterator(
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
-  Iterator[UnsafeRowPair] with Closeable = {
-    val iter = innerStore.iterator(colFamilyName)
-    new Iterator[UnsafeRowPair] with Closeable {
-      override def hasNext: Boolean = iter.hasNext
-
-      override def next(): UnsafeRowPair = iter.next()
-
-      override def close(): Unit = {}
-    }
+  StateStoreIterator[UnsafeRowPair] = {
+    innerStore.iterator(colFamilyName)
   }
 
   override def abort(): Unit = innerStore.abort()

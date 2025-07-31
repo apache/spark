@@ -315,7 +315,7 @@ private[sql] class RocksDBStateStoreProvider
       rocksDB.remove(kvEncoder._1.encodeKey(key), colFamilyName)
     }
 
-    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] with Closeable = {
+    override def iterator(colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       validateAndTransitionState(UPDATE)
       // Note this verify function only verify on the colFamilyName being valid,
       // we are actually doing prefix when useColumnFamilies,
@@ -337,17 +337,11 @@ private[sql] class RocksDBStateStoreProvider
           rowPair
         }
 
-        new Iterator[UnsafeRowPair] with Closeable {
-          override def hasNext: Boolean = iter.hasNext
-
-          override def next(): UnsafeRowPair = iter.next()
-
-          override def close(): Unit = rocksDbIter.closeIfNeeded()
-        }
+        new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
       } else {
-        val rocksDBIter = rocksDB.iterator()
+        val rocksDbIter = rocksDB.iterator()
 
-        val iter = rocksDBIter.map { kv =>
+        val iter = rocksDbIter.map { kv =>
           rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
             kvEncoder._2.decodeValue(kv.value))
           if (!isValidated && rowPair.value != null && !useColumnFamilies) {
@@ -358,18 +352,12 @@ private[sql] class RocksDBStateStoreProvider
           rowPair
         }
 
-        new Iterator[UnsafeRowPair] with Closeable {
-          override def hasNext: Boolean = iter.hasNext
-
-          override def next(): UnsafeRowPair = iter.next()
-
-          override def close(): Unit = rocksDBIter.closeIfNeeded()
-        }
+        new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
       }
     }
 
     override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
-    Iterator[UnsafeRowPair] with Closeable = {
+    StateStoreIterator[UnsafeRowPair] = {
       validateAndTransitionState(UPDATE)
       verifyColFamilyOperations("prefixScan", colFamilyName)
 
@@ -388,13 +376,7 @@ private[sql] class RocksDBStateStoreProvider
         rowPair
       }
 
-      new Iterator[UnsafeRowPair] with Closeable {
-          override def hasNext: Boolean = iter.hasNext
-
-          override def next(): UnsafeRowPair = iter.next()
-
-          override def close(): Unit = rocksDBiter.closeIfNeeded()
-      }
+      new StateStoreIterator(iter, rocksDBiter.closeIfNeeded)
     }
 
     var checkpointInfo: Option[StateStoreCheckpointInfo] = None
