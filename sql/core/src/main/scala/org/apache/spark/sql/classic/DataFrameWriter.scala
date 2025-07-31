@@ -36,7 +36,7 @@ import org.apache.spark.sql.connector.catalog.TableWritePrivilege._
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.command.{DDLUtils, DropTableCommand, RefreshTableCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
@@ -115,7 +115,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
         extraOptions.contains("path")) {
       throw QueryCompilationErrors.pathOptionNotSetCorrectlyWhenWritingError()
     }
-    saveInternal(Some(path))
+    runCommand(df.sparkSession) {
+      saveCommand(Some(path))
+    }
   }
 
   /**
@@ -123,9 +125,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
    *
    * @since 1.4.0
    */
-  def save(): Unit = saveInternal(None)
+  def save(): Unit = {
+    runCommand(df.sparkSession) {
+      saveCommand(None)
+    }
+  }
 
-  private def saveInternal(path: Option[String]): Unit = {
+  private[sql] def saveCommand(path: Option[String]): LogicalPlan = {
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw QueryCompilationErrors.cannotOperateOnHiveDataSourceFilesError("write")
     }
@@ -179,23 +185,19 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
                 // Streaming also uses the data source V2 API. So it may be that the data source
                 // implements v2, but has no v2 implementation for batch writes. In that case, we
                 // fall back to saving as though it's a V1 source.
-                return saveToV1Source(path)
+                return saveToV1SourceCommand(path)
               }
           }
 
           val relation = DataSourceV2Relation.create(table, catalog, ident, dsOptions)
           checkPartitioningMatchesV2Table(table)
           if (curmode == SaveMode.Append) {
-            runCommand(df.sparkSession) {
-              AppendData.byName(relation, df.logicalPlan, finalOptions)
-            }
+            AppendData.byName(relation, df.logicalPlan, finalOptions)
           } else {
             // Truncate the table. TableCapabilityCheck will throw a nice exception if this
             // isn't supported
-            runCommand(df.sparkSession) {
-              OverwriteByExpression.byName(
-                relation, df.logicalPlan, Literal(true), finalOptions)
-            }
+            OverwriteByExpression.byName(
+              relation, df.logicalPlan, Literal(true), finalOptions)
           }
 
         case createMode =>
@@ -215,16 +217,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
                 serde = None,
                 external = false,
                 constraints = Seq.empty)
-              runCommand(df.sparkSession) {
-                CreateTableAsSelect(
-                  UnresolvedIdentifier(
-                    catalog.name +: ident.namespace.toImmutableArraySeq :+ ident.name),
-                  partitioningAsV2,
-                  df.queryExecution.analyzed,
-                  tableSpec,
-                  finalOptions,
-                  ignoreIfExists = createMode == SaveMode.Ignore)
-              }
+              CreateTableAsSelect(
+                UnresolvedIdentifier(
+                  catalog.name +: ident.namespace.toImmutableArraySeq :+ ident.name),
+                partitioningAsV2,
+                df.queryExecution.analyzed,
+                tableSpec,
+                finalOptions,
+                ignoreIfExists = createMode == SaveMode.Ignore)
             case _: TableProvider =>
               if (getTable.supports(BATCH_WRITE)) {
                 throw QueryCompilationErrors.writeWithSaveModeUnsupportedBySourceError(
@@ -233,13 +233,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
                 // Streaming also uses the data source V2 API. So it may be that the data source
                 // implements v2, but has no v2 implementation for batch writes. In that case, we
                 // fallback to saving as though it's a V1 source.
-                saveToV1Source(path)
+                saveToV1SourceCommand(path)
               }
           }
       }
 
     } else {
-      saveToV1Source(path)
+      saveToV1SourceCommand(path)
     }
   }
 
@@ -251,7 +251,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
     }
   }
 
-  private def saveToV1Source(path: Option[String]): Unit = {
+  private def saveToV1SourceCommand(path: Option[String]): LogicalPlan = {
     partitioningColumns.foreach { columns =>
       extraOptions = extraOptions + (
         DataSourceUtils.PARTITIONING_COLUMNS_KEY ->
@@ -266,13 +266,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
     val optionsWithPath = getOptionsWithPath(path)
 
     // Code path for data source v1.
-    runCommand(df.sparkSession) {
-      DataSource(
-        sparkSession = df.sparkSession,
-        className = source,
-        partitionColumns = partitioningColumns.getOrElse(Nil),
-        options = optionsWithPath.originalMap).planForWriting(curmode, df.logicalPlan)
-    }
+    DataSource(
+      sparkSession = df.sparkSession,
+      className = source,
+      partitionColumns = partitioningColumns.getOrElse(Nil),
+      options = optionsWithPath.originalMap).planForWriting(curmode, df.logicalPlan)
   }
 
   /**
@@ -304,6 +302,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit = {
+    runCommand(df.sparkSession) {
+      insertIntoCommand(tableName)
+    }
+  }
+
+  private[sql] def insertIntoCommand(tableName: String): LogicalPlan = {
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, NonSessionCatalogAndIdentifier, SessionCatalogAndIdentifier}
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -318,30 +322,30 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case NonSessionCatalogAndIdentifier(catalog, ident) =>
-        insertInto(catalog, ident)
+        insertIntoCommand(catalog, ident)
 
       case SessionCatalogAndIdentifier(catalog, ident)
           if canUseV2 && ident.namespace().length <= 1 =>
-        insertInto(catalog, ident)
+        insertIntoCommand(catalog, ident)
 
       case AsTableIdentifier(tableIdentifier) =>
-        insertInto(tableIdentifier)
+        insertIntoCommand(tableIdentifier)
       case other =>
         throw QueryCompilationErrors.cannotFindCatalogToHandleIdentifierError(other.quoted)
     }
   }
 
-  private def insertInto(catalog: CatalogPlugin, ident: Identifier): Unit = {
+  private def insertIntoCommand(catalog: CatalogPlugin, ident: Identifier): LogicalPlan = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
     val table = catalog.asTableCatalog.loadTable(ident, getWritePrivileges.toSet.asJava) match {
       case _: V1Table =>
-        return insertInto(TableIdentifier(ident.name(), ident.namespace().headOption))
+        return insertIntoCommand(TableIdentifier(ident.name(), ident.namespace().headOption))
       case t =>
         DataSourceV2Relation.create(t, Some(catalog), Some(ident))
     }
 
-    val command = curmode match {
+    curmode match {
       case SaveMode.Append | SaveMode.ErrorIfExists | SaveMode.Ignore =>
         AppendData.byPosition(table, df.logicalPlan, extraOptions.toMap)
 
@@ -356,22 +360,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           OverwriteByExpression.byPosition(table, df.logicalPlan, Literal(true), extraOptions.toMap)
         }
     }
-
-    runCommand(df.sparkSession) {
-      command
-    }
   }
 
-  private def insertInto(tableIdent: TableIdentifier): Unit = {
-    runCommand(df.sparkSession) {
-      InsertIntoStatement(
-        table = UnresolvedRelation(tableIdent).requireWritePrivileges(getWritePrivileges),
-        partitionSpec = Map.empty[String, Option[String]],
-        Nil,
-        query = df.logicalPlan,
-        overwrite = curmode == SaveMode.Overwrite,
-        ifPartitionNotExists = false)
-    }
+  private def insertIntoCommand(tableIdent: TableIdentifier): LogicalPlan = {
+    InsertIntoStatement(
+      table = UnresolvedRelation(tableIdent).requireWritePrivileges(getWritePrivileges),
+      partitionSpec = Map.empty[String, Option[String]],
+      Nil,
+      query = df.logicalPlan,
+      overwrite = curmode == SaveMode.Overwrite,
+      ifPartitionNotExists = false)
   }
 
   private def getWritePrivileges: Seq[TableWritePrivilege] = curmode match {
@@ -430,6 +428,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
    * @since 1.4.0
    */
   def saveAsTable(tableName: String): Unit = {
+    runCommand(df.sparkSession) {
+      saveAsTableCommand(tableName)
+    }
+  }
+
+  private[sql] def saveAsTableCommand(tableName: String): LogicalPlan = {
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, NonSessionCatalogAndIdentifier, SessionCatalogAndIdentifier}
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -440,30 +444,29 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case nameParts @ NonSessionCatalogAndIdentifier(catalog, ident) =>
-        saveAsTable(catalog.asTableCatalog, ident, nameParts)
+        saveAsTableCommand(catalog.asTableCatalog, ident, nameParts)
 
       case nameParts @ SessionCatalogAndIdentifier(catalog, ident)
           if canUseV2 && ident.namespace().length <= 1 =>
-        saveAsTable(catalog.asTableCatalog, ident, nameParts)
+        saveAsTableCommand(catalog.asTableCatalog, ident, nameParts)
 
       case AsTableIdentifier(tableIdentifier) =>
-        saveAsTable(tableIdentifier)
+        saveAsTableCommand(tableIdentifier)
 
       case other =>
         throw QueryCompilationErrors.cannotFindCatalogToHandleIdentifierError(other.quoted)
     }
   }
 
-
-  private def saveAsTable(
-      catalog: TableCatalog, ident: Identifier, nameParts: Seq[String]): Unit = {
+  private def saveAsTableCommand(
+      catalog: TableCatalog, ident: Identifier, nameParts: Seq[String]): LogicalPlan = {
     val tableOpt = try Option(catalog.loadTable(ident, getWritePrivileges.toSet.asJava)) catch {
       case _: NoSuchTableException => None
     }
 
-    val command = (curmode, tableOpt) match {
+    (curmode, tableOpt) match {
       case (_, Some(_: V1Table)) =>
-        return saveAsTable(TableIdentifier(ident.name(), ident.namespace().headOption))
+        saveAsTableCommand(TableIdentifier(ident.name(), ident.namespace().headOption))
 
       case (SaveMode.Append, Some(table)) =>
         checkPartitioningMatchesV2Table(table)
@@ -512,20 +515,17 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           writeOptions = extraOptions.toMap,
           other == SaveMode.Ignore)
     }
-
-    runCommand(df.sparkSession) {
-      command
-    }
   }
 
-  private def saveAsTable(tableIdent: TableIdentifier): Unit = {
+  private def saveAsTableCommand(tableIdent: TableIdentifier): LogicalPlan = {
     val catalog = df.sparkSession.sessionState.catalog
     val qualifiedIdent = catalog.qualifyIdentifier(tableIdent)
     val tableExists = catalog.tableExists(qualifiedIdent)
 
     (tableExists, curmode) match {
       case (true, SaveMode.Ignore) =>
-        // Do nothing
+        // Do nothing - return empty plan
+        LocalRelation.fromExternalRows(Seq.empty, Seq.empty)
 
       case (true, SaveMode.ErrorIfExists) =>
         throw QueryCompilationErrors.tableAlreadyExistsError(qualifiedIdent)
@@ -551,17 +551,26 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           case _ => // OK
         }
 
-        // Drop the existing table
-        catalog.dropTable(qualifiedIdent, ignoreIfNotExists = true, purge = false)
-        createTable(qualifiedIdent)
-        // Refresh the cache of the table in the catalog.
-        catalog.refreshTable(qualifiedIdent)
+        CompoundBody(
+          collection = Seq(
+            SingleStatement(DropTableCommand(
+              qualifiedIdent,
+              ifExists = true,
+              isView =
+                tableRelation.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.View],
+              purge = false)),
+            SingleStatement(createTableCommand(qualifiedIdent)),
+            SingleStatement(RefreshTableCommand(qualifiedIdent))
+          ),
+          label = None,
+          isScope = false
+        )
 
-      case _ => createTable(qualifiedIdent)
+      case _ => createTableCommand(qualifiedIdent)
     }
   }
 
-  private def createTable(tableIdent: TableIdentifier): Unit = {
+  private def createTableCommand(tableIdent: TableIdentifier): LogicalPlan = {
     val storage = DataSource.buildStorageFormatFromOptions(extraOptions.toMap)
     val tableType = if (storage.locationUri.isDefined) {
       CatalogTableType.EXTERNAL
@@ -586,8 +595,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
       bucketSpec = getBucketSpec,
       properties = properties)
 
-    runCommand(df.sparkSession)(
-      CreateTable(tableDesc, curmode, Some(df.logicalPlan)))
+    CreateTable(tableDesc, curmode, Some(df.logicalPlan))
   }
 
   /** Converts the provided partitioning and bucketing information to DataSourceV2 Transforms. */

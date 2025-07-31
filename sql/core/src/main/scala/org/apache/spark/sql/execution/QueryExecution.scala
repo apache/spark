@@ -161,6 +161,11 @@ class QueryExecution(
         qe.executedPlan,
         result.toImmutableArraySeq)
     }
+    if (logical.isInstanceOf[CompoundBody]) {
+      // If logical is a CompoundBody, it means that it has been executed during the analysis phase,
+      // and we can set the tracker to ready for execution.
+      tracker.setReadyForExecution()
+    }
     p transformDown {
       case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) =>
         eagerlyExecute(u, "multi-commands", CommandExecutionMode.SKIP)
