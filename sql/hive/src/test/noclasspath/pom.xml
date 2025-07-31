@@ -39,7 +39,7 @@
     <maven.compiler.target>8</maven.compiler.target>
     <maven.release>8</maven.release>
     <hadoop.version>3.4.1</hadoop.version>
-    <hive.version>4.1.0-SNAPSHOT</hive.version>
+    <hive.version>4.1.0</hive.version>
   </properties>
 
   <build>

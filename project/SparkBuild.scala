@@ -1195,12 +1195,15 @@ object DependencyOverrides {
         SbtPomKeys.effectivePom.value.getProperties.get("slf4j.version").asInstanceOf[String]
       val log4jVersion =
         SbtPomKeys.effectivePom.value.getProperties.get("log4j.version").asInstanceOf[String]
+      val derbyVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("derby.version").asInstanceOf[String]
       Seq(
         "com.google.guava" % "guava" % guavaVersion,
         "jline" % "jline" % jlineVersion,
         "org.apache.avro" % "avro" % avroVersion,
         "org.slf4j" % "slf4j-api" % slf4jVersion,
-        "org.apache.logging.log4j" % "log4j-slf4j-impl" % log4jVersion
+        "org.apache.logging.log4j" % "log4j-slf4j-impl" % log4jVersion,
+        "org.apache.derby" % "derby" % derbyVersion
       ) ++ jacksonDeps.key.value
     }
   )
