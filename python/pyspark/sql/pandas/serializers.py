@@ -201,7 +201,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
     Serializer for PyArrow-native UDTFs that work directly with PyArrow RecordBatches and Arrays.
     """
 
-    # TODO: support table arguments
+    # TODO(SPARK-52981): support table arguments
     ...
 
 

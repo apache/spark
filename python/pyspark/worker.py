@@ -2077,7 +2077,7 @@ def read_udtf(pickleSer, infile, eval_type):
                         yield verify_result(batch), arrow_return_type
                 else:
                     # For Arrow UDTFs, unpack the RecordBatches and pass them to the function
-                    # TODO: support table arguments
+                    # TODO(SPARK-52981): support table arguments
                     for batch in convert_to_arrow(func(*args)):
                         yield verify_result(batch), arrow_return_type
 

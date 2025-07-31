@@ -347,7 +347,6 @@ class ArrowUDTFTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-
     try:
         import xmlrunner
 
