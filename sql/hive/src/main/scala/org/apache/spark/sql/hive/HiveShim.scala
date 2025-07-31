@@ -29,6 +29,7 @@ import org.apache.hadoop.hive.ql.exec.UDF
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFMacro
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
 import org.apache.hadoop.hive.serde2.avro.{AvroGenericRecordWritable, AvroSerdeUtils}
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveDecimalObjectInspector
 import org.apache.hadoop.io.Writable
 
@@ -209,6 +210,17 @@ private[hive] object HiveShim {
         }
         func
       }
+    }
+
+    private var returnInspector: ObjectInspector = null
+
+    def getReturnInspector(build: => ObjectInspector): ObjectInspector = {
+      if (returnInspector != null) {
+        return returnInspector
+      }
+
+      returnInspector = build
+      returnInspector
     }
   }
 }
