@@ -82,6 +82,10 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
   protected def caseConvert(identifier: String): String = identifier
 
+  // Quote the identifier to remain original case, for example, MySql convert [`ID`, ID]
+  // to [ID, id]
+  protected def remainColumnCase(identifier: String): String = "\"" + identifier + "\""
+
   protected def withConnection[T](f: Connection => T): T = {
     val conn = DriverManager.getConnection(url, new Properties())
     try {
@@ -142,20 +146,20 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       // Complex situations with different capitalization and quotation marks.
       conn.prepareStatement(
         s"""CREATE TABLE $fullyQualifiedTableName3(
-           |"id" ${getJDBCTypeString(integerType)},
-           |"id_1" ${getJDBCTypeString(integerType)},
-           |"id_2" ${getJDBCTypeString(integerType)},
-           |"id_1_1" ${getJDBCTypeString(integerType)},
-           |"sid" ${getJDBCTypeString(integerType)}
+           |${remainColumnCase("id")} ${getJDBCTypeString(integerType)},
+           |${remainColumnCase("id_1")} ${getJDBCTypeString(integerType)},
+           |${remainColumnCase("id_2")} ${getJDBCTypeString(integerType)},
+           |${remainColumnCase("id_1_1")} ${getJDBCTypeString(integerType)},
+           |${remainColumnCase("sid")} ${getJDBCTypeString(integerType)}
            |)""".stripMargin
       ).executeUpdate()
       conn.prepareStatement(
         s"""CREATE TABLE $fullyQualifiedTableName4 (
-           |"id" ${getJDBCTypeString(integerType)},
-           |"id_1" ${getJDBCTypeString(integerType)},
-           |"id_2" ${getJDBCTypeString(integerType)},
-           |"id_2_1" ${getJDBCTypeString(integerType)},
-           |"Sid" ${getJDBCTypeString(integerType)}
+           |${remainColumnCase("id")} ${getJDBCTypeString(integerType)},
+           |${remainColumnCase("id_1")} ${getJDBCTypeString(integerType)},
+           |${remainColumnCase("id_2")} ${getJDBCTypeString(integerType)},
+           |${remainColumnCase("id_2_1")} ${getJDBCTypeString(integerType)},
+           |${remainColumnCase("Sid")} ${getJDBCTypeString(integerType)}
            |)""".stripMargin
       ).executeUpdate()
     }
@@ -686,12 +690,16 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
       assert(df.schema.fields.map(_.name) sameElements
         Array("id", "id_1", "id_2", "id_1_1", "sid",
-          "id", "id_1", "id_2", "id_2_1", "Sid"))
-      assert(df.queryExecution.optimizedPlan.collectFirst {
+          "id", "id_1", "id_2", "id_2_1", "Sid"),
+        "Unexpected schema names: " + df.schema.fields.map(_.name).mkString(","))
+
+      val schemaNames = df.queryExecution.optimizedPlan.collectFirst {
         case j: DataSourceV2ScanRelation => j
-      }.get.schema.fields.map(_.name) sameElements
+      }.get.schema.fields.map(_.name)
+      assert(schemaNames sameElements
         Array("id", "id_1", "id_2", "id_1_1", "sid",
-          "id_3", "id_1_2", "id_2_2", "id_2_1", "Sid"))
+          "id_3", "id_1_2", "id_2_2", "id_2_1", "Sid_1"),
+        "Unexpected schema names: " + schemaNames.mkString(","))
 
       checkJoinPushed(df)
     }

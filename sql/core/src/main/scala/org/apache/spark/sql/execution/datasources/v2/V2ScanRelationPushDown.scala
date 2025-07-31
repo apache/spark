@@ -194,52 +194,77 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         node
       }
   }
-
-  private def generateColumnAliasesForDuplicatedName(
+  /**
+   * Generates unique column aliases for join operations to avoid naming conflicts.
+   * Handles case sensitivity issues across different databases (SQL Server, MySQL, etc.).
+   *
+   * @param leftSideRequiredColumnNames  Columns from the left side of the join
+   * @param rightSideRequiredColumnNames Columns from the right side of the join
+   * @return Tuple of (leftColumnsWithAliases, rightColumnsWithAliases)
+   */
+  private[v2] def generateColumnAliasesForDuplicatedName(
     leftSideRequiredColumnNames: Array[String],
     rightSideRequiredColumnNames: Array[String]
   ): (Array[SupportsPushDownJoin.ColumnWithAlias],
     Array[SupportsPushDownJoin.ColumnWithAlias]) = {
-    //  Count occurrences of each column name across both sides to identify duplicates.
+    // Normalize all column names to lowercase for case-insensitive comparison
+    val normalizeCase: String => String = _.toLowerCase()
+
+    // Count occurrences of each column name (case-insensitive)
     val allRequiredColumnNames = leftSideRequiredColumnNames ++ rightSideRequiredColumnNames
     val allNameCounts: Map[String, Int] =
-      allRequiredColumnNames.groupBy(identity).view.mapValues(_.size).toMap
+      allRequiredColumnNames.map(normalizeCase)
+        .groupBy(identity)
+        .view
+        .mapValues(_.length)
+        .toMap
+
+    // Track claimed aliases using normalized names.
     // Use Set for O(1) lookups when checking existing column names, claim all names
     // that appears only once to ensure they have highest priority.
-    val allClaimedAliases = mutable.Set.from(allNameCounts.filter(_._2 == 1).keys)
+    val allClaimedAliases = mutable.Set.from(
+      allNameCounts.filter(_._2 == 1).keys
+    )
 
-    // Track the next suffix index for each column name (starts at 0) to avoid extreme worst
+    // Track suffix index for each base column name (starts at 0) to avoid extreme worst
     // case of O(n^2) alias generation.
     val aliasSuffixIndex = mutable.HashMap[String, Int]().withDefaultValue(0)
 
-    def processColumn(name: String): SupportsPushDownJoin.ColumnWithAlias = {
-      // Ensure a name that appears only once does not require an alias.
-      if (allNameCounts(name) == 1) {
-        new SupportsPushDownJoin.ColumnWithAlias(name, null)
-      } else {
-        var attempt = aliasSuffixIndex(name)
+    def processColumn(originalName: String): SupportsPushDownJoin.ColumnWithAlias = {
+      val normalizedName = normalizeCase(originalName)
 
-        // Generate candidate alias: use original name for the first attempt, then append
+      // No alias needed for unique column names
+      if (allNameCounts(normalizedName) == 1) {
+        new SupportsPushDownJoin.ColumnWithAlias(originalName, null)
+      } else {
+        var attempt = aliasSuffixIndex(normalizedName)
+        var candidate = if (attempt == 0) originalName else s"${originalName}_$attempt"
+        var normalizedCandidate = normalizeCase(candidate)
+
+        // Find first available unique alias, use original name for the first attempt, then append
         // suffix for more attempts.
-        var candidate = if (attempt == 0) name else s"${name}_$attempt"
-        // Ensure candidate alias is unique by checking against existing names.
-        while (allClaimedAliases.contains(candidate)) {
+        while (allClaimedAliases.contains(normalizedCandidate)) {
           attempt += 1
-          candidate = s"${name}_$attempt"
+          candidate = s"${originalName}_$attempt"
+          normalizedCandidate = normalizeCase(candidate)
         }
-        // Update state: next suffix index and mark alias as used
-        aliasSuffixIndex(name) = attempt + 1
-        allClaimedAliases.add(candidate)
-        if (name == candidate) {
-          new SupportsPushDownJoin.ColumnWithAlias(name, null)
+
+        // Update tracking state
+        aliasSuffixIndex(normalizedName) = attempt + 1
+        allClaimedAliases.add(normalizedCandidate)
+
+        if (originalName == candidate) {
+          new SupportsPushDownJoin.ColumnWithAlias(originalName, null)
         } else {
-          new SupportsPushDownJoin.ColumnWithAlias(name, candidate)
+          new SupportsPushDownJoin.ColumnWithAlias(originalName, candidate)
         }
       }
     }
 
-    (leftSideRequiredColumnNames.map(processColumn),
-      rightSideRequiredColumnNames.map(processColumn))
+    (
+      leftSideRequiredColumnNames.map(processColumn),
+      rightSideRequiredColumnNames.map(processColumn)
+    )
   }
 
   // Projections' names are maybe not up to date if the joins have been previously pushed down.
