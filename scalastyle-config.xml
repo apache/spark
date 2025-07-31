@@ -293,6 +293,11 @@ This file is divided into 3 sections:
     of Commons Lang 2 (package org.apache.commons.lang.*)</customMessage>
   </check>
 
+  <check customId="writeStringToFile" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileUtils\.writeStringToFile</parameter></parameters>
+    <customMessage>Use java.nio.file.Files.writeString instead.</customMessage>
+  </check>
+
   <check customId="commonslang3javaversion" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.lang3\..*JavaVersion</parameter></parameters>
     <customMessage>Use JEP 223 API (java.lang.Runtime.Version) instead of
