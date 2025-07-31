@@ -928,11 +928,11 @@ class Index(IndexOpsMixin):
                 field_names = result._internal.spark_type_for(
                     scol
                 ).fieldNames()  # type: ignore[attr-defined]
-                field_types = [result._internal.spark_type_for(scol[field]) for field in field_names]
+                field_types = [
+                    result._internal.spark_type_for(scol[field]) for field in field_names
+                ]
 
-                has_str = (
-                    any(isinstance(t, StringType) for t in field_types)
-                )
+                has_str = any(isinstance(t, StringType) for t in field_types)
                 if is_ansi_mode_enabled and has_str:
                     return F.array([scol[field].cast(StringType()) for field in field_names])
                 else:
