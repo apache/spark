@@ -185,6 +185,7 @@
             <property name="illegalPkgs" value="org.apache.commons.lang" />
             <property name="illegalPkgs" value="org.apache.commons.lang3.tuple" />
             <property name="illegalClasses" value="org.apache.commons.lang3.JavaVersion" />
+            <property name="illegalClasses" value="org.apache.hadoop.io.IOUtils" />
             <property name="illegalClasses" value="com.google.common.base.Strings" />
         </module>
         <module name="RegexpSinglelineJava">

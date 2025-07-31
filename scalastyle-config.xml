@@ -542,6 +542,11 @@ This file is divided into 3 sections:
     <customMessage>Use Java built-in methods or SparkStringUtils instead</customMessage>
   </check>
 
+  <check customId="hadoopioutils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.hadoop\.io\.IOUtils</parameter></parameters>
+    <customMessage>Use org.apache.spark.util.Utils instead.</customMessage>
+  </check>
+
   <check customId="defaultCharset" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">Charset\.defaultCharset</parameter></parameters>
     <customMessage>Use StandardCharsets.UTF_8 instead.</customMessage>
