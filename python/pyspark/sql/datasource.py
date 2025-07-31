@@ -300,7 +300,7 @@ class Filter(ABC):
 
     +---------------------+--------------------------------------------+
     | SQL filter          | Representation                             |
-    +---------------------+---------------------------------------------+
+    +---------------------+--------------------------------------------+
     | `a.b.c = 1`         | `EqualTo(("a", "b", "c"), 1)`              |
     | `a = 1`             | `EqualTo(("a",), 1)`                       |
     | `a = 'hi'`          | `EqualTo(("a",), "hi")`                    |
@@ -1103,8 +1103,9 @@ class DataSourceStreamArrowWriter(DataSourceStreamWriter):
     A base class for data stream writers that process data using PyArrow's `RecordBatch`.
 
     Unlike :class:`DataSourceStreamWriter`, which works with an iterator of Spark Rows, this class
-    is optimized for using the Arrow format when writing streaming data. It can offer better performance
-    when interfacing with systems or libraries that natively support Arrow for streaming use cases.
+    is optimized for using the Arrow format when writing streaming data. It can offer better
+    performance when interfacing with systems or libraries that natively support Arrow for
+    streaming use cases.
 
     .. versionadded: 4.1.0
     """
@@ -1115,13 +1116,13 @@ class DataSourceStreamArrowWriter(DataSourceStreamWriter):
         Writes an iterator of PyArrow `RecordBatch` objects to the streaming sink.
 
         This method is called on executors to write data to the streaming data sink in
-        each microbatch. It accepts an iterator of PyArrow `RecordBatch` objects and returns a single row
-        representing a commit message, or None if there is no commit message.
+        each microbatch. It accepts an iterator of PyArrow `RecordBatch` objects and
+        returns a single row representing a commit message, or None if there is no commit message.
 
         The driver collects commit messages, if any, from all executors and passes them
-        to the :class:`DataSourceStreamArrowWriter.commit` method if all tasks run successfully. If any
-        task fails, the :class:`DataSourceStreamArrowWriter.abort` method will be called with the
-        collected commit messages.
+        to the :class:`DataSourceStreamArrowWriter.commit` method if all tasks run
+        successfully. If any task fails, the :class:`DataSourceStreamArrowWriter.abort` method
+        will be called with the collected commit messages.
 
         Parameters
         ----------

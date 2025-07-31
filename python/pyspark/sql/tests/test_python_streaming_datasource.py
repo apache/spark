@@ -310,7 +310,6 @@ class BasePythonStreamingDataSourceTestsMixin:
             partition_id: int
             batch_count: int
             total_rows: int
-            filepath: str
 
         class TestStreamArrowWriter(DataSourceStreamArrowWriter):
             def __init__(self, options):
@@ -325,38 +324,38 @@ class BasePythonStreamingDataSourceTestsMixin:
                 partition_id = context.partitionId()
                 batch_count = 0
                 total_rows = 0
-                
+
                 for batch in iterator:
+                    assert isinstance(batch, pa.RecordBatch)
                     batch_count += 1
                     total_rows += batch.num_rows
-                    
-                    # Convert to pandas for easy processing (noop, don't actually write)
+
+                    # Convert to pandas and write to temp JSON file
                     df = batch.to_pandas()
-                    
+
                     filename = f"partition_{partition_id}_batch_{batch_count}.json"
                     filepath = os.path.join(self.path, filename)
 
-                return ArrowCommitMessage(
-                    partition_id=partition_id,
-                    batch_count=batch_count,
-                    total_rows=total_rows,
-                    filepath=filepath
+                    # Actually write the JSON file
+                    df.to_json(filepath, orient="records")
+
+                commit_msg = ArrowCommitMessage(
+                    partition_id=partition_id, batch_count=batch_count, total_rows=total_rows
                 )
+                return commit_msg
 
             def commit(self, messages, batchId):
                 """Write commit metadata for successful batch."""
                 total_batches = sum(m.batch_count for m in messages if m)
                 total_rows = sum(m.total_rows for m in messages if m)
-                filepaths = [m.filepath for m in messages if m]
 
                 status = {
                     "batch_id": batchId,
                     "num_partitions": len([m for m in messages if m]),
                     "total_batches": total_batches,
                     "total_rows": total_rows,
-                    "filepaths": filepaths
                 }
-                
+
                 with open(os.path.join(self.path, f"commit_{batchId}.json"), "w") as f:
                     json.dump(status, f)
 
@@ -366,6 +365,10 @@ class BasePythonStreamingDataSourceTestsMixin:
                     f.write(f"Batch {batchId} aborted")
 
         class TestDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "TestArrowStreamWriter"
+
             def schema(self):
                 return "id INT, name STRING, value DOUBLE"
 
@@ -379,37 +382,65 @@ class BasePythonStreamingDataSourceTestsMixin:
             self.spark.dataSource.register(TestDataSource)
 
             # Create test data
-            df = self.spark.range(0, 100, 1, 3).selectExpr(
-                "id", "concat('name_', id) as name", "id * 2.5 as value")
-            
-            # Write using streaming with Arrow writer
-            query = (df.writeStream
-                    .format("TestArrowStreamWriter")
-                    .option("path", temp_dir)
-                    .option("checkpointLocation", os.path.join(temp_dir, "checkpoint"))
-                    .trigger(availableNow=True)
-                    .start())
+            df = (
+                self.spark.readStream.format("rate")
+                .option("rowsPerSecond", 10)
+                .option("numPartitions", 3)
+                .load()
+                .selectExpr("value as id", "concat('name_', value) as name", "value * 2.5 as value")
+            )
 
+            # Write using streaming with Arrow writer
+            query = (
+                df.writeStream.format("TestArrowStreamWriter")
+                .option("path", temp_dir)
+                .option("checkpointLocation", os.path.join(temp_dir, "checkpoint"))
+                .trigger(processingTime="1 seconds")
+                .start()
+            )
+
+            # Wait a bit for data to be processed, then stop
+            time.sleep(6)  # Allow a few batches to run
+            query.stop()
             query.awaitTermination()
-            
-            # Since we're doing noop writes, verify commit metadata contains expected JSON filepaths
-            commit_files = [f for f in os.listdir(temp_dir) if f.startswith('commit_')]
+
+            # Since we're writing actual JSON files, verify commit metadata and written files
+            commit_files = [f for f in os.listdir(temp_dir) if f.startswith("commit_")]
             self.assertTrue(len(commit_files) > 0, "No commit files were created")
-            
-            # Read and verify commit metadata
-            with open(os.path.join(temp_dir, commit_files[0]), 'r') as f:
-                commit_data = json.load(f)
-                self.assertEqual(commit_data['total_rows'], 100)
-                self.assertTrue(commit_data['total_batches'] > 0)
-                
-                # Verify JSON filepaths are recorded in commit metadata
-                self.assertIn('filepaths', commit_data)
-                filepaths = commit_data['filepaths']
-                self.assertTrue(len(filepaths) > 0, "No JSON filepaths were recorded")
-                
-                # Verify all filepaths are JSON files
-                for filepath in filepaths:
-                    self.assertTrue(filepath.endswith('.json'), f"Filepath {filepath} is not a JSON file")
+
+            # Read and verify commit metadata - check all commits for any with data
+            total_committed_rows = 0
+            total_committed_batches = 0
+
+            for commit_file in commit_files:
+                with open(os.path.join(temp_dir, commit_file), "r") as f:
+                    commit_data = json.load(f)
+                    total_committed_rows += commit_data.get("total_rows", 0)
+                    total_committed_batches += commit_data.get("total_batches", 0)
+
+            # We should have both committed data AND JSON files written
+            json_files = [
+                f
+                for f in os.listdir(temp_dir)
+                if f.startswith("partition_") and f.endswith(".json")
+            ]
+
+            # Verify that we have both committed data AND JSON files
+            has_committed_data = total_committed_rows > 0
+            has_json_files = len(json_files) > 0
+
+            self.assertTrue(
+                has_committed_data, f"Expected committed data but got {total_committed_rows} rows"
+            )
+            self.assertTrue(
+                has_json_files, f"Expected JSON files but found {len(json_files)} files"
+            )
+
+            # Verify JSON files contain valid data
+            for json_file in json_files:
+                with open(os.path.join(temp_dir, json_file), "r") as f:
+                    data = json.load(f)
+                    self.assertTrue(len(data) > 0, f"JSON file {json_file} is empty")
 
         finally:
             # Clean up
