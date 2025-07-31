@@ -458,28 +458,20 @@ class QueryExecutionSuite extends SharedSparkSession {
 
   test("determineShuffleCleanupMode should return correct mode based on SQL configuration") {
     val conf = new SQLConf()
-    def checkMode(connectShuffleCleanupEnabled: Boolean, classicShuffleEnabled: Boolean,
+    def checkMode(classicShuffleEnabled: Boolean,
                   skipMigrationEnabled: Boolean, cleanupMode: ShuffleCleanupMode): Unit = {
-      conf.setConf(SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, connectShuffleCleanupEnabled)
       conf.setConf(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, classicShuffleEnabled)
       conf.setConf(SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED, skipMigrationEnabled)
       assert(QueryExecution.determineShuffleCleanupMode(conf) === cleanupMode)
     }
     // Defaults to doNotCleanup
-    checkMode(connectShuffleCleanupEnabled = false, classicShuffleEnabled = false,
-      skipMigrationEnabled = false, DoNotCleanup)
+    checkMode(classicShuffleEnabled = false, skipMigrationEnabled = false, DoNotCleanup)
 
     // Test RemoveShuffleFiles
-    checkMode(connectShuffleCleanupEnabled = false, classicShuffleEnabled = true,
-      skipMigrationEnabled = false, RemoveShuffleFiles)
-    checkMode(connectShuffleCleanupEnabled = true, classicShuffleEnabled = false,
-      skipMigrationEnabled = false, RemoveShuffleFiles)
-    checkMode(connectShuffleCleanupEnabled = true, classicShuffleEnabled = true,
-      skipMigrationEnabled = false, RemoveShuffleFiles)
+    checkMode(classicShuffleEnabled = true, skipMigrationEnabled = false, RemoveShuffleFiles)
 
     // Test SkipMigration
-    checkMode(connectShuffleCleanupEnabled = false, classicShuffleEnabled = false,
-      skipMigrationEnabled = true, SkipMigration)
+    checkMode(classicShuffleEnabled = false, skipMigrationEnabled = true, SkipMigration)
 
     // TODO: when both enabled, RemoveShuffle tasks Precedence, log a warning, ?
   }

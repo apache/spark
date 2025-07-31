@@ -35,12 +35,9 @@ import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_
 import org.apache.spark.sql.connect.planner.{InvalidInputErrors, SparkConnectPlanner}
 import org.apache.spark.sql.connect.service.ExecuteHolder
 import org.apache.spark.sql.connect.utils.MetricGenerator
-<<<<<<< HEAD
 import org.apache.spark.sql.execution.{DoNotCleanup, LocalTableScanExec, QueryExecution, RemoveShuffleFiles, SkipMigration, SQLExecution}
-=======
-import org.apache.spark.sql.execution.{LocalTableScanExec, QueryExecution, SQLExecution}
->>>>>>> af1b66ffe8f (SPARK-52777: Enable shuffle cleanup mode configuration in Spark SQL)
 import org.apache.spark.sql.execution.arrow.ArrowConverters
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ThreadUtils
 
@@ -90,7 +87,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
               session,
               transformer(tracker),
               tracker,
-              shuffleCleanupMode = shuffleCleanupMode)
+              specifiedShuffleCleanupMode = Option(shuffleCleanupMode))
             qe.assertCommandExecuted()
             executeHolder.eventsManager.postFinished()
           case None =>
