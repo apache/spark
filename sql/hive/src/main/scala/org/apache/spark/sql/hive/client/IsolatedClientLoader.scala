@@ -24,7 +24,7 @@ import java.util
 
 import scala.util.Try
 
-import org.apache.commons.io.{FileUtils, IOUtils}
+import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.shims.ShimLoader
 
@@ -258,7 +258,7 @@ private[hive] class IsolatedClientLoader(
             if (isBarrierClass(name)) {
               // For barrier classes, we construct a new copy of the class.
               val bytes = Utils.tryWithResource(
-                baseClassLoader.getResourceAsStream(classToPath(name)))(IOUtils.toByteArray)
+                baseClassLoader.getResourceAsStream(classToPath(name)))(_.readAllBytes)
               logDebug(s"custom defining: $name - ${util.Arrays.hashCode(bytes)}")
               defineClass(name, bytes, 0, bytes.length)
             } else if (!isSharedClass(name)) {
