@@ -150,6 +150,26 @@ case class CTERelationDef(
       false
     }
   }
+  lazy val hasSelfReferenceInSubCTE: Boolean = {
+    val withCTENode: Option[WithCTE] = child match {
+      case SubqueryAlias(_, _: Union) =>
+        None
+      case SubqueryAlias(_, UnresolvedSubqueryColumnAliases(_, _: Union)) =>
+        None
+      case SubqueryAlias(_, withCTE @ WithCTE(_, _)) =>
+        Some(withCTE)
+      case SubqueryAlias(_, UnresolvedSubqueryColumnAliases(_, withCTE @ WithCTE(_, _))) =>
+        Some(withCTE)
+      case _ => None
+    }
+    if (withCTENode.isDefined) {
+      withCTENode.get.cteDefs.map(_.collectFirstWithSubqueries {
+        case CTERelationRef(this.id, _, _, _, _, true, _) => true
+      }.getOrElse(false)).reduce(_ || _)
+    } else {
+      false
+    }
+  }
   lazy val hasSelfReferenceAsUnionLoopRef: Boolean = child.collectFirstWithSubqueries {
     case UnionLoopRef(this.id, _, _) => true
   }.getOrElse(false)

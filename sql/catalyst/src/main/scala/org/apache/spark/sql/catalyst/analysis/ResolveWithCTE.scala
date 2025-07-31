@@ -59,7 +59,7 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
               cteDefMap.put(cteDef.id, cteDef)
             }
             cteDef
-          case cteDef if cteDef.hasSelfReferenceInAnchor =>
+          case cteDef if cteDef.hasSelfReferenceInAnchor || cteDef.hasSelfReferenceInSubCTE =>
             throw new AnalysisException(
               errorClass = "INVALID_RECURSIVE_CTE",
               messageParameters = Map.empty)
