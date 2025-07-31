@@ -591,7 +591,7 @@ public class UnsafeExternalSorterSuite {
     }
 
     // Check that spilling still succeeds when the task is starved for memory.
-    memoryManager.markconsequentOOM(Integer.MAX_VALUE);
+    memoryManager.markConsequentOOM(Integer.MAX_VALUE);
     sorter.spill();
     memoryManager.resetConsequentOOM();
 
