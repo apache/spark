@@ -245,7 +245,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
         leftHolder
       } else {
-        logInfo(log"DSV2 Join pushdown - failed to push down join.")
+        logInfo(log"DSv2 Join pushdown - failed to push down join.")
         node
       }
   }
