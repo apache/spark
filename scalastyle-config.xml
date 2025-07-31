@@ -546,4 +546,9 @@ This file is divided into 3 sections:
     <parameters><parameter name="regex">Charset\.defaultCharset</parameter></parameters>
     <customMessage>Use StandardCharsets.UTF_8 instead.</customMessage>
   </check>
+
+  <check customId="ioutilsclosequietly" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">IOUtils\.closeQuietly</parameter></parameters>
+    <customMessage>Use closeQuietly of SparkErrorUtils or Utils instead.</customMessage>
+  </check>
 </scalastyle>

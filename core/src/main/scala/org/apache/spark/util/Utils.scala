@@ -3084,8 +3084,8 @@ private[spark] object Utils
       logDebug(log"Unzipped from ${MDC(PATH, dfsZipFile)}\n\t${MDC(PATHS, files.mkString("\n\t"))}")
     } finally {
       // Close everything no matter what happened
-      IOUtils.closeQuietly(in)
-      IOUtils.closeQuietly(out)
+      Utils.closeQuietly(in)
+      Utils.closeQuietly(out)
     }
     files.toSeq
   }
