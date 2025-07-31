@@ -24,6 +24,7 @@ from pyspark.sql.datasource import (
     DataSourceStreamReader,
     InputPartition,
     DataSourceStreamWriter,
+    DataSourceStreamArrowWriter,
     SimpleDataSourceStreamReader,
     WriterCommitMessage,
 )
@@ -294,6 +295,125 @@ class BasePythonStreamingDataSourceTestsMixin:
             input_dir.cleanup()
             output_dir.cleanup()
             checkpoint_dir.cleanup()
+
+    def test_stream_arrow_writer(self):
+        """Test DataSourceStreamArrowWriter with Arrow RecordBatch format."""
+        import tempfile
+        import shutil
+        import json
+        import os
+        import pyarrow as pa
+        from dataclasses import dataclass
+
+        @dataclass
+        class ArrowCommitMessage(WriterCommitMessage):
+            partition_id: int
+            batch_count: int
+            total_rows: int
+            filepath: str
+
+        class TestStreamArrowWriter(DataSourceStreamArrowWriter):
+            def __init__(self, options):
+                self.options = options
+                self.path = self.options.get("path")
+                assert self.path is not None
+
+            def write(self, iterator):
+                from pyspark import TaskContext
+
+                context = TaskContext.get()
+                partition_id = context.partitionId()
+                batch_count = 0
+                total_rows = 0
+                
+                for batch in iterator:
+                    batch_count += 1
+                    total_rows += batch.num_rows
+                    
+                    # Convert to pandas for easy processing (noop, don't actually write)
+                    df = batch.to_pandas()
+                    
+                    filename = f"partition_{partition_id}_batch_{batch_count}.json"
+                    filepath = os.path.join(self.path, filename)
+
+                return ArrowCommitMessage(
+                    partition_id=partition_id,
+                    batch_count=batch_count,
+                    total_rows=total_rows,
+                    filepath=filepath
+                )
+
+            def commit(self, messages, batchId):
+                """Write commit metadata for successful batch."""
+                total_batches = sum(m.batch_count for m in messages if m)
+                total_rows = sum(m.total_rows for m in messages if m)
+                filepaths = [m.filepath for m in messages if m]
+
+                status = {
+                    "batch_id": batchId,
+                    "num_partitions": len([m for m in messages if m]),
+                    "total_batches": total_batches,
+                    "total_rows": total_rows,
+                    "filepaths": filepaths
+                }
+                
+                with open(os.path.join(self.path, f"commit_{batchId}.json"), "w") as f:
+                    json.dump(status, f)
+
+            def abort(self, messages, batchId):
+                """Handle batch failure."""
+                with open(os.path.join(self.path, f"abort_{batchId}.txt"), "w") as f:
+                    f.write(f"Batch {batchId} aborted")
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "id INT, name STRING, value DOUBLE"
+
+            def streamWriter(self, schema, overwrite):
+                return TestStreamArrowWriter(self.options)
+
+        # Create temporary directory for test
+        temp_dir = tempfile.mkdtemp()
+        try:
+            # Register the data source
+            self.spark.dataSource.register(TestDataSource)
+
+            # Create test data
+            df = self.spark.range(0, 100, 1, 3).selectExpr(
+                "id", "concat('name_', id) as name", "id * 2.5 as value")
+            
+            # Write using streaming with Arrow writer
+            query = (df.writeStream
+                    .format("TestArrowStreamWriter")
+                    .option("path", temp_dir)
+                    .option("checkpointLocation", os.path.join(temp_dir, "checkpoint"))
+                    .trigger(availableNow=True)
+                    .start())
+
+            query.awaitTermination()
+            
+            # Since we're doing noop writes, verify commit metadata contains expected JSON filepaths
+            commit_files = [f for f in os.listdir(temp_dir) if f.startswith('commit_')]
+            self.assertTrue(len(commit_files) > 0, "No commit files were created")
+            
+            # Read and verify commit metadata
+            with open(os.path.join(temp_dir, commit_files[0]), 'r') as f:
+                commit_data = json.load(f)
+                self.assertEqual(commit_data['total_rows'], 100)
+                self.assertTrue(commit_data['total_batches'] > 0)
+                
+                # Verify JSON filepaths are recorded in commit metadata
+                self.assertIn('filepaths', commit_data)
+                filepaths = commit_data['filepaths']
+                self.assertTrue(len(filepaths) > 0, "No JSON filepaths were recorded")
+                
+                # Verify all filepaths are JSON files
+                for filepath in filepaths:
+                    self.assertTrue(filepath.endswith('.json'), f"Filepath {filepath} is not a JSON file")
+
+        finally:
+            # Clean up
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 class PythonStreamingDataSourceTests(BasePythonStreamingDataSourceTestsMixin, ReusedSQLTestCase):
