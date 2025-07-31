@@ -880,8 +880,8 @@ class RocksDBFileManager(
         throw e
     } finally {
       // Close everything no matter what happened
-      IOUtils.closeQuietly(in)
-      IOUtils.closeQuietly(zout)
+      Utils.closeQuietly(in)
+      Utils.closeQuietly(zout)
     }
   }
 

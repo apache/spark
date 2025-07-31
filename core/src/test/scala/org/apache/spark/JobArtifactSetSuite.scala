@@ -22,6 +22,7 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import org.apache.commons.io.IOUtils
 
+import org.apache.spark.util.Utils
 
 class JobArtifactSetSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -33,8 +34,8 @@ class JobArtifactSetSuite extends SparkFunSuite with LocalSparkContext {
     val zipEntry = new ZipEntry(fileToZip.getName)
     zipOut.putNextEntry(zipEntry)
     IOUtils.copy(fis, zipOut)
-    IOUtils.closeQuietly(fis)
-    IOUtils.closeQuietly(zipOut)
+    Utils.closeQuietly(fis)
+    Utils.closeQuietly(zipOut)
   }
 
   test("JobArtifactSet uses resources from SparkContext") {
