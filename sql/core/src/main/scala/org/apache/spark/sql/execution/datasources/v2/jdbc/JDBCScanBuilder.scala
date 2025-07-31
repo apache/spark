@@ -18,7 +18,8 @@ package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{JOIN_CONDITION, JOIN_TYPE, SCHEMA}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.expressions.{FieldReference, SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
@@ -189,11 +190,15 @@ case class JDBCScanBuilder(
       case _ => None
     }
     if (!joinTypeStringOption.isDefined) {
+      logError(log"Failed to push down join to JDBC due to unsupported join type " +
+        log"${MDC(JOIN_TYPE, joinType)}")
       return false
     }
 
     val compiledCondition = dialect.compileExpression(condition)
     if (!compiledCondition.isDefined) {
+      logError(log"Failed to push down join to JDBC due to unsupported join condition " +
+        log"${MDC(JOIN_CONDITION, condition)}")
       return false
     }
 
@@ -236,6 +241,8 @@ case class JDBCScanBuilder(
 
     jdbcOptions = new JDBCOptions(newJdbcOptionsMap)
     finalSchema = requiredSchema
+    logInfo(log"Updated JDBC schema due to join pushdown. " +
+      log"New schema: ${MDC(SCHEMA, finalSchema.toDDL)}")
 
     // We need to reset the pushedPredicate because it has already been consumed in previously
     // crafted SQL query.
