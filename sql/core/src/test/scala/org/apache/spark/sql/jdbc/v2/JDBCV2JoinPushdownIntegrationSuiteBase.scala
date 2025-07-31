@@ -212,9 +212,9 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       insertStmt2.close()
 
       conn.createStatement().execute(
-        s"""insert into $fullyQualifiedTableName3 values (0, 1, 2, 3, 4)""")
+        s"""INSERT INTO $fullyQualifiedTableName3 VALUES (0, 1, 2, 3, 4)""")
       conn.createStatement().execute(
-        s"""insert into $fullyQualifiedTableName4 values (0, -1, -2, -3, -4)""")
+        s"""INSERT INTO $fullyQualifiedTableName4 VALUES (0, -1, -2, -3, -4)""")
     }
   }
 

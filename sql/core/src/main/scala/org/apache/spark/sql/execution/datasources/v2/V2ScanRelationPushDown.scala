@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.Locale
+
 import scala.collection.mutable
 
 import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, GROUP_BY_EXPRS, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
@@ -208,7 +210,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   ): (Array[SupportsPushDownJoin.ColumnWithAlias],
     Array[SupportsPushDownJoin.ColumnWithAlias]) = {
     // Normalize all column names to lowercase for case-insensitive comparison
-    val normalizeCase: String => String = _.toLowerCase()
+    val normalizeCase: String => String = _.toLowerCase(Locale.ROOT)
 
     // Count occurrences of each column name (case-insensitive)
     val allRequiredColumnNames = leftSideRequiredColumnNames ++ rightSideRequiredColumnNames

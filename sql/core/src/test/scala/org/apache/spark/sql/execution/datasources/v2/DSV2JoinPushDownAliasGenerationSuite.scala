@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.Locale
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.connector.read.SupportsPushDownJoin.ColumnWithAlias
 
-class V2ScanRelationPushDownSuite extends SparkFunSuite {
+class DSV2JoinPushDownAliasGenerationSuite extends SparkFunSuite {
 
   private def assertAliases(
     leftInput: Array[String],
@@ -31,11 +33,11 @@ class V2ScanRelationPushDownSuite extends SparkFunSuite {
     val (actualLeft, actualRight) = V2ScanRelationPushDown
       .generateColumnAliasesForDuplicatedName(leftInput, rightInput)
 
-    val uniqName : ColumnWithAlias => String = col => {
-      if (col.alias() == null) col.colName() else col.alias().toLowerCase()
+    val uniqName: ColumnWithAlias => String = col => {
+      if (col.alias() == null) col.colName() else col.alias().toLowerCase(Locale.ROOT)
     }
     // Ensure no duplicate column names after ignoring capitalization
-    assert((actualLeft++actualRight).map(uniqName).distinct.length
+    assert((actualLeft ++ actualRight).map(uniqName).distinct.length
       == actualLeft.length + actualRight.length)
 
     assert(
