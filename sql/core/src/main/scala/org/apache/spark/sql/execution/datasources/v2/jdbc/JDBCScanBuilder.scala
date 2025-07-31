@@ -28,13 +28,15 @@ import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownAggrega
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.jdbc.{JdbcDialects, JdbcSQLQueryBuilder, JoinPushdownAliasGenerator}
 import org.apache.spark.sql.types.StructType
 
 case class JDBCScanBuilder(
     session: SparkSession,
     schema: StructType,
-    var jdbcOptions: JDBCOptions)
+    var jdbcOptions: JDBCOptions,
+    additionalMetrics: Map[String, SQLMetric] = Map())
   extends ScanBuilder
     with SupportsPushDownV2Filters
     with SupportsPushDownRequiredColumns
@@ -330,8 +332,9 @@ case class JDBCScanBuilder(
     // "DEPT","NAME",MAX("SALARY"),MIN("BONUS"), instead of getting column names from
     // prunedSchema and quote them (will become "MAX(SALARY)", "MIN(BONUS)" and can't
     // be used in sql string.
-    JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), finalSchema, pushedPredicate,
-      pushedAggregateList, pushedGroupBys, tableSample, pushedLimit, sortOrders, pushedOffset)
+    JDBCScan(JDBCRelation(schema, parts, jdbcOptions, additionalMetrics)(session),
+      finalSchema, pushedPredicate, pushedAggregateList, pushedGroupBys,
+      tableSample, pushedLimit, sortOrders, pushedOffset)
   }
 
 }
