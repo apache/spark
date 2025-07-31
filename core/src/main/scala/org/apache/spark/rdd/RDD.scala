@@ -2016,7 +2016,7 @@ abstract class RDD[T: ClassTag](
     def firstDebugString(rdd: RDD[_]): Seq[String] = {
       val partitionStr = "(" + rdd.partitions.length + ")"
       val leftOffset = (partitionStr.length - 1) / 2
-      val nextPrefix = (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset))
+      val nextPrefix = " ".repeat(leftOffset) + "|" + " ".repeat(partitionStr.length - leftOffset)
 
       debugSelf(rdd).zipWithIndex.map{
         case (desc: String, 0) => s"$partitionStr $desc"
@@ -2030,7 +2030,7 @@ abstract class RDD[T: ClassTag](
       val nextPrefix = (
         thisPrefix
         + (if (isLastChild) "  " else "| ")
-        + (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset)))
+        + (" ".repeat(leftOffset)) + "|" + (" ".repeat(partitionStr.length - leftOffset)))
 
       debugSelf(rdd).zipWithIndex.map{
         case (desc: String, 0) => s"$thisPrefix+-$partitionStr $desc"
