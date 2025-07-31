@@ -98,11 +98,11 @@ def _convert_to_vector(d: Union["VectorLike", "spmatrix", range]) -> "Vector":
     if isinstance(d, Vector):
         return d
     elif type(d) in (array.array, np.array, np.ndarray, list, tuple, range):
-        return DenseVector(d)  # type: ignore[arg-type]
+        return DenseVector(d)
     elif _have_scipy and scipy.sparse.issparse(d):
         assert cast("spmatrix", d).shape[1] == 1, "Expected column vector"
         # Make sure the converted csc_matrix has sorted indices.
-        csc = cast("spmatrix", d).tocsc()  # type: ignore[attr-defined]
+        csc = cast("spmatrix", d).tocsc()
         if not csc.has_sorted_indices:
             csc.sort_indices()
         return SparseVector(cast("spmatrix", d).shape[0], csc.indices, csc.data)
@@ -134,7 +134,7 @@ def _vector_size(v: Union["VectorLike", "spmatrix", range]) -> int:
     if isinstance(v, Vector):
         return len(v)
     elif type(v) in (array.array, list, tuple, range):
-        return len(v)  # type: ignore[arg-type]
+        return len(v)
     elif type(v) == np.ndarray:
         if v.ndim == 1 or (v.ndim == 2 and v.shape[1] == 1):
             return len(v)
@@ -394,7 +394,7 @@ class DenseVector(Vector):
         """
         Number of nonzero elements. This scans all active values and count non zeros
         """
-        return np.count_nonzero(self.array)  # type: ignore[return-value]
+        return np.count_nonzero(self.array)
 
     def norm(self, p: "NormType") -> np.float64:
         """
@@ -408,7 +408,7 @@ class DenseVector(Vector):
         >>> a.norm(1)
         6.0
         """
-        return np.linalg.norm(self.array, p)  # type: ignore[return-value]
+        return np.linalg.norm(self.array, p)
 
     def dot(self, other: Iterable[float]) -> np.float64:
         """
@@ -445,9 +445,9 @@ class DenseVector(Vector):
             return np.dot(self.array, other)
         elif _have_scipy and scipy.sparse.issparse(other):
             assert len(self) == cast("spmatrix", other).shape[0], "dimension mismatch"
-            return cast("spmatrix", other).transpose().dot(self.toArray())  # type: ignore[attr-defined]
+            return cast("spmatrix", other).transpose().dot(self.toArray())
         else:
-            assert len(self) == _vector_size(other), "dimension mismatch"  # type: ignore[arg-type]
+            assert len(self) == _vector_size(other), "dimension mismatch"
             if isinstance(other, SparseVector):
                 return other.dot(self)
             elif isinstance(other, Vector):
@@ -482,11 +482,11 @@ class DenseVector(Vector):
             ...
         AssertionError: dimension mismatch
         """
-        assert len(self) == _vector_size(other), "dimension mismatch"  # type: ignore[arg-type]
+        assert len(self) == _vector_size(other), "dimension mismatch"
         if isinstance(other, SparseVector):
             return other.squared_distance(self)
         elif _have_scipy and scipy.sparse.issparse(other):
-            return _convert_to_vector(other).squared_distance(self)  # type: ignore[attr-defined, arg-type]
+            return _convert_to_vector(other).squared_distance(self)  # type: ignore[attr-defined]
 
         if isinstance(other, Vector):
             other = other.toArray()
@@ -682,7 +682,7 @@ class SparseVector(Vector):
         """
         Number of nonzero elements. This scans all active values and count non zeros.
         """
-        return np.count_nonzero(self.values)  # type: ignore[return-value]
+        return np.count_nonzero(self.values)
 
     def norm(self, p: "NormType") -> np.float64:
         """
@@ -696,7 +696,7 @@ class SparseVector(Vector):
         >>> a.norm(2)
         5.0
         """
-        return np.linalg.norm(self.values, p)  # type: ignore[return-value]
+        return np.linalg.norm(self.values, p)
 
     def __reduce__(self) -> Tuple[Type["SparseVector"], Tuple[int, bytes, bytes]]:
         return (
@@ -799,7 +799,7 @@ class SparseVector(Vector):
             assert len(self) == other.shape[0], "dimension mismatch"
             return np.dot(self.values, other[self.indices])
 
-        assert len(self) == _vector_size(other), "dimension mismatch"  # type: ignore[arg-type]
+        assert len(self) == _vector_size(other), "dimension mismatch"
 
         if isinstance(other, DenseVector):
             return np.dot(other.array[self.indices], self.values)
@@ -844,7 +844,7 @@ class SparseVector(Vector):
             ...
         AssertionError: dimension mismatch
         """
-        assert len(self) == _vector_size(other), "dimension mismatch"  # type: ignore[arg-type]
+        assert len(self) == _vector_size(other), "dimension mismatch"
 
         if isinstance(other, np.ndarray) or isinstance(other, DenseVector):
             if isinstance(other, np.ndarray) and other.ndim != 1:
