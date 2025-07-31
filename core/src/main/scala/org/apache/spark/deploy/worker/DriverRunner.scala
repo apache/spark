@@ -215,7 +215,7 @@ private[deploy] class DriverRunner(
       val stderr = new File(baseDir, "stderr")
       val redactedCommand = Utils.redactCommandLineArgs(conf, builder.command.asScala.toSeq)
         .mkString("\"", "\" \"", "\"")
-      val header = "Launch Command: %s\n%s\n\n".format(redactedCommand, "=" * 40)
+      val header = "Launch Command: %s\n%s\n\n".format(redactedCommand, "=".repeat(40))
       Files.asCharSink(stderr, StandardCharsets.UTF_8, FileWriteMode.APPEND).write(header)
       CommandUtils.redirectStream(process.getErrorStream, stderr)
     }

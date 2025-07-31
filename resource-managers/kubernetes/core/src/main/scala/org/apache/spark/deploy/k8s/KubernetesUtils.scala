@@ -146,7 +146,7 @@ object KubernetesUtils extends Logging {
   @Since("3.0.0")
   def formatPairsBundle(pairs: Seq[(String, String)], indent: Int = 1) : String = {
     // Use more loggable format if value is null or empty
-    val indentStr = "\t" * indent
+    val indentStr = "\t".repeat(indent)
     pairs.map {
       case (k, v) => s"\n$indentStr $k: ${Option(v).filter(_.nonEmpty).getOrElse("N/A")}"
     }.mkString("")
