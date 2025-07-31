@@ -547,6 +547,11 @@ This file is divided into 3 sections:
     <customMessage>Use StandardCharsets.UTF_8 instead.</customMessage>
   </check>
 
+  <check customId="ioutilstobytearray" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">IOUtils\.toByteArray</parameter></parameters>
+    <customMessage>Use Java readAllBytes instead.</customMessage>
+  </check>
+
   <check customId="ioutilsclosequietly" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">IOUtils\.closeQuietly</parameter></parameters>
     <customMessage>Use closeQuietly of SparkErrorUtils or Utils instead.</customMessage>
