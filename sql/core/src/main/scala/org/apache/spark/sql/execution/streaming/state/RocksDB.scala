@@ -1392,7 +1392,7 @@ class RocksDB(
   /**
    * Refresh the recorded metrics with the latest metrics.
    */
-  def refreshRecordedMetrics(): Unit = {
+  private[state] def refreshRecordedMetricsForTest(): Unit = {
     recordedMetrics = Some(metrics)
   }
 
