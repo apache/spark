@@ -74,8 +74,6 @@ class DataSourceV2MetadataOnlyTableSuite extends QueryTest with SharedSparkSessi
   // TODO: move the v2 data source table handling from V2SessionCatalog to the analyzer
   ignore("v2 data source table") {
     val tableName = "general_catalog.default.test_v2"
-    spark.table(tableName).show()
-    spark.table(tableName).explain(true)
     checkAnswer(spark.table(tableName), 0.until(10).map(i => Row(i, -i)))
   }
 

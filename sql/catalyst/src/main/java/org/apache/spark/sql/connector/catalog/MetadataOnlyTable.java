@@ -29,7 +29,6 @@ import org.apache.spark.sql.types.StructType;
  * implementing read/write directly. It represents a general Spark data source table or
  * a Spark view, and relies on Spark to interpret the table metadata, resolve the table
  * provider into a data source, or read it as a view.
- * This affects the table read/write operations but not DDL operations.
  *
  * @since 4.1.0
  */
