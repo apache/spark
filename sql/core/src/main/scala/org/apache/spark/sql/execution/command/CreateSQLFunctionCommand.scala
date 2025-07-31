@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, SQLFunction, UserD
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.logical.{LateralJoin, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Project, Range, UnresolvedWith, View}
+import org.apache.spark.sql.catalyst.plans.logical.{LateralJoin, LocalRelation, LogicalPlan, OneRowRelation, Project, Range, UnresolvedWith, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -460,7 +460,7 @@ case class CreateSQLFunctionCommand(
     // Find logical plan nodes that read SQL data.
     val readsSQLData = plan.find {
       case _: View => true
-      case l: LeafNode => l match {
+      case p if p.children.isEmpty => p match {
         case _: OneRowRelation | _: LocalRelation | _: Range => false
         case _ => true
       }
@@ -471,8 +471,9 @@ case class CreateSQLFunctionCommand(
         // to be READS SQL DATA, then this SQL function will also be READS SQL DATA.
         p.expressions.exists(expr => expr.find {
           case f: SQLScalarFunction => f.function.containsSQL.contains(false)
+          case sub: SubqueryExpression => deriveSQLDataAccess(sub.plan)
           case _ => false
-        }.isDefined) || sub
+        }.isDefined)
     }.isDefined
 
     if (containsSQL.contains(true) && readsSQLData) {
