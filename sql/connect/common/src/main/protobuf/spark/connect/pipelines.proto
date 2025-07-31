@@ -216,13 +216,3 @@ message PipelineEvent {
 message PipelineQueryFunctionExecutionSignal {
   repeated string flow_names = 1;
 }
-
-// Context describing the flow being resolved within a graph.
-message FlowAnalysisContext {
-  // (Required) The ID of the dataflow graph that the flow belongs to. I.e. the value returned by
-  // CreateDataflowGraph.
-  string dataflow_graph_id = 1;
-
-  // (Required) The name of the flow within the dataflow graph.
-  string flow_name = 2;
-}

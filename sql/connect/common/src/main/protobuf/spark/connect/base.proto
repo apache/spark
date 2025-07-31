@@ -49,13 +49,6 @@ message UserContext {
   string user_id = 1;
   string user_name = 2;
 
-  // (Optional) Should be non-null for RPCs that are sent during the execution of a Declarative
-  // Pipelines flow query function. Identifies the flow and the dataflow graph that it's a part of.
-  // Any plans that are analyzed within the RPC are analyzed "relative to" the dataflow graph.
-  // I.e., when determining the existence and schema of a data source that's defined in the graph,
-  // the definition from the graph is used instead of the definition in physical storage.
-  optional FlowAnalysisContext pipeline_flow_analysis_context = 3;
-
   // To extend the existing user context message that is used to identify incoming requests,
   // Spark Connect leverages the Any protobuf type that can be used to inject arbitrary other
   // messages into this message. Extensions are stored as a `repeated` type to be able to
