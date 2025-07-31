@@ -182,7 +182,8 @@ def main(infile: IO, outfile: IO) -> None:
                 raise PySparkAssertionError(
                     errorClass="DATA_SOURCE_TYPE_MISMATCH",
                     messageParameters={
-                        "expected": "an instance of DataSourceStreamWriter or DataSourceStreamArrowWriter",
+                        "expected": ("an instance of DataSourceStreamWriter or "
+                                     "DataSourceStreamArrowWriter"),
                         "actual": f"'{type(writer).__name__}'",
                     },
                 )
