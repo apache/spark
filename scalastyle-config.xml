@@ -293,6 +293,11 @@ This file is divided into 3 sections:
     of Commons Lang 2 (package org.apache.commons.lang.*)</customMessage>
   </check>
 
+  <check customId="getFile" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileUtils\.getFile</parameter></parameters>
+    <customMessage>Use getFile of SparkFileUtil or Utils instead.</customMessage>
+  </check>
+
   <check customId="writeStringToFile" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">FileUtils\.writeStringToFile</parameter></parameters>
     <customMessage>Use java.nio.file.Files.writeString instead.</customMessage>
