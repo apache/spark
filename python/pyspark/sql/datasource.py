@@ -43,13 +43,13 @@ __all__ = [
     "DataSource",
     "DataSourceReader",
     "DataSourceStreamReader",
-    "SimpleDataSourceStreamReader",
     "DataSourceWriter",
     "DataSourceArrowWriter",
     "DataSourceStreamWriter",
+    "DataSourceStreamArrowWriter",
+    "SimpleDataSourceStreamReader",
     "DataSourceRegistration",
     "InputPartition",
-    "SimpleDataSourceStreamReader",
     "WriterCommitMessage",
     "Filter",
     "EqualTo",
@@ -300,7 +300,7 @@ class Filter(ABC):
 
     +---------------------+--------------------------------------------+
     | SQL filter          | Representation                             |
-    +---------------------+--------------------------------------------+
+    +---------------------+---------------------------------------------+
     | `a.b.c = 1`         | `EqualTo(("a", "b", "c"), 1)`              |
     | `a = 1`             | `EqualTo(("a",), 1)`                       |
     | `a = 'hi'`          | `EqualTo(("a",), "hi")`                    |
@@ -1094,6 +1094,58 @@ class DataSourceStreamWriter(ABC):
         batchId: int
             An integer that uniquely identifies a batch of data being written.
             The integer increase by 1 with each microbatch processed.
+        """
+        ...
+
+
+class DataSourceStreamArrowWriter(DataSourceStreamWriter):
+    """
+    A base class for data stream writers that process data using PyArrow's `RecordBatch`.
+
+    Unlike :class:`DataSourceStreamWriter`, which works with an iterator of Spark Rows, this class
+    is optimized for using the Arrow format when writing streaming data. It can offer better performance
+    when interfacing with systems or libraries that natively support Arrow for streaming use cases.
+
+    .. versionadded: 4.1.0
+    """
+
+    @abstractmethod
+    def write(self, iterator: Iterator["RecordBatch"]) -> "WriterCommitMessage":
+        """
+        Writes an iterator of PyArrow `RecordBatch` objects to the streaming sink.
+
+        This method is called on executors to write data to the streaming data sink in
+        each microbatch. It accepts an iterator of PyArrow `RecordBatch` objects and returns a single row
+        representing a commit message, or None if there is no commit message.
+
+        The driver collects commit messages, if any, from all executors and passes them
+        to the :class:`DataSourceStreamArrowWriter.commit` method if all tasks run successfully. If any
+        task fails, the :class:`DataSourceStreamArrowWriter.abort` method will be called with the
+        collected commit messages.
+
+        Parameters
+        ----------
+        iterator : iterator of :class:`RecordBatch`\\s
+            An iterator of PyArrow `RecordBatch` objects representing the input data.
+
+        Returns
+        -------
+        :class:`WriterCommitMessage`
+            a serializable commit message
+
+        Examples
+        --------
+        >>> from dataclasses import dataclass
+        >>> @dataclass
+        ... class MyCommitMessage(WriterCommitMessage):
+        ...     num_rows: int
+        ...     batch_id: int
+        ...
+        >>> def write(self, iterator: Iterator["RecordBatch"]) -> "WriterCommitMessage":
+        ...     total_rows = 0
+        ...     for batch in iterator:
+        ...         total_rows += len(batch)
+        ...     return MyCommitMessage(num_rows=total_rows, batch_id=self.current_batch_id)
         """
         ...
 
