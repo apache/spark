@@ -185,6 +185,12 @@ class ConversionMixin:
 
         self.assert_eq((psidx + 1).to_series(), (pidx + 1).to_series())
 
+        # Multiindex
+        arrays = [[1, 2], ["red", "blue"]]
+        psidx = ps.MultiIndex.from_arrays(arrays, names=("number", "color"))
+        res_psser = psidx.to_series()
+        self.assert_eq(list(res_psser.values), [["1", "red"], ["2", "blue"]])
+
         pidx = self.pdf.set_index("b", append=True).index
         psidx = self.psdf.set_index("b", append=True).index
 
