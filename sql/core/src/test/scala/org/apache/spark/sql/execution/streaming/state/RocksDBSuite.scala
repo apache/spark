@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
-import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.Executors
 
@@ -2176,7 +2176,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     withTempDir { dir =>
       val file2 = new File(dir, "json")
       val json2 = """{"sstFiles":[],"numKeys":0}"""
-      FileUtils.write(file2, s"v2\n$json2", Charset.defaultCharset)
+      FileUtils.write(file2, s"v2\n$json2", StandardCharsets.UTF_8)
       val e = intercept[SparkException] {
         RocksDBCheckpointMetadata.readFromFile(file2)
       }
@@ -2194,7 +2194,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       assert(metadata.json == json)
       withTempDir { dir =>
         val file = new File(dir, "json")
-        FileUtils.write(file, s"v1\n$json", Charset.defaultCharset)
+        FileUtils.write(file, s"v1\n$json", StandardCharsets.UTF_8)
         assert(metadata == RocksDBCheckpointMetadata.readFromFile(file))
       }
     }
@@ -3485,7 +3485,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
   def generateFiles(dir: String, fileToLengths: Seq[(String, Int)]): Unit = {
     fileToLengths.foreach { case (fileName, length) =>
       val file = new File(dir, fileName)
-      FileUtils.write(file, "a" * length, Charset.defaultCharset)
+      FileUtils.write(file, "a" * length, StandardCharsets.UTF_8)
     }
   }
 

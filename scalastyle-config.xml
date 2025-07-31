@@ -531,4 +531,9 @@ This file is divided into 3 sections:
     <parameters><parameter name="regex">com\.google\.common\.base\.Strings</parameter></parameters>
     <customMessage>Use Java built-in methods or SparkStringUtils instead</customMessage>
   </check>
+
+  <check customId="defaultCharset" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">Charset\.defaultCharset</parameter></parameters>
+    <customMessage>Use StandardCharsets.UTF_8 instead.</customMessage>
+  </check>
 </scalastyle>

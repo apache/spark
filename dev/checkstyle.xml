@@ -188,6 +188,10 @@
             <property name="illegalClasses" value="com.google.common.base.Strings" />
         </module>
         <module name="RegexpSinglelineJava">
+            <property name="format" value="Charset\.defaultCharset"/>
+            <property name="message" value="Use StandardCharsets.UTF_8 instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
             <property name="format" value="new URL\("/>
             <property name="message" value="Use URI.toURL or URL.of instead of URL constructors." />
         </module>
