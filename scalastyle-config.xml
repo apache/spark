@@ -556,4 +556,9 @@ This file is divided into 3 sections:
     <parameters><parameter name="regex">IOUtils\.copy\(</parameter></parameters>
     <customMessage>Use Java transferTo instead.</customMessage>
   </check>
+
+  <check customId="ioutilstostring" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">IOUtils\.toString\(</parameter></parameters>
+    <customMessage>Use toString of SparkStreamUtils or Utils instead.</customMessage>
+  </check>
 </scalastyle>
