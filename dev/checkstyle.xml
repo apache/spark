@@ -203,6 +203,10 @@
             <property name="format" value="FileUtils.writeStringToFile"/>
             <property name="message" value="Use java.nio.file.Files.writeString instead." />
         </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="FileUtils\.deleteDirectory"/>
+            <property name="message" value="Use deleteRecursively of SparkFileUtils or Utils instead." />
+        </module>
         <!-- support structured logging -->
         <module name="RegexpSinglelineJava">
             <property name="format" value="org\.slf4j\.(Logger|LoggerFactory)" />

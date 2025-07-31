@@ -125,7 +125,7 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
     val foundMatch = dir.exists() && isApproved(dir, simplified, explain)
 
     if (!foundMatch) {
-      FileUtils.deleteDirectory(dir)
+      Utils.deleteRecursively(dir)
       assert(Utils.createDirectory(dir))
 
       val file = new File(dir, "simplified.txt")
