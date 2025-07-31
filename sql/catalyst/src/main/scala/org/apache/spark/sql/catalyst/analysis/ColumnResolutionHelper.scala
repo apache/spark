@@ -269,7 +269,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       .filterNot(_ => AnalysisContext.get.isExecuteImmediate)
       // If variable name is qualified with session.<varName> treat it as a session variable.
       .filterNot(_ =>
-        nameParts.length > 2 || (nameParts.length == 2 && isForbiddenLabelOrVariableName(nameParts.head)))
+        nameParts.length > 2
+          || (nameParts.length == 2 && isForbiddenLabelOrVariableName(nameParts.head)))
       .flatMap(_.get(namePartsCaseAdjusted))
       .map { varDef =>
         VariableReference(

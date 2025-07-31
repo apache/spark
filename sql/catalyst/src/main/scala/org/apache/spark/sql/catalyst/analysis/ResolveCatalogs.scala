@@ -60,7 +60,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
             Map("varName" -> toSQLId(nameParts)))
         }
 
-        if (SqlScriptingParsingContext.isForbiddenLabelOrVariableName(nameParts.head.toLowerCase(Locale.ROOT))) {
+        if (SqlScriptingParsingContext
+            .isForbiddenLabelOrVariableName(nameParts.head.toLowerCase(Locale.ROOT))) {
           throw new AnalysisException(
             "INVALID_VARIABLE_DECLARATION.LOCAL_VARIABLE_NAME_FORBIDDEN",
             Map("varName" -> toSQLId(nameParts)))
