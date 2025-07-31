@@ -29,7 +29,7 @@ import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.connect.common.ProtoUtils
-import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.planner.InvalidInputErrors
 import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteSessionTag, SparkConnectService}
 import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.util.Utils
@@ -221,11 +221,13 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         StringUtils.abbreviate(debugString, 2048))
 
       executeHolder.request.getPlan.getOpTypeCase match {
-        case proto.Plan.OpTypeCase.COMMAND => handleCommand(executeHolder.request)
-        case proto.Plan.OpTypeCase.ROOT => handlePlan(executeHolder.request)
-        case _ =>
-          throw new UnsupportedOperationException(
-            s"${executeHolder.request.getPlan.getOpTypeCase} not supported.")
+        case proto.Plan.OpTypeCase.ROOT | proto.Plan.OpTypeCase.COMMAND =>
+          val execution = new SparkConnectPlanExecution(executeHolder)
+          execution.handlePlan(executeHolder.responseObserver)
+        case other =>
+          throw InvalidInputErrors.invalidOneOfField(
+            other,
+            executeHolder.request.getPlan.getDescriptorForType)
       }
 
       val observedMetrics: Map[String, Seq[(Option[String], Any)]] = {
@@ -305,21 +307,6 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       proto.Command.CommandTypeCase.STREAMING_QUERY_LISTENER_BUS_COMMAND &&
       request.getPlan.getCommand.getStreamingQueryListenerBusCommand.getCommandCase ==
       proto.StreamingQueryListenerBusCommand.CommandCase.ADD_LISTENER_BUS_LISTENER
-  }
-
-  private def handlePlan(request: proto.ExecutePlanRequest): Unit = {
-    val responseObserver = executeHolder.responseObserver
-
-    val execution = new SparkConnectPlanExecution(executeHolder)
-    execution.handlePlan(responseObserver)
-  }
-
-  private def handleCommand(request: proto.ExecutePlanRequest): Unit = {
-    val responseObserver = executeHolder.responseObserver
-
-    val command = request.getPlan.getCommand
-    val planner = new SparkConnectPlanner(executeHolder)
-    planner.process(command = command, responseObserver = responseObserver)
   }
 
   private def requestString(request: Message) = {
