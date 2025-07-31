@@ -96,7 +96,23 @@ struct<b:struct<a:int>,c:struct<a:int>>
 
 
 -- !query
+SELECT STRUCT(col1 AS a) AS b, b AS c FROM VALUES(1)
+-- !query schema
+struct<b:struct<a:int>,c:struct<a:int>>
+-- !query output
+{"a":1}	{"a":1}
+
+
+-- !query
 SELECT STRUCT(1 AS a) AS b, b AS c GROUP BY b
+-- !query schema
+struct<b:struct<a:int>,c:struct<a:int>>
+-- !query output
+{"a":1}	{"a":1}
+
+
+-- !query
+SELECT STRUCT(col1 AS a) AS b, b AS c FROM VALUES(1) GROUP BY b
 -- !query schema
 struct<b:struct<a:int>,c:struct<a:int>>
 -- !query output

@@ -1489,6 +1489,25 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       int newLimit = limit > numChars() || limit <= 0 ? numChars() : limit;
       byte[] input = getBytes();
       int byteIndex = 0;
+      UTF8String[] result = new UTF8String[newLimit];
+      for (int charIndex = 0; charIndex < newLimit - 1; charIndex++) {
+        int currCharNumBytes = numBytesForFirstByte(input[byteIndex]);
+        result[charIndex] = UTF8String.fromBytes(input, byteIndex, currCharNumBytes);
+        byteIndex += currCharNumBytes;
+      }
+      result[newLimit - 1] = UTF8String.fromBytes(input, byteIndex, numBytes() - byteIndex);
+      return result;
+    }
+    return split(pattern.toString(), limit);
+  }
+
+  public UTF8String[] splitLegacyTruncate(UTF8String pattern, int limit) {
+    // For the empty `pattern` a `split` function ignores trailing empty strings unless original
+    // string is empty.
+    if (numBytes() != 0 && pattern.numBytes() == 0) {
+      int newLimit = limit > numChars() || limit <= 0 ? numChars() : limit;
+      byte[] input = getBytes();
+      int byteIndex = 0;
       int charIndex = 0;
       UTF8String[] result = new UTF8String[newLimit];
       while (charIndex < newLimit) {

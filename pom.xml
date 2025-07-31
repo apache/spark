@@ -140,7 +140,7 @@
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.15.2</parquet.version>
-    <orc.version>2.1.3</orc.version>
+    <orc.version>2.2.0</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.25</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
@@ -185,11 +185,11 @@
     <fasterxml.jackson.version>2.19.0</fasterxml.jackson.version>
     <fasterxml.jackson.databind.version>2.19.0</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
-    <snappy.version>1.1.10.7</snappy.version>
+    <snappy.version>1.1.10.8</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.18.0</commons-codec.version>
     <commons-compress.version>1.27.1</commons-compress.version>
-    <commons-io.version>2.19.0</commons-io.version>
+    <commons-io.version>2.20.0</commons-io.version>
     <!-- To support Hive UDF jars built by Hive 2.0.0 ~ 2.3.9 and 3.0.0 ~ 3.1.3. -->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
@@ -215,7 +215,7 @@
     <bouncycastle.version>1.80</bouncycastle.version>
     <tink.version>1.16.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.1.122.Final</netty.version>
+    <netty.version>4.1.123.Final</netty.version>
     <netty-tcnative.version>2.0.72.Final</netty-tcnative.version>
     <icu4j.version>77.1</icu4j.version>
     <junit-jupiter.version>5.13.1</junit-jupiter.version>
@@ -1238,13 +1238,13 @@
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy</artifactId>
-        <version>1.17.0</version>
+        <version>1.17.6</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy-agent</artifactId>
-        <version>1.17.0</version>
+        <version>1.17.6</version>
         <scope>test</scope>
       </dependency>
       <dependency>

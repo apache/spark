@@ -339,11 +339,11 @@ class DataTypeSuite extends SparkFunSuite {
         |""".stripMargin
     val dt = DataType.fromJson(schema)
 
-    dt.simpleString equals "struct<c1:string>"
-    dt.json equals
+    assert(dt.simpleString equals "struct<c1:string>")
+    assert(dt.json equals
       """
-        |{"type":"struct","fields":[{"name":"c1","type":"string","nullable":false,"metadata":{}}]}
-        |""".stripMargin
+        |{"type":"struct","fields":[{"name":"c1","type":"string","nullable":true,"metadata":{}}]}
+        |""".stripMargin.trim)
   }
 
   def checkDefaultSize(dataType: DataType, expectedDefaultSize: Int): Unit = {

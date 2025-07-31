@@ -30,7 +30,6 @@ import com.google.rpc.{Code => RPCCode, ErrorInfo, Status => RPCStatus}
 import io.grpc.Status
 import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
-import org.apache.commons.lang3.StringUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods
@@ -44,6 +43,7 @@ import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.{ExecuteEventsManager, SessionHolder, SessionKey, SparkConnectService}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 private[connect] object ErrorUtils extends Logging {
 
@@ -225,7 +225,7 @@ private[connect] object ErrorUtils extends Logging {
         val maxSize = Math.min(
           SparkEnv.get.conf.get(Connect.CONNECT_JVM_STACK_TRACE_MAX_SIZE),
           maxMetadataSize)
-        errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace.get, maxSize.toInt))
+        errorInfo.putMetadata("stackTrace", Utils.abbreviate(stackTrace.get, maxSize.toInt))
       } else {
         errorInfo
       }
@@ -297,7 +297,7 @@ private[connect] object ErrorUtils extends Logging {
           e,
           Status.UNKNOWN
             .withCause(e)
-            .withDescription(StringUtils.abbreviate(e.getMessage, 2048))
+            .withDescription(Utils.abbreviate(e.getMessage, 2048))
             .asRuntimeException())
     }
     partial

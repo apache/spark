@@ -73,7 +73,7 @@ from pyspark.sql.utils import enum_to_value as _enum_to_value
 
 # The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
 # for code reuse.
-from pyspark.sql.functions import pandas_udf  # noqa: F401
+from pyspark.sql.functions import arrow_udf, pandas_udf  # noqa: F401
 
 
 if TYPE_CHECKING:
@@ -3140,6 +3140,26 @@ def current_date() -> Column:
 current_date.__doc__ = pysparkfuncs.current_date.__doc__
 
 
+@overload
+def current_time() -> Column:
+    ...
+
+
+@overload
+def current_time(precision: int) -> Column:
+    ...
+
+
+def current_time(precision: Optional[int] = None) -> Column:
+    if precision is None:
+        return _invoke_function("current_time")
+    else:
+        return _invoke_function("current_time", lit(precision))
+
+
+current_time.__doc__ = pysparkfuncs.current_time.__doc__
+
+
 def current_timestamp() -> Column:
     return _invoke_function("current_timestamp")
 
@@ -3414,6 +3434,26 @@ unix_seconds.__doc__ = pysparkfuncs.unix_seconds.__doc__
 
 
 @overload
+def to_time(str: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column:
+    ...
+
+
+def to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
+    if format is None:
+        return _invoke_function_over_columns("to_time", str)
+    else:
+        return _invoke_function_over_columns("to_time", str, format)
+
+
+to_time.__doc__ = pysparkfuncs.to_time.__doc__
+
+
+@overload
 def to_timestamp(col: "ColumnOrName") -> Column:
     ...
 
@@ -3431,6 +3471,26 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
 
 to_timestamp.__doc__ = pysparkfuncs.to_timestamp.__doc__
+
+
+@overload
+def try_to_time(str: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def try_to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column:
+    ...
+
+
+def try_to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
+    if format is None:
+        return _invoke_function_over_columns("try_to_time", str)
+    else:
+        return _invoke_function_over_columns("try_to_time", str, format)
+
+
+try_to_time.__doc__ = pysparkfuncs.try_to_time.__doc__
 
 
 def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
@@ -3855,6 +3915,13 @@ def make_interval(
 
 
 make_interval.__doc__ = pysparkfuncs.make_interval.__doc__
+
+
+def make_time(hour: "ColumnOrName", minute: "ColumnOrName", second: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("make_time", hour, minute, second)
+
+
+make_time.__doc__ = pysparkfuncs.make_time.__doc__
 
 
 def make_timestamp(

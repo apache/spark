@@ -409,20 +409,10 @@ WITH RECURSIVE r(level) AS (
 )
 SELECT * FROM r
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`level`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 62,
-    "stopIndex" : 66,
-    "fragment" : "level"
-  } ]
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
 }
 
 
@@ -2083,5 +2073,63 @@ SELECT * FROM t1
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1 FROM t1
+    UNION ALL
+    SELECT n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE t1 AS (
+    SELECT 1 AS n FROM t1
+    UNION ALL
+    SELECT n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    WITH t2(m) AS (SELECT 1)
+    SELECT 1 FROM t1
+    UNION ALL
+    SELECT n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE t1 AS (
+    WITH t2(m) AS (SELECT 1)
+    SELECT 1 AS n FROM t1
+    UNION ALL
+    SELECT n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_CTE",
   "sqlState" : "42836"
 }

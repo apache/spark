@@ -52,12 +52,9 @@
       <artifactId>jackson-module-scala_${scala.binary.version}</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.commons</groupId>
-      <artifactId>commons-text</artifactId>
-    </dependency>
-    <dependency>
       <groupId>commons-io</groupId>
       <artifactId>commons-io</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.ivy</groupId>

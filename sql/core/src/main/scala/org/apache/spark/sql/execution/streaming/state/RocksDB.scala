@@ -21,13 +21,11 @@ import java.io.File
 import java.util.Locale
 import java.util.Set
 import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
-import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
 import scala.jdk.CollectionConverters.ConcurrentMapHasAsScala
-import scala.ref.WeakReference
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
@@ -158,8 +156,6 @@ class RocksDB(
   private val byteArrayPair = new ByteArrayPair()
   private val commitLatencyMs = new mutable.HashMap[String, Long]()
 
-  private val acquireLock = new Object
-
   @volatile private var db: NativeRocksDB = _
   @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
   private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
@@ -195,24 +191,14 @@ class RocksDB(
 
   // SPARK-46249 - Keep track of recorded metrics per version which can be used for querying later
   // Updates and access to recordedMetrics are protected by the DB instance lock
-  @GuardedBy("acquireLock")
   @volatile private var recordedMetrics: Option[RocksDBMetrics] = None
 
-  @GuardedBy("acquireLock")
-  @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
-
-  // This is accessed and updated only between load and commit
-  // which means it is implicitly guarded by acquireLock
-  @GuardedBy("acquireLock")
   private val colFamilyNameToInfoMap = new ConcurrentHashMap[String, ColumnFamilyInfo]()
 
-  @GuardedBy("acquireLock")
   private val colFamilyIdToNameMap = new ConcurrentHashMap[Short, String]()
 
-  @GuardedBy("acquireLock")
   private val maxColumnFamilyId: AtomicInteger = new AtomicInteger(-1)
 
-  @GuardedBy("acquireLock")
   private val shouldForceSnapshot: AtomicBoolean = new AtomicBoolean(false)
 
   private def getColumnFamilyInfo(cfName: String): ColumnFamilyInfo = {
@@ -300,11 +286,6 @@ class RocksDB(
     colFamilyNameToInfoMap.asScala.values.toSeq.count(_.isInternal == isInternal)
   }
 
-  // Mapping of local SST files to DFS files for file reuse.
-  // This mapping should only be updated using the Task thread - at version load and commit time.
-  // If same mapping instance is updated from different threads,
-  // it will result in undefined behavior (and most likely incorrect mapping state).
-  @GuardedBy("acquireLock")
   private val rocksDBFileMapping: RocksDBFileMapping = new RocksDBFileMapping()
 
   // We send snapshots that needs to be uploaded by the maintenance thread to this queue
@@ -584,7 +565,6 @@ class RocksDB(
       stateStoreCkptId: Option[String] = None,
       readOnly: Boolean = false): RocksDB = {
     assert(version >= 0)
-    acquire(LoadStore)
     recordedMetrics = None
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)} with stateStoreCkptId: ${
       MDC(LogKeys.UUID, stateStoreCkptId.getOrElse(""))}")
@@ -609,7 +589,6 @@ class RocksDB(
    */
   def loadFromSnapshot(snapshotVersion: Long, endVersion: Long): RocksDB = {
     assert(snapshotVersion >= 0 && endVersion >= snapshotVersion)
-    acquire(LoadStore)
     recordedMetrics = None
     logInfo(
       log"Loading snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
@@ -1025,11 +1004,7 @@ class RocksDB(
     }
   }
 
-  def release(): Unit = {
-    if (db != null) {
-      release(LoadStore)
-    }
-  }
+  def release(): Unit = {}
 
   /**
    * Commit all the updates made as a version to DFS. The steps it needs to do to commits are:
@@ -1111,10 +1086,6 @@ class RocksDB(
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded version
         throw t
-    } finally {
-      // reset resources as either 1) we already pushed the changes and it has been committed or
-      // 2) commit has failed and the current version is "invalidated".
-      release(LoadStore)
     }
   }
 
@@ -1198,23 +1169,18 @@ class RocksDB(
    * Drop uncommitted changes, and roll back to previous version.
    */
   def rollback(): Unit = {
-    acquire(RollbackStore)
-    try {
-      numKeysOnWritingVersion = numKeysOnLoadedVersion
-      numInternalKeysOnWritingVersion = numInternalKeysOnLoadedVersion
-      loadedVersion = -1L
-      lastCommitBasedStateStoreCkptId = None
-      lastCommittedStateStoreCkptId = None
-      loadedStateStoreCkptId = None
-      sessionStateStoreCkptId = None
-      lineageManager.clear()
-      changelogWriter.foreach(_.abort())
-      // Make sure changelogWriter gets recreated next time.
-      changelogWriter = None
-      logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
-    } finally {
-      release(RollbackStore)
-    }
+    numKeysOnWritingVersion = numKeysOnLoadedVersion
+    numInternalKeysOnWritingVersion = numInternalKeysOnLoadedVersion
+    loadedVersion = -1L
+    lastCommitBasedStateStoreCkptId = None
+    lastCommittedStateStoreCkptId = None
+    loadedStateStoreCkptId = None
+    sessionStateStoreCkptId = None
+    lineageManager.clear()
+    changelogWriter.foreach(_.abort())
+    // Make sure changelogWriter gets recreated next time.
+    changelogWriter = None
+    logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
   }
 
   def doMaintenance(): Unit = {
@@ -1246,7 +1212,6 @@ class RocksDB(
   /** Release all resources */
   def close(): Unit = {
     // Acquire DB instance lock and release at the end to allow for synchronized access
-    acquire(CloseStore)
     try {
       closeDB()
 
@@ -1268,8 +1233,6 @@ class RocksDB(
     } catch {
       case e: Exception =>
         logWarning("Error closing RocksDB", e)
-    } finally {
-      release(CloseStore)
     }
   }
 
@@ -1365,96 +1328,13 @@ class RocksDB(
    */
   def metricsOpt: Option[RocksDBMetrics] = {
     var rocksDBMetricsOpt: Option[RocksDBMetrics] = None
-    acquire(ReportStoreMetrics)
     try {
       rocksDBMetricsOpt = recordedMetrics
     } catch {
       case ex: Exception =>
         logInfo(log"Failed to acquire metrics with exception=${MDC(LogKeys.ERROR, ex)}")
-    } finally {
-      release(ReportStoreMetrics)
     }
     rocksDBMetricsOpt
-  }
-
-  /**
-   * Function to acquire RocksDB instance lock that allows for synchronized access to the state
-   * store instance
-   *
-   * @param opType - operation type requesting the lock
-   */
-  private def acquire(opType: RocksDBOpType): Unit = acquireLock.synchronized {
-    val newAcquiredThreadInfo = AcquiredThreadInfo()
-    val waitStartTime = System.nanoTime()
-    def timeWaitedMs = {
-      val elapsedNanos = System.nanoTime() - waitStartTime
-      TimeUnit.MILLISECONDS.convert(elapsedNanos, TimeUnit.NANOSECONDS)
-    }
-    def isAcquiredByDifferentThread = acquiredThreadInfo != null &&
-      acquiredThreadInfo.threadRef.get.isDefined &&
-      newAcquiredThreadInfo.threadRef.get.get.getId != acquiredThreadInfo.threadRef.get.get.getId
-
-    while (isAcquiredByDifferentThread && timeWaitedMs < conf.lockAcquireTimeoutMs) {
-      acquireLock.wait(10)
-    }
-    if (isAcquiredByDifferentThread) {
-      val stackTraceOutput = acquiredThreadInfo.threadRef.get.get.getStackTrace.mkString("\n")
-      throw QueryExecutionErrors.unreleasedThreadError(loggingId, opType.toString,
-        newAcquiredThreadInfo.toString(), acquiredThreadInfo.toString(), timeWaitedMs,
-        stackTraceOutput)
-    } else {
-      acquiredThreadInfo = newAcquiredThreadInfo
-      // Add a listener to always release the lock when the task (if active) completes
-      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] {
-        _ => this.release(StoreTaskCompletionListener, Some(newAcquiredThreadInfo))
-      })
-      logInfo(log"RocksDB instance was acquired by " +
-        log"ownerThread=${MDC(LogKeys.THREAD, acquiredThreadInfo)} " +
-        log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
-    }
-  }
-
-  /**
-   * Function to release RocksDB instance lock that allows for synchronized access to the state
-   * store instance. Optionally provide a thread to check against, and release only if provided
-   * thread is the one that acquired the lock.
-   *
-   * @param opType - operation type releasing the lock
-   * @param releaseForThreadOpt - optional thread to check against acquired thread
-   */
-  private def release(
-      opType: RocksDBOpType,
-      releaseForThreadOpt: Option[AcquiredThreadInfo] = None): Unit = acquireLock.synchronized {
-    if (acquiredThreadInfo != null) {
-      val release = releaseForThreadOpt match {
-        case Some(releaseForThread) if releaseForThread.threadRef.get.isEmpty =>
-          logInfo(log"Thread reference is empty when attempting to release for " +
-            log"opType=${MDC(LogKeys.OP_TYPE, opType.toString)}, ignoring release. " +
-            log"Lock is held by ownerThread=${MDC(LogKeys.THREAD, acquiredThreadInfo)}")
-          false
-        // NOTE: we compare the entire acquiredThreadInfo object to ensure that we are
-        // releasing not only for the right thread but the right task as well. This is
-        // inconsistent with the logic for acquire which uses only the thread ID, consider
-        // updating this in future.
-        case Some(releaseForThread) if acquiredThreadInfo != releaseForThread =>
-          logInfo(log"Thread info for " +
-            log"releaseThread=${MDC(LogKeys.THREAD, releaseForThreadOpt.get)} " +
-            log"does not match the acquired thread when attempting to " +
-            log"release for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}, ignoring release. " +
-            log"Lock is held by ownerThread=${MDC(LogKeys.THREAD, acquiredThreadInfo)}")
-          false
-        case _ => true
-      }
-
-      if (release) {
-        logInfo(log"RocksDB instance was released by " +
-          log"releaseThread=${MDC(LogKeys.THREAD, AcquiredThreadInfo())} " +
-          log"with ownerThread=${MDC(LogKeys.THREAD, acquiredThreadInfo)} " +
-          log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
-        acquiredThreadInfo = null
-        acquireLock.notifyAll()
-      }
-    }
   }
 
   private def getDBProperty(property: String): Long = db.getProperty(property).toLong
@@ -1478,11 +1358,6 @@ class RocksDB(
       }
       db = null
     }
-  }
-
-  private[state] def getAcquiredThreadInfo(): Option[AcquiredThreadInfo] =
-      acquireLock.synchronized {
-    Option(acquiredThreadInfo).map(_.copy())
   }
 
   /** Upload the snapshot to DFS and remove it from snapshots pending */
@@ -2056,21 +1931,6 @@ object RocksDBNativeHistogram {
       nativeHist.getPercentile95,
       nativeHist.getPercentile99,
       nativeHist.getCount)
-  }
-}
-
-case class AcquiredThreadInfo(
-    threadRef: WeakReference[Thread] = new WeakReference[Thread](Thread.currentThread()),
-    tc: TaskContext = TaskContext.get()) {
-  override def toString(): String = {
-    val taskStr = if (tc != null) {
-      val taskDetails =
-        s"partition ${tc.partitionId()}.${tc.attemptNumber()} in stage " +
-          s"${tc.stageId()}.${tc.stageAttemptNumber()}, TID ${tc.taskAttemptId()}"
-      s", task: $taskDetails"
-    } else ""
-
-    s"[ThreadId: ${threadRef.get.map(_.getId)}$taskStr]"
   }
 }
 

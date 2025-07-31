@@ -701,13 +701,15 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
 
         # TODO: should we handle timezone here?
 
-        try:
+        if arr.type == arrow_type:
             return arr
-        except pa.lib.ArrowException:
-            if arrow_cast:
-                return arr.cast(target_type=arrow_type, safe=self._safecheck)
-            else:
-                raise
+        elif arrow_cast:
+            return arr.cast(target_type=arrow_type, safe=self._safecheck)
+        else:
+            raise PySparkTypeError(
+                "Arrow UDFs require the return type to match the expected Arrow type. "
+                f"Expected: {arrow_type}, but got: {arr.type}."
+            )
 
     def dump_stream(self, iterator, stream):
         """
@@ -793,7 +795,7 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
         for batch in super().load_stream(stream):
             columns = [
                 [conv(v) for v in column.to_pylist()] if conv is not None else column.to_pylist()
-                for column, conv in zip(batch.itercolumns(), converters)
+                for column, conv in zip(batch.columns, converters)
             ]
             if len(columns) == 0:
                 yield [[pyspark._NoValue] * batch.num_rows]
@@ -844,7 +846,7 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
     Serializer used by Python worker to evaluate Arrow-optimized Python UDTFs.
     """
 
-    def __init__(self, timezone, safecheck, int_to_decimal_coercion_enabled):
+    def __init__(self, timezone, safecheck, input_types, int_to_decimal_coercion_enabled):
         super(ArrowStreamPandasUDTFSerializer, self).__init__(
             timezone=timezone,
             safecheck=safecheck,
@@ -864,6 +866,7 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
             ndarray_as_list=True,
             # Enables explicit casting for mismatched return types of Arrow Python UDTFs.
             arrow_cast=True,
+            input_types=input_types,
             # Enable additional coercions for UDTF serialization
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
         )
@@ -888,35 +891,44 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
         import pandas as pd
         import pyarrow as pa
 
-        # Make input conform to [(series1, type1), (series2, type2), ...]
-        if not isinstance(series, (list, tuple)) or (
-            len(series) == 2 and isinstance(series[1], pa.DataType)
+        # Make input conform to
+        # [(series1, arrow_type1, spark_type1), (series2, arrow_type2, spark_type2), ...]
+        if (
+            not isinstance(series, (list, tuple))
+            or (len(series) == 2 and isinstance(series[1], pa.DataType))
+            or (
+                len(series) == 3
+                and isinstance(series[1], pa.DataType)
+                and isinstance(series[2], DataType)
+            )
         ):
             series = [series]
         series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
+        series = ((s[0], s[1], None) if len(s) == 2 else s for s in series)
 
         arrs = []
-        for s, t in series:
+        for s, arrow_type, spark_type in series:
             if not isinstance(s, pd.DataFrame):
                 raise PySparkValueError(
                     "Output of an arrow-optimized Python UDTFs expects "
                     f"a pandas.DataFrame but got: {type(s)}"
                 )
 
-            arrs.append(self._create_struct_array(s, t))
+            arrs.append(self._create_struct_array(s, arrow_type, spark_type))
 
         return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
 
     def _get_or_create_converter_from_pandas(self, dt):
-        if dt not in self._converter_map:
+        key = dt.json()
+        if key not in self._converter_map:
             conv = _create_converter_from_pandas(
                 dt,
                 timezone=self._timezone,
                 error_on_duplicated_field_names=False,
                 ignore_unexpected_complex_type_values=True,
             )
-            self._converter_map[dt] = conv
-        return self._converter_map[dt]
+            self._converter_map[key] = conv
+        return self._converter_map[key]
 
     def _create_array(self, series, arrow_type, spark_type=None, arrow_cast=False):
         """

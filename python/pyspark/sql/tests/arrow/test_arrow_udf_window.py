@@ -17,7 +17,7 @@
 
 import unittest
 
-from pyspark.sql.pandas.functions import arrow_udf, ArrowUDFType
+from pyspark.sql.functions import arrow_udf, ArrowUDFType
 from pyspark.util import PythonEvalType
 from pyspark.sql import functions as sf
 from pyspark.sql.window import Window
@@ -548,6 +548,41 @@ class WindowArrowUDFTestsMixin:
                                 func_call="weighted_mean(v => v, w)", window_spec=window_spec
                             )
                         ).show()
+
+    def test_return_type_coercion(self):
+        import pyarrow as pa
+
+        df = self.spark.range(10).withColumn("v", sf.lit(1))
+        w = Window.partitionBy("id").orderBy("v")
+
+        @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
+        def agg_long(id: pa.Array) -> int:
+            assert isinstance(id, pa.Array), str(type(id))
+            return pa.scalar(value=len(id), type=pa.int64())
+
+        result1 = df.select(agg_long("v").over(w).alias("res"))
+        self.assertEqual(10, len(result1.collect()))
+
+        # long -> int coercion
+        @arrow_udf("int", ArrowUDFType.GROUPED_AGG)
+        def agg_int1(id: pa.Array) -> int:
+            assert isinstance(id, pa.Array), str(type(id))
+            return pa.scalar(value=len(id), type=pa.int64())
+
+        result2 = df.select(agg_int1("v").over(w).alias("res"))
+        self.assertEqual(10, len(result2.collect()))
+
+        # long -> int coercion, overflow
+        @arrow_udf("int", ArrowUDFType.GROUPED_AGG)
+        def agg_int2(id: pa.Array) -> int:
+            assert isinstance(id, pa.Array), str(type(id))
+            return pa.scalar(value=len(id) + 2147483647, type=pa.int64())
+
+        result3 = df.select(agg_int2("id").alias("res"))
+        with self.assertRaises(Exception):
+            # pyarrow.lib.ArrowInvalid:
+            # Integer value 2147483657 not in range: -2147483648 to 2147483647
+            result3.collect()
 
 
 class WindowArrowUDFTests(WindowArrowUDFTestsMixin, ReusedSQLTestCase):

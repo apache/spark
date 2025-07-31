@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -24,11 +25,16 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
+
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set(SQLConf.ANSI_ENABLED, true)
+
   val attrInts = Seq(
     $"cint".int,
     $"`c.int`".int,

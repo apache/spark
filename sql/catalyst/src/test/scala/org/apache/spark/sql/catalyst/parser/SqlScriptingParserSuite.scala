@@ -323,7 +323,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_NAME_FORBIDDEN",
+      condition = "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN",
       parameters = Map("label" -> toSQLId("system")))
     assert(exception.origin.line.contains(3))
   }
@@ -345,7 +345,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_NAME_FORBIDDEN",
+      condition = "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN",
       parameters = Map("label" -> toSQLId("sysxyz")))
     assert(exception.origin.line.contains(3))
   }
@@ -367,7 +367,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_NAME_FORBIDDEN",
+      condition = "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN",
       parameters = Map("label" -> toSQLId("session")))
     assert(exception.origin.line.contains(3))
   }
@@ -389,7 +389,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_NAME_FORBIDDEN",
+      condition = "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN",
       parameters = Map("label" -> toSQLId("builtin")))
     assert(exception.origin.line.contains(3))
   }
@@ -411,7 +411,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_NAME_FORBIDDEN",
+      condition = "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN",
       parameters = Map("label" -> toSQLId("system")))
     assert(exception.origin.line.contains(3))
   }
@@ -433,7 +433,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_NAME_FORBIDDEN",
+      condition = "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN",
       parameters = Map("label" -> toSQLId("session")))
     assert(exception.origin.line.contains(3))
   }
@@ -2012,7 +2012,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("lbl")))
   }
 
@@ -2031,7 +2031,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("lbl")))
   }
 
@@ -2050,7 +2050,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("lbl")))
   }
 
@@ -2092,7 +2092,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("lbl_1")))
   }
 
@@ -2111,7 +2111,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("lbl")))
   }
 
@@ -2130,7 +2130,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("lbl")))
   }
 
@@ -2149,7 +2149,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("w_loop")))
   }
 
@@ -2170,7 +2170,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("r_loop")))
   }
 
@@ -2189,7 +2189,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("l_loop")))
   }
 
@@ -2208,7 +2208,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("f_loop")))
   }
 
@@ -2334,6 +2334,130 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     // For statement
     val forStatement = repeatStatement.body.collection.head.asInstanceOf[ForStatement]
     assert(forStatement.label.get == "lbl_4")
+  }
+
+  test("for variable not the same as labels in scope") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  L1: BEGIN
+        |    L2: BEGIN
+        |      L3: FOR L4 AS SELECT 1 DO
+        |        SELECT 1;
+        |        FOR L5 AS SELECT 3 DO
+        |          BEGIN
+        |            SELECT L4;
+        |          END;
+        |         SELECT 4;
+        |        END FOR;
+        |      END FOR L3;
+        |    END L2;
+        |    L4: BEGIN
+        |      SELECT 3;
+        |    END L4;
+        |  END L1;
+        |END""".stripMargin
+
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[CompoundBody])
+  }
+
+  test("for variable name is the same as a label in scope - should fail") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  L1: BEGIN
+        |    L2: BEGIN
+        |      L3: FOR L2 AS SELECT 1 DO
+        |        SELECT 1;
+        |        SELECT 2;
+        |      END FOR L3;
+        |    END L2;
+        |    L4: BEGIN
+        |      SELECT 3;
+        |    END L4;
+        |  END L1;
+        |END""".stripMargin
+
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
+      parameters = Map("label" -> "`l2`"))
+  }
+
+  test("for variable name is the same as the label of the for loop - should fail") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  L1: FOR L1 AS SELECT 1 DO
+        |    SELECT 2;
+        |  END FOR L1;
+        |END""".stripMargin
+
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
+      parameters = Map("label" -> "`l1`"))
+  }
+
+  test("label name is the same as the for loop variable name - should fail") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  FOR L1 AS SELECT 1 DO
+        |    L1: BEGIN
+        |      SELECT 2;
+        |    END L1;
+        |  END FOR;
+        |END""".stripMargin
+
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
+      parameters = Map("label" -> "`l1`"))
+  }
+
+  test("nested for loop variable names are the same - should fail") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  FOR L1 AS SELECT 1 DO
+        |    FOR L1 AS SELECT 2 DO
+        |     SELECT 3;
+        |    END FOR;
+        |  END FOR;
+        |END""".stripMargin
+
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
+      parameters = Map("label" -> "`l1`"))
+  }
+
+  test("for loop variable names are the same but for loops are not nested") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  FOR L1 AS SELECT 1 DO
+        |    SELECT 2;
+        |  END FOR;
+        |  FOR L1 AS SELECT 3 DO
+        |    SELECT 4;
+        |  END FOR;
+        |END""".stripMargin
+
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.collection.length == 2)
+    assert(tree.collection.forall(_.isInstanceOf[ForStatement]))
   }
 
   test("for statement") {

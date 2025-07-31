@@ -104,12 +104,29 @@ Project [b#x, b#x AS c#x]
 
 
 -- !query
+SELECT STRUCT(col1 AS a) AS b, b AS c FROM VALUES(1)
+-- !query analysis
+Project [b#x, b#x AS c#x]
++- Project [col1#x, struct(a, col1#x) AS b#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
 SELECT STRUCT(1 AS a) AS b, b AS c GROUP BY b
 -- !query analysis
 Project [b#x, b#x AS c#x]
 +- Project [struct(1)#x, struct(1)#x AS b#x]
    +- Aggregate [struct(a, 1)], [struct(a, 1) AS struct(1)#x]
       +- OneRowRelation
+
+
+-- !query
+SELECT STRUCT(col1 AS a) AS b, b AS c FROM VALUES(1) GROUP BY b
+-- !query analysis
+Project [b#x, b#x AS c#x]
++- Project [struct(col1)#x, struct(col1)#x AS b#x]
+   +- Aggregate [struct(a, col1#x)], [struct(a, col1#x) AS struct(col1)#x]
+      +- LocalRelation [col1#x]
 
 
 -- !query

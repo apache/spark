@@ -282,10 +282,20 @@ This file is divided into 3 sections:
       scala.jdk.CollectionConverters._ and use .asScala / .asJava methods</customMessage>
   </check>
 
+  <check customId="readFileToByteArray" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileUtils\.readFileToByteArray</parameter></parameters>
+    <customMessage>Use java.nio.file.Files.readAllBytes</customMessage>
+  </check>
+
   <check customId="commonslang2" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.lang\.</parameter></parameters>
     <customMessage>Use Commons Lang 3 classes (package org.apache.commons.lang3.*) instead
     of Commons Lang 2 (package org.apache.commons.lang.*)</customMessage>
+  </check>
+
+  <check customId="writeStringToFile" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileUtils\.writeStringToFile</parameter></parameters>
+    <customMessage>Use java.nio.file.Files.writeString instead.</customMessage>
   </check>
 
   <check customId="commonslang3javaversion" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
@@ -312,6 +322,26 @@ This file is divided into 3 sections:
   <check customId="commonslang3isblankorempty" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">[^k]StringUtils.is(Not)?(Blank|Empty)</parameter></parameters>
     <customMessage>Use Utils.is(Not)?(Blank|Empty) instead</customMessage>
+  </check>
+
+  <check customId="commonslang3strings" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.commons\.lang3\.Strings</parameter></parameters>
+    <customMessage>Use Java String methods instead</customMessage>
+  </check>
+
+  <check customId="commonslang3strip" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">StringUtils\.strip\(</parameter></parameters>
+    <customMessage>Use Utils.strip method instead</customMessage>
+  </check>
+
+  <check customId="commonstextstringsubstitutor" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.commons\.text\.StringSubstitutor</parameter></parameters>
+    <customMessage>Use org.apache.spark.StringSubstitutor instead</customMessage>
+  </check>
+
+  <check customId="commonslang3abbreviate" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">StringUtils\.abbreviate\(</parameter></parameters>
+    <customMessage>Use Utils.abbreviate method instead</customMessage>
   </check>
 
   <check customId="uribuilder" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
@@ -495,5 +525,10 @@ This file is divided into 3 sections:
   <check customId="configName" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">buildConf\("spark.databricks.</parameter></parameters>
     <customMessage>Use Apache Spark config namespace.</customMessage>
+  </check>
+
+  <check customId="googleStrings" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">com\.google\.common\.base\.Strings</parameter></parameters>
+    <customMessage>Use Java built-in methods or SparkStringUtils instead</customMessage>
   </check>
 </scalastyle>

@@ -1183,20 +1183,10 @@ org.apache.spark.sql.AnalysisException
 WITH RECURSIVE x(n) AS (SELECT n FROM x UNION ALL SELECT 1)
 	SELECT * FROM x
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`n`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 32,
-    "stopIndex" : 32,
-    "fragment" : "n"
-  } ]
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
 }
 
 

@@ -440,6 +440,15 @@ object SQLConf {
       .intConf
       .createWithDefault(3)
 
+  val PRESERVE_ALIAS_METADATA_WHEN_COLLAPSING_PROJECTS =
+    buildConf("spark.sql.optimizer.preserveAliasMetadataWhenCollapsingProjects")
+    .internal()
+    .doc("When true, make sure to explicitly copy the metadata of the aliases from lower " +
+      "project list.")
+    .version("4.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
       "specified by their rule names and separated by comma. It is not guaranteed that all the " +
@@ -2682,6 +2691,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val STATE_STORE_COMMIT_VALIDATION_ENABLED =
+    buildConf("spark.sql.streaming.stateStore.commitValidation.enabled")
+      .doc("When true, Spark will validate that all StateStore instances have committed for " +
+        "stateful streaming queries using foreachBatch. This helps detect cases where " +
+        "user-defined functions in foreachBatch (e.g., show(), limit()) don't process all " +
+        "partitions, which can lead to incorrect results. The validation only applies to " +
+        "foreachBatch sinks without global aggregates or limits.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val CHECKPOINT_RENAMEDFILE_CHECK_ENABLED =
     buildConf("spark.sql.streaming.checkpoint.renamedFileCheck.enabled")
       .doc("When true, Spark will validate if renamed checkpoint file exists.")
@@ -3999,7 +4019,7 @@ object SQLConf {
         "check and do type conversions anyway. This config only works for Arrow 0.11.0+.")
       .version("3.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PYSPARK_WORKER_PYTHON_EXECUTABLE =
     buildConf("spark.sql.execution.pyspark.python")
@@ -6014,6 +6034,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val UNION_OUTPUT_PARTITIONING =
+    buildConf("spark.sql.unionOutputPartitioning")
+      .internal()
+      .doc("When set to true, the output partitioning of UnionExec will be the same as the " +
+        "input partitioning if its children have same partitioning. Otherwise, it will be a " +
+        "default partitioning.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_PARSE_QUERY_WITHOUT_EOF = buildConf("spark.sql.legacy.parseQueryWithoutEof")
     .internal()
     .doc(
@@ -6166,6 +6196,21 @@ object SQLConf {
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  val LEGACY_TRUNCATE_FOR_EMPTY_REGEX_SPLIT =
+    buildConf("spark.sql.legacy.truncateForEmptyRegexSplit")
+      .internal()
+      .doc("When set to true, splitting a string of length n using an empty regex with a " +
+        "positive limit discards the last n - limit characters." +
+        "For example: SELECT split('abcd', '', 2) returns ['a', 'b']." +
+        "When set to false, the last element of the resulting array contains all input beyond " +
+        "the last matched regex." +
+        "For example: SELECT split('abcd', '', 2) returns ['a', 'bcd']." +
+        "According to the description of the split function, this should be set to false by " +
+        "default. See SPARK-49968 for details.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -6517,6 +6562,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def maxBatchesToRetainInMemory: Int = getConf(MAX_BATCHES_TO_RETAIN_IN_MEMORY)
 
   def stateStoreUnloadOnCommit: Boolean = getConf(STATE_STORE_UNLOAD_ON_COMMIT)
+
+  def stateStoreCommitValidationEnabled: Boolean = getConf(STATE_STORE_COMMIT_VALIDATION_ENABLED)
 
   def streamingMaintenanceInterval: Long = getConf(STREAMING_MAINTENANCE_INTERVAL)
 

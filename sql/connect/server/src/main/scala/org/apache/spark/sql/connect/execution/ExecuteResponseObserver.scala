@@ -260,6 +260,11 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
     finalProducedIndex.isDefined
   }
 
+  // Returns if this observer has already been cleaned
+  def isCleaned(): Boolean = responseLock.synchronized {
+    completed() && responses.isEmpty
+  }
+
   // For testing.
   private[connect] def undoCompletion(): Unit = responseLock.synchronized {
     finalProducedIndex = None

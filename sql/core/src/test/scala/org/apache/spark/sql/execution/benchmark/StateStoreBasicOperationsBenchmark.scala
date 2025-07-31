@@ -465,9 +465,11 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     val storeId = StateStoreId(newDir(), Random.nextInt(), 0)
     val provider = new HDFSBackedStateStoreProvider()
     val storeConf = new StateStoreConf(new SQLConf())
+    val configuration = new Configuration
+    configuration.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
     provider.init(
       storeId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-      useColumnFamilies = false, storeConf, new Configuration)
+      useColumnFamilies = false, storeConf, configuration)
     provider
   }
 

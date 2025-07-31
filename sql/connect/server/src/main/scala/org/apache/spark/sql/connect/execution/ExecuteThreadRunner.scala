@@ -23,7 +23,6 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.protobuf.Message
-import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
@@ -209,16 +208,14 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
             tag))
       }
       session.sparkContext.setJobDescription(
-        s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
+        s"Spark Connect - ${Utils.abbreviate(debugString, 128)}")
       session.sparkContext.setInterruptOnCancel(true)
 
       // Add debug information to the query execution so that the jobs are traceable.
       session.sparkContext.setLocalProperty(
         "callSite.short",
-        s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
-      session.sparkContext.setLocalProperty(
-        "callSite.long",
-        StringUtils.abbreviate(debugString, 2048))
+        s"Spark Connect - ${Utils.abbreviate(debugString, 128)}")
+      session.sparkContext.setLocalProperty("callSite.long", Utils.abbreviate(debugString, 2048))
 
       executeHolder.request.getPlan.getOpTypeCase match {
         case proto.Plan.OpTypeCase.COMMAND => handleCommand(executeHolder.request)

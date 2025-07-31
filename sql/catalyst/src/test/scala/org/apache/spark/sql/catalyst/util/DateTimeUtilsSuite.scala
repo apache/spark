@@ -766,6 +766,43 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("SPARK-51554: time truncation using timeTrunc") {
+    // 01:02:03.400500600
+    val input = localTimeToNanos(LocalTime.of(1, 2, 3, 400500600))
+    // Truncate the minutes, seconds, and fractions of seconds. Result is: 01:00:00.
+    assert(DateTimeUtils.timeTrunc(UTF8String.fromString("HOUR"), input) === 3600000000000L)
+    // Truncate the seconds and fractions of seconds. Result is: 01:02:00.
+    assert(DateTimeUtils.timeTrunc(UTF8String.fromString("MINUTE"), input) === 3720000000000L)
+    // Truncate the fractions of seconds. Result is: 01:02:03.
+    assert(DateTimeUtils.timeTrunc(UTF8String.fromString("SECOND"), input) === 3723000000000L)
+    // Truncate the milliseconds. Result is: 01:02:03.400.
+    assert(DateTimeUtils.timeTrunc(UTF8String.fromString("MILLISECOND"), input) === 3723400000000L)
+    // Truncate the microseconds. Result is: 01:02:03.400500.
+    assert(DateTimeUtils.timeTrunc(UTF8String.fromString("MICROSECOND"), input) === 3723400500000L)
+
+    // 00:00:00
+    val midnight = localTimeToNanos(LocalTime.MIDNIGHT)
+    // Midnight time remains the same for any truncation.
+    assert(DateTimeUtils.timeTrunc(UTF8String.fromString("HOUR"), midnight) === 0)
+    assert(DateTimeUtils.timeTrunc(UTF8String.fromString("MINUTE"), midnight) === 0)
+    assert(DateTimeUtils.timeTrunc(UTF8String.fromString("SECOND"), midnight) === 0)
+    assert(DateTimeUtils.timeTrunc(UTF8String.fromString("MILLISECOND"), midnight) === 0)
+    assert(DateTimeUtils.timeTrunc(UTF8String.fromString("MICROSECOND"), midnight) === 0)
+
+    // Unsupported truncation levels.
+    Seq("DAY", "WEEK", "MONTH", "QUARTER", "YEAR", "INVALID", "ABC", "XYZ", "MS", " ", "").
+        map(UTF8String.fromString).foreach { level =>
+      intercept[IllegalArgumentException] {
+        DateTimeUtils.timeTrunc(level, input)
+        DateTimeUtils.timeTrunc(level, midnight)
+      }
+    }
+    // Null truncation level is not allowed.
+    intercept[AssertionError] {
+      DateTimeUtils.timeTrunc(null, input)
+    }
+  }
+
   test("SPARK-35664: microseconds to LocalDateTime") {
     assert(microsToLocalDateTime(0) == LocalDateTime.parse("1970-01-01T00:00:00"))
     assert(microsToLocalDateTime(100) == LocalDateTime.parse("1970-01-01T00:00:00.0001"))
@@ -1310,6 +1347,33 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         parameters = Map("rangeMessage" ->
           s"Invalid value for SecondOfMinute (valid values 0 - 59): ${invalidSecond.toLong}"))
     }
+  }
+
+  test("SPARK-51415: makeTimestamp with days, nanos, and zoneId") {
+    Seq(
+      (MIT, -34200000000L), // -09:30
+      (PST, -28800000000L), // -08:00
+      (UTC, 0L), // +00:00
+      (CET, 3600000000L), // +01:00
+      (JST, 32400000000L) // +09:00
+    ).foreach({ case (zoneId: ZoneId, microsOffset: Long) =>
+      assert(makeTimestamp(0, 0, zoneId) ==
+        0 - microsOffset)
+      assert(makeTimestamp(0, localTime(23, 59, 59), zoneId) * NANOS_PER_MICROS ==
+        localTime(23, 59, 59) - microsOffset * NANOS_PER_MICROS)
+      assert(makeTimestamp(-1, 0, zoneId) ==
+        -1 * MICROS_PER_DAY - microsOffset)
+      assert(makeTimestamp(-1, localTime(23, 59, 59, 999999), zoneId) ==
+        -1 - microsOffset)
+      assert(makeTimestamp(days(9999, 12, 31), localTime(23, 59, 59, 999999), zoneId) ==
+        date(9999, 12, 31, 23, 59, 59, 999999) - microsOffset)
+      assert(makeTimestamp(days(1, 1, 1), localTime(0, 0, 0), zoneId) ==
+        date(1, 1, 1, 0, 0, 0) - microsOffset)
+      val msg = intercept[DateTimeException] {
+        makeTimestamp(0, -1, zoneId)
+      }.getMessage
+      assert(msg.contains("Invalid value"))
+    })
   }
 
   test("makeTimestampNTZ") {

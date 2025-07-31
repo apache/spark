@@ -48,6 +48,7 @@ class ArrowPythonUDTFRunner(
   with BasicPythonArrowOutput {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
+    PythonWorkerUtils.writeUTF(schema.json, dataOut)
     PythonUDTFRunner.writeUDTF(dataOut, udtf, argMetas)
   }
 

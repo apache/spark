@@ -33,7 +33,7 @@ SDP is designed for both batch and streaming data processing, supporting common 
 
 The key advantage of SDP is its declarative approach - you define what tables should exist and what their contents should be, and SDP handles the orchestration, compute management, and error handling automatically.
 
-![Dataflow Graph](../img/declarative-pipelines-dataflow-graph.png)
+![Dataflow Graph](img/declarative-pipelines-dataflow-graph.png)
 
 ## Key Concepts
 
