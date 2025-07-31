@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.io.{Closeable, File}
+import java.io.File
 import java.util.UUID
 
 import org.apache.hadoop.conf.Configuration

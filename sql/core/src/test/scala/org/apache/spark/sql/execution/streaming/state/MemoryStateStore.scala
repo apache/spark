@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.io.Closeable
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
