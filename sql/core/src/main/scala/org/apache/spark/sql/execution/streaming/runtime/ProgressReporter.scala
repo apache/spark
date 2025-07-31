@@ -21,6 +21,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.{Optional, UUID}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -55,6 +56,8 @@ class ProgressReporter(
 
   // The timestamp we report an event that has not executed anything
   var lastNoExecutionProgressEventTime = Long.MinValue
+
+  val shouldValidateStateStoreCommit = new AtomicBoolean(false)
 
   /** Holds the most recent query progress updates.  Accesses must lock on the queue itself. */
   private val progressBuffer = new mutable.Queue[StreamingQueryProgress]()
@@ -277,6 +280,15 @@ abstract class ProgressContext(
       currentTriggerStartOffsets != null && currentTriggerEndOffsets != null &&
         currentTriggerLatestOffsets != null
     )
+
+    // Only validate commits if enabled and the query has stateful operators
+    if (progressReporter.shouldValidateStateStoreCommit.get()) {
+      progressReporter.stateStoreCoordinator.validateStateStoreCommitForBatch(
+        lastExecution.runId,
+        lastExecution.currentBatchId
+      )
+    }
+
     currentTriggerEndTimestamp = triggerClock.getTimeMillis()
     val processingTimeMills = currentTriggerEndTimestamp - currentTriggerStartTimestamp
     assert(lastExecution != null, "executed batch should provide the information for execution.")

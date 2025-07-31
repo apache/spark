@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import scala.collection.mutable
 
@@ -124,13 +125,13 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
     val foundMatch = dir.exists() && isApproved(dir, simplified, explain)
 
     if (!foundMatch) {
-      FileUtils.deleteDirectory(dir)
+      Utils.deleteRecursively(dir)
       assert(Utils.createDirectory(dir))
 
       val file = new File(dir, "simplified.txt")
-      FileUtils.writeStringToFile(file, simplified, StandardCharsets.UTF_8)
+      Files.writeString(file.toPath(), simplified, StandardCharsets.UTF_8)
       val fileOriginalPlan = new File(dir, "explain.txt")
-      FileUtils.writeStringToFile(fileOriginalPlan, explain, StandardCharsets.UTF_8)
+      Files.writeString(fileOriginalPlan.toPath(), explain, StandardCharsets.UTF_8)
       logDebug(s"APPROVED: $file $fileOriginalPlan")
     }
   }
@@ -152,8 +153,8 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
       val approvedSimplified = FileUtils.readFileToString(
         approvedSimplifiedFile, StandardCharsets.UTF_8)
       // write out for debugging
-      FileUtils.writeStringToFile(actualSimplifiedFile, actualSimplified, StandardCharsets.UTF_8)
-      FileUtils.writeStringToFile(actualExplainFile, explain, StandardCharsets.UTF_8)
+      Files.writeString(actualSimplifiedFile.toPath(), actualSimplified, StandardCharsets.UTF_8)
+      Files.writeString(actualExplainFile.toPath(), explain, StandardCharsets.UTF_8)
 
       fail(
         s"""

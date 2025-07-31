@@ -342,6 +342,7 @@
 | org.apache.spark.sql.catalyst.expressions.Subtract | - | SELECT 2 - 1 | struct<(2 - 1):int> |
 | org.apache.spark.sql.catalyst.expressions.Tan | tan | SELECT tan(0) | struct<TAN(0):double> |
 | org.apache.spark.sql.catalyst.expressions.Tanh | tanh | SELECT tanh(0) | struct<TANH(0):double> |
+| org.apache.spark.sql.catalyst.expressions.TimeDiff | time_diff | SELECT time_diff('HOUR', TIME'20:30:29', TIME'21:30:28') | struct<time_diff(HOUR, TIME '20:30:29', TIME '21:30:28'):bigint> |
 | org.apache.spark.sql.catalyst.expressions.TimeTrunc | time_trunc | SELECT time_trunc('HOUR', TIME'09:32:05.359') | struct<time_trunc(HOUR, TIME '09:32:05.359'):time(6)> |
 | org.apache.spark.sql.catalyst.expressions.TimeWindow | window | SELECT a, window.start, window.end, count(*) as cnt FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'), ('A1', '2021-01-01 00:06:00'), ('A2', '2021-01-01 00:01:00') AS tab(a, b) GROUP by a, window(b, '5 minutes') ORDER BY a, start | struct<a:string,start:timestamp,end:timestamp,cnt:bigint> |
 | org.apache.spark.sql.catalyst.expressions.ToBinary | to_binary | SELECT to_binary('abc', 'utf-8') | struct<to_binary(abc, utf-8):binary> |

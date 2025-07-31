@@ -29,7 +29,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.{SparkContext, SparkThrowable, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{DEFAULT_ISOLATION_LEVEL, ISOLATION_LEVEL}
@@ -400,6 +400,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
         }
       }
     }
+  }
+
+  def createSchemaFetchMetric(sparkContext: SparkContext): SQLMetric = {
+    SQLMetrics.createNanoTimingMetric(
+      sparkContext,
+      JDBCRelation.schemaFetchName
+    )
   }
 
   // A `JDBCValueGetter` is responsible for getting a value from `ResultSet` into a field

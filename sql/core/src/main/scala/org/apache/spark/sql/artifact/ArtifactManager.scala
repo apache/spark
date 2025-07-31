@@ -524,7 +524,7 @@ object ArtifactManager extends Logging {
 
     // Clean up artifacts folder
     try {
-      FileUtils.deleteDirectory(artifactPath.toFile)
+      Utils.deleteRecursively(artifactPath.toFile)
     } catch {
       case e: IOException =>
         logWarning(log"Failed to delete directory ${MDC(LogKeys.PATH, artifactPath.toFile)}: " +

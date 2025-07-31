@@ -404,7 +404,7 @@ class Dataset[T] private[sql](
       }
 
       // Create SeparateLine
-      val sep: String = colWidths.map("-" * _).addString(sb, "+", "+", "+\n").toString()
+      val sep: String = colWidths.map("-".repeat(_)).addString(sb, "+", "+", "+\n").toString()
 
       // column names
       paddedRows.head.addString(sb, "|", "|", "|\n")

@@ -183,8 +183,6 @@ class BaseUDTFTestsMixin:
                 yield 1,
                 yield 2,
 
-        self.spark.udtf.register("testUDTF", TestUDTF)
-
         assertDataFrameEqual(
             self.spark.range(3, numPartitions=1).lateralJoin(TestUDTF()),
             [
@@ -194,6 +192,21 @@ class BaseUDTFTestsMixin:
                 Row(id=1, a=2),
                 Row(id=2, a=1),
                 Row(id=2, a=2),
+            ],
+        )
+
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, i: int):
+                for n in range(i):
+                    yield n,
+
+        assertDataFrameEqual(
+            self.spark.range(3, numPartitions=1).lateralJoin(TestUDTF(col("id").outer())),
+            [
+                Row(id=1, a=0),
+                Row(id=2, a=0),
+                Row(id=2, a=1),
             ],
         )
 

@@ -1289,7 +1289,6 @@ def use_legacy_pandas_udf_conversion(runner_conf):
 def read_udtf(pickleSer, infile, eval_type):
     prefers_large_var_types = False
     legacy_pandas_conversion = False
-    input_schema = None
 
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
         runner_conf = {}
@@ -1306,7 +1305,9 @@ def read_udtf(pickleSer, infile, eval_type):
             ).lower()
             == "true"
         )
-        input_schema = _parse_datatype_json_string(utf8_deserializer.loads(infile))
+        input_types = [
+            field.dataType for field in _parse_datatype_json_string(utf8_deserializer.loads(infile))
+        ]
         if legacy_pandas_conversion:
             # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
             safecheck = (
@@ -1322,7 +1323,6 @@ def read_udtf(pickleSer, infile, eval_type):
                 == "true"
             )
             timezone = runner_conf.get("spark.sql.session.timeZone", None)
-            input_types = [field.dataType for field in input_schema]
             ser = ArrowStreamPandasUDTFSerializer(
                 timezone,
                 safecheck,
@@ -1843,7 +1843,10 @@ def read_udtf(pickleSer, infile, eval_type):
             def convert_to_arrow(data: Iterable):
                 data = list(check_return_value(data))
                 if len(data) == 0:
-                    return pa.Table.from_pylist(data, schema=pa.schema(list(arrow_return_type)))
+                    # Return one empty RecordBatch to match the left side of the lateral join
+                    return [
+                        pa.RecordBatch.from_pylist(data, schema=pa.schema(list(arrow_return_type)))
+                    ]
 
                 def raise_conversion_error(original_exception):
                     raise PySparkRuntimeError(
@@ -1856,7 +1859,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     ) from original_exception
 
                 try:
-                    return LocalDataToArrowConversion.convert(
+                    table = LocalDataToArrowConversion.convert(
                         data, return_type, prefers_large_var_types
                     )
                 except PySparkValueError as e:
@@ -1878,15 +1881,17 @@ def read_udtf(pickleSer, infile, eval_type):
                 except Exception as e:
                     raise_conversion_error(e)
 
+                return verify_result(table).to_batches()
+
             def evaluate(*args: list, num_rows=1):
                 if len(args) == 0:
                     for _ in range(num_rows):
-                        for batch in verify_result(convert_to_arrow(func())).to_batches():
+                        for batch in convert_to_arrow(func()):
                             yield batch, arrow_return_type
 
                 else:
                     for row in zip(*args):
-                        for batch in verify_result(convert_to_arrow(func(*row))).to_batches():
+                        for batch in convert_to_arrow(func(*row)):
                             yield batch, arrow_return_type
 
             return evaluate
@@ -1906,10 +1911,8 @@ def read_udtf(pickleSer, infile, eval_type):
         def mapper(_, it):
             try:
                 converters = [
-                    ArrowTableToRowsConversion._create_converter(
-                        field.dataType, none_on_identity=True
-                    )
-                    for field in input_schema
+                    ArrowTableToRowsConversion._create_converter(dt, none_on_identity=True)
+                    for dt in input_types
                 ]
                 for a in it:
                     pylist = [
@@ -2171,8 +2174,8 @@ def read_udfs(pickleSer, infile, eval_type):
             PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
             PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
         ):
-            # Arrow cast for type coercion is enabled by default
-            ser = ArrowStreamArrowUDFSerializer(timezone, safecheck, _assign_cols_by_name, True)
+            # Arrow cast and safe check are always enabled
+            ser = ArrowStreamArrowUDFSerializer(timezone, True, _assign_cols_by_name, True)
         elif (
             eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             and not use_legacy_pandas_udf_conversion(runner_conf)

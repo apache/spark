@@ -184,6 +184,12 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         logInfo(log"Committed version ${MDC(LogKeys.COMMITTED_VERSION, newVersion)} " +
           log"for ${MDC(LogKeys.STATE_STORE_PROVIDER, this)} to file " +
           log"${MDC(LogKeys.FILE_NAME, finalDeltaFile)}")
+
+        // Report the commit to StateStoreCoordinator for tracking
+        if (storeConf.commitValidationEnabled) {
+          StateStore.reportCommitToCoordinator(newVersion, stateStoreId, hadoopConf)
+        }
+
         newVersion
       } catch {
         case e: Throwable =>

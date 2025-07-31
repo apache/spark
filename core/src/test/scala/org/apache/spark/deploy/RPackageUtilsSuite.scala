@@ -26,7 +26,6 @@ import java.util.zip.ZipFile
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
@@ -170,7 +169,7 @@ class RPackageUtilsSuite
         zipFile.close()
       }
     } {
-      FileUtils.deleteDirectory(tempDir)
+      Utils.deleteRecursively(tempDir)
     }
   }
 }

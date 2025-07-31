@@ -1,5 +1,7 @@
 -- time literals, functions and operations
 
+create temporary view timediff_view as select time'01:02:03' time_start, time'04:05:06' time_end, 'SECOND' unit;
+
 create temporary view time_view as select '11:53:26.038344' time_str, 'HH:mm:ss.SSSSSS' fmt_str;
 
 create temporary view trunc_time_view as select time'11:53:26.038344' time_val, 'MINUTE' unit;
@@ -170,6 +172,93 @@ SELECT '23:59:59.999999' :: TIME - INTERVAL '23:59:59.999999' HOUR TO SECOND;
 SELECT '00:00:00.0001' :: TIME(4) - INTERVAL '0 00:00:00.0001' DAY TO SECOND;
 SELECT '08:30' :: TIME(0) - INTERVAL '6' HOUR;
 SELECT '10:00:01' :: TIME(1) - INTERVAL '1' MONTH;
+
+-- SPARK-51555: time difference.
+SELECT time_diff('HOUR', time'00:00:00', time'12:34:56');
+SELECT time_diff('MINUTE', time'00:00:00', time'12:34:56');
+SELECT time_diff('SECOND', time'00:00:00', time'12:34:56');
+SELECT time_diff('MILLISECOND', time'00:00:00', time'12:34:56');
+SELECT time_diff('MICROSECOND', time'00:00:00', time'12:34:56');
+
+-- SPARK-51555: positive and negative time difference.
+SELECT time_diff('HOUR', time'01:02:03', time'12:34:56');
+SELECT time_diff('MINUTE', time'01:02:03', time'12:34:56');
+SELECT time_diff('SECOND', time'01:02:03', time'12:34:56');
+SELECT time_diff('HOUR', time'12:34:56', time'01:02:03');
+SELECT time_diff('MINUTE', time'12:34:56', time'01:02:03');
+SELECT time_diff('SECOND', time'12:34:56', time'01:02:03');
+
+-- SPARK-51555: time difference with various time precisions.
+SELECT time_diff('HOUR', time'00:00:00', time'12:34:56.1');
+SELECT time_diff('MINUTE', time'00:00:00', time'12:34:56.1');
+SELECT time_diff('SECOND', time'00:00:00', time'12:34:56.1');
+SELECT time_diff('MILLISECOND', time'00:00:00', time'12:34:56.1');
+SELECT time_diff('MICROSECOND', time'00:00:00', time'12:34:56.1');
+SELECT time_diff('HOUR', time'00:00:00', time'12:34:56.123456');
+SELECT time_diff('MINUTE', time'00:00:00', time'12:34:56.123456');
+SELECT time_diff('SECOND', time'00:00:00', time'12:34:56.123456');
+SELECT time_diff('MILLISECOND', time'00:00:00', time'12:34:56.123456');
+SELECT time_diff('MICROSECOND', time'00:00:00', time'12:34:56.123456');
+SELECT time_diff('HOUR', time'00:00:00', time'12:34:56.123456789');
+SELECT time_diff('MINUTE', time'00:00:00', time'12:34:56.123456789');
+SELECT time_diff('SECOND', time'00:00:00', time'12:34:56.123456789');
+SELECT time_diff('MILLISECOND', time'00:00:00', time'12:34:56.123456789');
+SELECT time_diff('MICROSECOND', time'00:00:00', time'12:34:56.123456789');
+
+-- SPARK-51555: time difference with various unit cases.
+SELECT time_diff('hour', time'00:00:00', time'12:34:56');
+SELECT time_diff('MiNuTe', time'00:00:00', time'12:34:56');
+SELECT time_diff('sEcOnD', time'00:00:00', time'12:34:56');
+SELECT time_diff('Millisecond', time'00:00:00', time'12:34:56');
+SELECT time_diff('microseconD', time'00:00:00', time'12:34:56');
+
+-- SPARK-51555: time difference with zero time.
+SELECT time_diff('HOUR', time'00:00:00', time'00:00:00');
+SELECT time_diff('MINUTE', time'00:00:00', time'00:00:00');
+SELECT time_diff('SECOND', time'00:00:00', time'00:00:00');
+SELECT time_diff('MILLISECOND', time'00:00:00', time'00:00:00');
+SELECT time_diff('MICROSECOND', time'00:00:00', time'00:00:00');
+-- SPARK-51555: time difference with small time.
+SELECT time_diff('HOUR', time'00:00:00', time'00:00:00.000000001');
+SELECT time_diff('MINUTE', time'00:00:00', time'00:00:00.000000001');
+SELECT time_diff('SECOND', time'00:00:00', time'00:00:00.000000001');
+SELECT time_diff('MILLISECOND', time'00:00:00', time'00:00:00.000000001');
+SELECT time_diff('MICROSECOND', time'00:00:00', time'00:00:00.000000001');
+-- SPARK-51555: time difference with max time.
+SELECT time_diff('HOUR', time'00:00:00', time'23:59:59.999999999');
+SELECT time_diff('MINUTE', time'00:00:00', time'23:59:59.999999999');
+SELECT time_diff('SECOND', time'00:00:00', time'23:59:59.999999999');
+SELECT time_diff('MILLISECOND', time'00:00:00', time'23:59:59.999999999');
+SELECT time_diff('MICROSECOND', time'00:00:00', time'23:59:59.999999999');
+
+-- SPARK-51555: time difference with invalid unit.
+SELECT time_diff('', time'00:00:00', time'12:34:56');
+SELECT time_diff(' ', time'00:00:00', time'12:34:56');
+SELECT time_diff('MS', time'00:00:00', time'12:34:56');
+SELECT time_diff('DAY', time'00:00:00', time'12:34:56');
+SELECT time_diff('WEEK', time'00:00:00', time'12:34:56');
+SELECT time_diff('ABCD', time'00:00:00', time'12:34:56');
+SELECT time_diff('QUARTER', time'00:00:00', time'12:34:56');
+SELECT time_diff('INVALID', time'00:00:00', time'12:34:56');
+SELECT time_diff('INVALID_UNIT', time'00:00:00', time'12:34:56');
+
+-- SPARK-51555: time difference with null inputs.
+SELECT time_diff(NULL, time'00:00:00', time'12:34:56');
+SELECT time_diff('MICROSECOND', NULL, time'12:34:56');
+SELECT time_diff('MICROSECOND', time'00:00:00', NULL);
+SELECT time_diff(NULL, NULL, time'12:34:56');
+SELECT time_diff(NULL, time'00:00:00', NULL);
+SELECT time_diff('MICROSECOND', NULL, NULL);
+SELECT time_diff(NULL, NULL, NULL);
+
+-- SPARK-51555: time difference with table columns.
+SELECT time_diff('SECOND', time_start, time_end) FROM timediff_view;
+SELECT time_diff(unit, time'01:02:03', time_end) FROM timediff_view;
+SELECT time_diff(unit, time_start, time'04:05:06') FROM timediff_view;
+SELECT time_diff('SECOND', time'01:02:03', time_end) FROM timediff_view;
+SELECT time_diff('SECOND', time_start, time'04:05:06') FROM timediff_view;
+SELECT time_diff(unit, time'01:02:03', time'04:05:06') FROM timediff_view;
+SELECT time_diff(unit, time_start, time_end) FROM timediff_view;
 
 -- Subtract times
 SELECT TIME'12:30:41' - TIME'10:00';

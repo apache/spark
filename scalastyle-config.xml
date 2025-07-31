@@ -282,10 +282,30 @@ This file is divided into 3 sections:
       scala.jdk.CollectionConverters._ and use .asScala / .asJava methods</customMessage>
   </check>
 
+  <check customId="deleteRecursively" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileUtils\.deleteDirectory</parameter></parameters>
+    <customMessage>Use deleteRecursively of SparkFileUtils or Utils</customMessage>
+  </check>
+
+  <check customId="readFileToByteArray" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileUtils\.readFileToByteArray</parameter></parameters>
+    <customMessage>Use java.nio.file.Files.readAllBytes</customMessage>
+  </check>
+
   <check customId="commonslang2" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.lang\.</parameter></parameters>
     <customMessage>Use Commons Lang 3 classes (package org.apache.commons.lang3.*) instead
     of Commons Lang 2 (package org.apache.commons.lang.*)</customMessage>
+  </check>
+
+  <check customId="getFile" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileUtils\.getFile</parameter></parameters>
+    <customMessage>Use getFile of SparkFileUtil or Utils instead.</customMessage>
+  </check>
+
+  <check customId="writeStringToFile" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileUtils\.writeStringToFile</parameter></parameters>
+    <customMessage>Use java.nio.file.Files.writeString instead.</customMessage>
   </check>
 
   <check customId="commonslang3javaversion" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
@@ -520,5 +540,10 @@ This file is divided into 3 sections:
   <check customId="googleStrings" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">com\.google\.common\.base\.Strings</parameter></parameters>
     <customMessage>Use Java built-in methods or SparkStringUtils instead</customMessage>
+  </check>
+
+  <check customId="defaultCharset" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">Charset\.defaultCharset</parameter></parameters>
+    <customMessage>Use StandardCharsets.UTF_8 instead.</customMessage>
   </check>
 </scalastyle>

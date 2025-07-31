@@ -188,12 +188,24 @@
             <property name="illegalClasses" value="com.google.common.base.Strings" />
         </module>
         <module name="RegexpSinglelineJava">
+            <property name="format" value="Charset\.defaultCharset"/>
+            <property name="message" value="Use StandardCharsets.UTF_8 instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
             <property name="format" value="new URL\("/>
             <property name="message" value="Use URI.toURL or URL.of instead of URL constructors." />
         </module>
         <module name="RegexpSinglelineJava">
             <property name="format" value="new ToStringBuilder\("/>
             <property name="message" value="Use String concatenation instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="FileUtils.writeStringToFile"/>
+            <property name="message" value="Use java.nio.file.Files.writeString instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="FileUtils\.deleteDirectory"/>
+            <property name="message" value="Use deleteRecursively of SparkFileUtils or Utils instead." />
         </module>
         <!-- support structured logging -->
         <module name="RegexpSinglelineJava">
