@@ -111,7 +111,8 @@ private[spark] class PythonWorkerFactory(
   @GuardedBy("self")
   private var daemonSockPath: String = _
   @GuardedBy("self")
-  private val idleWorkers = new mutable.Queue[PythonWorker]()
+  // Visible for testing
+  private[spark] val idleWorkers = new mutable.Queue[PythonWorker]()
   @GuardedBy("self")
   private val idleWorkerPoolSize = authHelper.conf.get(PYTHON_FACTORY_IDLE_WORKER_MAX_POOL_SIZE)
   @GuardedBy("self")
@@ -489,7 +490,7 @@ private[spark] class PythonWorkerFactory(
         if (idleWorkerPoolSize.exists(idleWorkers.size > _)) {
           val oldestWorker = idleWorkers.dequeue()
           try {
-            oldestWorker.stop()
+            stopWorker(oldestWorker)
           } catch {
             case e: Exception =>
               logWarning("Failed to stop evicted worker", e)
