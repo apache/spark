@@ -1264,7 +1264,7 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
 
 private[client] class Shim_v3_1 extends Shim_v3_0
 
-private[client] class Shim_v4_1 extends Shim_v3_1 {
+private[client] class Shim_v4_0 extends Shim_v3_1 {
   private lazy val clazzLoadFileType = getClass.getClassLoader.loadClass(
     "org.apache.hadoop.hive.ql.plan.LoadTableDesc$LoadFileType")
   private lazy val clazzLoadTableDesc = getClass.getClassLoader.loadClass(
