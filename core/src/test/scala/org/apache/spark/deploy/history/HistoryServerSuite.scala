@@ -27,7 +27,7 @@ import scala.jdk.CollectionConverters._
 import com.google.common.io.{ByteStreams, Files}
 import jakarta.servlet._
 import jakarta.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
-import org.apache.commons.io.{FileUtils, IOUtils}
+import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods
@@ -219,7 +219,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
   )
 
   if (regenerateGoldenFiles) {
-    FileUtils.deleteDirectory(expRoot)
+    Utils.deleteRecursively(expRoot)
     Utils.createDirectory(expRoot)
   }
 

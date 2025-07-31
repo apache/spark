@@ -23,10 +23,10 @@ import java.util.jar.Attributes.Name
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.commons.io.FileUtils
 import org.apache.ivy.core.settings.IvySettings
 
 import org.apache.spark.util.MavenUtils.MavenCoordinate
+import org.apache.spark.util.SparkFileUtils.deleteRecursively
 
 private[spark] object IvyTestUtils {
 
@@ -319,7 +319,7 @@ private[spark] object IvyTestUtils {
       val descriptor = createDescriptor(tempPath, artifact, dependencies, useIvyLayout)
       assert(descriptor.exists(), "Problem creating Pom file")
     } finally {
-      FileUtils.deleteDirectory(root)
+      deleteRecursively(root)
     }
     tempPath
   }
@@ -377,13 +377,13 @@ private[spark] object IvyTestUtils {
       if (repo.toString.contains(".m2") || repo.toString.contains(".ivy2") ||
           repo.toString.contains(".ivy2.5.2")) {
         val groupDir = getBaseGroupDirectory(artifact, useIvyLayout)
-        FileUtils.deleteDirectory(new File(repo, groupDir + File.separator + artifact.artifactId))
+        deleteRecursively(new File(repo, groupDir + File.separator + artifact.artifactId))
         deps.foreach { _.foreach { dep =>
-            FileUtils.deleteDirectory(new File(repo, getBaseGroupDirectory(dep, useIvyLayout)))
+            deleteRecursively(new File(repo, getBaseGroupDirectory(dep, useIvyLayout)))
           }
         }
       } else {
-        FileUtils.deleteDirectory(repo)
+        deleteRecursively(repo)
       }
       purgeLocalIvyCache(artifact, deps, ivySettings)
     }
@@ -395,9 +395,9 @@ private[spark] object IvyTestUtils {
       dependencies: Option[Seq[MavenCoordinate]],
       ivySettings: IvySettings): Unit = {
     // delete the artifact from the cache as well if it already exists
-    FileUtils.deleteDirectory(new File(ivySettings.getDefaultCache, artifact.groupId))
+    deleteRecursively(new File(ivySettings.getDefaultCache, artifact.groupId))
     dependencies.foreach { _.foreach { dep =>
-        FileUtils.deleteDirectory(new File(ivySettings.getDefaultCache, dep.groupId))
+        deleteRecursively(new File(ivySettings.getDefaultCache, dep.groupId))
       }
     }
   }

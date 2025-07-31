@@ -34,6 +34,7 @@ import org.apache.spark.network.shuffle.ShuffleTestAccessor
 import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
 import org.apache.spark.tags.{ExtendedLevelDBTest, ExtendedYarnTest}
+import org.apache.spark.util.Utils
 
 /**
  * Integration test for the external shuffle service with a yarn mini-cluster
@@ -179,7 +180,7 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
     } finally {
       sc.stop()
       if (execStateCopy != null) {
-        FileUtils.deleteDirectory(execStateCopy)
+        Utils.deleteRecursively(execStateCopy)
       }
       Files.asCharSink(status, StandardCharsets.UTF_8).write(result)
     }

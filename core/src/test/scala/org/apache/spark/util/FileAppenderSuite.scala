@@ -35,6 +35,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config
+import org.apache.spark.util.Utils
 import org.apache.spark.util.logging.{FileAppender, RollingFileAppender, SizeBasedRollingPolicy, TimeBasedRollingPolicy}
 
 class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter {
@@ -389,7 +390,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter {
         try {
           IOUtils.toString(inputStream, StandardCharsets.UTF_8)
         } finally {
-          IOUtils.closeQuietly(inputStream)
+          Utils.closeQuietly(inputStream)
         }
       } else {
         Files.asCharSource(file, StandardCharsets.UTF_8).read()

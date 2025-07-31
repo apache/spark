@@ -18,7 +18,7 @@ package org.apache.spark.util
 
 import java.io.File
 import java.net.{URI, URISyntaxException}
-import java.nio.file.Files
+import java.nio.file.{Files, Path}
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.network.util.JavaUtils
@@ -119,6 +119,20 @@ private[spark] trait SparkFileUtils extends Logging {
    */
   def deleteRecursively(file: File): Unit = {
     JavaUtils.deleteRecursively(file)
+  }
+
+  def getFile(names: String*): File = {
+    require(names != null && names.forall(_ != null))
+    names.tail.foldLeft(Path.of(names.head)) { (path, part) =>
+      path.resolve(part)
+    }.toFile
+  }
+
+  def getFile(parent: File, names: String*): File = {
+    require(parent != null && names != null && names.forall(_ != null))
+    names.foldLeft(parent.toPath) { (path, part) =>
+      path.resolve(part)
+    }.toFile
   }
 }
 

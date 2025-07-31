@@ -230,7 +230,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
           case _: SparkException =>
           case throwable: Throwable => throw throwable
         } finally {
-          FileUtils.deleteDirectory(copyDir.toFile)
+          Utils.deleteRecursively(copyDir.toFile)
           blockManager.removeCache(spark.sessionUUID)
         }
       }

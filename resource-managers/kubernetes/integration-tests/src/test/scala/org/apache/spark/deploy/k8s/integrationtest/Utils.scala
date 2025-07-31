@@ -17,7 +17,7 @@
 package org.apache.spark.deploy.k8s.integrationtest
 
 import java.io.{Closeable, File, FileInputStream, FileOutputStream, PrintWriter}
-import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
 import java.util.concurrent.CountDownLatch
 import java.util.zip.{ZipEntry, ZipOutputStream}
@@ -33,6 +33,7 @@ import org.apache.commons.io.output.ByteArrayOutputStream
 
 import org.apache.spark.{SPARK_VERSION, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.SparkErrorUtils
 
 object Utils extends Logging {
 
@@ -96,7 +97,7 @@ object Utils extends Logging {
     listener.waitForClose()
     watch.close()
     out.flush()
-    val result = out.toString(Charset.defaultCharset())
+    val result = out.toString(StandardCharsets.UTF_8)
     result
   }
 
@@ -146,8 +147,8 @@ object Utils extends Logging {
     val zipEntry = new ZipEntry(fileToZip.getName)
     zipOut.putNextEntry(zipEntry)
     IOUtils.copy(fis, zipOut)
-    IOUtils.closeQuietly(fis)
-    IOUtils.closeQuietly(zipOut)
+    SparkErrorUtils.closeQuietly(fis)
+    SparkErrorUtils.closeQuietly(zipOut)
   }
 
   def createTarGzFile(inFile: String, outFile: String): Unit = {

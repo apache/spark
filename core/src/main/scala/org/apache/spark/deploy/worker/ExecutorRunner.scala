@@ -184,7 +184,7 @@ private[deploy] class ExecutorRunner(
 
       process = builder.start()
       val header = "Spark Executor Command: %s\n%s\n\n".format(
-        redactedCommand, "=" * 40)
+        redactedCommand, "=".repeat(40))
 
       // Redirect its stdout and stderr to files
       val stdout = new File(executorDir, "stdout")

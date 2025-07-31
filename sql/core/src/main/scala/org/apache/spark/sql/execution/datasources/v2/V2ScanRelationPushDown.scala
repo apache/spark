@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, GROUP_BY_EXPRS, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
+import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, COLUMN_NAMES, GROUP_BY_EXPRS, JOIN_CONDITION, JOIN_TYPE, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -204,6 +204,22 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         normalizedCondition.flatMap(DataSourceV2Strategy.translateFilterV2(_))
       val translatedJoinType = DataSourceStrategy.translateJoinType(joinType)
 
+      logInfo(log"DSv2 Join pushdown - translated join condition " +
+        log"${MDC(JOIN_CONDITION, translatedCondition)}")
+      logInfo(log"DSv2 Join pushdown - translated join type " +
+        log"${MDC(JOIN_TYPE, translatedJoinType)}")
+
+      logInfo(log"DSv2 Join pushdown - left side required columns with aliases: " +
+        log"${MDC(
+          COLUMN_NAMES,
+          leftSideRequiredColumnsWithAliases.map(_.prettyString()).mkString(", ")
+        )}")
+      logInfo(log"DSv2 Join pushdown - right side required columns with aliases: " +
+        log"${MDC(
+          COLUMN_NAMES,
+          rightSideRequiredColumnsWithAliases.map(_.prettyString()).mkString(", ")
+        )}")
+
       if (translatedJoinType.isDefined &&
         translatedCondition.isDefined &&
         lBuilder.pushDownJoin(
@@ -220,8 +236,16 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         leftHolder.output = node.output.asInstanceOf[Seq[AttributeReference]]
         leftHolder.pushedJoinOutputMap = pushedJoinOutputMap
 
+        // TODO: for cascade joins, already joined relations will still have the name of the
+        // original(leaf) relation. It should be thought of if we want to change the name of the
+        // relation when join is pushed down.
+        logInfo(log"DSv2 Join pushdown - successfully pushed down join between relations " +
+          log"${MDC(RELATION_NAME, leftHolder.relation.name)} and " +
+          log"${MDC(RELATION_NAME, rightHolder.relation.name)}.")
+
         leftHolder
       } else {
+        logInfo(log"DSv2 Join pushdown - failed to push down join.")
         node
       }
   }

@@ -30,7 +30,7 @@ import com.fasterxml.jackson.core.util.{DefaultIndenter, DefaultPrettyPrinter}
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.apache.commons.io.{FileUtils, IOUtils}
+import org.apache.commons.io.IOUtils
 
 import org.apache.spark.SparkThrowableHelper._
 import org.apache.spark.util.Utils
@@ -97,8 +97,8 @@ class SparkThrowableSuite extends SparkFunSuite {
         val errorConditionsFile = errorJsonFilePath.toFile
         logInfo(s"Regenerating error conditions file $errorConditionsFile")
         Files.delete(errorConditionsFile.toPath)
-        FileUtils.writeStringToFile(
-          errorConditionsFile,
+        Files.writeString(
+          errorJsonFilePath,
           rewrittenString + lineSeparator,
           StandardCharsets.UTF_8)
       }
@@ -421,7 +421,7 @@ class SparkThrowableSuite extends SparkFunSuite {
   test("overwrite error classes") {
     withTempDir { dir =>
       val json = new File(dir, "errors.json")
-      FileUtils.writeStringToFile(json,
+      Files.writeString(json.toPath(),
         """
           |{
           |  "DIVIDE_BY_ZERO" : {
@@ -439,7 +439,7 @@ class SparkThrowableSuite extends SparkFunSuite {
   test("prohibit dots in error class names") {
     withTempDir { dir =>
       val json = new File(dir, "errors.json")
-      FileUtils.writeStringToFile(json,
+      Files.writeString(json.toPath(),
         """
           |{
           |  "DIVIDE.BY_ZERO" : {
@@ -458,7 +458,7 @@ class SparkThrowableSuite extends SparkFunSuite {
 
     withTempDir { dir =>
       val json = new File(dir, "errors.json")
-      FileUtils.writeStringToFile(json,
+      Files.writeString(json.toPath(),
         """
           |{
           |  "DIVIDE" : {
@@ -486,7 +486,7 @@ class SparkThrowableSuite extends SparkFunSuite {
   test("handle null values in message parameters") {
     withTempDir { dir =>
       val json = new File(dir, "errors.json")
-      FileUtils.writeStringToFile(json,
+      Files.writeString(json.toPath(),
         """
           |{
           |  "MISSING_PARAMETER" : {

@@ -395,6 +395,53 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       TimeType(), DayTimeIntervalType())
   }
 
+  test("SPARK-51555: Time difference") {
+    // Test cases for various difference units - from 09:32:05.359123 until 17:23:49.906152.
+    val startTime: Long = localTime(9, 32, 5, 359123)
+    val startTimeLit: Expression = Literal(startTime, TimeType())
+    val endTime: Long = localTime(17, 23, 49, 906152)
+    val endTimeLit: Expression = Literal(endTime, TimeType())
+
+    // Test differences for valid units.
+    checkEvaluation(TimeDiff(Literal("HOUR"), startTimeLit, endTimeLit), 7L)
+    checkEvaluation(TimeDiff(Literal("MINUTE"), startTimeLit, endTimeLit), 471L)
+    checkEvaluation(TimeDiff(Literal("SECOND"), startTimeLit, endTimeLit), 28304L)
+    checkEvaluation(TimeDiff(Literal("MILLISECOND"), startTimeLit, endTimeLit), 28304547L)
+    checkEvaluation(TimeDiff(Literal("MICROSECOND"), startTimeLit, endTimeLit), 28304547029L)
+
+    // Test case-insensitive units.
+    checkEvaluation(TimeDiff(Literal("hour"), startTimeLit, endTimeLit), 7L)
+    checkEvaluation(TimeDiff(Literal("Minute"), startTimeLit, endTimeLit), 471L)
+    checkEvaluation(TimeDiff(Literal("seconD"), startTimeLit, endTimeLit), 28304L)
+    checkEvaluation(TimeDiff(Literal("milliSECOND"), startTimeLit, endTimeLit), 28304547L)
+    checkEvaluation(TimeDiff(Literal("mIcRoSeCoNd"), startTimeLit, endTimeLit), 28304547029L)
+
+    // Test invalid units.
+    val invalidUnits: Seq[String] = Seq("MS", "INVALID", "ABC", "XYZ", " ", "")
+    invalidUnits.foreach { unit =>
+      checkErrorInExpression[SparkIllegalArgumentException](
+        TimeDiff(Literal(unit), startTimeLit, endTimeLit),
+        condition = "INVALID_PARAMETER_VALUE.TIME_UNIT",
+        parameters = Map(
+          "functionName" -> "`timediff`",
+          "parameter" -> "`unit`",
+          "invalidValue" -> s"'$unit'"
+        )
+      )
+    }
+
+    // Test null inputs.
+    val nullUnit = Literal.create(null, StringType)
+    val nullTime = Literal.create(null, TimeType())
+    checkEvaluation(TimeDiff(nullUnit, startTimeLit, endTimeLit), null)
+    checkEvaluation(TimeDiff(Literal("hour"), nullTime, endTimeLit), null)
+    checkEvaluation(TimeDiff(Literal("hour"), startTimeLit, nullTime), null)
+    checkEvaluation(TimeDiff(nullUnit, nullTime, endTimeLit), null)
+    checkEvaluation(TimeDiff(nullUnit, startTimeLit, nullTime), null)
+    checkEvaluation(TimeDiff(Literal("hour"), nullTime, nullTime), null)
+    checkEvaluation(TimeDiff(nullUnit, nullTime, nullTime), null)
+  }
+
   test("Subtract times") {
     checkEvaluation(
       SubtractTimes(Literal.create(null, TimeType()), Literal(LocalTime.MIN)),
@@ -471,7 +518,7 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         exception = intercept[SparkIllegalArgumentException] {
           TimeTrunc(Literal(unit), Literal(testTime, TimeType())).eval()
         },
-        condition = "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+        condition = "INVALID_PARAMETER_VALUE.TIME_UNIT",
         parameters = Map(
           "functionName" -> "`time_trunc`",
           "parameter" -> "`unit`",

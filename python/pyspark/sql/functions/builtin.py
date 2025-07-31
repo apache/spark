@@ -60,7 +60,12 @@ from pyspark.sql.udtf import SkipRestOfInputTableException  # noqa: F401
 from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
-from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
+from pyspark.sql.pandas.functions import (  # noqa: F401
+    arrow_udf,  # noqa: F401
+    pandas_udf,  # noqa: F401
+    ArrowUDFType,  # noqa: F401
+    PandasUDFType,  # noqa: F401
+)  # noqa: F401
 
 from pyspark.sql.utils import (
     to_str as _to_str,

@@ -41,7 +41,6 @@ import java.util.concurrent.TimeUnit;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
 
-import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -68,6 +67,7 @@ import org.apache.spark.network.shuffle.protocol.PushBlockStream;
 import org.apache.spark.network.shuffle.protocol.RemoveShuffleMerge;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * Tests for {@link RemoteBlockPushResolver}.
@@ -107,7 +107,7 @@ public class RemoteBlockPushResolverSuite {
   public void after() {
     try {
       for (Path local : localDirs) {
-        FileUtils.deleteDirectory(local.toFile());
+        JavaUtils.deleteRecursively(local.toFile());
       }
       removeApplication(TEST_APP);
     } catch (Exception e) {

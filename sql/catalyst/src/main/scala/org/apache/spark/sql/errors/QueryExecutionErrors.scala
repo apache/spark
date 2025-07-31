@@ -3067,13 +3067,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
-  // Throws a SparkIllegalArgumentException when an invalid time truncation unit is specified.
+  // Throws a SparkIllegalArgumentException when an invalid time unit is specified.
   // Note that the supported units are: HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND.
-  def invalidTimeTruncUnitError(
+  def invalidTimeUnitError(
       functionName: String,
       invalidValue: String): Throwable = {
     new SparkIllegalArgumentException(
-      errorClass = "INVALID_PARAMETER_VALUE.TIMETRUNC_UNIT",
+      errorClass = "INVALID_PARAMETER_VALUE.TIME_UNIT",
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
         "parameter" -> toSQLId("unit"),
