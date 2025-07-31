@@ -503,6 +503,7 @@ __all__ = [  # noqa: F405
     # UDF, UDTF and UDT
     "AnalyzeArgument",
     "AnalyzeResult",
+    "ArrowUDFType",
     "OrderingColumn",
     "PandasUDFType",
     "PartitioningColumn",
@@ -510,6 +511,7 @@ __all__ = [  # noqa: F405
     "SkipRestOfInputTableException",
     "UserDefinedFunction",
     "UserDefinedTableFunction",
+    "arrow_udf",
     "call_udf",
     "pandas_udf",
     "udf",

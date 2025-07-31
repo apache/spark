@@ -18,7 +18,7 @@
 package org.apache.spark.examples.streaming;
 
 import java.io.File;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -153,7 +153,7 @@ public final class JavaRecoverableNetworkWordCount {
       System.out.println(output);
       System.out.println("Dropped " + droppedWordsCounter.value() + " word(s) totally");
       System.out.println("Appending to " + outputFile.getAbsolutePath());
-      Files.asCharSink(outputFile, Charset.defaultCharset(), FileWriteMode.APPEND)
+      Files.asCharSink(outputFile, StandardCharsets.UTF_8, FileWriteMode.APPEND)
         .write(output + "\n");
     });
 

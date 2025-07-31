@@ -3436,7 +3436,7 @@
           "expects a string literal, but got <invalidValue>."
         ]
       },
-      "TIMETRUNC_UNIT" : {
+      "TIME_UNIT" : {
         "message" : [
           "expects one of the units 'HOUR', 'MINUTE', 'SECOND', 'MILLISECOND', 'MICROSECOND', but got '<invalidValue>'."
         ]

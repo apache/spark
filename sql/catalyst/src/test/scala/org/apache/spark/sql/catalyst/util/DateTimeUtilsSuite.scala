@@ -1451,6 +1451,62 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     )
   }
 
+  // Helper methods to assert results of the timeDiff method and verify execution symmetry.
+  private def testTimeDiff(unit: String, start: Long, end: Long, expected: Long): Unit = {
+    val unitStr = UTF8String.fromString(unit)
+    assert(timeDiff(unitStr, start, end) === expected)
+    assert(timeDiff(unitStr, end, start) === -expected)
+  }
+
+  test("SPARK-51555: time difference calculation using timeDiff") {
+    // Helper variables to express various units of time in nanoseconds.
+    val zero = 0L
+    val nano = zero + 1
+    val micro = 1000 * nano
+    val milli = 1000 * micro
+    val sec = 1000 * milli
+    val min = 60 * sec
+    val hour = 60 * min
+    val day = 24 * hour
+    val maxTime = day - nano
+
+    // Tests that return the same results for all supported units.
+    val supportedUnits = Seq("HOUR", "MINUTE", "SECOND", "MILLISECOND", "MICROSECOND")
+    supportedUnits.foreach(unit => {
+      testTimeDiff(unit, zero, zero, 0)
+      testTimeDiff(unit, zero, nano, 0)
+      testTimeDiff(unit, zero, nano * 999, 0)
+      testTimeDiff(unit, nano, nano, 0)
+      testTimeDiff(unit, nano, nano * 999, 0)
+      testTimeDiff(unit, maxTime, maxTime, 0)
+      testTimeDiff(unit, maxTime, maxTime - 999, 0)
+    })
+
+    // Tests that return different results for various supported units.
+    testTimeDiff("HOUR", hour, hour, 0)
+    testTimeDiff("MINUTE", min, min, 0)
+    testTimeDiff("SECOND", sec, sec, 0)
+    testTimeDiff("MILLISECOND", milli, milli, 0)
+    testTimeDiff("MICROSECOND", micro, micro, 0)
+    testTimeDiff("HOUR", zero, hour, 1)
+    testTimeDiff("MINUTE", zero, min, 1)
+    testTimeDiff("SECOND", zero, sec, 1)
+    testTimeDiff("MILLISECOND", zero, milli, 1)
+    testTimeDiff("MICROSECOND", zero, micro, 1)
+    testTimeDiff("HOUR", zero, maxTime, 23)
+    testTimeDiff("MINUTE", zero, maxTime, 1439)
+    testTimeDiff("SECOND", zero, maxTime, 86399)
+    testTimeDiff("MILLISECOND", zero, maxTime, 86399999)
+    testTimeDiff("MICROSECOND", zero, maxTime, 86399999999L)
+    val start = 10 * hour + 53 * min + 45 * sec + 123 * milli + 456 * micro // 10:53:45.123456
+    val end = 11 * hour + 54 * min + 46 * sec + 654 * milli + 321 * micro // 11:54:46.654321
+    testTimeDiff("HOUR", start, end, 1)
+    testTimeDiff("MINUTE", start, end, 61)
+    testTimeDiff("SECOND", start, end, 3661)
+    testTimeDiff("MILLISECOND", start, end, 3661530)
+    testTimeDiff("MICROSECOND", start, end, 3661530865L)
+  }
+
   test("subtract times") {
       Seq(
         (LocalTime.MIDNIGHT, LocalTime.MIDNIGHT) -> 0,

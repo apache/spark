@@ -17,7 +17,7 @@
 package org.apache.spark.deploy.k8s.integrationtest
 
 import java.io.{Closeable, File, FileInputStream, FileOutputStream, PrintWriter}
-import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
 import java.util.concurrent.CountDownLatch
 import java.util.zip.{ZipEntry, ZipOutputStream}
@@ -96,7 +96,7 @@ object Utils extends Logging {
     listener.waitForClose()
     watch.close()
     out.flush()
-    val result = out.toString(Charset.defaultCharset())
+    val result = out.toString(StandardCharsets.UTF_8)
     result
   }
 

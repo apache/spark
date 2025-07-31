@@ -520,7 +520,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
       case "MILLISECOND" => ChronoUnit.MILLIS
       case "MICROSECOND" => ChronoUnit.MICROS
       case _ =>
-        throw QueryExecutionErrors.invalidTimeTruncUnitError("time_trunc", level.toString)
+        throw QueryExecutionErrors.invalidTimeUnitError("time_trunc", level.toString)
     }
   }
 
@@ -714,6 +714,43 @@ object DateTimeUtils extends SparkDateTimeUtils {
    */
   def subtractTimes(endNanos: Long, startNanos: Long): Long = {
     (endNanos - startNanos) / NANOS_PER_MICROS
+  }
+
+  // Helper method to get the number of nanoseconds per the given time unit, used for calculating
+  // the difference between two time values (timediff function). Supported units are: MICROSECOND,
+  // MILLISECOND, SECOND, MINUTE, HOUR.
+  private def getNanosPerTimeUnit(unit: UTF8String): Long = {
+    val unitStr = unit.toString
+    unitStr.toUpperCase(Locale.ROOT) match {
+      case "MICROSECOND" =>
+        NANOS_PER_MICROS
+      case "MILLISECOND" =>
+        NANOS_PER_MILLIS
+      case "SECOND" =>
+        NANOS_PER_SECOND
+      case "MINUTE" =>
+        NANOS_PER_SECOND * SECONDS_PER_MINUTE
+      case "HOUR" =>
+        NANOS_PER_SECOND * SECONDS_PER_MINUTE * MINUTES_PER_HOUR
+      case _ =>
+        throw QueryExecutionErrors.invalidTimeUnitError("timediff", unitStr)
+    }
+  }
+
+  /**
+   * Gets the difference between two time values in the specified unit.
+   *
+   * @param unit Specifies the interval units in which to express the difference between
+   *             the two time parameters. Supported units are: MICROSECOND, MILLISECOND,
+   *             SECOND, MINUTE, HOUR.
+   * @param startNanos A time value expressed as nanoseconds since the start of the day,
+   *                   which the function subtracts from `endNanos`.
+   * @param endNanos A time value expressed as nanoseconds since the start of the day,
+   *                 from which the function subtracts `startNanos`.
+   * @return The time span between two time values, in the units specified.
+   */
+  def timeDiff(unit: UTF8String, startNanos: Long, endNanos: Long): Long = {
+    (endNanos - startNanos) / getNanosPerTimeUnit(unit)
   }
 
   /**
