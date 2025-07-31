@@ -282,6 +282,11 @@ This file is divided into 3 sections:
       scala.jdk.CollectionConverters._ and use .asScala / .asJava methods</customMessage>
   </check>
 
+  <check customId="deleteRecursively" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileUtils\.deleteDirectory</parameter></parameters>
+    <customMessage>Use deleteRecursively of SparkFileUtils or Utils</customMessage>
+  </check>
+
   <check customId="readFileToByteArray" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">FileUtils\.readFileToByteArray</parameter></parameters>
     <customMessage>Use java.nio.file.Files.readAllBytes</customMessage>

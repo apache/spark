@@ -214,7 +214,7 @@ private class HistoryServerDiskManager(
   def committed(): Long = committedUsage.get()
 
   private def deleteStore(path: File): Unit = {
-    FileUtils.deleteDirectory(path)
+    Utils.deleteRecursively(path)
     listing.delete(classOf[ApplicationStoreInfo], path.getAbsolutePath())
   }
 
@@ -334,7 +334,7 @@ private class HistoryServerDiskManager(
     /** Deletes the temporary directory created for the lease. */
     def rollback(): Unit = {
       updateUsage(-leased)
-      FileUtils.deleteDirectory(tmpPath)
+      Utils.deleteRecursively(tmpPath)
     }
 
   }
