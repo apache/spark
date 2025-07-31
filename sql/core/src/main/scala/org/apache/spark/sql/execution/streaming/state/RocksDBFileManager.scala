@@ -30,7 +30,7 @@ import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
-import org.apache.commons.io.{FilenameUtils, IOUtils}
+import org.apache.commons.io.FilenameUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.json4s.{Formats, NoTypeHints}
@@ -861,7 +861,7 @@ class RocksDBFileManager(
       files.foreach { file =>
         zout.putNextEntry(new ZipEntry(file.getName))
         in = new FileInputStream(file)
-        val bytes = IOUtils.copy(in, zout)
+        val bytes = in.transferTo(zout)
         in.close()
         zout.closeEntry()
         totalBytes += bytes
