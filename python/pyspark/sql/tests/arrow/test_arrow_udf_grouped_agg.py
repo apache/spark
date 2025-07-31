@@ -688,7 +688,7 @@ class GroupedAggArrowUDFTestsMixin:
         df = self.spark.createDataFrame([(1, 1), (1, 2), (2, 3), (2, 5), (2, 1)], ("id", "v"))
 
         @arrow_udf("array<int>")
-        def arrow_collect_set(v: pa.Array) -> list[int]:
+        def arrow_collect_set(v: pa.Array) -> pa.Scalar:
             assert isinstance(v, pa.Array), str(type(v))
             s = sorted([x.as_py() for x in pa.compute.unique(v)])
             t = pa.list_(pa.int32())
@@ -712,7 +712,7 @@ class GroupedAggArrowUDFTestsMixin:
         df = self.spark.createDataFrame([(1, 1), (1, 2), (2, 3), (2, 5), (2, 1)], ("id", "v"))
 
         @arrow_udf("array<int>")
-        def arrow_collect_list(v: pa.Array) -> list[int]:
+        def arrow_collect_list(v: pa.Array) -> pa.Scalar:
             assert isinstance(v, pa.Array), str(type(v))
             s = sorted([x.as_py() for x in v])
             t = pa.list_(pa.int32())
@@ -736,7 +736,7 @@ class GroupedAggArrowUDFTestsMixin:
         df = self.spark.createDataFrame([(1, 1), (2, 2), (3, 5)], ("id", "v"))
 
         @arrow_udf("map<int, int>")
-        def arrow_collect_as_map(id: pa.Array, v: pa.Array) -> dict[int, int]:
+        def arrow_collect_as_map(id: pa.Array, v: pa.Array) -> pa.Scalar:
             assert isinstance(id, pa.Array), str(type(id))
             assert isinstance(v, pa.Array), str(type(v))
             d = {i: j for i, j in zip(id.to_pylist(), v.to_pylist())}
@@ -759,7 +759,7 @@ class GroupedAggArrowUDFTestsMixin:
         df = self.spark.createDataFrame([(1, 1), (2, 2), (3, 5)], ("id", "v"))
 
         @arrow_udf("struct<m1: int, m2:int>")
-        def arrow_collect_min_max(id: pa.Array, v: pa.Array) -> dict[int, int]:
+        def arrow_collect_min_max(id: pa.Array, v: pa.Array) -> pa.Scalar:
             assert isinstance(id, pa.Array), str(type(id))
             assert isinstance(v, pa.Array), str(type(v))
             m1 = pa.compute.min(id)
