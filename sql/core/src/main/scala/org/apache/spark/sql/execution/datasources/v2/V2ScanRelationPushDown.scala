@@ -201,8 +201,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           translatedCondition.get)
       ) {
         leftHolder.joinedRelations = leftHolder.joinedRelations ++ rightHolder.joinedRelations
-        leftHolder.pushedPredicates = leftHolder.pushedPredicates ++
-          rightHolder.pushedPredicates :+ translatedCondition.get
+        val leftSidePushedDownOperators = getPushedDownOperators(leftHolder)
+        val rightSidePushedDownOperators = getPushedDownOperators(rightHolder)
+        leftHolder.joinedRelationsPushedDownOperators =
+          Seq(leftSidePushedDownOperators, rightSidePushedDownOperators)
+
+        leftHolder.pushedPredicates = Seq(translatedCondition.get)
+        leftHolder.pushedSample = None
 
         leftHolder.output = node.output.asInstanceOf[Seq[AttributeReference]]
         leftHolder.pushedJoinOutputMap = pushedJoinOutputMap
@@ -792,12 +797,16 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             f.pushedFilters()
           case _ => Array.empty[sources.Filter]
         }
-        val pushedDownOperators = PushedDownOperators(sHolder.pushedAggregate, sHolder.pushedSample,
-          sHolder.pushedLimit, sHolder.pushedOffset, sHolder.sortOrders, sHolder.pushedPredicates,
-          sHolder.joinedRelations.map(_.name))
+        val pushedDownOperators = getPushedDownOperators(sHolder)
         V1ScanWrapper(v1, pushedFilters.toImmutableArraySeq, pushedDownOperators)
       case _ => scan
     }
+  }
+
+  private def getPushedDownOperators(sHolder: ScanBuilderHolder): PushedDownOperators = {
+    PushedDownOperators(sHolder.pushedAggregate, sHolder.pushedSample,
+      sHolder.pushedLimit, sHolder.pushedOffset, sHolder.sortOrders, sHolder.pushedPredicates,
+      sHolder.joinedRelationsPushedDownOperators)
   }
 }
 
@@ -820,6 +829,8 @@ case class ScanBuilderHolder(
   var pushedAggOutputMap: AttributeMap[Expression] = AttributeMap.empty[Expression]
 
   var joinedRelations: Seq[DataSourceV2RelationBase] = Seq(relation)
+
+  var joinedRelationsPushedDownOperators: Seq[PushedDownOperators] = Seq.empty[PushedDownOperators]
 
   var pushedJoinOutputMap: AttributeMap[Expression] = AttributeMap.empty[Expression]
 }

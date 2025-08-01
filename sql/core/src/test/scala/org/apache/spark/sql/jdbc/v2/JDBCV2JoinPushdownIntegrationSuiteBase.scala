@@ -704,4 +704,25 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       checkJoinPushed(df)
     }
   }
+
+  // TODO: test currently doesn't assert on anything. We can assert on pushedJoins from explain
+  // when https://github.com/apache/spark/pull/51686 is checked in, since we would have
+  // deterministic column names.
+  test("Test explain") {
+    val sqlQuery = s"""
+                      |SELECT * FROM $catalogAndNamespace.$casedJoinTableName1 a
+                      |JOIN $catalogAndNamespace.$casedJoinTableName2 b
+                      |ON a.id = b.id + 1
+                      |JOIN $catalogAndNamespace.$casedJoinTableName1 c
+                      |ON b.id = c.id + 1
+                      |JOIN $catalogAndNamespace.$casedJoinTableName2 d
+                      |ON c.id = d.id + 1
+                      |""".stripMargin
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      sql(sqlQuery).explain("formatted")
+    }
+
+    assert(1 == 0)
+  }
 }
