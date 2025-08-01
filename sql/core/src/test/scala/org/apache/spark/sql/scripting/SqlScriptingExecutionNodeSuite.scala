@@ -20,7 +20,7 @@ package org.apache.spark.sql.scripting
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateVariables, LeafNode, OneRowRelation, Project, SetVariable}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, LeafNode, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -177,7 +177,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       case forStmt: TestForStatement => forStmt.label.get
       case _: NoOpStatementExec => "NOOP"
       case createStmt: SingleStatementExec
-        if createStmt.parsedPlan.isInstanceOf[CreateVariables] => "CreateVariables"
+        if createStmt.parsedPlan.isInstanceOf[CreateVariable] => "CreateVariables"
       case setStmt: SingleStatementExec
         if setStmt.parsedPlan.isInstanceOf[SetVariable] => "SetVariable"
       case project: SingleStatementExec if project.parsedPlan.isInstanceOf[Project]

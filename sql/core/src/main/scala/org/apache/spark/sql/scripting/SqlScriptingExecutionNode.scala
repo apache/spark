@@ -25,7 +25,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, UnresolvedAttribute, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, EqualTo, Expression, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateVariables, DefaultValueExpression, LogicalPlan, OneRowRelation, Project, SetVariable}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, LogicalPlan, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.plans.logical.ExceptionHandlerType.ExceptionHandlerType
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
@@ -1173,8 +1173,8 @@ class ForStatementExec(
   private def createDeclareVarExec(varName: String): SingleStatementExec = {
     val defaultExpression = DefaultValueExpression(
       Literal(null, queryColumnNameToDataType(varName)), "null")
-    val declareVariables = CreateVariables(
-      IndexedSeq(UnresolvedIdentifier(Seq(varName))),
+    val declareVariables = CreateVariable(
+      Seq(UnresolvedIdentifier(Seq(varName))),
       defaultExpression,
       replace = false
     )

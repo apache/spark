@@ -987,7 +987,7 @@ DropTableCommand `spark_catalog`.`default`.`v1`, false, true, false
 -- !query
 DECLARE v1 INT
 -- !query analysis
-CreateVariables defaultvalueexpression(null, null), false
+CreateVariable defaultvalueexpression(null, null), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.v1
 
 

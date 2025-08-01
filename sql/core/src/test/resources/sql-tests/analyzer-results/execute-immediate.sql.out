@@ -33,7 +33,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`x`, false
 -- !query
 DECLARE sql_string STRING
 -- !query analysis
-CreateVariables defaultvalueexpression(null, null), false
+CreateVariable defaultvalueexpression(null, null), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.sql_string
 
 
@@ -123,7 +123,7 @@ SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view
 -- !query
 DECLARE a STRING
 -- !query analysis
-CreateVariables defaultvalueexpression(null, null), false
+CreateVariable defaultvalueexpression(null, null), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.a
 
 
@@ -227,7 +227,7 @@ SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view
 -- !query
 DECLARE b INT
 -- !query analysis
-CreateVariables defaultvalueexpression(null, null), false
+CreateVariable defaultvalueexpression(null, null), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.b
 
 
@@ -322,7 +322,7 @@ Project [variablereference(system.session.sql_string='SELECT id from tbl_view wh
 -- !query
 DECLARE res_id INT
 -- !query analysis
-CreateVariables defaultvalueexpression(null, null), false
+CreateVariable defaultvalueexpression(null, null), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.res_id
 
 
@@ -752,7 +752,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 DECLARE p = 10
 -- !query analysis
-CreateVariables defaultvalueexpression(10, 10), false
+CreateVariable defaultvalueexpression(10, 10), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.p
 
 

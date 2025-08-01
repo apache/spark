@@ -40,12 +40,12 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
     // We only support temp variables for now and the system catalog is not properly implemented
     // yet. We need to resolve `UnresolvedIdentifier` for variable commands specially.
-    case c @ CreateVariables(plans, _, _) =>
-      // From scripts we can only create local variables, which must be unqualified,
-      // and must not be DECLARE OR REPLACE.
+    case c @ CreateVariable(plans, _, _) =>
+      // We resolve only UnresolvedIdentifiers, and pass on the other nodes
       val resolved = plans.map {
-        case plan: UnresolvedIdentifier =>
-          val unresolvedIdentifier = plan
+        case unresolvedIdentifier: UnresolvedIdentifier =>
+          // From scripts we can only create local variables, which must be unqualified,
+          // and must not be DECLARE OR REPLACE.
           if (withinSqlScript) {
             if (c.replace) {
               throw new AnalysisException(

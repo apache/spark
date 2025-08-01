@@ -1370,7 +1370,7 @@ trait QuaternaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
 }
 
 trait NaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
-  def naryChildren: IndexedSeq[T]
+  def naryChildren: Seq[T]
 
   @transient override final lazy val children: Seq[T] = naryChildren
 
@@ -1399,7 +1399,7 @@ trait NaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
     withNaryChildren(newChildren)
   }
 
-  protected def withNaryChildren(newChildren: IndexedSeq[T]): T
+  protected def withNaryChildren(newChildren: Seq[T]): T
 }
 
 object MultiTransform {

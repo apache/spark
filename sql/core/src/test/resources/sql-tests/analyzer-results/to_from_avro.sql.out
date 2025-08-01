@@ -13,7 +13,7 @@ CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`t`, ErrorIfExist
 -- !query
 declare avro_schema string
 -- !query analysis
-CreateVariables defaultvalueexpression(null, null), false
+CreateVariable defaultvalueexpression(null, null), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.avro_schema
 
 

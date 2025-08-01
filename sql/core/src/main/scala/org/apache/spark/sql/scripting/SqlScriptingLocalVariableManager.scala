@@ -28,6 +28,9 @@ import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableErro
 class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
   extends VariableManager with DataTypeErrorsBase {
 
+  protected def getVariableNameForError(variableName: String): String =
+    toSQLId(Seq(context.currentScope.label, variableName))
+
   override def create(
       nameParts: Seq[String],
       varDef: VariableDefinition,
@@ -42,7 +45,7 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
       throw new AnalysisException(
         errorClass = "VARIABLE_ALREADY_EXISTS",
         messageParameters = Map(
-          "variableName" -> toSQLId(Seq(context.currentScope.label, name))))
+          "variableName" -> getVariableNameForError(name)))
     }
     context.currentScope.variables.put(name, varDef)
   }

@@ -349,8 +349,8 @@ class AstBuilder extends DataTypeAstBuilder
 
         case statement =>
           statement match {
-            case SingleStatement(createVariables: CreateVariables) =>
-              compoundBodyParserContext.variable(createVariables, isScope)
+            case SingleStatement(createVariable: CreateVariable) =>
+              compoundBodyParserContext.variable(createVariable, isScope)
             case _ => compoundBodyParserContext.statement()
           }
           buff += statement
@@ -6375,17 +6375,17 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Create a [[CreateVariables]] command.
+   * Create a [[CreateVariable]] command.
    *
    * For example:
    * {{{
-   *   DECLARE [OR REPLACE] [COMMA SEPARATED VARIABLES] [db_name.]variable_name
+   *   DECLARE [OR REPLACE] [VARIABLE] [db_name.]variable_name [COMMA [db_name.]variable_name]*
    *   [dataType] [defaultExpression];
    * }}}
    *
    * We will add CREATE VARIABLE for persisted variable definitions to this, hence the name.
    */
-  override def visitCreateVariables(ctx: CreateVariablesContext): LogicalPlan = withOrigin(ctx) {
+  override def visitCreateVariable(ctx: CreateVariableContext): LogicalPlan = withOrigin(ctx) {
     val dataTypeOpt = Option(ctx.dataType()).map(typedVisit[DataType])
     val defaultExpression = if (ctx.variableDefaultExpression() == null) {
       if (dataTypeOpt.isEmpty) {
@@ -6399,12 +6399,12 @@ class AstBuilder extends DataTypeAstBuilder
       val default = visitVariableDefaultExpression(ctx.variableDefaultExpression())
       dataTypeOpt.map { dt => default.copy(child = Cast(default.child, dt)) }.getOrElse(default)
     }
-    CreateVariables(
+    CreateVariable(
       ctx.identifierReferences.asScala.map (
-        ctx => {
-          withIdentClause(ctx, UnresolvedIdentifier(_))
+        identifierReference => {
+          withIdentClause(identifierReference, UnresolvedIdentifier(_))
         }
-      ).toIndexedSeq,
+      ).toSeq,
       defaultExpression,
       ctx.REPLACE() != null
     )

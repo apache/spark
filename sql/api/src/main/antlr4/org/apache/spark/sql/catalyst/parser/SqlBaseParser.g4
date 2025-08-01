@@ -300,7 +300,7 @@ statement
     | DECLARE (OR REPLACE)? variable?
         identifierReferences+=identifierReference
         (COMMA identifierReferences+=identifierReference)*
-        dataType? variableDefaultExpression?                           #createVariables
+        dataType? variableDefaultExpression?                           #createVariable
     | DROP TEMPORARY variable (IF EXISTS)? identifierReference         #dropVariable
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         (statement|setResetStatement)                                  #explain

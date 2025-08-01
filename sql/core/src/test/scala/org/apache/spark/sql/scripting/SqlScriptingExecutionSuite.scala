@@ -2536,7 +2536,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |    SELECT localVar;
         |    SELECT session.localVar;
         |  END;
-        |  DECLARE x, y, z, w = 2;
         |END
         |""".stripMargin
       val expected = Seq(
@@ -2761,7 +2760,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |  END;
         |END
         |""".stripMargin
-
     val expected = Seq(
       Seq(Row(1)), // select localVar1
       Seq(Row(1)), // select lbl1.localVar1
@@ -2770,9 +2768,29 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1)), // select localVar3
       Seq(Row(1)), // select lbl1.localVar3
       Seq(Row(1)), // select localVar4
-      Seq(Row(1)), // select lbl1.localVar4
+      Seq(Row(1)) // select lbl1.localVar4
     )
     verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("local variable - same variable declared twice inside on DECLARE statement") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  lbl1: BEGIN
+        |    DECLARE var1, var1 = 23;
+        |  END;
+        |END
+        |""".stripMargin
+
+    val e = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+    }
+    checkError(
+      exception = e,
+      condition = "VARIABLE_ALREADY_EXISTS",
+      parameters = Map("variableName" -> toSQLId("lbl1.var1"))
+    )
   }
 
   test("local variable - variable declared via IDENTIFIER construct," +
@@ -2799,7 +2817,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       Seq(Row(3)), // select var1
       Seq(Row(3)), // select lbl1.var1
       Seq(Row(3)), // select var2
-      Seq(Row(3)), // select lbl1.var2
+      Seq(Row(3)) // select lbl1.var2
     )
     verifySqlScriptResult(sqlScript, expected)
   }

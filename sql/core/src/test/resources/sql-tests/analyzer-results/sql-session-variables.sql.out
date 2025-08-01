@@ -8,7 +8,7 @@ SetCommand (spark.sql.ansi.enabled,Some(true))
 -- !query
 DECLARE title STRING
 -- !query analysis
-CreateVariables defaultvalueexpression(null, null), false
+CreateVariable defaultvalueexpression(null, null), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.title
 
 
@@ -23,7 +23,7 @@ SetVariable [variablereference(system.session.title=CAST(NULL AS STRING))]
 -- !query
 DECLARE var1 INT = 5
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(5 as int), 5), false
+CreateVariable defaultvalueexpression(cast(5 as int), 5), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -67,7 +67,7 @@ SetVariable [variablereference(system.session.title='-- Basic sanity --')]
 -- !query
 DECLARE VARIABLE var1 INT
 -- !query analysis
-CreateVariables defaultvalueexpression(null, null), false
+CreateVariable defaultvalueexpression(null, null), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -81,7 +81,7 @@ Project [Expect: INT, NULL AS Expect: INT, NULL#x, typeof(variablereference(syst
 -- !query
 DECLARE OR REPLACE VARIABLE var1 DOUBLE
 -- !query analysis
-CreateVariables defaultvalueexpression(null, null), true
+CreateVariable defaultvalueexpression(null, null), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -152,7 +152,7 @@ SetVariable [variablereference(system.session.title='Create Variable - Failure C
 -- !query
 DECLARE VAR var1 INT
 -- !query analysis
-CreateVariables defaultvalueexpression(null, null), false
+CreateVariable defaultvalueexpression(null, null), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -213,7 +213,7 @@ DropVariable true
 -- !query
 DECLARE VARIABLE var1 INT
 -- !query analysis
-CreateVariables defaultvalueexpression(null, null), false
+CreateVariable defaultvalueexpression(null, null), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -263,7 +263,7 @@ SetVariable [variablereference(system.session.title='Drop Variable')]
 -- !query
 DECLARE VARIABLE var1 INT DEFAULT 1
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(1 as int), 1), false
+CreateVariable defaultvalueexpression(cast(1 as int), 1), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -292,7 +292,7 @@ Project [2 AS Expected#x, variablereference(system.session.var1=2) AS Unqualifie
 -- !query
 DECLARE OR REPLACE VARIABLE session.var1 INT DEFAULT 1
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(1 as int), 1), true
+CreateVariable defaultvalueexpression(cast(1 as int), 1), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -321,7 +321,7 @@ Project [2 AS Expected#x, variablereference(system.session.var1=2) AS Unqualifie
 -- !query
 DECLARE OR REPLACE VARIABLE system.session.var1 INT DEFAULT 1
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(1 as int), 1), true
+CreateVariable defaultvalueexpression(cast(1 as int), 1), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -350,7 +350,7 @@ Project [2 AS Expected#x, variablereference(system.session.var1=2) AS Unqualifie
 -- !query
 DECLARE OR REPLACE VARIABLE sySteM.sEssIon.vAr1 INT DEFAULT 1
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(1 as int), 1), true
+CreateVariable defaultvalueexpression(cast(1 as int), 1), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.vAr1
 
 
@@ -379,7 +379,7 @@ Project [2 AS Expected#x, variablereference(system.session.var1=2) AS Unqualifie
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT
 -- !query analysis
-CreateVariables defaultvalueexpression(null, null), true
+CreateVariable defaultvalueexpression(null, null), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -406,7 +406,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT
 -- !query analysis
-CreateVariables defaultvalueexpression(null, null), true
+CreateVariable defaultvalueexpression(null, null), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -433,7 +433,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT
 -- !query analysis
-CreateVariables defaultvalueexpression(null, null), true
+CreateVariable defaultvalueexpression(null, null), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -460,7 +460,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT
 -- !query analysis
-CreateVariables defaultvalueexpression(null, null), true
+CreateVariable defaultvalueexpression(null, null), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -556,7 +556,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT
 -- !query analysis
-CreateVariables defaultvalueexpression(null, null), true
+CreateVariable defaultvalueexpression(null, null), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -679,7 +679,7 @@ SetVariable [variablereference(system.session.title='Test qualifiers - fail')]
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 1
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(1 as int), 1), true
+CreateVariable defaultvalueexpression(cast(1 as int), 1), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -706,7 +706,7 @@ Project [true AS Expected#x, (variablereference(system.session.var1=1.0239069642
 -- !query
 DECLARE OR REPLACE VARIABLE var1 = 'Hello'
 -- !query analysis
-CreateVariables defaultvalueexpression(Hello, 'Hello'), true
+CreateVariable defaultvalueexpression(Hello, 'Hello'), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -720,7 +720,7 @@ Project [STRING, Hello AS Expected#x, typeof(variablereference(system.session.va
 -- !query
 DECLARE OR REPLACE VARIABLE var1 DEFAULT NULL
 -- !query analysis
-CreateVariables defaultvalueexpression(null, NULL), true
+CreateVariable defaultvalueexpression(null, NULL), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -734,7 +734,7 @@ Project [VOID, NULL AS Expected#x, typeof(variablereference(system.session.var1=
 -- !query
 DECLARE OR REPLACE VARIABLE INT DEFAULT 5.0
 -- !query analysis
-CreateVariables defaultvalueexpression(5.0, 5.0), true
+CreateVariable defaultvalueexpression(5.0, 5.0), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.INT
 
 
@@ -748,7 +748,7 @@ Project [INT, 5 AS Expected#x, typeof(variablereference(system.session.var1=NULL
 -- !query
 DECLARE OR REPLACE VARIABLE var1 MAP<string, double> DEFAULT MAP('Hello', 5.1, 'World', -7.1E10)
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(map(Hello, cast(5.1 as double), World, -7.1E10) as map<string,double>), MAP('Hello', 5.1, 'World', -7.1E10)), true
+CreateVariable defaultvalueexpression(cast(map(Hello, cast(5.1 as double), World, -7.1E10) as map<string,double>), MAP('Hello', 5.1, 'World', -7.1E10)), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -762,7 +762,7 @@ Project [MAP<string, double>, [Hello -> 5.1, World -> -7E10] AS Expected#x, type
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT NULL
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(null as int), NULL), true
+CreateVariable defaultvalueexpression(cast(null as int), NULL), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -776,7 +776,7 @@ Project [NULL AS Expected#x, variablereference(system.session.var1=CAST(NULL AS 
 -- !query
 DECLARE OR REPLACE VARIABLE var1 STRING DEFAULT CURRENT_DATABASE()
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(current_schema() as string), CURRENT_DATABASE()), true
+CreateVariable defaultvalueexpression(cast(current_schema() as string), CURRENT_DATABASE()), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -904,7 +904,7 @@ SetVariable [variablereference(system.session.title='Test DEFAULT on create - fa
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 5
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(5 as int), 5), true
+CreateVariable defaultvalueexpression(cast(5 as int), 5), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -1080,7 +1080,7 @@ org.apache.spark.SparkNumberFormatException
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 5
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(5 as int), 5), true
+CreateVariable defaultvalueexpression(cast(5 as int), 5), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -1117,21 +1117,21 @@ SetVariable [variablereference(system.session.title='SET VARIABLE - single targe
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 5
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(5 as int), 5), true
+CreateVariable defaultvalueexpression(cast(5 as int), 5), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
 -- !query
 DECLARE OR REPLACE VARIABLE var2 STRING DEFAULT 'hello'
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(hello as string), 'hello'), true
+CreateVariable defaultvalueexpression(cast(hello as string), 'hello'), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var2
 
 
 -- !query
 DECLARE OR REPLACE VARIABLE var3 DOUBLE DEFAULT 2
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(2 as double), 2), true
+CreateVariable defaultvalueexpression(cast(2 as double), 2), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var3
 
 
@@ -1169,21 +1169,21 @@ Project [variablereference(system.session.var1=7) AS 7#x, variablereference(syst
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 5
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(5 as int), 5), true
+CreateVariable defaultvalueexpression(cast(5 as int), 5), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
 -- !query
 DECLARE OR REPLACE VARIABLE var2 STRING DEFAULT 'hello'
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(hello as string), 'hello'), true
+CreateVariable defaultvalueexpression(cast(hello as string), 'hello'), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var2
 
 
 -- !query
 DECLARE OR REPLACE VARIABLE var3 DOUBLE DEFAULT 2
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(2 as double), 2), true
+CreateVariable defaultvalueexpression(cast(2 as double), 2), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var3
 
 
@@ -1257,21 +1257,21 @@ SetVariable [variablereference(system.session.title='SET VARIABLE - comma separa
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 5
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(5 as int), 5), true
+CreateVariable defaultvalueexpression(cast(5 as int), 5), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
 -- !query
 DECLARE OR REPLACE VARIABLE var2 STRING DEFAULT 'hello'
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(hello as string), 'hello'), true
+CreateVariable defaultvalueexpression(cast(hello as string), 'hello'), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var2
 
 
 -- !query
 DECLARE OR REPLACE VARIABLE var3 DOUBLE DEFAULT 2
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(2 as double), 2), true
+CreateVariable defaultvalueexpression(cast(2 as double), 2), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var3
 
 
@@ -1459,21 +1459,21 @@ SetVariable [variablereference(system.session.title='SET VARIABLE - row assignme
 -- !query
 DECLARE OR REPLACE VARIABLE var1 STRING DEFAULT 'default1'
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(default1 as string), 'default1'), true
+CreateVariable defaultvalueexpression(cast(default1 as string), 'default1'), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
 -- !query
 DECLARE OR REPLACE VARIABLE var2 STRING DEFAULT 'default2'
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(default2 as string), 'default2'), true
+CreateVariable defaultvalueexpression(cast(default2 as string), 'default2'), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var2
 
 
 -- !query
 DECLARE OR REPLACE VARIABLE var3 STRING DEFAULT 'default3'
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(default3 as string), 'default3'), true
+CreateVariable defaultvalueexpression(cast(default3 as string), 'default3'), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var3
 
 
@@ -1769,7 +1769,7 @@ SetVariable [variablereference(system.session.title='DEFAULT expression usage')]
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 1
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(1 as int), 1), true
+CreateVariable defaultvalueexpression(cast(1 as int), 1), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -1885,7 +1885,7 @@ DropVariable false
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 1
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(1 as int), 1), true
+CreateVariable defaultvalueexpression(cast(1 as int), 1), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -1949,7 +1949,7 @@ SetVariable [variablereference(system.session.title='SET command')]
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 1
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(1 as int), 1), true
+CreateVariable defaultvalueexpression(cast(1 as int), 1), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -2100,7 +2100,7 @@ SetVariable [variablereference(system.session.title='variable references -- visi
 -- !query
 DECLARE OR REPLACE VARIABLE var1 INT DEFAULT 1
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(1 as int), 1), true
+CreateVariable defaultvalueexpression(cast(1 as int), 1), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 
@@ -2144,7 +2144,7 @@ SetVariable [variablereference(system.session.title='variable references -- proh
 -- !query
 DECLARE OR REPLACE VARIABLE var1 STRING DEFAULT 'a INT'
 -- !query analysis
-CreateVariables defaultvalueexpression(cast(a INT as string), 'a INT'), true
+CreateVariable defaultvalueexpression(cast(a INT as string), 'a INT'), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
 
 

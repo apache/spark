@@ -719,7 +719,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           case alter: AlterTableCommand =>
             checkAlterTableCommand(alter)
 
-          case c: CreateVariables
+          case c: CreateVariable
               if c.resolved && c.defaultExpr.child.containsPattern(PLAN_EXPRESSION) =>
             val ident = c.names(0).asInstanceOf[ResolvedIdentifier]
             val varName = toSQLId(
@@ -858,7 +858,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             !o.isInstanceOf[Window] &&
             !o.isInstanceOf[Expand] &&
             !o.isInstanceOf[Generate] &&
-            !o.isInstanceOf[CreateVariables] &&
+            !o.isInstanceOf[CreateVariable] &&
             !o.isInstanceOf[MapInPandas] &&
             !o.isInstanceOf[MapInArrow] &&
             // Lateral join is checked in checkSubqueryExpression.

@@ -1683,12 +1683,12 @@ case class TableSpec(
 /**
  * The logical plan of the DECLARE [OR REPLACE] TEMPORARY VARIABLES command.
  */
-case class CreateVariables(
-    names: IndexedSeq[LogicalPlan],
+case class CreateVariable(
+    names: Seq[LogicalPlan],
     defaultExpr: DefaultValueExpression,
     replace: Boolean) extends NaryCommand with SupportsSubquery {
-  override def naryChildren: IndexedSeq[LogicalPlan] = names
-  override protected def withNaryChildren(newChildren: IndexedSeq[LogicalPlan]): LogicalPlan =
+  override def naryChildren: IndexedSeq[LogicalPlan] = names.toIndexedSeq
+  override protected def withNaryChildren(newChildren: Seq[LogicalPlan]): LogicalPlan =
     copy(names = newChildren)
 }
 
