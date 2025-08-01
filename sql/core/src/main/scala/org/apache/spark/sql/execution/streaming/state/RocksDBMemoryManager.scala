@@ -36,7 +36,7 @@ import org.apache.spark.memory.{MemoryMode, UnifiedMemoryManager, UnmanagedMemor
  * UnifiedMemoryManager, allowing Spark to account for RocksDB memory when making
  * memory allocation decisions.
  */
-object RocksDBMemoryManager extends Logging with UnmanagedMemoryConsumer{
+object RocksDBMemoryManager extends Logging with UnmanagedMemoryConsumer {
   private var writeBufferManager: WriteBufferManager = null
   private var cache: Cache = null
 
