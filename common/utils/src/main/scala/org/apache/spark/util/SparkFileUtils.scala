@@ -50,6 +50,13 @@ private[spark] trait SparkFileUtils extends Logging {
   }
 
   /**
+   * Size of files recursively.
+   */
+  def sizeOf(f: File): Long = {
+    JavaUtils.sizeOf(f)
+  }
+
+  /**
    * Lists files recursively.
    */
   def recursiveList(f: File): Array[File] = {

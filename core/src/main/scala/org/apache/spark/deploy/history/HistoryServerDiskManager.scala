@@ -286,7 +286,7 @@ private class HistoryServerDiskManager(
   }
 
   /** Visible for testing. Return the size of a directory. */
-  private[history] def sizeOf(path: File): Long = FileUtils.sizeOf(path)
+  private[history] def sizeOf(path: File): Long = Utils.sizeOf(path)
 
   private[history] class Lease(val tmpPath: File, private val leased: Long) {
 

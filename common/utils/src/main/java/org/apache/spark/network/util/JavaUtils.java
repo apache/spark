@@ -23,9 +23,13 @@ import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.FileVisitResult;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -80,6 +84,25 @@ public class JavaUtils {
    */
   public static String bytesToString(ByteBuffer b) {
     return StandardCharsets.UTF_8.decode(b.slice()).toString();
+  }
+
+  public static long sizeOf(File file) throws IOException {
+    if (!file.exists()) {
+      throw new IllegalArgumentException(file.getAbsolutePath() + " not found");
+    }
+    return sizeOf(file.toPath());
+  }
+
+  public static long sizeOf(Path dirPath) throws IOException {
+    AtomicLong size = new AtomicLong(0);
+    Files.walkFileTree(dirPath, new SimpleFileVisitor<Path>() {
+        @Override
+        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+          size.addAndGet(attrs.size());
+          return FileVisitResult.CONTINUE;
+        }
+      });
+    return size.get();
   }
 
   /**
