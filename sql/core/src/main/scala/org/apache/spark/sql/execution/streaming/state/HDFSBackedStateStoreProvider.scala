@@ -82,8 +82,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = map.get(key)
 
-    override def iterator(colFamilyName: String):
-    StateStoreIterator[UnsafeRowPair] = {
+    override def iterator(colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       val iter = map.iterator()
       new StateStoreIterator(iter)
     }
@@ -96,8 +95,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       s"HDFSReadStateStore[stateStoreId=$stateStoreId_, version=$version]"
     }
 
-    override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
-    StateStoreIterator[UnsafeRowPair] = {
+    override def prefixScan(
+       prefixKey: UnsafeRow,
+       colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       val iter = map.prefixScan(prefixKey)
       new StateStoreIterator(iter)
     }
@@ -217,15 +217,15 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
      * Get an iterator of all the store data.
      * This can be called only after committing all the updates made in the current thread.
      */
-    override def iterator(colFamilyName: String):
-    StateStoreIterator[UnsafeRowPair] = {
+    override def iterator(colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       assertUseOfDefaultColFamily(colFamilyName)
       val iter = mapToUpdate.iterator()
       new StateStoreIterator(iter)
     }
 
-    override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
-    StateStoreIterator[UnsafeRowPair] = {
+    override def prefixScan(
+       prefixKey: UnsafeRow,
+       colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       assertUseOfDefaultColFamily(colFamilyName)
       val iter = mapToUpdate.prefixScan(prefixKey)
       new StateStoreIterator(iter)

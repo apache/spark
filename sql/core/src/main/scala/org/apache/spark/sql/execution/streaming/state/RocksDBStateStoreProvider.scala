@@ -356,8 +356,9 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
-    override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
-    StateStoreIterator[UnsafeRowPair] = {
+    override def prefixScan(
+       prefixKey: UnsafeRow,
+       colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       validateAndTransitionState(UPDATE)
       verifyColFamilyOperations("prefixScan", colFamilyName)
 
