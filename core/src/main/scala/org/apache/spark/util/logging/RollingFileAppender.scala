@@ -23,8 +23,8 @@ import java.util.zip.GZIPOutputStream
 import com.google.common.io.Files
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.{config, MDC}
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.config
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 

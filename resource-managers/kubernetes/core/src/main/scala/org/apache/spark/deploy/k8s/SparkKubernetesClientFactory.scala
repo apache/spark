@@ -29,7 +29,7 @@ import io.fabric8.kubernetes.client.utils.Utils.getSystemPropertyOrEnvVar
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.K8S_CONTEXT
 import org.apache.spark.internal.config.ConfigEntry
 

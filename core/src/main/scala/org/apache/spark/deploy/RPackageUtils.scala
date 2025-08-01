@@ -27,7 +27,7 @@ import scala.jdk.CollectionConverters._
 import com.google.common.io.{ByteStreams, Files}
 
 import org.apache.spark.api.r.RUtils
-import org.apache.spark.internal.{LogEntry, Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{LogEntry, Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.util.{RedirectThread, Utils}
 

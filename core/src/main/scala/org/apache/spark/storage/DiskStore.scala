@@ -29,7 +29,7 @@ import com.google.common.io.Closeables
 import io.netty.channel.DefaultFileRegion
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
