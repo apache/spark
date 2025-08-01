@@ -760,12 +760,12 @@ abstract class AvroSuite
       spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, ZSTANDARD.lowerCaseName())
       df.write.format("avro").save(zstandardDir)
 
-      val uncompressSize = FileUtils.sizeOfDirectory(new File(uncompressDir))
-      val bzip2Size = FileUtils.sizeOfDirectory(new File(bzip2Dir))
-      val xzSize = FileUtils.sizeOfDirectory(new File(xzDir))
-      val deflateSize = FileUtils.sizeOfDirectory(new File(deflateDir))
-      val snappySize = FileUtils.sizeOfDirectory(new File(snappyDir))
-      val zstandardSize = FileUtils.sizeOfDirectory(new File(zstandardDir))
+      val uncompressSize = Utils.sizeOf(new File(uncompressDir))
+      val bzip2Size = Utils.sizeOf(new File(bzip2Dir))
+      val xzSize = Utils.sizeOf(new File(xzDir))
+      val deflateSize = Utils.sizeOf(new File(deflateDir))
+      val snappySize = Utils.sizeOf(new File(snappyDir))
+      val zstandardSize = Utils.sizeOf(new File(zstandardDir))
 
       assert(uncompressSize > deflateSize)
       assert(snappySize > deflateSize)
