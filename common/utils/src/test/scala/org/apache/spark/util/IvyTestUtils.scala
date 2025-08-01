@@ -161,9 +161,9 @@ private[spark] object IvyTestUtils {
 
   /** Helper method to write artifact information in the pom. */
   private def pomArtifactWriter(artifact: MavenCoordinate, tabCount: Int = 1): String = {
-    var result = "\n" + "  " * tabCount + s"<groupId>${artifact.groupId}</groupId>"
-    result += "\n" + "  " * tabCount + s"<artifactId>${artifact.artifactId}</artifactId>"
-    result += "\n" + "  " * tabCount + s"<version>${artifact.version}</version>"
+    var result = "\n" + "  ".repeat(tabCount) + s"<groupId>${artifact.groupId}</groupId>"
+    result += "\n" + "  ".repeat(tabCount) + s"<artifactId>${artifact.artifactId}</artifactId>"
+    result += "\n" + "  ".repeat(tabCount) + s"<version>${artifact.version}</version>"
     result
   }
 

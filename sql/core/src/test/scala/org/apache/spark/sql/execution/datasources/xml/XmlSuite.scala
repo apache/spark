@@ -2832,7 +2832,7 @@ class XmlSuite
   test("Find compatible types even if inferred DecimalType is not capable of other IntegralType") {
     val mixedIntegerAndDoubleRecords = Seq(
       """<ROW><a>3</a><b>1.1</b></ROW>""",
-      s"""<ROW><a>3.1</a><b>0.${"0" * 38}1</b></ROW>""").toDS()
+      s"""<ROW><a>3.1</a><b>0.${"0".repeat(38)}1</b></ROW>""").toDS()
     val xmlDF = spark.read
       .option("prefersDecimal", "true")
       .option("rowTag", "ROW")
@@ -2852,9 +2852,8 @@ class XmlSuite
     )
   }
 
-  def bigIntegerRecords: Dataset[String] =
-    spark.createDataset(spark.sparkContext.parallelize(
-      s"""<ROW><a>1${"0" * 38}</a><b>92233720368547758070</b></ROW>""" :: Nil))(Encoders.STRING)
+  def bigIntegerRecords: Dataset[String] = spark.createDataset(spark.sparkContext.parallelize(
+    s"""<ROW><a>1${"0".repeat(38)}</a><b>92233720368547758070</b></ROW>""" :: Nil))(Encoders.STRING)
 
   test("Infer big integers correctly even when it does not fit in decimal") {
     val df = spark.read
@@ -2874,7 +2873,7 @@ class XmlSuite
 
   def floatingValueRecords: Dataset[String] =
     spark.createDataset(spark.sparkContext.parallelize(
-      s"""<ROW><a>0.${"0" * 38}1</a><b>.01</b></ROW>""" :: Nil))(Encoders.STRING)
+      s"""<ROW><a>0.${"0".repeat(38)}1</a><b>.01</b></ROW>""" :: Nil))(Encoders.STRING)
 
   test("Infer floating-point values correctly even when it does not fit in decimal") {
     val df = spark.read
