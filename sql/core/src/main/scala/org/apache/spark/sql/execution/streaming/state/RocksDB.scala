@@ -158,6 +158,8 @@ class RocksDB(
   private val byteArrayPair = new ByteArrayPair()
   private val commitLatencyMs = new mutable.HashMap[String, Long]()
 
+  private val loadMetrics = new mutable.HashMap[String, Long]()
+
   @volatile private var db: NativeRocksDB = _
   @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
   private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
@@ -584,8 +586,13 @@ class RocksDB(
       version: Long,
       stateStoreCkptId: Option[String] = None,
       readOnly: Boolean = false): RocksDB = {
+    val startTime = System.currentTimeMillis()
+
     assert(version >= 0)
     recordedMetrics = None
+    // Reset the load metrics before loading
+    loadMetrics.clear()
+
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)} with stateStoreCkptId: ${
       MDC(LogKeys.UUID, stateStoreCkptId.getOrElse(""))}")
     if (stateStoreCkptId.isDefined || enableStateStoreCheckpointIds && version == 0) {
@@ -594,6 +601,11 @@ class RocksDB(
       loadWithoutCheckpointId(version, readOnly)
     }
 
+    // Record the metrics after loading
+    val duration = System.currentTimeMillis() - startTime
+    loadMetrics ++= Map(
+      "load" -> duration
+    )
     // Register with memory manager after successful load
     updateMemoryUsageIfNeeded()
 
@@ -612,8 +624,12 @@ class RocksDB(
    *         Source.
    */
   def loadFromSnapshot(snapshotVersion: Long, endVersion: Long): RocksDB = {
+    val startTime = System.currentTimeMillis()
+
     assert(snapshotVersion >= 0 && endVersion >= snapshotVersion)
     recordedMetrics = None
+    loadMetrics.clear()
+
     logInfo(
       log"Loading snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
       log"changelog files to version ${MDC(LogKeys.VERSION_NUM, endVersion)}.")
@@ -630,6 +646,12 @@ class RocksDB(
     }
     // Report this snapshot version to the coordinator
     reportSnapshotUploadToCoordinator(snapshotVersion)
+
+    // Record the metrics after loading
+    loadMetrics ++= Map(
+      "loadFromSnapshot" -> (System.currentTimeMillis() - startTime)
+    )
+
     this
   }
 
@@ -695,6 +717,8 @@ class RocksDB(
    * Replay change log from the loaded version to the target version.
    */
   private def replayChangelog(versionsAndUniqueIds: Array[(Long, Option[String])]): Unit = {
+    val startTime = System.currentTimeMillis()
+
     assert(!versionsAndUniqueIds.isEmpty && versionsAndUniqueIds.head._1 == loadedVersion + 1,
       s"Replay changelog should start from one version after loadedVersion: $loadedVersion," +
         s" but it is not."
@@ -743,6 +767,12 @@ class RocksDB(
         if (changelogReader != null) changelogReader.closeIfNeeded()
       }
     }
+
+    val duration = System.currentTimeMillis() - startTime
+    loadMetrics ++= Map(
+      "replayChangelog" -> Math.max(duration, 1L), // avoid flaky tests
+      "numReplayChangeLogFiles" -> versionsAndUniqueIds.length
+    )
   }
 
   /**
@@ -1044,6 +1074,7 @@ class RocksDB(
    * - Sync the checkpoint dir files to DFS
    */
   def commit(): (Long, StateStoreCheckpointInfo) = {
+    commitLatencyMs.clear()
     updateMemoryUsageIfNeeded()
     val newVersion = loadedVersion + 1
     try {
@@ -1056,13 +1087,14 @@ class RocksDB(
         commitLatencyMs ++= snapshotLatency
       }
 
+      var isUploaded = false
+
       logInfo(log"Syncing checkpoint for ${MDC(LogKeys.VERSION_NUM, newVersion)} to DFS")
       val fileSyncTimeMs = timeTakenMs {
         if (enableChangelogCheckpointing) {
           // If we have changed the columnFamilyId mapping, we have set a new
           // snapshot and need to upload this to the DFS even if changelog checkpointing
           // is enabled.
-          var isUploaded = false
           if (shouldForceSnapshot.get()) {
             assert(snapshot.isDefined)
             uploadSnapshot(snapshot.get)
@@ -1073,7 +1105,14 @@ class RocksDB(
           // ensure that changelog files are always written
           try {
             assert(changelogWriter.isDefined)
-            changelogWriter.foreach(_.commit())
+            val changeLogWriterCommitTimeMs = timeTakenMs {
+              changelogWriter.foreach(_.commit())
+            }
+            // Record the commit time for the changelog writer
+            commitLatencyMs ++= Map(
+              "changeLogWriterCommit" -> changeLogWriterCommitTimeMs
+            )
+
             if (!isUploaded) {
               snapshot.foreach(snapshotsToUploadQueue.offer)
             }
@@ -1084,7 +1123,17 @@ class RocksDB(
           assert(changelogWriter.isEmpty)
           assert(snapshot.isDefined)
           uploadSnapshot(snapshot.get)
+          isUploaded = true
         }
+      }
+
+      if (isUploaded) {
+        // If we have uploaded the snapshot, the fileManagerMetrics will be cleared and updated
+        // in uploadSnapshot. If there are new metrics needed to be added specific to this commit,
+        // add them here to not accidentally use old fileManagerMetrics from the maintenance threads
+        commitLatencyMs ++= Map(
+          "saveZipFiles" -> fileManagerMetrics.saveZipFilesTimeMs.getOrElse(0L)
+        )
       }
 
       if (enableStateStoreCheckpointIds) {
@@ -1355,7 +1404,9 @@ class RocksDB(
       pinnedBlocksMemUsage,
       totalSSTFilesBytes,
       nativeOpsLatencyMicros,
-      commitLatencyMs,
+      // Ensure that the maps are cloned to avoid sharing these Maps
+      commitLatencyMs.clone(),
+      loadMetrics.clone(),
       bytesCopied = fileManagerMetrics.bytesCopied,
       filesCopied = fileManagerMetrics.filesCopied,
       filesReused = fileManagerMetrics.filesReused,
@@ -1378,6 +1429,13 @@ class RocksDB(
         logInfo(log"Failed to acquire metrics with exception=${MDC(LogKeys.ERROR, ex)}")
     }
     rocksDBMetricsOpt
+  }
+
+  /**
+   * Refresh the recorded metrics with the latest metrics.
+   */
+  private[state] def refreshRecordedMetricsForTest(): Unit = {
+    recordedMetrics = Some(metrics)
   }
 
   private def getDBProperty(property: String): Long = db.getProperty(property).toLong
@@ -2007,6 +2065,7 @@ case class RocksDBMetrics(
     totalSSTFilesBytes: Long,
     nativeOpsHistograms: Map[String, RocksDBNativeHistogram],
     lastCommitLatencyMs: Map[String, Long],
+    loadMetrics: Map[String, Long],
     filesCopied: Long,
     bytesCopied: Long,
     filesReused: Long,

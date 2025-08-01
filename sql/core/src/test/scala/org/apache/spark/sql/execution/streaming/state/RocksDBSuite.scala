@@ -2326,6 +2326,132 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  testWithChangelogCheckpointingEnabled("RocksDB metric Maps do not change after retrieved") {
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      val conf = dbConf
+
+      withDB(remoteDir, conf = conf) { db =>
+        db.load(0)
+        db.put("a", "5")
+        db.put("b", "5")
+        db.commit()
+
+        // These should not change after retrieval
+        val m1 = db.metricsOpt.get
+
+        db.load(1)
+        db.put("a", "5")
+        db.put("b", "5")
+        db.commit()
+
+        val m2 = db.metricsOpt.get
+
+        // verify that the metrics maps are not shared
+        assert(!m1.lastCommitLatencyMs.eq(m2.lastCommitLatencyMs))
+        assert(!m1.loadMetrics.eq(m2.loadMetrics))
+        assert(!m1.nativeOpsHistograms.eq(m2.nativeOpsHistograms))
+        assert(!m1.nativeOpsMetrics.eq(m2.nativeOpsMetrics))
+      }
+    }
+  }
+
+  test("load metrics are populated correctly") {
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      val conf = dbConf
+
+      withDB(remoteDir, conf = conf) { db =>
+        db.load(0)
+        db.put("a", "5")
+        db.put("b", "5")
+        db.commit()
+
+        db.doMaintenance() // upload snapshot
+        db.rollback() // invalidate the db, so next load will reload from dfs
+
+        db.load(1)
+        db.put("a", "10")
+        db.put("b", "25")
+        db.commit()
+
+        val m1 = db.metricsOpt.get
+        assert(m1.loadMetrics("load") > 0)
+        // since we called load, loadFromSnapshot should not be populated
+        assert(!m1.loadMetrics.contains("loadFromSnapshot"))
+
+        if (conf.enableChangelogCheckpointing) {
+          assert(m1.loadMetrics("replayChangelog") > 0)
+          assert(m1.loadMetrics("numReplayChangeLogFiles") == 1)
+        } else {
+          assert(!m1.loadMetrics.contains("replayChangelog"))
+          assert(!m1.loadMetrics.contains("numReplayChangeLogFiles"))
+        }
+      }
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("load from snapshot metrics are populated correctly") {
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      // We want a snapshot for every two delta files
+      val conf = dbConf.copy(minDeltasForSnapshot = 1)
+
+      withDB(remoteDir, conf = conf) { db =>
+        db.load(0)
+        db.put("a", "5")
+        db.commit()
+        db.doMaintenance()
+
+        db.load(1)
+        db.put("b", "10")
+        db.commit()
+        db.doMaintenance()
+
+        db.loadFromSnapshot(0, 1)
+
+        db.refreshRecordedMetricsForTest()
+        val m1 = db.metricsOpt.get
+        assert(m1.loadMetrics("loadFromSnapshot") > 0)
+        // since we called loadFromSnapshot, load should not be populated
+        assert(!m1.loadMetrics.contains("load"))
+        assert(m1.loadMetrics("replayChangelog") > 0)
+        assert(m1.loadMetrics("numReplayChangeLogFiles") == 1)
+      }
+    }
+  }
+
+  test("commit metrics are populated correctly") {
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      val conf = dbConf.copy()
+
+      withDB(remoteDir, conf = conf) { db =>
+        db.load(0)
+        db.put("a", "5")
+        db.put("b", "5")
+        db.commit()
+        db.doMaintenance() // upload snapshot
+
+        val m1 = db.metricsOpt.get
+        assert(m1.lastCommitLatencyMs("fileSync") > 0)
+
+        if (conf.enableChangelogCheckpointing) {
+          // Since changelog checkpoint is enabled, we should populate this metric
+          assert(m1.lastCommitLatencyMs("changeLogWriterCommit") > 0)
+          // A snapshot is not forced when changelog checkpointing is enabled
+          assert(!m1.lastCommitLatencyMs.contains("saveZipFiles"))
+        } else {
+          // When changelog checkpoint is NOT enabled we should
+          // always populate this metric in the snapshot
+          assert(m1.lastCommitLatencyMs("saveZipFiles") > 0)
+          // This metric is not populated when changelog checkpointing is disabled
+          assert(!m1.lastCommitLatencyMs.contains("changeLogWriterCommit"))
+        }
+      }
+    }
+  }
+
   // Add tests to check valid and invalid values for max_open_files passed to the underlying
   // RocksDB instance.
   Seq("-1", "100", "1000").foreach { maxOpenFiles =>
