@@ -26,7 +26,6 @@ import scala.collection.mutable.HashSet
 import scala.reflect._
 
 import com.google.common.io.Files
-import org.apache.commons.io.IOUtils
 import org.apache.logging.log4j._
 import org.apache.logging.log4j.core.{Appender, LogEvent, Logger}
 import org.mockito.ArgumentCaptor
@@ -388,7 +387,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter {
       if (file.getName.endsWith(RollingFileAppender.GZIP_LOG_SUFFIX)) {
         val inputStream = new GZIPInputStream(new FileInputStream(file))
         try {
-          IOUtils.toString(inputStream, StandardCharsets.UTF_8)
+          Utils.toString(inputStream)
         } finally {
           Utils.closeQuietly(inputStream)
         }
