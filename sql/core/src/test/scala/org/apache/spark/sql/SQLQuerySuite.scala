@@ -5059,6 +5059,28 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
+
+  test("SPARK-53094: Fix cube-related data quality problem") {
+    withTable("table1") {
+      withSQLConf() {
+        sql(
+          """CREATE TABLE table1(product string, amount bigint,
+            |region string) using csv""".stripMargin)
+
+        sql("INSERT INTO table1 " + "VALUES('a', 100, 'east')")
+        sql("INSERT INTO table1 " + "VALUES('b', 200, 'east')")
+        sql("INSERT INTO table1 " + "VALUES('a', 150, 'west')")
+        sql("INSERT INTO table1 " + "VALUES('b', 250, 'west')")
+        sql("INSERT INTO table1 " + "VALUES('a', 120, 'east')")
+
+        checkAnswer(
+          sql("select product, region, sum(amount) as s " +
+            "from table1 group by product, region with cube having count(product) > 2 " +
+            "order by s desc"),
+          Seq(Row(null, null, 820), Row(null, "east", 420), Row("a", null, 370)))
+      }
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
