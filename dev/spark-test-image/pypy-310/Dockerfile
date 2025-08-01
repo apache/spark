@@ -69,4 +69,4 @@ RUN mkdir -p /usr/local/pypy/pypy3.11 && \
     ln -sf /usr/local/pypy/pypy3.11/bin/pypy /usr/local/bin/pypy3.10 && \
     ln -sf /usr/local/pypy/pypy3.11/bin/pypy /usr/local/bin/pypy3
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
-RUN pypy3 -m pip install numpy 'six==1.16.0' 'pandas==2.3.1' 'pyarrow==20.0.0' scipy coverage matplotlib lxml
+RUN pypy3 -m pip install numpy 'six==1.16.0' 'pandas==2.3.1' scipy coverage matplotlib lxml
