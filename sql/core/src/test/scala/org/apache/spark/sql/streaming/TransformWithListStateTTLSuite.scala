@@ -224,7 +224,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
         AddData(inputStream, "k2"),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k2", 3)),
-        assertNumStateRows(total = 10, updated = 3),
+        assertNumStateRows(total = 10, updated = 3)
 
         // For each unique key that occurs t times, the MultiStatefulVariableTTLProcessor maintains:
         //    - Map state: t records in the primary, and t records in the TTL index
@@ -331,7 +331,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
         CheckNewAnswer(
           OutputEvent("k1", -1, isTTLValue = true, 109000)
         ),
-        assertNumStateRows(total = 1, updated = 0),
+        assertNumStateRows(total = 1, updated = 0)
       )
     }
   }
@@ -740,6 +740,49 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
           StopStream
         )
       }
+    }
+  }
+
+  test("SPARK-53069: stopping and restarting the query maintains correct state total rows") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(10))
+      val inputStream = MemoryStream[String]
+      val result = inputStream.toDS()
+        .groupByKey(x => x)
+        .transformWithState(
+          new MultiStatefulVariableTTLProcessor(ttlConfig),
+          TimeMode.ProcessingTime(),
+          OutputMode.Append())
+      val clock = new StreamManualClock
+
+      testStream(result)(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+
+        AddData(inputStream, "k1"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("k1", 1)),
+        assertNumStateRows(total = 3, updated = 3),
+
+        StopStream,
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+
+        AddData(inputStream, "k1"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("k1", 2)),
+        assertNumStateRows(total = 4, updated = 3),
+
+        StopStream,
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+
+        AddData(inputStream, "k1"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("k1", 3)),
+        assertNumStateRows(total = 5, updated = 3),
+
+        StopStream
+      )
     }
   }
 }
