@@ -1669,6 +1669,18 @@ class ClientE2ETestSuite
     }
     checkAnswer(df, (0 until 6).map(i => Row(i)))
   }
+
+  test("SPARK-53054: DataFrameReader defaults to spark.sql.sources.default") {
+    withTempPath { file =>
+      val path = file.getAbsoluteFile.toURI.toString
+      spark.range(100).write.parquet(file.toPath.toAbsolutePath.toString)
+
+      spark.conf.set("spark.sql.sources.default", "parquet")
+
+      val df = spark.read.load(path)
+      assert(df.count() == 100)
+    }
+  }
 }
 
 private[sql] case class ClassData(a: String, b: Int)
