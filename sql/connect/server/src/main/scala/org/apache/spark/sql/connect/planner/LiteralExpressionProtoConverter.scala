@@ -105,16 +105,29 @@ object LiteralExpressionProtoConverter {
         expressions.Literal(lit.getTime.getNano, TimeType(precision))
 
       case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
-        expressions.Literal.create(
-          LiteralValueProtoConverter.toCatalystArray(lit.getArray),
-          ArrayType(DataTypeProtoConverter.toCatalystType(lit.getArray.getElementType)))
+        val arrayData = LiteralValueProtoConverter.toCatalystArray(lit.getArray)
+        val arrayDataType = if (lit.getArray.hasDataTypeArray) {
+          DataTypeProtoConverter.toCatalystType(
+            proto.DataType.newBuilder.setArray(lit.getArray.getDataTypeArray).build())
+        } else {
+          // For backward compatibility, construct the array type from element type
+          val elementType = DataTypeProtoConverter.toCatalystType(lit.getArray.getElementType)
+          ArrayType(elementType, containsNull = true)
+        }
+        expressions.Literal.create(arrayData, arrayDataType)
 
       case proto.Expression.Literal.LiteralTypeCase.MAP =>
-        expressions.Literal.create(
-          LiteralValueProtoConverter.toCatalystMap(lit.getMap),
-          MapType(
-            DataTypeProtoConverter.toCatalystType(lit.getMap.getKeyType),
-            DataTypeProtoConverter.toCatalystType(lit.getMap.getValueType)))
+        val mapData = LiteralValueProtoConverter.toCatalystMap(lit.getMap)
+        val mapDataType = if (lit.getMap.hasDataTypeMap) {
+          DataTypeProtoConverter.toCatalystType(
+            proto.DataType.newBuilder.setMap(lit.getMap.getDataTypeMap).build())
+        } else {
+          // For backward compatibility, construct the map type from key and value types
+          val keyType = DataTypeProtoConverter.toCatalystType(lit.getMap.getKeyType)
+          val valueType = DataTypeProtoConverter.toCatalystType(lit.getMap.getValueType)
+          MapType(keyType, valueType, valueContainsNull = true)
+        }
+        expressions.Literal.create(mapData, mapDataType)
 
       case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
         val (structData, structType) = LiteralValueProtoConverter.toCatalystStruct(lit.getStruct)
