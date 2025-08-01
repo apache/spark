@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets
 
 import scala.util.control.NonFatal
 
-import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FSDataInputStream, Path}
 import org.json4s.{Formats, NoTypeHints}
@@ -31,6 +30,7 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
+import org.apache.spark.util.Utils
 
 /**
  * Contains metadata associated with a [[org.apache.spark.sql.streaming.StreamingQuery]].
@@ -63,7 +63,7 @@ object StreamMetadata extends Logging {
           logError(log"Error reading stream metadata from ${MDC(LogKeys.PATH, metadataFile)}", e)
           throw e
       } finally {
-        IOUtils.closeQuietly(input)
+        Utils.closeQuietly(input)
       }
     } else None
   }

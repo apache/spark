@@ -127,12 +127,12 @@ def arrow_udf(f=None, returnType=None, functionType=None):
 
         This type of Pandas UDF can use keyword arguments:
 
-        >>> from pyspark.sql.functions import col
+        >>> from pyspark.sql import functions as sf
         >>> @arrow_udf(returnType=IntegerType())
         ... def calc(a: pa.Array, b: pa.Array) -> pa.Array:
         ...     return pa.compute.add(a, pa.compute.multiply(b, 10))
         ...
-        >>> spark.range(2).select(calc(b=col("id") * 10, a=col("id"))).show()
+        >>> spark.range(2).select(calc(b=sf.col("id") * 10, a=sf.col("id"))).show()
         +-----------------------------+
         |calc(b => (id * 10), a => id)|
         +-----------------------------+
@@ -198,14 +198,14 @@ def arrow_udf(f=None, returnType=None, functionType=None):
         to Iterator of Arrays case.
 
         >>> from typing import Iterator, Tuple
-        >>> from pyspark.sql.functions import struct, col
+        >>> from pyspark.sql import functions as sf
         >>> @arrow_udf("long")
         ... def multiply(iterator: Iterator[Tuple[pa.Array, pa.Array]]) -> Iterator[pa.Array]:
         ...     for v1, v2 in iterator:
         ...         yield pa.compute.multiply(v1, v2.field("v"))
         ...
         >>> df = spark.createDataFrame(pd.DataFrame([1, 2, 3], columns=["v"]))
-        >>> df.withColumn('output', multiply(col("v"), struct(col("v")))).show()
+        >>> df.withColumn('output', multiply(sf.col("v"), sf.struct(sf.col("v")))).show()
         +---+------+
         |  v|output|
         +---+------+
@@ -365,6 +365,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     From Spark 3.0 with Python 3.6+, `Python type hints <https://www.python.org/dev/peps/pep-0484>`_
     detect the function types as below:
 
+    >>> from pyspark.sql.types import IntegerType
     >>> @pandas_udf(IntegerType())
     ... def slen(s: pd.Series) -> pd.Series:
     ...     return s.str.len()
@@ -447,11 +448,12 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
         This type of Pandas UDF can use keyword arguments:
 
+        >>> from pyspark.sql import functions as sf
         >>> @pandas_udf(returnType=IntegerType())
         ... def calc(a: pd.Series, b: pd.Series) -> pd.Series:
         ...     return a + 10 * b
         ...
-        >>> spark.range(2).select(calc(b=col("id") * 10, a=col("id"))).show()
+        >>> spark.range(2).select(calc(b=sf.col("id") * 10, a=sf.col("id"))).show()
         +-----------------------------+
         |calc(b => (id * 10), a => id)|
         +-----------------------------+
@@ -516,14 +518,14 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         to Iterator of Series case.
 
         >>> from typing import Iterator, Tuple
-        >>> from pyspark.sql.functions import struct, col
+        >>> from pyspark.sql import functions as sf
         >>> @pandas_udf("long")
         ... def multiply(iterator: Iterator[Tuple[pd.Series, pd.DataFrame]]) -> Iterator[pd.Series]:
         ...     for s1, df in iterator:
         ...         yield s1 * df.v
         ...
         >>> df = spark.createDataFrame(pd.DataFrame([1, 2, 3], columns=["v"]))
-        >>> df.withColumn('output', multiply(col("v"), struct(col("v")))).show()
+        >>> df.withColumn('output', multiply(sf.col("v"), sf.struct(sf.col("v")))).show()
         +---+------+
         |  v|output|
         +---+------+
@@ -880,3 +882,31 @@ def _create_vectorized_udf(f, returnType, evalType, kind):
         return _create_connect_udf(f, returnType, evalType)
     else:
         return _create_udf(f, returnType, evalType)
+
+
+def _test() -> None:
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession
+    import pyspark.sql.pandas.functions
+
+    globs = pyspark.sql.column.__dict__.copy()
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .appName("pyspark.sql.pandas.functions tests")
+        .getOrCreate()
+    )
+    globs["spark"] = spark
+
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.pandas.functions,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+    )
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

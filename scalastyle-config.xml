@@ -292,6 +292,11 @@ This file is divided into 3 sections:
     <customMessage>Use java.nio.file.Files.readAllBytes</customMessage>
   </check>
 
+  <check customId="sizeOf" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileUtils\.sizeOf(Directory)?</parameter></parameters>
+    <customMessage>Use sizeOf of JavaUtils or Utils instead.</customMessage>
+  </check>
+
   <check customId="commonslang2" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.lang\.</parameter></parameters>
     <customMessage>Use Commons Lang 3 classes (package org.apache.commons.lang3.*) instead
@@ -542,8 +547,33 @@ This file is divided into 3 sections:
     <customMessage>Use Java built-in methods or SparkStringUtils instead</customMessage>
   </check>
 
+  <check customId="hadoopioutils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.hadoop\.io\.IOUtils</parameter></parameters>
+    <customMessage>Use org.apache.spark.util.Utils instead.</customMessage>
+  </check>
+
   <check customId="defaultCharset" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">Charset\.defaultCharset</parameter></parameters>
     <customMessage>Use StandardCharsets.UTF_8 instead.</customMessage>
+  </check>
+
+  <check customId="ioutilstobytearray" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">IOUtils\.toByteArray</parameter></parameters>
+    <customMessage>Use Java readAllBytes instead.</customMessage>
+  </check>
+
+  <check customId="ioutilsclosequietly" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">IOUtils\.closeQuietly</parameter></parameters>
+    <customMessage>Use closeQuietly of SparkErrorUtils or Utils instead.</customMessage>
+  </check>
+
+  <check customId="ioutilscopy" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">IOUtils\.copy\(</parameter></parameters>
+    <customMessage>Use Java transferTo instead.</customMessage>
+  </check>
+
+  <check customId="ioutilstostring" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">IOUtils\.toString\(</parameter></parameters>
+    <customMessage>Use toString of SparkStreamUtils or Utils instead.</customMessage>
   </check>
 </scalastyle>

@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
 import scala.collection.{mutable, Map}
 import scala.jdk.CollectionConverters.ConcurrentMapHasAsScala
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.json4s.{Formats, NoTypeHints}
@@ -73,7 +74,8 @@ class RocksDB(
     useColumnFamilies: Boolean = false,
     enableStateStoreCheckpointIds: Boolean = false,
     partitionId: Int = 0,
-    eventForwarder: Option[RocksDBEventForwarder] = None) extends Logging {
+    eventForwarder: Option[RocksDBEventForwarder] = None,
+    uniqueId: String = "") extends Logging {
 
   import RocksDB._
 
@@ -180,6 +182,24 @@ class RocksDB(
   protected var loadedStateStoreCkptId: Option[String] = None
   protected var sessionStateStoreCkptId: Option[String] = None
   protected[sql] val lineageManager: RocksDBLineageManager = new RocksDBLineageManager
+
+  // Memory tracking fields for unmanaged memory monitoring
+  // This allows the UnifiedMemoryManager to track RocksDB memory usage without
+  // directly accessing RocksDB from the polling thread, avoiding segmentation faults
+
+  // Timestamp of the last memory usage update in milliseconds.
+  // Used to enforce the update interval and prevent excessive memory queries.
+  private val lastMemoryUpdateTime = new AtomicLong(0L)
+
+  // Minimum interval between memory usage updates in milliseconds.
+  // This prevents performance impact from querying RocksDB memory too frequently.
+  private val memoryUpdateIntervalMs = conf.memoryUpdateIntervalMs
+
+  // Register with RocksDBMemoryManager if we have a unique ID
+  if (uniqueId.nonEmpty) {
+    // Initial registration with zero memory usage
+    RocksDBMemoryManager.updateMemoryUsage(uniqueId, 0L, conf.boundedMemoryUsage)
+  }
 
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
@@ -573,6 +593,10 @@ class RocksDB(
     } else {
       loadWithoutCheckpointId(version, readOnly)
     }
+
+    // Register with memory manager after successful load
+    updateMemoryUsageIfNeeded()
+
     this
   }
 
@@ -754,6 +778,7 @@ class RocksDB(
   def get(
       key: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Array[Byte] = {
+    updateMemoryUsageIfNeeded()
     val keyWithPrefix = if (useColumnFamilies) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
@@ -821,6 +846,7 @@ class RocksDB(
       value: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
       includesPrefix: Boolean = false): Unit = {
+    updateMemoryUsageIfNeeded()
     val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
@@ -848,6 +874,7 @@ class RocksDB(
       value: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
       includesPrefix: Boolean = false): Unit = {
+    updateMemoryUsageIfNeeded()
     val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
@@ -867,6 +894,7 @@ class RocksDB(
       key: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
       includesPrefix: Boolean = false): Unit = {
+    updateMemoryUsageIfNeeded()
     val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
@@ -882,6 +910,7 @@ class RocksDB(
    * Get an iterator of all committed and uncommitted key-value pairs.
    */
   def iterator(): Iterator[ByteArrayPair] = {
+    updateMemoryUsageIfNeeded()
     val iter = db.newIterator()
     logInfo(log"Getting iterator from version ${MDC(LogKeys.LOADED_VERSION, loadedVersion)}")
     iter.seekToFirst()
@@ -918,6 +947,7 @@ class RocksDB(
    * Get an iterator of all committed and uncommitted key-value pairs for the given column family.
    */
   def iterator(cfName: String): Iterator[ByteArrayPair] = {
+    updateMemoryUsageIfNeeded()
     if (!useColumnFamilies) {
       iterator()
     } else {
@@ -967,6 +997,7 @@ class RocksDB(
   def prefixScan(
       prefix: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[ByteArrayPair] = {
+    updateMemoryUsageIfNeeded()
     val iter = db.newIterator()
     val updatedPrefix = if (useColumnFamilies) {
       encodeStateRowWithPrefix(prefix, cfName)
@@ -1013,6 +1044,7 @@ class RocksDB(
    * - Sync the checkpoint dir files to DFS
    */
   def commit(): (Long, StateStoreCheckpointInfo) = {
+    updateMemoryUsageIfNeeded()
     val newVersion = loadedVersion + 1
     try {
       logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
@@ -1227,6 +1259,17 @@ class RocksDB(
         snapshot = snapshotsToUploadQueue.poll()
       }
 
+      // Unregister from RocksDBMemoryManager
+      if (uniqueId.nonEmpty) {
+        try {
+          RocksDBMemoryManager.unregisterInstance(uniqueId)
+        } catch {
+          case NonFatal(e) =>
+            logWarning(log"Failed to unregister from RocksDBMemoryManager " +
+              log"${MDC(LogKeys.EXCEPTION, e)}")
+        }
+      }
+
       silentDeleteRecursively(localRootDir, "closing RocksDB")
       // Clear internal maps to reset the state
       clearColFamilyMaps()
@@ -1338,6 +1381,53 @@ class RocksDB(
   }
 
   private def getDBProperty(property: String): Long = db.getProperty(property).toLong
+
+  /**
+   * Returns the current memory usage of this RocksDB instance in bytes.
+   * WARNING: This method should only be called from the task thread when
+   * RocksDB is in a safe state.
+   *
+   * This includes memory from all major RocksDB components:
+   * - Table readers (indexes and filters in memory)
+   * - Memtables (write buffers)
+   * - Block cache (cached data blocks)
+   * - Block cache pinned usage (blocks pinned in cache)
+   *
+   * @return Total memory usage in bytes across all tracked components
+   */
+  def getMemoryUsage: Long = {
+
+    require(db != null && !db.isClosed, "RocksDB must be open to get memory usage")
+    RocksDB.mainMemorySources.map { memorySource =>
+      getDBProperty(memorySource)
+    }.sum
+  }
+
+  /**
+   * Updates the cached memory usage if enough time has passed.
+   * This is called from task thread operations, so it's already thread-safe.
+   */
+  def updateMemoryUsageIfNeeded(): Unit = {
+    if (uniqueId.isEmpty) return // No tracking without unique ID
+
+    val currentTime = System.currentTimeMillis()
+    val timeSinceLastUpdate = currentTime - lastMemoryUpdateTime.get()
+
+    if (timeSinceLastUpdate >= memoryUpdateIntervalMs && db != null && !db.isClosed) {
+      try {
+        val usage = getMemoryUsage
+        lastMemoryUpdateTime.set(currentTime)
+        // Report usage to RocksDBMemoryManager
+        RocksDBMemoryManager.updateMemoryUsage(
+          uniqueId,
+          usage,
+          conf.boundedMemoryUsage)
+      } catch {
+        case NonFatal(e) =>
+          logDebug(s"Failed to update RocksDB memory usage: ${e.getMessage}")
+      }
+    }
+  }
 
   private def openDB(): Unit = {
     assert(db == null)
@@ -1458,6 +1548,13 @@ class RocksDB(
 }
 
 object RocksDB extends Logging {
+
+  val mainMemorySources: Seq[String] = Seq(
+    "rocksdb.estimate-table-readers-mem",
+    "rocksdb.cur-size-all-mem-tables",
+    "rocksdb.block-cache-usage",
+    "rocksdb.block-cache-pinned-usage")
+
   case class RocksDBSnapshot(
       checkpointDir: File,
       version: Long,
@@ -1699,6 +1796,7 @@ case class RocksDBConf(
     totalMemoryUsageMB: Long,
     writeBufferCacheRatio: Double,
     highPriorityPoolRatio: Double,
+    memoryUpdateIntervalMs: Long,
     compressionCodec: String,
     allowFAllocate: Boolean,
     compression: String,
@@ -1784,6 +1882,12 @@ object RocksDBConf {
   val HIGH_PRIORITY_POOL_RATIO_CONF_KEY = "highPriorityPoolRatio"
   private val HIGH_PRIORITY_POOL_RATIO_CONF = SQLConfEntry(HIGH_PRIORITY_POOL_RATIO_CONF_KEY,
     "0.1")
+
+  // Memory usage update interval for unmanaged memory tracking
+  val MEMORY_UPDATE_INTERVAL_MS_CONF_KEY = "memoryUpdateIntervalMs"
+  private val MEMORY_UPDATE_INTERVAL_MS_CONF = SQLConfEntry(MEMORY_UPDATE_INTERVAL_MS_CONF_KEY,
+    "1000")
+
 
   // Allow files to be pre-allocated on disk using fallocate
   // Disabling may slow writes, but can solve an issue where
@@ -1883,6 +1987,7 @@ object RocksDBConf {
       getLongConf(MAX_MEMORY_USAGE_MB_CONF),
       getRatioConf(WRITE_BUFFER_CACHE_RATIO_CONF),
       getRatioConf(HIGH_PRIORITY_POOL_RATIO_CONF),
+      getPositiveLongConf(MEMORY_UPDATE_INTERVAL_MS_CONF),
       storeConf.compressionCodec,
       getBooleanConf(ALLOW_FALLOCATE_CONF),
       getStringConf(COMPRESSION_CONF),

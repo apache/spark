@@ -795,7 +795,7 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
         for batch in super().load_stream(stream):
             columns = [
                 [conv(v) for v in column.to_pylist()] if conv is not None else column.to_pylist()
-                for column, conv in zip(batch.columns, converters)
+                for column, conv in zip(batch.itercolumns(), converters)
             ]
             if len(columns) == 0:
                 yield [[pyspark._NoValue] * batch.num_rows]
