@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
-import org.apache.spark.sql.functions.{concat, lit, when}
+import org.apache.spark.sql.functions.{col, concat, lit, when}
 
 class DataFrameSuite extends QueryTest with RemoteSparkSession {
 
@@ -42,6 +42,29 @@ class DataFrameSuite extends QueryTest with RemoteSparkSession {
 
     assert(df4.columns === Array("colA", "colB", "colC", "colC", "colD", "colE"))
     assert(df4.count() === 1)
+  }
+
+  test("drop column from different dataframe") {
+    val sparkSession = spark
+
+    val df1 = spark.range(10)
+    val df2 = df1.select(col("id"), lit(0).as("v0"))
+
+    assert(df2.drop(df2.col("id")).columns === Array("v0"))
+    // drop df1.col("id") from df2, which is semantically equal to df2.col("id")
+    // note that df1.drop(df2.col("id")) works in Classic, but not in Connect
+    assert(df2.drop(df1.col("id")).columns === Array("v0"))
+
+    val df3 = df2.select(col("*"), lit(1).as("v1"))
+    assert(df3.drop(df3.col("id")).columns === Array("v0", "v1"))
+    // drop df2.col("id") from df2, which is semantically equal to df3.col("id")
+    assert(df3.drop(df2.col("id")).columns === Array("v0", "v1"))
+    // drop df1.col("id") from df2, which is semantically equal to df3.col("id")
+    assert(df3.drop(df1.col("id")).columns === Array("v0", "v1"))
+
+    assert(df3.drop(df3.col("v0")).columns === Array("id", "v1"))
+    // drop df2.col("v0") from df2, which is semantically equal to df3.col("v0")
+    assert(df3.drop(df2.col("v0")).columns === Array("id", "v1"))
   }
 
   test("lazy column validation") {
