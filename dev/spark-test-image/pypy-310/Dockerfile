@@ -50,6 +50,7 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     libtiff5-dev \
     libxml2-dev \
+    libxslt-dev \
     openjdk-17-jdk-headless \
     pkg-config \
     qpdf \
