@@ -22,7 +22,7 @@ import scala.util.control.NonFatal
 
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{SHARD_ID, WORKER_URL}
 import org.apache.spark.streaming.Duration
 import org.apache.spark.streaming.util.RecurringTimer

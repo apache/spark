@@ -22,7 +22,6 @@ import java.util.Locale
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.LogKeys.OPTIONS
-import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{LocalTempView, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.Attribute

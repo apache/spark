@@ -27,7 +27,7 @@ import org.antlr.v4.runtime.misc.{Interval, ParseCancellationException}
 import org.antlr.v4.runtime.tree.TerminalNodeImpl
 
 import org.apache.spark.{QueryContext, SparkException, SparkThrowable, SparkThrowableHelper}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, SQLQueryContext, WithOrigin}
 import org.apache.spark.sql.catalyst.util.SparkParserUtils

@@ -20,7 +20,7 @@ import java.util.{Locale, OptionalLong}
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{PATH, REASON}
 import org.apache.spark.internal.config.IO_WARNING_LARGEFILETHRESHOLD
 import org.apache.spark.sql.SparkSession

@@ -178,7 +178,7 @@ public class ThriftHttpServlet extends TServlet {
           response.addCookie(hs2Cookie);
         }
         LOG.info("Cookie added for clientUserName {}",
-          MDC.of(LogKeys.USER_NAME$.MODULE$, clientUserName));
+          MDC.of(LogKeys.USER_NAME, clientUserName));
       }
       super.doPost(request, response);
     }
@@ -232,7 +232,7 @@ public class ThriftHttpServlet extends TServlet {
         String userName = HttpAuthUtils.getUserNameFromCookieToken(currValue);
 
         if (userName == null) {
-          LOG.warn("Invalid cookie token {}", MDC.of(LogKeys.TOKEN$.MODULE$, currValue));
+          LOG.warn("Invalid cookie token {}", MDC.of(LogKeys.TOKEN, currValue));
           continue;
         }
         //We have found a valid cookie in the client request.

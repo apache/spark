@@ -27,7 +27,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{OFFSET, TIME, TOPIC_PARTITION, TOPIC_PARTITION_OFFSET_RANGE}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{StreamingContext, Time}

@@ -227,7 +227,7 @@ final class BypassMergeSortShuffleWriter<K, V>
             }
             if (!file.delete()) {
               logger.error("Unable to delete file for partition {}",
-                MDC.of(LogKeys.PARTITION_ID$.MODULE$, i));
+                MDC.of(LogKeys.PARTITION_ID, i));
             }
           }
         }

@@ -113,7 +113,7 @@ public final class HttpAuthUtils {
 
     if (!map.keySet().equals(COOKIE_ATTRIBUTES)) {
       LOG.error("Invalid token with missing attributes {}",
-        MDC.of(LogKeys.TOKEN$.MODULE$, tokenStr));
+        MDC.of(LogKeys.TOKEN, tokenStr));
       return null;
     }
     return map.get(COOKIE_CLIENT_USER_NAME);
@@ -133,7 +133,7 @@ public final class HttpAuthUtils {
       String part = st.nextToken();
       int separator = part.indexOf(COOKIE_KEY_VALUE_SEPARATOR);
       if (separator == -1) {
-        LOG.error("Invalid token string {}", MDC.of(LogKeys.TOKEN$.MODULE$, tokenStr));
+        LOG.error("Invalid token string {}", MDC.of(LogKeys.TOKEN, tokenStr));
         return null;
       }
       String key = part.substring(0, separator);

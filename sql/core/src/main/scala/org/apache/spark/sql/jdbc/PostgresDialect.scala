@@ -27,7 +27,6 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.LogKeys.COLUMN_NAME
-import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier

@@ -25,7 +25,7 @@ import scala.collection.mutable.HashMap
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{JobExecutionStatus, SparkConf, SparkContext}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.internal.config.Status.LIVE_UI_LOCAL_STORE_DIR
 import org.apache.spark.status.AppStatusUtils.getQuantilesValue

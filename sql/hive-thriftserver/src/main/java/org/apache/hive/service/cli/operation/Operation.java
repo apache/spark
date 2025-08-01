@@ -212,7 +212,7 @@ public abstract class Operation {
       try {
         if (operationLogFile.exists()) {
           LOG.warn("The operation log file should not exist, but it is already there: {}",
-            MDC.of(LogKeys.PATH$.MODULE$, operationLogFile.getAbsolutePath()));
+            MDC.of(LogKeys.PATH, operationLogFile.getAbsolutePath()));
           operationLogFile.delete();
         }
         if (!operationLogFile.createNewFile()) {
@@ -221,14 +221,14 @@ public abstract class Operation {
           if (!operationLogFile.canRead() || !operationLogFile.canWrite()) {
             LOG.warn("The already existed operation log file cannot be recreated, " +
               "and it cannot be read or written: {}",
-              MDC.of(LogKeys.PATH$.MODULE$, operationLogFile.getAbsolutePath()));
+              MDC.of(LogKeys.PATH, operationLogFile.getAbsolutePath()));
             isOperationLogEnabled = false;
             return;
           }
         }
       } catch (Exception e) {
         LOG.warn("Unable to create operation log file: {}", e,
-          MDC.of(LogKeys.PATH$.MODULE$, operationLogFile.getAbsolutePath()));
+          MDC.of(LogKeys.PATH, operationLogFile.getAbsolutePath()));
         isOperationLogEnabled = false;
         return;
       }
@@ -238,7 +238,7 @@ public abstract class Operation {
         operationLog = new OperationLog(opHandle.toString(), operationLogFile, parentSession.getHiveConf());
       } catch (FileNotFoundException e) {
         LOG.warn("Unable to instantiate OperationLog object for operation: {}", e,
-          MDC.of(LogKeys.OPERATION_HANDLE$.MODULE$, opHandle));
+          MDC.of(LogKeys.OPERATION_HANDLE, opHandle));
         isOperationLogEnabled = false;
         return;
       }
@@ -290,7 +290,7 @@ public abstract class Operation {
       if (operationLog == null) {
         LOG.error("Operation [ {} ] logging is enabled, " +
           "but its OperationLog object cannot be found.",
-          MDC.of(LogKeys.OPERATION_HANDLE_ID$.MODULE$, opHandle.getHandleIdentifier()));
+          MDC.of(LogKeys.OPERATION_HANDLE_ID, opHandle.getHandleIdentifier()));
       } else {
         operationLog.close();
       }

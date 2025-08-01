@@ -28,7 +28,7 @@ import org.json4s.{Formats, JBool, JObject, NoTypeHints}
 import org.json4s.jackson.JsonMethods.{compact, render}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceErrors
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CommitLog, MetadataVersionUtil, StateStoreWriter, StreamingQueryCheckpointMetadata}

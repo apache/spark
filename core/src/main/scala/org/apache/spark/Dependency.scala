@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer

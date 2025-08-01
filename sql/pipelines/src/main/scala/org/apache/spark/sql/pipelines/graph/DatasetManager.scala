@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.{NonFatal, NoStackTrace}
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connector.catalog.{

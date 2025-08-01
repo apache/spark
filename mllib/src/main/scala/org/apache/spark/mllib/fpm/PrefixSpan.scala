@@ -33,7 +33,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{MIN_NUM_FREQUENT_PATTERN, NUM_FREQUENT_ITEMS, NUM_LOCAL_FREQUENT_PATTERN, NUM_PREFIXES, NUM_SEQUENCES}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD

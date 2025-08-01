@@ -230,10 +230,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
 
     logger.info("Thread {} spilling sort data of {} to disk ({} {} so far)",
-      MDC.of(LogKeys.THREAD_ID$.MODULE$, Thread.currentThread().getId()),
-      MDC.of(LogKeys.MEMORY_SIZE$.MODULE$, Utils.bytesToString(getMemoryUsage())),
-      MDC.of(LogKeys.NUM_SPILL_WRITERS$.MODULE$, spillWriters.size()),
-      MDC.of(LogKeys.SPILL_TIMES$.MODULE$, spillWriters.size() > 1 ? "times" : "time"));
+      MDC.of(LogKeys.THREAD_ID, Thread.currentThread().getId()),
+      MDC.of(LogKeys.MEMORY_SIZE, Utils.bytesToString(getMemoryUsage())),
+      MDC.of(LogKeys.NUM_SPILL_WRITERS, spillWriters.size()),
+      MDC.of(LogKeys.SPILL_TIMES, spillWriters.size() > 1 ? "times" : "time"));
 
     ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
 
@@ -350,7 +350,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       if (file != null && file.exists()) {
         if (!file.delete()) {
           logger.error("Was unable to delete spill file {}",
-            MDC.of(LogKeys.PATH$.MODULE$, file.getAbsolutePath()));
+            MDC.of(LogKeys.PATH, file.getAbsolutePath()));
         }
       }
     }
@@ -492,13 +492,13 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     assert(inMemSorter != null);
     if (inMemSorter.numRecords() >= numElementsForSpillThreshold) {
       logger.info("Spilling data because number of spilledRecords ({}) crossed the threshold {}",
-        MDC.of(LogKeys.NUM_ELEMENTS_SPILL_RECORDS$.MODULE$, inMemSorter.numRecords()),
-        MDC.of(LogKeys.NUM_ELEMENTS_SPILL_THRESHOLD$.MODULE$, numElementsForSpillThreshold));
+        MDC.of(LogKeys.NUM_ELEMENTS_SPILL_RECORDS, inMemSorter.numRecords()),
+        MDC.of(LogKeys.NUM_ELEMENTS_SPILL_THRESHOLD, numElementsForSpillThreshold));
       spill();
     } else if (inMemRecordsSize >= recordsSizeForSpillThreshold) {
       logger.info("Spilling data because size of spilledRecords ({}) crossed the size threshold {}",
-        MDC.of(LogKeys.SPILL_RECORDS_SIZE$.MODULE$, inMemRecordsSize),
-        MDC.of(LogKeys.SPILL_RECORDS_SIZE_THRESHOLD$.MODULE$, recordsSizeForSpillThreshold));
+        MDC.of(LogKeys.SPILL_RECORDS_SIZE, inMemRecordsSize),
+        MDC.of(LogKeys.SPILL_RECORDS_SIZE_THRESHOLD, recordsSizeForSpillThreshold));
       spill();
     }
 

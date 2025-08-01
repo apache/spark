@@ -129,7 +129,7 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Cl
       page = allocatePage(requiredSize);
     } catch (SparkOutOfMemoryError e) {
       logger.warn("Failed to allocate page ({} bytes).",
-        MDC.of(LogKeys.PAGE_SIZE$.MODULE$, requiredSize));
+        MDC.of(LogKeys.PAGE_SIZE, requiredSize));
       return false;
     }
     base = page.getBaseObject();

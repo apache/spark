@@ -33,7 +33,7 @@ import org.codehaus.janino.util.ClassFile.CodeAttribute
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, TaskContext, TaskKilledException}
 import org.apache.spark.executor.InputMetrics
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow

@@ -25,7 +25,7 @@ import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.ExecutorFailureTracker
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{FAILURES, HOST, NODES}
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.HealthTracker

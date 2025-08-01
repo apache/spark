@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.CommonConfigurationKeysPublic
 import org.apache.hadoop.net._
 import org.apache.hadoop.util.ReflectionUtils
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.NODE_LOCATION
 import org.apache.spark.util.SparkStringUtils
 

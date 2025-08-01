@@ -24,7 +24,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.ref.WeakReference
 
 import org.apache.spark.TaskContext
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
