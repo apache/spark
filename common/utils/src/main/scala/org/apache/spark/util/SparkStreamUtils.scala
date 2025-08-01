@@ -18,6 +18,7 @@ package org.apache.spark.util
 
 import java.io.{FileInputStream, FileOutputStream, InputStream, OutputStream}
 import java.nio.channels.{FileChannel, WritableByteChannel}
+import java.nio.charset.StandardCharsets
 
 import org.apache.spark.util.SparkErrorUtils.tryWithSafeFinally
 
@@ -103,6 +104,10 @@ private[spark] trait SparkStreamUtils {
            |You can set spark.file.transferTo = false to disable this NIO feature.
          """.stripMargin)
     }
+  }
+
+  def toString(in: InputStream): String = {
+    new String(in.readAllBytes(), StandardCharsets.UTF_8)
   }
 }
 

@@ -33,6 +33,7 @@ import org.apache.spark.ml.Model
 import org.apache.spark.ml.util.{ConnectHelper, HasTrainingSummary, MLWritable, Summary}
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.util.SparkFileUtils
 
 /**
  * MLCache is for caching ML objects, typically for models and summaries evaluated by a model.
@@ -213,7 +214,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
       val removePath = getModelOffloadingPath(refId)
       val offloadingPath = new File(removePath.toString)
       if (offloadingPath.exists()) {
-        FileUtils.deleteDirectory(offloadingPath)
+        SparkFileUtils.deleteRecursively(offloadingPath)
         true
       } else {
         false

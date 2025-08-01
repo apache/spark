@@ -36,7 +36,6 @@ import scala.util.control.NonFatal
 import com.codahale.metrics.{MetricRegistry, MetricSet}
 import com.esotericsoftware.kryo.KryoException
 import com.google.common.cache.CacheBuilder
-import org.apache.commons.io.IOUtils
 
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
@@ -373,7 +372,7 @@ private[spark] class BlockManager(
           logInfo(extendMessageWithBlockDetails(ex.getMessage, blockId))
           throw ex
       } finally {
-        IOUtils.closeQuietly(inputStream)
+        Utils.closeQuietly(inputStream)
       }
     }
 

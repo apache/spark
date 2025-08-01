@@ -27,7 +27,6 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.common.io.ByteStreams
-import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
@@ -184,6 +183,12 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         logInfo(log"Committed version ${MDC(LogKeys.COMMITTED_VERSION, newVersion)} " +
           log"for ${MDC(LogKeys.STATE_STORE_PROVIDER, this)} to file " +
           log"${MDC(LogKeys.FILE_NAME, finalDeltaFile)}")
+
+        // Report the commit to StateStoreCoordinator for tracking
+        if (storeConf.commitValidationEnabled) {
+          StateStore.reportCommitToCoordinator(newVersion, stateStoreId, hadoopConf)
+        }
+
         newVersion
       } catch {
         case e: Throwable =>
@@ -731,7 +736,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       rawStream: CancellableFSDataOutputStream): Unit = {
     try {
       if (rawStream != null) rawStream.cancel()
-      IOUtils.closeQuietly(compressedStream)
+      Utils.closeQuietly(compressedStream)
     } catch {
       // Closing the compressedStream causes the stream to write/flush flush data into the
       // rawStream. Since the rawStream is already closed, there may be errors.

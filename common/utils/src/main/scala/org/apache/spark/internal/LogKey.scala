@@ -149,6 +149,7 @@ private[spark] object LogKeys {
   case object COLUMN_DATA_TYPE_TARGET extends LogKey
   case object COLUMN_DEFAULT_VALUE extends LogKey
   case object COLUMN_NAME extends LogKey
+  case object COLUMN_NAMES extends LogKey
   case object COMMAND extends LogKey
   case object COMMAND_OUTPUT extends LogKey
   case object COMMITTED_VERSION extends LogKey

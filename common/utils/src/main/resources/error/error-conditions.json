@@ -3436,7 +3436,7 @@
           "expects a string literal, but got <invalidValue>."
         ]
       },
-      "TIMETRUNC_UNIT" : {
+      "TIME_UNIT" : {
         "message" : [
           "expects one of the units 'HOUR', 'MINUTE', 'SECOND', 'MILLISECOND', 'MICROSECOND', but got '<invalidValue>'."
         ]
@@ -5154,6 +5154,16 @@
       "Incompatible schema transformation with column family=<colFamilyName>, oldSchema=<oldSchema>, newSchema=<newSchema>."
     ],
     "sqlState" : "42802"
+  },
+  "STATE_STORE_COMMIT_VALIDATION_FAILED" : {
+    "message" : [
+      "State store commit validation failed for batch <batchId>.",
+      "Expected <expectedCommits> commits but got <actualCommits>.",
+      "Missing commits: <missingCommits>.",
+      "This error typically occurs when using operations like show() or limit() in foreachBatch that don't process all partitions, or if you are swallowing an exception and returning from the function early.",
+      "To fix: ensure your foreachBatch function processes the entire DataFrame."
+    ],
+    "sqlState" : "XXKST"
   },
   "STATE_STORE_HANDLE_NOT_INITIALIZED" : {
     "message" : [
