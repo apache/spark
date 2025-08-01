@@ -1454,11 +1454,8 @@ class RocksDB(
    * @return Total memory usage in bytes across all tracked components
    */
   def getMemoryUsage: Long = {
-
     require(db != null && !db.isClosed, "RocksDB must be open to get memory usage")
-    RocksDB.mainMemorySources.map { memorySource =>
-      getDBProperty(memorySource)
-    }.sum
+    RocksDB.mainMemorySources.map(getDBProperty).sum
   }
 
   /**
