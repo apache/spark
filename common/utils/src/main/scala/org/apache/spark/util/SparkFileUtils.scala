@@ -21,7 +21,7 @@ import java.net.{URI, URISyntaxException}
 import java.nio.file.{Files, Path, StandardCopyOption}
 import java.nio.file.attribute.FileTime
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.network.util.JavaUtils
 
 private[spark] trait SparkFileUtils extends Logging {

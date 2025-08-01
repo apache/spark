@@ -15,33 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.internal;
+package org.apache.spark.util;
 
-// checkstyle.off: RegexpSinglelineJava
-import org.slf4j.LoggerFactory;
-// checkstyle.on: RegexpSinglelineJava
+import org.apache.spark.internal.LogKey;
 
-public class SparkLoggerFactory {
-
-  private static volatile boolean structuredLoggingEnabled = false;
-
-  public static void enableStructuredLogging() {
-    structuredLoggingEnabled = true;
-  }
-
-  public static void disableStructuredLogging() {
-    structuredLoggingEnabled = false;
-  }
-
-  public static boolean isStructuredLoggingEnabled() {
-    return structuredLoggingEnabled;
-  }
-
-  public static SparkLogger getLogger(String name) {
-    return new SparkLogger(LoggerFactory.getLogger(name));
-  }
-
-  public static SparkLogger getLogger(Class<?> clazz) {
-    return new SparkLogger(LoggerFactory.getLogger(clazz));
-  }
+public enum CustomLogKeys implements LogKey {
+  CUSTOM_LOG_KEY
 }

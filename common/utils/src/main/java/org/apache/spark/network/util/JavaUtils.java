@@ -245,7 +245,7 @@ public class JavaUtils {
         return;
       } catch (IOException e) {
         logger.warn("Attempt to delete using native Unix OS command failed for path = {}. " +
-          "Falling back to Java IO way", e, MDC.of(LogKeys.PATH$.MODULE$, file.getAbsolutePath()));
+          "Falling back to Java IO way", e, MDC.of(LogKeys.PATH, file.getAbsolutePath()));
       }
     }
 
@@ -543,7 +543,7 @@ public class JavaUtils {
         dir = new File(root, namePrefix + "-" + UUID.randomUUID());
         Files.createDirectories(dir.toPath());
       } catch (IOException | SecurityException e) {
-        logger.error("Failed to create directory {}", e, MDC.of(LogKeys.PATH$.MODULE$, dir));
+        logger.error("Failed to create directory {}", e, MDC.of(LogKeys.PATH, dir));
         dir = null;
       }
     }
