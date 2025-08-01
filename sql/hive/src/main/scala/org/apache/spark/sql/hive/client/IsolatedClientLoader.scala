@@ -24,7 +24,6 @@ import java.util
 
 import scala.util.Try
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.shims.ShimLoader
 
@@ -149,7 +148,7 @@ private[hive] object IsolatedClientLoader extends Logging {
 
     // TODO: Remove copy logic.
     val tempDir = Utils.createTempDir(namePrefix = s"hive-${version}")
-    allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))
+    allFiles.foreach(f => Utils.copyFileToDirectory(f, tempDir))
     logInfo(log"Downloaded metastore jars to ${MDC(PATH, tempDir.getCanonicalPath)}")
     tempDir.listFiles().map(_.toURI.toURL).toImmutableArraySeq
   }
