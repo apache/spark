@@ -182,7 +182,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
   test("too big for memory") {
     withTempView("bigData") {
-      val data = "*" * 1000
+      val data = "*".repeat(1000)
       sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF()
         .createOrReplaceTempView("bigData")
       spark.table("bigData").persist(StorageLevel.MEMORY_AND_DISK)

@@ -3611,7 +3611,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
   def generateFiles(dir: String, fileToLengths: Seq[(String, Int)]): Unit = {
     fileToLengths.foreach { case (fileName, length) =>
       val file = new File(dir, fileName)
-      FileUtils.write(file, "a" * length, StandardCharsets.UTF_8)
+      FileUtils.write(file, "a".repeat(length), StandardCharsets.UTF_8)
     }
   }
 

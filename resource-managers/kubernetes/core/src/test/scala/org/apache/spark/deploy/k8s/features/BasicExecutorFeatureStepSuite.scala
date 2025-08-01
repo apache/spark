@@ -213,7 +213,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("SPARK-35460: invalid PodNamePrefixes") {
     withPodNamePrefix {
-      Seq("_123", "spark_exec", "spark@", "a" * 238).foreach { invalid =>
+      Seq("_123", "spark_exec", "spark@", "a".repeat(238)).foreach { invalid =>
         baseConf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, invalid)
         checkError(
           exception = intercept[SparkIllegalArgumentException](newExecutorConf()),

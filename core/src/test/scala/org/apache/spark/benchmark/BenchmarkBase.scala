@@ -37,7 +37,7 @@ abstract class BenchmarkBase {
   def runBenchmarkSuite(mainArgs: Array[String]): Unit
 
   final def runBenchmark(benchmarkName: String)(func: => Any): Unit = {
-    val separator = "=" * 96
+    val separator = "=".repeat(96)
     val testHeader = (separator + '\n' + benchmarkName + '\n' + separator + '\n' + '\n').getBytes
     output.foreach(_.write(testHeader))
     func

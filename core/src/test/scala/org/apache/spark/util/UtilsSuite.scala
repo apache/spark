@@ -492,10 +492,10 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(Utils.createDirectory(testDirPath, "scenario1").exists())
 
     // 2. Illegal file path
-    val scenario2 = new File(testDir, "scenario2" * 256)
+    val scenario2 = new File(testDir, "scenario2".repeat(256))
     assert(!Utils.createDirectory(scenario2))
     assert(!scenario2.exists())
-    assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario2" * 256))
+    assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario2".repeat(256)))
 
     // 3. The parent directory cannot read
     val scenario3 = new File(testDir, "scenario3")
