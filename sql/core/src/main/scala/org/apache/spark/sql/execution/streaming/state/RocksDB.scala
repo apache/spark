@@ -1047,7 +1047,7 @@ class RocksDB(
   def commit(): (Long, StateStoreCheckpointInfo) = {
     // Reset the commit metrics before commit
     commitLatencyMs.clear()
-    
+
     val newVersion = loadedVersion + 1
     try {
       logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
