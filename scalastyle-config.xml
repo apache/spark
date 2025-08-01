@@ -287,6 +287,11 @@ This file is divided into 3 sections:
     <customMessage>Use deleteRecursively of SparkFileUtils or Utils</customMessage>
   </check>
 
+  <check customId="deleteQuietly" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileUtils\.deleteQuietly</parameter></parameters>
+    <customMessage>Use deleteQuietly of JavaUtils/SparkFileUtils/Utils</customMessage>
+  </check>
+
   <check customId="readFileToByteArray" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">FileUtils\.readFileToByteArray</parameter></parameters>
     <customMessage>Use java.nio.file.Files.readAllBytes</customMessage>

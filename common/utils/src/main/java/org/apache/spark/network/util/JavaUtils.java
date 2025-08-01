@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
@@ -60,6 +61,16 @@ public class JavaUtils {
       }
     } catch (IOException e) {
       logger.error("IOException should not have been thrown.", e);
+    }
+  }
+
+  /** Delete a file or directory and its contents recursively without throwing exceptions. */
+  public static void deleteQuietly(File file) {
+    if (file != null && file.exists()) {
+      Path path = file.toPath();
+      try (Stream<Path> walk = Files.walk(path)) {
+        walk.sorted(Comparator.reverseOrder()).map(Path::toFile).forEach(File::delete);
+      } catch (Exception ignored) { /* No-op */ }
     }
   }
 

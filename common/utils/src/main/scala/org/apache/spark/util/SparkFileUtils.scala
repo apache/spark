@@ -128,6 +128,11 @@ private[spark] trait SparkFileUtils extends Logging {
     JavaUtils.deleteRecursively(file)
   }
 
+  /** Delete a file or directory and its contents recursively without throwing exceptions. */
+  def deleteQuietly(file: File): Unit = {
+    JavaUtils.deleteQuietly(file)
+  }
+
   def getFile(names: String*): File = {
     require(names != null && names.forall(_ != null))
     names.tail.foldLeft(Path.of(names.head)) { (path, part) =>
