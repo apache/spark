@@ -1326,7 +1326,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     testAndVerify(result2)
   }
 
-  test("ES-1538905: DataFrameReader defaults to spark.sql.sources.default") {
+  test("SPARK-53054: DataFrameReader defaults to spark.sql.sources.default") {
     withTempPath { file =>
       val path = file.getAbsoluteFile.toURI.toString
       spark.range(100).write.parquet(file.toPath.toAbsolutePath.toString)
