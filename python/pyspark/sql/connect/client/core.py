@@ -63,7 +63,6 @@ from google.rpc import error_details_pb2
 
 from pyspark.util import is_remote_only
 from pyspark.accumulators import SpecialAccumulatorIds
-from pyspark.loose_version import LooseVersion
 from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql.metrics import MetricValue, PlanMetrics, ExecutionInfo, ObservedMetrics

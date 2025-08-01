@@ -25,7 +25,6 @@ from typing import TYPE_CHECKING, Optional
 
 import pyspark
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
-from pyspark.loose_version import LooseVersion
 from pyspark.serializers import (
     Serializer,
     read_int,
