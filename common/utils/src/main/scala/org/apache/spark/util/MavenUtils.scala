@@ -152,17 +152,6 @@ private[spark] object MavenUtils extends Logging {
       cr.add(localM2)
     }
 
-    if (SparkEnvUtils.isTesting) {
-      val localM2 = new IBiblioResolver
-      localM2.setM2compatible(true)
-      localM2.setRoot(
-        new File(System.getProperty("user.home"), ".m2" + File.separator + "repository")
-          .toURI.toString)
-      localM2.setUsepoms(true)
-      localM2.setName("user-home-m2-cache")
-      cr.add(localM2)
-    }
-
     val localIvy = new FileSystemResolver
     val localIvyRoot = new File(defaultIvyUserDir, "local")
     localIvy.setLocal(true)
