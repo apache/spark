@@ -369,15 +369,15 @@ private[sql] class RocksDBStateStoreProvider
       val rowPair = new UnsafeRowPair()
       val prefix = kvEncoder._1.encodePrefixKey(prefixKey)
 
-      val rocksDBiter = rocksDB.prefixScan(prefix, colFamilyName)
+      val rocksDbIter = rocksDB.prefixScan(prefix, colFamilyName)
 
-      val iter = rocksDBiter.map { kv =>
+      val iter = rocksDbIter.map { kv =>
         rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
           kvEncoder._2.decodeValue(kv.value))
         rowPair
       }
 
-      new StateStoreIterator(iter, rocksDBiter.closeIfNeeded)
+      new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
     }
 
     var checkpointInfo: Option[StateStoreCheckpointInfo] = None

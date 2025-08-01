@@ -133,13 +133,13 @@ trait ReadStateStore {
    */
   def prefixScan(
       prefixKey: UnsafeRow,
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
-  StateStoreIterator[UnsafeRowPair]
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
+      : StateStoreIterator[UnsafeRowPair]
 
   /** Return an iterator containing all the key-value pairs in the StateStore. */
   def iterator(
-    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
-  StateStoreIterator[UnsafeRowPair]
+    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
+    : StateStoreIterator[UnsafeRowPair]
 
   /**
    * Clean up the resource.
@@ -246,8 +246,8 @@ trait StateStore extends ReadStateStore {
    * performed after initialization of the iterator. Callers should perform all updates before
    * calling this method if all updates should be visible in the returned iterator.
    */
-  override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
-  StateStoreIterator[UnsafeRowPair]
+  override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
+      : StateStoreIterator[UnsafeRowPair]
 
   /** Current metrics of the state store */
   def metrics: StateStoreMetrics
@@ -279,17 +279,16 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow = store.get(key,
     colFamilyName)
 
-  override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
-  StateStoreIterator[UnsafeRowPair] = store.iterator(colFamilyName)
+  override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
+      : StateStoreIterator[UnsafeRowPair] = store.iterator(colFamilyName)
 
   override def abort(): Unit = store.abort()
 
   override def release(): Unit = store.release()
 
   override def prefixScan(prefixKey: UnsafeRow,
-    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
-  StateStoreIterator[UnsafeRowPair] =
-    store.prefixScan(prefixKey, colFamilyName)
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
+      : StateStoreIterator[UnsafeRowPair] = store.prefixScan(prefixKey, colFamilyName)
 
   override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
     store.valuesIterator(key, colFamilyName)
