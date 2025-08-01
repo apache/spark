@@ -216,16 +216,16 @@ case class RowDataSourceScanExec(
    * The exmaple of resulting string is the following:
    *
    * PushedJoins:
-   * [0]: [PushedFilters: [ID_484c7d74_a2d9_4754_97f3_bed1b37b7d08 = (ID + 1)],
-   *     PushedJoins: [
-   *     [0]: [PushedFilters: [ID_c404c515_2496_4ed3_bf05_a38e1e6ff770 = (ID + 1)],
+   * [0]: [PushedFilters: [ID_03c3fe2f_6cd9_4794_ace9_85e617420548 = (ID + 1)],
+   *      PushedJoins: [
+   *      [0]: [PushedFilters: [ID_c0e665d3_3cea_4fb8_b57d_6a9f26af360f = (ID + 1)],
    *         PushedJoins: [
-   *         [0]: [PushedFilters: [ID IS NOT NULL]],
-   *         [1]: [PushedFilters: [ID IS NOT NULL]]
-   *      ]],
-   *     [1]: [PushedFilters: [ID IS NOT NULL]]
-   *  ]],
-   * [1]: [PushedFilters: [ID IS NOT NULL]]
+   *            [0]: [Relation: join_pushdown_catalog.tbl1, PushedFilters: [ID IS NOT NULL]],
+   *            [1]: [Relation: join_pushdown_catalog.tbl2, PushedFilters: [ID IS NOT NULL]]
+   *        ]],
+   *      [1]: [Relation: join_pushdown_catalog.tbl13, PushedFilters: [ID IS NOT NULL]]
+   *    ]],
+   * [1]: [Relation: join_pushdown_catalog.tbl4, PushedFilters: [ID IS NOT NULL]]
    */
   private def getPushedJoinString(
       joinedPushedDownOperators: Seq[PushedDownOperators],
@@ -234,6 +234,12 @@ case class RowDataSourceScanExec(
 
     val joinStrings = joinedPushedDownOperators.zipWithIndex.map { case (r, index) =>
       val parts = scala.collection.mutable.ListBuffer[String]()
+
+      // Add relation name for leaf nodes (nodes without further joins)
+      if (r.joinedRelationPushedDownOperators.isEmpty) {
+        val relationName = r.relationName.get
+        parts += s"Relation: $relationName"
+      }
 
       if (r.pushedPredicates.nonEmpty) {
         parts += s"PushedFilters: ${seqToString(r.pushedPredicates.map(_.describe()))}"
@@ -249,11 +255,32 @@ case class RowDataSourceScanExec(
         parts += s"PushedJoins: [\n$nestedJoins\n$indentStr  ]"
       }
 
-      val metadataStr = if (parts.length == 1) {
-        parts.head
-      } else {
-        val continuationIndent = indentStr + "    " // 4 spaces for continuation
-        parts.mkString(",\n" + continuationIndent)
+      val metadataStr = {
+        // Separate basic parts (relation, filter, and sample) from nested joins
+        val basicParts = scala.collection.mutable.ListBuffer[String]()
+        val nestedJoinsPart = scala.collection.mutable.ListBuffer[String]()
+
+        parts.foreach { part =>
+          if (part.startsWith("PushedJoins:")) {
+            nestedJoinsPart += part
+          } else {
+            basicParts += part
+          }
+        }
+
+        val result = scala.collection.mutable.ListBuffer[String]()
+
+        if (basicParts.nonEmpty) {
+          result += basicParts.mkString(", ")
+        }
+
+        // Add nested joins on new line
+        if (nestedJoinsPart.nonEmpty) {
+          val continuationIndent = indentStr + "    " // 4 spaces for continuation
+          result += nestedJoinsPart.mkString(",\n" + continuationIndent)
+        }
+
+        result.mkString(",\n" + indentStr + "    ")
       }
       s"$indentStr[$index]: [$metadataStr]"
     }

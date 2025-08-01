@@ -31,6 +31,8 @@ case class PushedDownOperators(
     offset: Option[Int],
     sortValues: Seq[SortOrder],
     pushedPredicates: Seq[Predicate],
-    joinedRelationPushedDownOperators: Seq[PushedDownOperators]) {
+    joinedRelationPushedDownOperators: Seq[PushedDownOperators],
+    // Relation name in case of leaf relation. For join nodes, this is empty.
+    relationName: Option[String]) {
   assert((limit.isEmpty && sortValues.isEmpty) || limit.isDefined)
 }

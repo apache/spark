@@ -200,9 +200,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           rightSideRequiredColumnsWithAliases,
           translatedCondition.get)
       ) {
-        leftHolder.joinedRelations = leftHolder.joinedRelations ++ rightHolder.joinedRelations
         val leftSidePushedDownOperators = getPushedDownOperators(leftHolder)
         val rightSidePushedDownOperators = getPushedDownOperators(rightHolder)
+
+        leftHolder.joinedRelations = leftHolder.joinedRelations ++ rightHolder.joinedRelations
         leftHolder.joinedRelationsPushedDownOperators =
           Seq(leftSidePushedDownOperators, rightSidePushedDownOperators)
 
@@ -804,9 +805,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def getPushedDownOperators(sHolder: ScanBuilderHolder): PushedDownOperators = {
+    val optRelationName = Option.when(sHolder.joinedRelations.length <= 1)(sHolder.relation.name)
     PushedDownOperators(sHolder.pushedAggregate, sHolder.pushedSample,
       sHolder.pushedLimit, sHolder.pushedOffset, sHolder.sortOrders, sHolder.pushedPredicates,
-      sHolder.joinedRelationsPushedDownOperators)
+      sHolder.joinedRelationsPushedDownOperators, optRelationName)
   }
 }
 

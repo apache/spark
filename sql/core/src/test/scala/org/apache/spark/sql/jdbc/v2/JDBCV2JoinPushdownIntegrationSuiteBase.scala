@@ -722,7 +722,5 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       sql(sqlQuery).explain("formatted")
     }
-
-    assert(1 == 0)
   }
 }
