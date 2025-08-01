@@ -353,4 +353,4 @@ if __name__ == "__main__":
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    unittest.main(testRunner=testRunner, verbosity=2) 
