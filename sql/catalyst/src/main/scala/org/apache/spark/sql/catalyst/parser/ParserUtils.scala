@@ -416,7 +416,7 @@ object SqlScriptingParsingContext {
     immutable.Set("builtin".r, "session".r, "sys.*".r)
 
   /**
-   * Used for enforcing names of Labels, FOR variables, and temporary variables
+   * Used for enforcing names of Labels, FOR variables, and local variables
    */
   def isForbiddenLabelOrVariableName(labelName: String): Boolean = {
     forbiddenNames.exists(_.matches(labelName.toLowerCase(Locale.ROOT)))
