@@ -17,9 +17,10 @@
 import unittest
 from typing import Iterator
 
+from pyspark.errors import PySparkAttributeError
 from pyspark.errors.exceptions.captured import PythonException
 from pyspark.sql.functions import arrow_udtf, lit
-from pyspark.sql.types import Row
+from pyspark.sql.types import Row, StructType, StructField, IntegerType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pyarrow, pyarrow_requirement_message
 from pyspark.testing import assertDataFrameEqual
 
@@ -345,6 +346,42 @@ class ArrowUDTFTests(ReusedSQLTestCase):
             result_df = StringToIntUDTF()
             result_df.collect()
 
+    def test_arrow_udtf_blocks_analyze_method_none_return_type(self):
+
+        with self.assertRaises(PySparkAttributeError) as cm:
+            @arrow_udtf
+            class AnalyzeUDTF:
+                def eval(self, input_col: "pa.Array") -> Iterator["pa.Table"]:
+                    yield pa.table({"result": pa.array([1, 2, 3])})
+
+                @staticmethod
+                def analyze(arg):
+                    from pyspark.sql.udtf import AnalyzeResult
+
+                    return AnalyzeResult(
+                        schema=StructType([StructField("result", IntegerType(), True)])
+                    )
+
+        self.assertIn("INVALID_ARROW_UDTF_WITH_ANALYZE", str(cm.exception))
+
+    def test_arrow_udtf_blocks_analyze_method_with_return_type(self):
+
+        with self.assertRaises(PySparkAttributeError) as cm:
+            @arrow_udtf(returnType="result: int")
+            class AnalyzeUDTF:
+                def eval(self, input_col: "pa.Array") -> Iterator["pa.Table"]:
+                    yield pa.table({"result": pa.array([1, 2, 3])})
+
+                @staticmethod
+                def analyze(arg):
+                    from pyspark.sql.udtf import AnalyzeResult
+
+                    return AnalyzeResult(
+                        schema=StructType([StructField("result", IntegerType(), True)])
+                    )
+
+        self.assertIn("INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE", str(cm.exception))
+
 
 if __name__ == "__main__":
     try:
@@ -353,4 +390,4 @@ if __name__ == "__main__":
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2) 
+    unittest.main(testRunner=testRunner, verbosity=2)

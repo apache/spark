@@ -256,12 +256,9 @@ def _create_pyarrow_udtf(
     """Create a PyArrow-native Python UDTF."""
     # Validate PyArrow dependencies
     try:
-        require_minimum_pandas_version()
         require_minimum_pyarrow_version()
     except ImportError as e:
-        raise PySparkImportError(
-            f"PyArrow UDTF requires both pandas and pyarrow dependencies: {str(e)}"
-        ) from e
+        raise PySparkImportError(f"PyArrow UDTF requires pyarrow dependencies: {str(e)}") from e
 
     # Validate the handler class with PyArrow-specific checks
     _validate_arrow_udtf_handler(cls, returnType)
@@ -280,26 +277,13 @@ def _validate_arrow_udtf_handler(cls: Any, returnType: Optional[Union[StructType
     # First run standard UDTF validation
     _validate_udtf_handler(cls, returnType)
 
-    # Additional PyArrow-specific validation
-    import inspect
-
-    # Check that eval method signature looks appropriate for PyArrow
-    if hasattr(cls, "eval"):
-        sig = inspect.signature(cls.eval)
-        params = list(sig.parameters.values())[1:]
-
-        # Check that eval method signature looks appropriate for PyArrow
-        for param in params:
-            if param.annotation != inspect.Parameter.empty:
-                annotation_str = str(param.annotation)
-                if "pyarrow" not in annotation_str.lower() and "pa." not in annotation_str:
-                    import warnings
-
-                    warnings.warn(
-                        f"PyArrow UDTF parameter '{param.name}' does not have PyArrow type hints. "
-                        f"Consider using 'pa.RecordBatch' or 'pa.Array' for better clarity.",
-                        UserWarning,
-                    )
+    # Block analyze method usage in arrow UDTFs
+    has_analyze = hasattr(cls, "analyze")
+    if has_analyze:
+        raise PySparkAttributeError(
+            errorClass="INVALID_ARROW_UDTF_WITH_ANALYZE",
+            messageParameters={"name": cls.__name__},
+        )
 
 
 def _validate_udtf_handler(cls: Any, returnType: Optional[Union[StructType, str]]) -> None:
