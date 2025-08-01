@@ -158,10 +158,9 @@ case class RowDataSourceScanExec(
 
   override def inputRDD: RDD[InternalRow] = rdd
 
+  private def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
+
   override val metadata: Map[String, String] = {
-
-    def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
-
     val markedFilters = if (filters.nonEmpty) {
       for (filter <- filters) yield {
         if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
@@ -188,8 +187,9 @@ case class RowDataSourceScanExec(
       seqToString(markedFilters.toSeq)
     }
 
-    val pushedJoins = if (pushedDownOperators.joinedRelations.length > 1) {
-      Map("PushedJoins" -> seqToString(pushedDownOperators.joinedRelations))
+    val pushedJoins = if (pushedDownOperators.joinedRelationPushedDownOperators.nonEmpty) {
+      Map("PushedJoins" ->
+        s"\n${getPushedJoinString(pushedDownOperators.joinedRelationPushedDownOperators)}")
     } else {
       Map()
     }
@@ -207,6 +207,58 @@ case class RowDataSourceScanExec(
         s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
       ) ++
       pushedJoins
+  }
+
+  /**
+   * Build string for all the pushed down join operators. The method is recursive, so if there is
+   * join on top of 2 already joined relations, all of these will be present in string.
+   *
+   * The exmaple of resulting string is the following:
+   *
+   * PushedJoins:
+   * [0]: [PushedFilters: [ID_484c7d74_a2d9_4754_97f3_bed1b37b7d08 = (ID + 1)],
+   *     PushedJoins: [
+   *     [0]: [PushedFilters: [ID_c404c515_2496_4ed3_bf05_a38e1e6ff770 = (ID + 1)],
+   *         PushedJoins: [
+   *         [0]: [PushedFilters: [ID IS NOT NULL]],
+   *         [1]: [PushedFilters: [ID IS NOT NULL]]
+   *      ]],
+   *     [1]: [PushedFilters: [ID IS NOT NULL]]
+   *  ]],
+   * [1]: [PushedFilters: [ID IS NOT NULL]]
+   */
+  private def getPushedJoinString(
+      joinedPushedDownOperators: Seq[PushedDownOperators],
+      indent: Int = 0): String = {
+    val indentStr = "  " * indent
+
+    val joinStrings = joinedPushedDownOperators.zipWithIndex.map { case (r, index) =>
+      val parts = scala.collection.mutable.ListBuffer[String]()
+
+      if (r.pushedPredicates.nonEmpty) {
+        parts += s"PushedFilters: ${seqToString(r.pushedPredicates.map(_.describe()))}"
+      }
+
+      r.sample.foreach { v =>
+        parts += s"PushedSample: " +
+          s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
+      }
+
+      if (r.joinedRelationPushedDownOperators.nonEmpty) {
+        val nestedJoins = getPushedJoinString(r.joinedRelationPushedDownOperators, indent + 2)
+        parts += s"PushedJoins: [\n$nestedJoins\n$indentStr  ]"
+      }
+
+      val metadataStr = if (parts.length == 1) {
+        parts.head
+      } else {
+        val continuationIndent = indentStr + "    " // 4 spaces for continuation
+        parts.mkString(",\n" + continuationIndent)
+      }
+      s"$indentStr[$index]: [$metadataStr]"
+    }
+
+    joinStrings.mkString(",\n")
   }
 
   // Don't care about `rdd` and `tableIdentifier`, and `stream` when canonicalizing.
