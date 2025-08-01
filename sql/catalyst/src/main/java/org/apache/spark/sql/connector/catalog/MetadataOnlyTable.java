@@ -53,7 +53,6 @@ public class MetadataOnlyTable implements Table {
     private String createVersion = "";
     private long createTime = 0;
     private Map<String, String> tableProps = Map.ofEntries();
-    private Map<String, String> serdeProps = Map.ofEntries();
     private Transform[] partitioning = new Transform[0];
 
     public Builder(Column[] columns) {
@@ -122,11 +121,6 @@ public class MetadataOnlyTable implements Table {
       return this;
     }
 
-    public Builder withSerdeProps(Map<String, String> serdeProps) {
-      this.serdeProps = serdeProps;
-      return this;
-    }
-
     public Builder withPartitioning(Transform[] partitioning) {
       this.partitioning = partitioning;
       return this;
@@ -177,10 +171,6 @@ public class MetadataOnlyTable implements Table {
     return builder.tableProps;
   }
 
-  public Map<String, String> getSerdeProps() {
-    return builder.serdeProps;
-  }
-
   @Override
   public Column[] columns() {
     return builder.columns;
@@ -189,7 +179,6 @@ public class MetadataOnlyTable implements Table {
   @Override
   public Map<String, String> properties() {
     Map<String, String> props = new java.util.HashMap<>(builder.tableProps);
-    builder.serdeProps.forEach((k, v) -> props.put(TableCatalog.OPTION_PREFIX + k, v));
     if (getProvider() != null) {
       props.put(TableCatalog.PROP_PROVIDER, getProvider());
     }

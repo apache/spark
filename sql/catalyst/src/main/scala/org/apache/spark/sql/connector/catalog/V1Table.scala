@@ -120,7 +120,9 @@ private[sql] object V1Table {
       case _ => CatalogTableType.EXTERNAL
     }
     val viewText = Option(t.getViewText())
-    val tableProps = t.getTableProps().asScala.toMap
+    val (serdeProps, tableProps) = t.getTableProps().asScala.toSeq
+      .partition(_._1.startsWith(TableCatalog.OPTION_PREFIX))
+    val tablePropsMap = tableProps.toMap
     val (partCols, bucketSpec, clusterBySpec) = t.partitioning().toSeq.convertTransforms
     CatalogTable(
       identifier = TableIdentifier(
@@ -132,7 +134,9 @@ private[sql] object V1Table {
         locationUri = Option(t.getLocation()).map(CatalogUtils.stringToURI),
         // v2 table properties should be put into the serde properties as well in case
         // it contains data source options.
-        properties = tableProps ++ t.getSerdeProps().asScala
+        properties = tablePropsMap ++ serdeProps.map {
+          case (k, v) => k.drop(TableCatalog.OPTION_PREFIX.length) -> v
+        }
       ),
       schema = CatalogV2Util.v2ColumnsToStructType(t.columns()),
       provider = Option(t.getProvider),
@@ -145,7 +149,7 @@ private[sql] object V1Table {
       viewOriginalText = viewText,
       comment = Option(t.getComment()),
       collation = Option(t.getCollation()),
-      properties = tableProps ++ clusterBySpec.map(ClusterBySpec.toPropertyWithoutValidation)
+      properties = tablePropsMap ++ clusterBySpec.map(ClusterBySpec.toPropertyWithoutValidation)
     )
   }
 }
