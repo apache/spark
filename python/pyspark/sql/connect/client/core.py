@@ -968,7 +968,7 @@ class SparkConnectClient(object):
             # Rename columns to avoid duplicated column names.
             renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
 
-            pandas_options = {}
+            pandas_options = {"coerce_temporal_nanoseconds": True}
             if self_destruct:
                 # Configure PyArrow to use as little memory as possible:
                 # self_destruct - free columns as they are converted
@@ -979,15 +979,6 @@ class SparkConnectClient(object):
                         "self_destruct": True,
                         "split_blocks": True,
                         "use_threads": False,
-                    }
-                )
-            if LooseVersion(pa.__version__) >= LooseVersion("13.0.0"):
-                # A legacy option to coerce date32, date64, duration, and timestamp
-                # time units to nanoseconds when converting to pandas.
-                # This option can only be added since 13.0.0.
-                pandas_options.update(
-                    {
-                        "coerce_temporal_nanoseconds": True,
                     }
                 )
             pdf = renamed_table.to_pandas(**pandas_options)
