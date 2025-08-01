@@ -302,6 +302,11 @@ This file is divided into 3 sections:
     <customMessage>Use sizeOf of JavaUtils or Utils instead.</customMessage>
   </check>
 
+  <check customId="copyFileToDirectory" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileUtils\.copyFileToDirectory</parameter></parameters>
+    <customMessage>Use copyFileToDirectory of SparkFileUtils or Utils instead.</customMessage>
+  </check>
+
   <check customId="commonslang2" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.lang\.</parameter></parameters>
     <customMessage>Use Commons Lang 3 classes (package org.apache.commons.lang3.*) instead

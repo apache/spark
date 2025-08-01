@@ -18,7 +18,7 @@ package org.apache.spark.util
 
 import java.io.File
 import java.net.{URI, URISyntaxException}
-import java.nio.file.{Files, Path}
+import java.nio.file.{Files, Path, StandardCopyOption}
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.network.util.JavaUtils
@@ -145,6 +145,16 @@ private[spark] trait SparkFileUtils extends Logging {
     names.foldLeft(parent.toPath) { (path, part) =>
       path.resolve(part)
     }.toFile
+  }
+
+  /** Copy file to the target directory simply. File attribute times are not copied. */
+  def copyFileToDirectory(file: File, dir: File): Unit = {
+    if (file == null || dir == null || !file.exists() || (dir.exists() && !dir.isDirectory())) {
+      throw new IllegalArgumentException(s"Invalid input file $file or directory $dir")
+    }
+    Files.createDirectories(dir.toPath())
+    val newFile = new File(dir, file.getName())
+    Files.copy(file.toPath(), newFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
   }
 }
 
