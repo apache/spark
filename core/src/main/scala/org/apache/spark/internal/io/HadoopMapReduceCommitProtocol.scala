@@ -127,14 +127,13 @@ class HadoopMapReduceCommitProtocol(
     val filename = getFilename(taskContext, spec)
 
     val stagingDir: Path = committer match {
-      // For FileOutputCommitter it has its own staging path called "work path".
       case f: FileOutputCommitter =>
         if (dynamicPartitionOverwrite) {
           assert(dir.isDefined,
             "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
           partitionPaths += dir.get
         }
-        new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))
+        f.getTaskAttemptPath(taskContext)
       case _ => new Path(path)
     }
 
@@ -180,7 +179,6 @@ class HadoopMapReduceCommitProtocol(
 
     // Set up the configuration object
     jobContext.getConfiguration.set("mapreduce.job.id", jobId.toString)
-    jobContext.getConfiguration.set(SPARK_WRITE_JOB_ID, this.jobId)
     jobContext.getConfiguration.set("mapreduce.task.id", taskAttemptId.getTaskID.toString)
     jobContext.getConfiguration.set("mapreduce.task.attempt.id", taskAttemptId.toString)
     jobContext.getConfiguration.setBoolean("mapreduce.task.ismap", true)

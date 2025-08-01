@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.FileNotFoundException
-import java.lang.invoke.MethodHandles
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobContext, OutputCommitter, TaskAttemptContext}
@@ -86,10 +85,6 @@ class SQLHadoopMapReduceCommitProtocol(
 class UniqueJobPathOutputCommitter(outputPath: Path, context: TaskAttemptContext)
   extends FileOutputCommitter(outputPath, context)
   with Logging {
-
-  MethodHandles.lookup()
-    .findVarHandle(classOf[FileOutputCommitter], "workPath", classOf[Path])
-    .set(this, getTaskAttemptPath(context))
 
   private def getSparkWriteId: String = {
     context.getConfiguration.get(SPARK_WRITE_JOB_ID, FileOutputCommitter.PENDING_DIR_NAME)

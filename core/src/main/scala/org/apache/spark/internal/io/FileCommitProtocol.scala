@@ -237,7 +237,7 @@ object FileCommitProtocol extends Logging {
     getStagingDir(new Path(path), jobId)
   }
 
-  val SPARK_WRITE_JOB_ID: String = "spark.write.job.id"
+  val SPARK_WRITE_JOB_ID: String = "spark.sql.sources.writeJobUUID"
 }
 
 /**

@@ -29,6 +29,7 @@ import org.apache.spark._
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
+import org.apache.spark.internal.io.FileCommitProtocol.SPARK_WRITE_JOB_ID
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -163,7 +164,7 @@ object FileFormatWriter extends Logging {
 
     // propagate the description UUID into the jobs, so that committers
     // get an ID guaranteed to be unique.
-    job.getConfiguration.set("spark.sql.sources.writeJobUUID", description.uuid)
+    job.getConfiguration.set(SPARK_WRITE_JOB_ID, description.uuid)
 
     // When `PLANNED_WRITE_ENABLED` is true, the optimizer rule V1Writes will add logical sort
     // operator based on the required ordering of the V1 write command. So the output
@@ -377,7 +378,7 @@ object FileFormatWriter extends Logging {
       hadoopConf.set("mapreduce.task.attempt.id", taskAttemptId.toString)
       hadoopConf.setBoolean("mapreduce.task.ismap", true)
       hadoopConf.setInt("mapreduce.task.partition", 0)
-
+      hadoopConf.set(SPARK_WRITE_JOB_ID, description.uuid)
       new TaskAttemptContextImpl(hadoopConf, taskAttemptId)
     }
 
