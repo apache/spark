@@ -21,7 +21,7 @@ import java.util.UUID
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Random, Success}
+import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
 import org.scalactic.source.Position
@@ -30,9 +30,8 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException, TaskContext}
-import org.apache.spark.TaskContext.withTaskContext
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
-import org.apache.spark.sql.execution.streaming.{StatefulOperatorStateInfo, StreamExecution}
+import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.streaming.state.StateStoreTestsHelper._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
