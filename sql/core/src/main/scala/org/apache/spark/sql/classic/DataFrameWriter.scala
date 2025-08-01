@@ -25,7 +25,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedIdentifier, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, UnresolvedIdentifier, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -36,8 +36,8 @@ import org.apache.spark.sql.connector.catalog.TableWritePrivilege._
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.command.{DDLUtils, DropTableCommand, RefreshTableCommand}
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
+import org.apache.spark.sql.execution.command.{DDLUtils, SaveAsV1TableCommand}
+import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils}
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -451,7 +451,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
         saveAsTableCommand(catalog.asTableCatalog, ident, nameParts)
 
       case AsTableIdentifier(tableIdentifier) =>
-        saveAsTableCommand(tableIdentifier)
+        saveAsV1TableCommand(tableIdentifier)
 
       case other =>
         throw QueryCompilationErrors.cannotFindCatalogToHandleIdentifierError(other.quoted)
@@ -466,7 +466,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
 
     (curmode, tableOpt) match {
       case (_, Some(_: V1Table)) =>
-        saveAsTableCommand(TableIdentifier(ident.name(), ident.namespace().headOption))
+        saveAsV1TableCommand(TableIdentifier(ident.name(), ident.namespace().headOption))
 
       case (SaveMode.Append, Some(table)) =>
         checkPartitioningMatchesV2Table(table)
@@ -517,60 +517,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
     }
   }
 
-  private def saveAsTableCommand(tableIdent: TableIdentifier): LogicalPlan = {
-    val catalog = df.sparkSession.sessionState.catalog
-    val qualifiedIdent = catalog.qualifyIdentifier(tableIdent)
-    val tableExists = catalog.tableExists(qualifiedIdent)
-
-    (tableExists, curmode) match {
-      case (true, SaveMode.Ignore) =>
-        // Do nothing - return empty plan
-        LocalRelation.fromExternalRows(Seq.empty, Seq.empty)
-
-      case (true, SaveMode.ErrorIfExists) =>
-        throw QueryCompilationErrors.tableAlreadyExistsError(qualifiedIdent)
-
-      case (true, SaveMode.Overwrite) =>
-        // Get all input data source or hive relations of the query.
-        val srcRelations = df.logicalPlan.collect {
-          case l: LogicalRelation => l.relation
-          case relation: HiveTableRelation => relation.tableMeta.identifier
-        }
-
-        val tableRelation = df.sparkSession.table(qualifiedIdent).queryExecution.analyzed
-        EliminateSubqueryAliases(tableRelation) match {
-          // check if the table is a data source table (the relation is a BaseRelation).
-          case l: LogicalRelation if srcRelations.contains(l.relation) =>
-            throw QueryCompilationErrors.cannotOverwriteTableThatIsBeingReadFromError(
-              qualifiedIdent)
-          // check hive table relation when overwrite mode
-          case relation: HiveTableRelation
-              if srcRelations.contains(relation.tableMeta.identifier) =>
-            throw QueryCompilationErrors.cannotOverwriteTableThatIsBeingReadFromError(
-              qualifiedIdent)
-          case _ => // OK
-        }
-
-        CompoundBody(
-          collection = Seq(
-            SingleStatement(DropTableCommand(
-              qualifiedIdent,
-              ifExists = true,
-              isView =
-                tableRelation.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.View],
-              purge = false)),
-            SingleStatement(createTableCommand(qualifiedIdent)),
-            SingleStatement(RefreshTableCommand(qualifiedIdent))
-          ),
-          label = None,
-          isScope = false
-        )
-
-      case _ => createTableCommand(qualifiedIdent)
-    }
-  }
-
-  private def createTableCommand(tableIdent: TableIdentifier): LogicalPlan = {
+  private def saveAsV1TableCommand(tableIdent: TableIdentifier): SaveAsV1TableCommand = {
     val storage = DataSource.buildStorageFormatFromOptions(extraOptions.toMap)
     val tableType = if (storage.locationUri.isDefined) {
       CatalogTableType.EXTERNAL
@@ -595,7 +542,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
       bucketSpec = getBucketSpec,
       properties = properties)
 
-    CreateTable(tableDesc, curmode, Some(df.logicalPlan))
+    SaveAsV1TableCommand(tableDesc, curmode, df.logicalPlan)
   }
 
   /** Converts the provided partitioning and bucketing information to DataSourceV2 Transforms. */
