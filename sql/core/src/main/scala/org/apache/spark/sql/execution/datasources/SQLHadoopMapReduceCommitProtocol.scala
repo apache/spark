@@ -68,7 +68,10 @@ class SQLHadoopMapReduceCommitProtocol(
         val ctor = clazz.getDeclaredConstructor()
         committer = ctor.newInstance()
       }
-    } else if (clazz == classOf[FileOutputCommitter]) {
+    } else if (committer.getClass == classOf[FileOutputCommitter]) {
+      // If both OUTPUT_COMMITTER_CLASS is not specified by user and FileOutputCommitter is not
+      // overridden by the data source, we will use the default UniqueJobPathOutputCommitter to
+      // make the job temporary output path unique.
       committer = new UniqueJobPathOutputCommitter(new Path(path), context)
     }
     logInfo(log"Using output committer class " +
@@ -81,6 +84,7 @@ class SQLHadoopMapReduceCommitProtocol(
  * An implementation of [[FileOutputCommitter]] that uses the Spark write ID to create
  * a staging directory for job attempts instead of static `_temporary` as root.
  *
+ * This class can be set to spark.sql.sources.outputCommitterClass for direct use.
  */
 class UniqueJobPathOutputCommitter(outputPath: Path, context: TaskAttemptContext)
   extends FileOutputCommitter(outputPath, context)
