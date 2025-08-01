@@ -340,7 +340,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     val sparkContext = session.sparkContext
     val newArtifactManager = new ArtifactManager(newSession)
     if (artifactPath.toFile.exists()) {
-      FileUtils.copyDirectory(artifactPath.toFile, newArtifactManager.artifactPath.toFile)
+      Utils.copyDirectory(artifactPath.toFile, newArtifactManager.artifactPath.toFile)
     }
     val blockManager = sparkContext.env.blockManager
     val newBlockIds = cachedBlockIdList.asScala.map { blockId =>

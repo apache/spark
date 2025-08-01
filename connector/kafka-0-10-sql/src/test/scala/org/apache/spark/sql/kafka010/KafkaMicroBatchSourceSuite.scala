@@ -29,7 +29,6 @@ import scala.io.Source
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
-import org.apache.commons.io.FileUtils
 import org.apache.kafka.clients.producer.{ProducerRecord, RecordMetadata}
 import org.apache.kafka.common.TopicPartition
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
@@ -1729,7 +1728,7 @@ abstract class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBa
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
     testStream(query)(
       StartStream(checkpointLocation = checkpointDir.getAbsolutePath),

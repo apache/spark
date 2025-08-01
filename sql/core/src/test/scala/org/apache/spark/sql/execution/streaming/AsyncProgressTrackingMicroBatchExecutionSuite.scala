@@ -22,7 +22,6 @@ import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
 
 import scala.collection.mutable.ListBuffer
 
-import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
@@ -1359,10 +1358,10 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
     testStream(streamEvent, extraOptions = Map(
       ASYNC_PROGRESS_TRACKING_ENABLED -> "true",

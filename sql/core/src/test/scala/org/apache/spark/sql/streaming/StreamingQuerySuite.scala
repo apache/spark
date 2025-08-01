@@ -52,6 +52,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.{BlockingSource, MockSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.util.Utils
 
 @SlowSQLTest
 class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging with MockitoSugar {
@@ -1097,7 +1098,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val inputDir = new File(input.toURI)
 
     // Copy test files to tempDir so that we won't modify the original data.
-    FileUtils.copyDirectory(inputDir, dir)
+    Utils.copyDirectory(inputDir, dir)
 
     // Spark 2.4 and earlier escaped the _spark_metadata path once
     val legacySparkMetadataDir = new File(
