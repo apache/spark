@@ -60,7 +60,7 @@ private[spark] trait SparkStringUtils {
     val rightPadded = right ++ Seq.fill(math.max(left.size - right.size, 0))("")
 
     leftPadded.zip(rightPadded).map { case (l, r) =>
-      (if (l == r) " " else "!") + l + (" " * ((maxLeftSize - l.length) + 3)) + r
+      (if (l == r) " " else "!") + l + " ".repeat((maxLeftSize - l.length) + 3) + r
     }
   }
 

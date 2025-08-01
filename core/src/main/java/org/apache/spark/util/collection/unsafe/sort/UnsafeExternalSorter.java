@@ -27,7 +27,6 @@ import java.util.Queue;
 import java.util.function.Supplier;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.apache.commons.io.IOUtils;
 
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
@@ -886,7 +885,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     private void closeIfPossible(UnsafeSorterIterator iterator) {
       if (iterator instanceof Closeable closeable) {
-        IOUtils.closeQuietly((closeable));
+        Utils.closeQuietly((closeable));
       }
     }
   }

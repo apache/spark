@@ -488,7 +488,7 @@ case class AdaptiveSparkPlanExec(
       maxFields: Int,
       printNodeId: Boolean,
       printOutputColumns: Boolean): Unit = {
-    append("   " * depth)
+    append("   ".repeat(depth))
     append(s"+- == $header ==\n")
     plan.generateTreeString(
       0,
