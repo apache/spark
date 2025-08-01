@@ -45,6 +45,10 @@ import org.apache.spark.sql.execution.streaming.state.MaintenanceTaskType._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{NextIterator, ThreadUtils, Utils}
 
+/**
+ * A wrapper around an iterator that also has a close method.
+ * This is useful for freeing underlying iterator resources when the iterator is no longer needed.
+ */
 class StateStoreIterator[A](
   private val iter: Iterator[A],
   private val onClose: () => Unit = () => {}
