@@ -17,31 +17,13 @@
 
 package org.apache.spark.internal;
 
-// checkstyle.off: RegexpSinglelineJava
-import org.slf4j.LoggerFactory;
-// checkstyle.on: RegexpSinglelineJava
-
-public class SparkLoggerFactory {
-
-  private static volatile boolean structuredLoggingEnabled = false;
-
-  public static void enableStructuredLogging() {
-    structuredLoggingEnabled = true;
-  }
-
-  public static void disableStructuredLogging() {
-    structuredLoggingEnabled = false;
-  }
-
-  public static boolean isStructuredLoggingEnabled() {
-    return structuredLoggingEnabled;
-  }
-
-  public static SparkLogger getLogger(String name) {
-    return new SparkLogger(LoggerFactory.getLogger(name));
-  }
-
-  public static SparkLogger getLogger(Class<?> clazz) {
-    return new SparkLogger(LoggerFactory.getLogger(clazz));
+/**
+ * Mapped Diagnostic Context (MDC) that will be used in log messages.
+ * The values of the MDC will be inline in the log message, while the key-value pairs will be
+ * part of the ThreadContext.
+ */
+public record MDC(LogKey key, Object value) {
+  public static MDC of(LogKey key, Object value) {
+    return new MDC(key, value);
   }
 }
