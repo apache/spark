@@ -473,6 +473,9 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
   }
 
   private def makeMapWriter(mapType: MapType, inShredded: Boolean): ValueWriter = {
+    // TODO: If maps are ever supported in the shredded schema, we should add a test in
+    //  `ParquetVariantShreddingSuite` to make sure that timestamps within maps are shredded
+    //  correctly as INT64.
     val keyWriter = makeWriter(mapType.keyType, inShredded)
     val valueWriter = makeWriter(mapType.valueType, inShredded)
     val repeatedGroupName = if (writeLegacyParquetFormat) {
