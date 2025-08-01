@@ -57,13 +57,13 @@ class DataFrameSuite extends QueryTest with RemoteSparkSession {
 
     val df3 = df2.select(col("*"), lit(1).as("v1"))
     assert(df3.drop(df3.col("id")).columns === Array("v0", "v1"))
-    // drop df2.col("id") from df2, which is semantically equal to df3.col("id")
+    // drop df2.col("id") from df3, which is semantically equal to df3.col("id")
     assert(df3.drop(df2.col("id")).columns === Array("v0", "v1"))
-    // drop df1.col("id") from df2, which is semantically equal to df3.col("id")
+    // drop df1.col("id") from df3, which is semantically equal to df3.col("id")
     assert(df3.drop(df1.col("id")).columns === Array("v0", "v1"))
 
     assert(df3.drop(df3.col("v0")).columns === Array("id", "v1"))
-    // drop df2.col("v0") from df2, which is semantically equal to df3.col("v0")
+    // drop df2.col("v0") from df3, which is semantically equal to df3.col("v0")
     assert(df3.drop(df2.col("v0")).columns === Array("id", "v1"))
   }
 
