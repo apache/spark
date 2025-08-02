@@ -433,14 +433,18 @@ the cluster.
 When there exists a log collection system, you can expose it at Spark Driver `Executors` tab UI. For example,
 
 ```
-spark.ui.custom.executor.log.url='https://log-server/log?appId={{APP_ID}}&execId={{EXECUTOR_ID}}'
+spark.ui.custom.driver.log.url='https://log-server/driverLog?appId={{APP_ID}}&namespace={{KUBERNETES_NAMESPACE}}&podName={{KUBERNETES_POD_NAME}}'
+spark.ui.custom.executor.log.url='https://log-server/executorLog?appId={{APP_ID}}&execId={{EXECUTOR_ID}}'
 ```
 
-You can add additional custom variables to this url template, populated with the values of existing executor environment variables like
+You can add additional custom variables to these url templates, populated with the values of existing driver and executor environment variables like
 
 ```
+spark.driverEnv.SPARK_DRIVER_ATTRIBUTE_YOUR_VAR='$(EXISTING_DRIVER_ENV_VAR)'
 spark.executorEnv.SPARK_EXECUTOR_ATTRIBUTE_YOUR_VAR='$(EXISTING_EXECUTOR_ENV_VAR)'
-spark.ui.custom.executor.log.url='https://log-server/log?appId={{APP_ID}}&execId={{EXECUTOR_ID}}&your_var={{YOUR_VAR}}'
+
+spark.ui.custom.driver.log.url='https://log-server/driverLog?appId={{APP_ID}}&podName={{KUBRNETES_POD_NAME}}&your_var={{YOUR_VAR}}'
+spark.ui.custom.executor.log.url='https://log-server/executorLog?appId={{APP_ID}}&execId={{EXECUTOR_ID}}&your_var={{YOUR_VAR}}'
 ```
 
 ### Accessing Driver UI

@@ -16,6 +16,7 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import java.util.Locale
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -26,7 +27,7 @@ import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{LogUrlHandler, SparkContext}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
@@ -34,11 +35,10 @@ import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.LogKeys.{COUNT, TOTAL}
 import org.apache.spark.internal.MDC
-import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
+import org.apache.spark.internal.config.{SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO, UI}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
-import org.apache.spark.scheduler.{ExecutorDecommission, ExecutorDecommissionInfo, ExecutorKilled, ExecutorLossReason,
-  TaskSchedulerImpl}
+import org.apache.spark.scheduler.{ExecutorDecommission, ExecutorDecommissionInfo, ExecutorKilled, ExecutorLossReason, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -102,6 +102,20 @@ private[spark] class KubernetesClusterSchedulerBackend(
    */
   override def applicationId(): String = {
     conf.getOption("spark.app.id").getOrElse(appId)
+  }
+
+  def extractAttributes: Map[String, String] = {
+    val prefix = "SPARK_DRIVER_ATTRIBUTE_"
+    sys.env.filter { case (k, _) => k.startsWith(prefix) }
+      .map(e => (e._1.substring(prefix.length).toUpperCase(Locale.ROOT), e._2))
+  }
+
+  override def getDriverAttributes: Option[Map[String, String]] =
+    Some(Map("LOG_FILES" -> "log") ++ extractAttributes)
+
+  override def getDriverLogUrls: Option[Map[String, String]] = {
+    val logUrlHandler = new LogUrlHandler(conf.get(UI.CUSTOM_DRIVER_LOG_URL))
+    getDriverAttributes.map(attr => logUrlHandler.applyPattern(Map.empty, attr)).filter(_.nonEmpty)
   }
 
   override def start(): Unit = {

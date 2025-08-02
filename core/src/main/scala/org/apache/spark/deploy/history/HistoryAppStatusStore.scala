@@ -17,8 +17,7 @@
 
 package org.apache.spark.deploy.history
 
-import org.apache.spark.SparkConf
-import org.apache.spark.executor.ExecutorLogUrlHandler
+import org.apache.spark.{LogUrlHandler, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.History._
 import org.apache.spark.status.AppStatusStore
@@ -40,7 +39,7 @@ private[spark] class HistoryAppStatusStore(
     }
   }
 
-  private val logUrlHandler = new ExecutorLogUrlHandler(logUrlPattern)
+  private val logUrlHandler = new LogUrlHandler(logUrlPattern)
 
   override def executorList(activeOnly: Boolean): Seq[v1.ExecutorSummary] = {
     val execList = super.executorList(activeOnly)

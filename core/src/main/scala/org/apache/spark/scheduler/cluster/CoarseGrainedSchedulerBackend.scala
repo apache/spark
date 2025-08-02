@@ -27,11 +27,10 @@ import scala.concurrent.Future
 import com.google.common.cache.CacheBuilder
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.{ExecutorAllocationClient, SparkEnv, TaskState}
+import org.apache.spark.{ExecutorAllocationClient, LogUrlHandler, SparkEnv, TaskState}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.executor.ExecutorLogUrlHandler
 import org.apache.spark.internal.{config, Logging, MDC}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
@@ -156,7 +155,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       .filter { case (k, _) => k.startsWith("spark.") }
       .toImmutableArraySeq
 
-    private val logUrlHandler: ExecutorLogUrlHandler = new ExecutorLogUrlHandler(
+    private val logUrlHandler: LogUrlHandler = new LogUrlHandler(
       conf.get(UI.CUSTOM_EXECUTOR_LOG_URL))
 
     override def onStart(): Unit = {
