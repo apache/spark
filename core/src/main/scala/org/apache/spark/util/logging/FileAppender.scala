@@ -83,6 +83,10 @@ private[spark] class FileAppender(
       } {
         try {
           if (closeStreams) {
+            val lastBuf = inputStream.readAllBytes()
+            if (lastBuf.nonEmpty) {
+              appendToFile(lastBuf, lastBuf.length)
+            }
             inputStream.close()
           }
         } finally {
