@@ -47,7 +47,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = outputLocation)
 
-    FileFormatWriter.write(
+    fileFormatWriter.write(
       sparkSession = sparkSession,
       plan = plan,
       fileFormat = fileFormat,

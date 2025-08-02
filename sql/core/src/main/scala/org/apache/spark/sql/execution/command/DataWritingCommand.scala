@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, LogicalPlan, 
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
-import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
+import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, FileFormatWriter}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.SerializableConfiguration
@@ -45,6 +45,10 @@ trait DataWritingCommand extends UnaryCommand with CTEInChildren {
   def query: LogicalPlan
 
   override final def child: LogicalPlan = query
+
+  protected val fileFormatWriter: FileFormatWriter = {
+    FileFormatWriter.create(conf)
+  }
 
   // Output column names of the analyzed input query plan.
   def outputColumnNames: Seq[String]

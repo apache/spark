@@ -96,7 +96,8 @@ case class WriteFilesExec(
       val sparkPartitionId = TaskContext.get().partitionId()
       val sparkAttemptNumber = TaskContext.get().taskAttemptId().toInt & Int.MaxValue
 
-      val ret = FileFormatWriter.executeTask(
+      val writer = FileFormatWriter.create(conf)
+      val ret = writer.executeTask(
         description,
         jobTrackerID,
         sparkStageId,
