@@ -118,11 +118,6 @@ class HadoopMapReduceCommitProtocol(
   }
 
   override def newTaskTempFile(
-      taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
-    newTaskTempFile(taskContext, dir, FileNameSpec("", ext))
-  }
-
-  override def newTaskTempFile(
       taskContext: TaskAttemptContext, dir: Option[String], spec: FileNameSpec): String = {
     val filename = getFilename(taskContext, spec)
 
@@ -143,11 +138,6 @@ class HadoopMapReduceCommitProtocol(
     }.getOrElse {
       new Path(stagingDir, filename).toString
     }
-  }
-
-  override def newTaskTempFileAbsPath(
-      taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
-    newTaskTempFileAbsPath(taskContext, absoluteDir, FileNameSpec("", ext))
   }
 
   override def newTaskTempFileAbsPath(

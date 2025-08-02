@@ -131,6 +131,14 @@ object SparkException {
       messageParameters: java.util.Map[String, String]): Map[String, String] = {
     messageParameters.asScala.toMap
   }
+
+  def mustOverrideOneMethodError(methodName: String): RuntimeException = {
+    val msg = s"You must override one `$methodName`. It's preferred to not override the " +
+      "deprecated one."
+    new SparkRuntimeException(
+      "INTERNAL_ERROR",
+      Map("message" -> msg))
+  }
 }
 
 /**
