@@ -329,6 +329,24 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
       }
     }
 
+    runBenchmark("Pushdown benchmark for ArrayContains -> InFilters") {
+      withTempPath { dir =>
+        withTempTable("orcTable", "parquetTable") {
+          prepareTable(dir, numRows, width, false)
+          Seq(5, 10, 50, 100).foreach { count =>
+            Seq(10, 50, 90).foreach { distribution =>
+              val filter =
+                Range(0, count).map(r => scala.util.Random.nextInt(numRows * distribution / 100))
+              val whereExpr = s"array_contains(array(${filter.mkString(",")}), value)"
+              val title =
+                s"ArrayContains -> InFilters (values count: $count, distribution: $distribution)"
+              filterPushDownBenchmark(numRows, title, whereExpr)
+            }
+          }
+        }
+      }
+    }
+
     runBenchmark(s"Pushdown benchmark for ${ByteType.simpleString}") {
       withTempPath { dir =>
         val columns = (1 to width).map(i => s"CAST(id AS string) c$i")
