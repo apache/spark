@@ -81,8 +81,11 @@ public class JavaUtils {
         (dst.exists() && !dst.isDirectory())) {
       throw new IllegalArgumentException("Invalid input file " + src + " or directory " + dst);
     }
-    Path from = src.toPath();
-    Path to = dst.toPath();
+    Path from = src.toPath().toAbsolutePath().normalize();
+    Path to = dst.toPath().toAbsolutePath().normalize();
+    if (to.startsWith(from)) {
+       throw new IllegalArgumentException("Cannot copy directory to itself or its subdirectory");
+    }
     Files.createDirectories(to);
     Files.walkFileTree(from, new SimpleFileVisitor<Path>() {
       @Override
