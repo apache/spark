@@ -629,7 +629,7 @@ case class HashAggregateExec(
     // create grouping key
     val unsafeRowKeyCode = GenerateUnsafeProjection.createCode(
       ctx, bindReferences[Expression](groupingExpressions, child.output))
-    val fastRowKeys = ctx.generateExpressions(
+    val (fastRowKeys, _) = ctx.generateExpressions(
       bindReferences[Expression](groupingExpressions, child.output))
     val unsafeRowKeys = unsafeRowKeyCode.value
     val unsafeRowKeyHash = ctx.freshName("unsafeRowKeyHash")
@@ -732,8 +732,7 @@ case class HashAggregateExec(
       val boundUpdateExprs = updateExprs.map { updateExprsForOneFunc =>
         bindReferences(updateExprsForOneFunc, inputAttrs)
       }
-      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExprs.flatten)
-      val effectiveCodes = ctx.evaluateSubExprEliminationState(subExprs.states.values)
+      val subExprs = ctx.subexpressionElimination(boundUpdateExprs.flatten)
       val unsafeRowBufferEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
         ctx.withSubExprEliminationExprs(subExprs.states) {
           boundUpdateExprsForOneFunc.map(_.genCode(ctx))
@@ -765,7 +764,7 @@ case class HashAggregateExec(
         ctx, input, inputAttrs, boundUpdateExprs, aggNames, aggCodeBlocks, subExprs)
       s"""
          |// common sub-expressions
-         |$effectiveCodes
+         |${subExprs.subExprCode}
          |// evaluate aggregate functions and update aggregation buffers
          |$codeToEvalAggFuncs
        """.stripMargin
@@ -778,8 +777,7 @@ case class HashAggregateExec(
           val boundUpdateExprs = updateExprs.map { updateExprsForOneFunc =>
             bindReferences(updateExprsForOneFunc, inputAttrs)
           }
-          val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExprs.flatten)
-          val effectiveCodes = ctx.evaluateSubExprEliminationState(subExprs.states.values)
+          val subExprs = ctx.subexpressionElimination(boundUpdateExprs.flatten)
           val fastRowEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
             ctx.withSubExprEliminationExprs(subExprs.states) {
               boundUpdateExprsForOneFunc.map(_.genCode(ctx))
@@ -815,7 +813,7 @@ case class HashAggregateExec(
           s"""
              |if ($fastRowBuffer != null) {
              |  // common sub-expressions
-             |  $effectiveCodes
+             |  ${subExprs.subExprCode}
              |  // evaluate aggregate functions and update aggregation buffers
              |  $codeToEvalAggFuncs
              |} else {
