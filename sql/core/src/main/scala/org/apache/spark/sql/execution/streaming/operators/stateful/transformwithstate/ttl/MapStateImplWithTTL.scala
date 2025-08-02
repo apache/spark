@@ -128,7 +128,9 @@ metrics: Map[String, SQLMetric])
         }
       }
 
-      override protected def close(): Unit = {}
+      override protected def close(): Unit = {
+        unsafeRowPairIterator.close()
+      }
     }
   }
 
