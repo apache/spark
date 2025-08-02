@@ -97,7 +97,6 @@ object RocksDBMemoryManager extends Logging with UnmanagedMemoryConsumer {
     logDebug(s"Unregistered instance $uniqueId")
   }
 
-
   def getNumRocksDBInstances(boundedMemory: Boolean): Long = {
     instanceMemoryMap.values().asScala.count(_.isBoundedMemory == boundedMemory)
   }
@@ -120,7 +119,6 @@ object RocksDBMemoryManager extends Logging with UnmanagedMemoryConsumer {
       totalMemoryUsage
     }
   }
-
 
   def getOrCreateRocksDBMemoryManagerAndCache(conf: RocksDBConf): (WriteBufferManager, Cache)
     = synchronized {
