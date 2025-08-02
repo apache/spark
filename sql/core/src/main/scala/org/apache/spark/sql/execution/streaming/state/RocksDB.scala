@@ -75,7 +75,7 @@ class RocksDB(
     enableStateStoreCheckpointIds: Boolean = false,
     partitionId: Int = 0,
     eventForwarder: Option[RocksDBEventForwarder] = None,
-    uniqueId: String = "") extends Logging {
+    uniqueId: Option[String] = None) extends Logging {
 
   import RocksDB._
 
@@ -197,11 +197,12 @@ class RocksDB(
   // This prevents performance impact from querying RocksDB memory too frequently.
   private val memoryUpdateIntervalMs = conf.memoryUpdateIntervalMs
 
-  // Register with RocksDBMemoryManager if we have a unique ID
-  if (uniqueId.nonEmpty) {
-    // Initial registration with zero memory usage
-    RocksDBMemoryManager.updateMemoryUsage(uniqueId, 0L, conf.boundedMemoryUsage)
-  }
+  // Generate a unique ID if not provided to ensure proper memory tracking
+  private val instanceUniqueId = uniqueId.getOrElse(UUID.randomUUID().toString)
+
+  // Register with RocksDBMemoryManager
+  // Initial registration with zero memory usage
+  RocksDBMemoryManager.updateMemoryUsage(instanceUniqueId, 0L, conf.boundedMemoryUsage)
 
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
@@ -1309,14 +1310,12 @@ class RocksDB(
       }
 
       // Unregister from RocksDBMemoryManager
-      if (uniqueId.nonEmpty) {
-        try {
-          RocksDBMemoryManager.unregisterInstance(uniqueId)
-        } catch {
-          case NonFatal(e) =>
-            logWarning(log"Failed to unregister from RocksDBMemoryManager " +
-              log"${MDC(LogKeys.EXCEPTION, e)}")
-        }
+      try {
+        RocksDBMemoryManager.unregisterInstance(instanceUniqueId)
+      } catch {
+        case NonFatal(e) =>
+          logWarning(log"Failed to unregister from RocksDBMemoryManager " +
+            log"${MDC(LogKeys.EXCEPTION, e)}")
       }
 
       silentDeleteRecursively(localRootDir, "closing RocksDB")
@@ -1351,9 +1350,6 @@ class RocksDB(
   private def metrics: RocksDBMetrics = {
     import HistogramType._
     val totalSSTFilesBytes = getDBProperty("rocksdb.total-sst-files-size")
-    val readerMemUsage = getDBProperty("rocksdb.estimate-table-readers-mem")
-    val memTableMemUsage = getDBProperty("rocksdb.size-all-mem-tables")
-    val blockCacheUsage = getDBProperty("rocksdb.block-cache-usage")
     val pinnedBlocksMemUsage = getDBProperty("rocksdb.block-cache-pinned-usage")
     val nativeOpsHistograms = Seq(
       "get" -> DB_GET,
@@ -1387,14 +1383,8 @@ class RocksDB(
       nativeStats.getTickerCount(typ)
     }
 
-    // if bounded memory usage is enabled, we share the block cache across all state providers
-    // running on the same node and account the usage to this single cache. In this case, its not
-    // possible to provide partition level or query level memory usage.
-    val memoryUsage = if (conf.boundedMemoryUsage) {
-      0L
-    } else {
-      readerMemUsage + memTableMemUsage + blockCacheUsage
-    }
+    // Use RocksDBMemoryManager to calculate the memory usage accounting
+    val memoryUsage = RocksDBMemoryManager.getInstanceMemoryUsage(instanceUniqueId, getMemoryUsage)
 
     RocksDBMetrics(
       numKeysOnLoadedVersion,
@@ -1463,7 +1453,6 @@ class RocksDB(
    * This is called from task thread operations, so it's already thread-safe.
    */
   def updateMemoryUsageIfNeeded(): Unit = {
-    if (uniqueId.isEmpty) return // No tracking without unique ID
 
     val currentTime = System.currentTimeMillis()
     val timeSinceLastUpdate = currentTime - lastMemoryUpdateTime.get()
@@ -1474,7 +1463,7 @@ class RocksDB(
         lastMemoryUpdateTime.set(currentTime)
         // Report usage to RocksDBMemoryManager
         RocksDBMemoryManager.updateMemoryUsage(
-          uniqueId,
+          instanceUniqueId,
           usage,
           conf.boundedMemoryUsage)
       } catch {
@@ -1606,9 +1595,8 @@ object RocksDB extends Logging {
 
   val mainMemorySources: Seq[String] = Seq(
     "rocksdb.estimate-table-readers-mem",
-    "rocksdb.cur-size-all-mem-tables",
-    "rocksdb.block-cache-usage",
-    "rocksdb.block-cache-pinned-usage")
+    "rocksdb.size-all-mem-tables",
+    "rocksdb.block-cache-usage")
 
   case class RocksDBSnapshot(
       checkpointDir: File,

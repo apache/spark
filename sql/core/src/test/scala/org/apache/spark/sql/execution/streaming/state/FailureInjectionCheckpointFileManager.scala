@@ -259,7 +259,7 @@ class FailureInjectionRocksDBStateStoreProvider extends RocksDBStateStoreProvide
       enableStateStoreCheckpointIds: Boolean,
       partitionId: Int,
       eventForwarder: Option[RocksDBEventForwarder] = None,
-      uniqueId: String): RocksDB = {
+      uniqueId: Option[String]): RocksDB = {
     FailureInjectionRocksDBStateStoreProvider.createRocksDBWithFaultInjection(
       dfsRootDir,
       conf,
@@ -289,7 +289,7 @@ object FailureInjectionRocksDBStateStoreProvider {
       enableStateStoreCheckpointIds: Boolean,
       partitionId: Int,
       eventForwarder: Option[RocksDBEventForwarder],
-      uniqueId: String): RocksDB = {
+      uniqueId: Option[String]): RocksDB = {
     new RocksDB(
       dfsRootDir,
       conf = conf,
