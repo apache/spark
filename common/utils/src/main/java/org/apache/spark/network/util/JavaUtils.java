@@ -77,7 +77,8 @@ public class JavaUtils {
 
   /** Copy src to the target directory simply. File attribute times are not copied. */
   public static void copyDirectory(File src, File dst) throws IOException {
-    if (src == null || dst == null || !src.exists() || (dst.exists() && !dst.isDirectory())) {
+    if (src == null || dst == null || !src.exists() || !src.isDirectory() ||
+        (dst.exists() && !dst.isDirectory())) {
       throw new IllegalArgumentException("Invalid input file " + src + " or directory " + dst);
     }
     Path from = src.toPath();
