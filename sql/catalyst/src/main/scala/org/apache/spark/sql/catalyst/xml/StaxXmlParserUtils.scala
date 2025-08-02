@@ -16,13 +16,14 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import java.io.StringReader
 import javax.xml.namespace.QName
-import javax.xml.stream.{EventFilter, XMLEventReader, XMLInputFactory, XMLStreamConstants}
+import javax.xml.stream.{EventFilter, StreamFilter, XMLEventReader, XMLInputFactory, XMLStreamConstants, XMLStreamReader}
 import javax.xml.stream.events._
 
 import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
+
+import org.apache.commons.io.input.BOMInputStream
 
 object StaxXmlParserUtils {
 
@@ -35,29 +36,55 @@ object StaxXmlParserUtils {
     factory
   }
 
-  def filteredReader(xml: String): XMLEventReader = {
-    val filter = new EventFilter {
-      override def accept(event: XMLEvent): Boolean =
-        event.getEventType match {
-          // Ignore comments and processing instructions
-          case XMLStreamConstants.COMMENT | XMLStreamConstants.PROCESSING_INSTRUCTION => false
-          // unsupported events
-          case XMLStreamConstants.DTD |
-               XMLStreamConstants.ENTITY_DECLARATION |
-               XMLStreamConstants.ENTITY_REFERENCE |
-               XMLStreamConstants.NOTATION_DECLARATION => false
-          case _ => true
-        }
+  private val eventTypeFilter: Int => Boolean = {
+    // Ignore comments and processing instructions
+    case XMLStreamConstants.COMMENT |
+         XMLStreamConstants.PROCESSING_INSTRUCTION => false
+    // unsupported events
+    case XMLStreamConstants.DTD |
+         XMLStreamConstants.ENTITY_DECLARATION |
+         XMLStreamConstants.ENTITY_REFERENCE |
+         XMLStreamConstants.NOTATION_DECLARATION => false
+    case _ => true
+  }
+
+  def filteredStreamReader(
+      inputStream: java.io.InputStream,
+      options: XmlOptions): XMLStreamReader = {
+    val filter = new StreamFilter {
+      override def accept(event: XMLStreamReader): Boolean = eventTypeFilter(event.getEventType)
     }
-    // It does not have to skip for white space, since `XmlInputFormat`
-    // always finds the root tag without a heading space.
-    val eventReader = factory.createXMLEventReader(new StringReader(xml))
+    val bomInputStreamBuilder = new BOMInputStream.Builder
+    bomInputStreamBuilder.setInputStream(inputStream)
+    val streamReader = factory.createXMLStreamReader(bomInputStreamBuilder.get(), options.charset)
+    factory.createFilteredReader(streamReader, filter)
+  }
+
+  def filteredEventReader(inputStream: java.io.InputStream, options: XmlOptions): XMLEventReader = {
+    val streamReader = filteredStreamReader(inputStream, options)
+    filteredEventReader(streamReader)
+  }
+
+  def filteredEventReader(streamReader: XMLStreamReader): XMLEventReader = {
+    val filter = new EventFilter {
+      override def accept(event: XMLEvent): Boolean = eventTypeFilter(event.getEventType)
+    }
+    val eventReader = factory.createXMLEventReader(streamReader)
     factory.createFilteredReader(eventReader, filter)
   }
 
+  def staxXMLRecordReader(xml: String, options: XmlOptions): StaxXMLRecordReader = {
+    val inputStream = () => new java.io.ByteArrayInputStream(xml.getBytes(options.charset))
+    StaxXMLRecordReader(inputStream, options)
+  }
+
   def gatherRootAttributes(parser: XMLEventReader): Array[Attribute] = {
-    val rootEvent =
-      StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.START_ELEMENT)
+    val rootEvent = parser.peek() match {
+      case _: StartElement =>
+        parser.nextEvent()
+      case _ =>
+        StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.START_ELEMENT)
+    }
     rootEvent.asStartElement.getAttributes.asScala.toArray
   }
 

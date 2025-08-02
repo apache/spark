@@ -42,7 +42,7 @@ import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
-import org.apache.spark.sql.types.{StructField, StructType, VariantType}
+import org.apache.spark.sql.types.{DataType, StructField, StructType, VariantType}
 import org.apache.spark.util.Utils
 
 /**
@@ -176,8 +176,9 @@ object MultiLineXmlDataSource extends XmlDataSource {
       parser: StaxXmlParser,
       requiredSchema: StructType): Iterator[InternalRow] = {
     parser.parseStream(
-      CodecStreams.createInputStreamWithCloseResource(conf, file.toPath),
-      requiredSchema)
+      () => CodecStreams.createInputStreamWithCloseResource(conf, file.toPath),
+      requiredSchema
+    )
   }
 
   override def infer(
@@ -186,33 +187,39 @@ object MultiLineXmlDataSource extends XmlDataSource {
       parsedOptions: XmlOptions): StructType = {
     val xml = createBaseRdd(sparkSession, inputPaths, parsedOptions)
 
-    val tokenRDD: RDD[String] =
-      xml.flatMap { portableDataStream =>
+    val xmlInferSchema =
+      new XmlInferSchema(parsedOptions, sparkSession.sessionState.conf.caseSensitiveAnalysis)
+
+    SQLExecution.withSQLConfPropagated(sparkSession) {
+      val inferredTypeRdd: RDD[DataType] = xml.flatMap { portableDataStream =>
         try {
-          StaxXmlParser.tokenizeStream(
-            CodecStreams.createInputStreamWithCloseResource(
-              portableDataStream.getConfiguration,
-              new Path(portableDataStream.getPath())),
-            parsedOptions)
+          val inputStream = () => CodecStreams.createInputStreamWithCloseResource(
+            portableDataStream.getConfiguration,
+            new Path(portableDataStream.getPath())
+          )
+
+          // XML tokenizer for parsing XML records
+          StaxXmlParser
+            .convertStream(inputStream, parsedOptions) { reader =>
+               xmlInferSchema.infer(reader, shouldSkipToNextReader = true)
+            }
+            .flatten
         } catch {
           case e: FileNotFoundException if parsedOptions.ignoreMissingFiles =>
             logWarning("Skipped missing file", e)
-            Iterator.empty[String]
+            Iterator.empty[DataType]
           case NonFatal(e) =>
             ExceptionUtils.getRootCause(e) match {
               case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
               case _: RuntimeException | _: IOException if parsedOptions.ignoreCorruptFiles =>
                 logWarning("Skipped the rest of the content in the corrupted file", e)
-                Iterator.empty[String]
+                Iterator.empty[DataType]
               case o => throw o
             }
         }
       }
-    SQLExecution.withSQLConfPropagated(sparkSession) {
-      val schema =
-        new XmlInferSchema(parsedOptions, sparkSession.sessionState.conf.caseSensitiveAnalysis)
-          .infer(tokenRDD)
-      schema
+
+      xmlInferSchema.mergeType(inferredTypeRdd)
     }
   }
 
