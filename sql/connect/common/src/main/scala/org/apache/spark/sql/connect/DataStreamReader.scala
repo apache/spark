@@ -45,6 +45,11 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
   }
 
   /** @inheritdoc */
+  override def name(sourceName: String): this.type = {
+    this
+  }
+
+  /** @inheritdoc */
   def schema(schema: StructType): this.type = {
     if (schema != null) {
       sourceBuilder.setSchema(schema.json) // Use json. DDL does not retail all the attributes.
@@ -142,5 +147,4 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
 
   /** @inheritdoc */
   override def textFile(path: String): Dataset[String] = super.textFile(path)
-
 }
