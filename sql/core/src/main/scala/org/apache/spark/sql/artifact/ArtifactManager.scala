@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
-import org.apache.commons.io.{FilenameUtils, FileUtils}
+import org.apache.commons.io.FilenameUtils
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
@@ -213,7 +213,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
       // Disallow overwriting with modified version
       if (Files.exists(target)) {
         // makes the query idempotent
-        if (FileUtils.contentEquals(target.toFile, serverLocalStagingPath.toFile)) {
+        if (Utils.contentEquals(target.toFile, serverLocalStagingPath.toFile)) {
           return
         }
 

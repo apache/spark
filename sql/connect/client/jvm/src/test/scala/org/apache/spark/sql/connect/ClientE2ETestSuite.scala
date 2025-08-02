@@ -26,7 +26,6 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
@@ -46,7 +45,7 @@ import org.apache.spark.sql.connect.test.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.SparkThreadUtils
+import org.apache.spark.util.{SparkFileUtils, SparkThreadUtils}
 
 class ClientE2ETestSuite
     extends QueryTest
@@ -346,7 +345,7 @@ class ClientE2ETestSuite
       .listFiles()
       .filter(file => file.getPath.endsWith(".csv"))(0)
 
-    assert(FileUtils.contentEquals(testDataPath.toFile, outputFile))
+    assert(SparkFileUtils.contentEquals(testDataPath.toFile, outputFile))
   }
 
   test("read path collision") {
