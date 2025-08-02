@@ -580,4 +580,38 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
         "Missing or unexpected reused ReusedSubqueryExec in the plan")
     }
   }
+
+  test("Runtime bloom filter join: BF rewrite for outer joins when the key-preserved table"
+    + " fits in the broadcast limit") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "100",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "3000") {
+
+      assertRewroteWithBloomFilter("select * from bf5part left join bf2 " +
+        "on bf5part.c5 = bf2.c2 where bf5part.d5 = 74 and bf5part.f5 = 0")
+
+      assertRewroteWithBloomFilter("select * from bf2 right join bf5part " +
+        "on bf5part.c5 = bf2.c2 where bf5part.d5 = 74 and bf5part.f5 = 0")
+    }
+  }
+
+  test("Runtime bloom filter join: BF rewrite respects hints defining broadcast policy") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "100",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+
+      assertRewroteWithBloomFilter("select /*+ SHUFFLE_MERGE(bf1) */" +
+        " * from bf1 join bf2 on bf1.c1 = bf2.c2 where bf2.a2 = 62")
+
+      assertRewroteWithBloomFilter("select /*+ SHUFFLE_HASH(bf2) */" +
+        " * from bf1 join bf2 on bf1.c1 = bf2.c2 where bf2.a2 = 62")
+
+      assertRewroteWithBloomFilter("select /*+ SHUFFLE_REPLICATE_NL(bf1) */" +
+        " * from bf1 join bf2 on bf1.c1 = bf2.c2 where bf2.a2 = 62")
+
+      assertDidNotRewriteWithBloomFilter("select /*+ MAPJOIN(bf2) */" +
+        " * from bf1 join bf2 on bf1.c1 = bf2.c2 where bf2.a2 = 62")
+
+      assertDidNotRewriteWithBloomFilter("select /*+ SHUFFLE_HASH(bf1), MAPJOIN(bf2) */" +
+        " * from bf1 join bf2 on bf1.c1 = bf2.c2 where bf2.a2 = 62")
+    }
+  }
 }
