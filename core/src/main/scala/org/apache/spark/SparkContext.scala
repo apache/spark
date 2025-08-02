@@ -432,6 +432,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     SparkContext.supplementJavaModuleOptions(_conf)
     SparkContext.supplementJavaIPv6Options(_conf)
+    SparkContext.supplementBlasOptions(_conf)
 
     _driverLogger = DriverLogger(_conf)
 
@@ -3408,32 +3409,35 @@ object SparkContext extends Logging {
     }
   }
 
+  private def supplementJavaOpts(
+      conf: SparkConf, key: OptionalConfigEntry[String], javaOpts: String): Unit = {
+    val v = conf.get(key) match {
+      case Some(opts) => s"$javaOpts $opts"
+      case None => javaOpts
+    }
+    conf.set(key.key, v)
+  }
+
   /**
    * SPARK-36796: This is a helper function to supplement some JVM runtime options to
    * `spark.driver.extraJavaOptions` and `spark.executor.extraJavaOptions`.
    */
   private def supplementJavaModuleOptions(conf: SparkConf): Unit = {
-    def supplement(key: OptionalConfigEntry[String]): Unit = {
-      val v = conf.get(key) match {
-        case Some(opts) => s"${JavaModuleOptions.defaultModuleOptions()} $opts"
-        case None => JavaModuleOptions.defaultModuleOptions()
-      }
-      conf.set(key.key, v)
-    }
-    supplement(DRIVER_JAVA_OPTIONS)
-    supplement(EXECUTOR_JAVA_OPTIONS)
+    val opts = JavaModuleOptions.defaultModuleOptions()
+    supplementJavaOpts(conf, DRIVER_JAVA_OPTIONS, opts)
+    supplementJavaOpts(conf, EXECUTOR_JAVA_OPTIONS, opts)
   }
 
   private def supplementJavaIPv6Options(conf: SparkConf): Unit = {
-    def supplement(key: OptionalConfigEntry[String]): Unit = {
-      val v = conf.get(key) match {
-        case Some(opts) => s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6} $opts"
-        case None => s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}"
-      }
-      conf.set(key.key, v)
-    }
-    supplement(DRIVER_JAVA_OPTIONS)
-    supplement(EXECUTOR_JAVA_OPTIONS)
+    val opts = s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}"
+    supplementJavaOpts(conf, DRIVER_JAVA_OPTIONS, opts)
+    supplementJavaOpts(conf, EXECUTOR_JAVA_OPTIONS, opts)
+  }
+
+  private def supplementBlasOptions(conf: SparkConf): Unit = {
+    val opts = s"-Dnetlib.allowNativeBlas=${Utils.allowNativeBlas}"
+    supplementJavaOpts(conf, DRIVER_JAVA_OPTIONS, opts)
+    supplementJavaOpts(conf, EXECUTOR_JAVA_OPTIONS, opts)
   }
 }
 
