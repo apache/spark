@@ -749,6 +749,24 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     testDataTransformingEnc(enc, data)
   }
 
+  test("SPARK-52601 TransformingEncoder from primitive to timestamp") {
+    val enc: AgnosticEncoder[Long] =
+      TransformingEncoder[Long, java.sql.Timestamp](
+        classTag,
+        TimestampEncoder(true),
+        () =>
+          new Codec[Long, java.sql.Timestamp] with Serializable {
+            override def encode(in: Long): Timestamp = Timestamp.from(microsToInstant(in))
+            override def decode(out: Timestamp): Long = instantToMicros(out.toInstant)
+        }
+    )
+    val data: Seq[Long] = Seq(0L, 1L, 2L)
+
+    assert(enc.dataType === TimestampType)
+
+    testDataTransformingEnc(enc, data)
+  }
+
   val longEncForTimestamp: AgnosticEncoder[V[Long]] =
     TransformingEncoder[V[Long], java.sql.Timestamp](
       classTag,
