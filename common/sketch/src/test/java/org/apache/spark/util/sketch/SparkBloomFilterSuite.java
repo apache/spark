@@ -33,7 +33,7 @@ import java.util.concurrent.atomic.LongAdder;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
-
+@Disabled("TODO(SPARK-53077): Re-enable with a resonable test time.")
 public class SparkBloomFilterSuite {
 
   // the implemented fpp limit is only approximating the hard boundary,
