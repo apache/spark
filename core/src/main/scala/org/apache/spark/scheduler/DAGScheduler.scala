@@ -1099,9 +1099,9 @@ private[spark] class DAGScheduler(
   /**
    * Cancel a job that is running or waiting in the queue.
    */
-  def cancelJob(jobId: Int, reason: Option[String]): Unit = {
+  def cancelJob(jobId: Int, reason: Option[String], quiet: Boolean = false): Unit = {
     logInfo(log"Asked to cancel job ${MDC(JOB_ID, jobId)}")
-    eventProcessLoop.post(JobCancelled(jobId, reason))
+    eventProcessLoop.post(JobCancelled(jobId, reason, quiet))
   }
 
   /**
@@ -2856,13 +2856,20 @@ private[spark] class DAGScheduler(
     }
   }
 
-  private[scheduler] def handleJobCancellation(jobId: Int, reason: Option[String]): Unit = {
+  private[scheduler] def handleJobCancellation(
+      jobId: Int, reason: Option[String], quiet: Boolean = false): Unit = {
     if (!jobIdToStageIds.contains(jobId)) {
       logDebug("Trying to cancel unregistered job " + jobId)
     } else {
+      val error = if (quiet) {
+        new SparkException("Job %d cancelled %s".format(jobId, reason.getOrElse("")))
+      } else {
+        SparkCoreErrors.sparkJobCancelled(jobId, reason.getOrElse(""), null)
+      }
       failJobAndIndependentStages(
         job = jobIdToActiveJob(jobId),
-        error = SparkCoreErrors.sparkJobCancelled(jobId, reason.getOrElse(""), null)
+        error = error,
+        quiet = quiet
       )
     }
   }
@@ -2996,12 +3003,17 @@ private[spark] class DAGScheduler(
   /** Fails a job and all stages that are only used by that job, and cleans up relevant state. */
   private def failJobAndIndependentStages(
       job: ActiveJob,
-      error: Exception): Unit = {
+      error: Exception,
+      quiet: Boolean = false): Unit = {
     if (cancelRunningIndependentStages(job, error.getMessage)) {
       // SPARK-15783 important to cleanup state first, just for tests where we have some asserts
       // against the state.  Otherwise we have a *little* bit of flakiness in the tests.
       cleanupStateForJobAndIndependentStages(job)
-      job.listener.jobFailed(error)
+      if (quiet) {
+        job.listener.jobCancel(error)
+      } else {
+        job.listener.jobFailed(error)
+      }
       listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobFailed(error)))
     }
   }
@@ -3156,8 +3168,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case StageCancelled(stageId, reason) =>
       dagScheduler.handleStageCancellation(stageId, reason)
 
-    case JobCancelled(jobId, reason) =>
-      dagScheduler.handleJobCancellation(jobId, reason)
+    case JobCancelled(jobId, reason, quiet) =>
+      dagScheduler.handleJobCancellation(jobId, reason, quiet)
 
     case JobGroupCancelled(groupId, cancelFutureJobs, reason) =>
       dagScheduler.handleJobGroupCancelled(groupId, cancelFutureJobs, reason)

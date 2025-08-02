@@ -179,7 +179,10 @@ abstract class CTEInlineSuiteBase
 
   test("SPARK-36447: With in subquery of main query") {
     withSQLConf(
-      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> AQEPropagateEmptyRelation.ruleName) {
+      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
+        AQEPropagateEmptyRelation(
+          scala.collection.concurrent.TrieMap.empty,
+          collection.mutable.Map.empty).ruleName) {
       withTempView("t") {
         Seq((2, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
         val df = sql(
