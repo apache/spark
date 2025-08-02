@@ -57,11 +57,18 @@ trait TestPipelineUpdateContextMixin {
       unresolvedGraph: DataflowGraph,
       fullRefreshTables: TableFilter = NoTables,
       refreshTables: TableFilter = AllTables,
-      resetCheckpointFlows: FlowFilter = AllFlows
+      resetCheckpointFlows: FlowFilter = AllFlows,
+      storageRootOpt: Option[String] = None
   ) extends PipelineUpdateContext {
     val eventBuffer = new PipelineRunEventBuffer()
 
-    override val eventCallback: PipelineEvent => Unit = eventBuffer.addEvent
+    override val eventCallback: PipelineEvent => Unit = { event =>
+      eventBuffer.addEvent(event)
+      println(event.messageWithError)
+      event.error.foreach { error =>
+        throw error
+      }
+    }
 
     override def flowProgressEventLogger: FlowProgressEventLogger = {
       new FlowProgressEventLogger(eventCallback = eventCallback)
