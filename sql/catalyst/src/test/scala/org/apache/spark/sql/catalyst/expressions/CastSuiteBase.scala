@@ -28,10 +28,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
-import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -1616,6 +1616,33 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         checkConsistencyBetweenInterpretedAndCodegen(
           (child: Expression) => Cast(child, TimeType(sp)), TimeType(tp))
       }
+    }
+  }
+
+  test("SPARK-52617: cast TimestampNTZType to time") {
+    specialTs.foreach { s =>
+      val ldt = LocalDateTime.parse(s) // parsed as local timestamp
+      val micros = DateTimeUtils.localDateTimeToMicros(ldt)
+
+      val nanosOfDay = ldt.toLocalTime().toNanoOfDay
+      val expected = DateTimeUtils.truncateTimeToPrecision(nanosOfDay, TimeType.DEFAULT_PRECISION)
+
+      checkEvaluation(Cast(Literal(micros, TimestampNTZType), TimeType(0)), expected)
+    }
+  }
+
+  test("SPARK-52617: cast time to TimestampNTZType") {
+    val testCases = Seq(
+      ("2023-01-01T15:30:00.123456", 6),
+      ("2023-01-01T15:30:00", 0))
+
+    testCases.foreach { case (s, precision) =>
+      val ldt = LocalDateTime.parse(s)
+      val micros = DateTimeUtils.localDateTimeToMicros(ldt)
+      val nanosOfDay = ldt.toLocalTime().toNanoOfDay
+      val expected = DateTimeUtils.truncateTimeToPrecision(nanosOfDay, precision)
+
+      checkEvaluation(Cast(Literal(micros, TimestampNTZType), TimeType(precision)), expected)
     }
   }
 
