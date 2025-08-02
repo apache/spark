@@ -816,5 +816,34 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
         .equals("a.cint", OrcFilters.getPredicateLeafType(IntegerType), 2L)
         .`end`().build())
   }
+
+  test("SPARK-52032: filter pushdown with null-safe equality operator") {
+    withTempDir { dir =>
+      // Create test data
+      val data = Seq(
+        (1, "John", "john@example.com"),
+        (3, null, "bob@example.com")
+      )
+      val df = spark.createDataFrame(data).toDF("id", "name", "email")
+
+      // Write data in ORC format
+      val orcPath = s"${dir.getCanonicalPath}/orc"
+      df.write.mode("overwrite").orc(orcPath)
+
+      // Read data back and check for both enabled/disabled filter-pushdown
+      Seq(true, false).foreach { filterPushdown =>
+        withSQLConf("spark.sql.orc.filterPushdown" -> filterPushdown.toString) {
+          // Apply filter with null-safe equality operator
+          val df = spark.read.orc(orcPath).filter(!(col("name") <=> "dummy"))
+
+          // Check results
+          checkAnswer(df, Seq(
+            Row(1, "John", "john@example.com"),
+            Row(3, null, "bob@example.com")
+          ))
+        }
+      }
+    }
+  }
 }
 
