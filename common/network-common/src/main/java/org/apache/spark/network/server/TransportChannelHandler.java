@@ -88,7 +88,7 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
     logger.warn("Exception in connection from {}", cause,
-      MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(ctx.channel())));
+      MDC.of(LogKeys.HOST_PORT, getRemoteAddress(ctx.channel())));
     requestHandler.exceptionCaught(cause);
     responseHandler.exceptionCaught(cause);
     ctx.close();
@@ -168,9 +168,9 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
             logger.error("Connection to {} has been quiet for {} ms while there are outstanding " +
               "requests. Assuming connection is dead; please adjust" +
               " spark.{}.io.connectionTimeout if this is wrong.",
-              MDC.of(LogKeys.HOST_PORT$.MODULE$, address),
-              MDC.of(LogKeys.TIMEOUT$.MODULE$, requestTimeoutNs / 1000 / 1000),
-              MDC.of(LogKeys.MODULE_NAME$.MODULE$, transportContext.getConf().getModuleName()));
+              MDC.of(LogKeys.HOST_PORT, address),
+              MDC.of(LogKeys.TIMEOUT, requestTimeoutNs / 1000 / 1000),
+              MDC.of(LogKeys.MODULE_NAME, transportContext.getConf().getModuleName()));
             client.timeOut();
             ctx.close();
           } else if (closeIdleConnections) {

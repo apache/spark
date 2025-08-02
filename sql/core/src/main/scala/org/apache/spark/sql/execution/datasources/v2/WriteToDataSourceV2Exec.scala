@@ -23,7 +23,7 @@ import java.util
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException

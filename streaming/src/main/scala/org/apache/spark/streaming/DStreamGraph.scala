@@ -22,7 +22,7 @@ import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 import scala.collection.mutable
 import scala.collection.parallel.immutable.ParVector
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ReceiverInputDStream}
 import org.apache.spark.streaming.scheduler.Job
 import org.apache.spark.util.Utils

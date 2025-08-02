@@ -19,7 +19,7 @@
 package org.apache.spark.sql.execution.datasources.v2.python
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}

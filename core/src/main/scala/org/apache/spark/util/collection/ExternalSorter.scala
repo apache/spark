@@ -28,7 +28,7 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys.{NUM_BYTES, TASK_ATTEMPT_ID}
 import org.apache.spark.serializer._
 import org.apache.spark.shuffle.{ShufflePartitionPairsWriter, ShuffleWriteMetricsReporter}

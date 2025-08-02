@@ -34,7 +34,7 @@ import org.apache.commons.io.output.{ByteArrayOutputStream => ApacheByteArrayOut
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
-import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec

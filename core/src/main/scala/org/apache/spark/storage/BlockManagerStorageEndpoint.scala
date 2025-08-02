@@ -20,7 +20,7 @@ package org.apache.spark.storage
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 
 import org.apache.spark.{MapOutputTracker, SparkEnv}
-import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys.{BLOCK_ID, BROADCAST_ID, RDD_ID, SHUFFLE_ID}
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEnv}
 import org.apache.spark.storage.BlockManagerMessages._

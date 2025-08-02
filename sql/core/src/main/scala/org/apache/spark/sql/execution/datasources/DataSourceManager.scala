@@ -21,7 +21,7 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.api.python.PythonUtils
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.DATA_SOURCE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource

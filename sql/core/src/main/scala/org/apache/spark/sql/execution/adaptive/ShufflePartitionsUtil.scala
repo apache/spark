@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.execution.{CoalescedPartitionSpec, PartialReducerPartitionSpec, ShufflePartitionSpec}
 
 object ShufflePartitionsUtil extends Logging {

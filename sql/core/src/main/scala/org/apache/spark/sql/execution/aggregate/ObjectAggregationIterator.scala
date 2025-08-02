@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys.{CONFIG, HASH_MAP_SIZE, OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._

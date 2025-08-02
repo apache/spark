@@ -26,7 +26,7 @@ import org.apache.logging.log4j.Level
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-import org.apache.spark.internal.{LogEntry, Logging, LogKey, LogKeys, MDC, MessageWithContext}
+import org.apache.spark.internal.{LogEntry, Logging, LogKeys, MessageWithContext}
 
 trait LoggingSuiteBase
     extends AnyFunSuite // scalastyle:ignore funsuite
@@ -490,9 +490,4 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
     val logOutputWithoutMDCSet = captureLogOutput(() => logInfo(msgWithMDC))
     assert(mdcPattern.r.findFirstIn(logOutputWithoutMDCSet).isEmpty)
   }
-}
-
-object CustomLogKeys {
-  // Custom `LogKey` must be `extends LogKey`
-  case object CUSTOM_LOG_KEY extends LogKey
 }

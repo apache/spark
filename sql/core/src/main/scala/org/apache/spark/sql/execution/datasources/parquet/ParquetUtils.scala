@@ -33,7 +33,7 @@ import org.apache.parquet.schema.{PrimitiveType, Types}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONFIG}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow

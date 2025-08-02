@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.collection.mutable.{HashMap, ListBuffer}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.History._

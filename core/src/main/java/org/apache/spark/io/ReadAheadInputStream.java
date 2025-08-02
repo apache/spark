@@ -213,7 +213,7 @@ public class ReadAheadInputStream extends InputStream {
       try {
         underlyingInputStream.close();
       } catch (IOException e) {
-        logger.warn("{}", e, MDC.of(LogKeys.ERROR$.MODULE$, e.getMessage()));
+        logger.warn("{}", e, MDC.of(LogKeys.ERROR, e.getMessage()));
       }
     }
   }

@@ -22,7 +22,6 @@ import java.util.concurrent.TimeUnit._
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.LogKeys.{COUNT, MAX_SPLIT_BYTES, OPEN_COST_IN_BYTES}
-import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec

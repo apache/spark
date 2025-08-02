@@ -30,7 +30,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.mllib.linalg.BLAS
 import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
 import org.apache.spark.mllib.util.{Loader, Saveable}

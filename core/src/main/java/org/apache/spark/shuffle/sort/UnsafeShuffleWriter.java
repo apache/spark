@@ -229,7 +229,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       for (SpillInfo spill : spills) {
         if (spill.file.exists() && !spill.file.delete()) {
           logger.error("Error while deleting spill file {}",
-            MDC.of(LogKeys.PATH$.MODULE$, spill.file.getPath()));
+            MDC.of(LogKeys.PATH, spill.file.getPath()));
         }
       }
     }

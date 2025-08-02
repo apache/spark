@@ -18,8 +18,9 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.util.Locale
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.LogUtils.SPARK_LOG_SCHEMA
 
@@ -63,7 +64,8 @@ class LogQuerySuite extends QueryTest with SharedSparkSession with Logging {
       createTempView("logs")
       checkAnswer(
         spark.sql(s"SELECT level, msg, context, exception FROM logs WHERE msg = '${msg.message}'"),
-        Row("ERROR", msg.message, Map(LogKeys.EXECUTOR_ID.name -> "1"), null) :: Nil)
+        Row("ERROR", msg.message,
+          Map(LogKeys.EXECUTOR_ID.name.toLowerCase(Locale.ROOT) -> "1"), null) :: Nil)
     }
   }
 
@@ -74,7 +76,7 @@ class LogQuerySuite extends QueryTest with SharedSparkSession with Logging {
 
     withTempView("logs") {
       createTempView("logs")
-      val expectedMDC = Map(LogKeys.TASK_ID.name -> "2")
+      val expectedMDC = Map(LogKeys.TASK_ID.name.toLowerCase(Locale.ROOT) -> "2")
       checkAnswer(
         spark.sql("SELECT level, msg, context, exception.class, exception.msg FROM logs " +
           s"WHERE msg = '${msg.message}'"),

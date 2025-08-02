@@ -21,7 +21,7 @@ import java.util.{Locale, UUID}
 
 import scala.collection.mutable
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}

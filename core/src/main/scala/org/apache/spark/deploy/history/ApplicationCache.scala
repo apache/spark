@@ -28,7 +28,7 @@ import jakarta.servlet.{DispatcherType, Filter, FilterChain, ServletException, S
 import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.servlet.FilterHolder
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.ui.SparkUI

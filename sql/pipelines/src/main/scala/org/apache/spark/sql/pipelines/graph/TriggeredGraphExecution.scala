@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.{LogKeys, MDC}
+import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.pipelines.graph.TriggeredGraphExecution._
 import org.apache.spark.sql.pipelines.util.ExponentialBackoffStrategy

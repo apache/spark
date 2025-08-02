@@ -18,6 +18,7 @@
 package org.apache.spark.internal;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -51,7 +52,7 @@ import org.slf4j.Logger;
  *
  * import org.apache.spark.internal.LogKeys;
  * import org.apache.spark.internal.MDC;
- * logger.error("Unable to delete file for partition {}", MDC.of(LogKeys.PARTITION_ID$.MODULE$, i));
+ * logger.error("Unable to delete file for partition {}", MDC.of(LogKeys.PARTITION_ID, i));
  * <p>
  *
  * Constant String Messages:
@@ -65,8 +66,10 @@ import org.slf4j.Logger;
  * you can define `custom LogKey` and use it in `java` code as follows:
  * <p>
  *
- * // To add a `custom LogKey`, implement `LogKey`
- * public static class CUSTOM_LOG_KEY implements LogKey { }
+ * // Add a `CustomLogKeys`, implement `LogKey`
+ * public enum CustomLogKeys implements LogKey {
+ *   CUSTOM_LOG_KEY
+ * }
  * import org.apache.spark.internal.MDC;
  * logger.error("Unable to delete key {} for cache", MDC.of(CUSTOM_LOG_KEY, "key"));
  */
@@ -222,8 +225,8 @@ public class SparkLogger {
     for (int index = 0; index < mdcs.length; index++) {
       MDC mdc = mdcs[index];
       String value = (mdc.value() != null) ? mdc.value().toString() : null;
-      if (Logging$.MODULE$.isStructuredLoggingEnabled()) {
-        context.put(mdc.key().name(), value);
+      if (SparkLoggerFactory.isStructuredLoggingEnabled()) {
+        context.put(mdc.key().name().toLowerCase(Locale.ROOT), value);
       }
       args[index] = value;
     }

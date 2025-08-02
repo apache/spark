@@ -28,7 +28,7 @@ import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkException, SparkUserAppException}
 import org.apache.spark.deploy.SparkSubmitAction._
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.DYN_ALLOCATION_ENABLED
 import org.apache.spark.launcher.SparkSubmitArgumentsParser

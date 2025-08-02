@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._

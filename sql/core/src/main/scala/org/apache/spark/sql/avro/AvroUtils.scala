@@ -31,7 +31,7 @@ import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CODEC_LEVEL, CODEC_NAME, CONFIG, PATH}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.avro.AvroCompressionCodec._

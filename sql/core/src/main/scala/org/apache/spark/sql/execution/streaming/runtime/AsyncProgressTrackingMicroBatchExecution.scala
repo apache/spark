@@ -21,7 +21,6 @@ import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.internal.LogKeys.{BATCH_ID, PRETTY_ID_STRING}
-import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors

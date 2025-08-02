@@ -28,7 +28,7 @@ import scala.sys.process.Process
 
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{PATH, PYTHON_PACKAGES, PYTHON_VERSION}
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 import org.apache.spark.util.Utils

@@ -21,7 +21,7 @@ import scala.xml.{Node, Unparsed}
 import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{LOG_TYPE, PATH}
 import org.apache.spark.internal.config.DRIVER_LOG_LOCAL_DIR
 import org.apache.spark.util.Utils

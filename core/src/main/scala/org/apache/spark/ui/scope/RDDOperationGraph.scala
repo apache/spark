@@ -25,7 +25,7 @@ import scala.xml.Utility
 
 import org.apache.commons.text.StringEscapeUtils
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.DeterministicLevel
 import org.apache.spark.scheduler.StageInfo

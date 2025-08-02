@@ -106,7 +106,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     } catch (NumberFormatException e) {
       logger.warn("Push based shuffle requires comparable application attemptId, " +
         "but the appAttemptId {} cannot be parsed to Integer", e,
-          MDC.of(LogKeys.APP_ATTEMPT_ID$.MODULE$, appAttemptId));
+          MDC.of(LogKeys.APP_ATTEMPT_ID, appAttemptId));
     }
   }
 
@@ -221,8 +221,8 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       });
     } catch (Exception e) {
       logger.error("Exception while sending finalizeShuffleMerge request to {}:{}", e,
-        MDC.of(LogKeys.HOST$.MODULE$, host),
-        MDC.of(LogKeys.PORT$.MODULE$, port));
+        MDC.of(LogKeys.HOST, host),
+        MDC.of(LogKeys.PORT, port));
       listener.onShuffleMergeFailure(e);
     }
   }
@@ -322,8 +322,8 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
         } catch (Throwable t) {
           logger.warn("Error trying to remove blocks {} via external shuffle service from " +
             "executor: {}", t,
-            MDC.of(LogKeys.BLOCK_IDS$.MODULE$, Arrays.toString(blockIds)),
-            MDC.of(LogKeys.EXECUTOR_ID$.MODULE$, execId));
+            MDC.of(LogKeys.BLOCK_IDS, Arrays.toString(blockIds)),
+            MDC.of(LogKeys.EXECUTOR_ID, execId));
           numRemovedBlocksFuture.complete(0);
         }
       }
@@ -331,8 +331,8 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       @Override
       public void onFailure(Throwable e) {
         logger.warn("Error trying to remove blocks {} via external shuffle service from " +
-          "executor: {}", e, MDC.of(LogKeys.BLOCK_IDS$.MODULE$, Arrays.toString(blockIds)),
-          MDC.of(LogKeys.EXECUTOR_ID$.MODULE$, execId));
+          "executor: {}", e, MDC.of(LogKeys.BLOCK_IDS, Arrays.toString(blockIds)),
+          MDC.of(LogKeys.EXECUTOR_ID, execId));
         numRemovedBlocksFuture.complete(0);
       }
     });

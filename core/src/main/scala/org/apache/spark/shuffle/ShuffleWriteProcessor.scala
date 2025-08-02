@@ -18,7 +18,7 @@
 package org.apache.spark.shuffle
 
 import org.apache.spark.{ShuffleDependency, SparkEnv, TaskContext}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{NUM_MERGER_LOCATIONS, SHUFFLE_ID, STAGE_ID}
 import org.apache.spark.scheduler.MapStatus
 

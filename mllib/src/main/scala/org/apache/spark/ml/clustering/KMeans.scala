@@ -25,7 +25,6 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.LogKeys.{COST, INIT_MODE, NUM_ITERATIONS, TOTAL_TIME}
-import org.apache.spark.internal.MDC
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
 import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg._

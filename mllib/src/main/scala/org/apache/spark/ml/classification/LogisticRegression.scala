@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.{COUNT, RANGE}
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.impl.Utils

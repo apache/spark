@@ -31,7 +31,7 @@ import org.apache.commons.crypto.random._
 import org.apache.commons.crypto.stream._
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.{CryptoUtils, JavaUtils}

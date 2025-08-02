@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{COUNT, PERCENT, TOTAL}
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession

@@ -23,7 +23,7 @@ import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.SequenceFileOutputFormat
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 
 /**
  * Extra functions available on RDDs of (key, value) pairs to create a Hadoop SequenceFile,

@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
-import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
+import org.apache.spark.internal.{config, Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UNMANAGED_MEMORY_POLLING_INTERVAL

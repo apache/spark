@@ -23,6 +23,20 @@ import org.slf4j.LoggerFactory;
 
 public class SparkLoggerFactory {
 
+  private static volatile boolean structuredLoggingEnabled = false;
+
+  public static void enableStructuredLogging() {
+    structuredLoggingEnabled = true;
+  }
+
+  public static void disableStructuredLogging() {
+    structuredLoggingEnabled = false;
+  }
+
+  public static boolean isStructuredLoggingEnabled() {
+    return structuredLoggingEnabled;
+  }
+
   public static SparkLogger getLogger(String name) {
     return new SparkLogger(LoggerFactory.getLogger(name));
   }

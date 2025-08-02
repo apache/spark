@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.exchange
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.internal.{LogKeys, MDC}
+import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._

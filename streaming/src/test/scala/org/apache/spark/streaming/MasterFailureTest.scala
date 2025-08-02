@@ -32,7 +32,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.Assertions._
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.Utils

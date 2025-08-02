@@ -33,7 +33,7 @@ import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorMetrics
-import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
+import org.apache.spark.internal.{config, Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile

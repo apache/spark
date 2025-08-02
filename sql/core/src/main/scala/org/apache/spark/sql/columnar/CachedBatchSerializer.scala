@@ -18,7 +18,7 @@
 package org.apache.spark.sql.columnar
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{FILTER, PREDICATE}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow

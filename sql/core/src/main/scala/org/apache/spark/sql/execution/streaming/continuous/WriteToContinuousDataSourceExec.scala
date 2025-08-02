@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow

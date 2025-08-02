@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CONFIG, DEFAULT_VALUE, NEW_VALUE, OLD_VALUE, TIP}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.RuntimeConfig
