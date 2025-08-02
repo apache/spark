@@ -24,6 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.catalyst.expressions.{Coalesce, Literal, UnsafeRow}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.InputParameter
 import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
 import org.apache.spark.sql.execution.datasources.parquet.SparkToParquetSchemaConverter
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
@@ -1104,6 +1105,62 @@ class QueryCompilationErrorsSuite
       parameters = Map(),
       context =
         ExpectedContext(fragment = "aggregate(array(1,2,3), x -> x + 1, 0)", start = 7, stop = 44)
+    )
+  }
+
+    test("UNEXPECTED_REQUIRED_PARAMETER: routine has unexpected required parameter") {
+    val parameters = Seq(
+      InputParameter("param1", Some(Literal("default1"))),
+      InputParameter("param2", Some(Literal("default2")))
+    )
+            checkError(
+      exception = QueryCompilationErrors.unexpectedRequiredParameter("testRoutine", parameters)
+        .asInstanceOf[AnalysisException],
+      condition = "UNEXPECTED_REQUIRED_PARAMETER",
+      parameters = Map(
+        "routineName" -> "`testRoutine`",
+        "parameters" ->
+          "[InputParameter(param1,Some(default1)), InputParameter(param2,Some(default2))]"
+      )
+    )
+  }
+
+  test("MISSING_STATIC_PARTITION_COLUMN: unknown static partition column") {
+    checkError(
+      exception = QueryCompilationErrors.missingStaticPartitionColumn("unknownColumn")
+        .asInstanceOf[AnalysisException],
+      condition = "MISSING_STATIC_PARTITION_COLUMN",
+      parameters = Map("staticName" -> "unknownColumn")
+    )
+  }
+
+  test("DATATYPE_OPERATION_UNSUPPORTED: dataType operation not supported") {
+    checkError(
+      exception = QueryCompilationErrors.dataTypeOperationUnsupportedError()
+        .asInstanceOf[SparkUnsupportedOperationException],
+      condition = "DATATYPE_OPERATION_UNSUPPORTED",
+      parameters = Map.empty
+    )
+  }
+
+  test("DEPRECATED_METHOD_CALL: deprecated method call") {
+    checkError(
+      exception = QueryCompilationErrors.createTableDeprecatedError()
+        .asInstanceOf[AnalysisException],
+      condition = "DEPRECATED_METHOD_CALL",
+      parameters = Map(
+        "oldMethod" -> "createTable(..., StructType, ...)",
+        "newMethod" -> "createTable(..., Array[Column], ...)"
+      )
+    )
+  }
+
+  test("MUST_OVERRIDE_METHOD: must override one method") {
+    checkError(
+      exception = QueryCompilationErrors.mustOverrideOneMethodError("testMethod")
+        .asInstanceOf[AnalysisException],
+      condition = "MUST_OVERRIDE_METHOD",
+      parameters = Map("methodName" -> "testMethod")
     )
   }
 }
