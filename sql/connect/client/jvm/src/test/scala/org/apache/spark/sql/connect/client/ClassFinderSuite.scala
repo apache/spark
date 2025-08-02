@@ -18,8 +18,6 @@ package org.apache.spark.sql.connect.client
 
 import java.nio.file.Paths
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.sql.connect.test.ConnectFunSuite
 import org.apache.spark.util.SparkFileUtils
 
@@ -32,7 +30,7 @@ class ClassFinderSuite extends ConnectFunSuite {
     requiredClasses.foreach(className =>
       assume(classResourcePath.resolve(className).toFile.exists))
     val copyDir = SparkFileUtils.createTempDir().toPath
-    FileUtils.copyDirectory(classResourcePath.toFile, copyDir.toFile)
+    SparkFileUtils.copyDirectory(classResourcePath.toFile, copyDir.toFile)
     val monitor = new REPLClassDirMonitor(copyDir.toAbsolutePath.toString)
 
     def checkClasses(monitor: REPLClassDirMonitor, additionalClasses: Seq[String] = Nil): Unit = {

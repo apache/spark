@@ -26,6 +26,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.FileVisitResult;
 import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -72,6 +73,34 @@ public class JavaUtils {
         walk.sorted(Comparator.reverseOrder()).map(Path::toFile).forEach(File::delete);
       } catch (Exception ignored) { /* No-op */ }
     }
+  }
+
+  /** Copy src to the target directory simply. File attribute times are not copied. */
+  public static void copyDirectory(File src, File dst) throws IOException {
+    if (src == null || dst == null || !src.exists() || !src.isDirectory() ||
+        (dst.exists() && !dst.isDirectory())) {
+      throw new IllegalArgumentException("Invalid input file " + src + " or directory " + dst);
+    }
+    Path from = src.toPath().toAbsolutePath().normalize();
+    Path to = dst.toPath().toAbsolutePath().normalize();
+    if (to.startsWith(from)) {
+       throw new IllegalArgumentException("Cannot copy directory to itself or its subdirectory");
+    }
+    Files.createDirectories(to);
+    Files.walkFileTree(from, new SimpleFileVisitor<Path>() {
+      @Override
+      public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs)
+          throws IOException {
+        Files.createDirectories(to.resolve(from.relativize(dir)));
+        return FileVisitResult.CONTINUE;
+      }
+
+      @Override
+      public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+        Files.copy(file, to.resolve(from.relativize(file)), StandardCopyOption.REPLACE_EXISTING);
+        return FileVisitResult.CONTINUE;
+      }
+    });
   }
 
   /** Returns a hash consistent with Spark's Utils.nonNegativeHash(). */

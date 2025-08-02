@@ -56,7 +56,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
     assume(artifactPath.resolve("smallClassFile.class").toFile.exists)
 
     val copyDir = Utils.createTempDir().toPath
-    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+    Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
     val stagingPath = copyDir.resolve("smallClassFile.class")
     assert(stagingPath.toFile.exists())
     val remotePath = Paths.get("classes/smallClassFile.class")
@@ -72,7 +72,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
     assume(artifactPath.resolve("Hello.class").toFile.exists)
 
     val copyDir = Utils.createTempDir().toPath
-    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+    Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
     val stagingPath = copyDir.resolve("Hello.class")
     assert(stagingPath.toFile.exists())
     val remotePath = Paths.get("classes/Hello.class")
@@ -98,7 +98,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
     assume(artifactPath.resolve("Hello.class").toFile.exists)
 
     val copyDir = Utils.createTempDir().toPath
-    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+    Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
     val stagingPath = copyDir.resolve("Hello.class")
     assert(stagingPath.toFile.exists())
     val remotePath = Paths.get("classes/Hello.class")
@@ -180,7 +180,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
 
     val copyDir = Utils.createTempDir().toPath
     val destFSDir = Utils.createTempDir().toPath
-    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+    Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
     val stagingPath = copyDir.resolve("smallClassFile.class")
     val remotePath = Paths.get("forward_to_fs", destFSDir.toString, "smallClassFileCopied.class")
     assert(stagingPath.toFile.exists())
@@ -203,7 +203,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
       val blockId = CacheId(spark.sessionUUID, "abc")
       // Setup artifact dir
       val copyDir = Utils.createTempDir().toPath
-      FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+      Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
       try {
         artifactManager.addArtifact(remotePath, stagingPath, None)
         val stagingPathFile = copyDir.resolve("smallClassFile.class")
@@ -246,7 +246,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
 
     def addHelloClass(session: SparkSession): Unit = {
       val copyDir = Utils.createTempDir().toPath
-      FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+      Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
       val stagingPath = copyDir.resolve("Hello.class")
       val remotePath = Paths.get("classes/Hello.class")
       assert(stagingPath.toFile.exists())
@@ -299,7 +299,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
     assume(artifactPath.resolve("Hello.class").toFile.exists)
 
     val copyDir = Utils.createTempDir().toPath
-    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+    Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
     val stagingPath = copyDir.resolve("Hello.class")
     val remotePath = Paths.get("classes/Hello.class")
 
@@ -368,7 +368,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
     val copyDir = Utils.createTempDir().toPath
     assume(artifactPath.resolve(classFileToUse).toFile.exists)
 
-    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+    Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
     val classPath = copyDir.resolve(classFileToUse)
     assert(classPath.toFile.exists())
 
@@ -407,7 +407,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
     withTempPath { dir =>
       val path = dir.toPath
       // Setup artifact dir
-      FileUtils.copyDirectory(artifactPath.toFile, dir)
+      Utils.copyDirectory(artifactPath.toFile, dir)
       val randomFilePath = path.resolve("random_file")
       val testBytes = "test".getBytes(StandardCharsets.UTF_8)
       Files.write(randomFilePath, testBytes)

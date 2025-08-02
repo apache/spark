@@ -23,7 +23,6 @@ import java.text.SimpleDateFormat
 import java.util.{Calendar, Date, Locale}
 import java.util.concurrent.TimeUnit._
 
-import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -245,7 +244,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
     inputData.addData(15)
     inputData.addData(10, 12, 14)
@@ -850,7 +849,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
     input1.addData(20)
     input2.addData(30)

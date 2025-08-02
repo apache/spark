@@ -25,8 +25,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.{CleanerListener, SparkRuntimeException}
 import org.apache.spark.executor.DataReadMethod._
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
@@ -1405,7 +1403,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         .filter(_.startsWith("Location:"))
         .head
         .replace("Location: file:", "")
-      FileUtils.copyDirectory(
+      Utils.copyDirectory(
         new File(part0Loc),
         new File(part0Loc.replace("part=0", "part=1")))
 
