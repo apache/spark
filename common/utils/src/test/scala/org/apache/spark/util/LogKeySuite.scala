@@ -17,14 +17,12 @@
 
 package org.apache.spark.util
 
-import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
 import java.util.{ArrayList => JList}
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe._
 
-import org.apache.commons.io.FileUtils
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.internal.{Logging, LogKeys}
@@ -61,9 +59,8 @@ class LogKeySuite
   private def regenerateLogKeyFile(
       originalKeys: Seq[String], sortedKeys: Seq[String]): Unit = {
     if (originalKeys != sortedKeys) {
-      val logKeyFile = logKeyFilePath.toFile
-      logInfo(s"Regenerating the file $logKeyFile")
-      val originalContents = FileUtils.readLines(logKeyFile, StandardCharsets.UTF_8)
+      logInfo(s"Regenerating the file $logKeyFilePath")
+      val originalContents = Files.readAllLines(logKeyFilePath)
       val sortedContents = new JList[String]()
       var firstMatch = false
       originalContents.asScala.foreach { line =>
@@ -78,8 +75,8 @@ class LogKeySuite
           sortedContents.add(line)
         }
       }
-      Files.delete(logKeyFile.toPath)
-      FileUtils.writeLines(logKeyFile, StandardCharsets.UTF_8.name(), sortedContents)
+      Files.delete(logKeyFilePath)
+      Files.write(logKeyFilePath, sortedContents)
     }
   }
 
