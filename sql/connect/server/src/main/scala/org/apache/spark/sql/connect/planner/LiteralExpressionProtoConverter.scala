@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.planner
 
+import scala.language.existentials
+
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter}
@@ -105,16 +107,18 @@ object LiteralExpressionProtoConverter {
         expressions.Literal(lit.getTime.getNano, TimeType(precision))
 
       case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
+        val (array, arrayType) = LiteralValueProtoConverter.toCatalystArray(lit.getArray)
         expressions.Literal.create(
-          LiteralValueProtoConverter.toCatalystArray(lit.getArray),
-          ArrayType(DataTypeProtoConverter.toCatalystType(lit.getArray.getElementType)))
+          array,
+          ArrayType(DataTypeProtoConverter.toCatalystType(arrayType.getElementType)))
 
       case proto.Expression.Literal.LiteralTypeCase.MAP =>
+        val (map, mapType) = LiteralValueProtoConverter.toCatalystMap(lit.getMap)
         expressions.Literal.create(
-          LiteralValueProtoConverter.toCatalystMap(lit.getMap),
+          map,
           MapType(
-            DataTypeProtoConverter.toCatalystType(lit.getMap.getKeyType),
-            DataTypeProtoConverter.toCatalystType(lit.getMap.getValueType)))
+            DataTypeProtoConverter.toCatalystType(mapType.getKeyType),
+            DataTypeProtoConverter.toCatalystType(mapType.getValueType)))
 
       case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
         val (structData, structType) = LiteralValueProtoConverter.toCatalystStruct(lit.getStruct)
