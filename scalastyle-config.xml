@@ -282,14 +282,49 @@ This file is divided into 3 sections:
       scala.jdk.CollectionConverters._ and use .asScala / .asJava methods</customMessage>
   </check>
 
+  <check customId="readLines" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileUtils\.readLines</parameter></parameters>
+    <customMessage>Use Files.readAllLines instead.</customMessage>
+  </check>
+
+  <check customId="writeLines" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileUtils\.writeLines</parameter></parameters>
+    <customMessage>Use Files.write instead.</customMessage>
+  </check>
+
   <check customId="deleteRecursively" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">FileUtils\.deleteDirectory</parameter></parameters>
     <customMessage>Use deleteRecursively of SparkFileUtils or Utils</customMessage>
   </check>
 
+  <check customId="deleteQuietly" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileUtils\.deleteQuietly</parameter></parameters>
+    <customMessage>Use deleteQuietly of JavaUtils/SparkFileUtils/Utils</customMessage>
+  </check>
+
   <check customId="readFileToByteArray" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">FileUtils\.readFileToByteArray</parameter></parameters>
     <customMessage>Use java.nio.file.Files.readAllBytes</customMessage>
+  </check>
+
+  <check customId="sizeOf" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileUtils\.sizeOf(Directory)?</parameter></parameters>
+    <customMessage>Use sizeOf of JavaUtils or Utils instead.</customMessage>
+  </check>
+
+  <check customId="copyFile" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex"> FileUtils\.copyFile\(</parameter></parameters>
+    <customMessage>Use copyFile of SparkFileUtils or Utils instead.</customMessage>
+  </check>
+
+  <check customId="copyFileToDirectory" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex"> FileUtils\.copyFileToDirectory</parameter></parameters>
+    <customMessage>Use copyFileToDirectory of SparkFileUtils or Utils instead.</customMessage>
+  </check>
+
+  <check customId="copyDirectory" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex"> FileUtils\.copyDirectory</parameter></parameters>
+    <customMessage>Use copyDirectory of JavaUtils/SparkFileUtils/Utils instead.</customMessage>
   </check>
 
   <check customId="commonslang2" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
@@ -570,5 +605,10 @@ This file is divided into 3 sections:
   <check customId="ioutilstostring" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">IOUtils\.toString\(</parameter></parameters>
     <customMessage>Use toString of SparkStreamUtils or Utils instead.</customMessage>
+  </check>
+
+  <check customId="maputils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.commons\.collections4\.MapUtils</parameter></parameters>
+    <customMessage>Use org.apache.spark.util.collection.Utils instead.</customMessage>
   </check>
 </scalastyle>

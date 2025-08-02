@@ -24,6 +24,7 @@ import org.apache.spark.sql.execution.streaming.{MapStateImplWithTTL, MemoryStre
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.tags.SlowSQLTest
 
 class MapStateSingleKeyTTLProcessor(ttlConfig: TTLConfig)
   extends StatefulProcessor[String, InputEvent, OutputEvent] {
@@ -173,6 +174,7 @@ class MapStateTTLProcessor(ttlConfig: TTLConfig)
   }
 }
 
+@SlowSQLTest
 class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
 
   import testImplicits._

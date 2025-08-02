@@ -36,14 +36,14 @@ object Base64Benchmark extends SqlBasedBenchmark {
   private val N = 20L * 1000 * 1000
 
   private def doEncode(len: Int, f: Array[Byte] => Array[Byte]): Unit = {
-    spark.range(N).map(_ => "Spark" * len).foreach { s =>
+    spark.range(N).map(_ => "Spark".repeat(len)).foreach { s =>
       f(s.getBytes)
       ()
     }
   }
 
   private def doDecode(len: Int, f: Array[Byte] => Array[Byte]): Unit = {
-    spark.range(N).map(_ => "Spark" * len).map { s =>
+    spark.range(N).map(_ => "Spark".repeat(len)).map { s =>
       // using the same encode func
       java.util.Base64.getMimeEncoder.encode(s.getBytes)
     }.foreach { s =>

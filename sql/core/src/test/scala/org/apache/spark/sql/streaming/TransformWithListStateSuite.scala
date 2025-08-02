@@ -22,6 +22,7 @@ import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.SlowSQLTest
 
 case class InputRow(key: String, action: String, value: String)
 
@@ -221,6 +222,7 @@ class ToggleSaveAndEmitProcessor
   }
 }
 
+@SlowSQLTest
 class TransformWithListStateSuite extends StreamTest
   with AlsoTestWithRocksDBFeatures with AlsoTestWithEncodingTypes with StateStoreMetricsTest {
   import testImplicits._

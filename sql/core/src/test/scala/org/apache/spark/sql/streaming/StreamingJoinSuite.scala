@@ -24,7 +24,6 @@ import java.util.{Locale, UUID}
 
 import scala.util.Random
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.Path
 import org.scalactic.source.Position
 import org.scalatest.{BeforeAndAfter, Tag}
@@ -724,7 +723,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
     inputStream.addData((1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L))
 
     testStream(query)(
@@ -790,7 +789,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
     inputStream.addData((1, 1L, "a"), (2, 2L, "b"), (3, 3L, "c"), (4, 4L, "d"), (5, 5L, "e"))
 
     val ex = intercept[StreamingQueryException] {
@@ -860,7 +859,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
     inputStream.addData((1, 1L, "a"), (2, 2L, "b"), (3, 3L, "c"), (4, 4L, "d"), (5, 5L, "e"))
 
     val ex = intercept[StreamingQueryException] {
@@ -1550,7 +1549,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
     inputStream.addData((1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L))
 
     /*

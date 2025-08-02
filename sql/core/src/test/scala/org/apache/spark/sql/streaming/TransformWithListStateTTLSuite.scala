@@ -24,6 +24,7 @@ import org.apache.spark.sql.execution.streaming.{ListStateImplWithTTL, MemoryStr
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.tags.SlowSQLTest
 
 // MultiStatefulVariableTTLProcessor is a StatefulProcessor that consumes a stream of
 // strings and returns a stream of <string, count> pairs.
@@ -164,6 +165,7 @@ class ListStateTTLProcessor(ttlConfig: TTLConfig)
  * Test suite for testing list state with TTL.
  * We use the base TTL suite with a list state processor.
  */
+@SlowSQLTest
 class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
   with StateStoreMetricsTest {
 

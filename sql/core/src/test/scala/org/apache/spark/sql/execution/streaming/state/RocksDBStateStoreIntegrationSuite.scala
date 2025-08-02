@@ -21,8 +21,9 @@ import java.io.File
 
 import scala.jdk.CollectionConverters.SetHasAsScala
 
-import org.scalatest.time.{Minute, Span}
+import org.scalatest.time.{Millis, Minute, Seconds, Span}
 
+import org.apache.spark.memory.UnifiedMemoryManager
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions.{count, max}
 import org.apache.spark.sql.internal.SQLConf
@@ -109,7 +110,10 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
               "rocksdbTotalBytesReadThroughIterator", "rocksdbTotalBytesWrittenByFlush",
               "rocksdbPinnedBlocksMemoryUsage", "rocksdbNumInternalColFamiliesKeys",
               "rocksdbNumExternalColumnFamilies", "rocksdbNumInternalColumnFamilies",
-              "SnapshotLastUploaded.partition_0_default"))
+              "SnapshotLastUploaded.partition_0_default", "rocksdbChangeLogWriterCommitLatencyMs",
+              "rocksdbSaveZipFilesLatencyMs", "rocksdbLoadFromSnapshotLatencyMs",
+              "rocksdbLoadLatencyMs", "rocksdbReplayChangeLogLatencyMs",
+              "rocksdbNumReplayChangelogFiles"))
           }
         } finally {
           query.stop()
@@ -329,9 +333,6 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
           ("spark.sql.streaming.stateStore.rocksdb.boundedMemoryUsage" ->
             boundedMemoryEnabled.toString)) {
 
-          import org.apache.spark.memory.UnifiedMemoryManager
-          import org.apache.spark.sql.streaming.Trigger
-
           // Use rate stream to ensure continuous state operations that trigger memory updates
           val query = spark.readStream
             .format("rate")
@@ -347,38 +348,29 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
             .start()
 
           try {
-            // Let the stream run to establish RocksDB instances and generate state operations
-            Thread.sleep(2000) // 2 seconds should be enough for several processing cycles
-
-            // Now check for memory tracking - the continuous stream should trigger memory updates
-            var rocksDBMemory = 0L
-            var attempts = 0
-            val maxAttempts = 15 // 15 attempts with 1-second intervals = 15 seconds max
-
-            while (rocksDBMemory <= 0L && attempts < maxAttempts) {
-              Thread.sleep(1000) // Wait between checks to allow memory updates
-              rocksDBMemory = UnifiedMemoryManager.getMemoryByComponentType("RocksDB")
-              attempts += 1
-
-              if (rocksDBMemory > 0L) {
-                logInfo(s"RocksDB memory detected: $rocksDBMemory bytes " +
-                  s"after $attempts attempts with boundedMemory=$boundedMemoryEnabled")
-              }
+            // Check for memory tracking - the continuous stream should trigger memory updates
+            var initialRocksDBMemory = 0L
+            eventually(timeout(Span(20, Seconds)), interval(Span(500, Millis))) {
+              initialRocksDBMemory = UnifiedMemoryManager.getMemoryByComponentType("RocksDB")
+              assert(initialRocksDBMemory > 0L,
+                s"RocksDB memory should be tracked with boundedMemory=$boundedMemoryEnabled")
             }
 
+            logInfo(s"RocksDB memory detected: $initialRocksDBMemory bytes " +
+              s"with boundedMemory=$boundedMemoryEnabled")
+
             // Verify memory tracking remains stable during continued operation
-            Thread.sleep(2000) // Let stream continue running
+            eventually(timeout(Span(5, Seconds)), interval(Span(500, Millis))) {
+              val currentMemory = UnifiedMemoryManager.getMemoryByComponentType("RocksDB")
+              assert(currentMemory > 0L,
+                s"RocksDB memory tracking should remain active during stream processing: " +
+                  s"got $currentMemory bytes (initial: $initialRocksDBMemory) " +
+                  s"with boundedMemory=$boundedMemoryEnabled")
+            }
 
             val finalMemory = UnifiedMemoryManager.getMemoryByComponentType("RocksDB")
-
-            // Memory should still be tracked (allow for some fluctuation)
-            assert(finalMemory > 0L,
-              s"RocksDB memory tracking should remain active during stream processing: " +
-                s"got $finalMemory bytes (initial: $rocksDBMemory) " +
-                s"with boundedMemory=$boundedMemoryEnabled")
-
             logInfo(s"RocksDB memory tracking test completed successfully: " +
-              s"initial=$rocksDBMemory bytes, final=$finalMemory bytes " +
+              s"initial=$initialRocksDBMemory bytes, final=$finalMemory bytes " +
               s"with boundedMemory=$boundedMemoryEnabled")
 
           } finally {

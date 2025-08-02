@@ -208,6 +208,10 @@
             <property name="format" value="FileUtils\.deleteDirectory"/>
             <property name="message" value="Use deleteRecursively of SparkFileUtils or Utils instead." />
         </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="FileUtils\.deleteQuietly"/>
+            <property name="message" value="Use deleteQuietly of JavaUtils/SparkFileUtils/Utils instead." />
+        </module>
         <!-- support structured logging -->
         <module name="RegexpSinglelineJava">
             <property name="format" value="org\.slf4j\.(Logger|LoggerFactory)" />

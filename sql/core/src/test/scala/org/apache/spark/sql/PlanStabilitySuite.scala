@@ -212,7 +212,7 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
      *     Project [c_customer_id]
      */
     def simplifyNode(node: SparkPlan, depth: Int): String = {
-      val padding = "  " * depth
+      val padding = "  ".repeat(depth)
       var thisNode = node.nodeName
       if (node.references.nonEmpty) {
         thisNode += s" [${cleanUpReferences(node.references)}]"

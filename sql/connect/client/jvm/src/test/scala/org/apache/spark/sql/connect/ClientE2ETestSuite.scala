@@ -120,7 +120,7 @@ class ClientE2ETestSuite
       import session.implicits._
 
       val throwException =
-        udf((_: String) => throw new SparkException("test" * 10000))
+        udf((_: String) => throw new SparkException("test".repeat(10000)))
 
       val ex = intercept[SparkException] {
         Seq("1").toDS().withColumn("udf_val", throwException($"value")).collect()
@@ -133,7 +133,7 @@ class ClientE2ETestSuite
       val cause = ex.getCause.asInstanceOf[SparkException]
       assert(cause.getCondition == null)
       assert(cause.getMessageParameters.isEmpty)
-      assert(cause.getMessage.contains("test" * 10000))
+      assert(cause.getMessage.contains("test".repeat(10000)))
     }
   }
 
@@ -1675,6 +1675,18 @@ class ClientE2ETestSuite
     val df = spark.sql("SELECT TIME '12:13:14'")
 
     checkAnswer(df, Row(LocalTime.of(12, 13, 14)))
+  }
+
+  test("SPARK-53054: DataFrameReader defaults to spark.sql.sources.default") {
+    withTempPath { file =>
+      val path = file.getAbsoluteFile.toURI.toString
+      spark.range(100).write.parquet(file.toPath.toAbsolutePath.toString)
+
+      spark.conf.set("spark.sql.sources.default", "parquet")
+
+      val df = spark.read.load(path)
+      assert(df.count() == 100)
+    }
   }
 }
 

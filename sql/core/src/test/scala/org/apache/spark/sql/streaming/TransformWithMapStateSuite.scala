@@ -22,6 +22,7 @@ import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.SlowSQLTest
 
 case class InputMapRow(key: String, action: String, value: (String, String))
 
@@ -138,6 +139,7 @@ class EvolvedMapStateProcessor extends StatefulProcessor[String, String, (String
  * Class that adds integration tests for MapState types used in arbitrary stateful
  * operators such as transformWithState.
  */
+@SlowSQLTest
 class TransformWithMapStateSuite extends StreamTest
   with AlsoTestWithEncodingTypes
   with AlsoTestWithRocksDBFeatures
