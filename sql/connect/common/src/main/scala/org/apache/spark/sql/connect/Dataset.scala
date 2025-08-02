@@ -147,6 +147,8 @@ class Dataset[T] private[sql] (
 
   private[sql] val agnosticEncoder: AgnosticEncoder[T] = agnosticEncoderFor(encoder)
 
+  private[sql] lazy val optimizedPlan = sparkSession.optimizer.optimize(plan)
+
   override def toString: String = {
     try {
       val builder = new mutable.StringBuilder
@@ -211,7 +213,7 @@ class Dataset[T] private[sql] (
     DataTypeProtoConverter
       .toCatalystType(
         sparkSession
-          .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA)
+          .analyze(optimizedPlan, proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA)
           .getSchema
           .getSchema)
       .asInstanceOf[StructType]
@@ -234,7 +236,7 @@ class Dataset[T] private[sql] (
     // scalastyle:off println
     println(
       sparkSession
-        .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN, Some(mode))
+        .analyze(optimizedPlan, proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN, Some(mode))
         .getExplain
         .getExplainString)
     // scalastyle:on println
@@ -242,7 +244,7 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def isLocal: Boolean = sparkSession
-    .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.IS_LOCAL)
+    .analyze(optimizedPlan, proto.AnalyzePlanRequest.AnalyzeCase.IS_LOCAL)
     .getIsLocal
     .getIsLocal
 
@@ -253,7 +255,7 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def isStreaming: Boolean = sparkSession
-    .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.IS_STREAMING)
+    .analyze(optimizedPlan, proto.AnalyzePlanRequest.AnalyzeCase.IS_STREAMING)
     .getIsStreaming
     .getIsStreaming
 
@@ -815,7 +817,7 @@ class Dataset[T] private[sql] (
   protected def createTempView(viewName: String, replace: Boolean, global: Boolean): Unit = {
     val command = sparkSession.newCommand { builder =>
       builder.getCreateDataframeViewBuilder
-        .setInput(plan.getRoot)
+        .setInput(optimizedPlan.getRoot)
         .setName(viewName)
         .setIsGlobal(global)
         .setReplace(replace)
@@ -1054,7 +1056,7 @@ class Dataset[T] private[sql] (
   /** @inheritdoc */
   def inputFiles: Array[String] =
     sparkSession
-      .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.INPUT_FILES)
+      .analyze(optimizedPlan, proto.AnalyzePlanRequest.AnalyzeCase.INPUT_FILES)
       .getInputFiles
       .getFilesList
       .asScala
@@ -1092,7 +1094,7 @@ class Dataset[T] private[sql] (
   /** @inheritdoc */
   def persist(): this.type = {
     sparkSession.analyze { builder =>
-      builder.getPersistBuilder.setRelation(plan.getRoot)
+      builder.getPersistBuilder.setRelation(optimizedPlan.getRoot)
     }
     this
   }
@@ -1101,7 +1103,7 @@ class Dataset[T] private[sql] (
   def persist(newLevel: StorageLevel): this.type = {
     sparkSession.analyze { builder =>
       builder.getPersistBuilder
-        .setRelation(plan.getRoot)
+        .setRelation(optimizedPlan.getRoot)
         .setStorageLevel(StorageLevelProtoConverter.toConnectProtoType(newLevel))
     }
     this
@@ -1111,7 +1113,7 @@ class Dataset[T] private[sql] (
   def unpersist(blocking: Boolean): this.type = {
     sparkSession.analyze { builder =>
       builder.getUnpersistBuilder
-        .setRelation(plan.getRoot)
+        .setRelation(optimizedPlan.getRoot)
         .setBlocking(blocking)
     }
     this
@@ -1125,7 +1127,7 @@ class Dataset[T] private[sql] (
     StorageLevelProtoConverter.toStorageLevel(
       sparkSession
         .analyze { builder =>
-          builder.getGetStorageLevelBuilder.setRelation(plan.getRoot)
+          builder.getGetStorageLevelBuilder.setRelation(optimizedPlan.getRoot)
         }
         .getGetStorageLevel
         .getStorageLevel)
@@ -1170,7 +1172,7 @@ class Dataset[T] private[sql] (
         val checkpointBuilder = builder.getCheckpointCommandBuilder
           .setLocal(!reliableCheckpoint)
           .setEager(eager)
-          .setRelation(this.plan.getRoot)
+          .setRelation(this.optimizedPlan.getRoot)
         storageLevel.foreach { storageLevel =>
           checkpointBuilder.setStorageLevel(
             StorageLevelProtoConverter.toConnectProtoType(storageLevel))
@@ -1197,13 +1199,13 @@ class Dataset[T] private[sql] (
   /** @inheritdoc */
   @DeveloperApi
   def sameSemantics(other: sql.Dataset[T]): Boolean = {
-    sparkSession.sameSemantics(this.plan, other.plan)
+    sparkSession.sameSemantics(this.optimizedPlan, other.optimizedPlan)
   }
 
   /** @inheritdoc */
   @DeveloperApi
   def semanticHash(): Int = {
-    sparkSession.semanticHash(this.plan)
+    sparkSession.semanticHash(this.optimizedPlan)
   }
 
   /** @inheritdoc */
@@ -1212,10 +1214,10 @@ class Dataset[T] private[sql] (
   }
 
   private[sql] def analyze: proto.AnalyzePlanResponse = {
-    sparkSession.analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA)
+    sparkSession.analyze(optimizedPlan, proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA)
   }
 
-  def collectResult(): SparkResult[T] = sparkSession.execute(plan, agnosticEncoder)
+  def collectResult(): SparkResult[T] = sparkSession.execute(optimizedPlan, agnosticEncoder)
 
   private[sql] def withResult[E](f: SparkResult[T] => E): E = {
     val result = collectResult()
