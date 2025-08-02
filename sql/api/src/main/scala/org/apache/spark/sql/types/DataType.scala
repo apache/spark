@@ -328,7 +328,11 @@ object DataType {
       fieldPath: String,
       fieldType: String,
       collationMap: Map[String, String]): Unit = {
-    if (collationMap.contains(fieldPath) && fieldType != "string") {
+    val isValidType = fieldType match {
+      case "string" | CHAR_TYPE(_) | VARCHAR_TYPE(_) => true
+      case _ => false
+    }
+    if (collationMap.contains(fieldPath) && !isValidType) {
       throw new SparkIllegalArgumentException(
         errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
         messageParameters = Map("jsonType" -> fieldType))
