@@ -81,6 +81,46 @@ trait VariableManager {
    * @return true if at least one variable exists, false otherwise.
    */
   def isEmpty: Boolean
+
+  /**
+   *
+   * @param variableName Name of the variable
+   * @return
+   */
+  protected def getVariableNameForError(variableName: String): String
+
+  /**
+   * Create a variable.
+   * @param variables Variables to be created
+   * @param overrideIfExists If true, the new variable will replace an existing one
+   *                         with the same identifier, if it exists.
+   */
+  final def create(
+      variables: Seq[(Seq[String], VariableDefinition)],
+      overrideIfExists: Boolean): Unit = synchronized {
+    if (!overrideIfExists) {
+      val uniqueNames = mutable.Set[String]()
+
+      variables.foreach(variable => {
+        val nameParts: Seq[String] = variable._1
+        val name = nameParts.last
+        if (get(nameParts).isDefined || uniqueNames.contains(name)) {
+          throw new AnalysisException(
+            errorClass = "VARIABLE_ALREADY_EXISTS",
+            messageParameters = Map(
+              "variableName" -> getVariableNameForError(name)))
+        }
+
+        uniqueNames.add(name)
+      })
+    }
+
+    variables.foreach(variable => {
+      val nameParts: Seq[String] = variable._1
+      val varDef: VariableDefinition = variable._2
+      create(nameParts, varDef, overrideIfExists)
+    })
+  }
 }
 
 /**
@@ -105,6 +145,9 @@ class TempVariableManager extends VariableManager with DataTypeErrorsBase {
   @GuardedBy("this")
   private val variables = new mutable.HashMap[String, VariableDefinition]
 
+  protected def getVariableNameForError(variableName: String): String =
+    toSQLId(Seq(SYSTEM_CATALOG_NAME, SESSION_NAMESPACE, variableName))
+
   override def create(
       nameParts: Seq[String],
       varDef: VariableDefinition,
@@ -114,7 +157,7 @@ class TempVariableManager extends VariableManager with DataTypeErrorsBase {
       throw new AnalysisException(
         errorClass = "VARIABLE_ALREADY_EXISTS",
         messageParameters = Map(
-          "variableName" -> toSQLId(Seq(SYSTEM_CATALOG_NAME, SESSION_NAMESPACE, name))))
+          "variableName" -> getVariableNameForError(name)))
     }
     variables.put(name, varDef)
   }
