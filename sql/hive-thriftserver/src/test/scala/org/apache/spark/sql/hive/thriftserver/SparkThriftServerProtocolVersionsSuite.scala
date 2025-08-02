@@ -64,12 +64,15 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
 
       rs = new HiveQueryResultSet.Builder(connection)
         .setClient(client)
-        .setSessionHandle(sessHandle)
-        .setStmtHandle(stmtHandle).setMaxRows(Int.MaxValue).setFetchSize(Int.MaxValue)
+        .setStmtHandle(stmtHandle)
+        .setMaxRows(Int.MaxValue)
+        .setFetchSize(Int.MaxValue)
         .build()
       f(rs)
     } finally {
-      rs.close()
+      if (rs != null) {
+        rs.close()
+      }
       connection.close()
       transport.close()
       rawTransport.close()
@@ -133,7 +136,6 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
 
       rs = new HiveQueryResultSet.Builder(connection)
         .setClient(client)
-        .setSessionHandle(sessHandle)
         .setStmtHandle(getTableResp.getOperationHandle)
         .build()
       f(rs)

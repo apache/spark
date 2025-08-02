@@ -91,13 +91,7 @@ private[hive] object IsolatedClientLoader extends Logging {
 
   def hiveVersion(version: String): HiveVersion = {
     VersionUtils.majorMinorPatchVersion(version).flatMap {
-      case (2, 0, _) => Some(hive.v2_0)
-      case (2, 1, _) => Some(hive.v2_1)
-      case (2, 2, _) => Some(hive.v2_2)
-      case (2, 3, _) => Some(hive.v2_3)
-      case (3, 0, _) => Some(hive.v3_0)
-      case (3, 1, _) => Some(hive.v3_1)
-      case (4, 0, _) => Some(hive.v4_0)
+      case (4, 1, _) => Some(hive.v4_1)
       case _ => None
     }.getOrElse {
       throw QueryExecutionErrors.unsupportedHiveMetastoreVersionError(
@@ -209,6 +203,7 @@ private[hive] class IsolatedClientLoader(
       name.startsWith("org.apache.hadoop.") && !name.startsWith("org.apache.hadoop.hive.")
 
     name.startsWith("org.slf4j") ||
+    name.startsWith("org.apache.derby.") || // derby JDBC for embedded HMS
     name.startsWith("org.apache.log4j") || // log4j1.x
     name.startsWith("org.apache.logging.log4j") || // log4j2
     name.startsWith("org.apache.spark.") ||

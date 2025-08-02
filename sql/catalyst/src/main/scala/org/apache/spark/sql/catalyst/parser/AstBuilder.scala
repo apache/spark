@@ -4722,8 +4722,7 @@ class AstBuilder extends DataTypeAstBuilder
       entry("field.delim", ctx.fieldsTerminatedBy) ++
           entry("serialization.format", ctx.fieldsTerminatedBy) ++
           entry("escape.delim", ctx.escapedBy) ++
-          // The following typo is inherited from Hive...
-          entry("colelction.delim", ctx.collectionItemsTerminatedBy) ++
+          entry("collection.delim", ctx.collectionItemsTerminatedBy) ++
           entry("mapkey.delim", ctx.keysTerminatedBy) ++
           Option(ctx.linesSeparatedBy).toSeq.map { token =>
             val value = string(visitStringLit(token))

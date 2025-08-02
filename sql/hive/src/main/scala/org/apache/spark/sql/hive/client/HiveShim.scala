@@ -29,11 +29,11 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{IMetaStoreClient, PartitionDropOptions, TableType}
-import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, Function => HiveFunction, FunctionType, Index, MetaException, PrincipalType, ResourceType, ResourceUri}
-import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, Function => HiveFunction, FunctionType, MetaException, PrincipalType, ResourceType, ResourceUri}
+import org.apache.hadoop.hive.ql.IDriver
 import org.apache.hadoop.hive.ql.io.AcidUtils
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition, Table}
-import org.apache.hadoop.hive.ql.plan.{AddPartitionDesc, DynamicPartitionCtx}
+import org.apache.hadoop.hive.ql.plan.DynamicPartitionCtx
 import org.apache.hadoop.hive.ql.processors.{CommandProcessor, CommandProcessorFactory}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
@@ -109,7 +109,7 @@ private[client] sealed abstract class Shim {
 
   def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor
 
-  def getDriverResults(driver: Driver): Seq[String]
+  def getDriverResults(driver: IDriver): Seq[String]
 
   def getMetastoreClientConnectRetryDelayMillis(conf: HiveConf): Long
 
@@ -211,8 +211,6 @@ private[client] sealed abstract class Shim {
 
   def listFunctions(hive: Hive, db: String, pattern: String): Seq[String]
 
-  def dropIndex(hive: Hive, dbName: String, tableName: String, indexName: String): Unit
-
   def dropTable(
       hive: Hive,
       dbName: String,
@@ -234,8 +232,6 @@ private[client] sealed abstract class Shim {
   def setDatabaseOwnerName(db: Database, owner: String): Unit
 
   def getMSC(hive: Hive): IMetaStoreClient
-
-  def getIndexes(hive: Hive, dbName: String, tableName: String, max: Short): Seq[Index]
 
   protected def findMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     klass.getMethod(name, args: _*)
@@ -324,16 +320,10 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       table: Table,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = {
-    val addPartitionDesc = new AddPartitionDesc(table.getDbName, table.getTableName, ignoreIfExists)
-    parts.zipWithIndex.foreach { case (s, i) =>
-      addPartitionDesc.addPartition(
-        s.spec.asJava, s.storage.locationUri.map(CatalogUtils.URIToString).orNull)
-      if (s.parameters.nonEmpty) {
-        addPartitionDesc.getPartition(i).setPartParams(s.parameters.asJava)
-      }
+    parts.zipWithIndex.foreach { case (s, _) =>
+      hive.createPartition(table, s.parameters.asJava)
+      recordHiveCall()
     }
-    recordHiveCall()
-    hive.createPartitions(addPartitionDesc)
   }
 
   override def getAllPartitions(hive: Hive, table: Table): Seq[Partition] = {
@@ -456,7 +446,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
   override def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor =
     CommandProcessorFactory.get(Array(token), conf)
 
-  override def getDriverResults(driver: Driver): Seq[String] = {
+  override def getDriverResults(driver: IDriver): Seq[String] = {
     val res = new JArrayList[Object]()
     driver.getResults(res)
     res.asScala.map {
@@ -516,11 +506,6 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       numDP: JInteger, listBucketingEnabled: JBoolean, isAcid, txnIdInLoadDynamicPartitions)
   }
 
-  override def dropIndex(hive: Hive, dbName: String, tableName: String, indexName: String): Unit = {
-    recordHiveCall()
-    hive.dropIndex(dbName, tableName, indexName, throwExceptionInDropIndex, deleteDataInDropIndex)
-  }
-
   override def dropTable(
       hive: Hive,
       dbName: String,
@@ -535,6 +520,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
   override def alterTable(hive: Hive, tableName: String, table: Table): Unit = {
     recordHiveCall()
     alterTableMethod.invoke(hive, tableName, table)
+    // hive.alterTable(tableName, table, )
   }
 
   override def alterPartitions(hive: Hive, tableName: String, newParts: JList[Partition]): Unit = {
@@ -995,17 +981,9 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       oldPartSpec: JMap[String, String],
       newPart: Partition): Unit = {
     recordHiveCall()
-    hive.renamePartition(table, oldPartSpec, newPart)
+    hive.renamePartition(table, oldPartSpec, newPart, 0)
   }
 
-  override def getIndexes(
-      hive: Hive,
-      dbName: String,
-      tableName: String,
-      max: Short): Seq[Index] = {
-    recordHiveCall()
-    hive.getIndexes(dbName, tableName, max).asScala.toSeq
-  }
 }
 
 private[client] class Shim_v2_1 extends Shim_v2_0 {
@@ -1398,7 +1376,7 @@ private[client] class Shim_v4_0 extends Shim_v3_1 {
     }
     assert(loadFileType.isDefined)
     recordHiveCall()
-    val resetStatistics = false
+    val resetStatistics = true
     val isDirectInsert = false
     loadTableMethod.invoke(
       hive,
@@ -1437,7 +1415,7 @@ private[client] class Shim_v4_0 extends Shim_v3_1 {
     val partitions = parts.map(HiveClientImpl.toHivePartition(_, table).getTPartition).asJava
     recordHiveCall()
     val needResults = false
-    addPartitionsMethod.invoke(hive, partitions, ignoreIfExists, needResults: JBoolean)
+    hive.addPartitions(partitions, ignoreIfExists, needResults: JBoolean)
   }
 
   override def loadPartition(
@@ -1543,3 +1521,5 @@ private[client] class Shim_v4_0 extends Shim_v3_1 {
     renamePartitionMethod.invoke(hive, table, oldPartSpec, newPart, writeIdInLoadTableOrPartition)
   }
 }
+
+private[client] class Shim_v4_1 extends Shim_v4_0

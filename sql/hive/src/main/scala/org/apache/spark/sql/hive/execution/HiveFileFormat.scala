@@ -23,7 +23,6 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
 import org.apache.hadoop.hive.ql.plan.FileSinkDesc
-import org.apache.hadoop.hive.serde2.Serializer
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorUtils, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
@@ -89,7 +88,7 @@ case class HiveFileFormat(fileSinkConf: FileSinkDesc)
     // Add table properties from storage handler to hadoopConf, so any custom storage
     // handler settings can be set to hadoopConf
     HiveTableUtil.configureJobPropertiesForStorageHandler(tableDesc, conf, false)
-    Utilities.copyTableJobPropertiesToConf(tableDesc, conf)
+    Utilities.copyTableJobPropertiesToConf(tableDesc, conf.asInstanceOf[JobConf])
 
     // Avoid referencing the outer object.
     val fileSinkConfSer = fileSinkConf
@@ -135,12 +134,7 @@ class HiveOutputWriter(
 
   private def tableDesc = fileSinkConf.getTableInfo
 
-  private val serializer = {
-    val serializer = tableDesc.getDeserializerClass.getConstructor().
-      newInstance().asInstanceOf[Serializer]
-    serializer.initialize(jobConf, tableDesc.getProperties)
-    serializer
-  }
+  private val serializer = tableDesc.getDeserializer(jobConf)
 
   private val hiveWriter = HiveFileFormatUtils.getHiveRecordWriter(
     jobConf,

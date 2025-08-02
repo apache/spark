@@ -138,6 +138,35 @@
       <artifactId>hive-llap-client</artifactId>
       <scope>${hive.llap.scope}</scope>
     </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-udf</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-standalone-metastore-server</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.datasketches</groupId>
+      <artifactId>datasketches-hive</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-parser</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.calcite</groupId>
+      <artifactId>calcite-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-hdfs</artifactId>
+      <version>${hadoop.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+
     <!-- hive-serde already depends on avro, but this brings in customized config of avro deps from parent -->
     <dependency>
       <groupId>org.apache.avro</groupId>
@@ -173,6 +202,10 @@
       <artifactId>datanucleus-core</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.datanucleus</groupId>
+      <artifactId>datanucleus-api-jdo</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client-runtime</artifactId>
       <scope>${hadoop.deps.scope}</scope>
@@ -186,12 +219,24 @@
       <artifactId>libfb303</artifactId>
     </dependency>
     <dependency>
+      <groupId>com.esotericsoftware.kryo</groupId>
+      <artifactId>kryo5</artifactId>
+      <version>5.5.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.jodd</groupId>
+      <artifactId>jodd-util</artifactId>
+      <version>6.0.0</version>
+    </dependency>
+    <dependency>
       <groupId>org.apache.derby</groupId>
       <artifactId>derby</artifactId>
+      <scope>runtime</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.derby</groupId>
       <artifactId>derbytools</artifactId>
+      <scope>runtime</scope>
     </dependency>
     <dependency>
       <groupId>org.scala-lang</groupId>
@@ -202,6 +247,10 @@
       <groupId>org.scalacheck</groupId>
       <artifactId>scalacheck_${scala.binary.version}</artifactId>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.maven.shared</groupId>
+      <artifactId>maven-invoker</artifactId>
     </dependency>
   </dependencies>
   <profiles>
