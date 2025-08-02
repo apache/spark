@@ -359,7 +359,7 @@ class SqlScriptingLabelContext {
       // Do not add the label to the seenLabels set if it is not defined.
       java.util.UUID.randomUUID.toString.toLowerCase(Locale.ROOT)
     }
-    if (SqlScriptingLabelContext.isForbiddenLabelOrForVariableName(labelText)) {
+    if (SqlScriptingParsingContext.isForbiddenLabelOrVariableName(labelText)) {
       withOrigin(beginLabelCtx.get) {
         throw SqlScriptingErrors.labelOrForVariableNameForbidden(CurrentOrigin.get, labelText)
       }
@@ -388,7 +388,7 @@ class SqlScriptingLabelContext {
       assertIdentifierNotInSeenLabels(identifierCtx)
       seenLabels.add(identifierName.toLowerCase(Locale.ROOT))
 
-      if (SqlScriptingLabelContext.isForbiddenLabelOrForVariableName(identifierName)) {
+      if (SqlScriptingParsingContext.isForbiddenLabelOrVariableName(identifierName)) {
         withOrigin(ctx) {
           throw SqlScriptingErrors.labelOrForVariableNameForbidden(
             CurrentOrigin.get,
@@ -411,12 +411,15 @@ class SqlScriptingLabelContext {
 
 }
 
-object SqlScriptingLabelContext {
-  private val forbiddenLabelNames: immutable.Set[Regex] =
+object SqlScriptingParsingContext {
+  private val forbiddenNames: immutable.Set[Regex] =
     immutable.Set("builtin".r, "session".r, "sys.*".r)
 
-  def isForbiddenLabelOrForVariableName(labelName: String): Boolean = {
-    forbiddenLabelNames.exists(_.matches(labelName.toLowerCase(Locale.ROOT)))
+  /**
+   * Used for enforcing names of Labels, FOR variables, and local variables
+   */
+  def isForbiddenLabelOrVariableName(labelName: String): Boolean = {
+    forbiddenNames.exists(_.matches(labelName.toLowerCase(Locale.ROOT)))
   }
 }
 
