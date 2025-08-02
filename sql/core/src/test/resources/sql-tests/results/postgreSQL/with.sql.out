@@ -1543,15 +1543,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 185,
-    "fragment" : "WITH RECURSIVE outermost(x) AS (\n  WITH innermost as (SELECT 2 FROM outermost) -- fail\n    SELECT * FROM innermost\n    UNION SELECT * from outermost\n)\nSELECT * FROM outermost ORDER BY 1"
-  } ]
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
 }
 
 
