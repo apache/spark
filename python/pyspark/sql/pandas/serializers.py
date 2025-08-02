@@ -1094,6 +1094,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
             safecheck,
             assign_cols_by_name,
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+            arrow_cast=True,
         )
         self.pickleSer = CPickleSerializer()
         self.utf8_deserializer = UTF8Deserializer()
@@ -1474,6 +1475,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
             safecheck,
             assign_cols_by_name,
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+            arrow_cast=True,
         )
         self.arrow_max_records_per_batch = arrow_max_records_per_batch
         self.key_offsets = None
