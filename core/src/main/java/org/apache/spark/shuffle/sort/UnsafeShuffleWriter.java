@@ -103,6 +103,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private MyByteArrayOutputStream serBuffer;
   private SerializationStream serOutputStream;
 
+  private boolean enableRowCountOptimize = false;
+  private boolean enableRowCountMetricsCheck = true;
+
   /**
    * Are we in the process of stopping? Because map tasks can call stop() with success = true
    * and then call stop() with success = false if they get an exception, we want to make sure
@@ -138,6 +141,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.taskContext = taskContext;
     this.sparkConf = sparkConf;
     this.transferToEnabled = (boolean) sparkConf.get(package$.MODULE$.SHUFFLE_MERGE_PREFER_NIO());
+    this.enableRowCountOptimize = (boolean)sparkConf.get(package$.MODULE$.SHUFFLE_MAP_STATUS_ROW_COUNT_OPTIMIZE_SKEWED_JOB());
+    this.enableRowCountMetricsCheck = (boolean)sparkConf.get(package$.MODULE$.SHUFFLE_MAP_STATUS_ROW_COUNT_METRICS_CHCEK());
     this.initialSortBufferSize =
       (int) (long) sparkConf.get(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE());
     this.mergeBufferSizeInBytes =
@@ -178,10 +183,22 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     // generic throwables.
     boolean success = false;
     try {
+      long[] partitionRecords = new long[partitioner.numPartitions()];
+
       while (records.hasNext()) {
-        insertRecordIntoSorter(records.next());
+        Product2<K, V> record = records.next();
+        insertRecordIntoSorter(record);
+        if (enableRowCountOptimize) {
+          int partitionId = partitioner.getPartition(record._1());
+          partitionRecords[partitionId] += 1;
+        }
       }
-      closeAndWriteOutput();
+
+      if (enableRowCountOptimize) {
+        closeAndWriteOutput(partitionRecords);
+      } else {
+        closeAndWriteOutput();
+      }
       success = true;
     } finally {
       if (sorter != null) {
@@ -217,6 +234,11 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   @VisibleForTesting
   void closeAndWriteOutput() throws IOException {
+    closeAndWriteOutput(null);
+  }
+
+  @VisibleForTesting
+  void closeAndWriteOutput(long[] partitionRecords) throws IOException {
     assert(sorter != null);
     updatePeakMemoryUsed();
     serBuffer = null;
@@ -234,7 +256,31 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
     }
     mapStatus = MapStatus$.MODULE$.apply(
-      blockManager.shuffleServerId(), partitionLengths, mapId);
+            blockManager.shuffleServerId(), partitionLengths, mapId);
+    if (enableRowCountOptimize && partitionRecords != null) {
+      boolean metricsCheckResult = true;
+      if (enableRowCountMetricsCheck) {
+        long partitionRecordsSum = Arrays.stream(partitionRecords).sum();
+        long metricsRecordsSum = taskContext.taskMetrics().shuffleWriteMetrics().recordsWritten();
+        if (logger.isDebugEnabled()) {
+          long partitionRecordsMax = Arrays.stream(partitionRecords).max().getAsLong();
+          long partitionRecordsMin = Arrays.stream(partitionRecords).min().getAsLong();
+          logger.debug("PartitionRecords ShuffleId : {}, max : {}, min : {}, sum : {}. MetricsRecords sum : {}.",
+                  shuffleId, partitionRecordsMax, partitionRecordsMin, partitionRecordsSum, metricsRecordsSum);
+        } else {
+          logger.info("PartitionRecords ShuffleId : {}, sum : {}. MetricsRecords sum : {}.",
+                  shuffleId, partitionRecordsSum, metricsRecordsSum);
+        }
+        if (partitionRecordsSum != metricsRecordsSum) {
+          metricsCheckResult = false;
+          logger.info("ShuffleId : {}, MetricsRecords sum : {} not equal PartitionRecords sum : {}", shuffleId,
+                  metricsRecordsSum, partitionRecordsSum);
+        }
+      }
+      if (metricsCheckResult) {
+        mapStatus.updateRecordsArray(partitionRecords);
+      }
+    }
   }
 
   @VisibleForTesting
