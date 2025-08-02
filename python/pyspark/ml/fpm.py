@@ -240,6 +240,7 @@ class FPGrowth(
     >>> fpm.transform(data).take(1) == model2.transform(data).take(1)
     True
     """
+
     _input_kwargs: Dict[str, Any]
 
     @keyword_only

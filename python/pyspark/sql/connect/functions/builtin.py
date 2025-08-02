@@ -3141,13 +3141,11 @@ current_date.__doc__ = pysparkfuncs.current_date.__doc__
 
 
 @overload
-def current_time() -> Column:
-    ...
+def current_time() -> Column: ...
 
 
 @overload
-def current_time(precision: int) -> Column:
-    ...
+def current_time(precision: int) -> Column: ...
 
 
 def current_time(precision: Optional[int] = None) -> Column:
@@ -3434,13 +3432,11 @@ unix_seconds.__doc__ = pysparkfuncs.unix_seconds.__doc__
 
 
 @overload
-def to_time(str: "ColumnOrName") -> Column:
-    ...
+def to_time(str: "ColumnOrName") -> Column: ...
 
 
 @overload
-def to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column:
-    ...
+def to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column: ...
 
 
 def to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
@@ -3454,13 +3450,11 @@ to_time.__doc__ = pysparkfuncs.to_time.__doc__
 
 
 @overload
-def to_timestamp(col: "ColumnOrName") -> Column:
-    ...
+def to_timestamp(col: "ColumnOrName") -> Column: ...
 
 
 @overload
-def to_timestamp(col: "ColumnOrName", format: str) -> Column:
-    ...
+def to_timestamp(col: "ColumnOrName", format: str) -> Column: ...
 
 
 def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
@@ -3474,13 +3468,11 @@ to_timestamp.__doc__ = pysparkfuncs.to_timestamp.__doc__
 
 
 @overload
-def try_to_time(str: "ColumnOrName") -> Column:
-    ...
+def try_to_time(str: "ColumnOrName") -> Column: ...
 
 
 @overload
-def try_to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column:
-    ...
+def try_to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column: ...
 
 
 def try_to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
@@ -3602,13 +3594,11 @@ from_unixtime.__doc__ = pysparkfuncs.from_unixtime.__doc__
 
 
 @overload
-def unix_timestamp(timestamp: "ColumnOrName", format: str = ...) -> Column:
-    ...
+def unix_timestamp(timestamp: "ColumnOrName", format: str = ...) -> Column: ...
 
 
 @overload
-def unix_timestamp() -> Column:
-    ...
+def unix_timestamp() -> Column: ...
 
 
 def unix_timestamp(

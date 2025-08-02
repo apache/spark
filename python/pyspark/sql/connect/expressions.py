@@ -105,8 +105,7 @@ class Expression:
 
     def to_plan(  # type: ignore[empty-body]
         self, session: "SparkConnectClient"
-    ) -> "proto.Expression":
-        ...
+    ) -> "proto.Expression": ...
 
     def __repr__(self) -> str:  # type: ignore[empty-body]
         ...
