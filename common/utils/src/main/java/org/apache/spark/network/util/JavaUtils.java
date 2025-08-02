@@ -145,6 +145,30 @@ public class JavaUtils {
     return size.get();
   }
 
+  public static void cleanDirectory(File dir) throws IOException {
+    if (dir == null || !dir.exists() || !dir.isDirectory()) {
+      throw new IllegalArgumentException("Invald input directory " + dir.getAbsolutePath());
+    }
+    cleanDirectory(dir.toPath());
+  }
+
+  public static void cleanDirectory(Path rootDir) throws IOException {
+    Files.walkFileTree(rootDir, new SimpleFileVisitor<Path>() {
+      @Override
+      public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+        Files.delete(file);
+        return FileVisitResult.CONTINUE;
+      }
+
+      @Override
+      public FileVisitResult postVisitDirectory(Path dir, IOException e) throws IOException {
+        if (e != null) throw e;
+        if (!dir.equals(rootDir)) Files.delete(dir);
+        return FileVisitResult.CONTINUE;
+      }
+    });
+  }
+
   /**
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
