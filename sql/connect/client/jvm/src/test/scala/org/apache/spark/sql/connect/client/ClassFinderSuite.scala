@@ -50,7 +50,7 @@ class ClassFinderSuite extends ConnectFunSuite {
     val subDir = SparkFileUtils.createTempDir(copyDir.toAbsolutePath.toString)
     val classToCopy = copyDir.resolve("Hello.class")
     val copyLocation = subDir.toPath.resolve("HelloDup.class")
-    FileUtils.copyFile(classToCopy.toFile, copyLocation.toFile)
+    SparkFileUtils.copyFile(classToCopy.toFile, copyLocation.toFile)
 
     checkClasses(monitor, Seq(s"${subDir.getName}/HelloDup.class"))
   }

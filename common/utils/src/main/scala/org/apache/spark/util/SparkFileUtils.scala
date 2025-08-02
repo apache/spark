@@ -156,6 +156,13 @@ private[spark] trait SparkFileUtils extends Logging {
     val newFile = new File(dir, file.getName())
     Files.copy(file.toPath(), newFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
   }
+
+  def copyFile(src: File, dst: File): Unit = {
+    if (src == null || dst == null || !src.exists() || (dst.exists() && dst.isDirectory())) {
+      throw new IllegalArgumentException(s"Invalid input file $src or directory $dst")
+    }
+    Files.copy(src.toPath(), dst.toPath(), StandardCopyOption.REPLACE_EXISTING)
+  }
 }
 
 private[spark] object SparkFileUtils extends SparkFileUtils
