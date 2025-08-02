@@ -75,6 +75,7 @@ if typing.TYPE_CHECKING:
         SQLArrowTableUDFType,
         SQLBatchedUDFType,
         SQLTableUDFType,
+        SQLArrowUDTFType,
     )
     from pyspark.serializers import Serializer
     from pyspark.sql import SparkSession
@@ -658,6 +659,7 @@ class PythonEvalType:
 
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
     SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301
+    SQL_ARROW_UDTF: "SQLArrowUDTFType" = 302
 
 
 def _create_local_socket(sock_info: "JavaArray") -> "io.BufferedRWPair":
