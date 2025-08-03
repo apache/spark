@@ -184,7 +184,7 @@ private[spark] trait SparkFileUtils extends Logging {
     } else {
       val path1 = file1.toPath
       val path2 = file2.toPath
-      Files.isSameFile(file1.toPath, file2.toPath) || Files.mismatch(path1, path2) == -1L
+      Files.isSameFile(path1, path2) || Files.mismatch(path1, path2) == -1L
     }
   }
 }
