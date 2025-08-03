@@ -205,7 +205,7 @@ abstract class SparkFunSuite
         logInfo("\n\n===== EXTRA LOGS FOR THE FAILED TEST\n")
         workerLogfiles.foreach { logFile =>
           logInfo(s"\n----- Logfile: ${logFile.getAbsolutePath()}")
-          logInfo(FileUtils.readFileToString(logFile, "UTF-8"))
+          logInfo(Files.readString(logFile.toPath))
         }
       }
     }

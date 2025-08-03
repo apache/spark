@@ -1293,8 +1293,8 @@ class SparkSubmitSuite
 
     // The path and filename are preserved.
     assert(outputUri.getPath.endsWith(new Path(sourceUri).getName))
-    assert(FileUtils.readFileToString(new File(outputUri.getPath), StandardCharsets.UTF_8) ===
-      FileUtils.readFileToString(new File(sourceUri.getPath), StandardCharsets.UTF_8))
+    assert(Files.readString(new File(outputUri.getPath).toPath) ===
+      Files.readString(new File(sourceUri.getPath).toPath))
   }
 
   private def deleteTempOutputFile(outputPath: String): Unit = {
