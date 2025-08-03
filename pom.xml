@@ -1150,6 +1150,10 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-math3</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.scala-lang.modules</groupId>
+            <artifactId>scala-collection-compat_${scala.binary.version}</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
