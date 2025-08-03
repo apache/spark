@@ -21,7 +21,6 @@ import java.io._
 import java.net.{URI, URL}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
-import java.nio.file.{Path => JPath}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.io.{Codec, Source}
@@ -1294,7 +1293,8 @@ class SparkSubmitSuite
 
     // The path and filename are preserved.
     assert(outputUri.getPath.endsWith(new Path(sourceUri).getName))
-    assert(Files.readString(JPath.of(outputUri)) === Files.readString(JPath.of(sourceUri)))
+    assert(Files.readString(new File(outputUri.getPath).toPath) ===
+      Files.readString(new File(sourceUri.getPath).toPath))
   }
 
   private def deleteTempOutputFile(outputPath: String): Unit = {
