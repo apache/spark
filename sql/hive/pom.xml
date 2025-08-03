@@ -159,6 +159,7 @@
     <dependency>
       <groupId>org.apache.calcite</groupId>
       <artifactId>calcite-core</artifactId>
+      <scope>${calcite.deps.scope}</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
