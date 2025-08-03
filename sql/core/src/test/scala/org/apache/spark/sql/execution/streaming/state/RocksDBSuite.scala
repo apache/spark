@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.UUID
 import java.util.concurrent.Executors
 
@@ -28,7 +28,6 @@ import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.util.Random
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataInputStream, Path}
 import org.rocksdb.CompressionType
@@ -2176,7 +2175,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     withTempDir { dir =>
       val file2 = new File(dir, "json")
       val json2 = """{"sstFiles":[],"numKeys":0}"""
-      FileUtils.write(file2, s"v2\n$json2", StandardCharsets.UTF_8)
+      Files.writeString(file2.toPath, s"v2\n$json2")
       val e = intercept[SparkException] {
         RocksDBCheckpointMetadata.readFromFile(file2)
       }
@@ -2194,7 +2193,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       assert(metadata.json == json)
       withTempDir { dir =>
         val file = new File(dir, "json")
-        FileUtils.write(file, s"v1\n$json", StandardCharsets.UTF_8)
+        Files.writeString(file.toPath, s"v1\n$json")
         assert(metadata == RocksDBCheckpointMetadata.readFromFile(file))
       }
     }
@@ -3611,7 +3610,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
   def generateFiles(dir: String, fileToLengths: Seq[(String, Int)]): Unit = {
     fileToLengths.foreach { case (fileName, length) =>
       val file = new File(dir, fileName)
-      FileUtils.write(file, "a".repeat(length), StandardCharsets.UTF_8)
+      file.getParentFile().mkdirs()
+      Files.writeString(file.toPath, "a".repeat(length))
     }
   }
 
