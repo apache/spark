@@ -119,6 +119,11 @@ private[spark] trait SparkFileUtils extends Logging {
     createDirectory(root, namePrefix)
   }
 
+  /** Delete recursively while keeping the given directory itself. */
+  def cleanDirectory(dir: File): Unit = {
+    JavaUtils.cleanDirectory(dir)
+  }
+
   /**
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
