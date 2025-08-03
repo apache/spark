@@ -18,7 +18,6 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
-import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
@@ -1111,9 +1110,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     // migrate to new version. However, in our test, "tempDir" will be different in each run and
     // we need to fix the absolute path in the metadata to match "tempDir".
     val sparkMetadata = Files.readString(new File(legacySparkMetadataDir, "0").toPath)
-    FileUtils.write(
-      new File(legacySparkMetadataDir, "0"),
-      sparkMetadata.replaceAll("TEMPDIR", dir.getCanonicalPath), UTF_8)
+    Files.writeString(
+      new File(legacySparkMetadataDir, "0").toPath,
+      sparkMetadata.replaceAll("TEMPDIR", dir.getCanonicalPath))
   }
 
   test("detect escaped path and report the migration guide") {

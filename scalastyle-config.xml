@@ -292,6 +292,11 @@ This file is divided into 3 sections:
     <customMessage>Use Files.readString instead.</customMessage>
   </check>
 
+  <check customId="write" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">[^k]FileUtils\.write\(</parameter></parameters>
+    <customMessage>Use Files.writeString instead.</customMessage>
+  </check>
+
   <check customId="writeLines" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">FileUtils\.writeLines</parameter></parameters>
     <customMessage>Use Files.write instead.</customMessage>
