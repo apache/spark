@@ -168,6 +168,25 @@ private[spark] trait SparkFileUtils extends Logging {
     }
     Files.copy(src.toPath(), dst.toPath(), StandardCopyOption.REPLACE_EXISTING)
   }
+
+  /** Return true if the content of the files are equal or they both don't exist */
+  def contentEquals(file1: File, file2: File): Boolean = {
+    if (file1 == null && file2 != null || file1 != null && file2 == null) {
+      false
+    } else if (file1 == null && file2 == null || !file1.exists() && !file2.exists()) {
+      true
+    } else if (!file1.exists() || !file2.exists()) {
+      false
+    } else if (file1.isDirectory() || file2.isDirectory()) {
+      throw new IllegalArgumentException(s"Input is not a file: $file1 or $file2")
+    } else if (file1.length != file2.length) {
+      false
+    } else {
+      val path1 = file1.toPath
+      val path2 = file2.toPath
+      Files.isSameFile(path1, path2) || Files.mismatch(path1, path2) == -1L
+    }
+  }
 }
 
 private[spark] object SparkFileUtils extends SparkFileUtils
