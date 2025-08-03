@@ -122,7 +122,7 @@ fi
 
 if [ -z "$JAVA_HOME" ]; then
   echo "Error: JAVA_HOME is not set, cannot proceed."
-  exit -1
+  exit 1
 fi
 
 if [ $(command -v git) ]; then
@@ -136,11 +136,11 @@ fi
 if [ "$SBT_ENABLED" == "true" ] && [ ! "$(command -v "$SBT")" ]; then
   echo -e "Could not locate SBT command: '$SBT'."
   echo -e "Specify the SBT command with the --sbt flag"
-  exit -1;
+  exit 1;
 elif [ ! "$(command -v "$MVN")" ]; then
   echo -e "Could not locate Maven command: '$MVN'."
   echo -e "Specify the Maven command with the --mvn flag"
-  exit -1;
+  exit 1;
 fi
 
 if [ "$SBT_ENABLED" == "true" ]; then

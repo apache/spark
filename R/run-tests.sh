@@ -56,7 +56,7 @@ if [[ $FAILED != 0 || $NUM_TEST_WARNING != 0 ]]; then
     echo -en "\033[31m"  # Red
     echo "Had test warnings or failures; see logs."
     echo -en "\033[0m"  # No color
-    exit -1
+    exit 1
 else
     # We have 2 NOTEs: for RoxygenNote and one in Jenkins only "No repository set"
     # For non-latest version branches, one WARNING for package version
@@ -66,7 +66,7 @@ else
       echo -en "\033[31m"  # Red
       echo "Had CRAN check errors; see logs."
       echo -en "\033[0m"  # No color
-      exit -1
+      exit 1
     else
       echo -en "\033[32m"  # Green
       echo "Tests passed."
