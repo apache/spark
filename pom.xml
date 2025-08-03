@@ -276,6 +276,7 @@
       needing Hadoop classes in the classpath to compile).
     -->
     <derby.deps.scope>compile</derby.deps.scope>
+    <calcite.deps.scope>compile</calcite.deps.scope>
     <hadoop.deps.scope>compile</hadoop.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
     <hive.storage.version>${hive.version}</hive.storage.version>
@@ -1878,8 +1879,8 @@
             <artifactId>ant</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>com.esotericsoftware.kryo</groupId>
-            <artifactId>kryo</artifactId>
+            <groupId>org.datanucleus</groupId>
+            <artifactId>datanucleus-core</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-codec</groupId>
