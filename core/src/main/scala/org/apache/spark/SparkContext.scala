@@ -39,6 +39,7 @@ import org.apache.hadoop.io.{BooleanWritable, BytesWritable, DoubleWritable, Flo
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat, TextInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
+import sys.process._
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
@@ -432,6 +433,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     SparkContext.supplementJavaModuleOptions(_conf)
     SparkContext.supplementJavaIPv6Options(_conf)
+    SparkContext.supplementJavaGCOptions(_conf)
 
     _driverLogger = DriverLogger(_conf)
 
@@ -3432,6 +3434,43 @@ object SparkContext extends Logging {
       }
       conf.set(key.key, v)
     }
+    supplement(DRIVER_JAVA_OPTIONS)
+    supplement(EXECUTOR_JAVA_OPTIONS)
+  }
+
+  private def supplementJavaGCOptions(conf: SparkConf): Unit = {
+    val javaFlagCommand = "java -XX:+PrintFlagsFinal -version"
+    val gcAlgorithmPattern = """^\s*bool\s+(Use\w+GC)\s*[=:].*""".r
+    // These flags contain "GC" in their names but aren't standalone garbage collection algorithms.
+    // They're specific policy options that modify GC behavior rather than representing
+    // complete GC implementations, so we exclude them when detecting available GC algorithms.
+    val nonGCAlgorithmFlags: Set[String] = Set(
+      "UseAdaptiveSizePolicyWithSystemGC",
+      "UseMaximumCompactionOnSystemGC")
+
+    val gcAlgorithms = try {
+      val output = javaFlagCommand.!!
+      output.linesIterator.flatMap {
+        case gcAlgorithmPattern(name) => Some(name)
+        case _ => None
+      }.toSet.diff(nonGCAlgorithmFlags).map(gc => s"-XX:+$gc")
+    } catch {
+      case e: Exception =>
+        logWarning(s"Failed to determine GC algorithms: ${e.getMessage}")
+        Set.empty[String]
+    }
+
+    if (gcAlgorithms.isEmpty) return
+
+    def supplement(key: OptionalConfigEntry[String]): Unit = {
+      conf.get(key).foreach { opts =>
+        val splitOpts = opts.split("\\s+")
+        if (!splitOpts.exists(gcAlgorithms)) {
+          conf.set(key.key, s"-XX:+UseParallelGC $opts")
+        }
+      }
+    }
+
     supplement(DRIVER_JAVA_OPTIONS)
     supplement(EXECUTOR_JAVA_OPTIONS)
   }
