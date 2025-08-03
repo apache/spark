@@ -287,6 +287,11 @@ This file is divided into 3 sections:
     <customMessage>Use Files.readAllLines instead.</customMessage>
   </check>
 
+  <check customId="readLines" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileUtils\.readFileToString</parameter></parameters>
+    <customMessage>Use Files.readString instead.</customMessage>
+  </check>
+
   <check customId="writeLines" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">FileUtils\.writeLines</parameter></parameters>
     <customMessage>Use Files.write instead.</customMessage>
