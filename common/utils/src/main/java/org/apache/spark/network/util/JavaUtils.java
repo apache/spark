@@ -147,12 +147,12 @@ public class JavaUtils {
 
   public static void cleanDirectory(File dir) throws IOException {
     if (dir == null || !dir.exists() || !dir.isDirectory()) {
-      throw new IllegalArgumentException("Invald input directory " + dir.getAbsolutePath());
+      throw new IllegalArgumentException("Invalid input directory " + dir);
     }
     cleanDirectory(dir.toPath());
   }
 
-  public static void cleanDirectory(Path rootDir) throws IOException {
+  private static void cleanDirectory(Path rootDir) throws IOException {
     Files.walkFileTree(rootDir, new SimpleFileVisitor<Path>() {
       @Override
       public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
