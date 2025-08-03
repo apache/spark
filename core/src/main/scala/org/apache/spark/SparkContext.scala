@@ -3465,7 +3465,7 @@ object SparkContext extends Logging {
     def supplement(key: OptionalConfigEntry[String]): Unit = {
       conf.get(key).foreach { opts =>
         val splitOpts = opts.split("\\s+")
-        if (!splitOpts.exists(gcAlgorithms)) {
+        if (!splitOpts.exists(gcAlgorithms.contains)) {
           conf.set(key.key, s"-XX:+UseParallelGC $opts")
         }
       }
