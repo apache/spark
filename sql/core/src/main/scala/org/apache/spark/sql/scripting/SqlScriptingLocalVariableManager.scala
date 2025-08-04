@@ -28,7 +28,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableErro
 class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
   extends VariableManager with DataTypeErrorsBase {
 
-  protected def getVariableNameForError(variableName: String): String =
+  override def getVariableNameForError(variableName: String): String =
     toSQLId(Seq(context.currentScope.label, variableName))
 
   override def create(

@@ -146,7 +146,7 @@ class TempVariableManager extends VariableManager with DataTypeErrorsBase {
   @GuardedBy("this")
   private val variables = new mutable.HashMap[String, VariableDefinition]
 
-  protected def getVariableNameForError(variableName: String): String =
+  override def getVariableNameForError(variableName: String): String =
     toSQLId(Seq(SYSTEM_CATALOG_NAME, SESSION_NAMESPACE, variableName))
 
   override def create(
