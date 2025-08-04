@@ -34,9 +34,9 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 /**
  * Helper functions for converting between internal and external date and time representations.
  * Dates are exposed externally as java.sql.Date and are represented internally as the number of
- * dates since the Unix epoch (1970-01-01). Timestamps are exposed externally as java.sql.Timestamp
- * and are stored internally as longs, which are capable of storing timestamps with microsecond
- * precision.
+ * dates since the Unix epoch (1970-01-01). Timestamps are exposed externally as
+ * java.sql.Timestamp and are stored internally as longs, which are capable of storing timestamps
+ * with microsecond precision.
  */
 object DateTimeUtils extends SparkDateTimeUtils {
 
@@ -69,7 +69,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
   private final val gmtUtf8 = UTF8String.fromString("GMT")
   // The method is called by JSON/CSV parser to clean up the legacy timestamp string by removing
   // the "GMT" string. For example, it returns 2000-01-01T00:00+01:00 for 2000-01-01T00:00GMT+01:00.
-  def cleanLegacyTimestampStr(s: UTF8String): UTF8String = s.replace(gmtUtf8, UTF8String.EMPTY_UTF8)
+  def cleanLegacyTimestampStr(s: UTF8String): UTF8String =
+    s.replace(gmtUtf8, UTF8String.EMPTY_UTF8)
 
   def doubleToTimestampAnsi(d: Double, context: QueryContext): Long = {
     if (d.isNaN || d.isInfinite) {
@@ -82,24 +83,22 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Trims and parses a given UTF8 string to a corresponding [[Long]] value which representing the
    * number of microseconds since the epoch. The result is independent of time zones. Zone id
-   * component will be ignored.
-   * The return type is [[Option]] in order to distinguish between 0L and null. Please
-   * refer to `parseTimestampString` for the allowed formats.
+   * component will be ignored. The return type is [[Option]] in order to distinguish between 0L
+   * and null. Please refer to `parseTimestampString` for the allowed formats.
    */
   def stringToTimestampWithoutTimeZone(s: UTF8String): Option[Long] = {
     stringToTimestampWithoutTimeZone(s, true)
   }
 
-  def stringToTimestampWithoutTimeZoneAnsi(
-      s: UTF8String,
-      context: QueryContext): Long = {
+  def stringToTimestampWithoutTimeZoneAnsi(s: UTF8String, context: QueryContext): Long = {
     stringToTimestampWithoutTimeZone(s, true).getOrElse {
       throw QueryExecutionErrors.invalidInputInCastToDatetimeError(s, TimestampNTZType, context)
     }
   }
 
   /**
-   * Returns the hour value of a given timestamp value. The timestamp is expressed in microseconds.
+   * Returns the hour value of a given timestamp value. The timestamp is expressed in
+   * microseconds.
    */
   def getHours(micros: Long, zoneId: ZoneId): Int = {
     getLocalDateTime(micros, zoneId).getHour
@@ -141,13 +140,13 @@ object DateTimeUtils extends SparkDateTimeUtils {
   def getSecondsOfTime(nanos: Long): Int = {
     nanosToLocalTime(nanos).getSecond
   }
+
   /**
    * Returns the seconds part and its fractional part with microseconds.
    */
   def getSecondsWithFraction(micros: Long, zoneId: ZoneId): Decimal = {
     Decimal(getMicroseconds(micros, zoneId), 8, 6)
   }
-
 
   /**
    * Returns the second value with fraction from a given TIME (TimeType) value.
@@ -168,8 +167,10 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Returns local seconds, including fractional parts, multiplied by 1000000.
    *
-   * @param micros The number of microseconds since the epoch.
-   * @param zoneId The time zone id which milliseconds should be obtained in.
+   * @param micros
+   *   The number of microseconds since the epoch.
+   * @param zoneId
+   *   The time zone id which milliseconds should be obtained in.
    */
   def getMicroseconds(micros: Long, zoneId: ZoneId): Int = {
     val lt = getLocalDateTime(micros, zoneId)
@@ -187,8 +188,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
   def getYear(days: Int): Int = daysToLocalDate(days).getYear
 
   /**
-   * Returns the year which conforms to ISO 8601. Each ISO 8601 week-numbering
-   * year begins with the Monday of the week containing the 4th of January.
+   * Returns the year which conforms to ISO 8601. Each ISO 8601 week-numbering year begins with
+   * the Monday of the week containing the 4th of January.
    */
   def getWeekBasedYear(days: Int): Int = daysToLocalDate(days).get(IsoFields.WEEK_BASED_YEAR)
 
@@ -196,8 +197,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
   def getQuarter(days: Int): Int = daysToLocalDate(days).get(IsoFields.QUARTER_OF_YEAR)
 
   /**
-   * Returns the month value for the given number of days since 1970-01-01.
-   * January is month 1.
+   * Returns the month value for the given number of days since 1970-01-01. January is month 1.
    */
   def getMonth(days: Int): Int = daysToLocalDate(days).getMonthValue
 
@@ -207,20 +207,21 @@ object DateTimeUtils extends SparkDateTimeUtils {
   def getDayOfMonth(days: Int): Int = daysToLocalDate(days).getDayOfMonth
 
   /**
-   * Returns the day of the week for the given number of days since 1970-01-01
-   * (1 = Sunday, 2 = Monday, ..., 7 = Saturday).
+   * Returns the day of the week for the given number of days since 1970-01-01 (1 = Sunday, 2 =
+   * Monday, ..., 7 = Saturday).
    */
   def getDayOfWeek(days: Int): Int = LocalDate.ofEpochDay(days).getDayOfWeek.plus(1).getValue
 
   /**
-   * Returns the day of the week for the given number of days since 1970-01-01
-   * (0 = Monday, 1 = Tuesday, ..., 6 = Sunday).
+   * Returns the day of the week for the given number of days since 1970-01-01 (0 = Monday, 1 =
+   * Tuesday, ..., 6 = Sunday).
    */
   def getWeekDay(days: Int): Int = LocalDate.ofEpochDay(days).getDayOfWeek.ordinal()
 
   /**
-   * Returns the week of the year of the given date expressed as the number of days from 1970-01-01.
-   * A week is considered to start on a Monday and week 1 is the first week with > 3 days.
+   * Returns the week of the year of the given date expressed as the number of days from
+   * 1970-01-01. A week is considered to start on a Monday and week 1 is the first week with > 3
+   * days.
    */
   def getWeekOfYear(days: Int): Int = {
     LocalDate.ofEpochDay(days).get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)
@@ -228,14 +229,16 @@ object DateTimeUtils extends SparkDateTimeUtils {
 
   /**
    * Adds an year-month interval to a date represented as days since 1970-01-01.
-   * @return a date value, expressed in days since 1970-01-01.
+   * @return
+   *   a date value, expressed in days since 1970-01-01.
    */
   def dateAddMonths(days: Int, months: Int): Int = {
     localDateToDays(daysToLocalDate(days).plusMonths(months))
   }
 
   /**
-   * Returns the three-letter abbreviated month name for the given number of days since 1970-01-01.
+   * Returns the three-letter abbreviated month name for the given number of days since
+   * 1970-01-01.
    */
   def getMonthName(days: Int): UTF8String = {
     val monthName = Month
@@ -258,29 +261,37 @@ object DateTimeUtils extends SparkDateTimeUtils {
 
   /**
    * Adds months to a timestamp at the given time zone. It converts the input timestamp to a local
-   * timestamp at the given time zone, adds months, and converts the resulted local timestamp
-   * back to a timestamp, expressed in microseconds since 1970-01-01 00:00:00Z.
+   * timestamp at the given time zone, adds months, and converts the resulted local timestamp back
+   * to a timestamp, expressed in microseconds since 1970-01-01 00:00:00Z.
    *
-   * @param micros The input timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z
-   * @param months The amount of months to add. It can be positive or negative.
-   * @param zoneId The time zone ID at which the operation is performed.
-   * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
+   * @param micros
+   *   The input timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z
+   * @param months
+   *   The amount of months to add. It can be positive or negative.
+   * @param zoneId
+   *   The time zone ID at which the operation is performed.
+   * @return
+   *   A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
    */
   def timestampAddMonths(micros: Long, months: Int, zoneId: ZoneId): Long = {
     instantToMicros(microsToInstant(micros).atZone(zoneId).plusMonths(months).toInstant)
   }
 
   /**
-   * Adds a day-time interval expressed in microseconds to a timestamp at the given time zone.
-   * It converts the input timestamp to a local timestamp, and adds the interval by:
+   * Adds a day-time interval expressed in microseconds to a timestamp at the given time zone. It
+   * converts the input timestamp to a local timestamp, and adds the interval by:
    *   - Splitting the interval to days and microsecond adjustment in a day, and
    *   - First of all, it adds days and then the time part.
    * The resulted local timestamp is converted back to an instant at the given time zone.
    *
-   * @param micros The input timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
-   * @param dayTime The amount of microseconds to add. It can be positive or negative.
-   * @param zoneId The time zone ID at which the operation is performed.
-   * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
+   * @param micros
+   *   The input timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
+   * @param dayTime
+   *   The amount of microseconds to add. It can be positive or negative.
+   * @param zoneId
+   *   The time zone ID at which the operation is performed.
+   * @return
+   *   A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
    */
   def timestampAddDayTime(micros: Long, dayTime: Long, zoneId: ZoneId): Long = {
     val days = dayTime / MICROS_PER_DAY
@@ -295,7 +306,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Adds a full interval (months, days, microseconds) to a timestamp represented as the number of
    * microseconds since 1970-01-01 00:00:00Z.
-   * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
+   * @return
+   *   A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
    */
   def timestampAddInterval(
       start: Long,
@@ -314,8 +326,9 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Adds a full interval (months, days, microseconds) to a timestamp without time zone
    * represented as a local time in microsecond precision, which is independent of time zone.
-   * @return A timestamp without time zone value, expressed in range
-   *         [0001-01-01T00:00:00.000000, 9999-12-31T23:59:59.999999].
+   * @return
+   *   A timestamp without time zone value, expressed in range [0001-01-01T00:00:00.000000,
+   *   9999-12-31T23:59:59.999999].
    */
   def timestampNTZAddInterval(
       start: Long,
@@ -332,14 +345,15 @@ object DateTimeUtils extends SparkDateTimeUtils {
 
   /**
    * Adds the interval's months and days to a date expressed as days since the epoch.
-   * @return A date value, expressed in days since 1970-01-01.
+   * @return
+   *   A date value, expressed in days since 1970-01-01.
    *
-   * @throws DateTimeException if the result exceeds the supported date range
-   * @throws IllegalArgumentException if the interval has `microseconds` part
+   * @throws DateTimeException
+   *   if the result exceeds the supported date range
+   * @throws IllegalArgumentException
+   *   if the interval has `microseconds` part
    */
-  def dateAddInterval(
-     start: Int,
-     interval: CalendarInterval): Int = {
+  def dateAddInterval(start: Int, interval: CalendarInterval): Int = {
     if (interval.microseconds != 0) {
       throw QueryExecutionErrors.invalidIntervalWithMicrosecondsAdditionError()
     }
@@ -348,8 +362,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Splits date (expressed in days since 1970-01-01) into four fields:
-   * year, month (Jan is Month 1), dayInMonth, daysToMonthEnd (0 if it's last day of month).
+   * Splits date (expressed in days since 1970-01-01) into four fields: year, month (Jan is Month
+   * 1), dayInMonth, daysToMonthEnd (0 if it's last day of month).
    */
   private def splitDate(days: Int): (Int, Int, Int, Int) = {
     val ld = daysToLocalDate(days)
@@ -363,14 +377,10 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * If micros1 and micros2 are on the same day of month, or both are the last day of month,
    * returns, time of day will be ignored.
    *
-   * Otherwise, the difference is calculated based on 31 days per month.
-   * The result is rounded to 8 decimal places if `roundOff` is set to true.
+   * Otherwise, the difference is calculated based on 31 days per month. The result is rounded to
+   * 8 decimal places if `roundOff` is set to true.
    */
-  def monthsBetween(
-      micros1: Long,
-      micros2: Long,
-      roundOff: Boolean,
-      zoneId: ZoneId): Double = {
+  def monthsBetween(micros1: Long, micros2: Long, roundOff: Boolean, zoneId: ZoneId): Double = {
     val date1 = microsToDays(micros1, zoneId)
     val date2 = microsToDays(micros2, zoneId)
     val (year1, monthInYear1, dayInMonth1, daysToMonthEnd1) = splitDate(date1)
@@ -388,7 +398,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
     // we follow Hive's implementation which uses seconds
     val secondsInDay1 = MICROSECONDS.toSeconds(micros1 - daysToMicros(date1, zoneId))
     val secondsInDay2 = MICROSECONDS.toSeconds(micros2 - daysToMicros(date2, zoneId))
-    val secondsDiff = (dayInMonth1 - dayInMonth2) * SECONDS_PER_DAY + secondsInDay1 - secondsInDay2
+    val secondsDiff =
+      (dayInMonth1 - dayInMonth2) * SECONDS_PER_DAY + secondsInDay1 - secondsInDay2
     val secondsInMonth = DAYS.toSeconds(31)
     val diff = monthDiff + secondsDiff / secondsInMonth.toDouble
     if (roundOff) {
@@ -409,9 +420,10 @@ object DateTimeUtils extends SparkDateTimeUtils {
   private val SATURDAY = 2
 
   /**
-   * Returns day of week from String. Starting from Thursday, marked as 0.
-   * (Because 1970-01-01 is Thursday).
-   * @throws SparkIllegalArgumentException if the input is not a valid day of week.
+   * Returns day of week from String. Starting from Thursday, marked as 0. (Because 1970-01-01 is
+   * Thursday).
+   * @throws SparkIllegalArgumentException
+   *   if the input is not a valid day of week.
    */
   def getDayOfWeekFromString(string: UTF8String): Int = {
     val dowString = string.toString.toUpperCase(Locale.ROOT)
@@ -431,8 +443,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Returns the first date which is later than startDate and is of the given dayOfWeek.
-   * dayOfWeek is an integer ranges in [0, 6], and 0 is Thu, 1 is Fri, etc,.
+   * Returns the first date which is later than startDate and is of the given dayOfWeek. dayOfWeek
+   * is an integer ranges in [0, 6], and 0 is Thu, 1 is Fri, etc,.
    */
   def getNextDateForDayOfWeek(startDay: Int, dayOfWeek: Int): Int = {
     startDay + 1 + ((dayOfWeek - 1 - startDay) % 7 + 7) % 7
@@ -464,8 +476,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
   private[sql] val TRUNC_TO_YEAR = 9
 
   /**
-   * Returns the trunc date from original date and trunc level.
-   * Trunc level should be generated using `parseTruncLevel()`, should be between 6 and 9.
+   * Returns the trunc date from original date and trunc level. Trunc level should be generated
+   * using `parseTruncLevel()`, should be between 6 and 9.
    */
   def truncDate(days: Int, level: Int): Int = {
     level match {
@@ -486,8 +498,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Returns the trunc date time from original date time and trunc level.
-   * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 9.
+   * Returns the trunc date time from original date time and trunc level. Trunc level should be
+   * generated using `parseTruncLevel()`, should be between 0 and 9.
    */
   def truncTimestamp(micros: Long, level: Int, zoneId: ZoneId): Long = {
     // Time zone offsets have a maximum precision of seconds (see `java.time.ZoneOffset`). Hence
@@ -533,8 +545,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Returns the truncate level, could be from TRUNC_TO_MICROSECOND to TRUNC_TO_YEAR,
-   * or TRUNC_INVALID, TRUNC_INVALID means unsupported truncate level.
+   * Returns the truncate level, could be from TRUNC_TO_MICROSECOND to TRUNC_TO_YEAR, or
+   * TRUNC_INVALID, TRUNC_INVALID means unsupported truncate level.
    */
   def parseTruncLevel(format: UTF8String): Int = {
     if (format == null) {
@@ -559,11 +571,15 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Converts a timestamp without time zone from a source to target time zone.
    *
-   * @param sourceTz The time zone for the input timestamp without time zone.
-   * @param targetTz The time zone to which the input timestamp should be converted.
-   * @param micros The offset in microseconds represents a local timestamp.
-   * @return The timestamp without time zone represents the same moment (physical time) as
-   *         the input timestamp in the input time zone, but in the destination time zone.
+   * @param sourceTz
+   *   The time zone for the input timestamp without time zone.
+   * @param targetTz
+   *   The time zone to which the input timestamp should be converted.
+   * @param micros
+   *   The offset in microseconds represents a local timestamp.
+   * @return
+   *   The timestamp without time zone represents the same moment (physical time) as the input
+   *   timestamp in the input time zone, but in the destination time zone.
    */
   def convertTimestampNtzToAnotherTz(sourceTz: String, targetTz: String, micros: Long): Long = {
     val ldt = microsToLocalDateTime(micros)
@@ -574,16 +590,16 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Returns a timestamp of given timezone from UTC timestamp, with the same string
-   * representation in their timezone.
+   * Returns a timestamp of given timezone from UTC timestamp, with the same string representation
+   * in their timezone.
    */
   def fromUTCTime(micros: Long, timeZone: String): Long = {
     convertTz(micros, ZoneOffset.UTC, getZoneId(timeZone))
   }
 
   /**
-   * Returns a utc timestamp from a given timestamp from a given timezone, with the same
-   * string representation in their timezone.
+   * Returns a utc timestamp from a given timestamp from a given timezone, with the same string
+   * representation in their timezone.
    */
   def toUTCTime(micros: Long, timeZone: String): Long = {
     convertTz(micros, getZoneId(timeZone), ZoneOffset.UTC)
@@ -603,8 +619,10 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Extracts special values from an input string ignoring case.
    *
-   * @param input A trimmed string
-   * @return Some special value in lower case or None.
+   * @param input
+   *   A trimmed string
+   * @return
+   *   Some special value in lower case or None.
    */
   private def extractSpecialValue(input: String): Option[String] = {
     def isValid(value: String, timeZoneId: String): Boolean = {
@@ -632,10 +650,13 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Converts notational shorthands that are converted to ordinary timestamps.
    *
-   * @param input A string to parse. It can contain trailing or leading whitespaces.
-   * @param zoneId Zone identifier used to get the current timestamp.
-   * @return Some of microseconds since the epoch if the conversion completed
-   *         successfully otherwise None.
+   * @param input
+   *   A string to parse. It can contain trailing or leading whitespaces.
+   * @param zoneId
+   *   Zone identifier used to get the current timestamp.
+   * @return
+   *   Some of microseconds since the epoch if the conversion completed successfully otherwise
+   *   None.
    */
   def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[Long] = {
     extractSpecialValue(input.trim).flatMap {
@@ -648,14 +669,16 @@ object DateTimeUtils extends SparkDateTimeUtils {
     }
   }
 
-
   /**
    * Converts notational shorthands that are converted to ordinary timestamps without time zone.
    *
-   * @param input A string to parse. It can contain trailing or leading whitespaces.
-   * @param zoneId Zone identifier used to get the current local timestamp.
-   * @return Some of microseconds since the epoch if the conversion completed
-   *         successfully otherwise None.
+   * @param input
+   *   A string to parse. It can contain trailing or leading whitespaces.
+   * @param zoneId
+   *   Zone identifier used to get the current local timestamp.
+   * @return
+   *   Some of microseconds since the epoch if the conversion completed successfully otherwise
+   *   None.
    */
   def convertSpecialTimestampNTZ(input: String, zoneId: ZoneId): Option[Long] = {
     val localDateTime = extractSpecialValue(input.trim).flatMap {
@@ -674,9 +697,12 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Converts notational shorthands that are converted to ordinary dates.
    *
-   * @param input A string to parse. It can contain trailing or leading whitespaces.
-   * @param zoneId Zone identifier used to get the current date.
-   * @return Some of days since the epoch if the conversion completed successfully otherwise None.
+   * @param input
+   *   A string to parse. It can contain trailing or leading whitespaces.
+   * @param zoneId
+   *   Zone identifier used to get the current date.
+   * @return
+   *   Some of days since the epoch if the conversion completed successfully otherwise None.
    */
   def convertSpecialDate(input: String, zoneId: ZoneId): Option[Int] = {
     extractSpecialValue(input.trim).flatMap {
@@ -691,10 +717,13 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Subtracts two dates expressed as days since 1970-01-01.
    *
-   * @param endDay The end date, exclusive
-   * @param startDay The start date, inclusive
-   * @return An interval between two dates. The interval can be negative
-   *         if the end date is before the start date.
+   * @param endDay
+   *   The end date, exclusive
+   * @param startDay
+   *   The start date, inclusive
+   * @return
+   *   An interval between two dates. The interval can be negative if the end date is before the
+   *   start date.
    */
   def subtractDates(endDay: Int, startDay: Int): CalendarInterval = {
     val period = Period.between(daysToLocalDate(startDay), daysToLocalDate(endDay))
@@ -704,13 +733,16 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Subtracts two time values expressed as nanoseconds since 00:00:00, and returns
-   * the difference in microseconds.
+   * Subtracts two time values expressed as nanoseconds since 00:00:00, and returns the difference
+   * in microseconds.
    *
-   * @param endNanos The end time as nanoseconds since the midnight, exclusive
-   * @param startNanos The end time as nanoseconds since the midnight, inclusive
-   * @return The difference in microseconds between local time corresponded to the input
-   *         `endNanos` and `startNanos`.
+   * @param endNanos
+   *   The end time as nanoseconds since the midnight, exclusive
+   * @param startNanos
+   *   The end time as nanoseconds since the midnight, inclusive
+   * @return
+   *   The difference in microseconds between local time corresponded to the input `endNanos` and
+   *   `startNanos`.
    */
   def subtractTimes(endNanos: Long, startNanos: Long): Long = {
     (endNanos - startNanos) / NANOS_PER_MICROS
@@ -740,14 +772,17 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Gets the difference between two time values in the specified unit.
    *
-   * @param unit Specifies the interval units in which to express the difference between
-   *             the two time parameters. Supported units are: MICROSECOND, MILLISECOND,
-   *             SECOND, MINUTE, HOUR.
-   * @param startNanos A time value expressed as nanoseconds since the start of the day,
-   *                   which the function subtracts from `endNanos`.
-   * @param endNanos A time value expressed as nanoseconds since the start of the day,
-   *                 from which the function subtracts `startNanos`.
-   * @return The time span between two time values, in the units specified.
+   * @param unit
+   *   Specifies the interval units in which to express the difference between the two time
+   *   parameters. Supported units are: MICROSECOND, MILLISECOND, SECOND, MINUTE, HOUR.
+   * @param startNanos
+   *   A time value expressed as nanoseconds since the start of the day, which the function
+   *   subtracts from `endNanos`.
+   * @param endNanos
+   *   A time value expressed as nanoseconds since the start of the day, from which the function
+   *   subtracts `startNanos`.
+   * @return
+   *   The time span between two time values, in the units specified.
    */
   def timeDiff(unit: UTF8String, startNanos: Long, endNanos: Long): Long = {
     (endNanos - startNanos) / getNanosPerTimeUnit(unit)
@@ -757,11 +792,15 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * Subtracts two timestamps expressed as microseconds since 1970-01-01 00:00:00Z, and returns
    * the difference in microseconds between local timestamps at the given time zone.
    *
-   * @param endMicros The end timestamp as microseconds since the epoch, exclusive
-   * @param startMicros The end timestamp as microseconds since the epoch, inclusive
-   * @param zoneId The time zone ID in which the subtraction is performed
-   * @return The difference in microseconds between local timestamps corresponded to the input
-   *         instants `end` and `start`.
+   * @param endMicros
+   *   The end timestamp as microseconds since the epoch, exclusive
+   * @param startMicros
+   *   The end timestamp as microseconds since the epoch, inclusive
+   * @param zoneId
+   *   The time zone ID in which the subtraction is performed
+   * @return
+   *   The difference in microseconds between local timestamps corresponded to the input instants
+   *   `end` and `start`.
    */
   def subtractTimestamps(endMicros: Long, startMicros: Long, zoneId: ZoneId): Long = {
     val localEndTs = getLocalDateTime(endMicros, zoneId)
@@ -772,11 +811,16 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Adds the specified number of units to a timestamp.
    *
-   * @param unit A keyword that specifies the interval units to add to the input timestamp.
-   * @param quantity The amount of `unit`s to add. It can be positive or negative.
-   * @param micros The input timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
-   * @param zoneId The time zone ID at which the operation is performed.
-   * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
+   * @param unit
+   *   A keyword that specifies the interval units to add to the input timestamp.
+   * @param quantity
+   *   The amount of `unit`s to add. It can be positive or negative.
+   * @param micros
+   *   The input timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
+   * @param zoneId
+   *   The time zone ID at which the operation is performed.
+   * @return
+   *   A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
    */
   def timestampAdd(unit: String, quantity: Long, micros: Long, zoneId: ZoneId): Long = {
     try {
@@ -784,17 +828,33 @@ object DateTimeUtils extends SparkDateTimeUtils {
         case "MICROSECOND" =>
           timestampAddInterval(micros, 0, 0, quantity, zoneId)
         case "MILLISECOND" =>
-          timestampAddInterval(micros, 0, 0,
-            Math.multiplyExact(quantity, MICROS_PER_MILLIS), zoneId)
+          timestampAddInterval(
+            micros,
+            0,
+            0,
+            Math.multiplyExact(quantity, MICROS_PER_MILLIS),
+            zoneId)
         case "SECOND" =>
-          timestampAddInterval(micros, 0, 0,
-            Math.multiplyExact(quantity, MICROS_PER_SECOND), zoneId)
+          timestampAddInterval(
+            micros,
+            0,
+            0,
+            Math.multiplyExact(quantity, MICROS_PER_SECOND),
+            zoneId)
         case "MINUTE" =>
-          timestampAddInterval(micros, 0, 0,
-            Math.multiplyExact(quantity, MICROS_PER_MINUTE), zoneId)
+          timestampAddInterval(
+            micros,
+            0,
+            0,
+            Math.multiplyExact(quantity, MICROS_PER_MINUTE),
+            zoneId)
         case "HOUR" =>
-          timestampAddInterval(micros, 0, 0,
-            Math.multiplyExact(quantity, MICROS_PER_HOUR), zoneId)
+          timestampAddInterval(
+            micros,
+            0,
+            0,
+            Math.multiplyExact(quantity, MICROS_PER_HOUR),
+            zoneId)
         case "DAY" | "DAYOFYEAR" =>
           // Given that more than `Int32.MaxValue` days will cause an `ArithmeticException` due to
           // overflow, we can safely cast the quantity to an `Int` here. Same follows for larger
@@ -843,12 +903,17 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Gets the difference between two timestamps.
    *
-   * @param unit Specifies the interval units in which to express the difference between
-   *             the two timestamp parameters.
-   * @param startTs A timestamp which the function subtracts from `endTs`.
-   * @param endTs A timestamp from which the function subtracts `startTs`.
-   * @param zoneId The time zone ID at which the operation is performed.
-   * @return The time span between two timestamp values, in the units specified.
+   * @param unit
+   *   Specifies the interval units in which to express the difference between the two timestamp
+   *   parameters.
+   * @param startTs
+   *   A timestamp which the function subtracts from `endTs`.
+   * @param endTs
+   *   A timestamp from which the function subtracts `startTs`.
+   * @param zoneId
+   *   The time zone ID at which the operation is performed.
+   * @return
+   *   The time span between two timestamp values, in the units specified.
    */
   def timestampDiff(unit: String, startTs: Long, endTs: Long, zoneId: ZoneId): Long = {
     val unitInUpperCase = unit.toUpperCase(Locale.ROOT)
@@ -862,12 +927,16 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Converts separate time fields in a long that represents nanoseconds since the start of
-   * the day
-   * @param hours the hour, from 0 to 23
-   * @param minutes the minute, from 0 to 59
-   * @param secsAndMicros the second, from 0 to 59.999999
-   * @return A time value represented as nanoseconds since the start of the day
+   * Converts separate time fields in a long that represents nanoseconds since the start of the
+   * day
+   * @param hours
+   *   the hour, from 0 to 23
+   * @param minutes
+   *   the minute, from 0 to 59
+   * @param secsAndMicros
+   *   the second, from 0 to 59.999999
+   * @return
+   *   A time value represented as nanoseconds since the start of the day
    */
   def makeTime(hours: Int, minutes: Int, secsAndMicros: Decimal): Long = {
     try {
@@ -900,10 +969,12 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Makes a timestamp without time zone from a date and a local time.
    *
-   * @param days The number of days since the epoch 1970-01-01.
-   *             Negative numbers represent earlier days.
-   * @param nanos The number of nanoseconds within the day since the midnight.
-   * @return The number of microseconds since the epoch 1970-01-01 00:00:00Z.
+   * @param days
+   *   The number of days since the epoch 1970-01-01. Negative numbers represent earlier days.
+   * @param nanos
+   *   The number of nanoseconds within the day since the midnight.
+   * @return
+   *   The number of microseconds since the epoch 1970-01-01 00:00:00Z.
    */
   def makeTimestampNTZ(days: Int, nanos: Long): Long = {
     localDateTimeToMicros(LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos)))
@@ -912,11 +983,14 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Makes a timestamp from a date and a local time.
    *
-   * @param days The number of days since the epoch 1970-01-01.
-   *             Negative numbers represent earlier days.
-   * @param nanos The number of nanoseconds within the day since the midnight.
-   * @param zoneId The time zone ID at which the operation is performed.
-   * @return The number of microseconds since the epoch 1970-01-01 00:00:00Z.
+   * @param days
+   *   The number of days since the epoch 1970-01-01. Negative numbers represent earlier days.
+   * @param nanos
+   *   The number of nanoseconds within the day since the midnight.
+   * @param zoneId
+   *   The time zone ID at which the operation is performed.
+   * @return
+   *   The number of microseconds since the epoch 1970-01-01 00:00:00Z.
    */
   def makeTimestamp(days: Int, nanos: Long, zoneId: ZoneId): Long = {
     val ldt = LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos))
@@ -926,11 +1000,14 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Makes a timestamp from a date and a local time with timezone string.
    *
-   * @param days The number of days since the epoch 1970-01-01.
-   *             Negative numbers represent earlier days.
-   * @param nanos The number of nanoseconds within the day since the midnight.
-   * @param timezone The time zone string.
-   * @return The number of microseconds since the epoch 1970-01-01 00:00:00Z.
+   * @param days
+   *   The number of days since the epoch 1970-01-01. Negative numbers represent earlier days.
+   * @param nanos
+   *   The number of nanoseconds within the day since the midnight.
+   * @param timezone
+   *   The time zone string.
+   * @return
+   *   The number of microseconds since the epoch 1970-01-01 00:00:00Z.
    */
   def makeTimestamp(days: Int, nanos: Long, timezone: UTF8String): Long = {
     val zoneId = getZoneId(timezone.toString)
@@ -940,14 +1017,20 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Adds a day-time interval to a time.
    *
-   * @param time A time in nanoseconds.
-   * @param timePrecision The number of digits of the fraction part of time.
-   * @param interval A day-time interval in microseconds.
-   * @param intervalEndField The rightmost field which the interval comprises of.
-   *                         Valid values: 0 (DAY), 1 (HOUR), 2 (MINUTE), 3 (SECOND).
-   * @param targetPrecision The number of digits of the fraction part of the resulting time.
-   * @return A time value in nanoseconds or throw an arithmetic overflow
-   *         if the result out of valid time range [00:00, 24:00).
+   * @param time
+   *   A time in nanoseconds.
+   * @param timePrecision
+   *   The number of digits of the fraction part of time.
+   * @param interval
+   *   A day-time interval in microseconds.
+   * @param intervalEndField
+   *   The rightmost field which the interval comprises of. Valid values: 0 (DAY), 1 (HOUR), 2
+   *   (MINUTE), 3 (SECOND).
+   * @param targetPrecision
+   *   The number of digits of the fraction part of the resulting time.
+   * @return
+   *   A time value in nanoseconds or throw an arithmetic overflow if the result out of valid time
+   *   range [00:00, 24:00).
    */
   def timeAddInterval(
       time: Long,
@@ -960,7 +1043,10 @@ object DateTimeUtils extends SparkDateTimeUtils {
       truncateTimeToPrecision(result, targetPrecision)
     } else {
       throw QueryExecutionErrors.timeAddIntervalOverflowError(
-        time, timePrecision, interval, intervalEndField)
+        time,
+        timePrecision,
+        interval,
+        intervalEndField)
     }
   }
 }
