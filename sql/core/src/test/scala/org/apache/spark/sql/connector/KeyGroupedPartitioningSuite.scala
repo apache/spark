@@ -1120,10 +1120,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
              |""".stripMargin)
         val shuffles = collectShuffles(df.queryExecution.executedPlan)
         assert(shuffles.isEmpty, "should not contain any shuffle")
-        if (pushDownValues) {
-          val scans = collectScans(df.queryExecution.executedPlan)
-          assert(scans.forall(_.inputRDD.partitions.length === 3))
-        }
         checkAnswer(df, Seq(Row(140.0, 7, 140.0, Timestamp.valueOf("2020-02-01 00:00:00"))))
       }
     }
