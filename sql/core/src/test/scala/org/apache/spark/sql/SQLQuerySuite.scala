@@ -5059,25 +5059,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-53094: Fix cube-related data quality problem") {
-    withTable("table1") {
-      withSQLConf() {
-        sql(
-          """CREATE TABLE table1(product string, amount bigint,
-            |region string) using csv""".stripMargin)
+    val df = sql(
+      """SELECT product, region, sum(amount) AS s
+        |FROM VALUES
+        |  ('a', 'east', 100),
+        |  ('b', 'east', 200),
+        |  ('a', 'west', 150),
+        |  ('b', 'west', 250),
+        |  ('a', 'east', 120) AS t(product, region, amount)
+        |GROUP BY product, region WITH CUBE
+        |HAVING count(product) > 2
+        |ORDER BY s DESC""".stripMargin)
 
-        sql("INSERT INTO table1 " + "VALUES('a', 100, 'east')")
-        sql("INSERT INTO table1 " + "VALUES('b', 200, 'east')")
-        sql("INSERT INTO table1 " + "VALUES('a', 150, 'west')")
-        sql("INSERT INTO table1 " + "VALUES('b', 250, 'west')")
-        sql("INSERT INTO table1 " + "VALUES('a', 120, 'east')")
-
-        checkAnswer(
-          sql("select product, region, sum(amount) as s " +
-            "from table1 group by product, region with cube having count(product) > 2 " +
-            "order by s desc"),
-          Seq(Row(null, null, 820), Row(null, "east", 420), Row("a", null, 370)))
-      }
-    }
+    checkAnswer(df, Seq(Row(null, null, 820), Row(null, "east", 420), Row("a", null, 370)))
   }
 }
 
