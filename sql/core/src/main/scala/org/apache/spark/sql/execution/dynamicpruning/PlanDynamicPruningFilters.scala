@@ -55,7 +55,7 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[Sp
       case DynamicPruningSubquery(
           value, buildPlan, buildKeys, broadcastKeyIndices, onlyInBroadcast, exprId, _) =>
         val sparkPlan = QueryExecution.createSparkPlan(sparkSession.sessionState.planner, buildPlan)
-        lazy val name = s"dynamicpruning#${exprId.id}"
+        val name = s"dynamicpruning#${exprId.id}"
         // Using `sparkPlan` is a little hacky as it is based on the assumption that this rule is
         // the first to be applied (apart from `InsertAdaptiveSparkPlan`).
         val canReuseExchange = conf.exchangeReuseEnabled && buildKeys.nonEmpty &&
