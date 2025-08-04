@@ -43,7 +43,7 @@ private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String
     with Serializable with Logging {
 
   override def newTaskTempFileAbsPath(
-       taskContext: TaskAttemptContext, absoluteDir: String, spec: FileNameSpec): String = {
+      taskContext: TaskAttemptContext, absoluteDir: String, spec: FileNameSpec): String = {
     throw new Exception("there should be no custom partition path")
   }
 }
