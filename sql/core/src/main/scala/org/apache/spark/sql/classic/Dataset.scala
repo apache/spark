@@ -26,7 +26,6 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.{sql, TaskContext}
@@ -396,9 +395,9 @@ class Dataset[T] private[sql](
       val paddedRows = rows.map { row =>
         row.zipWithIndex.map { case (cell, i) =>
           if (truncate > 0) {
-            StringUtils.leftPad(cell, colWidths(i) - Utils.stringHalfWidth(cell) + cell.length)
+            Utils.leftPad(cell, colWidths(i) - Utils.stringHalfWidth(cell) + cell.length)
           } else {
-            StringUtils.rightPad(cell, colWidths(i) - Utils.stringHalfWidth(cell) + cell.length)
+            Utils.rightPad(cell, colWidths(i) - Utils.stringHalfWidth(cell) + cell.length)
           }
         }
       }
@@ -428,13 +427,13 @@ class Dataset[T] private[sql](
 
       dataRows.zipWithIndex.foreach { case (row, i) =>
         // "+ 5" in size means a character length except for padded names and data
-        val rowHeader = StringUtils.rightPad(
-          s"-RECORD $i", fieldNameColWidth + dataColWidth + 5, "-")
+        val rowHeader = Utils.rightPad(
+          s"-RECORD $i", fieldNameColWidth + dataColWidth + 5, '-')
         sb.append(rowHeader).append("\n")
         row.zipWithIndex.map { case (cell, j) =>
-          val fieldName = StringUtils.rightPad(fieldNames(j),
+          val fieldName = Utils.rightPad(fieldNames(j),
             fieldNameColWidth - Utils.stringHalfWidth(fieldNames(j)) + fieldNames(j).length)
-          val data = StringUtils.rightPad(cell,
+          val data = Utils.rightPad(cell,
             dataColWidth - Utils.stringHalfWidth(cell) + cell.length)
           s" $fieldName | $data "
         }.addString(sb, "", "\n", "\n")

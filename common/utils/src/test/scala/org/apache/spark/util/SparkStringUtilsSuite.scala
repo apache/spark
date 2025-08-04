@@ -39,4 +39,22 @@ class SparkStringUtilsSuite
     assert(SparkStringUtils.leftPad("bat", 1, 'z') == "bat")
     assert(SparkStringUtils.leftPad("bat", -1, 'z') == "bat")
   }
+
+  test("rightPad with spaces") {
+    assert(SparkStringUtils.rightPad(null, 3) == null)
+    assert(SparkStringUtils.rightPad("", 3) == "   ")
+    assert(SparkStringUtils.rightPad("bat", 3) == "bat")
+    assert(SparkStringUtils.rightPad("bat", 5) == "bat  ")
+    assert(SparkStringUtils.rightPad("bat", 1) == "bat")
+    assert(SparkStringUtils.rightPad("bat", -1) == "bat")
+  }
+
+  test("rightPad with specified character") {
+    assert(SparkStringUtils.rightPad(null, 3, 'z') == null)
+    assert(SparkStringUtils.rightPad("", 3, 'z') == "zzz")
+    assert(SparkStringUtils.rightPad("bat", 3, 'z') == "bat")
+    assert(SparkStringUtils.rightPad("bat", 5, 'z') == "batzz")
+    assert(SparkStringUtils.rightPad("bat", 1, 'z') == "bat")
+    assert(SparkStringUtils.rightPad("bat", -1, 'z') == "bat")
+  }
 }

@@ -23,8 +23,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.ArrayImplicits._
 
-
-
 private[spark] trait SparkStringUtils {
   private final lazy val SPACE_DELIMITED_UPPERCASE_HEX =
     HexFormat.of().withDelimiter(" ").withUpperCase()
@@ -82,12 +80,12 @@ private[spark] trait SparkStringUtils {
    * The String is padded to the size of `size`.
    *
    * {{{
-   * StringUtils.leftPad(null, *)   = null
-   * StringUtils.leftPad("", 3)     = "   "
-   * StringUtils.leftPad("bat", 3)  = "bat"
-   * StringUtils.leftPad("bat", 5)  = "  bat"
-   * StringUtils.leftPad("bat", 1)  = "bat"
-   * StringUtils.leftPad("bat", -1) = "bat"
+   * SparkStringUtils.leftPad(null, *)   = null
+   * SparkStringUtils.leftPad("", 3)     = "   "
+   * SparkStringUtils.leftPad("bat", 3)  = "bat"
+   * SparkStringUtils.leftPad("bat", 5)  = "  bat"
+   * SparkStringUtils.leftPad("bat", 1)  = "bat"
+   * SparkStringUtils.leftPad("bat", -1) = "bat"
    * }}}
    *
    * @param str  the String to pad out, may be null
@@ -104,12 +102,12 @@ private[spark] trait SparkStringUtils {
    * Pad to a size of `size`.
    *
    * {{{
-   * StringUtils.leftPad(null, *, *)     = null
-   * StringUtils.leftPad("", 3, 'z')     = "zzz"
-   * StringUtils.leftPad("bat", 3, 'z')  = "bat"
-   * StringUtils.leftPad("bat", 5, 'z')  = "zzbat"
-   * StringUtils.leftPad("bat", 1, 'z')  = "bat"
-   * StringUtils.leftPad("bat", -1, 'z') = "bat"
+   * SparkStringUtils.leftPad(null, *, *)     = null
+   * SparkStringUtils.leftPad("", 3, 'z')     = "zzz"
+   * SparkStringUtils.leftPad("bat", 3, 'z')  = "bat"
+   * SparkStringUtils.leftPad("bat", 5, 'z')  = "zzbat"
+   * SparkStringUtils.leftPad("bat", 1, 'z')  = "bat"
+   * SparkStringUtils.leftPad("bat", -1, 'z') = "bat"
    * }}}
    *
    * @param str     the String to pad out, may be null
@@ -127,6 +125,61 @@ private[spark] trait SparkStringUtils {
     val chars = new Array[Char](size)
     util.Arrays.fill(chars, 0, pads, padChar)
     str.getChars(0, strLen, chars, pads)
+    new String(chars)
+  }
+
+  /**
+   * Right pad a String with spaces.
+   *
+   * The String is padded to the size of `size`.
+   *
+   * {{{
+   * SparkStringUtils.rightPad(null, *)   = null
+   * SparkStringUtils.rightPad("", 3)     = "   "
+   * SparkStringUtils.rightPad("bat", 3)  = "bat"
+   * SparkStringUtils.rightPad("bat", 5)  = "bat  "
+   * SparkStringUtils.rightPad("bat", 1)  = "bat"
+   * SparkStringUtils.rightPad("bat", -1) = "bat"
+   * }}}
+   *
+   * @param str  the String to pad out, may be null
+   * @param size the size to pad to
+   * @return right padded String or original String if no padding is necessary,
+   *         `null` if null String input
+   */
+  def rightPad(str: String, size: Int): String = {
+    rightPad(str, size, ' ')
+  }
+
+  /**
+   * Right pad a String with a specified character.
+   *
+   * The String is padded to the size of `size`.
+   *
+   * {{{
+   * SparkStringUtils.rightPad(null, *, *)     = null
+   * SparkStringUtils.rightPad("", 3, 'z')     = "zzz"
+   * SparkStringUtils.rightPad("bat", 3, 'z')  = "bat"
+   * SparkStringUtils.rightPad("bat", 5, 'z')  = "batzz"
+   * SparkStringUtils.rightPad("bat", 1, 'z')  = "bat"
+   * SparkStringUtils.rightPad("bat", -1, 'z') = "bat"
+   * }}}
+   *
+   * @param str     the String to pad out, may be null
+   * @param size    the size to pad to
+   * @param padChar the character to pad with
+   * @return right padded String or original String if no padding is necessary,
+   *         `null` if null String input
+   */
+  def rightPad(str: String, size: Int, padChar: Char): String = {
+    if (str == null) return null
+    val strLen = str.length
+    val pads = size - strLen
+    if (pads <= 0) return str
+
+    val chars = new Array[Char](size)
+    str.getChars(0, strLen, chars, 0)
+    util.Arrays.fill(chars, strLen, size, padChar)
     new String(chars)
   }
 }
