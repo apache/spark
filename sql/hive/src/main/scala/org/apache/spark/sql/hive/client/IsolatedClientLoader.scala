@@ -24,7 +24,6 @@ import java.util
 
 import scala.util.Try
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.shims.ShimLoader
 
@@ -99,6 +98,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       case (3, 0, _) => Some(hive.v3_0)
       case (3, 1, _) => Some(hive.v3_1)
       case (4, 0, _) => Some(hive.v4_0)
+      case (4, 1, _) => Some(hive.v4_1)
       case _ => None
     }.getOrElse {
       throw QueryExecutionErrors.unsupportedHiveMetastoreVersionError(
@@ -149,7 +149,7 @@ private[hive] object IsolatedClientLoader extends Logging {
 
     // TODO: Remove copy logic.
     val tempDir = Utils.createTempDir(namePrefix = s"hive-${version}")
-    allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))
+    allFiles.foreach(f => Utils.copyFileToDirectory(f, tempDir))
     logInfo(log"Downloaded metastore jars to ${MDC(PATH, tempDir.getCanonicalPath)}")
     tempDir.listFiles().map(_.toURI.toURL).toImmutableArraySeq
   }

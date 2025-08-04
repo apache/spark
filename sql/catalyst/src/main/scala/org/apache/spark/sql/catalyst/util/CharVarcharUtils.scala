@@ -90,9 +90,18 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
    * the given attribute's metadata.
    */
   def cleanAttrMetadata(attr: AttributeReference): AttributeReference = {
-    val cleaned = new MetadataBuilder().withMetadata(attr.metadata)
-      .remove(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY).build()
-    attr.withMetadata(cleaned)
+    attr.withMetadata(cleanMetadata(attr.metadata))
+  }
+
+  /**
+   * Removes the metadata entry that contains the original type string of CharType/VarcharType from
+   * the given metadata.
+   */
+  def cleanMetadata(metadata: Metadata): Metadata = {
+    new MetadataBuilder()
+      .withMetadata(metadata)
+      .remove(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)
+      .build()
   }
 
   def getRawTypeString(metadata: Metadata): Option[String] = {

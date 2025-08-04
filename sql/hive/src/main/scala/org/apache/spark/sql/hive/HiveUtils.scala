@@ -76,7 +76,7 @@ private[spark] object HiveUtils extends Logging {
     .doc("Version of the Hive metastore. Available options are " +
       "<code>2.0.0</code> through <code>2.3.10</code>, " +
       "<code>3.0.0</code> through <code>3.1.3</code> and " +
-      "<code>4.0.0</code> through <code>4.0.1</code>.")
+      "<code>4.0.0</code> through <code>4.1.0</code>.")
     .version("1.4.0")
     .stringConf
     .checkValue(isCompatibleHiveVersion, "Unsupported Hive Metastore version")

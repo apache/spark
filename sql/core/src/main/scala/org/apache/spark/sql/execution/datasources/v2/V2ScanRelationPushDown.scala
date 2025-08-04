@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.Locale
+
 import scala.collection.mutable
 
 import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, COLUMN_NAMES, GROUP_BY_EXPRS, JOIN_CONDITION, JOIN_TYPE, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
@@ -137,42 +139,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         // Cross joins are not supported because they increase the amount of data.
         condition.isDefined &&
         lBuilder.isOtherSideCompatibleForJoin(rBuilder) =>
-      val leftSideRequiredColumnNames = getRequiredColumnNames(leftProjections, leftHolder)
-      val rightSideRequiredColumnNames = getRequiredColumnNames(rightProjections, rightHolder)
-
-      // Alias the duplicated columns from left side of the join. We are creating the
-      // Map[String, Int] to tell how many times each column name has occured within one side.
-      val leftSideNameCounts: Map[String, Int] =
-        leftSideRequiredColumnNames.groupBy(identity).view.mapValues(_.size).toMap
-      val rightSideNameCounts: Map[String, Int] =
-        rightSideRequiredColumnNames.groupBy(identity).view.mapValues(_.size).toMap
-      // It's more performant to call contains on Set than on Seq
-      val rightSideColumnNamesSet = rightSideRequiredColumnNames.toSet
-
-      val leftSideRequiredColumnsWithAliases = leftSideRequiredColumnNames.map { name =>
-        val aliasName =
-          if (leftSideNameCounts(name) > 1 || rightSideColumnNamesSet.contains(name)) {
-            generateJoinOutputAlias(name)
-          } else {
-            null
-          }
-
-        new SupportsPushDownJoin.ColumnWithAlias(name, aliasName)
-      }
-
-      // Aliasing of duplicated columns in right side is done only if there are duplicates in
-      // right side only. There won't be a conflict with left side columns because they are
-      // already aliased.
-      val rightSideRequiredColumnsWithAliases = rightSideRequiredColumnNames.map { name =>
-        val aliasName =
-          if (rightSideNameCounts(name) > 1) {
-            generateJoinOutputAlias(name)
-          } else {
-            null
-          }
-
-        new SupportsPushDownJoin.ColumnWithAlias(name, aliasName)
-      }
+      // Process left and right columns in original order
+      val (leftSideRequiredColumnsWithAliases, rightSideRequiredColumnsWithAliases) =
+        generateColumnAliasesForDuplicatedName(
+          getRequiredColumnNames(leftProjections, leftHolder),
+          getRequiredColumnNames(rightProjections, rightHolder))
 
       // Create the AttributeMap that holds (Attribute -> Attribute with up to date name) mapping.
       val pushedJoinOutputMap = AttributeMap[Expression](
@@ -249,11 +220,80 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         node
       }
   }
+  /**
+   * Generates unique column aliases for join operations to avoid naming conflicts.
+   * Handles case sensitivity issues across different databases (SQL Server, MySQL, etc.).
+   *
+   * @param leftSideRequiredColumnNames  Columns from the left side of the join
+   * @param rightSideRequiredColumnNames Columns from the right side of the join
+   * @return Tuple of (leftColumnsWithAliases, rightColumnsWithAliases)
+   */
+  private[v2] def generateColumnAliasesForDuplicatedName(
+    leftSideRequiredColumnNames: Array[String],
+    rightSideRequiredColumnNames: Array[String]
+  ): (Array[SupportsPushDownJoin.ColumnWithAlias],
+    Array[SupportsPushDownJoin.ColumnWithAlias]) = {
+    // Normalize all column names to lowercase for case-insensitive comparison
+    val normalizeCase: String => String = _.toLowerCase(Locale.ROOT)
 
-  def generateJoinOutputAlias(name: String): String =
-    s"${name}_${java.util.UUID.randomUUID().toString.replace("-", "_")}"
+    // Count occurrences of each column name (case-insensitive)
+    val allRequiredColumnNames = leftSideRequiredColumnNames ++ rightSideRequiredColumnNames
+    val allNameCounts: Map[String, Int] =
+      allRequiredColumnNames.map(normalizeCase)
+        .groupBy(identity)
+        .view
+        .mapValues(_.length)
+        .toMap
 
-  // projections' names are maybe not up to date if the joins have been previously pushed down.
+    // Track claimed aliases using normalized names.
+    // Use Set for O(1) lookups when checking existing column names, claim all names
+    // that appears only once to ensure they have highest priority.
+    val allClaimedAliases = mutable.Set.from(
+      allNameCounts.filter(_._2 == 1).keys
+    )
+
+    // Track suffix index for each base column name (starts at 0) to avoid extreme worst
+    // case of O(n^2) alias generation.
+    val aliasSuffixIndex = mutable.HashMap[String, Int]().withDefaultValue(0)
+
+    def processColumn(originalName: String): SupportsPushDownJoin.ColumnWithAlias = {
+      val normalizedName = normalizeCase(originalName)
+
+      // No alias needed for unique column names
+      if (allNameCounts(normalizedName) == 1) {
+        new SupportsPushDownJoin.ColumnWithAlias(originalName, null)
+      } else {
+        var attempt = aliasSuffixIndex(normalizedName)
+        var candidate = if (attempt == 0) originalName else s"${originalName}_$attempt"
+        var normalizedCandidate = normalizeCase(candidate)
+
+        // Find first available unique alias, use original name for the first attempt, then append
+        // suffix for more attempts.
+        while (allClaimedAliases.contains(normalizedCandidate)) {
+          attempt += 1
+          candidate = s"${originalName}_$attempt"
+          normalizedCandidate = normalizeCase(candidate)
+        }
+
+        // Update tracking state
+        aliasSuffixIndex(normalizedName) = attempt + 1
+        allClaimedAliases.add(normalizedCandidate)
+
+        if (originalName == candidate) {
+          new SupportsPushDownJoin.ColumnWithAlias(originalName, null)
+        } else {
+          new SupportsPushDownJoin.ColumnWithAlias(originalName, candidate)
+        }
+      }
+    }
+
+    (
+      leftSideRequiredColumnNames.map(processColumn),
+      rightSideRequiredColumnNames.map(processColumn)
+    )
+  }
+
+  // Projections' names are maybe not up to date if the joins have been previously pushed down.
   // For this reason, we need to use pushedJoinOutputMap to get up to date names.
   def getRequiredColumnNames(
       projections: Seq[NamedExpression],

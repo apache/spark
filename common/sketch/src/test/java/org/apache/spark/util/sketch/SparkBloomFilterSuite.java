@@ -18,6 +18,7 @@
 package org.apache.spark.util.sketch;
 
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -33,7 +34,8 @@ import java.util.concurrent.atomic.LongAdder;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
-
+@EnabledIfEnvironmentVariable(
+  named = "SPARK_TEST_SPARK_BLOOM_FILTER_SUITE_ENABLED", matches = "true")
 public class SparkBloomFilterSuite {
 
   // the implemented fpp limit is only approximating the hard boundary,

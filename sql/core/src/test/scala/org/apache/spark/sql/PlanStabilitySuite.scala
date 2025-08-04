@@ -104,9 +104,9 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
   private def isApproved(
       dir: File, actualSimplifiedPlan: String, actualExplain: String): Boolean = {
     val simplifiedFile = new File(dir, "simplified.txt")
-    val expectedSimplified = FileUtils.readFileToString(simplifiedFile, StandardCharsets.UTF_8)
+    val expectedSimplified = Files.readString(simplifiedFile.toPath)
     lazy val explainFile = new File(dir, "explain.txt")
-    lazy val expectedExplain = FileUtils.readFileToString(explainFile, StandardCharsets.UTF_8)
+    lazy val expectedExplain = Files.readString(explainFile.toPath)
     expectedSimplified == actualSimplifiedPlan && expectedExplain == actualExplain
   }
 
@@ -150,8 +150,7 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
       val actualSimplifiedFile = new File(tempDir, s"$name.actual.simplified.txt")
       val actualExplainFile = new File(tempDir, s"$name.actual.explain.txt")
 
-      val approvedSimplified = FileUtils.readFileToString(
-        approvedSimplifiedFile, StandardCharsets.UTF_8)
+      val approvedSimplified = Files.readString(approvedSimplifiedFile.toPath)
       // write out for debugging
       Files.writeString(actualSimplifiedFile.toPath(), actualSimplified, StandardCharsets.UTF_8)
       Files.writeString(actualExplainFile.toPath(), explain, StandardCharsets.UTF_8)
@@ -212,7 +211,7 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
      *     Project [c_customer_id]
      */
     def simplifyNode(node: SparkPlan, depth: Int): String = {
-      val padding = "  " * depth
+      val padding = "  ".repeat(depth)
       var thisNode = node.nodeName
       if (node.references.nonEmpty) {
         thisNode += s" [${cleanUpReferences(node.references)}]"

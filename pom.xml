@@ -182,8 +182,8 @@
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
-    <fasterxml.jackson.version>2.19.0</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.19.0</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.19.2</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.19.2</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.8</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
@@ -211,7 +211,7 @@
     <htmlunit3-driver.version>4.21.0</htmlunit3-driver.version>
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
-    <commons-cli.version>1.9.0</commons-cli.version>
+    <commons-cli.version>1.10.0</commons-cli.version>
     <bouncycastle.version>1.80</bouncycastle.version>
     <tink.version>1.16.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
@@ -231,7 +231,7 @@
     ./python/packaging/client/setup.py, and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>18.3.0</arrow.version>
-    <ammonite.version>3.0.1</ammonite.version>
+    <ammonite.version>3.0.2</ammonite.version>
     <jjwt.version>0.12.6</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
@@ -516,12 +516,12 @@
       </dependency>
       <!--
         SPARK-51806: Kryo 4.0.x depends on objenesis 2.5.1, while Spark currently
-        depends on objenesis 3.3. Here, it is uniformly defined as version 3.3.
+        depends on objenesis 3.4. Here, it is uniformly defined as version 3.4.
         -->
       <dependency>
         <groupId>org.objenesis</groupId>
         <artifactId>objenesis</artifactId>
-        <version>3.3</version>
+        <version>3.4</version>
       </dependency>
       <dependency>
         <groupId>com.github.jnr</groupId>
@@ -1149,6 +1149,10 @@
           <exclusion>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-math3</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.scala-lang.modules</groupId>
+            <artifactId>scala-collection-compat_${scala.binary.version}</artifactId>
           </exclusion>
         </exclusions>
       </dependency>

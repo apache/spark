@@ -32,6 +32,12 @@ private[spark] trait SparkCollectionUtils {
     }
     builder.result()
   }
+
+  def isEmpty[K, V](map: java.util.Map[K, V]): Boolean = {
+    map == null || map.isEmpty()
+  }
+
+  def isNotEmpty[K, V](map: java.util.Map[K, V]): Boolean = !isEmpty(map)
 }
 
 private[spark] object SparkCollectionUtils extends SparkCollectionUtils

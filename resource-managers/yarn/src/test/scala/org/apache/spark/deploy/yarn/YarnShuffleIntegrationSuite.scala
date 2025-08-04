@@ -21,7 +21,6 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 
 import com.google.common.io.Files
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -173,7 +172,7 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
         val dbBackend = DBBackend.byName(dbBackendName)
         logWarning(s"Use ${dbBackend.name()} as the implementation of " +
           s"${SHUFFLE_SERVICE_DB_BACKEND.key}")
-        FileUtils.copyDirectory(registeredExecFile, execStateCopy)
+        Utils.copyDirectory(registeredExecFile, execStateCopy)
         assert(!ShuffleTestAccessor
           .reloadRegisteredExecutors(dbBackend, execStateCopy).isEmpty)
       }
