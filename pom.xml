@@ -2118,6 +2118,10 @@
             <groupId>com.jolbox</groupId>
             <artifactId>bonecp</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.apache.orc</groupId>
+            <artifactId>orc-core</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
 

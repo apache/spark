@@ -16,7 +16,6 @@
  */
 
 package org.apache.hive.service.cli.operation;
-import java.io.BufferedOutputStream;
 import java.io.CharArrayWriter;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
