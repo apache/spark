@@ -3638,6 +3638,12 @@
     ],
     "sqlState" : "42K08"
   },
+  "INVALID_SQL_FUNCTION_DATA_ACCESS" : {
+    "message" : [
+      "Cannot create a SQL function with CONTAINS SQL that accesses a table/view or a SQL function that reads SQL data. Please use READS SQL DATA instead."
+    ],
+    "sqlState" : "42K0E"
+  },
   "INVALID_SQL_FUNCTION_PLAN_STRUCTURE" : {
     "message" : [
       "Invalid SQL function plan structure",
