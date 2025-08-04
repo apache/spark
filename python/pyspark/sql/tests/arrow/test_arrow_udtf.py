@@ -347,8 +347,8 @@ class ArrowUDTFTests(ReusedSQLTestCase):
             result_df.collect()
 
     def test_arrow_udtf_blocks_analyze_method_none_return_type(self):
-
         with self.assertRaises(PySparkAttributeError) as cm:
+
             @arrow_udtf
             class AnalyzeUDTF:
                 def eval(self, input_col: "pa.Array") -> Iterator["pa.Table"]:
@@ -365,8 +365,8 @@ class ArrowUDTFTests(ReusedSQLTestCase):
         self.assertIn("INVALID_ARROW_UDTF_WITH_ANALYZE", str(cm.exception))
 
     def test_arrow_udtf_blocks_analyze_method_with_return_type(self):
-
         with self.assertRaises(PySparkAttributeError) as cm:
+
             @arrow_udtf(returnType="result: int")
             class AnalyzeUDTF:
                 def eval(self, input_col: "pa.Array") -> Iterator["pa.Table"]:
