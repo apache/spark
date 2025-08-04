@@ -339,6 +339,7 @@
       <properties>
         <hive.deps.scope>provided</hive.deps.scope>
         <hive.llap.scope>provided</hive.llap.scope>
+        <calcite.deps.scope>provided</calcite.deps.scope>
       </properties>
     </profile>
     <profile>
