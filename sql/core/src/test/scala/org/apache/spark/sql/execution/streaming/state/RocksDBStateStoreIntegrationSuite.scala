@@ -382,4 +382,67 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest
       }
     }
   }
+
+  testWithColumnFamilies("bounded memory usage calculation",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    withTempDir { dir =>
+      withSQLConf(
+        (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName),
+        (SQLConf.CHECKPOINT_LOCATION.key -> dir.getCanonicalPath),
+        (SQLConf.SHUFFLE_PARTITIONS.key -> "2"), // Use 2 partitions to test multiple providers
+        (s"${RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX}.boundedMemoryUsage" -> "true")) {
+
+        // Clear any existing providers from previous tests
+        RocksDBMemoryManager.resetWriteBufferManagerAndCache
+
+        val inputData = MemoryStream[Int]
+
+        val query = inputData.toDS().toDF("value")
+          .select($"value")
+          .groupBy($"value")
+          .agg(count("*"))
+          .writeStream
+          .format("console")
+          .outputMode("complete")
+          .start()
+
+        try {
+          // Initially no providers should be registered
+          assert(RocksDBMemoryManager.getNumRocksDBInstances(true) == 0)
+
+          // Add data to trigger state store creation
+          inputData.addData(1, 2, 3, 4)
+          query.processAllAvailable()
+
+          // With 2 partitions, we should have 2 bounded memory providers registered
+          assert(RocksDBMemoryManager.getNumRocksDBInstances(true) == 2)
+
+          assert(RocksDBMemoryManager.getNumRocksDBInstances(false) == 0)
+
+          // Add more data and check providers remain registered
+          inputData.addData(5, 6, 7, 8)
+          query.processAllAvailable()
+
+          // Should still have 2 instances
+          assert(RocksDBMemoryManager.getNumRocksDBInstances(true) == 2)
+
+          // Verify that the progress contains reasonable memory usage values
+          // With bounded memory, each provider should report its share of total memory
+          // (not 0L as in the old implementation)
+          val progress = query.lastProgress
+          val stateOperators = progress.stateOperators
+          assert(stateOperators.nonEmpty)
+
+          // Check that memory usage is reported at the operator level
+          stateOperators.foreach { op =>
+            // Memory usage is reported in memoryUsedBytes, not in customMetrics
+            val memUsage = op.memoryUsedBytes
+            assert(memUsage > 0L, s"Memory usage should be greater than 0, but was $memUsage")
+          }
+        } finally {
+          query.stop()
+        }
+      }
+    }
+  }
 }
