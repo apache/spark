@@ -3643,6 +3643,13 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
 timestamp_seconds.__doc__ = pysparkfuncs.timestamp_seconds.__doc__
 
 
+def time_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_diff", lit(unit), start, end)
+
+
+time_diff.__doc__ = pysparkfuncs.time_diff.__doc__
+
+
 def timestamp_millis(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("timestamp_millis", col)
 
@@ -4012,6 +4019,12 @@ def try_make_timestamp_ltz(
 try_make_timestamp_ltz.__doc__ = pysparkfuncs.try_make_timestamp_ltz.__doc__
 
 
+@overload
+def make_timestamp_ntz(date: "ColumnOrName", time: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
 def make_timestamp_ntz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -4020,14 +4033,52 @@ def make_timestamp_ntz(
     mins: "ColumnOrName",
     secs: "ColumnOrName",
 ) -> Column:
-    return _invoke_function_over_columns(
-        "make_timestamp_ntz", years, months, days, hours, mins, secs
-    )
+    ...
+
+
+def make_timestamp_ntz(
+    yearsOrDate: "ColumnOrName",
+    monthsOrTime: "ColumnOrName",
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+) -> Column:
+    # Probe input arguments.
+    hasDays: bool = days is not None
+    hasHours: bool = hours is not None
+    hasMins: bool = mins is not None
+    hasSecs: bool = secs is not None
+    # Branch execution based on the number of input arguments.
+    if hasDays and hasHours and hasMins and hasSecs:
+        # Overload with inputs: years, months, days, hours, mins, secs.
+        return _invoke_function_over_columns(
+            "make_timestamp_ntz", yearsOrDate, monthsOrTime, days, hours, mins, secs
+        )
+    elif not hasDays and not hasHours and not hasMins and not hasSecs:
+        # Overload with inputs: date, time.
+        return _invoke_function_over_columns(
+            "make_timestamp_ntz", yearsOrDate, monthsOrTime
+        )
+    else:
+        raise PySparkValueError(
+            errorClass="INVALID_NUM_ARGS",
+            messageParameters={
+                "arg_name": "make_timestamp_ntz",
+                "num_args": "2 or 6",
+            },
+        )
 
 
 make_timestamp_ntz.__doc__ = pysparkfuncs.make_timestamp_ntz.__doc__
 
 
+@overload
+def try_make_timestamp_ntz(date: "ColumnOrName", time: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
 def try_make_timestamp_ntz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -4036,9 +4087,41 @@ def try_make_timestamp_ntz(
     mins: "ColumnOrName",
     secs: "ColumnOrName",
 ) -> Column:
-    return _invoke_function_over_columns(
-        "try_make_timestamp_ntz", years, months, days, hours, mins, secs
-    )
+    ...
+
+
+def try_make_timestamp_ntz(
+    yearsOrDate: "ColumnOrName",
+    monthsOrTime: "ColumnOrName",
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+) -> Column:
+    # Probe input arguments.
+    hasDays: bool = days is not None
+    hasHours: bool = hours is not None
+    hasMins: bool = mins is not None
+    hasSecs: bool = secs is not None
+    # Branch execution based on the number of input arguments.
+    if hasDays and hasHours and hasMins and hasSecs:
+        # Overload with inputs: years, months, days, hours, mins, secs.
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ntz", yearsOrDate, monthsOrTime, days, hours, mins, secs
+        )
+    elif not hasDays and not hasHours and not hasMins and not hasSecs:
+        # Overload with inputs: date, time.
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ntz", yearsOrDate, monthsOrTime
+        )
+    else:
+        raise PySparkValueError(
+            errorClass="INVALID_NUM_ARGS",
+            messageParameters={
+                "arg_name": "try_make_timestamp_ntz",
+                "num_args": "2 or 6",
+            },
+        )
 
 
 try_make_timestamp_ntz.__doc__ = pysparkfuncs.try_make_timestamp_ntz.__doc__
