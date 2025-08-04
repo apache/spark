@@ -1063,6 +1063,72 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
+  test("[SPARK-53074] partial clustering avoided to meet a non-JOIN required distribution") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 45.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 50.0, cast('2020-01-02' as timestamp)), " +
+      "(2, 15.0, cast('2020-01-02' as timestamp)), " +
+      "(2, 20.0, cast('2020-01-03' as timestamp)), " +
+      "(3, 20.0, cast('2020-02-01' as timestamp))")
+
+    for {
+      pushDownValues <- Seq(true, false)
+      enable <- Seq("true", "false")
+    } yield {
+      withSQLConf(
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> false.toString,
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> enable) {
+        // The left side uses a key-grouped partitioning to satisfy the WINDOW function's
+        // required distribution. By default, the left side will be partially clustered (since
+        // it's estimated to be larger), but this partial clustering won't be applied because the
+        // left side needs to be key-grouped partitioned to satisfy the WINDOW's required
+        // distribution.
+        // The left side needs to project additional fields to ensure it's estimated to be
+        // larger than the right side.
+        val df = sql(
+          s"""
+             |WITH purchases_windowed AS (
+             |  SELECT
+             |    ROW_NUMBER() OVER (
+             |      PARTITION BY item_id ORDER BY time DESC
+             |    ) AS RN,
+             |    item_id,
+             |    price,
+             |    STRUCT(item_id, price, time) AS purchases_struct
+             |  FROM testcat.ns.$purchases
+             |)
+             |SELECT
+             |  SUM(p.price),
+             |  SUM(p.purchases_struct.item_id),
+             |  SUM(p.purchases_struct.price),
+             |  MAX(p.purchases_struct.time)
+             |FROM
+             |  purchases_windowed p JOIN testcat.ns.$items i
+             |  ON i.id = p.item_id
+             |WHERE p.RN = 1
+             |""".stripMargin)
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        assert(shuffles.isEmpty, "should not contain any shuffle")
+        if (pushDownValues) {
+          val scans = collectScans(df.queryExecution.executedPlan)
+          assert(scans.forall(_.inputRDD.partitions.length === 3))
+        }
+        checkAnswer(df, Seq(Row(140.0, 7, 140.0, Timestamp.valueOf("2020-02-01 00:00:00"))))
+      }
+    }
+  }
+
   test("data source partitioning + dynamic partition filtering") {
     withSQLConf(
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
