@@ -489,6 +489,10 @@ class TransformWithStateConnectSuite
     }
   }
 
+  test("transformWithState - schema evolution") {
+
+  }
+
   /* Utils functions for tests */
   def prepareInputData(inputPath: String, col1: Seq[String], col2: Seq[Int]): File = {
     // Ensure the parent directory exists
