@@ -155,6 +155,7 @@
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-parser</artifactId>
+      <scope>${hive.deps.scope}</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.calcite</groupId>
@@ -165,7 +166,7 @@
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-hdfs</artifactId>
       <version>${hadoop.version}</version>
-      <scope>runtime</scope>
+      <scope>${hadoop.deps.scope}</scope>
     </dependency>
 
     <!-- hive-serde already depends on avro, but this brings in customized config of avro deps from parent -->
