@@ -26,7 +26,6 @@ import javax.naming.NamingException;
 import javax.naming.directory.InitialDirContext;
 import javax.security.sasl.AuthenticationException;
 
-import org.apache.commons.lang3.Strings;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hive.service.ServiceUtils;
 
@@ -72,7 +71,7 @@ public class LdapAuthenticationProviderImpl implements PasswdAuthenticationProvi
     } else {
       String[] patterns = userDNPattern.split(":");
       for (String pattern : patterns) {
-        if (Strings.CS.contains(pattern, ",") && Strings.CS.contains(pattern, "=")) {
+        if (pattern.contains(",") && pattern.contains("=")) {
           candidatePrincipals.add(pattern.replaceAll("%s", user));
         }
       }
