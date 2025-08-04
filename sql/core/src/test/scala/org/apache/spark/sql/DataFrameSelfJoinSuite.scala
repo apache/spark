@@ -18,8 +18,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, AttributeReference, PythonUDF, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{Expand, Generate, ScriptInputOutputSchema, ScriptTransformation, Window => WindowPlan}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, AttributeReference, EqualTo, NamedExpression, PythonUDF, SortOrder}
+import org.apache.spark.sql.catalyst.plans.logical.{Expand, Generate, Join, ScriptInputOutputSchema, ScriptTransformation, Window => WindowPlan}
 import org.apache.spark.sql.classic.{Dataset => DatasetImpl}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, count, explode, sum, year}
@@ -497,6 +497,31 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       val df1 = df.as("t1")
       val df2 = df.as("t2")
       assert(df1.join(df2, $"t1.i" === $"t2.i").cache().count() == 1)
+    }
+  }
+
+  test("SPARK-53098: `DeduplicateRelations` shouldn't remap expressions if old `ExprId` still " +
+  "exists in output") {
+    val df1 = Seq[TestData](TestData(1, "sales")).toDS()
+    val df2 = Seq[TestData](TestData(1, "sales")).toDS()
+    val df3 = df1.join(df2, df1("key") === df2("key")).select(df1("*"))
+    for (conf <- Seq(true, false)) {
+      withSQLConf(
+        // Disable auto-resolution of ambiguity because we want to test behavior before
+        // `resolveSelfJoinCondition` fully kicks in (while we still have ambiguous join condition)
+        SQLConf.DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY.key -> "false",
+        SQLConf.DONT_DEDUPLICATE_EXPRESSION_IF_EXPR_ID_IN_OUTPUT.key -> conf.toString
+      ) {
+        val analyzedPlan =
+          df1.join(df3, df1.col("key") === df3.col("key"), "left_outer").queryExecution.analyzed
+          .asInstanceOf[Join]
+        val joinCondition = analyzedPlan.condition.get.asInstanceOf[EqualTo]
+        val leftBranchExprId = joinCondition.left.asInstanceOf[NamedExpression]
+        val rightBranchExprId = joinCondition.right.asInstanceOf[NamedExpression]
+        assert(leftBranchExprId === rightBranchExprId)
+        assert(analyzedPlan.left.outputSet.contains(leftBranchExprId) == conf)
+        assert(analyzedPlan.right.outputSet.contains(leftBranchExprId) != conf)
+      }
     }
   }
 }
