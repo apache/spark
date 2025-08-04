@@ -18,7 +18,6 @@ package org.apache.hive.service.cli.operation;
 
 import java.util.Map;
 
-import org.apache.hadoop.hive.ql.session.OperationLog;
 import org.apache.hive.service.cli.OperationType;
 import org.apache.hive.service.cli.session.HiveSession;
 

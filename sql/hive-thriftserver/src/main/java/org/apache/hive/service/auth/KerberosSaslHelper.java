@@ -20,7 +20,6 @@ import java.io.IOException;
 import java.util.Map;
 import javax.security.sasl.SaslException;
 
-import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.hive.metastore.security.HadoopThriftAuthBridge;
 import org.apache.hadoop.hive.metastore.security.HadoopThriftAuthBridge.Server;
 import org.apache.hive.service.cli.thrift.ThriftCLIService;
