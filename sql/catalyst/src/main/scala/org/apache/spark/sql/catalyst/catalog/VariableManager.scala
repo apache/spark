@@ -91,7 +91,8 @@ trait VariableManager {
 
   /**
    * Create a variable.
-   * @param variables Variables to be created
+   * @param variables Variables to be created,
+   *                  a list of tuples of nameParts and varDef for each variable
    * @param overrideIfExists If true, the new variable will replace an existing one
    *                         with the same identifier, if it exists.
    */
