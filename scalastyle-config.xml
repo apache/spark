@@ -627,6 +627,11 @@ This file is divided into 3 sections:
     <customMessage>Use toString of SparkStreamUtils or Utils instead.</customMessage>
   </check>
 
+  <check customId="ioutilswrite" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bIOUtils\.write\b</parameter></parameters>
+    <customMessage>Use Java `write` instead.</customMessage>
+  </check>
+
   <check customId="maputils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.collections4\.MapUtils\b</parameter></parameters>
     <customMessage>Use org.apache.spark.util.collection.Utils instead.</customMessage>

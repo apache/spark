@@ -32,7 +32,6 @@ import scala.collection.mutable.ListBuffer
 import scala.util.{Random, Try}
 
 import com.google.common.io.Files
-import org.apache.commons.io.IOUtils
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -343,7 +342,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     } else {
       new FileOutputStream(path)
     }
-    IOUtils.write(content, outputStream)
+    outputStream.write(content)
     outputStream.close()
     content.length
   }
