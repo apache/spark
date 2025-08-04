@@ -51,7 +51,7 @@ abstract class BenchmarkBase {
     System.setProperty(IS_TESTING.key, "true")
     val regenerateBenchmarkFiles: Boolean = System.getenv("SPARK_GENERATE_BENCHMARK_FILES") == "1"
     if (regenerateBenchmarkFiles) {
-      val version = System.getProperty("java.version").split("\\D+")(0).toInt
+      val version = Utils.javaVersion.split("\\D+")(0).toInt
       val jdkString = if (version > 17) s"-jdk$version" else ""
       val resultFileName =
         s"${this.getClass.getSimpleName.replace("$", "")}$jdkString$suffix-results.txt"

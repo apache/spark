@@ -45,7 +45,7 @@ import org.apache.spark.sql.connect.test.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{SparkFileUtils, SparkThreadUtils}
+import org.apache.spark.util.{SparkFileUtils, SparkSystemUtils, SparkThreadUtils}
 
 class ClientE2ETestSuite
     extends QueryTest
@@ -227,7 +227,7 @@ class ClientE2ETestSuite
   }
 
   test("spark deep recursion") {
-    var recursionDepth = if (System.getProperty("os.arch") == "s390x") 400 else 500
+    var recursionDepth = if (SparkSystemUtils.osArch == "s390x") 400 else 500
     var df = spark.range(1)
     for (a <- 1 to recursionDepth) {
       df = df.union(spark.range(a, a + 1))
