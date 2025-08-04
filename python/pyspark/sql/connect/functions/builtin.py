@@ -3643,6 +3643,13 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
 timestamp_seconds.__doc__ = pysparkfuncs.timestamp_seconds.__doc__
 
 
+def time_trunc(unit: str, time: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_trunc", lit(unit), time)
+
+
+time_trunc.__doc__ = pysparkfuncs.time_trunc.__doc__
+
+
 def timestamp_millis(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("timestamp_millis", col)
 

@@ -400,6 +400,17 @@ class FunctionsTestsMixin:
         rndn2 = df.select("key", F.randn(0)).collect()
         self.assertEqual(sorted(rndn1), sorted(rndn2))
 
+    def test_time_trunc(self):
+        # SPARK-5XXXX: test the time_trunc function.
+        df = self.spark.createDataFrame([(datetime.time(1, 2, 3))], ["time"])
+        result = datetime.time(1, 2, 0)
+        row_from_col = df.select(F.time_trunc("minute", df.time)).first()
+        self.assertIsInstance(row_from_col[0], datetime.time)
+        self.assertEqual(row_from_col[0], result)
+        row_from_name = df.select(F.time_trunc("minute", "time")).first()
+        self.assertIsInstance(row_from_name[0], datetime.time)
+        self.assertEqual(row_from_name[0], result)
+
     def test_try_parse_url(self):
         df = self.spark.createDataFrame(
             [("https://spark.apache.org/path?query=1", "QUERY", "query")],
