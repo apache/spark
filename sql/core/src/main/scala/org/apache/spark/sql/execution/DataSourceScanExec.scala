@@ -234,9 +234,10 @@ case class RowDataSourceScanExec(
     val indentStr = " ".repeat(2 * indent)
 
     val joinStrings = joinedPushedDownOperators.zipWithIndex.map { case (operators, index) =>
+      val joinSideStr = if (index == 0) "L" else "R"
       val parts = buildOperatorParts(operators, indent)
       val metadataStr = formatMetadata(parts, indentStr)
-      s"$indentStr[$index]: [$metadataStr]"
+      s"$indentStr[$joinSideStr]: [$metadataStr]"
     }
 
     joinStrings.mkString(",\n")
