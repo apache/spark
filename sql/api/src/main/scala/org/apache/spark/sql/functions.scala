@@ -6293,6 +6293,29 @@ object functions {
     Column.internalFn("timestampadd", lit(unit), quantity, ts)
 
   /**
+   * Returns the difference between two times, measured in specified units.
+   *
+   * @param unit
+   *   A STRING representing the unit to truncate the time to. Supported units are: "HOUR",
+   *   "MINUTE", "SECOND", "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
+   * @param start
+   *   A starting TIME.
+   * @param end
+   *   An ending TIME.
+   * @return
+   *   A TIME truncated to the specified unit.
+   * @note
+   *   If any of the inputs is `NULL`, the result is `NULL`.
+   * @throws IllegalArgumentException
+   *   If the `unit` is not supported.
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def time_diff(unit: Column, start: Column, end: Column): Column = {
+    Column.fn("time_diff", unit, start, end)
+  }
+
+  /**
    * Parses the `timestamp` expression with the `format` expression to a timestamp without time
    * zone. Returns null with invalid input.
    *

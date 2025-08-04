@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.time.LocalTime
 import java.time.temporal.ChronoUnit
 
-import org.apache.spark.{SparkConf, SparkDateTimeException}
+import org.apache.spark.{SparkConf, SparkDateTimeException, SparkIllegalArgumentException}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -239,6 +239,57 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
     // Check that the results match the expected output.
     checkAnswer(result1, expected)
     checkAnswer(result2, expected)
+  }
+
+  test("SPARK-5XXXX: time_diff function") {
+    // Input data for the function.
+    val schema = StructType(Seq(
+      StructField("unit", StringType, nullable = false),
+      StructField("start", TimeType(), nullable = false),
+      StructField("end", TimeType(), nullable = false)
+    ))
+    val data = Seq(
+      Row("HOUR", LocalTime.parse("20:30:29"), LocalTime.parse("21:30:28")),
+      Row("second", LocalTime.parse("09:32:05.359123"), LocalTime.parse("17:23:49.906152")),
+      Row("MicroSecond", LocalTime.parse("09:32:05.359123"), LocalTime.parse("17:23:49.906152"))
+    )
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+    // Test the function using both `selectExpr` and `select`.
+    val result1 = df.selectExpr(
+      "time_diff(unit, start, end)"
+    )
+    val result2 = df.select(
+      time_diff(col("unit"), col("start"), col("end"))
+    )
+    // Check that both methods produce the same result.
+    checkAnswer(result1, result2)
+
+    // Expected output of the function.
+    val expected = Seq(
+      0,
+      28304,
+      28304547029L
+    ).toDF("diff").select(col("diff"))
+    // Check that the results match the expected output.
+    checkAnswer(result1, expected)
+    checkAnswer(result2, expected)
+
+    // Error is thrown for malformed input.
+    val invalidUnitDF = Seq(
+      ("invalid_unit", LocalTime.parse("01:02:03"), LocalTime.parse("01:02:03"))
+    ).toDF("unit", "start", "end")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        invalidUnitDF.select(time_diff(col("unit"), col("start"), col("end"))).collect()
+      },
+      condition = "INVALID_PARAMETER_VALUE.TIME_UNIT",
+      parameters = Map(
+        "functionName" -> "`timediff`",
+        "parameter" -> "`unit`",
+        "invalidValue" -> "'invalid_unit'"
+      )
+    )
   }
 
   test("SPARK-52883: to_time function without format") {
