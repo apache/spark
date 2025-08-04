@@ -40,7 +40,7 @@ jobs:
           "PYSPARK_IMAGE_TO_TEST": "python-311",
           "PYTHON_TO_TEST": "python3.11",
           "SPARK_ANSI_SQL_MODE": "false",
-          "SPARK_TEST_SPARK_BF_SUITE_ENABLED": "true"
+          "SPARK_TEST_SPARK_BLOOM_FILTER_SUITE_ENABLED": "true"
         }
       jobs: >-
         {
