@@ -28,7 +28,7 @@ import org.json4s.{DefaultFormats, Formats}
 import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{QueryContext, QueryContextType, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkDateTimeException, SparkException, SparkIllegalArgumentException, SparkNumberFormatException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
-import org.apache.spark.connect.proto.{FetchErrorDetailsRequest, FetchErrorDetailsResponse, SparkConnectServiceGrpc, UserContext}
+import org.apache.spark.connect.proto.{ClientEnv, FetchErrorDetailsRequest, FetchErrorDetailsResponse, SparkConnectServiceGrpc, UserContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException, TempTableAlreadyExistsException}
@@ -53,12 +53,13 @@ private[client] class GrpcExceptionConverter(channel: ManagedChannel) extends Lo
 
   val grpcStub = SparkConnectServiceGrpc.newBlockingStub(channel)
 
-  def convert[T](sessionId: String, userContext: UserContext, clientType: String)(f: => T): T = {
+  def convert[T](sessionId: String, userContext: UserContext, clientType: String,
+                 clientEnv: ClientEnv)(f: => T): T = {
     try {
       f
     } catch {
       case e: StatusRuntimeException =>
-        throw toThrowable(e, sessionId, userContext, clientType)
+        throw toThrowable(e, sessionId, userContext, clientType, clientEnv)
     }
   }
 
@@ -66,25 +67,26 @@ private[client] class GrpcExceptionConverter(channel: ManagedChannel) extends Lo
       sessionId: String,
       userContext: UserContext,
       clientType: String,
-      iter: CloseableIterator[T]): CloseableIterator[T] = {
+      iter: CloseableIterator[T],
+      clientEnv: ClientEnv): CloseableIterator[T] = {
     new WrappedCloseableIterator[T] {
 
       override def innerIterator: Iterator[T] = iter
 
       override def hasNext: Boolean = {
-        convert(sessionId, userContext, clientType) {
+        convert(sessionId, userContext, clientType, clientEnv) {
           iter.hasNext
         }
       }
 
       override def next(): T = {
-        convert(sessionId, userContext, clientType) {
+        convert(sessionId, userContext, clientType, clientEnv) {
           iter.next()
         }
       }
 
       override def close(): Unit = {
-        convert(sessionId, userContext, clientType) {
+        convert(sessionId, userContext, clientType, clientEnv) {
           iter.close()
         }
       }
@@ -99,7 +101,8 @@ private[client] class GrpcExceptionConverter(channel: ManagedChannel) extends Lo
       info: ErrorInfo,
       sessionId: String,
       userContext: UserContext,
-      clientType: String): Option[Throwable] = {
+      clientType: String,
+      clientEnv: ClientEnv): Option[Throwable] = {
     val errorId = info.getMetadataOrDefault("errorId", null)
     if (errorId == null) {
       logWarning("Unable to fetch enriched error since errorId is missing")
@@ -114,6 +117,7 @@ private[client] class GrpcExceptionConverter(channel: ManagedChannel) extends Lo
           .setErrorId(errorId)
           .setUserContext(userContext)
           .setClientType(clientType)
+          .setClientEnv(clientEnv)
           .build())
 
       if (!errorDetailsResponse.hasRootErrorIdx) {
@@ -136,7 +140,8 @@ private[client] class GrpcExceptionConverter(channel: ManagedChannel) extends Lo
       ex: StatusRuntimeException,
       sessionId: String,
       userContext: UserContext,
-      clientType: String): Throwable = {
+      clientType: String,
+      clientEnv: ClientEnv): Throwable = {
     val status = StatusProto.fromThrowable(ex)
 
     // Extract the ErrorInfo from the StatusProto, if present.
@@ -147,7 +152,7 @@ private[client] class GrpcExceptionConverter(channel: ManagedChannel) extends Lo
     if (errorInfoOpt.isDefined) {
       // If ErrorInfo is found, try to fetch enriched error details by an additional RPC.
       val enrichedErrorOpt =
-        fetchEnrichedError(errorInfoOpt.get, sessionId, userContext, clientType)
+        fetchEnrichedError(errorInfoOpt.get, sessionId, userContext, clientType, clientEnv)
       if (enrichedErrorOpt.isDefined) {
         return enrichedErrorOpt.get
       }
