@@ -102,6 +102,18 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
+      <groupId>org.scalameta</groupId>
+      <artifactId>semanticdb-shared_${scala.binary.version}</artifactId>
+      <version>4.13.1.1</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.scala-lang</groupId>
+          <artifactId>scalap</artifactId>
+        </exclusion>
+      </exclusions>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
       <type>test-jar</type>
