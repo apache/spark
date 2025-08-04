@@ -12703,6 +12703,63 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def time_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Column:
+    """
+    Returns the difference between two times, measured in specified units.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    unit : literal string
+        The unit to truncate the time to. Supported units are: "HOUR", "MINUTE", "SECOND",
+        "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
+    start : :class:`~pyspark.sql.Column` or column name
+        A starting time.
+    end : :class:`~pyspark.sql.Column` or column name
+        An ending time.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The difference between two times, in the specified units.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.date_diff`
+    :meth:`pyspark.sql.functions.timestamp_diff`
+
+    Examples
+    --------
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("13:08:15", "21:30:28")], ['start', 'end']) \
+    ...     .withColumn("start", sf.col("start").cast("time")) \
+    ...     .withColumn("end", sf.col("end").cast("time"))
+    >>> df.select('*', sf.time_diff('HOUR', 'start', 'end')).show()
+    +--------+--------+---------------------------+
+    |   start|     end|time_diff(HOUR, start, end)|
+    +--------+--------+---------------------------+
+    |20:30:29|21:30:28|                          0|
+    +--------+--------+---------------------------+
+    >>> df.select('*', sf.time_diff('MINUTE', 'start', 'end')).show()
+    +--------+--------+-----------------------------+
+    |   start|     end|time_diff(MINUTE, start, end)|
+    +--------+--------+-----------------------------+
+    |20:30:29|21:30:28|                           59|
+    +--------+--------+-----------------------------+
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function(
+        "time_trunc",
+        _enum_to_value(unit),
+        _to_java_column(start),
+        _to_java_column(end)
+    )
+
+
+@_try_remote_functions
 def timestamp_millis(col: "ColumnOrName") -> Column:
     """
     Creates timestamp from the number of milliseconds since UTC epoch.
