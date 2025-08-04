@@ -3396,11 +3396,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             lag_scol = F.lag(scol, lag).over(Window.orderBy(NATURAL_ORDER_COLUMN_NAME))
             lag_col_name = verify_temp_column_name(sdf, "__autocorr_lag_tmp_col__")
-            corr = (
-                sdf.withColumn(lag_col_name, lag_scol)
-                .select(F.corr(scol, F.col(lag_col_name)))
-                .head()[0]
-            )
+
+            sdf_lag = sdf.withColumn(lag_col_name, lag_scol)
+            if is_ansi_mode_enabled(sdf.sparkSession):
+                cov_value = sdf_lag.select(F.covar_samp(scol, F.col(lag_col_name))).first()[0]
+                if cov_value is None or cov_value == 0.0:
+                    return np.nan
+            corr = sdf_lag.select(F.corr(scol, F.col(lag_col_name))).head()[0]
+
         return np.nan if corr is None else corr
 
     def corr(
