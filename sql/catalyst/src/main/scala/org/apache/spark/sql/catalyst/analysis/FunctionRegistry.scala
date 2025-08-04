@@ -678,7 +678,7 @@ object FunctionRegistry {
     expression[MakeTime]("make_time"),
     expression[TimeTrunc]("time_trunc"),
     expressionBuilder("make_timestamp", MakeTimestampExpressionBuilder),
-    expression[TryMakeTimestamp]("try_make_timestamp"),
+    expressionBuilder("try_make_timestamp", TryMakeTimestampExpressionBuilder),
     expression[MonthName]("monthname"),
     // We keep the 2 expression builders below to have different function docs.
     expressionBuilder("make_timestamp_ntz", MakeTimestampNTZExpressionBuilder, setAlias = true),
