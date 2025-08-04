@@ -847,7 +847,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.6-10</version>
+        <version>1.5.5-4</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -2625,10 +2625,6 @@
             <groupId>org.apache.hive</groupId>
             <artifactId>hive-storage-api</artifactId>
           </exclusion>
-          <exclusion>
-            <groupId>com.github.luben</groupId>
-            <artifactId>zstd-jni</artifactId>
-          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -2705,10 +2701,6 @@
           <exclusion>
             <groupId>javax.annotation</groupId>
             <artifactId>javax.annotation-api</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.github.luben</groupId>
-            <artifactId>zstd-jni</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
