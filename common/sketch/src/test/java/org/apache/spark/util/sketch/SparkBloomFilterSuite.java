@@ -35,7 +35,7 @@ import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
 @EnabledIfEnvironmentVariable(
-    named = "SPARK_TEST_SPARK_BLOOM_FILTER_SUITE_ENABLED", matches = "true")
+  named = "SPARK_TEST_SPARK_BLOOM_FILTER_SUITE_ENABLED", matches = "true")
 public class SparkBloomFilterSuite {
 
   // the implemented fpp limit is only approximating the hard boundary,
