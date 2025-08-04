@@ -20,6 +20,7 @@ package org.apache.spark.sql.jdbc.v2.join
 import java.sql.Connection
 import java.util.Locale
 
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{DockerJDBCIntegrationSuite, JdbcDialect, OracleDatabaseOnDocker, OracleDialect}
 import org.apache.spark.sql.jdbc.v2.JDBCV2JoinPushdownIntegrationSuiteBase
 import org.apache.spark.sql.types.DataTypes
@@ -56,6 +57,15 @@ import org.apache.spark.tags.DockerTest
 class OracleJoinPushdownIntegrationSuite
   extends DockerJDBCIntegrationSuite
   with JDBCV2JoinPushdownIntegrationSuiteBase {
+  override def excluded: Seq[String] = Seq(
+    // Following tests are harder to be supported for Oracle because Oracle connector does
+    // casts in predicates. There is a separate test in this suite that is similar to
+    // "Test explain formatted" test from base suite.
+    "Test self join with condition",
+    "Test multi-way self join with conditions",
+    "Test explain formatted"
+  )
+
   override val namespace: String = "SYSTEM"
 
   override val db = new OracleDatabaseOnDocker
@@ -73,5 +83,39 @@ class OracleJoinPushdownIntegrationSuite
   // This method comes from DockerJDBCIntegrationSuite
   override def dataPreparation(connection: Connection): Unit = {
     super.dataPreparation()
+  }
+
+  test("Test explain formatted - Oracle compatible") {
+    val sqlQuery =
+      s"""
+         |SELECT * FROM $catalogAndNamespace.$casedJoinTableName1 a
+         |JOIN $catalogAndNamespace.$casedJoinTableName2 b
+         |ON a.id = b.id + 1
+         |JOIN $catalogAndNamespace.$casedJoinTableName3 c
+         |ON b.id = c.id + 1
+         |JOIN $catalogAndNamespace.$casedJoinTableName4 d
+         |ON c.id = d.id + 1
+         |""".stripMargin
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+
+      // scalastyle:off line.size.limit
+      checkJoinPushed(
+        df,
+        s"""PushedFilters: [CAST(id_3 AS decimal(11,0)) = (id_4 + 1)], PushedJoins: [
+           |[L]: [PushedFilters: [CAST(ID_1 AS decimal(11,0)) = (id_3 + 1)],
+           |    PushedJoins: [
+           |    [L]: [PushedFilters: [CAST(ID AS decimal(11,0)) = (ID_1 + 1)],
+           |        PushedJoins: [
+           |        [L]: [Relation: $catalogAndNamespace.${caseConvert(joinTableName1)}, PushedFilters: [${caseConvert("id")} IS NOT NULL]],
+           |        [R]: [Relation: $catalogAndNamespace.${caseConvert(joinTableName2)}, PushedFilters: [${caseConvert("id")} IS NOT NULL]]
+           |      ]],
+           |    [R]: [Relation: $catalogAndNamespace.${caseConvert(joinTableName3)}, PushedFilters: [id IS NOT NULL]]
+           |  ]],
+           |[R]: [Relation: $catalogAndNamespace.${caseConvert(joinTableName4)}, PushedFilters: [id IS NOT NULL]]]""".stripMargin
+      )
+      // scalastyle:on line.size.limit
+    }
   }
 }

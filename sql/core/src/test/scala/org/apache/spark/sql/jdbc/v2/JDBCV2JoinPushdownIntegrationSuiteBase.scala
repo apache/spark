@@ -56,11 +56,11 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     .set(s"spark.sql.catalog.$catalogName.pushDownOffset", "true")
     .set(s"spark.sql.catalog.$catalogName.caseSensitive", "false")
 
-  private def catalogAndNamespace = s"$catalogName.${caseConvert(namespace)}"
-  private def casedJoinTableName1 = caseConvert(joinTableName1)
-  private def casedJoinTableName2 = caseConvert(joinTableName2)
-  private def casedJoinTableName3 = caseConvert(joinTableName3)
-  private def casedJoinTableName4 = caseConvert(joinTableName4)
+  protected def catalogAndNamespace = s"$catalogName.${caseConvert(namespace)}"
+  protected def casedJoinTableName1 = caseConvert(joinTableName1)
+  protected def casedJoinTableName2 = caseConvert(joinTableName2)
+  protected def casedJoinTableName3 = caseConvert(joinTableName3)
+  protected def casedJoinTableName4 = caseConvert(joinTableName4)
 
   def qualifyTableName(tableName: String): String = {
     val fullyQualifiedCasedNamespace = jdbcDialect.quoteIdentifier(caseConvert(namespace))
