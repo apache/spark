@@ -35,7 +35,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
-import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
+import org.apache.spark.sql.execution.datasources.v2.{PushedDownOperators, TableSampleInfo}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
 import org.apache.spark.sql.internal.SQLConf
@@ -160,6 +160,9 @@ case class RowDataSourceScanExec(
 
   private def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
 
+  private def pushedSampleMetadataString(s: TableSampleInfo): String =
+    s"SAMPLE (${(s.upperBound - s.lowerBound) * 100}) ${s.withReplacement} SEED(${s.seed})"
+
   override val metadata: Map[String, String] = {
     val markedFilters = if (filters.nonEmpty) {
       for (filter <- filters) yield {
@@ -189,7 +192,7 @@ case class RowDataSourceScanExec(
 
     val pushedJoins = if (pushedDownOperators.joinedRelationPushedDownOperators.nonEmpty) {
       Map("PushedJoins" ->
-        s"\n${getPushedJoinString(pushedDownOperators.joinedRelationPushedDownOperators)}")
+        s"[\n${getPushedJoinString(pushedDownOperators.joinedRelationPushedDownOperators)}]")
     } else {
       Map()
     }
@@ -203,9 +206,7 @@ case class RowDataSourceScanExec(
             seqToString(v.groupByExpressions.map(_.describe()).toImmutableArraySeq))} ++
       topNOrLimitInfo ++
       offsetInfo ++
-      pushedDownOperators.sample.map(v => "PushedSample" ->
-        s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
-      ) ++
+      pushedDownOperators.sample.map(v => "PushedSample" -> pushedSampleMetadataString(v)) ++
       pushedJoins
   }
 
@@ -216,9 +217,9 @@ case class RowDataSourceScanExec(
    * The exmaple of resulting string is the following:
    *
    * PushedJoins:
-   * [0]: [PushedFilters: [ID_03c3fe2f_6cd9_4794_ace9_85e617420548 = (ID + 1)],
+   * [0]: [PushedFilters: [ID_1 = (ID_2 + 1)],
    *      PushedJoins: [
-   *      [0]: [PushedFilters: [ID_c0e665d3_3cea_4fb8_b57d_6a9f26af360f = (ID + 1)],
+   *      [0]: [PushedFilters: [ID_1 = (ID + 1)],
    *         PushedJoins: [
    *            [0]: [Relation: join_pushdown_catalog.tbl1, PushedFilters: [ID IS NOT NULL]],
    *            [1]: [Relation: join_pushdown_catalog.tbl2, PushedFilters: [ID IS NOT NULL]]
@@ -230,62 +231,57 @@ case class RowDataSourceScanExec(
   private def getPushedJoinString(
       joinedPushedDownOperators: Seq[PushedDownOperators],
       indent: Int = 0): String = {
-    val indentStr = "  " * indent
+    val indentStr = " ".repeat(2 * indent)
 
-    val joinStrings = joinedPushedDownOperators.zipWithIndex.map { case (r, index) =>
-      val parts = scala.collection.mutable.ListBuffer[String]()
-
-      // Add relation name for leaf nodes (nodes without further joins)
-      if (r.joinedRelationPushedDownOperators.isEmpty) {
-        val relationName = r.relationName.get
-        parts += s"Relation: $relationName"
-      }
-
-      if (r.pushedPredicates.nonEmpty) {
-        parts += s"PushedFilters: ${seqToString(r.pushedPredicates.map(_.describe()))}"
-      }
-
-      r.sample.foreach { v =>
-        parts += s"PushedSample: " +
-          s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
-      }
-
-      if (r.joinedRelationPushedDownOperators.nonEmpty) {
-        val nestedJoins = getPushedJoinString(r.joinedRelationPushedDownOperators, indent + 2)
-        parts += s"PushedJoins: [\n$nestedJoins\n$indentStr  ]"
-      }
-
-      val metadataStr = {
-        // Separate basic parts (relation, filter, and sample) from nested joins
-        val basicParts = scala.collection.mutable.ListBuffer[String]()
-        val nestedJoinsPart = scala.collection.mutable.ListBuffer[String]()
-
-        parts.foreach { part =>
-          if (part.startsWith("PushedJoins:")) {
-            nestedJoinsPart += part
-          } else {
-            basicParts += part
-          }
-        }
-
-        val result = scala.collection.mutable.ListBuffer[String]()
-
-        if (basicParts.nonEmpty) {
-          result += basicParts.mkString(", ")
-        }
-
-        // Add nested joins on new line
-        if (nestedJoinsPart.nonEmpty) {
-          val continuationIndent = indentStr + "    " // 4 spaces for continuation
-          result += nestedJoinsPart.mkString(",\n" + continuationIndent)
-        }
-
-        result.mkString(",\n" + indentStr + "    ")
-      }
+    val joinStrings = joinedPushedDownOperators.zipWithIndex.map { case (operators, index) =>
+      val parts = buildOperatorParts(operators, indent)
+      val metadataStr = formatMetadata(parts, indentStr)
       s"$indentStr[$index]: [$metadataStr]"
     }
 
     joinStrings.mkString(",\n")
+  }
+
+  private def buildOperatorParts(operators: PushedDownOperators, indent: Int): List[String] = {
+    val parts = List.newBuilder[String]
+    val indentStr = " ".repeat(2 * indent)
+
+    // Add relation name for leaf nodes (nodes without further joins)
+    if (operators.joinedRelationPushedDownOperators.isEmpty) {
+      operators.relationName.foreach(name => parts += s"Relation: $name")
+    }
+
+    if (operators.pushedPredicates.nonEmpty) {
+      parts += s"PushedFilters: ${seqToString(operators.pushedPredicates.map(_.describe()))}"
+    }
+
+    operators.sample.foreach { sample =>
+      parts += s"PushedSample: ${pushedSampleMetadataString(sample)}"
+    }
+
+    // Recursively get the pushed join string for child with correct indentation.
+    if (operators.joinedRelationPushedDownOperators.nonEmpty) {
+      val nestedJoins = getPushedJoinString(operators.joinedRelationPushedDownOperators, indent + 2)
+      parts += s"PushedJoins: [\n$nestedJoins\n$indentStr  ]"
+    }
+
+    parts.result()
+  }
+
+  private def formatMetadata(parts: List[String], indentStr: String): String = {
+    val (basicParts, nestedJoinsParts) = parts.partition(!_.startsWith("PushedJoins:"))
+    val result = List.newBuilder[String]
+
+    if (basicParts.nonEmpty) {
+      result += basicParts.mkString(", ")
+    }
+
+    if (nestedJoinsParts.nonEmpty) {
+      val continuationIndent = indentStr + " ".repeat(4)
+      result += nestedJoinsParts.mkString(",\n" + continuationIndent)
+    }
+
+    result.result().mkString(",\n" + indentStr + "    ")
   }
 
   // Don't care about `rdd` and `tableIdentifier`, and `stream` when canonicalizing.

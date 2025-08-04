@@ -287,11 +287,15 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
 
+      // scalastyle:off line.size.limit
       checkJoinPushed(
         df,
-        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
-          s"$catalogAndNamespace.${caseConvert(joinTableName1)}"
+        s"""PushedFilters: [${caseConvert("id")} = (${caseConvert("id_1")} + 1)], PushedJoins: [
+          |[0]: [Relation: $catalogAndNamespace.${caseConvert(joinTableName1)}, PushedFilters: [${caseConvert("id")} IS NOT NULL]],
+          |[1]: [Relation: $catalogAndNamespace.${caseConvert(joinTableName1)}, PushedFilters: [${caseConvert("id")} IS NOT NULL]]]"""
+          .stripMargin
       )
+      // scalastyle:on line.size.limit
       checkAnswer(df, rows)
     }
   }
@@ -301,8 +305,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       |SELECT * FROM
       |$catalogAndNamespace.$casedJoinTableName1 a
       |JOIN $catalogAndNamespace.$casedJoinTableName1 b ON b.id = a.id + 1
-      |JOIN $catalogAndNamespace.$casedJoinTableName1 c ON c.id = b.id - 1
-      |""".stripMargin
+      |JOIN $catalogAndNamespace.$casedJoinTableName1 c ON c.id = b.id - 1""".stripMargin
 
     val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
       sql(sqlQuery).collect().toSeq
@@ -313,12 +316,18 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
 
+      // scalastyle:off line.size.limit
       checkJoinPushed(
         df,
-        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
-          s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
-          s"$catalogAndNamespace.${caseConvert(joinTableName1)}"
+        s"""PushedFilters: [${caseConvert("id_2")} = (${caseConvert("id_1")} - 1)], PushedJoins: [
+          |[0]: [PushedFilters: [${caseConvert("id_1")} = (${caseConvert("id")} + 1)],
+          |    PushedJoins: [
+          |    [0]: [Relation: $catalogAndNamespace.${caseConvert(joinTableName1)}, PushedFilters: [${caseConvert("id")} IS NOT NULL]],
+          |    [1]: [Relation: $catalogAndNamespace.${caseConvert(joinTableName1)}, PushedFilters: [${caseConvert("id")} IS NOT NULL]]
+          |  ]],
+          |[1]: [Relation: $catalogAndNamespace.${caseConvert(joinTableName1)}, PushedFilters: [${caseConvert("id")} IS NOT NULL]]]""".stripMargin
       )
+      // scalastyle:on line.size.limit
       checkAnswer(df, rows)
     }
   }
@@ -346,11 +355,6 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
         )
       )
       checkPrunedColumnsDataTypeAndNullability(df, expectedSchema)
-      checkJoinPushed(
-        df,
-        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
-          s"$catalogAndNamespace.${caseConvert(joinTableName1)}"
-      )
       checkAnswer(df, rows)
     }
   }
@@ -377,14 +381,9 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
         )
       )
       checkPrunedColumnsDataTypeAndNullability(df, expectedSchema)
-      checkJoinPushed(
-        df,
-        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}",
-          s"$catalogAndNamespace.${caseConvert(joinTableName2)}"
-      )
       checkPushedInfo(df,
-        s"PushedFilters: [${caseConvert("id")} IS NOT NULL, " +
-          s"${caseConvert("next_id")} IS NOT NULL, " +
+        s"PushedFilters: [${caseConvert("id")} IS NOT NULL",
+          s"${caseConvert("next_id")} IS NOT NULL",
           s"${caseConvert("id")} = ${caseConvert("next_id")}]")
       checkAnswer(df, rows)
     }
@@ -417,11 +416,6 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
         )
       )
       checkPrunedColumnsDataTypeAndNullability(df, expectedSchema)
-      checkJoinPushed(
-        df,
-        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
-          s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
-          s"$catalogAndNamespace.${caseConvert(joinTableName1)}")
       checkAnswer(df, rows)
     }
   }
@@ -459,12 +453,6 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val joinDf = df1.join(df2, "id")
-
-      checkJoinPushed(
-        joinDf,
-        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
-          s"$catalogAndNamespace.${caseConvert(joinTableName1)}"
-      )
       checkAnswer(joinDf, rows)
     }
   }
@@ -484,12 +472,6 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       val df = sql(sqlQuery)
 
       checkAggregateRemoved(df, supportsAggregatePushdown)
-      checkJoinPushed(
-        df,
-        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
-          s"$catalogAndNamespace.${caseConvert(joinTableName1)}"
-      )
-
       checkAnswer(df, rows)
     }
   }
@@ -508,12 +490,6 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
-
-      checkJoinPushed(
-        df,
-        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}," +
-          s" $catalogAndNamespace.${caseConvert(joinTableName1)}, " +
-          s"$catalogAndNamespace.${caseConvert(joinTableName1)}")
       checkAnswer(df, rows)
     }
   }
@@ -538,12 +514,6 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
       checkSortRemoved(df, supportsSortPushdown)
       checkLimitRemoved(df, supportsLimitPushdown)
-
-      checkJoinPushed(
-        df,
-        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
-          s"$catalogAndNamespace.${caseConvert(joinTableName1)}"
-      )
       checkAnswer(df, rows)
     }
   }
@@ -563,11 +533,6 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
-      checkJoinPushed(
-        df,
-        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}",
-          s"$catalogAndNamespace.${caseConvert(joinTableName2)}"
-      )
       checkFilterPushed(df, supportsFilterPushdown)
       checkAnswer(df, rows)
     }
@@ -588,11 +553,6 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
-      checkJoinPushed(
-        df,
-        expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}",
-          s"$catalogAndNamespace.${caseConvert(joinTableName2)}"
-      )
       checkAnswer(df, rows)
     }
   }
@@ -708,19 +668,36 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   // TODO: test currently doesn't assert on anything. We can assert on pushedJoins from explain
   // when https://github.com/apache/spark/pull/51686 is checked in, since we would have
   // deterministic column names.
-  test("Test explain") {
+  test("Test explain formatted") {
     val sqlQuery = s"""
-                      |SELECT * FROM $catalogAndNamespace.$casedJoinTableName1 a
-                      |JOIN $catalogAndNamespace.$casedJoinTableName2 b
-                      |ON a.id = b.id + 1
-                      |JOIN $catalogAndNamespace.$casedJoinTableName1 c
-                      |ON b.id = c.id + 1
-                      |JOIN $catalogAndNamespace.$casedJoinTableName2 d
-                      |ON c.id = d.id + 1
-                      |""".stripMargin
+      |SELECT * FROM $catalogAndNamespace.$casedJoinTableName1 a
+      |JOIN $catalogAndNamespace.$casedJoinTableName2 b
+      |ON a.id = b.id + 1
+      |JOIN $catalogAndNamespace.$casedJoinTableName3 c
+      |ON b.id = c.id + 1
+      |JOIN $catalogAndNamespace.$casedJoinTableName4 d
+      |ON c.id = d.id + 1
+      |""".stripMargin
 
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
-      sql(sqlQuery).explain("formatted")
+      val df = sql(sqlQuery)
+
+      // scalastyle:off line.size.limit
+      checkJoinPushed(
+        df,
+        s"""PushedFilters: [id_3 = (id_4 + 1)], PushedJoins: [
+          |[0]: [PushedFilters: [${caseConvert("id_1")} = (id_3 + 1)],
+          |    PushedJoins: [
+          |    [0]: [PushedFilters: [${caseConvert("id")} = (${caseConvert("id_1")} + 1)],
+          |        PushedJoins: [
+          |        [0]: [Relation: $catalogAndNamespace.${caseConvert(joinTableName1)}, PushedFilters: [${caseConvert("id")} IS NOT NULL]],
+          |        [1]: [Relation: $catalogAndNamespace.${caseConvert(joinTableName2)}, PushedFilters: [${caseConvert("id")} IS NOT NULL]]
+          |      ]],
+          |    [1]: [Relation: $catalogAndNamespace.${caseConvert(joinTableName3)}, PushedFilters: [id IS NOT NULL]]
+          |  ]],
+          |[1]: [Relation: $catalogAndNamespace.${caseConvert(joinTableName4)}, PushedFilters: [id IS NOT NULL]]]""".stripMargin
+      )
+      // scalastyle:on line.size.limit
     }
   }
 }
