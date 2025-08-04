@@ -3499,7 +3499,7 @@
   },
   "INVALID_RECURSIVE_CTE" : {
     "message" : [
-      "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references."
+      "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references. Any top level inner CTE must not contain self references."
     ],
     "sqlState" : "42836"
   },
