@@ -25,7 +25,6 @@ import java.util.concurrent.CountDownLatch
 import scala.collection.mutable
 import scala.util.{Success, Try}
 
-import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.RandomStringUtils
 import org.apache.hadoop.fs.Path
 import org.mockito.Mockito.when
@@ -1163,7 +1162,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       assertMigrationError(e2.getMessage, sparkMetadataDir, legacySparkMetadataDir)
 
       // Move "_spark_metadata" to fix the file sink and test the checkpoint path.
-      FileUtils.moveDirectory(legacySparkMetadataDir, sparkMetadataDir)
+      Utils.moveDirectory(legacySparkMetadataDir, sparkMetadataDir)
 
       // Restarting the streaming query should detect the legacy
       // checkpoint path and throw an error.
@@ -1177,7 +1176,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       assertMigrationError(e3.getMessage, checkpointDir, legacyCheckpointDir)
 
       // Fix the checkpoint path and verify that the user can migrate the issue by moving files.
-      FileUtils.moveDirectory(legacyCheckpointDir, checkpointDir)
+      Utils.moveDirectory(legacyCheckpointDir, checkpointDir)
 
       val q = inputData.toDF()
         .writeStream

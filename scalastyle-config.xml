@@ -342,6 +342,11 @@ This file is divided into 3 sections:
     <customMessage>Use copyDirectory of JavaUtils/SparkFileUtils/Utils instead.</customMessage>
   </check>
 
+  <check customId="moveDirectory" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.moveDirectory\b</parameter></parameters>
+    <customMessage>Use copyDirectory of SparkFileUtils or Utils instead.</customMessage>
+  </check>
+
   <check customId="contentEquals" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bFileUtils\.contentEquals\b</parameter></parameters>
     <customMessage>Use contentEquals of SparkFileUtils or Utils instead.</customMessage>
