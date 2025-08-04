@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, Star, TableAlreadyExistsException, UnresolvedRegex}
@@ -54,10 +54,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def unexpectedRequiredParameter(
       routineName: String, parameters: Seq[InputParameter]): Throwable = {
-    val errorMessage = s"Routine ${toSQLId(routineName)} has an unexpected required argument for" +
-      s" the provided routine signature ${parameters.mkString("[", ", ", "]")}." +
-      s" All required arguments should come before optional arguments."
-    SparkException.internalError(errorMessage)
+    new AnalysisException(
+      errorClass = "UNEXPECTED_REQUIRED_PARAMETER",
+      messageParameters = Map(
+        "routineName" -> toSQLId(routineName),
+        "parameters" -> parameters.mkString("[", ", ", "]")))
   }
 
   def namedArgumentsNotSupported(functionName: String) : Throwable = {
@@ -323,7 +324,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def missingStaticPartitionColumn(staticName: String): Throwable = {
-    SparkException.internalError(s"Unknown static partition column: $staticName.")
+    new AnalysisException(
+      errorClass = "MISSING_STATIC_PARTITION_COLUMN",
+      messageParameters = Map("staticName" -> staticName))
   }
 
   def staticPartitionInUserSpecifiedColumnsError(staticName: String): Throwable = {
@@ -3980,8 +3983,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def dataTypeOperationUnsupportedError(): Throwable = {
-    SparkException.internalError(
-      "The operation `dataType` is not supported.")
+    new SparkUnsupportedOperationException(
+      "DATATYPE_OPERATION_UNSUPPORTED",
+      Map.empty[String, String])
   }
 
   def nullableRowIdError(nullableRowIdAttrs: Seq[AttributeReference]): Throwable = {
@@ -4191,8 +4195,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   private def callDeprecatedMethodError(oldMethod: String, newMethod: String): Throwable = {
-    SparkException.internalError(s"The method `$oldMethod` is deprecated, " +
-      s"please use `$newMethod` instead.")
+    new AnalysisException(
+      errorClass = "DEPRECATED_METHOD_CALL",
+      messageParameters = Map(
+        "oldMethod" -> oldMethod,
+        "newMethod" -> newMethod))
   }
 
   def createTableDeprecatedError(): Throwable = {
@@ -4200,12 +4207,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       "createTable(..., Array[Column], ...)")
   }
 
-  def mustOverrideOneMethodError(methodName: String): RuntimeException = {
-    val msg = s"You must override one `$methodName`. It's preferred to not override the " +
-      "deprecated one."
-    new SparkRuntimeException(
-      "INTERNAL_ERROR",
-      Map("message" -> msg))
+  def mustOverrideOneMethodError(methodName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "MUST_OVERRIDE_METHOD",
+      messageParameters = Map("methodName" -> methodName))
   }
 
   def cannotAssignEventTimeColumn(): Throwable = {
