@@ -22,6 +22,6 @@ private[client] trait HiveClientVersions {
   protected val versions = if (testVersions.nonEmpty) {
     testVersions.get.split(",").map(_.trim).filter(_.nonEmpty).toIndexedSeq
   } else {
-    IndexedSeq("4.0", "4.1")
+    IndexedSeq("4.1")
   }
 }
