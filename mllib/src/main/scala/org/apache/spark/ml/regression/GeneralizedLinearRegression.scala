@@ -22,7 +22,6 @@ import java.util.Locale
 
 import breeze.stats.{distributions => dist}
 import breeze.stats.distributions.Rand.FixedSeed.randBasis
-import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
@@ -42,6 +41,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
+import org.apache.spark.util.Utils
 
 /**
  * Params for Generalized Linear Regression.
@@ -1636,12 +1636,12 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
       // Output coefficients with statistics
       sb.append("Coefficients:\n")
       colNames.zipWithIndex.map { case (colName: String, i: Int) =>
-        StringUtils.leftPad(colName, colWidths(i))
+        Utils.leftPad(colName, colWidths(i))
       }.addString(sb, "", " ", "\n")
 
       data.foreach { case strRow: Array[String] =>
         strRow.zipWithIndex.map { case (cell: String, i: Int) =>
-          StringUtils.leftPad(cell, colWidths(i))
+          Utils.leftPad(cell, colWidths(i))
         }.addString(sb, "", " ", "\n")
       }
 
@@ -1654,9 +1654,9 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
       val rd = s"Residual deviance: ${round(deviance)} on $residualDegreeOfFreedom degrees of " +
         "freedom"
       val l = math.max(nd.length, rd.length)
-      sb.append(StringUtils.leftPad(nd, l))
+      sb.append(Utils.leftPad(nd, l))
       sb.append("\n")
-      sb.append(StringUtils.leftPad(rd, l))
+      sb.append(Utils.leftPad(rd, l))
 
       if (family.name != "tweedie") {
         sb.append("\n")

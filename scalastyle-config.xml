@@ -379,6 +379,11 @@ This file is divided into 3 sections:
     <customMessage>Use String concatenation instead</customMessage>
   </check>
 
+  <check customId="commonslang3pad" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bStringUtils\.(left|right)Pad\b</parameter></parameters>
+    <customMessage>Use (left|right)Pad of SparkStringUtils or Utils instead</customMessage>
+  </check>
+
   <check customId="commonslang3split" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bStringUtils\.split\b</parameter></parameters>
     <customMessage>Use Utils.stringToSeq instead</customMessage>
