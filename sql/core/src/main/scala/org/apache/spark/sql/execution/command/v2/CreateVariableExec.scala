@@ -43,25 +43,26 @@ case class CreateVariableExec(
     initializeExprs(exprs, 0)
     val initValue = Literal(exprs.head.eval(), defaultExpr.dataType)
 
+    val variableTuples = resolvedIdentifiers.map(resolvedIdentifier => {
+      val normalizedIdentifier = if (session.sessionState.conf.caseSensitiveAnalysis) {
+        resolvedIdentifier.identifier
+      } else {
+        Identifier.of(
+          resolvedIdentifier.identifier.namespace().map(_.toLowerCase(Locale.ROOT)),
+          resolvedIdentifier.identifier.name().toLowerCase(Locale.ROOT))
+      }
+      val varDef = VariableDefinition(normalizedIdentifier, defaultExpr.originalSQL, initValue)
+
+      (normalizedIdentifier.namespace().toSeq :+ normalizedIdentifier.name(), varDef)
+    })
+
     // create local variables if we are in a script, otherwise create session variable
     scriptingVariableManager
       .filter(_ => resolvedIdentifiers.head.catalog == FakeLocalCatalog)
       // If resolvedIdentifier.catalog is FakeLocalCatalog, scriptingVariableManager
       // will always be present.
       .getOrElse(tempVariableManager)
-      .create(
-        resolvedIdentifiers.map(resolvedIdentifier => {
-          val normalizedIdentifier = if (session.sessionState.conf.caseSensitiveAnalysis) {
-            resolvedIdentifier.identifier
-          } else {
-            Identifier.of(
-              resolvedIdentifier.identifier.namespace().map(_.toLowerCase(Locale.ROOT)),
-              resolvedIdentifier.identifier.name().toLowerCase(Locale.ROOT))
-          }
-          val varDef = VariableDefinition(normalizedIdentifier, defaultExpr.originalSQL, initValue)
-
-          (normalizedIdentifier.namespace().toSeq :+ normalizedIdentifier.name(), varDef)
-        }), replace)
+      .create(variableTuples, replace)
 
     Nil
   }
