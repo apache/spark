@@ -85,7 +85,7 @@ trait VariableManager {
   /**
    *
    * @param variableName Name of the variable
-   * @return
+   * @return variable name formatting for the error
    */
   protected def getVariableNameForError(variableName: String): String
 
