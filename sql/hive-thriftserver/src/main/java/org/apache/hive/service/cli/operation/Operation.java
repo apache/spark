@@ -17,7 +17,6 @@
 package org.apache.hive.service.cli.operation;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
@@ -28,7 +27,6 @@ import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.QueryState;
 import org.apache.hadoop.hive.ql.processors.CommandProcessorException;
-import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse;
 import org.apache.hadoop.hive.ql.session.OperationLog;
 import org.apache.hive.service.cli.FetchOrientation;
 import org.apache.hive.service.cli.HiveSQLException;
