@@ -414,6 +414,11 @@ This file is divided into 3 sections:
     <customMessage>Use Utils.abbreviate method instead</customMessage>
   </check>
 
+  <check customId="commonslang3substring" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bStringUtils\.substring\b</parameter></parameters>
+    <customMessage>Use Java String.substring instead.</customMessage>
+  </check>
+
   <check customId="uribuilder" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bUriBuilder\.fromUri\b</parameter></parameters>
     <customMessage>Use Utils.getUriBuilder instead.</customMessage>
