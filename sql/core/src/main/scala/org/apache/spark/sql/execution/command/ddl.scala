@@ -999,17 +999,17 @@ private[sql] case class SaveAsV1TableCommand(
 
         // Drop the existing table
         catalog.dropTable(qualifiedIdent, ignoreIfNotExists = true, purge = false)
-        runCommand(sparkSession)(CreateTable(tableDescWithQualifiedIdent, mode, Some(query)))
+        runCommand(sparkSession, CreateTable(tableDescWithQualifiedIdent, mode, Some(query)))
         // Refresh the cache of the table in the catalog.
         catalog.refreshTable(qualifiedIdent)
 
       case _ =>
-        runCommand(sparkSession)(CreateTable(tableDescWithQualifiedIdent, mode, Some(query)))
+        runCommand(sparkSession, CreateTable(tableDescWithQualifiedIdent, mode, Some(query)))
     }
     Seq.empty[Row]
   }
 
-  private def runCommand(session: SparkSession)(command: LogicalPlan): Unit = {
+  private def runCommand(session: SparkSession, command: LogicalPlan): Unit = {
     val qe = session.sessionState.executePlan(command)
     qe.assertCommandExecuted()
   }
