@@ -1681,7 +1681,7 @@ case class TableSpec(
 }
 
 /**
- * The logical plan of the DECLARE [OR REPLACE] TEMPORARY VARIABLES command.
+ * The logical plan of the DECLARE [OR REPLACE] TEMPORARY VARIABLE command.
  */
 case class CreateVariable(
     names: Seq[LogicalPlan],
