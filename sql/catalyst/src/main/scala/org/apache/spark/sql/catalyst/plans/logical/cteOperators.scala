@@ -159,9 +159,9 @@ case class CTERelationDef(
       case _ => None
     }
     if (withCTENode.isDefined) {
-      withCTENode.get.cteDefs.map(_.collectFirstWithSubqueries {
+      withCTENode.exists(_.cteDefs.exists(_.collectFirstWithSubqueries {
         case CTERelationRef(this.id, _, _, _, _, true, _) => true
-      }.getOrElse(false)).reduce(_ || _)
+      }.isDefined))
     } else {
       false
     }
