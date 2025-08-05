@@ -25,7 +25,6 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 
-
 private[spark] trait SparkErrorUtils extends Logging {
   /**
    * Execute a block of code that returns a value, re-throwing any non-fatal uncaught
