@@ -3118,8 +3118,6 @@ case class TryMakeTimestamp(
        NULL
       > SELECT _FUNC_(2024, 13, 22, 15, 30, 0);
        NULL
-      > SELECT _FUNC_(DATE'2024-13-22');
-       NULL
   """,
   group = "datetime_funcs",
   since = "4.0.0")
