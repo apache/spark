@@ -414,6 +414,11 @@ This file is divided into 3 sections:
     <customMessage>Use Utils.is(Not)?(Blank|Empty) instead</customMessage>
   </check>
 
+  <check customId="commonslang3getrootcause" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bExceptionUtils\.getRootCause\b</parameter></parameters>
+    <customMessage>Use getRootCause of SparkErrorUtils or Utils instead</customMessage>
+  </check>
+
   <check customId="commonslang3strings" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.lang3\.Strings\b</parameter></parameters>
     <customMessage>Use Java String methods instead</customMessage>
