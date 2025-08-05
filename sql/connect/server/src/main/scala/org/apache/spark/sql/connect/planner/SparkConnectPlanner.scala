@@ -30,7 +30,6 @@ import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{Any => ProtoAny, ByteString}
 import io.grpc.{Context, Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
-import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.{SparkClassNotFoundException, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Since}
@@ -3496,7 +3495,7 @@ class SparkConnectPlanner(
             .setExceptionMessage(e.toString())
             .setErrorClass(e.getCondition)
 
-          val stackTrace = Option(ExceptionUtils.getStackTrace(e))
+          val stackTrace = Option(Utils.stackTraceToString(e))
           stackTrace.foreach { s =>
             exception_builder.setStackTrace(s)
           }
