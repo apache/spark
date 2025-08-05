@@ -1470,7 +1470,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc.stop()
   }
 
-  test("Supplement UseParallelGC when GC algorithm is not specified") {
+  test("SPARK-53084: Supplement UseParallelGC when GC algorithm is not specified") {
     val conf = new SparkConf().setAppName("test").setMaster("local")
     sc = new SparkContext(conf)
     val driverJavaOptions = sc.conf.get(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS)
@@ -1479,7 +1479,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(executorJavaOptions.contains("-XX:+UseParallelGC"))
   }
 
-  test("Do not supplement UseParallelGC when GC algorithm is specified") {
+  test("SPARK-53084: Do not supplement UseParallelGC when GC algorithm is specified") {
     val conf = new SparkConf().setAppName("test").setMaster("local")
       .set(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS, "-XX:+UseG1GC")
       .set(SparkLauncher.EXECUTOR_DEFAULT_JAVA_OPTIONS, "-XX:+UseZGC")

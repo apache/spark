@@ -39,7 +39,6 @@ import org.apache.hadoop.io.{BooleanWritable, BytesWritable, DoubleWritable, Flo
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat, TextInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
-import sys.process._
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
@@ -3439,33 +3438,22 @@ object SparkContext extends Logging {
   }
 
   private def supplementJavaGCOptions(conf: SparkConf): Unit = {
-    val javaFlagCommand = "java -XX:+PrintFlagsFinal -version"
-    val gcAlgorithmPattern = """^\s*bool\s+(Use\w+GC)\s*[=:].*""".r
     // These flags contain "GC" in their names but aren't standalone garbage collection algorithms.
     // They're specific policy options that modify GC behavior rather than representing
     // complete GC implementations, so we exclude them when detecting available GC algorithms.
     val nonGCAlgorithmFlags: Set[String] = Set(
-      "UseAdaptiveSizePolicyWithSystemGC",
-      "UseMaximumCompactionOnSystemGC")
-
-    val gcAlgorithms = try {
-      val output = javaFlagCommand.!!
-      output.linesIterator.flatMap {
-        case gcAlgorithmPattern(name) => Some(name)
-        case _ => None
-      }.toSet.diff(nonGCAlgorithmFlags).map(gc => s"-XX:+$gc")
-    } catch {
-      case e: Exception =>
-        logWarning(s"Failed to determine GC algorithms: ${e.getMessage}")
-        Set.empty[String]
-    }
-
-    if (gcAlgorithms.isEmpty) return
+      "-XX:UseAdaptiveSizePolicyWithSystemGC",
+      "-XX:UseMaximumCompactionOnSystemGC")
 
     def supplement(key: OptionalConfigEntry[String]): Unit = {
       conf.get(key).foreach { opts =>
-        val splitOpts = opts.split("\\s+")
-        if (!splitOpts.exists(gcAlgorithms.contains)) {
+        val hasGCAlgorithm = opts.split("\\s+").exists { option =>
+          option.startsWith("-XX:+Use") &&
+            option.endsWith("GC") &&
+            !nonGCAlgorithmFlags.contains(option)
+        }
+
+        if (!hasGCAlgorithm) {
           conf.set(key.key, s"-XX:+UseParallelGC $opts")
         }
       }
