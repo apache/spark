@@ -3399,7 +3399,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
             sdf_lag = sdf.withColumn(lag_col_name, lag_scol)
             if is_ansi_mode_enabled(sdf.sparkSession):
-                cov_value = sdf_lag.select(F.covar_samp(scol, F.col(lag_col_name))).first()[0]
+                cov_value = sdf_lag.select(F.covar_samp(scol, F.col(lag_col_name))).head()[0]
                 if cov_value is None or cov_value == 0.0:
                     return np.nan
             corr = sdf_lag.select(F.corr(scol, F.col(lag_col_name))).head()[0]
