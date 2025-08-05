@@ -309,7 +309,12 @@ This file is divided into 3 sections:
 
   <check customId="deleteRecursively" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bFileUtils\.deleteDirectory\b</parameter></parameters>
-    <customMessage>Use deleteRecursively of SparkFileUtils or Utils</customMessage>
+    <customMessage>Use deleteRecursively of JavaUtils/SparkFileUtils/Utils</customMessage>
+  </check>
+
+  <check customId="forceDelete" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.forceDelete\b</parameter></parameters>
+    <customMessage>Use deleteRecursively of JavaUtils/SparkFileUtils/Utils</customMessage>
   </check>
 
   <check customId="deleteQuietly" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">

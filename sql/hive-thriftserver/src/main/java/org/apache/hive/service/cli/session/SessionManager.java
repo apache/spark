@@ -231,7 +231,7 @@ public class SessionManager extends CompositeService {
   private void cleanupLoggingRootDir() {
     if (isOperationLogEnabled) {
       try {
-        FileUtils.forceDelete(operationLogRootDir);
+        Utils.deleteRecursively(operationLogRootDir);
       } catch (Exception e) {
         LOG.warn("Failed to cleanup root dir of HS2 logging: {}", e,
           MDC.of(LogKeys.PATH$.MODULE$, operationLogRootDir.getAbsolutePath()));

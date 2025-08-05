@@ -209,7 +209,11 @@
         </module>
         <module name="RegexpSinglelineJava">
             <property name="format" value="FileUtils\.deleteDirectory"/>
-            <property name="message" value="Use deleteRecursively of SparkFileUtils or Utils instead." />
+            <property name="message" value="Use deleteRecursively of JavaUtils/SparkFileUtils/Utils instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="FileUtils\.forceDelete\("/>
+            <property name="message" value="Use deleteRecursively of JavaUtils/SparkFileUtils/Utils instead." />
         </module>
         <module name="RegexpSinglelineJava">
             <property name="format" value="FileUtils\.deleteQuietly"/>
