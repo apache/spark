@@ -647,6 +647,17 @@ class TypesTestsMixin:
         from pyspark.sql.types import _parse_datatype_json_string
 
         unicode_collation = "UNICODE"
+        utf8_lcase_collation = "UTF8_LCASE"
+
+        standalone_string = StringType(unicode_collation)
+
+        standalone_array = ArrayType(StringType(unicode_collation))
+
+        standalone_map = MapType(StringType(utf8_lcase_collation), StringType(unicode_collation))
+
+        standalone_nested = ArrayType(MapType(
+            StringType(utf8_lcase_collation),
+            ArrayType(StringType(unicode_collation))))
 
         simple_struct = StructType([StructField("c1", StringType(unicode_collation))])
 
@@ -718,6 +729,10 @@ class TypesTestsMixin:
         )
 
         schemas = [
+            standalone_string,
+            standalone_array,
+            standalone_map,
+            standalone_nested,
             simple_struct,
             nested_struct,
             array_in_schema,
@@ -732,7 +747,7 @@ class TypesTestsMixin:
             scala_datatype = self.spark._jsparkSession.parseDataType(schema.json())
             python_datatype = _parse_datatype_json_string(scala_datatype.json())
             assert schema == python_datatype
-            assert schema == _parse_datatype_json_string(schema.json())
+            assert schema == _parse_datatype_json_string(schema.json()), f"{schema.json()}"
 
     def test_schema_with_collations_on_non_string_types(self):
         from pyspark.sql.types import _parse_datatype_json_string, _COLLATIONS_METADATA_KEY
