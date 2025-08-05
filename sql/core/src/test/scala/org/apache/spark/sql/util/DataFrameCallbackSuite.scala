@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark._
-import org.apache.spark.internal.config.{EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES, EXECUTOR_HEARTBEAT_INTERVAL}
+import org.apache.spark.internal.config.EXECUTOR_HEARTBEAT_INTERVAL
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerExecutorMetricsUpdate}
 import org.apache.spark.sql.{functions, Encoder, Encoders, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -48,20 +48,10 @@ class DataFrameCallbackSuite extends QueryTest
   import functions._
 
   override protected def sparkConf: SparkConf = {
-    super.sparkConf.set(EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES, false)
-  }
+    val sparkConf = super.sparkConf
+    sparkConf.set(SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED.key, "false")
+    sparkConf.set(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, "false")
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-
-    val confsToSet = Map(
-      SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED -> false,
-      SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED -> false
-    )
-
-    confsToSet.foreach { case (key, newValue) =>
-      spark.sessionState.conf.setConf(key, newValue)
-    }
   }
 
   test("execute callback functions when a DataFrame action finished successfully") {

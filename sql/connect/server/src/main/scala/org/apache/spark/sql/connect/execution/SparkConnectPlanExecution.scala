@@ -57,7 +57,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val conf = session.sessionState.conf
     val shuffleCleanupMode =
-      if (conf.getConf(SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)) {
+      if (conf.getConf(SQLConf.CONNECT_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)) {
         RemoveShuffleFiles
       } else if (conf.getConf(SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED)) {
         SkipMigration
