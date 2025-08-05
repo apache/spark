@@ -3399,6 +3399,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
             sdf_lag = sdf.withColumn(lag_col_name, lag_scol)
             if is_ansi_mode_enabled(sdf.sparkSession):
+                # Compute covariance between the original and lagged columns.
+                # If the covariance is None or zero (indicating no linear relationship),
+                # return NaN, otherwise, proceeding to compute correlation may raise
+                # DIVIDE_BY_ZERO under ANSI mode.
                 cov_value = sdf_lag.select(F.covar_samp(scol, F.col(lag_col_name))).head()[0]
                 if cov_value is None or cov_value == 0.0:
                     return np.nan
