@@ -5149,6 +5149,13 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY" : {
+    "message" : [
+      "The offset log does not exist, but the state checkpoint location <checkpointLocation> is not empty.",
+      "Please either use a new checkpoint location, or delete the existing data in the checkpoint location."
+    ],
+    "sqlState" : "42K06"
+  },
   "STATE_STORE_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE" : {
     "message" : [
       "Incompatible schema transformation with column family=<colFamilyName>, oldSchema=<oldSchema>, newSchema=<newSchema>."
@@ -5267,13 +5274,6 @@
       "The number of state schema files <numStateSchemaFiles> exceeds the maximum number of state schema files for this query: <maxStateSchemaFiles>.",
       "Added: <addedColumnFamilies>, Removed: <removedColumnFamilies>",
       "Please set 'spark.sql.streaming.stateStore.stateSchemaFilesThreshold' to a higher number, or revert state schema modifications"
-    ],
-    "sqlState" : "42K06"
-  },
-  "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY" : {
-    "message" : [
-      "The offset log does not exist, but the state checkpoint location <checkpointLocation> is not empty.",
-      "Please either use a new checkpoint location, or delete the existing data in the checkpoint location."
     ],
     "sqlState" : "42K06"
   },
