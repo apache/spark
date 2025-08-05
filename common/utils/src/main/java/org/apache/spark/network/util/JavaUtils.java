@@ -21,6 +21,7 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -73,6 +74,35 @@ public class JavaUtils {
         walk.sorted(Comparator.reverseOrder()).map(Path::toFile).forEach(File::delete);
       } catch (Exception ignored) { /* No-op */ }
     }
+  }
+
+  public static void moveDirectory(File src, File dst) throws IOException {
+    if (src == null || dst == null || !src.exists() || !src.isDirectory() || dst.exists()) {
+      throw new IllegalArgumentException("Invalid input " + src + " or " + dst);
+    }
+    if (!src.renameTo(dst)) {
+      Path from = src.toPath().toAbsolutePath().normalize();
+      Path to = dst.toPath().toAbsolutePath().normalize();
+      if (to.startsWith(from)) {
+        throw new IllegalArgumentException("Cannot move directory to itself or its subdirectory");
+      }
+      moveDirectory(from, to);
+    }
+  }
+
+  private static void moveDirectory(Path src, Path dst) throws IOException {
+    Files.createDirectories(dst);
+    try (DirectoryStream<Path> stream = Files.newDirectoryStream(src)) {
+      for (Path from : stream) {
+        Path to = dst.resolve(from.getFileName());
+        if (Files.isDirectory(from)) {
+          moveDirectory(from, to);
+        } else {
+          Files.move(from, to, StandardCopyOption.REPLACE_EXISTING);
+        }
+      }
+    }
+    Files.delete(src);
   }
 
   /** Copy src to the target directory simply. File attribute times are not copied. */
