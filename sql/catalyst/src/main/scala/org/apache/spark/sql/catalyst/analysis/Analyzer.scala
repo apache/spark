@@ -794,31 +794,29 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       }
       // `cond` might contain unresolved aggregate functions so defer its resolution to
       // `ResolveAggregateFunctions` rule if needed.
-      if (!cond.resolved) {
-        colResolved
+      if (!cond.resolved) return colResolved
+
+      // Try resolving the condition of the filter as though it is in the aggregate clause
+      val (extraAggExprs, Seq(resolvedHavingCond)) =
+        ResolveAggregateFunctions.resolveExprsWithAggregate(Seq(cond), aggForResolving)
+
+      // Push the aggregate expressions into the aggregate (if any).
+      val newChild = constructAggregate(h, selectedGroupByExprs, groupByExprs,
+        aggregate.aggregateExpressions ++ extraAggExprs, aggregate.child)
+
+      // Since the output exprId will be changed in the constructed aggregate, here we build an
+      // attrMap to resolve the condition again.
+      val attrMap = AttributeMap((aggForResolving.output ++ extraAggExprs.map(_.toAttribute))
+        .zip(newChild.output))
+      val newCond = resolvedHavingCond.transform {
+        case a: AttributeReference => attrMap.getOrElse(a, a)
+      }
+
+      if (extraAggExprs.isEmpty) {
+        Filter(newCond, newChild)
       } else {
-        // Try resolving the condition of the filter as though it is in the aggregate clause
-        val (extraAggExprs, Seq(resolvedHavingCond)) =
-          ResolveAggregateFunctions.resolveExprsWithAggregate(Seq(cond), aggForResolving)
-
-        // Push the aggregate expressions into the aggregate (if any).
-        val newChild = constructAggregate(h, selectedGroupByExprs, groupByExprs,
-          aggregate.aggregateExpressions ++ extraAggExprs, aggregate.child)
-
-        // Since the output exprId will be changed in the constructed aggregate, here we build an
-        // attrMap to resolve the condition again.
-        val attrMap = AttributeMap((aggForResolving.output ++ extraAggExprs.map(_.toAttribute))
-          .zip(newChild.output))
-        val newCond = resolvedHavingCond.transform {
-          case a: AttributeReference => attrMap.getOrElse(a, a)
-        }
-
-        if (extraAggExprs.isEmpty) {
-          Filter(newCond, newChild)
-        } else {
-          Project(newChild.output.dropRight(extraAggExprs.length),
-            Filter(newCond, newChild))
-        }
+        Project(newChild.output.dropRight(extraAggExprs.length),
+          Filter(newCond, newChild))
       }
     }
 
