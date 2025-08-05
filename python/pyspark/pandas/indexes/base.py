@@ -933,7 +933,7 @@ class Index(IndexOpsMixin):
                 ]
 
                 has_str = any(isinstance(t, StringType) for t in field_types)
-                if is_ansi_mode_enabled(self._internal.spark_frame.sparkSession) and has_str:
+                if has_str and is_ansi_mode_enabled(self._internal.spark_frame.sparkSession):
                     return F.array([scol[field].cast(StringType()) for field in field_names])
                 else:
                     return F.array([scol[field] for field in field_names])
