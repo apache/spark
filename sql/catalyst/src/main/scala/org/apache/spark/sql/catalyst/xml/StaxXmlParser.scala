@@ -16,14 +16,13 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import java.io.{BufferedReader, CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException, StringReader}
-import java.nio.charset.{Charset, MalformedInputException}
+import java.io.{CharConversionException, FileNotFoundException, InputStream, IOException}
+import java.nio.charset.MalformedInputException
 import java.text.NumberFormat
 import java.util
 import java.util.Locale
 import javax.xml.stream.{XMLEventReader, XMLStreamException}
 import javax.xml.stream.events._
-import javax.xml.transform.stream.StreamSource
 import javax.xml.validation.Schema
 
 import scala.collection.mutable.ArrayBuffer
@@ -33,9 +32,8 @@ import scala.util.control.Exception.allCatch
 import scala.util.control.NonFatal
 import scala.xml.SAXException
 
-import org.apache.commons.lang3.exception.ExceptionUtils
-import org.apache.hadoop.hdfs.BlockMissingException
-import org.apache.hadoop.security.AccessControlException
+import com.google.common.io.ByteStreams
+import org.apache.hadoop.shaded.org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
@@ -51,6 +49,7 @@ import org.apache.spark.types.variant.{Variant, VariantBuilder}
 import org.apache.spark.types.variant.VariantBuilder.FieldEntry
 import org.apache.spark.types.variant.VariantUtil
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
+import org.apache.spark.util.Utils
 
 class StaxXmlParser(
     schema: StructType,
@@ -92,7 +91,7 @@ class StaxXmlParser(
       (_: String) => Some(InternalRow.empty)
     } else {
       val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
-      (input: String) => doParseColumn(input, options.parseMode, xsdSchema)
+      (input: String) => doParseColumn(input, xsdSchema)
     }
   }
 
@@ -104,68 +103,81 @@ class StaxXmlParser(
     }
   }
 
-  def parseStream(
-      inputStream: InputStream,
-      schema: StructType): Iterator[InternalRow] = {
+  /**
+   * XML stream parser that reads XML records from the input file stream sequentially without
+   * loading each individual XML record string into memory.
+   */
+  def parseStream(inputStream: () => InputStream, schema: StructType): Iterator[InternalRow] = {
     val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
-    val safeParser = new FailureSafeParser[String](
-      input => doParseColumn(input, options.parseMode, xsdSchema),
+    val streamLiteral = () =>
+      Utils.tryWithResource(
+        inputStream()
+      ) { is =>
+        UTF8String.fromBytes(ByteStreams.toByteArray(is))
+      }
+    val safeParser = new FailureSafeParser[StaxXMLRecordReader](
+      input => doParseColumn(input, xsdSchema, shouldSkipToNextRecord = true, streamLiteral),
       options.parseMode,
       schema,
-      options.columnNameOfCorruptRecord)
+      options.columnNameOfCorruptRecord
+    )
 
-    val xmlTokenizer = new XmlTokenizer(inputStream, options)
-    convertStream(xmlTokenizer) { tokens =>
-      safeParser.parse(tokens)
+    convertStream(inputStream, options) { reader =>
+      safeParser.parse(reader)
     }.flatten
   }
 
-  def parseColumn(xml: String, schema: StructType): InternalRow = {
-    // The user=specified schema from from_xml, etc will typically not include a
-    // "corrupted record" column. In PERMISSIVE mode, which puts bad records in
-    // such a column, this would cause an error. In this mode, if such a column
-    // is not manually specified, then fall back to DROPMALFORMED, which will return
-    // null column values where parsing fails.
-    val parseMode =
-    if (options.parseMode == PermissiveMode &&
-      !schema.fields.exists(_.name == options.columnNameOfCorruptRecord)) {
-      DropMalformedMode
-    } else {
-      options.parseMode
+  /**
+   * Parse a single XML record string and return an InternalRow.
+   */
+  def doParseColumn(xml: String, xsdSchema: Option[Schema]): Option[InternalRow] = {
+    val parser = StaxXmlParserUtils.staxXMLRecordReader(xml, options)
+    try {
+      doParseColumn(
+        parser, xsdSchema, shouldSkipToNextRecord = false, () => UTF8String.fromString(xml)
+      )
+    } finally {
+      parser.close()
     }
-    val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
-    doParseColumn(xml, parseMode, xsdSchema).orNull
   }
 
-  def doParseColumn(xml: String,
-      parseMode: ParseMode,
-      xsdSchema: Option[Schema]): Option[InternalRow] = {
-    lazy val xmlRecord = UTF8String.fromString(xml)
+  /**
+   * Parse the next XML record from the XML event stream.
+   * Note that the method will **NOT** close the XML event stream as there could have more XML
+   * records to parse. It's the caller's responsibility to close the stream.
+   *
+   * @param parser The XML event reader.
+   * @param shouldSkipToNextRecord If true, we will skip to the next XML record in the parser
+   * @param xmlLiteral A function that returns the entire XML file content as a UTF8String. Used
+   *                   to create a BadRecordException in case of parsing errors.
+   *                   TODO: Only include the file content starting with the current record.
+   */
+  def doParseColumn(
+      parser: StaxXMLRecordReader,
+      xsdSchema: Option[Schema] = None,
+      shouldSkipToNextRecord: Boolean,
+      xmlLiteral: () => UTF8String): Option[InternalRow] = {
     try {
+      if (shouldSkipToNextRecord && !parser.skipToNextRecord()) {
+        return None
+      }
+
       xsdSchema.foreach { schema =>
-        schema.newValidator().validate(new StreamSource(new StringReader(xml)))
+        parser.validateXSDSchema(schema)
       }
       options.singleVariantColumn match {
         case Some(_) =>
-          // If the singleVariantColumn is specified, parse the entire xml string as a Variant
-          val v = StaxXmlParser.parseVariant(xml, options)
+          // If the singleVariantColumn is specified, parse the entire xml record as a Variant
+          val v = StaxXmlParser.parseVariant(parser, options)
           Some(InternalRow(v))
         case _ =>
-          // Otherwise, parse the xml string as Structs
-          val parser = StaxXmlParserUtils.filteredReader(xml)
+          // Otherwise, parse the xml record as Structs
           val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
           val result = Some(convertObject(parser, schema, rootAttributes))
-          parser.close()
           result
       }
     } catch {
       case e: SparkUpgradeException => throw e
-      case e@(_: RuntimeException | _: XMLStreamException | _: MalformedInputException
-              | _: SAXException) =>
-        // XML parser currently doesn't support partial results for corrupted records.
-        // For such records, all fields other than the field configured by
-        // `columnNameOfCorruptRecord` are set to `null`.
-        throw BadRecordException(() => xmlRecord, () => Array.empty, e)
       case e: CharConversionException if options.charset.isEmpty =>
         val msg =
           """XML parser cannot handle a character in its input.
@@ -173,18 +185,34 @@ class StaxXmlParser(
             |""".stripMargin + e.getMessage
         val wrappedCharException = new CharConversionException(msg)
         wrappedCharException.initCause(e)
-        throw BadRecordException(() => xmlRecord, () => Array.empty,
+        throw BadRecordException(xmlLiteral, () => Array.empty,
           wrappedCharException)
       case PartialResultException(row, cause) =>
         throw BadRecordException(
-          record = () => xmlRecord,
+          record = xmlLiteral,
           partialResults = () => Array(row),
           cause)
       case PartialResultArrayException(rows, cause) =>
-        throw BadRecordException(
-          record = () => xmlRecord,
-          partialResults = () => rows,
-          cause)
+        throw BadRecordException(record = xmlLiteral, partialResults = () => rows, cause)
+      case e: Throwable =>
+        ExceptionUtils.getRootCause(e) match {
+          case _: FileNotFoundException if options.ignoreMissingFiles =>
+            logWarning("Skipped missing file", e)
+            parser.closeAllReaders()
+            None
+          case _: IOException | _: RuntimeException if options.ignoreCorruptFiles =>
+            logWarning("Skipped the rest of the content in the corrupted file", e)
+            parser.closeAllReaders()
+            None
+          case _: XMLStreamException | _: MalformedInputException | _: SAXException =>
+            // Skip rest of the content in the parser and put the whole XML file in the
+            // BadRecordException.
+            parser.closeAllReaders()
+            // XML parser currently doesn't support partial results for corrupted records.
+            // For such records, all fields other than the field configured by
+            // `columnNameOfCorruptRecord` are set to `null`.
+            throw BadRecordException(xmlLiteral, () => Array.empty, e)
+        }
     }
   }
 
@@ -641,291 +669,18 @@ class StaxXmlParser(
   }
 }
 
-/**
- * XMLRecordReader class to read through a given xml document to output xml blocks as records
- * as specified by the start tag and end tag.
- *
- * This implementation is ultimately loosely based on LineRecordReader in Hadoop.
- */
-class XmlTokenizer(
-  inputStream: InputStream,
-  options: XmlOptions) extends Logging {
-  private var reader = new BufferedReader(
-    new InputStreamReader(inputStream, Charset.forName(options.charset)))
-  private var currentStartTag: String = _
-  private var buffer = new StringBuilder()
-  private val startTag = s"<${options.rowTag}>"
-  private val endTag = s"</${options.rowTag}>"
-  private val commentStart = s"<!--"
-  private val commentEnd = s"-->"
-  private val cdataStart = s"<![CDATA["
-  private val cdataEnd = s"]]>"
-
-    /**
-   * Finds the start of the next record.
-   * It treats data from `startTag` and `endTag` as a record.
-   *
-   * @param key the current key that will be written
-   * @param value  the object that will be written
-   * @return whether it reads successfully
-   */
-    def next(): Option[String] = {
-      var nextString: Option[String] = None
-      try {
-        if (readUntilStartElement()) {
-          buffer.append(currentStartTag)
-          // Don't check whether the end element was found. Even if not, return everything
-          // that was read, which will invariably cause a parse error later
-          readUntilEndElement(currentStartTag.endsWith(">"))
-          nextString = Some(buffer.toString())
-          buffer = new StringBuilder()
-        }
-      } catch {
-        case e: FileNotFoundException if options.ignoreMissingFiles =>
-          logWarning(
-            "Skipping the rest of" +
-              " the content in the missing file during schema inference",
-            e)
-        case NonFatal(e) =>
-          ExceptionUtils.getRootCause(e) match {
-            case _: AccessControlException | _: BlockMissingException =>
-              reader.close()
-              reader = null
-              throw e
-            case _: RuntimeException | _: IOException if options.ignoreCorruptFiles =>
-              logWarning(
-                "Skipping the rest of" +
-                  " the content in the corrupted file during schema inference",
-                e)
-            case e: Throwable =>
-              reader.close()
-              reader = null
-              throw e
-          }
-      } finally {
-        if (nextString.isEmpty && reader != null) {
-          reader.close()
-          reader = null
-        }
-      }
-      nextString
-    }
-
-  private def readUntilMatch(end: String): Boolean = {
-    var i = 0
-    while (true) {
-      val cOrEOF = reader.read()
-      if (cOrEOF == -1) {
-        // End of file.
-        return false
-      }
-      val c = cOrEOF.toChar
-      if (c == end(i)) {
-        i += 1
-        if (i >= end.length) {
-          // Found the end string.
-          return true
-        }
-      } else {
-        i = 0
-      }
-    }
-    // Unreachable.
-    false
-  }
-
-  private def readUntilStartElement(): Boolean = {
-    currentStartTag = startTag
-    var i = 0
-    var commentIdx = 0
-    var cdataIdx = 0
-
-    while (true) {
-      val cOrEOF = reader.read()
-      if (cOrEOF == -1) { // || (i == 0 && getFilePosition() > end)) {
-        // End of file or end of split.
-        return false
-      }
-      val c = cOrEOF.toChar
-
-      if (c == commentStart(commentIdx)) {
-        if (commentIdx >= commentStart.length - 1) {
-          //  If a comment beigns we must ignore all character until its end
-          commentIdx = 0
-          readUntilMatch(commentEnd)
-        } else {
-          commentIdx += 1
-        }
-      } else {
-        commentIdx = 0
-      }
-
-      if (c == cdataStart(cdataIdx)) {
-        if (cdataIdx >= cdataStart.length - 1) {
-          //  If a CDATA beigns we must ignore all character until its end
-          cdataIdx = 0
-          readUntilMatch(cdataEnd)
-        } else {
-          cdataIdx += 1
-        }
-      } else {
-        cdataIdx = 0
-      }
-
-      if (c == startTag(i)) {
-        if (i >= startTag.length - 1) {
-          // Found start tag.
-          return true
-        }
-        // else in start tag
-        i += 1
-      } else {
-        // if doesn't match the closing angle bracket, check if followed by attributes
-        if (i == (startTag.length - 1) && Character.isWhitespace(c)) {
-          // Found start tag with attributes. Remember to write with following whitespace
-          // char, not angle bracket
-          currentStartTag = startTag.dropRight(1) + c
-          return true
-        }
-        // else not in start tag
-        i = 0
-      }
-    }
-    // Unreachable.
-    false
-  }
-
-  private def readUntilEndElement(startTagClosed: Boolean): Boolean = {
-    // Index into the start or end tag that has matched so far
-    var si = 0
-    var ei = 0
-    // Index into the start of a comment tag that matched so far
-    var commentIdx = 0
-    // Index into the start of a CDATA tag that matched so far
-    var cdataIdx = 0
-    // How many other start tags enclose the one that's started already?
-    var depth = 0
-    // Previously read character
-    var prevC = '\u0000'
-
-    // The current start tag already found may or may not have terminated with
-    // a '>' as it may have attributes we read here. If not, we search for
-    // a self-close tag, but only until a non-self-closing end to the start
-    // tag is found
-    var canSelfClose = !startTagClosed
-
-    while (true) {
-
-      val cOrEOF = reader.read()
-      if (cOrEOF == -1) {
-        // End of file (ignore end of split).
-        return false
-      }
-
-      val c = cOrEOF.toChar
-      buffer.append(c)
-
-      if (c == commentStart(commentIdx)) {
-        if (commentIdx >= commentStart.length - 1) {
-          //  If a comment beigns we must ignore everything until its end
-          buffer.setLength(buffer.length - commentStart.length)
-          commentIdx = 0
-          readUntilMatch(commentEnd)
-        } else {
-          commentIdx += 1
-        }
-      } else {
-        commentIdx = 0
-      }
-
-      if (c == '>' && prevC != '/') {
-        canSelfClose = false
-      }
-
-      // Still matching a start tag?
-      if (c == startTag(si)) {
-        // Still also matching an end tag?
-        if (c == endTag(ei)) {
-          // In start tag or end tag.
-          si += 1
-          ei += 1
-        } else {
-          if (si >= startTag.length - 1) {
-            // Found start tag.
-            si = 0
-            ei = 0
-            depth += 1
-          } else {
-            // In start tag.
-            si += 1
-            ei = 0
-          }
-        }
-      } else if (c == endTag(ei)) {
-        if (ei >= endTag.length - 1) {
-          if (depth == 0) {
-            // Found closing end tag.
-            return true
-          }
-          // else found nested end tag.
-          si = 0
-          ei = 0
-          depth -= 1
-        } else {
-          // In end tag.
-          si = 0
-          ei += 1
-        }
-      } else if (c == '>' && prevC == '/' && canSelfClose) {
-        if (depth == 0) {
-          // found a self-closing tag (end tag)
-          return true
-        }
-        // else found self-closing nested tag (end tag)
-        si = 0
-        ei = 0
-        depth -= 1
-      } else if (si == (startTag.length - 1) && Character.isWhitespace(c)) {
-        // found a start tag with attributes
-        si = 0
-        ei = 0
-        depth += 1
-      } else {
-        // Not in start tag or end tag.
-        si = 0
-        ei = 0
-      }
-      prevC = c
-    }
-    // Unreachable.
-    false
-  }
-}
-
 object StaxXmlParser {
-  /**
-   * Parses a stream that contains CSV strings and turns it into an iterator of tokens.
-   */
-  def tokenizeStream(inputStream: InputStream, options: XmlOptions): Iterator[String] = {
-    val xmlTokenizer = new XmlTokenizer(inputStream, options)
-    convertStream(xmlTokenizer)(tokens => tokens)
-  }
+  def convertStream[T](inputStream: () => InputStream, options: XmlOptions)(
+      convert: StaxXMLRecordReader => T): Iterator[T] = new Iterator[T] {
+    private val reader = StaxXMLRecordReader(inputStream, options)
 
-  private def convertStream[T](
-    xmlTokenizer: XmlTokenizer)(
-    convert: String => T) = new Iterator[T] {
-
-    private var nextRecord = xmlTokenizer.next()
-
-    override def hasNext: Boolean = nextRecord.nonEmpty
+    override def hasNext: Boolean = reader.hasMoreRecord
 
     override def next(): T = {
       if (!hasNext) {
         throw QueryExecutionErrors.endOfStreamError()
       }
-      val curRecord = convert(nextRecord.get)
-      nextRecord = xmlTokenizer.next()
-      curRecord
+      convert(reader)
     }
   }
 
@@ -933,11 +688,18 @@ object StaxXmlParser {
    * Parse the input XML string as a Variant value
    */
   def parseVariant(xml: String, options: XmlOptions): VariantVal = {
-    val parser = StaxXmlParserUtils.filteredReader(xml)
+    val parser = StaxXmlParserUtils.staxXMLRecordReader(xml, options)
+    try {
+      parseVariant(parser, options)
+    } finally {
+      parser.close()
+    }
+  }
+
+  def parseVariant(parser: XMLEventReader, options: XmlOptions): VariantVal = {
     val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
     val v = convertVariant(parser, rootAttributes, options)
-    parser.close()
-    v
+    new VariantVal(v.getValue, v.getMetadata)
   }
 
   /**
