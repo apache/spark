@@ -143,7 +143,7 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
     checkAnswer(result2, expected)
   }
 
-  test("SPARK-5XXXX: make_timestamp_ntz function") {
+  test("SPARK-53109: make_timestamp_ntz function") {
     // Input data for the function.
     val schema = StructType(Seq(
       StructField("date", DateType, nullable = false),
@@ -363,7 +363,7 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
     )
   }
 
-  test("SPARK-5XXXX: try_make_timestamp_ntz function") {
+  test("SPARK-53109: try_make_timestamp_ntz function") {
     // Input data for the function.
     val schema = StructType(Seq(
       StructField("date", DateType, nullable = false),
