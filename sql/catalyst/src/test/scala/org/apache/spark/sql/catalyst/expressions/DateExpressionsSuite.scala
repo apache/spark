@@ -2282,7 +2282,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       null)
   }
 
-  test("SPARK-5XXXX: try to make timestamp from date") {
+  test("SPARK-53113: try to make timestamp from date") {
     // Test with valid date.
     checkEvaluation(
       new TryMakeTimestampFromDateTime(dateLit("2023-10-01")),
@@ -2296,7 +2296,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
   }
 
-  test("SPARK-5XXXX: try to make timestamp from date and time") {
+  test("SPARK-53113: try to make timestamp from date and time") {
     // Test with valid date and time.
     checkEvaluation(
       new TryMakeTimestampFromDateTime(
@@ -2332,7 +2332,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
   }
 
-  test("SPARK-5XXXX: try to make timestamp from date, time, and timezone") {
+  test("SPARK-53113: try to make timestamp from date, time, and timezone") {
     Seq(
       ("-09:30", MIT),
       ("-08:00", PST),
