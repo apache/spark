@@ -332,6 +332,11 @@ This file is divided into 3 sections:
     <customMessage>Use sizeOf of JavaUtils or Utils instead.</customMessage>
   </check>
 
+  <check customId="moveFile" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.moveFile\b</parameter></parameters>
+    <customMessage>Use copyFile of JavaUtils/SparkFileUtils/Utils instead.</customMessage>
+  </check>
+
   <check customId="copyFile" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bFileUtils\.copyFile\b</parameter></parameters>
     <customMessage>Use copyFile of SparkFileUtils or Utils instead.</customMessage>
