@@ -100,12 +100,16 @@ private[spark] trait SparkErrorUtils extends Logging {
   }
 
   def stackTraceToString(t: Throwable): String = {
-    val out = new java.io.ByteArrayOutputStream
-    SparkErrorUtils.tryWithResource(new PrintWriter(out)) { writer =>
-      t.printStackTrace(writer)
-      writer.flush()
+    Option(t) match {
+      case None => ""
+      case Some(throwable) =>
+        val out = new java.io.ByteArrayOutputStream
+        SparkErrorUtils.tryWithResource(new PrintWriter(out)) { writer =>
+          throwable.printStackTrace(writer)
+          writer.flush()
+        }
+        new String(out.toByteArray, UTF_8)
     }
-    new String(out.toByteArray, UTF_8)
   }
 
   /**

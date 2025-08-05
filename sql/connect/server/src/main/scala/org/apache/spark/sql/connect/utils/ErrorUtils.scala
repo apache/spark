@@ -30,7 +30,6 @@ import com.google.rpc.{Code => RPCCode, ErrorInfo, Status => RPCStatus}
 import io.grpc.Status
 import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods
 
@@ -217,7 +216,7 @@ private[connect] object ErrorUtils extends Logging {
         .put(errorId, st)
     }
 
-    lazy val stackTrace = Option(ExceptionUtils.getStackTrace(st))
+    lazy val stackTrace = Option(Utils.stackTraceToString(st))
     val stackTraceEnabled = sessionHolderOpt.exists(
       _.session.sessionState.conf.getConf(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED))
     val withStackTrace =
