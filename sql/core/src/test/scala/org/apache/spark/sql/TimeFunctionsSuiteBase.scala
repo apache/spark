@@ -241,7 +241,7 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
     checkAnswer(result2, expected)
   }
 
-  test("SPARK-5XXXX: time_trunc function") {
+  test("SPARK-53107: time_trunc function") {
     // Input data for the function (including null values).
     val schema = StructType(Seq(
       StructField("unit", StringType),

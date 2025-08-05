@@ -82,7 +82,7 @@ class FunctionsTestsMixin:
 
         # Functions that we expect to be missing in python until they are added to pyspark
         expected_missing_in_py = set(
-            # TODO(SPARK-5XXXX): Implement the time_trunc function in Python
+            # TODO(SPARK-53107): Implement the time_trunc function in Python
             ["time_trunc"]
         )
 
