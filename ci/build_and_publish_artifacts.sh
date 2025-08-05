@@ -35,7 +35,8 @@ fi
 echo "Building Spark jars for ${VERSION}"
 
 build/mvn versions:set -DnewVersion=$VERSION -DgenerateBackupPoms=false
-build/mvn -DskipTests clean package -Phive -Pkubernetes -Phadoop-cloud -Phive-thriftserver
+build/mvn -s $BUILDKITE_BUILD_CHECKOUT_PATH/ci/settings.xml \
+  -DskipTests clean package -Phive -Pkubernetes -Phadoop-cloud -Phive-thriftserver
 
 GROUP_ID=org.apache.spark
 SCALA_VERSION=2.12

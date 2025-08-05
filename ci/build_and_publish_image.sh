@@ -40,8 +40,12 @@ fi
 
 echo "Building Spark distribution for ${VERSION}"
 
+export ARTIFACTORY_TOKEN=${DATA_PLATFORM_ARTIFACTORY_TOKEN#*=}
+
 build/mvn versions:set -DnewVersion=$VERSION -DgenerateBackupPoms=false
-dev/make-distribution.sh --name openai-spark --pip --tgz -Phive -Phive-thriftserver -Pyarn -Pkubernetes -Phadoop-cloud
+dev/make-distribution.sh \
+  --name openai-spark --pip --tgz -Phive -Phive-thriftserver -Pyarn -Pkubernetes -Phadoop-cloud \
+  -s $BUILDKITE_BUILD_CHECKOUT_PATH/ci/settings.xml
 
 
 az acr login -n ${REPONAME} --subscription data-platform

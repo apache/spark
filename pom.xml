@@ -352,7 +352,7 @@
     <repository>
       <id>openai-release</id>
       <name>OpenAI Maven Release Repository</name>
-      <url>https://artifactory.data-0.internal.api.openai.org/libs-release-local/artifactory</url>
+      <url>https://artifactory.data-0.internal.api.openai.org/artifactory/libs-release-local</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -363,7 +363,7 @@
     <repository>
       <id>openai-snapshot</id>
       <name>OpenAI Maven Snapshot Repository</name>
-      <url>https://artifactory.data-0.internal.api.openai.org/libs-snapshot-local/artifactory</url>
+      <url>https://artifactory.data-0.internal.api.openai.org/artifactory/libs-snapshot-local</url>
       <releases>
         <enabled>false</enabled>
       </releases>
