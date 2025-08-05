@@ -379,6 +379,11 @@ This file is divided into 3 sections:
     <customMessage>Use String concatenation instead</customMessage>
   </check>
 
+  <check customId="commonslang3pad" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bStringUtils\.(left|right)Pad\b</parameter></parameters>
+    <customMessage>Use (left|right)Pad of SparkStringUtils or Utils instead</customMessage>
+  </check>
+
   <check customId="commonslang3split" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bStringUtils\.split\b</parameter></parameters>
     <customMessage>Use Utils.stringToSeq instead</customMessage>
@@ -397,6 +402,11 @@ This file is divided into 3 sections:
   <check customId="commonslang3strip" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bStringUtils\.strip\b</parameter></parameters>
     <customMessage>Use Utils.strip method instead</customMessage>
+  </check>
+
+  <check customId="commonslang3stringutils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.commons\.lang3\.StringUtils\b</parameter></parameters>
+    <customMessage>Use Java String or Spark's Utils/JavaUtils methods instead</customMessage>
   </check>
 
   <check customId="commonslang3systemutils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">

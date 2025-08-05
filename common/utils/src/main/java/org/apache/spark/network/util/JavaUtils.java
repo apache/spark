@@ -522,4 +522,12 @@ public class JavaUtils {
     }
   }
 
+  public static String join(List<Object> arr, String sep) {
+    if (arr == null) return "";
+    StringJoiner joiner = new StringJoiner(sep == null ? "" : sep);
+    for (Object a : arr) {
+      joiner.add(a == null ? "" : a.toString());
+    }
+    return joiner.toString();
+  }
 }
