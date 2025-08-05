@@ -363,6 +363,11 @@ This file is divided into 3 sections:
     <customMessage>Use getFile of SparkFileUtil or Utils instead.</customMessage>
   </check>
 
+  <check customId="touch" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.touch\b</parameter></parameters>
+    <customMessage>Use touch of SparkFileUtil or Utils instead.</customMessage>
+  </check>
+
   <check customId="writeStringToFile" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bFileUtils\.writeStringToFile\b</parameter></parameters>
     <customMessage>Use java.nio.file.Files.writeString instead.</customMessage>
