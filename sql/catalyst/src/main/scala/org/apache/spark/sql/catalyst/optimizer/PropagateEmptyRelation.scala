@@ -61,6 +61,8 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
   protected def empty(plan: LogicalPlan): LogicalPlan =
     LocalRelation(plan.output, data = Seq.empty, isStreaming = plan.isStreaming)
 
+  protected def collectCancelableCandidates(maybeCancel: LogicalPlan*): Unit = {}
+
   // Construct a project list from plan's output, while the value is always NULL.
   private def nullValueProjectList(plan: LogicalPlan): Seq[NamedExpression] =
     plan.output.map{ a => Alias(cast(Literal(null), a.dataType), a.name)(a.exprId) }
@@ -69,7 +71,8 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
 
   protected def commonApplyFunc: PartialFunction[LogicalPlan, LogicalPlan] = {
     case p: Union if p.children.exists(isEmpty) =>
-      val newChildren = p.children.filterNot(isEmpty)
+      val (candidates, newChildren) = p.children.partition(isEmpty)
+      collectCancelableCandidates(candidates: _*)
       if (newChildren.isEmpty) {
         empty(p)
       } else {
@@ -106,22 +109,39 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
       }
       if (isLeftEmpty || isRightEmpty || isFalseCondition) {
         joinType match {
-          case _: InnerLike => empty(p)
+          case _: InnerLike =>
+            collectCancelableCandidates(p.left, p.right)
+            empty(p)
           // Intersect is handled as LeftSemi by `ReplaceIntersectWithSemiJoin` rule.
           // Except is handled as LeftAnti by `ReplaceExceptWithAntiJoin` rule.
-          case LeftOuter | LeftSemi | LeftAnti if isLeftEmpty => empty(p)
-          case LeftSemi if isRightEmpty | isFalseCondition => empty(p)
+          case LeftOuter | LeftSemi | LeftAnti if isLeftEmpty =>
+            collectCancelableCandidates(p.right)
+            empty(p)
+          case LeftSemi if isRightEmpty | isFalseCondition =>
+            if (isRightEmpty) {
+              collectCancelableCandidates(p.left)
+            } else {
+              collectCancelableCandidates(p.left, p.right)
+            }
+            empty(p)
           case LeftAnti if (isRightEmpty | isFalseCondition) && canExecuteWithoutJoin(p.left) =>
+            if (!isRightEmpty) {
+              collectCancelableCandidates(p.right)
+            }
             p.left
           case FullOuter if isLeftEmpty && isRightEmpty => empty(p)
           case LeftOuter | FullOuter if isRightEmpty && canExecuteWithoutJoin(p.left) =>
             Project(p.left.output ++ nullValueProjectList(p.right), p.left)
-          case RightOuter if isRightEmpty => empty(p)
+          case RightOuter if isRightEmpty =>
+            collectCancelableCandidates(p.left)
+            empty(p)
           case RightOuter | FullOuter if isLeftEmpty && canExecuteWithoutJoin(p.right) =>
             Project(nullValueProjectList(p.left) ++ p.right.output, p.right)
           case LeftOuter if isFalseCondition && canExecuteWithoutJoin(p.left) =>
+            collectCancelableCandidates(p.right)
             Project(p.left.output ++ nullValueProjectList(p.right), p.left)
           case RightOuter if isFalseCondition && canExecuteWithoutJoin(p.right) =>
+            collectCancelableCandidates(p.left)
             Project(nullValueProjectList(p.left) ++ p.right.output, p.right)
           case _ => p
         }
@@ -129,6 +149,7 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
         nonEmpty(p.right) && canExecuteWithoutJoin(p.left)) {
         p.left
       } else if (joinType == LeftAnti && conditionOpt.isEmpty && nonEmpty(p.right)) {
+        collectCancelableCandidates(p.left)
         empty(p)
       } else {
         p

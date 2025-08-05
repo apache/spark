@@ -26,8 +26,7 @@ import scala.concurrent.ExecutionContext
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkException
-import org.apache.spark.broadcast
+import org.apache.spark.{broadcast, SparkAQEStageCancelException, SparkException}
 import org.apache.spark.internal.{MDC, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
@@ -81,8 +80,13 @@ case class AdaptiveSparkPlanExec(
 
   @transient private val planChangeLogger = new PlanChangeLogger[SparkPlan]()
 
+  @transient private val stagesToCancel:
+    collection.mutable.Map[Int, (String, ExchangeQueryStageExec)] =
+    new collection.mutable.HashMap[Int, (String, ExchangeQueryStageExec)]()
+
   // The logical plan optimizer for re-optimizing the current logical plan.
-  @transient private val optimizer = new AQEOptimizer(conf,
+  @transient private val optimizer = new AQEOptimizer(
+    conf, context.stageReuse, stagesToCancel,
     context.session.sessionState.adaptiveRulesHolder.runtimeOptimizerRules)
 
   // `EnsureRequirements` may remove user-specified repartition and assume the query plan won't
@@ -309,7 +313,12 @@ case class AdaptiveSparkPlanExec(
                   }
                   events.offer(StageSuccess(stage, res.get))
                 } else {
-                  events.offer(StageFailure(stage, res.failed.get))
+                  res.failed.get match {
+                    // There is no need to trigger a new round to reOptimize
+                    case _: SparkAQEStageCancelException => // ignore
+                    case err: Throwable =>
+                      events.offer(StageFailure(stage, err))
+                  }
                 }
                 // explicitly clean up the resources in this stage
                 stage.cleanupResources()
@@ -367,7 +376,15 @@ case class AdaptiveSparkPlanExec(
               currentPhysicalPlan = newPhysicalPlan
               currentLogicalPlan = newLogicalPlan
               stagesToReplace = Seq.empty[QueryStageExec]
+
+              stagesToCancel.values.foreach(reasonAndStage => {
+                if (!reasonAndStage._2.isCancelled) {
+                  reasonAndStage._2.cancel(reasonAndStage._1, quiet = true)
+                  context.stageCache.remove(reasonAndStage._2.plan.canonicalized)
+                }
+              })
             }
+            stagesToCancel.clear()
           }
         }
         // Now that some stages have finished, we can try creating new stages.
@@ -588,7 +605,9 @@ case class AdaptiveSparkPlanExec(
       // First have a quick check in the `stageCache` without having to traverse down the node.
       context.stageCache.get(e.canonicalized) match {
         case Some(existingStage) if conf.exchangeReuseEnabled =>
+          context.stageReuse.put(e.canonicalized, ())
           val stage = reuseQueryStage(existingStage, e)
+          context.stageReuse.put(stage.plan.canonicalized, ())
           val isMaterialized = stage.isMaterialized
           CreateStageResult(
             newPlan = stage,
@@ -608,7 +627,9 @@ case class AdaptiveSparkPlanExec(
               val queryStage = context.stageCache.getOrElseUpdate(
                 newStage.plan.canonicalized, newStage)
               if (queryStage.ne(newStage)) {
+                context.stageReuse.put(newStage.plan.canonicalized, ())
                 newStage = reuseQueryStage(queryStage, e)
+                context.stageReuse.put(newStage.plan.canonicalized, ())
               }
             }
             val isMaterialized = newStage.isMaterialized
@@ -959,6 +980,8 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
    */
   val stageCache: TrieMap[SparkPlan, ExchangeQueryStageExec] =
     new TrieMap[SparkPlan, ExchangeQueryStageExec]()
+
+  val stageReuse: TrieMap[SparkPlan, Unit] = new TrieMap[SparkPlan, Unit]()
 
   val shuffleIds: ConcurrentHashMap[Int, Boolean] = new ConcurrentHashMap[Int, Boolean]()
 }
