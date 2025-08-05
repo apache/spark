@@ -78,13 +78,13 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
   override def prefixScan(
       prefixKey: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
-      : StateStoreIterator[UnsafeRowPair] = {
+    : StateStoreIterator[UnsafeRowPair] = {
     innerStore.prefixScan(prefixKey, colFamilyName)
   }
 
   override def iterator(
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
-      : StateStoreIterator[UnsafeRowPair] = {
+    : StateStoreIterator[UnsafeRowPair] = {
     innerStore.iterator(colFamilyName)
   }
 

@@ -96,8 +96,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
 
     override def prefixScan(
-       prefixKey: UnsafeRow,
-       colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+        prefixKey: UnsafeRow,
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       val iter = map.prefixScan(prefixKey)
       new StateStoreIterator(iter)
     }
@@ -224,8 +224,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
 
     override def prefixScan(
-       prefixKey: UnsafeRow,
-       colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+        prefixKey: UnsafeRow,
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       assertUseOfDefaultColFamily(colFamilyName)
       val iter = mapToUpdate.prefixScan(prefixKey)
       new StateStoreIterator(iter)
