@@ -747,7 +747,7 @@ class TypesTestsMixin:
             scala_datatype = self.spark._jsparkSession.parseDataType(schema.json())
             python_datatype = _parse_datatype_json_string(scala_datatype.json())
             assert schema == python_datatype
-            assert schema == _parse_datatype_json_string(schema.json()), f"{schema.json()}"
+            assert schema == _parse_datatype_json_string(schema.json())
 
     def test_schema_with_collations_on_non_string_types(self):
         from pyspark.sql.types import _parse_datatype_json_string, _COLLATIONS_METADATA_KEY
