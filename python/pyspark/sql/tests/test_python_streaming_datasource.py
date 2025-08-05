@@ -399,8 +399,8 @@ class BasePythonStreamingDataSourceTestsMixin:
                 .start()
             )
 
-            # Wait a bit for data to be processed, then stop
-            time.sleep(6)  # Allow a few batches to run
+            while not query.recentProgress:
+                time.sleep(0.2)
             query.stop()
             query.awaitTermination()
 
