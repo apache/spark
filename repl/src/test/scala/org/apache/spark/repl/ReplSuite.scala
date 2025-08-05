@@ -469,4 +469,12 @@ class ReplSuite extends SparkFunSuite {
       """.stripMargin)
     assertDoesNotContain("error: not found: type URI", output)
   }
+
+  test("SPARK-53131: spark-shell imports java.nio.file._ by default") {
+    val output = runInterpreter("local",
+      """
+        |Path.of("/tmp")
+      """.stripMargin)
+    assertDoesNotContain("error: not found: type URI", output)
+  }
 }
