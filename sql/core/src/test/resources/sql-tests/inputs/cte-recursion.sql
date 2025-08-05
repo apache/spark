@@ -97,6 +97,14 @@ SELECT * FROM t LIMIT 60;
 
 DROP VIEW ZeroAndOne;
 
+-- limited recursion allowed to stop from failing by putting LIMIT ALL
+WITH RECURSIVE t(n) MAX RECURSION LEVEL 100 AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM t WHERE n < 60
+    )
+SELECT * FROM t LIMIT ALL;
+
 -- terminate recursion with LIMIT
 WITH RECURSIVE r(level) AS (
   VALUES 0

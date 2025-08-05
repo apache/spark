@@ -882,6 +882,23 @@ object LimitPushDown extends Rule[LogicalPlan] {
       LocalLimit(le, udf.copy(child = maybePushLocalLimit(le, udf.child)))
     case LocalLimit(le, p @ Project(_, udf: ArrowEvalPython)) =>
       LocalLimit(le, p.copy(child = udf.copy(child = maybePushLocalLimit(le, udf.child))))
+
+    // Logic for pushing down LimitAll node.
+    // This node is no-op for any node that isn't UnionLoop. For UnionLoop it is used to signify an
+    // infinite recursion.
+    case LimitAll(ul @ UnionLoop(_, _, _, _, None, _)) =>
+      ul.copy(limit = Some(-1))
+    // If a limit node is present, the LimitAll shouldn't get pushed down, as the lowest limit node
+    // above a UnionLoop should only be considered.
+    case LimitAll(limit: GlobalLimit) =>
+      limit
+    case LimitAll(limit: LocalLimit) =>
+      limit
+    case LimitAll(ul @ UnionLoop(_, _, _, _, Some(_), _)) =>
+      ul
+     // Propagate LimitAll to all children.
+    case LimitAll(child) =>
+      child.withNewChildren(child.children.map(LimitAll(_)))
   }
 }
 
