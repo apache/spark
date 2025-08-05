@@ -154,6 +154,11 @@ private[spark] trait SparkFileUtils extends Logging {
   }
 
   /** Move src to dst simply. File attribute times are not copied. */
+  def moveFile(src: File, dst: File): Unit = {
+    JavaUtils.moveFile(src, dst)
+  }
+
+  /** Move src to dst simply. File attribute times are not copied. */
   def moveDirectory(src: File, dst: File): Unit = {
     JavaUtils.moveDirectory(src, dst)
   }

@@ -76,6 +76,17 @@ public class JavaUtils {
     }
   }
 
+  /** Move a file from src to dst. */
+  public static void moveFile(File src, File dst) throws IOException {
+    if (src == null || dst == null || !src.exists() || src.isDirectory() || dst.exists()) {
+      throw new IllegalArgumentException("Invalid input " + src + " or " + dst);
+    }
+    if (!src.renameTo(dst)) { // Try to use File.renameTo first
+      Files.move(src.toPath(), dst.toPath());
+    }
+  }
+
+  /** Move a directory from src to dst. */
   public static void moveDirectory(File src, File dst) throws IOException {
     if (src == null || dst == null || !src.exists() || !src.isDirectory() || dst.exists()) {
       throw new IllegalArgumentException("Invalid input " + src + " or " + dst);
