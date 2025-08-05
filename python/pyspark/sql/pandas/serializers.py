@@ -200,9 +200,29 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
     """
     Serializer for PyArrow-native UDTFs that work directly with PyArrow RecordBatches and Arrays.
     """
+    def __init__(self, table_arg_offsets=None):
+        super().__init__()
+        self.table_arg_offsets = table_arg_offsets
 
-    # TODO(SPARK-52981): support table arguments
-    ...
+    def load_stream(self, stream):
+        """
+        Flatten the struct into Arrow's record batches.
+        """
+        import pyarrow as pa
+
+        batches = super(ArrowStreamArrowUDTFSerializer, self).load_stream(stream) 
+        for batch in batches:
+            result_batches = []
+            for i in range(batch.num_columns):
+                if i in self.table_arg_offsets:
+                    struct = batch.column(i)
+                    # Flatten the struct and create a RecordBatch from it
+                    flattened_batch = pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))
+                    result_batches.append(flattened_batch)
+                else:
+                    # Keep the column as it is for non-table columns
+                    result_batches.append(batch.column(i))
+            yield result_batches
 
 
 class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
@@ -1582,6 +1602,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
         def generate_data_batches(batches):
             """
             Deserialize ArrowRecordBatches and return a generator of pandas.Series list.
+
             The deserialization logic assumes that Arrow RecordBatches contain the data with the
             ordering that data chunks for same grouping key will appear sequentially.
             See `TransformWithStateInPandasPythonInitialStateRunner` for arrow batch schema sent
