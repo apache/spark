@@ -2923,7 +2923,22 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       val extraAggExprs = new LinkedHashMap[Expression, NamedExpression]
       val transformed = exprs.map { e =>
         if (!e.resolved) {
-          e
+          val aggregatedCondition =
+            Aggregate(
+              agg.groupingExpressions,
+              Alias(e, "havingCondition")() :: Nil,
+              agg.child)
+          val resolvedOperator = executeSameContext(aggregatedCondition)
+          def resolvedAggregateFilter =
+            resolvedOperator
+              .asInstanceOf[Aggregate]
+              .aggregateExpressions.head
+
+          if (resolvedOperator.resolved) {
+            buildAggExprList(resolvedAggregateFilter, agg, extraAggExprs)
+          } else {
+            e
+          }
         } else {
           buildAggExprList(e, agg, extraAggExprs)
         }
