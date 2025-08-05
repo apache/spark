@@ -505,7 +505,8 @@ case class EnsureRequirements(
           // Similarly, the partially clustered distribution cannot be applied if the
           // partially clustered side must use the scan's key-grouped partitioning to
           // satisfy some required distribution in its plan (for example, for an aggregate
-          // or window function).
+          // or window function), as this will give incorrect results (for example, duplicate
+          // row_number() values).
           // Otherwise, query result could be incorrect.
           val canReplicateLeft = canReplicateLeftSide(joinType) &&
             canApplyPartialClusteredDistribution(right)
