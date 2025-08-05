@@ -241,7 +241,7 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
     checkAnswer(result2, expected)
   }
 
-  test("SPARK-5XXXX: time_diff function") {
+  test("SPARK-53108: time_diff function") {
     // Input data for the function.
     val schema = StructType(Seq(
       StructField("unit", StringType, nullable = false),
@@ -285,7 +285,7 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
       },
       condition = "INVALID_PARAMETER_VALUE.TIME_UNIT",
       parameters = Map(
-        "functionName" -> "`timediff`",
+        "functionName" -> "`time_diff`",
         "parameter" -> "`unit`",
         "invalidValue" -> "'invalid_unit'"
       )
