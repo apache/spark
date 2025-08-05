@@ -19,9 +19,12 @@ package org.apache.spark.util
 import java.io.{Closeable, IOException, PrintWriter}
 import java.nio.charset.StandardCharsets.UTF_8
 
+import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
+
 
 private[spark] trait SparkErrorUtils extends Logging {
   /**
@@ -104,6 +107,43 @@ private[spark] trait SparkErrorUtils extends Logging {
       writer.flush()
     }
     new String(out.toByteArray, UTF_8)
+  }
+
+  /**
+   * Walks the [[Throwable]] to obtain its root cause.
+   *
+   * This method walks through the exception chain until the last element,
+   * the root cause of the chain, using `getCause()`, and
+   * returns that exception.
+   *
+   * This method handles recursive cause chains that might
+   * otherwise cause infinite loops. The cause chain is processed until
+   * the end, or until the next item in the chain is already
+   * processed. If we detect a loop, then return the element before the loop.
+   *
+   * @param throwable the throwable to get the root cause for, may be null
+   * @return the root cause of the [[Throwable]], `null` if null throwable input
+   */
+  def getRootCause(throwable: Throwable): Throwable = {
+    @tailrec
+    def findRoot(
+        current: Throwable,
+        visited: mutable.Set[Throwable] = mutable.Set.empty): Throwable = {
+      if (current == null) null
+      else {
+        visited += current
+        val cause = current.getCause
+        if (cause == null) {
+          current
+        } else if (visited.contains(cause)) {
+          current
+        } else {
+          findRoot(cause, visited)
+        }
+      }
+    }
+
+    findRoot(throwable)
   }
 
   /** Try to close by ignoring all exceptions. This is different from JavaUtils.closeQuietly. */
