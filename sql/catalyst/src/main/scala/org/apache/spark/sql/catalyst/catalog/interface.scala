@@ -32,7 +32,7 @@ import org.json4s.JsonAST.{JArray, JBool, JDecimal, JDouble, JInt, JLong, JNull,
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CurrentUserContext, FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}

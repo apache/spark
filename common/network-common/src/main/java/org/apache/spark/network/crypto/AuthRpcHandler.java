@@ -93,7 +93,7 @@ class AuthRpcHandler extends AbstractAuthRpcHandler {
     } catch (RuntimeException e) {
       if (conf.saslFallback()) {
         LOG.warn("Failed to parse new auth challenge, reverting to SASL for client {}.",
-          MDC.of(LogKeys.HOST_PORT$.MODULE$, channel.remoteAddress()));
+          MDC.of(LogKeys.HOST_PORT, channel.remoteAddress()));
         saslHandler = new SaslRpcHandler(conf, channel, null, secretKeyHolder);
         message.position(position);
         message.limit(limit);

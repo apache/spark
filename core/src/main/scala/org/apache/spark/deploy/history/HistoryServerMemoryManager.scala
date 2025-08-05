@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.io.CompressionCodec

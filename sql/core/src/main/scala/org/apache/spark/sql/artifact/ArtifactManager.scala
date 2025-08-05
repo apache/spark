@@ -32,7 +32,7 @@ import org.apache.commons.io.FilenameUtils
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST}
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.classic.SparkSession

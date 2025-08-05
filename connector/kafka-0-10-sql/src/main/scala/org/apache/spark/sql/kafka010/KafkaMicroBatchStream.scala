@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ERROR, OFFSETS, TIP}
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.sql.SparkSession

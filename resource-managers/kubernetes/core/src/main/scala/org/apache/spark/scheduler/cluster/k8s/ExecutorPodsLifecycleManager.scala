@@ -31,7 +31,7 @@ import org.apache.spark.deploy.ExecutorFailureTracker
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesUtils._
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.scheduler.ExecutorExited
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 import org.apache.spark.util.SparkExitCode.EXCEED_MAX_EXECUTOR_FAILURES

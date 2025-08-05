@@ -25,7 +25,7 @@ import java.util.concurrent.ArrayBlockingQueue
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.receiver.Receiver

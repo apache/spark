@@ -23,7 +23,7 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.Evolving
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerResourceProfileAdded}

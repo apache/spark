@@ -67,7 +67,7 @@ import org.slf4j.Logger
 
 import org.apache.spark.{SPARK_VERSION, _}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._

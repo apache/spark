@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ESTIMATOR_PARAM_MAP, TRAIN_VALIDATION_SPLIT_METRIC, TRAIN_VALIDATION_SPLIT_METRICS}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator

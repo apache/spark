@@ -37,7 +37,7 @@ import org.json4s.jackson.JsonMethods
 import org.apache.spark.{QueryContextType, SparkEnv, SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto.FetchErrorDetailsResponse
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{OP_TYPE, SESSION_ID, USER_ID}
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.{ExecuteEventsManager, SessionHolder, SessionKey, SparkConnectService}
