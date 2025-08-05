@@ -4198,6 +4198,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val FILE_FORMAT_WRITER_CLASS =
+    buildConf("spark.sql.execution.fileFormatWriterClass")
+      .internal()
+      .doc("Specifies the implementation class of `FileFormatWriter` to be used in V1 writes.")
+      .version("4.1.0")
+      .stringConf
+      .checkValue(Utils.classIsLoadable(_), s"Class is not loadable")
+      .createOptional
+
   val FASTFAIL_ON_FILEFORMAT_OUTPUT =
     buildConf("spark.sql.execution.fastFailOnFileFormatOutput")
       .internal()
@@ -7073,6 +7082,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def disabledV2StreamingMicroBatchReaders: String =
     getConf(DISABLED_V2_STREAMING_MICROBATCH_READERS)
+
+  def fileFormatWriterClass: Option[String] = getConf(FILE_FORMAT_WRITER_CLASS)
 
   def fastFailFileFormatOutput: Boolean = getConf(FASTFAIL_ON_FILEFORMAT_OUTPUT)
 

@@ -172,8 +172,9 @@ class FileStreamSink(
         }
       }
       val qe = data.queryExecution
+      val writer = FileFormatWriter.create(sparkSession.sessionState.conf)
 
-      FileFormatWriter.write(
+      writer.write(
         sparkSession = sparkSession,
         plan = qe.executedPlan,
         fileFormat = fileFormat,
