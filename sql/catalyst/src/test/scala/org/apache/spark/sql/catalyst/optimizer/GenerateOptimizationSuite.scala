@@ -19,12 +19,12 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Explode
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Explode, JsonTuple, Literal}
 import org.apache.spark.sql.catalyst.optimizer.NestedColumnAliasingSuite.collectGeneratedAliases
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Generate, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StringType, StructType}
 
 class GenerateOptimizationSuite extends PlanTest {
 
@@ -77,5 +77,49 @@ class GenerateOptimizationSuite extends PlanTest {
       .analyze
 
     comparePlans(optimized, expected)
+  }
+
+  test("SPARK-53124: prune unnecessary fields from JsonTuple") {
+    // Create attribute references
+    val jsonStrAttr = AttributeReference("json_str", StringType)()
+    val aAttr = AttributeReference("a", StringType)()
+    val bAttr = AttributeReference("b", StringType)()
+    val cAttr = AttributeReference("c", StringType)()
+
+    // Create child relation
+    val child = LocalRelation(jsonStrAttr)
+
+    // Create JsonTuple generator with 3 fields
+    val jsonTuple = JsonTuple(Seq(jsonStrAttr, Literal("a"), Literal("b"), Literal("c")))
+    val generate = Generate(
+      generator = jsonTuple,
+      unrequiredChildIndex = Nil,
+      outer = false,
+      qualifier = None,
+      generatorOutput = Seq(aAttr, bAttr, cAttr),
+      child = child)
+
+    // Case 1: No generator outputs used - should eliminate Generate completely
+    val projectNone = Project(Seq(jsonStrAttr), generate)
+    val optimizedNone = Optimize.execute(projectNone)
+    // Verify Generate is removed when no outputs are used
+    assert(optimizedNone.children.head === child)
+
+    // Case 2: Some generator outputs used (just 'b')
+    val projectSome = Project(Seq(bAttr), generate)
+    val optimizedSome = Optimize.execute(projectSome)
+    // Verify only needed field remains in generator
+    val someGenerate = optimizedSome.children.head.asInstanceOf[Generate]
+    val someJsonTuple = someGenerate.generator.asInstanceOf[JsonTuple]
+    // Should have jsonStr and just one path expression
+    assert(someJsonTuple.children.size === 2)
+    assert(someGenerate.generatorOutput.size === 1)
+    assert(someGenerate.generatorOutput.head.semanticEquals(bAttr))
+
+    // Case 3: All generator outputs used - plan should remain unchanged
+    val projectAll = Project(Seq(aAttr, bAttr, cAttr), generate)
+    val optimizedAll = GenerateOptimization.apply(projectAll)
+    // Original generate should be preserved
+    comparePlans(projectAll, optimizedAll)
   }
 }
