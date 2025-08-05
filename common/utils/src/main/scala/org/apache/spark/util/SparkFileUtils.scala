@@ -19,6 +19,7 @@ package org.apache.spark.util
 import java.io.File
 import java.net.{URI, URISyntaxException}
 import java.nio.file.{Files, Path, StandardCopyOption}
+import java.nio.file.attribute.FileTime
 
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.network.util.JavaUtils
@@ -195,6 +196,22 @@ private[spark] trait SparkFileUtils extends Logging {
       val path1 = file1.toPath
       val path2 = file2.toPath
       Files.isSameFile(path1, path2) || Files.mismatch(path1, path2) == -1L
+    }
+  }
+
+  def touch(file: File): Unit = {
+    if (file == null) {
+      throw new IllegalArgumentException("Invalid input file: null")
+    }
+    val path = file.toPath
+    if (Files.exists(path)) {
+      Files.setLastModifiedTime(path, FileTime.fromMillis(System.currentTimeMillis()))
+    } else {
+      val parent = path.getParent()
+      if (parent != null && !Files.exists(parent)) {
+        Files.createDirectories(parent)
+      }
+      Files.createFile(path)
     }
   }
 }
