@@ -48,8 +48,11 @@ import org.apache.spark.util.{NextIterator, ThreadUtils, Utils}
 /**
  * Represents an iterator that provides additional functionalities for state store use cases.
  *
- * close() is useful for freeing underlying iterator resources when the iterator is no longer
+ * `close()` is useful for freeing underlying iterator resources when the iterator is no longer
  * needed.
+ *
+ * The caller MUST call `close()` on the iterator if it was not fully consumed, and it is no
+ * longer needed.
  */
 class StateStoreIterator[A](
     val iter: Iterator[A],

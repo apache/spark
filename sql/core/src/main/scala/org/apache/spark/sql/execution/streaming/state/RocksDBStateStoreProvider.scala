@@ -370,7 +370,6 @@ private[sql] class RocksDBStateStoreProvider
       val prefix = kvEncoder._1.encodePrefixKey(prefixKey)
 
       val rocksDbIter = rocksDB.prefixScan(prefix, colFamilyName)
-
       val iter = rocksDbIter.map { kv =>
         rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
           kvEncoder._2.decodeValue(kv.value))
