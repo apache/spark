@@ -1623,7 +1623,7 @@ org.apache.spark.SparkIllegalArgumentException
   "errorClass" : "INVALID_PARAMETER_VALUE.TIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
-    "functionName" : "`timediff`",
+    "functionName" : "`time_diff`",
     "invalidValue" : "''",
     "parameter" : "`unit`"
   }
@@ -1640,7 +1640,7 @@ org.apache.spark.SparkIllegalArgumentException
   "errorClass" : "INVALID_PARAMETER_VALUE.TIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
-    "functionName" : "`timediff`",
+    "functionName" : "`time_diff`",
     "invalidValue" : "' '",
     "parameter" : "`unit`"
   }
@@ -1657,7 +1657,7 @@ org.apache.spark.SparkIllegalArgumentException
   "errorClass" : "INVALID_PARAMETER_VALUE.TIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
-    "functionName" : "`timediff`",
+    "functionName" : "`time_diff`",
     "invalidValue" : "'MS'",
     "parameter" : "`unit`"
   }
@@ -1674,7 +1674,7 @@ org.apache.spark.SparkIllegalArgumentException
   "errorClass" : "INVALID_PARAMETER_VALUE.TIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
-    "functionName" : "`timediff`",
+    "functionName" : "`time_diff`",
     "invalidValue" : "'DAY'",
     "parameter" : "`unit`"
   }
@@ -1691,7 +1691,7 @@ org.apache.spark.SparkIllegalArgumentException
   "errorClass" : "INVALID_PARAMETER_VALUE.TIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
-    "functionName" : "`timediff`",
+    "functionName" : "`time_diff`",
     "invalidValue" : "'WEEK'",
     "parameter" : "`unit`"
   }
@@ -1708,7 +1708,7 @@ org.apache.spark.SparkIllegalArgumentException
   "errorClass" : "INVALID_PARAMETER_VALUE.TIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
-    "functionName" : "`timediff`",
+    "functionName" : "`time_diff`",
     "invalidValue" : "'ABCD'",
     "parameter" : "`unit`"
   }
@@ -1725,7 +1725,7 @@ org.apache.spark.SparkIllegalArgumentException
   "errorClass" : "INVALID_PARAMETER_VALUE.TIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
-    "functionName" : "`timediff`",
+    "functionName" : "`time_diff`",
     "invalidValue" : "'QUARTER'",
     "parameter" : "`unit`"
   }
@@ -1742,7 +1742,7 @@ org.apache.spark.SparkIllegalArgumentException
   "errorClass" : "INVALID_PARAMETER_VALUE.TIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
-    "functionName" : "`timediff`",
+    "functionName" : "`time_diff`",
     "invalidValue" : "'INVALID'",
     "parameter" : "`unit`"
   }
@@ -1759,7 +1759,7 @@ org.apache.spark.SparkIllegalArgumentException
   "errorClass" : "INVALID_PARAMETER_VALUE.TIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
-    "functionName" : "`timediff`",
+    "functionName" : "`time_diff`",
     "invalidValue" : "'INVALID_UNIT'",
     "parameter" : "`unit`"
   }

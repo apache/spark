@@ -28,11 +28,11 @@ import io.fabric8.kubernetes.client.dsl.ExecListener
 import io.fabric8.kubernetes.client.dsl.ExecListener.Response
 import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveOutputStream}
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
-import org.apache.commons.io.IOUtils
 import org.apache.commons.io.output.ByteArrayOutputStream
 
 import org.apache.spark.{SPARK_VERSION, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.SparkErrorUtils
 
 object Utils extends Logging {
 
@@ -145,9 +145,9 @@ object Utils extends Logging {
     val zipOut = new ZipOutputStream(fos)
     val zipEntry = new ZipEntry(fileToZip.getName)
     zipOut.putNextEntry(zipEntry)
-    IOUtils.copy(fis, zipOut)
-    IOUtils.closeQuietly(fis)
-    IOUtils.closeQuietly(zipOut)
+    fis.transferTo(zipOut)
+    SparkErrorUtils.closeQuietly(fis)
+    SparkErrorUtils.closeQuietly(zipOut)
   }
 
   def createTarGzFile(inFile: String, outFile: String): Unit = {
@@ -167,7 +167,7 @@ object Utils extends Logging {
         // to 777.
         tarEntry.setMode(0x81ff)
         tOut.putArchiveEntry(tarEntry)
-        IOUtils.copy(fis, tOut)
+        fis.transferTo(tOut)
         tOut.closeArchiveEntry()
         tOut.finish()
       }

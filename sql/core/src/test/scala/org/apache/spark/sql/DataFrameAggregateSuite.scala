@@ -2364,7 +2364,7 @@ class DataFrameAggregateSuite extends QueryTest
             val expectedAnswer = Row(null)
             assertDecimalSumOverflow(df2, ansiEnabled, fnName, expectedAnswer)
 
-            val decStr = "1" + "0" * 19
+            val decStr = "1" + "0".repeat(19)
             val d1 = spark.range(0, 12, 1, 1)
             val d2 = d1.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(aggFn($"d"))
             assertDecimalSumOverflow(d2, ansiEnabled, fnName, expectedAnswer)

@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowSQLTest
 
 object TTLInputProcessFunction {
   def processRow(
@@ -185,6 +186,7 @@ class TTLProcessorWithCompositeTypes(
   }
 }
 
+@SlowSQLTest
 class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
 
   import testImplicits._

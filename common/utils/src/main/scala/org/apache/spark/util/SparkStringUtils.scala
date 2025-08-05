@@ -72,6 +72,20 @@ private[spark] trait SparkStringUtils {
   /** Try to strip prefix and suffix with the given string 's' */
   def strip(str: String, s: String): String =
     if (str == null || s == null) str else str.stripPrefix(s).stripSuffix(s)
+
+  def leftPad(str: String, width: Int): String =
+    if (str == null || str.length >= width) str else String.format(s"%${width}s", str)
+
+  def rightPad(str: String, width: Int): String =
+    if (str == null || str.length >= width) str else String.format(s"%-${width}s", str)
+
+  def rightPad(str: String, width: Int, s: String): String =
+    if (str == null || str.length >= width) {
+      str
+    } else {
+      val tmp = str + s.repeat((width - str.length)/s.length)
+      tmp + s.substring(0, width - tmp.length)
+    }
 }
 
 private[spark] object SparkStringUtils extends SparkStringUtils with Logging {

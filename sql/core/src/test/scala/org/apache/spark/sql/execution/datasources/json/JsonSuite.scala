@@ -796,7 +796,7 @@ abstract class JsonSuite
   test("Find compatible types even if inferred DecimalType is not capable of other IntegralType") {
     val mixedIntegerAndDoubleRecords = Seq(
       """{"a": 3, "b": 1.1}""",
-      s"""{"a": 3.1, "b": 0.${"0" * 38}1}""").toDS()
+      s"""{"a": 3.1, "b": 0.${"0".repeat(38)}1}""").toDS()
     val jsonDF = spark.read
       .option("prefersDecimal", "true")
       .json(mixedIntegerAndDoubleRecords)

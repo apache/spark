@@ -84,10 +84,10 @@ private[spark] class Executor(
 
   logInfo(log"Starting executor ID ${LogMDC(LogKeys.EXECUTOR_ID, executorId)}" +
     log" on host ${LogMDC(HOST, executorHostname)}")
-  logInfo(log"OS info ${LogMDC(OS_NAME, System.getProperty("os.name"))}," +
-    log" ${LogMDC(OS_VERSION, System.getProperty("os.version"))}, " +
-    log"${LogMDC(OS_ARCH, System.getProperty("os.arch"))}")
-  logInfo(log"Java version ${LogMDC(JAVA_VERSION, System.getProperty("java.version"))}")
+  logInfo(log"OS info ${LogMDC(OS_NAME, Utils.osName)}," +
+    log" ${LogMDC(OS_VERSION, Utils.osVersion)}, " +
+    log"${LogMDC(OS_ARCH, Utils.osArch)}")
+  logInfo(log"Java version ${LogMDC(JAVA_VERSION, Utils.javaVersion)}")
 
   private val executorShutdown = new AtomicBoolean(false)
   val stopHookReference = ShutdownHookManager.addShutdownHook(

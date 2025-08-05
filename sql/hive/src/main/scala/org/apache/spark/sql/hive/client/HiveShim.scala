@@ -1543,3 +1543,5 @@ private[client] class Shim_v4_0 extends Shim_v3_1 {
     renamePartitionMethod.invoke(hive, table, oldPartSpec, newPart, writeIdInLoadTableOrPartition)
   }
 }
+
+private[client] class Shim_v4_1 extends Shim_v4_0

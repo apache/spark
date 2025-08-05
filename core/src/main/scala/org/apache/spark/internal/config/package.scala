@@ -500,6 +500,16 @@ package object config {
     .doubleConf
     .createWithDefault(0.6)
 
+  private[spark] val UNMANAGED_MEMORY_POLLING_INTERVAL =
+    ConfigBuilder("spark.memory.unmanagedMemoryPollingInterval")
+      .doc("Interval for polling unmanaged memory users to track their memory usage. " +
+        "Unmanaged memory users are components that manage their own memory outside of " +
+        "Spark's core memory management, such as RocksDB for Streaming State Store. " +
+        "Setting this to 0 disables unmanaged memory polling.")
+      .version("4.1.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("0s")
+
   private[spark] val STORAGE_UNROLL_MEMORY_THRESHOLD =
     ConfigBuilder("spark.storage.unrollMemoryThreshold")
       .doc("Initial memory to request before unrolling any block")

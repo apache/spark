@@ -25,7 +25,6 @@ from typing import TYPE_CHECKING, Optional
 
 import pyspark
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
-from pyspark.loose_version import LooseVersion
 from pyspark.serializers import (
     Serializer,
     read_int,
@@ -197,6 +196,15 @@ class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
         return ArrowStreamSerializer.load_stream(self, stream)
 
 
+class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
+    """
+    Serializer for PyArrow-native UDTFs that work directly with PyArrow RecordBatches and Arrays.
+    """
+
+    # TODO(SPARK-52981): support table arguments
+    ...
+
+
 class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
     """
     Serializes pyarrow.RecordBatch data with Arrow streaming format.
@@ -304,20 +312,10 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         # instead of creating datetime64[ns] as intermediate data to avoid overflow caused by
         # datetime64[ns] type handling.
         # Cast dates to objects instead of datetime64[ns] dtype to avoid overflow.
-        pandas_options = {"date_as_object": True}
-
-        import pyarrow as pa
-
-        if LooseVersion(pa.__version__) >= LooseVersion("13.0.0"):
-            # A legacy option to coerce date32, date64, duration, and timestamp
-            # time units to nanoseconds when converting to pandas.
-            # This option can only be added since 13.0.0.
-            pandas_options.update(
-                {
-                    "coerce_temporal_nanoseconds": True,
-                }
-            )
-
+        pandas_options = {
+            "date_as_object": True,
+            "coerce_temporal_nanoseconds": True,
+        }
         s = arrow_column.to_pandas(**pandas_options)
 
         # TODO(SPARK-43579): cache the converter for reuse
@@ -795,7 +793,7 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
         for batch in super().load_stream(stream):
             columns = [
                 [conv(v) for v in column.to_pylist()] if conv is not None else column.to_pylist()
-                for column, conv in zip(batch.columns, converters)
+                for column, conv in zip(batch.itercolumns(), converters)
             ]
             if len(columns) == 0:
                 yield [[pyspark._NoValue] * batch.num_rows]

@@ -201,10 +201,10 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // log out Spark Version in Spark driver log
   logInfo(log"Running Spark version ${MDC(LogKeys.SPARK_VERSION, SPARK_VERSION)}")
-  logInfo(log"OS info ${MDC(LogKeys.OS_NAME, System.getProperty("os.name"))}," +
-    log" ${MDC(LogKeys.OS_VERSION, System.getProperty("os.version"))}, " +
-    log"${MDC(LogKeys.OS_ARCH, System.getProperty("os.arch"))}")
-  logInfo(log"Java version ${MDC(LogKeys.JAVA_VERSION, System.getProperty("java.version"))}")
+  logInfo(log"OS info ${MDC(LogKeys.OS_NAME, Utils.osName)}," +
+    log" ${MDC(LogKeys.OS_VERSION, Utils.osVersion)}, " +
+    log"${MDC(LogKeys.OS_ARCH, Utils.osArch)}")
+  logInfo(log"Java version ${MDC(LogKeys.JAVA_VERSION, Utils.javaVersion)}")
 
   /* ------------------------------------------------------------------------------------- *
    | Private variables. These variables keep the internal state of the context, and are    |

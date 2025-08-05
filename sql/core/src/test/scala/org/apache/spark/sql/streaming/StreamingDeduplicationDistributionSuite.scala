@@ -19,8 +19,6 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Update
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingDeduplicateExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -75,7 +73,7 @@ class StreamingDeduplicationDistributionSuite extends StreamTest
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
     inputData.addData(1, 1, 2)
     inputData.addData(3, 4)

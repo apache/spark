@@ -24,7 +24,6 @@ import java.util
 
 import scala.util.Try
 
-import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.shims.ShimLoader
 
@@ -99,6 +98,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       case (3, 0, _) => Some(hive.v3_0)
       case (3, 1, _) => Some(hive.v3_1)
       case (4, 0, _) => Some(hive.v4_0)
+      case (4, 1, _) => Some(hive.v4_1)
       case _ => None
     }.getOrElse {
       throw QueryExecutionErrors.unsupportedHiveMetastoreVersionError(
@@ -149,7 +149,7 @@ private[hive] object IsolatedClientLoader extends Logging {
 
     // TODO: Remove copy logic.
     val tempDir = Utils.createTempDir(namePrefix = s"hive-${version}")
-    allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))
+    allFiles.foreach(f => Utils.copyFileToDirectory(f, tempDir))
     logInfo(log"Downloaded metastore jars to ${MDC(PATH, tempDir.getCanonicalPath)}")
     tempDir.listFiles().map(_.toURI.toURL).toImmutableArraySeq
   }
@@ -258,7 +258,7 @@ private[hive] class IsolatedClientLoader(
             if (isBarrierClass(name)) {
               // For barrier classes, we construct a new copy of the class.
               val bytes = Utils.tryWithResource(
-                baseClassLoader.getResourceAsStream(classToPath(name)))(IOUtils.toByteArray)
+                baseClassLoader.getResourceAsStream(classToPath(name)))(_.readAllBytes)
               logDebug(s"custom defining: $name - ${util.Arrays.hashCode(bytes)}")
               defineClass(name, bytes, 0, bytes.length)
             } else if (!isSharedClass(name)) {

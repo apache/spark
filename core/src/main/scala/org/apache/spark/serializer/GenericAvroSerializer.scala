@@ -28,7 +28,6 @@ import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 import org.apache.avro.{Schema, SchemaNormalization}
 import org.apache.avro.generic.{GenericContainer, GenericData}
 import org.apache.avro.io._
-import org.apache.commons.io.IOUtils
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.io.CompressionCodec
@@ -93,7 +92,7 @@ private[serializer] class GenericAvroSerializer[D <: GenericContainer]
       schemaBytes.remaining())
     val in = codec.compressedInputStream(bis)
     val bytes = Utils.tryWithSafeFinally {
-      IOUtils.toByteArray(in)
+      in.readAllBytes()
     } {
       in.close()
     }

@@ -305,7 +305,12 @@ class MetadataBuilder {
 
   /** Builds the [[Metadata]] instance. */
   def build(): Metadata = {
-    new Metadata(map.toMap, runtimeMap.toMap)
+    if (map.isEmpty && runtimeMap.isEmpty) {
+      // Save some memory when the metadata is empty
+      Metadata.empty
+    } else {
+      new Metadata(map.toMap, runtimeMap.toMap)
+    }
   }
 
   private def put(key: String, value: Any): this.type = {

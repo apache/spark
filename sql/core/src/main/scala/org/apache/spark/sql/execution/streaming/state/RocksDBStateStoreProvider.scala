@@ -432,6 +432,9 @@ private[sql] class RocksDBStateStoreProvider
         def commitLatencyMs(typ: String): Long =
           rocksDBMetrics.lastCommitLatencyMs.getOrElse(typ, 0L)
 
+        def loadMetrics(typ: String): Long =
+          rocksDBMetrics.loadMetrics.getOrElse(typ, 0L)
+
         def nativeOpsLatencyMillis(typ: String): Long = {
           rocksDBMetrics.nativeOpsMetrics.get(typ).map(_ * 1000).getOrElse(0)
         }
@@ -467,6 +470,13 @@ private[sql] class RocksDBStateStoreProvider
           CUSTOM_METRIC_COMMIT_COMPACT_TIME -> commitLatencyMs("compact"),
           CUSTOM_METRIC_CHECKPOINT_TIME -> commitLatencyMs("checkpoint"),
           CUSTOM_METRIC_FILESYNC_TIME -> commitLatencyMs("fileSync"),
+          CUSTOM_METRIC_CHANGE_LOG_WRITER_COMMIT_TIME -> commitLatencyMs("changeLogWriterCommit"),
+          CUSTOM_METRIC_SAVE_ZIP_FILES_TIME -> commitLatencyMs("saveZipFiles"),
+
+          CUSTOM_METRIC_LOAD_FROM_SNAPSHOT_TIME -> loadMetrics("loadFromSnapshot"),
+          CUSTOM_METRIC_LOAD_TIME -> loadMetrics("load"),
+          CUSTOM_METRIC_REPLAY_CHANGE_LOG -> loadMetrics("replayChangelog"),
+          CUSTOM_METRIC_NUM_REPLAY_CHANGE_LOG_FILES -> loadMetrics("numReplayChangeLogFiles"),
           CUSTOM_METRIC_BYTES_COPIED -> rocksDBMetrics.bytesCopied,
           CUSTOM_METRIC_FILES_COPIED -> rocksDBMetrics.filesCopied,
           CUSTOM_METRIC_FILES_REUSED -> rocksDBMetrics.filesReused,
@@ -562,6 +572,7 @@ private[sql] class RocksDBStateStoreProvider
     this.rocksDBEventForwarder =
       Some(RocksDBEventForwarder(StateStoreProvider.getRunId(hadoopConf), stateStoreId))
 
+    // Initialize StateStoreProviderId for memory tracking
     val queryRunId = UUID.fromString(StateStoreProvider.getRunId(hadoopConf))
     this.stateStoreProviderId = StateStoreProviderId(stateStoreId, queryRunId)
 
@@ -775,7 +786,8 @@ private[sql] class RocksDBStateStoreProvider
       useColumnFamilies: Boolean,
       enableStateStoreCheckpointIds: Boolean,
       partitionId: Int = 0,
-      eventForwarder: Option[RocksDBEventForwarder] = None): RocksDB = {
+      eventForwarder: Option[RocksDBEventForwarder] = None,
+      uniqueId: Option[String] = None): RocksDB = {
     new RocksDB(
       dfsRootDir,
       conf,
@@ -785,7 +797,8 @@ private[sql] class RocksDBStateStoreProvider
       useColumnFamilies,
       enableStateStoreCheckpointIds,
       partitionId,
-      eventForwarder)
+      eventForwarder,
+      uniqueId)
   }
 
   private[sql] lazy val rocksDB = {
@@ -797,7 +810,7 @@ private[sql] class RocksDBStateStoreProvider
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
     createRocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, loggingId,
       useColumnFamilies, storeConf.enableStateStoreCheckpointIds, stateStoreId.partitionId,
-      rocksDBEventForwarder)
+      rocksDBEventForwarder, Some(stateStoreProviderId.toString))
   }
 
   private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
@@ -1105,6 +1118,25 @@ object RocksDBStateStoreProvider {
     "rocksdbFilesReused", "RocksDB: file manager - files reused")
   val CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED = StateStoreCustomSizeMetric(
     "rocksdbZipFileBytesUncompressed", "RocksDB: file manager - uncompressed zip file bytes")
+  val CUSTOM_METRIC_CHANGE_LOG_WRITER_COMMIT_TIME = StateStoreCustomTimingMetric(
+    "rocksdbChangeLogWriterCommitLatencyMs",
+    "RocksDB: commit - changelog commit time")
+  val CUSTOM_METRIC_SAVE_ZIP_FILES_TIME = StateStoreCustomTimingMetric(
+    "rocksdbSaveZipFilesLatencyMs",
+    "RocksDB: commit - zip files sync to external storage time")
+
+  val CUSTOM_METRIC_LOAD_FROM_SNAPSHOT_TIME = StateStoreCustomTimingMetric(
+    "rocksdbLoadFromSnapshotLatencyMs",
+    "RocksDB: load from snapshot - time taken to load the store from snapshot")
+  val CUSTOM_METRIC_LOAD_TIME = StateStoreCustomTimingMetric(
+    "rocksdbLoadLatencyMs",
+    "RocksDB: load - time taken to load the store")
+  val CUSTOM_METRIC_REPLAY_CHANGE_LOG = StateStoreCustomTimingMetric(
+    "rocksdbReplayChangeLogLatencyMs",
+    "RocksDB: load - time taken to replay the change log")
+  val CUSTOM_METRIC_NUM_REPLAY_CHANGE_LOG_FILES = StateStoreCustomSizeMetric(
+    "rocksdbNumReplayChangelogFiles",
+    "RocksDB: load - number of change log files replayed")
 
   val CUSTOM_METRIC_BLOCK_CACHE_MISS = StateStoreCustomSumMetric(
     "rocksdbReadBlockCacheMissCount",
@@ -1159,13 +1191,16 @@ object RocksDBStateStoreProvider {
     CUSTOM_METRIC_FLUSH_TIME, CUSTOM_METRIC_COMMIT_COMPACT_TIME,
     CUSTOM_METRIC_CHECKPOINT_TIME, CUSTOM_METRIC_FILESYNC_TIME,
     CUSTOM_METRIC_BYTES_COPIED, CUSTOM_METRIC_FILES_COPIED, CUSTOM_METRIC_FILES_REUSED,
-    CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED, CUSTOM_METRIC_GET_COUNT, CUSTOM_METRIC_PUT_COUNT,
+    CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED, CUSTOM_METRIC_CHANGE_LOG_WRITER_COMMIT_TIME,
+    CUSTOM_METRIC_SAVE_ZIP_FILES_TIME, CUSTOM_METRIC_GET_COUNT, CUSTOM_METRIC_PUT_COUNT,
     CUSTOM_METRIC_BLOCK_CACHE_MISS, CUSTOM_METRIC_BLOCK_CACHE_HITS, CUSTOM_METRIC_BYTES_READ,
     CUSTOM_METRIC_BYTES_WRITTEN, CUSTOM_METRIC_ITERATOR_BYTES_READ, CUSTOM_METRIC_STALL_TIME,
     CUSTOM_METRIC_TOTAL_COMPACT_TIME, CUSTOM_METRIC_COMPACT_READ_BYTES,
     CUSTOM_METRIC_COMPACT_WRITTEN_BYTES, CUSTOM_METRIC_FLUSH_WRITTEN_BYTES,
     CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE, CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES_KEYS,
-    CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES, CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES)
+    CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES, CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES,
+    CUSTOM_METRIC_LOAD_FROM_SNAPSHOT_TIME, CUSTOM_METRIC_LOAD_TIME, CUSTOM_METRIC_REPLAY_CHANGE_LOG,
+    CUSTOM_METRIC_NUM_REPLAY_CHANGE_LOG_FILES)
 
   val CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED = StateStoreSnapshotLastUploadInstanceMetric()
 

@@ -30,11 +30,12 @@ import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 import com.google.common.collect.ImmutableSet;
-import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.rocksdb.RocksIterator;
+
+import org.apache.spark.network.util.JavaUtils;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -49,7 +50,7 @@ public class RocksDBSuite {
       db.close();
     }
     if (dbpath != null) {
-      FileUtils.deleteQuietly(dbpath);
+      JavaUtils.deleteQuietly(dbpath);
     }
   }
 
@@ -302,7 +303,7 @@ public class RocksDBSuite {
     }
     dbForCloseTest.close();
     assertTrue(dbPathForCloseTest.exists());
-    FileUtils.deleteQuietly(dbPathForCloseTest);
+    JavaUtils.deleteQuietly(dbPathForCloseTest);
     assertTrue(!dbPathForCloseTest.exists());
   }
 
@@ -417,7 +418,7 @@ public class RocksDBSuite {
       assertTrue(resourceCleaner.isCompleted());
     } finally {
       dbForCleanerTest.close();
-      FileUtils.deleteQuietly(dbPathForCleanerTest);
+      JavaUtils.deleteQuietly(dbPathForCleanerTest);
     }
   }
 
