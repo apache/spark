@@ -3586,8 +3586,7 @@ object SQLConf {
       .doc("When enabled, shuffle files will be cleaned up at the end of Spark Connect " +
         "SQL executions.")
       .version("4.1.0")
-      .booleanConf
-      .createWithDefault(Utils.isTesting)
+      .fallbackConf(SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)
 
   val SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.in.memory.threshold")
