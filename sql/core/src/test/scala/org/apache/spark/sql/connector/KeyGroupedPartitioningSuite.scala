@@ -1118,9 +1118,13 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
              |  ON i.id = p.item_id
              |WHERE p.RN = 1
              |""".stripMargin)
+        checkAnswer(df, Seq(Row(140.0, 7, 140.0, Timestamp.valueOf("2020-02-01 00:00:00"))))
         val shuffles = collectShuffles(df.queryExecution.executedPlan)
         assert(shuffles.isEmpty, "should not contain any shuffle")
-        checkAnswer(df, Seq(Row(140.0, 7, 140.0, Timestamp.valueOf("2020-02-01 00:00:00"))))
+        if (pushDownValues) {
+          val scans = collectScans(df.queryExecution.executedPlan)
+          assert(scans.forall(_.inputRDD.partitions.length === 3))
+        }
       }
     }
   }
