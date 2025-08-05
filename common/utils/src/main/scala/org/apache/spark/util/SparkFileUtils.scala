@@ -201,7 +201,7 @@ private[spark] trait SparkFileUtils extends Logging {
 
   def touch(file: File): Unit = {
     if (file == null) {
-      throw new IllegalArgumentException(s"Invalid input file $file")
+      throw new IllegalArgumentException("Invalid input file: null")
     }
     val path = file.toPath
     if (Files.exists(path)) {
