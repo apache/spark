@@ -196,6 +196,15 @@ class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
         return ArrowStreamSerializer.load_stream(self, stream)
 
 
+class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
+    """
+    Serializer for PyArrow-native UDTFs that work directly with PyArrow RecordBatches and Arrays.
+    """
+
+    # TODO(SPARK-52981): support table arguments
+    ...
+
+
 class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
     """
     Serializes pyarrow.RecordBatch data with Arrow streaming format.
