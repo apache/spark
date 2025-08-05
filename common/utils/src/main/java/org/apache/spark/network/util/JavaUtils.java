@@ -35,6 +35,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import java.util.stream.Collectors;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
@@ -337,6 +338,27 @@ public class JavaUtils {
       return files;
     } else {
       return new File[0];
+    }
+  }
+
+  public static Set<Path> listPaths(File dir) throws IOException {
+    if (dir == null || !dir.exists() || !dir.isDirectory()) {
+      throw new IllegalArgumentException("Invalid input " + dir);
+    }
+    try (var stream = Files.walk(dir.toPath())) {
+      return stream.filter(Files::isRegularFile).collect(Collectors.toCollection(HashSet::new));
+    }
+  }
+
+  public static Set<File> listFiles(File dir) throws IOException {
+    if (dir == null || !dir.exists() || !dir.isDirectory()) {
+      throw new IllegalArgumentException("Invalid input " + dir);
+    }
+    try (var stream = Files.walk(dir.toPath())) {
+      return stream
+        .filter(Files::isRegularFile)
+        .map(Path::toFile)
+        .collect(Collectors.toCollection(HashSet::new));
     }
   }
 

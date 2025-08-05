@@ -20,8 +20,6 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.classic.SparkSession
@@ -425,7 +423,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
         jarPath, path.resolve("udf_noA.jar"), None)
       artifactManager.addArtifact( // Cached
         Paths.get("cache/test"), randomFilePath, None)
-      assert(FileUtils.listFiles(artifactManager.artifactPath.toFile, null, true).size() === 3)
+      assert(Utils.listPaths(artifactManager.artifactPath.toFile).size() === 3)
 
       // Clone the artifact manager
       val newSession = spark.cloneSession()
@@ -444,7 +442,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
         }
       }
 
-      val allFiles = FileUtils.listFiles(newArtifactManager.artifactPath.toFile, null, true)
+      val allFiles = Utils.listFiles(newArtifactManager.artifactPath.toFile)
       assert(allFiles.size() === 3)
       allFiles.forEach { file =>
         assert(!file.getCanonicalPath.contains(spark.sessionUUID))

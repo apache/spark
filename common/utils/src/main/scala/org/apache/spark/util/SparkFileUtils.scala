@@ -74,6 +74,20 @@ private[spark] trait SparkFileUtils extends Logging {
   }
 
   /**
+   * Lists regular files recursively.
+   */
+  def listFiles(f: File): java.util.Set[File] = {
+    JavaUtils.listFiles(f)
+  }
+
+  /**
+   * Lists regular paths recursively.
+   */
+  def listPaths(f: File): java.util.Set[Path] = {
+    JavaUtils.listPaths(f)
+  }
+
+  /**
    * Create a directory given the abstract pathname
    * @return true, if the directory is successfully created; otherwise, return false.
    */

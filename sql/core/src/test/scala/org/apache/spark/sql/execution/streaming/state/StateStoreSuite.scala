@@ -28,7 +28,6 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.json4s.DefaultFormats
@@ -737,8 +736,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       provider.getStore(0).commit()
 
       // Verify we don't leak temp files
-      val tempFiles = FileUtils.listFiles(new File(provider.stateStoreId.checkpointRootLocation),
-        null, true).asScala.filter(_.getName.startsWith("temp-"))
+      val tempFiles = Utils.listFiles(new File(provider.stateStoreId.checkpointRootLocation))
+        .asScala.filter(_.getName.startsWith("temp-"))
       assert(tempFiles.isEmpty)
     }
   }
