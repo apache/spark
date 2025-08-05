@@ -28,7 +28,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.hive.common.cli.HiveFileProcessor;
 import org.apache.hadoop.hive.common.cli.IHiveFileProcessor;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -74,6 +73,7 @@ import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.util.Utils;
 import org.apache.spark.util.SparkStringUtils;
 
@@ -714,7 +714,7 @@ public class HiveSessionImpl implements HiveSession {
     } else {
       for (File file : fileAry) {
         try {
-          FileUtils.forceDelete(file);
+          JavaUtils.deleteRecursively(file);
         } catch (Exception e) {
           LOG.error("Failed to cleanup pipeout file: {}", e, MDC.of(LogKeys.PATH$.MODULE$, file));
         }
@@ -725,7 +725,7 @@ public class HiveSessionImpl implements HiveSession {
   private void cleanupSessionLogDir() {
     if (isOperationLogEnabled) {
       try {
-        FileUtils.forceDelete(sessionLogDir);
+        JavaUtils.deleteRecursively(sessionLogDir);
       } catch (Exception e) {
         LOG.error("Failed to cleanup session log dir: {}", e,
           MDC.of(LogKeys.SESSION_HANDLE$.MODULE$, sessionHandle));
