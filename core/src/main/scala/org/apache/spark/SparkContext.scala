@@ -3442,8 +3442,8 @@ object SparkContext extends Logging {
     // They're specific policy options that modify GC behavior rather than representing
     // complete GC implementations, so we exclude them when detecting available GC algorithms.
     val nonGCAlgorithmFlags: Set[String] = Set(
-      "-XX:UseAdaptiveSizePolicyWithSystemGC",
-      "-XX:UseMaximumCompactionOnSystemGC")
+      "-XX:+UseAdaptiveSizePolicyWithSystemGC",
+      "-XX:+UseMaximumCompactionOnSystemGC")
 
     def supplement(key: OptionalConfigEntry[String]): Unit = {
       conf.get(key).foreach { opts =>
