@@ -322,7 +322,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     # arithmetic operators
     def __neg__(self: IndexOpsLike) -> IndexOpsLike:
-        return self._dtype_op.neg(self)
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return self._dtype_op.neg(self)
 
     def __add__(self, other: Any) -> SeriesOrIndex:
         with ansi_mode_context(self._internal.spark_frame.sparkSession):
