@@ -224,7 +224,7 @@ class ToggleSaveAndEmitProcessor
 
 @SlowSQLTest
 class TransformWithListStateSuite extends StreamTest
-  with AlsoTestWithRocksDBFeatures with AlsoTestWithEncodingTypes {
+  with AlsoTestWithRocksDBFeatures with AlsoTestWithEncodingTypes with StateStoreMetricsTest {
   import testImplicits._
 
   test("test appending null value in list state throw exception") {
@@ -362,10 +362,14 @@ class TransformWithListStateSuite extends StreamTest
         // no interaction test
         AddData(inputData, InputRow("k1", "emit", "v1")),
         CheckNewAnswer(("k1", "v1")),
+        assertNumStateRows(total = 0, updated = 0), // emit does not change state
+
         // check simple append
         AddData(inputData, InputRow("k1", "append", "v2")),
         AddData(inputData, InputRow("k1", "emitAllInState", "")),
         CheckNewAnswer(("k1", "v2")),
+        assertNumStateRows(total = 0, updated = 1), // emitAllInState clears state
+
         // multiple appends are correctly stored and emitted
         AddData(inputData, InputRow("k2", "append", "v1")),
         AddData(inputData, InputRow("k1", "append", "v4")),
@@ -373,33 +377,45 @@ class TransformWithListStateSuite extends StreamTest
         AddData(inputData, InputRow("k1", "emit", "v5")),
         AddData(inputData, InputRow("k2", "emit", "v3")),
         CheckNewAnswer(("k1", "v5"), ("k2", "v3")),
+        assertNumStateRows(total = 2, updated = 3),
+
         AddData(inputData, InputRow("k1", "emitAllInState", "")),
         AddData(inputData, InputRow("k2", "emitAllInState", "")),
         CheckNewAnswer(("k2", "v1"), ("k2", "v2"), ("k1", "v4")),
+        assertNumStateRows(total = 0, updated = 0),
+
         // check appendAll with append
         AddData(inputData, InputRow("k3", "appendAll", "v1,v2,v3")),
         AddData(inputData, InputRow("k3", "emit", "v4")),
         AddData(inputData, InputRow("k3", "append", "v5")),
         CheckNewAnswer(("k3", "v4")),
+        assertNumStateRows(total = 1, updated = 4),
+
         AddData(inputData, InputRow("k3", "emitAllInState", "")),
         CheckNewAnswer(("k3", "v1"), ("k3", "v2"), ("k3", "v3"), ("k3", "v5")),
+        assertNumStateRows(total = 0, updated = 0),
+
         // check removal cleans up all data in state
         AddData(inputData, InputRow("k4", "append", "v2")),
-        AddData(inputData, InputRow("k4", "appendList", "v3,v4")),
+        AddData(inputData, InputRow("k4", "appendAll", "v3,v4")),
         AddData(inputData, InputRow("k4", "remove", "")),
         AddData(inputData, InputRow("k4", "emitAllInState", "")),
         CheckNewAnswer(),
+        assertNumStateRows(total = 0, updated = 3), // clearing state is a single update
+
         // check put cleans up previous state and adds new state
         AddData(inputData, InputRow("k5", "appendAll", "v1,v2,v3")),
         AddData(inputData, InputRow("k5", "append", "v4")),
         AddData(inputData, InputRow("k5", "put", "v5,v6")),
         AddData(inputData, InputRow("k5", "emitAllInState", "")),
         CheckNewAnswer(("k5", "v5"), ("k5", "v6")),
+        assertNumStateRows(total = 0, updated = 2), // put resets the updated count
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numListStateVars") > 0)
           assert(q.lastProgress.stateOperators(0).numRowsUpdated === 2)
           assert(q.lastProgress.stateOperators(0).numRowsRemoved === 2)
-        }
+        },
+        StopStream
       )
     }
   }
@@ -419,9 +435,11 @@ class TransformWithListStateSuite extends StreamTest
         AddData(inputData, "k1"),
         AddData(inputData, "k2"),
         CheckNewAnswer(),
+        assertNumStateRows(total = 4, updated = 4),
         AddData(inputData, "k1"),
         AddData(inputData, "k2"),
-        CheckNewAnswer("k1", "k1", "k2", "k2")
+        CheckNewAnswer("k1", "k1", "k2", "k2"),
+        assertNumStateRows(total = 0, updated = 0)
       )
     }
   }
@@ -444,9 +462,11 @@ class TransformWithListStateSuite extends StreamTest
           // Write data with initial schema
           AddData(inputData, "item1", "item2"),
           CheckNewAnswer(("item1", 1), ("item2", 1)),
+          assertNumStateRows(total = 2, updated = 2),
           // Add more items to verify count increment
           AddData(inputData, "item1", "item3"),
           CheckNewAnswer(("item1", 2), ("item3", 1)),
+          assertNumStateRows(total = 3, updated = 2),
           StopStream
         )
 
@@ -465,6 +485,10 @@ class TransformWithListStateSuite extends StreamTest
             ("item1", "Migrated item item1 with count 1", 1),
             ("item1", "Migrated item item1 with count 2", 2),
             ("item1", "Updated item item1 with count 4", 4)),
+          // 3 listState total for keys item1, item2, item3
+          // For rows with key item1 we clear and readd 3 items (3 updates)
+          // rows with keys item2 and item3 are not migrated because they are not accessed
+          assertNumStateRows(total = 3, updated = 3),
           StopStream
         )
       }

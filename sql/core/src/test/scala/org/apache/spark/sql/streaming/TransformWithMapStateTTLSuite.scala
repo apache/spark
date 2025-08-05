@@ -205,12 +205,18 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
         AddData(inputStream, MapInputEvent("k1", "key1", "put", 1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
+        assertNumStateRows(total = 1, updated = 1),
+
         AddData(inputStream, MapInputEvent("k1", "key1", "get", -1)),
         AdvanceManualClock(30 * 1000),
         CheckNewAnswer(MapOutputEvent("k1", "key1", 1, isTTLValue = false, -1)),
+        assertNumStateRows(total = 1, updated = 0),
+
         AddData(inputStream, MapInputEvent("k1", "key2", "put", 2)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
+        assertNumStateRows(total = 2, updated = 1),
+
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
         },
@@ -219,6 +225,7 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
         // advance clock to expire first key
         AdvanceManualClock(30 * 1000),
         CheckNewAnswer(MapOutputEvent("k1", "key2", 2, isTTLValue = false, -1)),
+        assertNumStateRows(total = 1, updated = 0),
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
         },
@@ -250,6 +257,8 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
         ),
         AdvanceManualClock(1 * 1000), // batch timestamp: 1000
         CheckNewAnswer(),
+        assertNumStateRows(total = 2, updated = 2),
+
         AddData(inputStream,
           MapInputEvent("k1", "key1", "get", -1),
           MapInputEvent("k1", "key2", "get", -1)
@@ -259,6 +268,8 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
           MapOutputEvent("k1", "key1", 1, isTTLValue = false, -1),
           MapOutputEvent("k1", "key2", 2, isTTLValue = false, -1)
         ),
+        assertNumStateRows(total = 2, updated = 0),
+
         // get values from ttl state
         AddData(inputStream,
           MapInputEvent("k1", "", "get_values_in_ttl_state", -1)
@@ -268,6 +279,8 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
           MapOutputEvent("k1", "key1", -1, isTTLValue = true, 61000),
           MapOutputEvent("k1", "key2", -1, isTTLValue = true, 61000)
         ),
+        assertNumStateRows(total = 2, updated = 0),
+
         // advance clock to expire first two values
         AdvanceManualClock(30 * 1000), // batch timestamp: 62000
         AddData(inputStream,
@@ -282,6 +295,8 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
           MapOutputEvent("k1", "key4", 4, isTTLValue = false, -1),
           MapOutputEvent("k1", "key5", 5, isTTLValue = false, -1)
         ),
+        assertNumStateRows(total = 3, updated = 3),
+
         AddData(inputStream,
           MapInputEvent("k1", "", "get_values_in_ttl_state", -1)
         ),
@@ -291,6 +306,8 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
           MapOutputEvent("k1", "key4", -1, isTTLValue = true, 123000),
           MapOutputEvent("k1", "key5", -1, isTTLValue = true, 123000)
         ),
+        assertNumStateRows(total = 3, updated = 0),
+
         // get all values without enforcing ttl
         AddData(inputStream,
           MapInputEvent("k1", "key1", "get_without_enforcing_ttl", -1),
@@ -305,6 +322,8 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
           MapOutputEvent("k1", "key4", 4, isTTLValue = false, -1),
           MapOutputEvent("k1", "key5", 5, isTTLValue = false, -1)
         ),
+        assertNumStateRows(total = 3, updated = 0),
+
         // check that updating a key updates its TTL
         AddData(inputStream, MapInputEvent("k1", "key3", "put", 3)),
         AdvanceManualClock(1 * 1000),
@@ -315,11 +334,15 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
           MapOutputEvent("k1", "key4", -1, isTTLValue = true, 123000),
           MapOutputEvent("k1", "key5", -1, isTTLValue = true, 123000)
         ),
+        assertNumStateRows(total = 3, updated = 1),
+
         AddData(inputStream, MapInputEvent("k1", "key3", "get_ttl_value_from_state", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(
           MapOutputEvent("k1", "key3", 3, isTTLValue = true, 126000)
         ),
+        assertNumStateRows(total = 3, updated = 0),
+
         StopStream
       )
     }

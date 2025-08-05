@@ -741,13 +741,13 @@ class RocksDB(
           changelogReader.foreach { case (recordType, key, value) =>
             recordType match {
               case RecordType.PUT_RECORD =>
-                put(key, value, includesPrefix = true)
+                put(key, value, includesPrefix = true, deriveCfName = true)
 
               case RecordType.DELETE_RECORD =>
-                remove(key, includesPrefix = true)
+                remove(key, includesPrefix = true, deriveCfName = true)
 
               case RecordType.MERGE_RECORD =>
-                merge(key, value, includesPrefix = true)
+                merge(key, value, includesPrefix = true, deriveCfName = true)
             }
           }
         } else {
@@ -876,7 +876,8 @@ class RocksDB(
       key: Array[Byte],
       value: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
-      includesPrefix: Boolean = false): Unit = {
+      includesPrefix: Boolean = false,
+      deriveCfName: Boolean = false): Unit = {
     updateMemoryUsageIfNeeded()
     val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
@@ -884,7 +885,14 @@ class RocksDB(
       key
     }
 
-    handleMetricsUpdate(keyWithPrefix, cfName, isPutOrMerge = true)
+    val columnFamilyName = if (deriveCfName && useColumnFamilies) {
+      val (_, cfName) = decodeStateRowWithPrefix(keyWithPrefix)
+      cfName
+    } else {
+      cfName
+    }
+
+    handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
     db.put(writeOptions, keyWithPrefix, value)
     changelogWriter.foreach(_.put(keyWithPrefix, value))
   }
@@ -904,7 +912,8 @@ class RocksDB(
       key: Array[Byte],
       value: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
-      includesPrefix: Boolean = false): Unit = {
+      includesPrefix: Boolean = false,
+      deriveCfName: Boolean = false): Unit = {
     updateMemoryUsageIfNeeded()
     val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
@@ -912,7 +921,14 @@ class RocksDB(
       key
     }
 
-    handleMetricsUpdate(keyWithPrefix, cfName, isPutOrMerge = true)
+    val columnFamilyName = if (deriveCfName && useColumnFamilies) {
+      val (_, cfName) = decodeStateRowWithPrefix(keyWithPrefix)
+      cfName
+    } else {
+      cfName
+    }
+
+    handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
     db.merge(writeOptions, keyWithPrefix, value)
     changelogWriter.foreach(_.merge(keyWithPrefix, value))
   }
@@ -924,7 +940,8 @@ class RocksDB(
   def remove(
       key: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
-      includesPrefix: Boolean = false): Unit = {
+      includesPrefix: Boolean = false,
+      deriveCfName: Boolean = false): Unit = {
     updateMemoryUsageIfNeeded()
     val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
@@ -932,7 +949,14 @@ class RocksDB(
       key
     }
 
-    handleMetricsUpdate(keyWithPrefix, cfName, isPutOrMerge = false)
+    val columnFamilyName = if (deriveCfName && useColumnFamilies) {
+      val (_, cfName) = decodeStateRowWithPrefix(keyWithPrefix)
+      cfName
+    } else {
+      cfName
+    }
+
+    handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = false)
     db.delete(writeOptions, keyWithPrefix)
     changelogWriter.foreach(_.delete(keyWithPrefix))
   }
