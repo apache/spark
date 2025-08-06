@@ -26,8 +26,10 @@ class MemoryStateStore extends StateStore() {
   import scala.jdk.CollectionConverters._
   private val map = new ConcurrentHashMap[UnsafeRow, UnsafeRow]
 
-  override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
-    map.entrySet.iterator.asScala.map { case e => new UnsafeRowPair(e.getKey, e.getValue) }
+  override def iterator(colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    val iter =
+      map.entrySet.iterator.asScala.map { case e => new UnsafeRowPair(e.getKey, e.getValue) }
+    new StateStoreIterator(iter)
   }
 
   override def createColFamilyIfAbsent(
@@ -63,7 +65,9 @@ class MemoryStateStore extends StateStore() {
 
   override def hasCommitted: Boolean = true
 
-  override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String): Iterator[UnsafeRowPair] = {
+  override def prefixScan(
+      prefixKey: UnsafeRow,
+      colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
     throw new UnsupportedOperationException("Doesn't support prefix scan!")
   }
 

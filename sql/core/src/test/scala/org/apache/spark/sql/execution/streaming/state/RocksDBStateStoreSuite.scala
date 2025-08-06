@@ -1610,6 +1610,80 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  testWithColumnFamiliesAndEncodingTypes(
+    "closing the iterator also closes the underlying rocksdb iterator",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+
+    // use the same schema as value schema for single col key schema
+    tryWithProviderResource(newStoreProvider(valueSchema,
+      RangeKeyScanStateEncoderSpec(valueSchema, Seq(0)), colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+      try {
+        val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+        if (colFamiliesEnabled) {
+          store.createColFamilyIfAbsent(cfName,
+            valueSchema, valueSchema,
+            RangeKeyScanStateEncoderSpec(valueSchema, Seq(0)))
+        }
+
+        val timerTimestamps = Seq(1, 2, 3, 22)
+        timerTimestamps.foreach { ts =>
+          val keyRow = dataToValueRow(ts)
+          val valueRow = dataToValueRow(1)
+          store.put(keyRow, valueRow, cfName)
+          assert(valueRowToData(store.get(keyRow, cfName)) === 1)
+        }
+
+        val iter1 = store.iterator(cfName)
+        for (i <- 1 to 4) {
+          assert(iter1.hasNext)
+          iter1.next()
+        }
+        // We were fully able to process the 4 elements
+        assert(!iter1.hasNext)
+
+        val iter2 = store.iterator(cfName)
+        for (i <- 1 to 2) {
+          assert(iter2.hasNext)
+          iter2.next()
+        }
+        // Close the iterator
+        iter2.close()
+        // After closing, this will call AbstractRocksIterator.isValid which should throw and
+        // exception since it no longer owns the underlying rocksdb iterator
+        val exception1 = intercept[AssertionError] {
+          iter2.next()
+        }
+        // Check that the exception is thrown from AbstractRocksIterator.isValid
+        assert(exception1.getStackTrace()(0).getClassName.contains("AbstractRocksIterator"))
+        assert(exception1.getStackTrace()(0).getMethodName.contains("isValid"))
+
+        // also check for prefix scan
+        val prefix = dataToValueRow(2)
+        val iter3 = store.prefixScan(prefix, cfName)
+
+        iter3.next()
+        assert(!iter3.hasNext)
+
+        val iter4 = store.prefixScan(prefix, cfName)
+        // Immediately close the iterator without calling next
+        iter4.close()
+
+        // Since we closed the iterator, this will throw an exception when we try to call next
+        val exception2 = intercept[AssertionError] {
+          iter4.next()
+        }
+        // Check that the exception is thrown from AbstractRocksIterator.isValid
+        assert(exception2.getStackTrace()(0).getClassName.contains("AbstractRocksIterator"))
+        assert(exception2.getStackTrace()(0).getMethodName.contains("isValid"))
+
+        store.commit()
+      } finally {
+        if (!store.hasCommitted) store.abort()
+      }
+    }
+  }
+
   test("validate rocksdb values iterator correctness") {
     withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
       tryWithProviderResource(newStoreProvider(useColumnFamilies = true,
