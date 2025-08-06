@@ -26,7 +26,6 @@ import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.io.FileUtils
 import org.apache.logging.log4j._
 import org.apache.logging.log4j.core.{LogEvent, Logger, LoggerContext}
 import org.apache.logging.log4j.core.appender.AbstractAppender
@@ -126,7 +125,7 @@ abstract class SparkFunSuite
     // copy it into a temporary one for accessing it from the dependent module.
     val file = File.createTempFile("test-resource", suffix)
     file.deleteOnExit()
-    FileUtils.copyURLToFile(url, file)
+    Utils.copyURLToFile(url, file)
     file
   }
 

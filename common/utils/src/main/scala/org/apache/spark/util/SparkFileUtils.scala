@@ -17,7 +17,7 @@
 package org.apache.spark.util
 
 import java.io.File
-import java.net.{URI, URISyntaxException}
+import java.net.{URI, URISyntaxException, URL}
 import java.nio.file.{Files, Path, StandardCopyOption}
 import java.nio.file.attribute.FileTime
 
@@ -197,6 +197,10 @@ private[spark] trait SparkFileUtils extends Logging {
       throw new IllegalArgumentException(s"Invalid input file $src or directory $dst")
     }
     Files.copy(src.toPath(), dst.toPath(), StandardCopyOption.REPLACE_EXISTING)
+  }
+
+  def copyURLToFile(url: URL, file: File): Unit = {
+    JavaUtils.copyURLToFile(url, file)
   }
 
   /** Return true if the content of the files are equal or they both don't exist */
