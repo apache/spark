@@ -21,7 +21,6 @@ import java.io.File
 import java.util.NoSuchElementException
 import java.util.concurrent.LinkedBlockingQueue
 
-import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
@@ -42,7 +41,7 @@ abstract class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with T
       db.close()
     }
     if (dbpath != null) {
-      FileUtils.deleteQuietly(dbpath)
+      Utils.deleteQuietly(dbpath)
     }
   }
 

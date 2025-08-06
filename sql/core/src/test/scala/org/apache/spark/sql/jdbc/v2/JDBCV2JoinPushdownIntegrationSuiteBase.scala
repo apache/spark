@@ -21,9 +21,10 @@ import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.connector.DataSourcePushdownTestUtils
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialect
@@ -40,6 +41,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
   val joinTableName1: String = "join_table_1"
   val joinTableName2: String = "join_table_2"
+  val joinTableName3: String = "join_table_3"
+  val joinTableName4: String = "join_table_4"
 
   val jdbcDialect: JdbcDialect
 
@@ -56,6 +59,8 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   private def catalogAndNamespace = s"$catalogName.${caseConvert(namespace)}"
   private def casedJoinTableName1 = caseConvert(joinTableName1)
   private def casedJoinTableName2 = caseConvert(joinTableName2)
+  private def casedJoinTableName3 = caseConvert(joinTableName3)
+  private def casedJoinTableName4 = caseConvert(joinTableName4)
 
   def qualifyTableName(tableName: String): String = {
     val fullyQualifiedCasedNamespace = jdbcDialect.quoteIdentifier(caseConvert(namespace))
@@ -67,14 +72,19 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     jdbcDialect.quoteIdentifier(caseConvert(namespace))
 
   private lazy val fullyQualifiedTableName1: String = qualifyTableName(joinTableName1)
-
   private lazy val fullyQualifiedTableName2: String = qualifyTableName(joinTableName2)
+  private lazy val fullyQualifiedTableName3: String = qualifyTableName(joinTableName3)
+  private lazy val fullyQualifiedTableName4: String = qualifyTableName(joinTableName4)
 
   protected def getJDBCTypeString(dt: DataType): String = {
     JdbcUtils.getJdbcType(dt, jdbcDialect).databaseTypeDefinition.toUpperCase()
   }
 
   protected def caseConvert(identifier: String): String = identifier
+
+  // Quote the identifier to remain original case, for example, MySql convert [`ID`, ID]
+  // to [ID, id]
+  protected def remainColumnCase(identifier: String): String = "\"" + identifier + "\""
 
   protected def withConnection[T](f: Connection => T): T = {
     val conn = DriverManager.getConnection(url, new Properties())
@@ -132,6 +142,26 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
            |  SURNAME ${getJDBCTypeString(stringType)}
            |)""".stripMargin
       ).executeUpdate()
+
+      // Complex situations with different capitalization and quotation marks.
+      conn.prepareStatement(
+        s"""CREATE TABLE $fullyQualifiedTableName3(
+           |${remainColumnCase("id")} ${getJDBCTypeString(integerType)},
+           |${remainColumnCase("id_1")} ${getJDBCTypeString(integerType)},
+           |${remainColumnCase("id_2")} ${getJDBCTypeString(integerType)},
+           |${remainColumnCase("id_1_1")} ${getJDBCTypeString(integerType)},
+           |${remainColumnCase("sid")} ${getJDBCTypeString(integerType)}
+           |)""".stripMargin
+      ).executeUpdate()
+      conn.prepareStatement(
+        s"""CREATE TABLE $fullyQualifiedTableName4 (
+           |${remainColumnCase("id")} ${getJDBCTypeString(integerType)},
+           |${remainColumnCase("id_1")} ${getJDBCTypeString(integerType)},
+           |${remainColumnCase("id_2")} ${getJDBCTypeString(integerType)},
+           |${remainColumnCase("id_2_1")} ${getJDBCTypeString(integerType)},
+           |${remainColumnCase("Sid")} ${getJDBCTypeString(integerType)}
+           |)""".stripMargin
+      ).executeUpdate()
     }
   }
 
@@ -181,6 +211,10 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
       insertStmt2.executeBatch()
       insertStmt2.close()
 
+      conn.createStatement().execute(
+        s"""INSERT INTO $fullyQualifiedTableName3 VALUES (0, 1, 2, 3, 4)""")
+      conn.createStatement().execute(
+        s"""INSERT INTO $fullyQualifiedTableName4 VALUES (0, -1, -2, -3, -4)""")
     }
   }
 
@@ -304,14 +338,14 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
 
-      val expectedSchemaWithoutNames = StructType(
+      val expectedSchema = StructType(
         Seq(
-          StructField("", integerType), // ID
-          StructField("", integerType), // NEXT_ID
+          StructField(caseConvert("id"), integerType), // ID
+          StructField(caseConvert("id_1"), integerType), // ID
           StructField(caseConvert("amount"), decimalType) // AMOUNT
         )
       )
-      checkPrunedColumnsDataTypeAndNullability(df, expectedSchemaWithoutNames)
+      checkPrunedColumnsDataTypeAndNullability(df, expectedSchema)
       checkJoinPushed(
         df,
         expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
@@ -336,13 +370,13 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
 
-      val expectedSchemaWithoutNames = StructType(
+      val expectedSchema = StructType(
         Seq(
           StructField(caseConvert("id"), integerType), // ID
           StructField(caseConvert("next_id"), integerType) // NEXT_ID
         )
       )
-      checkPrunedColumnsDataTypeAndNullability(df, expectedSchemaWithoutNames)
+      checkPrunedColumnsDataTypeAndNullability(df, expectedSchema)
       checkJoinPushed(
         df,
         expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}",
@@ -371,18 +405,18 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
 
-      val expectedSchemaWithoutNames = StructType(
+      val expectedSchema = StructType(
         Seq(
-          StructField("", integerType), // ID_UUID
-          StructField("", decimalType), // AMOUNT_UUID
-          StructField("", integerType), // ID_UUID
-          StructField("", decimalType), // AMOUNT_UUID
-          StructField(caseConvert("address"), stringType), // ADDRESS
           StructField(caseConvert("id"), integerType), // ID
-          StructField(caseConvert("amount"), decimalType) // AMOUNT
+          StructField(caseConvert("amount"), decimalType), // AMOUNT
+          StructField(caseConvert("id_1"), integerType), // ID
+          StructField(caseConvert("amount_1"), decimalType), // AMOUNT
+          StructField(caseConvert("address"), stringType), // ADDRESS
+          StructField(caseConvert("id_2"), integerType), // ID
+          StructField(caseConvert("amount_2"), decimalType) // AMOUNT
         )
       )
-      checkPrunedColumnsDataTypeAndNullability(df, expectedSchemaWithoutNames)
+      checkPrunedColumnsDataTypeAndNullability(df, expectedSchema)
       checkJoinPushed(
         df,
         expectedTables = s"$catalogAndNamespace.${caseConvert(joinTableName1)}, " +
@@ -638,6 +672,36 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
       checkJoinPushed(df)
       checkAnswer(df, rows)
+    }
+  }
+
+  test("Test complex duplicate column name alias") {
+    val sqlQuery = s"""
+                      |SELECT
+                      |    *
+                      |FROM $catalogAndNamespace.$casedJoinTableName3 a
+                      |JOIN $catalogAndNamespace.$casedJoinTableName4 b
+                      |ON a.id = b.id""".stripMargin
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+      val row = df.collect()(0)
+      assert(row.toString == Row(0, 1, 2, 3, 4, 0, -1, -2, -3, -4).toString)
+
+      assert(df.schema.fields.map(_.name) sameElements
+        Array("id", "id_1", "id_2", "id_1_1", "sid",
+          "id", "id_1", "id_2", "id_2_1", "Sid"),
+        "Unexpected schema names: " + df.schema.fields.map(_.name).mkString(","))
+
+      val schemaNames = df.queryExecution.optimizedPlan.collectFirst {
+        case j: DataSourceV2ScanRelation => j
+      }.get.schema.fields.map(_.name)
+      assert(schemaNames sameElements
+        Array("id", "id_1", "id_2", "id_1_1", "sid",
+          "id_3", "id_1_2", "id_2_2", "id_2_1", "Sid_1"),
+        "Unexpected schema names: " + schemaNames.mkString(","))
+
+      checkJoinPushed(df)
     }
   }
 }

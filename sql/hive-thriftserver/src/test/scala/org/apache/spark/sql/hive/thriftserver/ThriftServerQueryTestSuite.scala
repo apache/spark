@@ -23,8 +23,6 @@ import java.util.{Locale, MissingFormatArgumentException}
 
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.exception.ExceptionUtils
-
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLQueryTestSuite
@@ -308,7 +306,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       try {
         result
       } catch {
-        case NonFatal(e) => throw ExceptionUtils.getRootCause(e)
+        case NonFatal(e) => throw Utils.getRootCause(e)
       }
     }
   }

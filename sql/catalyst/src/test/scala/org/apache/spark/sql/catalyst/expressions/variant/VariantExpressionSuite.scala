@@ -900,11 +900,11 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       check(input, input.toString)
     }
     for (precision <- Seq(9, 18, 38)) {
-      val input = BigDecimal("9" * precision)
+      val input = BigDecimal("9".repeat(precision))
       check(Literal.create(input, DecimalType(precision, 0)), input.toString)
     }
     check("", "\"\"")
-    check("x" * 128, "\"" + ("x" * 128) + "\"")
+    check("x".repeat(128), "\"" + "x".repeat(128) + "\"")
     check(Array[Byte](1, 2, 3), "\"AQID\"")
     check(Literal(0, DateType), "\"1970-01-01\"")
 

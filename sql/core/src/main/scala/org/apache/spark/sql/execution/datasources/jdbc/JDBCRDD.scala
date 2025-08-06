@@ -23,7 +23,7 @@ import scala.util.Using
 import scala.util.control.NonFatal
 
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.SQL_TEXT
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -130,7 +130,8 @@ object JDBCRDD extends Logging {
       sample: Option[TableSampleInfo] = None,
       limit: Int = 0,
       sortOrders: Array[String] = Array.empty[String],
-      offset: Int = 0): RDD[InternalRow] = {
+      offset: Int = 0,
+      additionalMetrics: Map[String, SQLMetric] = Map()): RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = if (groupByColumns.isEmpty) {
@@ -155,7 +156,8 @@ object JDBCRDD extends Logging {
       sample,
       limit,
       sortOrders,
-      offset)
+      offset,
+      additionalMetrics)
   }
   // scalastyle:on argcount
 }
@@ -179,7 +181,8 @@ class JDBCRDD(
     sample: Option[TableSampleInfo],
     limit: Int,
     sortOrders: Array[String],
-    offset: Int)
+    offset: Int,
+    additionalMetrics: Map[String, SQLMetric])
   extends RDD[InternalRow](sc, Nil) with DataSourceMetricsMixin with ExternalEngineDatasourceRDD {
 
   /**
@@ -340,6 +343,6 @@ class JDBCRDD(
     Seq(
       "fetchAndTransformToInternalRowsNs" -> fetchAndTransformToInternalRowsMetric,
       "queryExecutionTime" -> queryExecutionTimeMetric
-    )
+    ) ++ additionalMetrics
   }
 }

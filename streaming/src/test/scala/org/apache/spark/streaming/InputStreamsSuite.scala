@@ -27,7 +27,6 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import com.google.common.io.Files
-import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
@@ -264,7 +263,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
         def write(path: Path, text: String): Unit = {
           val out = fs.create(path, true)
-          IOUtils.write(text, out, StandardCharsets.UTF_8)
+          out.write(text.getBytes(StandardCharsets.UTF_8))
           out.close()
         }
 

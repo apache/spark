@@ -26,7 +26,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.io.{Codec, Source}
 
 import com.google.common.io.ByteStreams
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FSDataInputStream, Path}
 import org.scalatest.BeforeAndAfterEach
@@ -111,7 +110,7 @@ class SparkSubmitSuite
   with TestPrematureExit {
 
   private val emptyIvySettings = File.createTempFile("ivy", ".xml")
-  FileUtils.write(emptyIvySettings, "<ivysettings />", StandardCharsets.UTF_8)
+  Files.writeString(emptyIvySettings.toPath, "<ivysettings />")
 
   private val submit = new SparkSubmit()
 
@@ -1293,8 +1292,8 @@ class SparkSubmitSuite
 
     // The path and filename are preserved.
     assert(outputUri.getPath.endsWith(new Path(sourceUri).getName))
-    assert(FileUtils.readFileToString(new File(outputUri.getPath), StandardCharsets.UTF_8) ===
-      FileUtils.readFileToString(new File(sourceUri.getPath), StandardCharsets.UTF_8))
+    assert(Files.readString(new File(outputUri.getPath).toPath) ===
+      Files.readString(new File(sourceUri.getPath).toPath))
   }
 
   private def deleteTempOutputFile(outputPath: String): Unit = {
@@ -1336,7 +1335,7 @@ class SparkSubmitSuite
     val jarFile = File.createTempFile("test", ".jar")
     jarFile.deleteOnExit()
     val content = "hello, world"
-    FileUtils.write(jarFile, content, StandardCharsets.UTF_8)
+    Files.writeString(jarFile.toPath, content)
     val hadoopConf = new Configuration()
     val tmpDir = Files.createTempDirectory("tmp").toFile
     updateConfWithFakeS3Fs(hadoopConf)
@@ -1351,7 +1350,7 @@ class SparkSubmitSuite
     val jarFile = File.createTempFile("test", ".jar")
     jarFile.deleteOnExit()
     val content = "hello, world"
-    FileUtils.write(jarFile, content, StandardCharsets.UTF_8)
+    Files.writeString(jarFile.toPath, content)
     val hadoopConf = new Configuration()
     val tmpDir = Files.createTempDirectory("tmp").toFile
     updateConfWithFakeS3Fs(hadoopConf)
@@ -1818,7 +1817,7 @@ class SparkSubmitSuite
         "spark = SparkSession.builder.getOrCreate();" +
         "assert 'connect' in str(type(spark));" +
         "assert spark.range(1).first()[0] == 0"
-    FileUtils.write(pyFile, content, StandardCharsets.UTF_8)
+    Files.writeString(pyFile.toPath, content)
     val args = Seq(
       "--name", "testPyApp",
       "--remote", "local",

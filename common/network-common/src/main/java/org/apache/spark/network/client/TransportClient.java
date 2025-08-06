@@ -364,8 +364,8 @@ public class TransportClient implements Closeable {
         }
       } else {
         logger.error("Failed to send RPC {} to {}", future.cause(),
-            MDC.of(LogKeys.REQUEST_ID$.MODULE$, requestId),
-            MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)));
+            MDC.of(LogKeys.REQUEST_ID, requestId),
+            MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
         channel.close();
         try {
           String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,

@@ -25,7 +25,9 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{RocksDBStateStoreProvider, StateStoreValueSchemaNotCompatible}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.tags.SlowSQLTest
 
+@SlowSQLTest
 class TransformWithStateUnsafeRowSuite extends TransformWithStateSuite {
 
   import testImplicits._

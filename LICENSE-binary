@@ -398,7 +398,6 @@ org.rocksdb:rocksdbjni
 org.scala-lang:scala-compiler
 org.scala-lang:scala-library
 org.scala-lang:scala-reflect
-org.scala-lang.modules:scala-collection-compat_2.13
 org.scala-lang.modules:scala-parallel-collections_2.13
 org.scala-lang.modules:scala-parser-combinators_2.13
 org.scala-lang.modules:scala-xml_2.13

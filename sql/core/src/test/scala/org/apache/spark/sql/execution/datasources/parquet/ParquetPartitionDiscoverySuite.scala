@@ -79,8 +79,8 @@ abstract class ParquetPartitionDiscoverySuite
 
     check("10", IntegerType)
     check("1000000000000000", LongType)
-    val decimal = Decimal("1" * 20)
-    check("1" * 20, DecimalType(decimal.precision, decimal.scale))
+    val decimal = Decimal("1".repeat(20))
+    check("1".repeat(20), DecimalType(decimal.precision, decimal.scale))
     check("1.5", DoubleType)
     check("hello", StringType)
     check("1990-02-24", DateType)
@@ -770,7 +770,7 @@ abstract class ParquetPartitionDiscoverySuite
           Row(
             Long.MaxValue,
             4.5,
-            new java.math.BigDecimal(new BigInteger("1" * 20)),
+            new java.math.BigDecimal(new BigInteger("1".repeat(20))),
             java.sql.Date.valueOf("2015-05-23"),
             ts,
             "This is a string, /[]?=:",
@@ -1097,13 +1097,13 @@ abstract class ParquetPartitionDiscoverySuite
     }
 
     withTempPath { path =>
-      val df = Seq((1, "1"), (2, "3"), (3, "2" * 30)).toDF("i", "decimal")
+      val df = Seq((1, "1"), (2, "3"), (3, "2".repeat(30))).toDF("i", "decimal")
       df.write.format("parquet").partitionBy("decimal").save(path.getAbsolutePath)
       checkAnswer(
         spark.read.load(path.getAbsolutePath),
         Row(1, BigDecimal("1")) ::
           Row(2, BigDecimal("3")) ::
-          Row(3, BigDecimal("2" * 30)) :: Nil)
+          Row(3, BigDecimal("2".repeat(30))) :: Nil)
     }
   }
 

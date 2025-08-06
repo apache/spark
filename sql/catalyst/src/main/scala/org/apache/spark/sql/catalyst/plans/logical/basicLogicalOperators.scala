@@ -97,8 +97,9 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     val noSemanticChange = projectList.length == child.output.length &&
       projectList.zip(child.output).forall {
         case (alias: Alias, attr) =>
-          alias.child.semanticEquals(attr) && alias.explicitMetadata.isEmpty &&
-            alias.qualifier.isEmpty && alias.nonInheritableMetadataKeys.isEmpty
+          alias.qualifier.isEmpty &&
+            alias.metadata == attr.metadata &&
+            alias.child.semanticEquals(attr)
         case (attr1: Attribute, attr2) => attr1.semanticEquals(attr2)
         case _ => false
       }

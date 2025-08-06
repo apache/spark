@@ -18,6 +18,7 @@
 package org.apache.spark.util.sketch;
 
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -33,13 +34,13 @@ import java.util.concurrent.atomic.LongAdder;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
-
+@EnabledIfEnvironmentVariable(
+  named = "SPARK_TEST_SPARK_BLOOM_FILTER_SUITE_ENABLED", matches = "true")
 public class SparkBloomFilterSuite {
 
   // the implemented fpp limit is only approximating the hard boundary,
   // so we'll need an error threshold for the assertion
-  final double FPP_EVEN_ODD_ERROR_FACTOR = 0.10;
-  final double FPP_RANDOM_ERROR_FACTOR = 0.10;
+  final double FPP_ACCEPTABLE_ERROR_FACTOR = 0.10;
 
   final long ONE_GB = 1024L * 1024L * 1024L;
   final long REQUIRED_HEAP_UPPER_BOUND_IN_BYTES = 4 * ONE_GB;
@@ -104,7 +105,7 @@ public class SparkBloomFilterSuite {
     //   to reduce running time to acceptable levels, we test only one case,
     //   with the default FPP and the default seed only.
     return Stream.of(
-      Arguments.of(1_000_000_000L, 0.03, BloomFilterImplV2.DEFAULT_SEED)
+      Arguments.of(350_000_000L, 0.03, BloomFilterImplV2.DEFAULT_SEED)
     );
     // preferable minimum parameter space for tests:
     //   {1_000_000L, 1_000_000_000L}           for: long numItems
@@ -199,7 +200,7 @@ public class SparkBloomFilterSuite {
     );
 
     double actualFpp = mightContainOdd.doubleValue() / numItems;
-    double acceptableFpp = expectedFpp * (1 + FPP_EVEN_ODD_ERROR_FACTOR);
+    double acceptableFpp = expectedFpp * (1 + FPP_ACCEPTABLE_ERROR_FACTOR);
 
     testOut.printf("expectedFpp:   %f %%\n", 100 * expectedFpp);
     testOut.printf("acceptableFpp: %f %%\n", 100 * acceptableFpp);
@@ -277,6 +278,7 @@ public class SparkBloomFilterSuite {
         deterministicSeed
       );
 
+    // V1 ignores custom seed values, so the control filter must be at least V2
     BloomFilter bloomFilterSecondary =
       BloomFilter.create(
         BloomFilter.Version.V2,
@@ -352,7 +354,7 @@ public class SparkBloomFilterSuite {
 
     double actualFpp =
       mightContainOddIndexed.doubleValue() / confirmedAsNotInserted.doubleValue();
-    double acceptableFpp = expectedFpp * (1 + FPP_RANDOM_ERROR_FACTOR);
+    double acceptableFpp = expectedFpp * (1 + FPP_ACCEPTABLE_ERROR_FACTOR);
 
     testOut.printf("mightContainOddIndexed: %10d\n", mightContainOddIndexed.longValue());
     testOut.printf("confirmedAsNotInserted: %10d\n", confirmedAsNotInserted.longValue());

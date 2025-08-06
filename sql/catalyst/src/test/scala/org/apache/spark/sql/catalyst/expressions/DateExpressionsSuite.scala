@@ -1638,7 +1638,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // test overflow for decimal input
     checkExceptionInExpression[ArithmeticException](
-      SecondsToTimestamp(Literal(Decimal("9" * 38))), "Overflow"
+      SecondsToTimestamp(Literal(Decimal("9".repeat(38)))), "Overflow"
     )
     // test truncation error for decimal input
     checkExceptionInExpression[ArithmeticException](

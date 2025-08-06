@@ -258,7 +258,8 @@ class FailureInjectionRocksDBStateStoreProvider extends RocksDBStateStoreProvide
       useColumnFamilies: Boolean,
       enableStateStoreCheckpointIds: Boolean,
       partitionId: Int,
-      eventForwarder: Option[RocksDBEventForwarder] = None): RocksDB = {
+      eventForwarder: Option[RocksDBEventForwarder] = None,
+      uniqueId: Option[String]): RocksDB = {
     FailureInjectionRocksDBStateStoreProvider.createRocksDBWithFaultInjection(
       dfsRootDir,
       conf,
@@ -268,7 +269,8 @@ class FailureInjectionRocksDBStateStoreProvider extends RocksDBStateStoreProvide
       useColumnFamilies,
       enableStateStoreCheckpointIds,
       partitionId,
-      eventForwarder)
+      eventForwarder,
+      uniqueId)
   }
 }
 
@@ -286,7 +288,8 @@ object FailureInjectionRocksDBStateStoreProvider {
       useColumnFamilies: Boolean,
       enableStateStoreCheckpointIds: Boolean,
       partitionId: Int,
-      eventForwarder: Option[RocksDBEventForwarder]): RocksDB = {
+      eventForwarder: Option[RocksDBEventForwarder],
+      uniqueId: Option[String]): RocksDB = {
     new RocksDB(
       dfsRootDir,
       conf = conf,
@@ -296,7 +299,8 @@ object FailureInjectionRocksDBStateStoreProvider {
       useColumnFamilies = useColumnFamilies,
       enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
       partitionId = partitionId,
-      eventForwarder = eventForwarder
+      eventForwarder = eventForwarder,
+      uniqueId
     ) {
       override def createFileManager(
           dfsRootDir: String,

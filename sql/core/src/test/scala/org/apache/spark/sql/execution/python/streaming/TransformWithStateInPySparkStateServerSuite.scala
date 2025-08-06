@@ -35,7 +35,9 @@ import org.apache.spark.sql.execution.streaming.state.StateMessage
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, ContainsKey, DeleteTimer, Exists, ExpiryTimerRequest, Get, GetProcessingTime, GetValue, GetWatermark, HandleState, Keys, ListStateCall, ListStateGet, ListStatePut, ListTimers, MapStateCall, ParseStringSchema, RegisterTimer, RemoveKey, SetHandleState, StateCallCommand, StatefulProcessorCall, TimerRequest, TimerStateCallCommand, TimerValueRequest, UpdateValue, UtilsRequest, Values, ValueStateCall, ValueStateUpdate}
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.tags.SlowSQLTest
 
+@SlowSQLTest
 class TransformWithStateInPySparkStateServerSuite extends SparkFunSuite with BeforeAndAfterEach {
   val stateName = "test"
   val iteratorId = "testId"

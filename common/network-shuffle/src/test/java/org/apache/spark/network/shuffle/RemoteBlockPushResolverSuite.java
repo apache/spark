@@ -67,7 +67,7 @@ import org.apache.spark.network.shuffle.protocol.PushBlockStream;
 import org.apache.spark.network.shuffle.protocol.RemoveShuffleMerge;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
-import org.apache.spark.util.SparkFileUtils$;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * Tests for {@link RemoteBlockPushResolver}.
@@ -107,7 +107,7 @@ public class RemoteBlockPushResolverSuite {
   public void after() {
     try {
       for (Path local : localDirs) {
-        SparkFileUtils$.MODULE$.deleteRecursively(local.toFile());
+        JavaUtils.deleteRecursively(local.toFile());
       }
       removeApplication(TEST_APP);
     } catch (Exception e) {
