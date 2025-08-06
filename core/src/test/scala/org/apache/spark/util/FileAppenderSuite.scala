@@ -58,7 +58,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter {
     val appender = new FileAppender(inputStream, testFile)
     inputStream.close()
     appender.awaitTermination()
-    assert(Files.asCharSource(testFile, StandardCharsets.UTF_8).read() === header + testString)
+    assert(java.nio.file.Files.readString(testFile.toPath) === header + testString)
   }
 
   test("SPARK-35027: basic file appender - close stream") {
@@ -392,7 +392,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter {
           Utils.closeQuietly(inputStream)
         }
       } else {
-        Files.asCharSource(file, StandardCharsets.UTF_8).read()
+        java.nio.file.Files.readString(file.toPath)
       }
     }.mkString("")
     assert(allText === expectedText)

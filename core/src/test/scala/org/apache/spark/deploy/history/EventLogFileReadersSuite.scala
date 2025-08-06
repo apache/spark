@@ -19,10 +19,10 @@ package org.apache.spark.deploy.history
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File}
 import java.net.URI
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
-import com.google.common.io.{ByteStreams, Files}
+import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfter
@@ -220,8 +220,8 @@ class SingleFileEventLogFileReaderSuite extends EventLogFileReadersSuite {
 
       val entry = is.getNextEntry
       assert(entry != null)
-      val actual = new String(ByteStreams.toByteArray(is), StandardCharsets.UTF_8)
-      val expected = Files.asCharSource(new File(logPath.toString), StandardCharsets.UTF_8).read()
+      val actual = ByteStreams.toByteArray(is)
+      val expected = Files.readAllBytes(new File(logPath.toString).toPath)
       assert(actual === expected)
       assert(is.getNextEntry === null)
     }
@@ -367,9 +367,8 @@ class RollingEventLogFilesReaderSuite extends EventLogFileReadersSuite {
           val fileName = entry.getName.stripPrefix(logPath.getName + "/")
           assert(allFileNames.contains(fileName))
 
-          val actual = new String(ByteStreams.toByteArray(is), StandardCharsets.UTF_8)
-          val expected = Files.asCharSource(
-            new File(logPath.toString, fileName), StandardCharsets.UTF_8).read()
+          val actual = ByteStreams.toByteArray(is)
+          val expected = Files.readAllBytes(new File(logPath.toString, fileName).toPath)
           assert(actual === expected)
         }
       }

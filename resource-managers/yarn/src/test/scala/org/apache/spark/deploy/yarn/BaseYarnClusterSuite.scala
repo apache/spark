@@ -236,11 +236,11 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
     // an error message
     val output = new Object() {
       override def toString: String = outFile
-          .map(Files.asCharSource(_, StandardCharsets.UTF_8).read())
+          .map((f: File) => java.nio.file.Files.readString(f.toPath))
           .getOrElse("(stdout/stderr was not captured)")
     }
     assert(finalState === SparkAppHandle.State.FINISHED, output)
-    val resultString = Files.asCharSource(result, StandardCharsets.UTF_8).read()
+    val resultString = java.nio.file.Files.readString(result.toPath)
     assert(resultString === expected, output)
   }
 
