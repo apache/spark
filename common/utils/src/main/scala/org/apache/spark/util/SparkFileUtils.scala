@@ -153,6 +153,11 @@ private[spark] trait SparkFileUtils extends Logging {
     JavaUtils.deleteQuietly(file)
   }
 
+  /** Registers the file or directory for deletion when the JVM exists. */
+  def forceDeleteOnExit(file: File): Unit = {
+    JavaUtils.forceDeleteOnExit(file)
+  }
+
   def getFile(names: String*): File = {
     require(names != null && names.forall(_ != null))
     names.tail.foldLeft(Path.of(names.head)) { (path, part) =>
