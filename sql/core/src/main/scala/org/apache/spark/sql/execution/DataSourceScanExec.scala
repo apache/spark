@@ -192,9 +192,9 @@ case class RowDataSourceScanExec(
 
     val pushedJoins = if (pushedDownOperators.joinedRelationPushedDownOperators.nonEmpty) {
       Map("PushedJoins" ->
-        s"[\n${getPushedJoinString(
+        s"\n${getPushedJoinString(
           pushedDownOperators.joinedRelationPushedDownOperators(0),
-          pushedDownOperators.joinedRelationPushedDownOperators(1))}]")
+          pushedDownOperators.joinedRelationPushedDownOperators(1))}\n")
     } else {
       Map()
     }
@@ -218,38 +218,39 @@ case class RowDataSourceScanExec(
    *
    * The exmaple of resulting string is the following:
    *
-   * PushedJoins:
-   * [L]: [PushedFilters: [ID_1 = (ID_2 + 1)],
-   *      PushedJoins: [
-   *      [L]: [PushedFilters: [ID_1 = (ID + 1)],
-   *         PushedJoins: [
-   *            [L]: [Relation: join_pushdown_catalog.tbl1, PushedFilters: [ID IS NOT NULL]],
-   *            [R]: [Relation: join_pushdown_catalog.tbl2, PushedFilters: [ID IS NOT NULL]]
-   *        ]],
-   *      [R]: [Relation: join_pushdown_catalog.tbl13, PushedFilters: [ID IS NOT NULL]]
-   *    ]],
-   * [R]: [Relation: join_pushdown_catalog.tbl4, PushedFilters: [ID IS NOT NULL]]
+   * PushedFilters: [id_3 = (id_4 + 1)], PushedJoins:
+   * [L]: PushedFilters: [ID_1 = (id_3 + 1)]
+   *      PushedJoins:
+   *      [L]: PushedFilters: [ID = (ID_1 + 1)]
+   *           PushedJoins:
+   *           [L]: Relation: join_pushdown_catalog.JOIN_SCHEMA.JOIN_TABLE_1
+   *                PushedFilters: [ID IS NOT NULL]
+   *           [R]: Relation: join_pushdown_catalog.JOIN_SCHEMA.JOIN_TABLE_2
+   *                PushedFilters: [ID IS NOT NULL]
+   *      [R]: Relation: join_pushdown_catalog.JOIN_SCHEMA.JOIN_TABLE_3
+   *           PushedFilters: [id IS NOT NULL]
+   * [R]: Relation: join_pushdown_catalog.JOIN_SCHEMA.JOIN_TABLE_4
+   *      PushedFilters: [id IS NOT NULL]
    */
   private def getPushedJoinString(
       leftSidePushedDownOperators: PushedDownOperators,
       rightSidePushedDownOperators: PushedDownOperators,
       indent: Int = 0): String = {
-    val indentStr = " ".repeat(2 * indent)
+    val indentStr = " ".repeat(indent)
 
     val leftSideOperators = buildOperatorParts(leftSidePushedDownOperators, indent)
-    val leftSideMetadataStr = formatMetadata(leftSideOperators, indentStr)
+    val leftSideMetadataStr = formatMetadata(leftSideOperators, indentStr + " ".repeat(5))
 
     val rightSideOperators = buildOperatorParts(rightSidePushedDownOperators, indent)
-    val rightSideMetadataStr = formatMetadata(rightSideOperators, indentStr)
+    val rightSideMetadataStr = formatMetadata(rightSideOperators, indentStr + " ".repeat(5))
 
-    val leftSideString = s"$indentStr[L]: [$leftSideMetadataStr]"
-    val rightSideString = s"$indentStr[R]: [$rightSideMetadataStr]"
-    Seq(leftSideString, rightSideString).mkString(",\n")
+    val leftSideString = s"$indentStr[L]: $leftSideMetadataStr"
+    val rightSideString = s"$indentStr[R]: $rightSideMetadataStr"
+    Seq(leftSideString, rightSideString).mkString("\n")
   }
 
   private def buildOperatorParts(operators: PushedDownOperators, indent: Int): List[String] = {
     val parts = List.newBuilder[String]
-    val indentStr = " ".repeat(2 * indent)
 
     // Add relation name for leaf nodes (nodes without further joins)
     if (operators.joinedRelationPushedDownOperators.isEmpty) {
@@ -269,8 +270,8 @@ case class RowDataSourceScanExec(
       val nestedJoins = getPushedJoinString(
         operators.joinedRelationPushedDownOperators(0),
         operators.joinedRelationPushedDownOperators(1),
-        indent + 2)
-      parts += s"PushedJoins: [\n$nestedJoins\n$indentStr  ]"
+        indent + 5)
+      parts += s"PushedJoins:\n$nestedJoins"
     }
 
     parts.result()
@@ -278,18 +279,7 @@ case class RowDataSourceScanExec(
 
   private def formatMetadata(parts: List[String], indentStr: String): String = {
     val (basicParts, nestedJoinsParts) = parts.partition(!_.startsWith("PushedJoins:"))
-    val result = List.newBuilder[String]
-
-    if (basicParts.nonEmpty) {
-      result += basicParts.mkString(", ")
-    }
-
-    if (nestedJoinsParts.nonEmpty) {
-      val continuationIndent = indentStr + " ".repeat(4)
-      result += nestedJoinsParts.mkString(",\n" + continuationIndent)
-    }
-
-    result.result().mkString(",\n" + indentStr + "    ")
+    (basicParts ++ nestedJoinsParts).mkString("\n" + indentStr)
   }
 
   // Don't care about `rdd` and `tableIdentifier`, and `stream` when canonicalizing.

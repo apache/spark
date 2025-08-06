@@ -103,17 +103,19 @@ class OracleJoinPushdownIntegrationSuite
       // scalastyle:off line.size.limit
       checkJoinPushed(
         df,
-        s"""PushedFilters: [CAST(id_3 AS decimal(11,0)) = (id_4 + 1)], PushedJoins: [
-           |[L]: [PushedFilters: [CAST(ID_1 AS decimal(11,0)) = (id_3 + 1)],
-           |    PushedJoins: [
-           |    [L]: [PushedFilters: [CAST(ID AS decimal(11,0)) = (ID_1 + 1)],
-           |        PushedJoins: [
-           |        [L]: [Relation: $catalogAndNamespace.${caseConvert(joinTableName1)}, PushedFilters: [${caseConvert("id")} IS NOT NULL]],
-           |        [R]: [Relation: $catalogAndNamespace.${caseConvert(joinTableName2)}, PushedFilters: [${caseConvert("id")} IS NOT NULL]]
-           |      ]],
-           |    [R]: [Relation: $catalogAndNamespace.${caseConvert(joinTableName3)}, PushedFilters: [id IS NOT NULL]]
-           |  ]],
-           |[R]: [Relation: $catalogAndNamespace.${caseConvert(joinTableName4)}, PushedFilters: [id IS NOT NULL]]]""".stripMargin
+        s"""PushedFilters: [CAST(id_3 AS decimal(11,0)) = (id_4 + 1)], PushedJoins:\u0020
+           |[L]: PushedFilters: [CAST(ID_1 AS decimal(11,0)) = (id_3 + 1)]
+           |     PushedJoins:
+           |     [L]: PushedFilters: [CAST(ID AS decimal(11,0)) = (ID_1 + 1)]
+           |          PushedJoins:
+           |          [L]: Relation: $catalogAndNamespace.${caseConvert(joinTableName1)}
+           |               PushedFilters: [${caseConvert("id")} IS NOT NULL]
+           |          [R]: Relation: $catalogAndNamespace.${caseConvert(joinTableName2)}
+           |               PushedFilters: [${caseConvert("id")} IS NOT NULL]
+           |     [R]: Relation: $catalogAndNamespace.${caseConvert(joinTableName3)}
+           |          PushedFilters: [id IS NOT NULL]
+           |[R]: Relation: $catalogAndNamespace.${caseConvert(joinTableName4)}
+           |     PushedFilters: [id IS NOT NULL]""".stripMargin
       )
       // scalastyle:on line.size.limit
     }
