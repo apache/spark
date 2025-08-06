@@ -20,6 +20,8 @@ import scala.collection.mutable
 import scala.io.Source
 import scala.util.Try
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, FastOperator}
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedFunction, UnresolvedRelation}
@@ -232,7 +234,7 @@ class QueryExecutionSuite extends SharedSparkSession {
 
   test("Logging plan changes for execution") {
     val testAppender = new LogAppender("plan changes")
-    withLogAppender(testAppender) {
+    withLogAppender(testAppender, level = Some(Level.INFO)) {
       withSQLConf(SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "INFO") {
         spark.range(1).groupBy("id").count().queryExecution.executedPlan
       }
