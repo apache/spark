@@ -59,7 +59,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case _ => false
   }
 
-  private def constantFolding(
+  private[sql] def constantFolding(
       e: Expression,
       isConditionalBranch: Boolean = false): Expression = e match {
     case c: ConditionalExpression if !c.foldable =>

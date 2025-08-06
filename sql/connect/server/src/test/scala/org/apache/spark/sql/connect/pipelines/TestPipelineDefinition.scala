@@ -60,7 +60,6 @@ class TestPipelineDefinition(graphId: String) {
         .setTargetDatasetName(name)
         .setRelation(q)
         .putAllSqlConf(sparkConf.asJava)
-        .setOnce(false)
         .build()
     }
   }
@@ -100,7 +99,6 @@ class TestPipelineDefinition(graphId: String) {
       .setTargetDatasetName(name)
       .setRelation(query)
       .putAllSqlConf(sparkConf.asJava)
-      .setOnce(false)
       .build()
 
   }
@@ -127,7 +125,6 @@ class TestPipelineDefinition(graphId: String) {
       .setTargetDatasetName(destinationName)
       .setRelation(query)
       .putAllSqlConf(sparkConf.asJava)
-      .setOnce(once)
       .build()
   }
 }

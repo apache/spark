@@ -574,6 +574,30 @@ class FunctionsTestsMixin:
         row = df.select(F.dayname(df.date)).first()
         self.assertEqual(row[0], "Mon")
 
+    def test_hour(self):
+        # SPARK-52892: test the hour function with time.
+        df = self.spark.range(1).select(F.lit(datetime.time(12, 34, 56)).alias("time"))
+        row_from_col = df.select(F.hour(df.time)).first()
+        self.assertEqual(row_from_col[0], 12)
+        row_from_name = df.select(F.hour("time")).first()
+        self.assertEqual(row_from_name[0], 12)
+
+    def test_minute(self):
+        # SPARK-52893: test the minute function with time.
+        df = self.spark.range(1).select(F.lit(datetime.time(12, 34, 56)).alias("time"))
+        row_from_col = df.select(F.minute(df.time)).first()
+        self.assertEqual(row_from_col[0], 34)
+        row_from_name = df.select(F.minute("time")).first()
+        self.assertEqual(row_from_name[0], 34)
+
+    def test_second(self):
+        # SPARK-52894: test the second function with time.
+        df = self.spark.range(1).select(F.lit(datetime.time(12, 34, 56)).alias("time"))
+        row_from_col = df.select(F.second(df.time)).first()
+        self.assertEqual(row_from_col[0], 56)
+        row_from_name = df.select(F.second("time")).first()
+        self.assertEqual(row_from_name[0], 56)
+
     # Test added for SPARK-37738; change Python API to accept both col & int as input
     def test_date_add_function(self):
         dt = datetime.date(2021, 12, 27)
@@ -627,6 +651,17 @@ class FunctionsTestsMixin:
                 ).first()
             )
         )
+
+    def test_make_time(self):
+        # SPARK-52888: test the make_time function.
+        df = self.spark.createDataFrame([(1, 2, 3)], ["hour", "minute", "second"])
+        result = datetime.time(1, 2, 3)
+        row_from_col = df.select(F.make_time(df.hour, df.minute, df.second)).first()
+        self.assertIsInstance(row_from_col[0], datetime.time)
+        self.assertEqual(row_from_col[0], result)
+        row_from_name = df.select(F.make_time("hour", "minute", "second")).first()
+        self.assertIsInstance(row_from_name[0], datetime.time)
+        self.assertEqual(row_from_name[0], result)
 
     def test_make_date(self):
         # SPARK-36554: expose make_date expression
@@ -1275,6 +1310,11 @@ class FunctionsTestsMixin:
         parse_result = df.select(F.to_date(F.col("dateCol"))).first()
         self.assertEqual(datetime.date(2017, 1, 22), parse_result["to_date(dateCol)"])
 
+    def test_try_datetime_functions(self):
+        df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
+        parse_result = df.select(F.try_to_date(F.col("dateCol")).alias("tryToDateCol")).first()
+        self.assertEqual(datetime.date(2017, 1, 22), parse_result["tryToDateCol"])
+
     def test_assert_true(self):
         self.check_assert_true(SparkRuntimeException)
 
@@ -1343,6 +1383,11 @@ class FunctionsTestsMixin:
                 F.shiftRightUnsigned(F.col("id"), 2) == F.shiftrightunsigned(F.col("id"), 2)
             )
         ).collect()
+
+    def test_lit_time(self):
+        t = datetime.time(12, 34, 56)
+        actual = self.spark.range(1).select(F.lit(t)).first()[0]
+        self.assertEqual(actual, t)
 
     def test_lit_day_time_interval(self):
         td = datetime.timedelta(days=1, hours=12, milliseconds=123)
@@ -1614,6 +1659,35 @@ class FunctionsTestsMixin:
         self.assertEqual("""{"a":1}""", actual[0]["var"])
         self.assertEqual(None, actual[1]["var"])
 
+    def test_try_to_time(self):
+        # SPARK-52891: test the try_to_time function.
+        df = self.spark.createDataFrame([("10:30:00", "HH:mm:ss")], ["time", "format"])
+        result = datetime.time(10, 30, 0)
+        # Test without format.
+        row_from_col_no_format = df.select(F.try_to_time(df.time)).first()
+        self.assertIsInstance(row_from_col_no_format[0], datetime.time)
+        self.assertEqual(row_from_col_no_format[0], result)
+        row_from_name_no_format = df.select(F.try_to_time("time")).first()
+        self.assertIsInstance(row_from_name_no_format[0], datetime.time)
+        self.assertEqual(row_from_name_no_format[0], result)
+        # Test with format.
+        row_from_col_with_format = df.select(F.try_to_time(df.time, df.format)).first()
+        self.assertIsInstance(row_from_col_with_format[0], datetime.time)
+        self.assertEqual(row_from_col_with_format[0], result)
+        row_from_name_with_format = df.select(F.try_to_time("time", "format")).first()
+        self.assertIsInstance(row_from_name_with_format[0], datetime.time)
+        self.assertEqual(row_from_name_with_format[0], result)
+        # Test with malformed time.
+        df = self.spark.createDataFrame([("malformed", "HH:mm:ss")], ["time", "format"])
+        row_from_col_no_format_malformed = df.select(F.try_to_time(df.time)).first()
+        self.assertIsNone(row_from_col_no_format_malformed[0])
+        row_from_name_no_format_malformed = df.select(F.try_to_time("time")).first()
+        self.assertIsNone(row_from_name_no_format_malformed[0])
+        row_from_col_with_format_malformed = df.select(F.try_to_time(df.time, df.format)).first()
+        self.assertIsNone(row_from_col_with_format_malformed[0])
+        row_from_name_with_format_malformed = df.select(F.try_to_time("time", "format")).first()
+        self.assertIsNone(row_from_name_with_format_malformed[0])
+
     def test_to_variant_object(self):
         df = self.spark.createDataFrame([(1, {"a": 1})], "i int, v struct<a int>")
         actual = df.select(
@@ -1723,6 +1797,25 @@ class FunctionsTestsMixin:
             messageParameters={"arg_name": "numBuckets", "arg_type": "str"},
         )
 
+    def test_to_time(self):
+        # SPARK-52890: test the to_time function.
+        df = self.spark.createDataFrame([("10:30:00", "HH:mm:ss")], ["time", "format"])
+        result = datetime.time(10, 30, 0)
+        # Test without format.
+        row_from_col_no_format = df.select(F.to_time(df.time)).first()
+        self.assertIsInstance(row_from_col_no_format[0], datetime.time)
+        self.assertEqual(row_from_col_no_format[0], result)
+        row_from_name_no_format = df.select(F.to_time("time")).first()
+        self.assertIsInstance(row_from_name_no_format[0], datetime.time)
+        self.assertEqual(row_from_name_no_format[0], result)
+        # Test with format.
+        row_from_col_with_format = df.select(F.to_time(df.time, df.format)).first()
+        self.assertIsInstance(row_from_col_with_format[0], datetime.time)
+        self.assertEqual(row_from_col_with_format[0], result)
+        row_from_name_with_format = df.select(F.to_time("time", "format")).first()
+        self.assertIsInstance(row_from_name_with_format[0], datetime.time)
+        self.assertEqual(row_from_name_with_format[0], result)
+
     def test_to_timestamp_ltz(self):
         df = self.spark.createDataFrame([("2016-12-31",)], ["e"])
         df = df.select(F.to_timestamp_ltz(df.e, F.lit("yyyy-MM-dd")).alias("r"))
@@ -1764,6 +1857,16 @@ class FunctionsTestsMixin:
         res = df.select(r, r, r2, r2, r3, r3).collect()
         for i in range(3):
             self.assertEqual(res[0][i * 2], res[0][i * 2 + 1])
+
+    def test_current_time(self):
+        # SPARK-52889: test the current_time function without precision.
+        df = self.spark.range(1).select(F.current_time())
+        self.assertIsInstance(df.first()[0], datetime.time)
+        self.assertEqual(df.schema.names[0], "current_time(6)")
+        # SPARK-52889: test the current_time function with precision.
+        df = self.spark.range(1).select(F.current_time(3))
+        self.assertIsInstance(df.first()[0], datetime.time)
+        self.assertEqual(df.schema.names[0], "current_time(3)")
 
     def test_current_timestamp(self):
         df = self.spark.range(1).select(F.current_timestamp())

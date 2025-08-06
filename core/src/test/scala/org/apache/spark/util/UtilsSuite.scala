@@ -32,7 +32,6 @@ import scala.collection.mutable.ListBuffer
 import scala.util.{Random, Try}
 
 import com.google.common.io.Files
-import org.apache.commons.io.IOUtils
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -248,8 +247,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
         assert(mergedStream.read() === -1)
         assert(byteBufferInputStream.chunkedByteBuffer === null)
       } finally {
-        IOUtils.closeQuietly(mergedStream)
-        IOUtils.closeQuietly(in)
+        Utils.closeQuietly(mergedStream)
+        Utils.closeQuietly(in)
       }
     }
   }
@@ -343,7 +342,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     } else {
       new FileOutputStream(path)
     }
-    IOUtils.write(content, outputStream)
+    outputStream.write(content)
     outputStream.close()
     content.length
   }
@@ -492,10 +491,10 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(Utils.createDirectory(testDirPath, "scenario1").exists())
 
     // 2. Illegal file path
-    val scenario2 = new File(testDir, "scenario2" * 256)
+    val scenario2 = new File(testDir, "scenario2".repeat(256))
     assert(!Utils.createDirectory(scenario2))
     assert(!scenario2.exists())
-    assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario2" * 256))
+    assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario2".repeat(256)))
 
     // 3. The parent directory cannot read
     val scenario3 = new File(testDir, "scenario3")

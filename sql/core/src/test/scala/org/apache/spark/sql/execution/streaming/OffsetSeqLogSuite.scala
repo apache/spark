@@ -19,11 +19,10 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io.File
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 class OffsetSeqLogSuite extends SharedSparkSession {
 
@@ -180,7 +179,7 @@ class OffsetSeqLogSuite extends SharedSparkSession {
       withTempDir { checkpointDir =>
         val resourceUri = this.getClass.getResource(
         "/structured-streaming/checkpoint-version-4.0.0-tws-" + storeEncodingFormat + "/").toURI
-        FileUtils.copyDirectory(new File(resourceUri), checkpointDir.getCanonicalFile)
+        Utils.copyDirectory(new File(resourceUri), checkpointDir.getCanonicalFile)
         verifyOffsetLogEntry(checkpointDir.getAbsolutePath, entryExists = true,
           storeEncodingFormat)
       }
@@ -191,7 +190,7 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     withTempDir { checkpointDir =>
       val resourceUri = this.getClass.getResource(
         "/structured-streaming/checkpoint-version-3.5.1-streaming-deduplication/").toURI
-      FileUtils.copyDirectory(new File(resourceUri), checkpointDir.getCanonicalFile)
+      Utils.copyDirectory(new File(resourceUri), checkpointDir.getCanonicalFile)
       verifyOffsetLogEntry(checkpointDir.getAbsolutePath, entryExists = false,
         "unsaferow")
     }

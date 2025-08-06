@@ -64,6 +64,7 @@ GroupedMapUDFTransformWithStateInitStateType = Literal[214]
 ArrowScalarUDFType = Literal[250]
 ArrowScalarIterUDFType = Literal[251]
 ArrowGroupedAggUDFType = Literal[252]
+ArrowWindowAggUDFType = Literal[253]
 
 class ArrowVariadicScalarToScalarFunction(Protocol):
     def __call__(self, *_: pyarrow.Array) -> pyarrow.Array: ...

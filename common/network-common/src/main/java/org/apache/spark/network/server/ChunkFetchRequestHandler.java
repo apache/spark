@@ -74,7 +74,7 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
     logger.warn("Exception in connection from {}", cause,
-      MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(ctx.channel())));
+      MDC.of(LogKeys.HOST_PORT, getRemoteAddress(ctx.channel())));
     ctx.close();
   }
 
@@ -96,8 +96,8 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
       long chunksBeingTransferred = streamManager.chunksBeingTransferred();
       if (chunksBeingTransferred >= maxChunksBeingTransferred) {
         logger.warn("The number of chunks being transferred {} is above {}, close the connection.",
-          MDC.of(LogKeys.NUM_CHUNKS$.MODULE$, chunksBeingTransferred),
-          MDC.of(LogKeys.MAX_NUM_CHUNKS$.MODULE$, maxChunksBeingTransferred));
+          MDC.of(LogKeys.NUM_CHUNKS, chunksBeingTransferred),
+          MDC.of(LogKeys.MAX_NUM_CHUNKS, maxChunksBeingTransferred));
         channel.close();
         return;
       }
@@ -111,8 +111,8 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
       }
     } catch (Exception e) {
       logger.error("Error opening block {} for request from {}", e,
-        MDC.of(LogKeys.STREAM_CHUNK_ID$.MODULE$, msg.streamChunkId),
-        MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)));
+        MDC.of(LogKeys.STREAM_CHUNK_ID, msg.streamChunkId),
+        MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
       respond(channel, new ChunkFetchFailure(msg.streamChunkId,
         Throwables.getStackTraceAsString(e)));
       return;
@@ -153,8 +153,8 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
       } else {
         logger.error("Error sending result {} to {}; closing connection",
           future.cause(),
-          MDC.of(LogKeys.RESULT$.MODULE$, result),
-          MDC.of(LogKeys.HOST_PORT$.MODULE$, remoteAddress));
+          MDC.of(LogKeys.RESULT, result),
+          MDC.of(LogKeys.HOST_PORT, remoteAddress));
         channel.close();
       }
     });

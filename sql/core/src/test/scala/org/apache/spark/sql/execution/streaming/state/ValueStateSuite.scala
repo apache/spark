@@ -25,7 +25,8 @@ import scala.util.Random
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.TaskContext.withTaskContext
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StreamExecution, ValueStateImplWithTTL}
@@ -476,7 +477,14 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
   protected def tryWithProviderResource[T](
       provider: StateStoreProvider)(f: StateStoreProvider => T): T = {
     try {
-      f(provider)
+      val tc = TaskContext.empty()
+      try {
+        withTaskContext(tc) {
+          f(provider)
+        }
+      } finally {
+        tc.markTaskCompleted(None)
+      }
     } finally {
       provider.close()
     }

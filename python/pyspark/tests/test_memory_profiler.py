@@ -167,7 +167,7 @@ class MemoryProfilerTests(PySparkTestCase):
     def exec_pandas_udf_ser_to_scalar(self):
         import pandas as pd
 
-        @pandas_udf("int")
+        @pandas_udf("double")
         def ser_to_scalar(ser: pd.Series) -> float:
             return ser.median()
 

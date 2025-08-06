@@ -61,7 +61,7 @@ import org.apache.spark.sql.execution.window._
  *     Unbounded window takes only input columns.
  * (2) Bounded window evaluates the udf once per input row.
  *     Unbounded window evaluates the udf once per window partition.
- * This is controlled by Python runner conf "pandas_window_bound_types"
+ * This is controlled by Python runner conf "window_bound_types"
  *
  * The logic to compute window bounds is delegated to [[WindowFunctionFrame]] and shared with
  * [[WindowExec]]
@@ -69,11 +69,12 @@ import org.apache.spark.sql.execution.window._
  * Note this doesn't support partial aggregation and all aggregation is computed from the entire
  * window.
  */
-case class WindowInPandasExec(
+case class ArrowWindowPythonExec(
     windowExpression: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    child: SparkPlan)
+    child: SparkPlan,
+    evalType: Int)
   extends WindowExecBase with PythonSQLMetrics {
   override lazy val metrics: Map[String, SQLMetric] = pythonMetrics ++ Map(
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size")
@@ -81,11 +82,12 @@ case class WindowInPandasExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val evaluatorFactory =
-      new WindowInPandasEvaluatorFactory(
+      new ArrowWindowPythonEvaluatorFactory(
         windowExpression,
         partitionSpec,
         orderSpec,
         child.output,
+        evalType,
         longMetric("spillSize"),
         pythonMetrics,
         conf.pythonUDFProfiler)
@@ -101,6 +103,21 @@ case class WindowInPandasExec(
     }
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): WindowInPandasExec =
+  override protected def withNewChildInternal(newChild: SparkPlan): ArrowWindowPythonExec =
     copy(child = newChild)
+}
+
+object ArrowWindowPythonExec {
+  def apply(
+      windowExpression: Seq[NamedExpression],
+      partitionSpec: Seq[Expression],
+      orderSpec: Seq[SortOrder],
+      child: SparkPlan): ArrowWindowPythonExec = {
+    val evalTypes = windowExpression.flatMap(w => WindowFunctionType.pythonEvalType(w))
+    assert(evalTypes.nonEmpty,
+      "Cannot extract eval type from PythonUDAFs in ArrowWindowPythonExec")
+    assert(evalTypes.distinct.size == 1,
+      "All window functions must have the same eval type in ArrowWindowPythonExec")
+    ArrowWindowPythonExec(windowExpression, partitionSpec, orderSpec, child, evalTypes.head)
+  }
 }

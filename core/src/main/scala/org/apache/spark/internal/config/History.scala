@@ -159,6 +159,13 @@ private[spark] object History {
       .doubleConf
       .createWithDefault(0.7d)
 
+  val EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED =
+    ConfigBuilder("spark.history.fs.eventLog.rolling.onDemandLoadEnabled")
+      .doc("Whether to look up rolling event log locations on demand manner before listing files.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val DRIVER_LOG_CLEANER_ENABLED = ConfigBuilder("spark.history.fs.driverlog.cleaner.enabled")
     .version("3.0.0")
     .doc("Specifies whether the History Server should periodically clean up driver logs from " +

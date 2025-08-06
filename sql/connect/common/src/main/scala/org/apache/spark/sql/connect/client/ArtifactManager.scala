@@ -33,7 +33,6 @@ import com.google.protobuf.ByteString
 import io.grpc.StatusRuntimeException
 import io.grpc.stub.StreamObserver
 import org.apache.commons.codec.digest.DigestUtils.sha256Hex
-import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
@@ -41,7 +40,7 @@ import org.apache.spark.connect.proto.AddArtifactsResponse
 import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.Artifact.{newCacheArtifact, newIvyArtifacts}
-import org.apache.spark.util.{SparkFileUtils, SparkThreadUtils}
+import org.apache.spark.util.{SparkFileUtils, SparkStringUtils, SparkThreadUtils}
 
 /**
  * The Artifact Manager is responsible for handling and transferring artifacts from the local
@@ -173,7 +172,8 @@ class ArtifactManager(
       .addAllNames(Arrays.asList(artifactName))
       .build()
     val response = bstub.artifactStatus(request)
-    if (StringUtils.isNotEmpty(response.getSessionId) && response.getSessionId != sessionId) {
+    if (SparkStringUtils.isNotEmpty(response.getSessionId) &&
+      response.getSessionId != sessionId) {
       // In older versions of the Spark cluster, the session ID is not set in the response.
       // Ignore this check to keep compatibility.
       throw new IllegalStateException(
@@ -248,7 +248,7 @@ class ArtifactManager(
     val responseHandler = new StreamObserver[proto.AddArtifactsResponse] {
       private val summaries = mutable.Buffer.empty[ArtifactSummary]
       override def onNext(v: AddArtifactsResponse): Unit = {
-        if (StringUtils.isNotEmpty(v.getSessionId) && v.getSessionId != sessionId) {
+        if (SparkStringUtils.isNotEmpty(v.getSessionId) && v.getSessionId != sessionId) {
           // In older versions of the Spark cluster, the session ID is not set in the response.
           // Ignore this check to keep compatibility.
           throw new IllegalStateException(s"Session ID mismatch: $sessionId != ${v.getSessionId}")

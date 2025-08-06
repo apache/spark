@@ -23,6 +23,7 @@ import numpy as np
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.testing.utils import is_ansi_mode_test
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
@@ -127,6 +128,18 @@ class NumOpsTestsMixin:
                 self.assert_eq(~pser, ~psser)
             else:
                 self.assertRaises(TypeError, lambda: ~psser)
+
+    def test_comparison_dtype_compatibility(self):
+        pdf = pd.DataFrame(
+            {"int": [1, 2], "bool": [True, False], "float": [0.1, 0.2], "str": ["1", "2"]}
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(pdf["int"] == pdf["bool"], psdf["int"] == psdf["bool"])
+        self.assert_eq(pdf["bool"] == pdf["int"], psdf["bool"] == psdf["int"])
+        self.assert_eq(pdf["int"] == pdf["float"], psdf["int"] == psdf["float"])
+        if is_ansi_mode_test:  # TODO: match non-ansi behavior with pandas
+            self.assert_eq(pdf["int"] == pdf["str"], psdf["int"] == psdf["str"])
+        self.assert_eq(pdf["float"] == pdf["bool"], psdf["float"] == psdf["bool"])
 
     def test_eq(self):
         pdf, psdf = self.pdf, self.psdf

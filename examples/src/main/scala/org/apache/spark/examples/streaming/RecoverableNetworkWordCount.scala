@@ -19,7 +19,7 @@
 package org.apache.spark.examples.streaming
 
 import java.io.File
-import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
 
 import com.google.common.io.{Files, FileWriteMode}
 
@@ -134,7 +134,7 @@ object RecoverableNetworkWordCount {
       println(output)
       println(s"Dropped ${droppedWordsCounter.value} word(s) totally")
       println(s"Appending to ${outputFile.getAbsolutePath}")
-      Files.asCharSink(outputFile, Charset.defaultCharset(), FileWriteMode.APPEND)
+      Files.asCharSink(outputFile, StandardCharsets.UTF_8, FileWriteMode.APPEND)
         .write(output + "\n")
     }
     ssc

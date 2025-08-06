@@ -242,7 +242,7 @@ class RollingEventLogFilesReaderSuite extends EventLogFileReadersSuite {
         SparkHadoopUtil.get.newConfiguration(conf))
 
       writer.start()
-      val dummyStr = "dummy" * 1024
+      val dummyStr = "dummy".repeat(1024)
       writeTestEvents(writer, dummyStr, 1024 * 1024 * 20)
       writer.stop()
 
@@ -275,7 +275,7 @@ class RollingEventLogFilesReaderSuite extends EventLogFileReadersSuite {
       writer.start()
 
       // write log more than 20m (intended to roll over to 3 files)
-      val dummyStr = "dummy" * 1024
+      val dummyStr = "dummy".repeat(1024)
       writeTestEvents(writer, dummyStr, 1024 * 1024 * 20)
 
       val logPathIncompleted = getCurrentLogPath(writer.logPath, isCompleted = false)

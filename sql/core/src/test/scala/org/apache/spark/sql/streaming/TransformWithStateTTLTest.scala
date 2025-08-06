@@ -42,7 +42,8 @@ case class OutputEvent(
  */
 abstract class TransformWithStateTTLTest
   extends StreamTest with AlsoTestWithEncodingTypes
-  with AlsoTestWithRocksDBFeatures {
+  with AlsoTestWithRocksDBFeatures
+  with StateStoreMetricsTest {
   import testImplicits._
 
   def getProcessor(ttlConfig: TTLConfig): StatefulProcessor[String, InputEvent, OutputEvent]

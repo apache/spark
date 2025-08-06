@@ -25,9 +25,9 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{BATCH_ID, PATH}
-import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.internal.io.{FileCommitProtocol, FileNameSpec}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
@@ -114,13 +114,13 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
   }
 
   override def newTaskTempFile(
-      taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
+      taskContext: TaskAttemptContext, dir: Option[String], spec: FileNameSpec): String = {
     // The file name looks like part-r-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003.gz.parquet
     // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
     // the file name is fine and won't overflow.
     val split = taskContext.getTaskAttemptID.getTaskID.getId
     val uuid = UUID.randomUUID.toString
-    val filename = f"part-$split%05d-$uuid$ext"
+    val filename = f"part-$split%05d-$uuid${spec.suffix}"
 
     val file = dir.map { d =>
       new Path(new Path(path, d), filename).toString
@@ -133,7 +133,7 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
   }
 
   override def newTaskTempFileAbsPath(
-      taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
+      taskContext: TaskAttemptContext, absoluteDir: String, spec: FileNameSpec): String = {
     throw QueryExecutionErrors.addFilesWithAbsolutePathUnsupportedError(this.toString)
   }
 

@@ -131,20 +131,23 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.container.image")
       .doc("Container image to use for Spark containers. Individual container types " +
         "(e.g. driver or executor) can also be configured to use different images if desired, " +
-        "by setting the container type-specific image name.")
+        "by setting the container type-specific image name. Note that `{{SPARK_VERSION}}` is " +
+        "the built-in variable that will be substituted with current Spark's version.")
       .version("2.3.0")
       .stringConf
       .createOptional
 
   val DRIVER_CONTAINER_IMAGE =
     ConfigBuilder("spark.kubernetes.driver.container.image")
-      .doc("Container image to use for the driver.")
+      .doc("Container image to use for the driver. Note that `{{SPARK_VERSION}}` is " +
+        "the built-in variable that will be substituted with current Spark's version.")
       .version("2.3.0")
       .fallbackConf(CONTAINER_IMAGE)
 
   val EXECUTOR_CONTAINER_IMAGE =
     ConfigBuilder("spark.kubernetes.executor.container.image")
-      .doc("Container image to use for the executors.")
+      .doc("Container image to use for the executors. Note that `{{SPARK_VERSION}}` is " +
+        "the built-in variable that will be substituted with current Spark's version.")
       .version("2.3.0")
       .fallbackConf(CONTAINER_IMAGE)
 
@@ -697,6 +700,14 @@ private[spark] object Config extends Logging {
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  val KUBERNETES_EXECUTOR_TERMINATION_GRACE_PERIOD_SECONDS =
+    ConfigBuilder("spark.kubernetes.executor.terminationGracePeriodSeconds")
+      .doc("Time to wait for graceful termination of executor pods.")
+      .version("4.1.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(period => period >= 0, "terminationGracePeriodSeconds must be non-negative")
+      .createWithDefaultString("30s")
 
   val KUBERNETES_DYN_ALLOC_KILL_GRACE_PERIOD =
     ConfigBuilder("spark.kubernetes.dynamicAllocation.deleteGracePeriod")

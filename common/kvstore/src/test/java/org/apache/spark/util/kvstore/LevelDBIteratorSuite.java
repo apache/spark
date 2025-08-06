@@ -19,10 +19,10 @@ package org.apache.spark.util.kvstore;
 
 import java.io.File;
 
-import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.AfterAll;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.util.SparkSystemUtils$;
 
 public class LevelDBIteratorSuite extends DBIteratorSuite {
@@ -36,7 +36,7 @@ public class LevelDBIteratorSuite extends DBIteratorSuite {
       db.close();
     }
     if (dbpath != null) {
-      FileUtils.deleteQuietly(dbpath);
+      JavaUtils.deleteQuietly(dbpath);
     }
   }
 

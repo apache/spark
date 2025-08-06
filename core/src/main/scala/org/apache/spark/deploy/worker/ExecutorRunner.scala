@@ -28,7 +28,7 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
 import org.apache.spark.deploy.StandaloneResourceUtils.prepareResourcesFile
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.SPARK_EXECUTOR_PREFIX
 import org.apache.spark.internal.config.UI._
@@ -184,7 +184,7 @@ private[deploy] class ExecutorRunner(
 
       process = builder.start()
       val header = "Spark Executor Command: %s\n%s\n\n".format(
-        redactedCommand, "=" * 40)
+        redactedCommand, "=".repeat(40))
 
       // Redirect its stdout and stderr to files
       val stdout = new File(executorDir, "stdout")

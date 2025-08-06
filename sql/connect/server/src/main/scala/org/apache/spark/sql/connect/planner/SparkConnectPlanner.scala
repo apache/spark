@@ -30,7 +30,6 @@ import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{Any => ProtoAny, ByteString}
 import io.grpc.{Context, Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
-import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.{SparkClassNotFoundException, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Since}
@@ -41,7 +40,7 @@ import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Column, Encoders, ForeachWriter, Observation, Row}
@@ -59,7 +58,7 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
-import org.apache.spark.sql.classic.{Catalog, Dataset, MergeIntoWriter, RelationalGroupedDataset, SparkSession, TypedAggUtils, UserDefinedFunctionUtils}
+import org.apache.spark.sql.classic.{Catalog, DataFrameWriter, Dataset, MergeIntoWriter, RelationalGroupedDataset, SparkSession, TypedAggUtils, UserDefinedFunctionUtils}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
@@ -2646,6 +2645,17 @@ class SparkConnectPlanner(
     process(command, new MockObserver())
   }
 
+  def transformCommand(
+      command: proto.Command,
+      tracker: QueryPlanningTracker): Option[LogicalPlan] = {
+    command.getCommandTypeCase match {
+      case proto.Command.CommandTypeCase.WRITE_OPERATION =>
+        Some(transformWriteOperation(command.getWriteOperation, tracker))
+      case _ =>
+        None
+    }
+  }
+
   def process(
       command: proto.Command,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
@@ -3078,23 +3088,15 @@ class SparkConnectPlanner(
     executeHolder.eventsManager.postFinished()
   }
 
-  /**
-   * Transforms the write operation and executes it.
-   *
-   * The input write operation contains a reference to the input plan and transforms it to the
-   * corresponding logical plan. Afterwards, creates the DataFrameWriter and translates the
-   * parameters of the WriteOperation into the corresponding methods calls.
-   *
-   * @param writeOperation
-   */
-  private def handleWriteOperation(writeOperation: proto.WriteOperation): Unit = {
+  private def transformWriteOperation(
+      writeOperation: proto.WriteOperation,
+      tracker: QueryPlanningTracker): LogicalPlan = {
     // Transform the input plan into the logical plan.
     val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val dataset = Dataset.ofRows(session, plan, tracker)
 
-    val w = dataset.write
+    val w = dataset.write.asInstanceOf[DataFrameWriter[_]]
     if (writeOperation.getMode != proto.WriteOperation.SaveMode.SAVE_MODE_UNSPECIFIED) {
       w.mode(SaveModeConverter.toSaveMode(writeOperation.getMode))
     }
@@ -3129,20 +3131,41 @@ class SparkConnectPlanner(
     }
 
     writeOperation.getSaveTypeCase match {
-      case proto.WriteOperation.SaveTypeCase.SAVETYPE_NOT_SET => w.save()
-      case proto.WriteOperation.SaveTypeCase.PATH => w.save(writeOperation.getPath)
+      case proto.WriteOperation.SaveTypeCase.SAVETYPE_NOT_SET => w.saveCommand(None)
+      case proto.WriteOperation.SaveTypeCase.PATH =>
+        w.saveCommand(Some(writeOperation.getPath))
       case proto.WriteOperation.SaveTypeCase.TABLE =>
         val tableName = writeOperation.getTable.getTableName
         writeOperation.getTable.getSaveMethod match {
           case proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE_AS_TABLE =>
-            w.saveAsTable(tableName)
+            w.saveAsTableCommand(tableName)
           case proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO =>
-            w.insertInto(tableName)
+            w.insertIntoCommand(tableName)
           case other => throw InvalidInputErrors.invalidEnum(other)
         }
       case other =>
         throw InvalidInputErrors.invalidOneOfField(other, writeOperation.getDescriptorForType)
     }
+  }
+
+  private def runCommand(command: LogicalPlan, tracker: QueryPlanningTracker): Unit = {
+    val qe = new QueryExecution(session, command, tracker)
+    qe.assertCommandExecuted()
+  }
+
+  /**
+   * Transforms the write operation and executes it.
+   *
+   * The input write operation contains a reference to the input plan and transforms it to the
+   * corresponding logical plan. Afterwards, creates the DataFrameWriter and translates the
+   * parameters of the WriteOperation into the corresponding methods calls.
+   *
+   * @param writeOperation
+   */
+  private def handleWriteOperation(writeOperation: proto.WriteOperation): Unit = {
+    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
+    runCommand(transformWriteOperation(writeOperation, tracker), tracker)
+
     executeHolder.eventsManager.postFinished()
   }
 
@@ -3472,7 +3495,7 @@ class SparkConnectPlanner(
             .setExceptionMessage(e.toString())
             .setErrorClass(e.getCondition)
 
-          val stackTrace = Option(ExceptionUtils.getStackTrace(e))
+          val stackTrace = Option(Utils.stackTraceToString(e))
           stackTrace.foreach { s =>
             exception_builder.setStackTrace(s)
           }

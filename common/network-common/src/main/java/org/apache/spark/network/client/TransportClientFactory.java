@@ -193,9 +193,9 @@ public class TransportClientFactory implements Closeable {
     final String resolvMsg = resolvedAddress.isUnresolved() ? "failed" : "succeed";
     if (hostResolveTimeMs > 2000) {
       logger.warn("DNS resolution {} for {} took {} ms",
-        MDC.of(LogKeys.STATUS$.MODULE$, resolvMsg),
-        MDC.of(LogKeys.HOST_PORT$.MODULE$, resolvedAddress),
-        MDC.of(LogKeys.TIME$.MODULE$, hostResolveTimeMs));
+        MDC.of(LogKeys.STATUS, resolvMsg),
+        MDC.of(LogKeys.HOST_PORT, resolvedAddress),
+        MDC.of(LogKeys.TIME, hostResolveTimeMs));
     } else {
       logger.trace("DNS resolution {} for {} took {} ms",
           resolvMsg, resolvedAddress, hostResolveTimeMs);
@@ -210,7 +210,7 @@ public class TransportClientFactory implements Closeable {
           return cachedClient;
         } else {
           logger.info("Found inactive connection to {}, creating a new one.",
-            MDC.of(LogKeys.HOST_PORT$.MODULE$, resolvedAddress));
+            MDC.of(LogKeys.HOST_PORT, resolvedAddress));
         }
       }
       // If this connection should fast fail when last connection failed in last fast fail time
@@ -314,7 +314,7 @@ public class TransportClientFactory implements Closeable {
               logger.debug("{} successfully completed TLS handshake to ", address);
             } else {
               logger.info("failed to complete TLS handshake to {}", handshakeFuture.cause(),
-                MDC.of(LogKeys.HOST_PORT$.MODULE$, address));
+                MDC.of(LogKeys.HOST_PORT, address));
               cf.channel().close();
             }
           }
@@ -340,7 +340,7 @@ public class TransportClientFactory implements Closeable {
     } catch (Exception e) { // catch non-RuntimeExceptions too as bootstrap may be written in Scala
       long bootstrapTimeMs = (System.nanoTime() - preBootstrap) / 1000000;
       logger.error("Exception while bootstrapping client after {} ms", e,
-        MDC.of(LogKeys.BOOTSTRAP_TIME$.MODULE$, bootstrapTimeMs));
+        MDC.of(LogKeys.BOOTSTRAP_TIME, bootstrapTimeMs));
       client.close();
       Throwables.throwIfUnchecked(e);
       throw new RuntimeException(e);
@@ -348,9 +348,9 @@ public class TransportClientFactory implements Closeable {
     long postBootstrap = System.nanoTime();
 
     logger.info("Successfully created connection to {} after {} ms ({} ms spent in bootstraps)",
-      MDC.of(LogKeys.HOST_PORT$.MODULE$, address),
-      MDC.of(LogKeys.ELAPSED_TIME$.MODULE$, (postBootstrap - preConnect) / 1000000),
-      MDC.of(LogKeys.BOOTSTRAP_TIME$.MODULE$, (postBootstrap - preBootstrap) / 1000000));
+      MDC.of(LogKeys.HOST_PORT, address),
+      MDC.of(LogKeys.ELAPSED_TIME, (postBootstrap - preConnect) / 1000000),
+      MDC.of(LogKeys.BOOTSTRAP_TIME, (postBootstrap - preBootstrap) / 1000000));
 
     return client;
   }

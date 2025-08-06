@@ -72,6 +72,13 @@ class StateStoreConf(
   val formatValidationEnabled: Boolean = sqlConf.stateStoreFormatValidationEnabled
 
   /**
+   * Whether to validate StateStore commits for ForeachBatch sinks to ensure all partitions
+   * are processed. This helps detect incomplete processing due to operations like show()
+   * or limit().
+   */
+  val commitValidationEnabled = sqlConf.stateStoreCommitValidationEnabled
+
+  /**
    * Whether to validate the value side. This config is applied to both validators as below:
    *
    * - whether to validate the value format when the format validation is enabled.

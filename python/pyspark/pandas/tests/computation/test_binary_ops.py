@@ -122,8 +122,7 @@ class FrameBinaryOpsMixin:
             dtype=np.float32,
         )
         psdf = ps.from_pandas(pdf)
-        # TODO(SPARK-52332): Fix promotion from float32 to float64 during division
-        self.assert_eq(psdf["a"] / psdf["b"], (pdf["a"] / pdf["b"]).astype(np.float64))
+        self.assert_eq(psdf["a"] / psdf["b"], pdf["a"] / pdf["b"])
 
         # np.float64
         pdf = pd.DataFrame(
@@ -195,6 +194,10 @@ class FrameBinaryOpsMixin:
 
         self.assert_eq(psdf["a"] / psdf["b"], pdf["a"] / pdf["b"])
 
+        pser = pd.Series([1.1, 2.2, 3.3], dtype=np.float32)
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser / 1, pser / 1)
+
         # Negative
         psdf = ps.DataFrame({"a": ["x"], "b": [1]})
 
@@ -213,6 +216,10 @@ class FrameBinaryOpsMixin:
         self.assert_eq(pdf["b"] // 0, psdf["b"] // 0)
         self.assert_eq(pdf["c"] // 0, psdf["c"] // 0)
         self.assert_eq(pdf["d"] // 0, psdf["d"] // 0)
+
+        pser = pd.Series([1.1, 2.2, 3.3], dtype=np.float32)
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser // 1, pser // 1)
 
         ks_err_msg = "Floor division can not be applied to strings"
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] // psdf["b"])

@@ -133,7 +133,7 @@ public final class ServiceOperations {
       stop(service);
     } catch (Exception e) {
       LOG.warn("When stopping the service {}", e,
-        MDC.of(LogKeys.SERVICE_NAME$.MODULE$, service.getName()));
+        MDC.of(LogKeys.SERVICE_NAME, service.getName()));
       return e;
     }
     return null;

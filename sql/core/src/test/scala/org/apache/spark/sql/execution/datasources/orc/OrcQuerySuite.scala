@@ -737,13 +737,13 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       val df = spark.range(10).map { x =>
-        val stringColumn = s"$x" * 10
-        val structColumn = (x, s"$x" * 100)
-        val arrayColumn = (0 until 5).map(i => (x + i, s"$x" * 5))
+        val stringColumn = s"$x".repeat(10)
+        val structColumn = (x, s"$x".repeat(100))
+        val arrayColumn = (0 until 5).map(i => (x + i, s"$x".repeat(5)))
         val mapColumn = Map(
-          s"$x" -> (x * 0.1, (x, s"$x" * 100)),
-          (s"$x" * 2) -> (x * 0.2, (x, s"$x" * 200)),
-          (s"$x" * 3) -> (x * 0.3, (x, s"$x" * 300)))
+          s"$x" -> (x * 0.1, (x, s"$x".repeat(100))),
+          (s"$x".repeat(2)) -> (x * 0.2, (x, s"$x".repeat(200))),
+          (s"$x".repeat(3)) -> (x * 0.3, (x, s"$x".repeat(300))))
         (x, stringColumn, structColumn, arrayColumn, mapColumn)
       }.toDF("int_col", "string_col", "struct_col", "array_col", "map_col")
       df.write.format("orc").save(path)
@@ -786,10 +786,10 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       val df = spark.range(10).map { x =>
-        val stringColumn = s"$x" * 10
-        val structColumn = (x, s"$x" * 100)
-        val arrayColumn = (0 until 5).map(i => (x + i, s"$x" * 5))
-        val mapColumn = Map(s"$x" -> (x * 0.1, (x, s"$x" * 100)))
+        val stringColumn = s"$x".repeat(10)
+        val structColumn = (x, s"$x".repeat(100))
+        val arrayColumn = (0 until 5).map(i => (x + i, s"$x".repeat(5)))
+        val mapColumn = Map(s"$x" -> (x * 0.1, (x, s"$x".repeat(100))))
         (x, stringColumn, structColumn, arrayColumn, mapColumn)
       }.toDF("int_col", "string_col", "struct_col", "array_col", "map_col")
       df.write.format("orc").save(path)

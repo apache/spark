@@ -184,11 +184,45 @@
             <property name="illegalPkgs" value="org.apache.log4j" />
             <property name="illegalPkgs" value="org.apache.commons.lang" />
             <property name="illegalPkgs" value="org.apache.commons.lang3.tuple" />
+            <property name="illegalClasses" value="org.apache.commons.io.FileUtils" />
             <property name="illegalClasses" value="org.apache.commons.lang3.JavaVersion" />
+            <property name="illegalClasses" value="org.apache.commons.lang3.Strings" />
+            <property name="illegalClasses" value="org.apache.commons.lang3.StringUtils" />
+            <property name="illegalClasses" value="org.apache.commons.lang3.SystemUtils" />
+            <property name="illegalClasses" value="org.apache.hadoop.io.IOUtils" />
+            <property name="illegalClasses" value="com.google.common.base.Strings" />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="Charset\.defaultCharset"/>
+            <property name="message" value="Use StandardCharsets.UTF_8 instead." />
         </module>
         <module name="RegexpSinglelineJava">
             <property name="format" value="new URL\("/>
             <property name="message" value="Use URI.toURL or URL.of instead of URL constructors." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="new ToStringBuilder\("/>
+            <property name="message" value="Use String concatenation instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="FileUtils.writeStringToFile"/>
+            <property name="message" value="Use java.nio.file.Files.writeString instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="FileUtils\.deleteDirectory"/>
+            <property name="message" value="Use deleteRecursively of JavaUtils/SparkFileUtils/Utils instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="FileUtils\.forceDelete\("/>
+            <property name="message" value="Use deleteRecursively of JavaUtils/SparkFileUtils/Utils instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="FileUtils\.forceDeleteOnExit\("/>
+            <property name="message" value="Use forceDeleteOnExit of JavaUtils/SparkFileUtils/Utils instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="FileUtils\.deleteQuietly"/>
+            <property name="message" value="Use deleteQuietly of JavaUtils/SparkFileUtils/Utils instead." />
         </module>
         <!-- support structured logging -->
         <module name="RegexpSinglelineJava">

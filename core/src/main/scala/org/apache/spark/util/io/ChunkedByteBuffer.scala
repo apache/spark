@@ -24,7 +24,6 @@ import java.nio.channels.WritableByteChannel
 import com.google.common.io.ByteStreams
 import com.google.common.primitives.UnsignedBytes
 import io.netty.handler.stream.ChunkedStream
-import org.apache.commons.io.IOUtils
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.config
@@ -251,7 +250,7 @@ private[spark] object ChunkedByteBuffer {
     val chunkSize = math.min(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH, length).toInt
     val out = new ChunkedByteBufferOutputStream(chunkSize, ByteBuffer.allocate _)
     Utils.tryWithSafeFinally {
-      IOUtils.copy(in, out)
+      in.transferTo(out)
     } {
       in.close()
       out.close()

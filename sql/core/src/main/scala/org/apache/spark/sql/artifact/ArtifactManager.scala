@@ -28,11 +28,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
-import org.apache.commons.io.{FilenameUtils, FileUtils}
+import org.apache.commons.io.FilenameUtils
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST}
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.classic.SparkSession
@@ -213,7 +213,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
       // Disallow overwriting with modified version
       if (Files.exists(target)) {
         // makes the query idempotent
-        if (FileUtils.contentEquals(target.toFile, serverLocalStagingPath.toFile)) {
+        if (Utils.contentEquals(target.toFile, serverLocalStagingPath.toFile)) {
           return
         }
 
@@ -340,7 +340,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     val sparkContext = session.sparkContext
     val newArtifactManager = new ArtifactManager(newSession)
     if (artifactPath.toFile.exists()) {
-      FileUtils.copyDirectory(artifactPath.toFile, newArtifactManager.artifactPath.toFile)
+      Utils.copyDirectory(artifactPath.toFile, newArtifactManager.artifactPath.toFile)
     }
     val blockManager = sparkContext.env.blockManager
     val newBlockIds = cachedBlockIdList.asScala.map { blockId =>
@@ -524,7 +524,7 @@ object ArtifactManager extends Logging {
 
     // Clean up artifacts folder
     try {
-      FileUtils.deleteDirectory(artifactPath.toFile)
+      Utils.deleteRecursively(artifactPath.toFile)
     } catch {
       case e: IOException =>
         logWarning(log"Failed to delete directory ${MDC(LogKeys.PATH, artifactPath.toFile)}: " +

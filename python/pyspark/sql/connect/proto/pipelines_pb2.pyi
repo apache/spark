@@ -420,7 +420,6 @@ class PipelineCommand(google.protobuf.message.Message):
         TARGET_DATASET_NAME_FIELD_NUMBER: builtins.int
         RELATION_FIELD_NUMBER: builtins.int
         SQL_CONF_FIELD_NUMBER: builtins.int
-        ONCE_FIELD_NUMBER: builtins.int
         dataflow_graph_id: builtins.str
         """The graph to attach this flow to."""
         flow_name: builtins.str
@@ -435,8 +434,6 @@ class PipelineCommand(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
             """SQL configurations set when running this flow."""
-        once: builtins.bool
-        """If true, this flow will only be run once per full refresh."""
         def __init__(
             self,
             *,
@@ -445,7 +442,6 @@ class PipelineCommand(google.protobuf.message.Message):
             target_dataset_name: builtins.str | None = ...,
             relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
             sql_conf: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
-            once: builtins.bool | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -454,8 +450,6 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"_dataflow_graph_id",
                 "_flow_name",
                 b"_flow_name",
-                "_once",
-                b"_once",
                 "_relation",
                 b"_relation",
                 "_target_dataset_name",
@@ -464,8 +458,6 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"dataflow_graph_id",
                 "flow_name",
                 b"flow_name",
-                "once",
-                b"once",
                 "relation",
                 b"relation",
                 "target_dataset_name",
@@ -479,8 +471,6 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"_dataflow_graph_id",
                 "_flow_name",
                 b"_flow_name",
-                "_once",
-                b"_once",
                 "_relation",
                 b"_relation",
                 "_target_dataset_name",
@@ -489,8 +479,6 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"dataflow_graph_id",
                 "flow_name",
                 b"flow_name",
-                "once",
-                b"once",
                 "relation",
                 b"relation",
                 "sql_conf",
@@ -508,10 +496,6 @@ class PipelineCommand(google.protobuf.message.Message):
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_flow_name", b"_flow_name"]
         ) -> typing_extensions.Literal["flow_name"] | None: ...
-        @typing.overload
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_once", b"_once"]
-        ) -> typing_extensions.Literal["once"] | None: ...
         @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_relation", b"_relation"]

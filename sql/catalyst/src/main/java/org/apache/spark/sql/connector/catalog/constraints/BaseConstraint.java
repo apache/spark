@@ -73,6 +73,16 @@ abstract class BaseConstraint implements Constraint {
         rely ? "RELY" : "NORELY");
   }
 
+  public String toDescription() {
+    StringJoiner joiner = new StringJoiner(" ");
+    joiner.add(definition());
+    joiner.add(enforced ? "ENFORCED" : "NOT ENFORCED");
+    if (rely) {
+      joiner.add("RELY");
+    }
+    return joiner.toString();
+  }
+
   @Override
   public String toString() {
     return toDDL();

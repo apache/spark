@@ -30,12 +30,12 @@ import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 import com.google.common.collect.ImmutableSet;
-import org.apache.commons.io.FileUtils;
 import org.iq80.leveldb.DBIterator;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.util.SparkSystemUtils$;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -52,7 +52,7 @@ public class LevelDBSuite {
       db.close();
     }
     if (dbpath != null) {
-      FileUtils.deleteQuietly(dbpath);
+      JavaUtils.deleteQuietly(dbpath);
     }
   }
 
@@ -306,7 +306,7 @@ public class LevelDBSuite {
     }
     dbForCloseTest.close();
     assertTrue(dbPathForCloseTest.exists());
-    FileUtils.deleteQuietly(dbPathForCloseTest);
+    JavaUtils.deleteQuietly(dbPathForCloseTest);
     assertTrue(!dbPathForCloseTest.exists());
   }
 
@@ -420,7 +420,7 @@ public class LevelDBSuite {
       assertTrue(resourceCleaner.isCompleted());
     } finally {
       dbForCleanerTest.close();
-      FileUtils.deleteQuietly(dbPathForCleanerTest);
+      JavaUtils.deleteQuietly(dbPathForCleanerTest);
     }
   }
 
