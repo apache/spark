@@ -383,6 +383,11 @@ This file is divided into 3 sections:
     <customMessage>Use java.nio.file.Files.writeString instead.</customMessage>
   </check>
 
+  <check customId="listFiles" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.listFiles\b</parameter></parameters>
+    <customMessage>Use listFiles of SparkFileUtil or Utils instead.</customMessage>
+  </check>
+
   <check customId="commonslang3javaversion" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.lang3\..*JavaVersion</parameter></parameters>
     <customMessage>Use JEP 223 API (java.lang.Runtime.Version) instead of
