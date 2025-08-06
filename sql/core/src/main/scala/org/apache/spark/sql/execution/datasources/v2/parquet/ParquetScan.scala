@@ -23,9 +23,11 @@ import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetInputFormat
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, InSet}
+import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.read.PartitionReaderFactory
+import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.read.{PartitionReaderFactory, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetOptions, ParquetReadSupport, ParquetWriteSupport}
 import org.apache.spark.sql.execution.datasources.v2.FileScan
@@ -46,12 +48,20 @@ case class ParquetScan(
     pushedFilters: Array[Filter],
     options: CaseInsensitiveStringMap,
     pushedAggregate: Option[Aggregation] = None,
-    partitionFilters: Seq[Expression] = Seq.empty,
-    dataFilters: Seq[Expression] = Seq.empty) extends FileScan {
+    originPartitionFilters: Seq[Expression] = Seq.empty,
+    dataFilters: Seq[Expression] = Seq.empty)
+    extends FileScan
+    with SupportsRuntimeV2Filtering {
   override def isSplitable(path: Path): Boolean = {
     // If aggregate is pushed down, only the file footer will be read once,
     // so file should not be split across multiple tasks.
     pushedAggregate.isEmpty
+  }
+
+  private var dppPartitionFilters: Seq[Expression] = Seq.empty;
+
+  override def partitionFilters: Seq[Expression] = {
+    originPartitionFilters ++ dppPartitionFilters
   }
 
   override def readSchema(): StructType = {
@@ -131,5 +141,30 @@ case class ParquetScan(
     super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters.toImmutableArraySeq)) ++
       Map("PushedAggregation" -> pushedAggregationsStr) ++
       Map("PushedGroupBy" -> pushedGroupByStr)
+  }
+
+  override def filterAttributes(): Array[NamedReference] = {
+    val scanFields = readSchema.fields.map(_.name).toSet
+    readPartitionSchema.fields
+      .map(_.name)
+      .filter(ref => scanFields.contains(ref))
+      .map(f => FieldReference(f))
+  }
+
+  override def filter(predicates: Array[Predicate]): Unit = {
+    predicates.foreach {
+      case p: Predicate if p.name().equals("IN") =>
+        if (p.children().length > 1 && p.children()(0).isInstanceOf[FieldReference]
+          && p.children().tail.forall(_.isInstanceOf[LiteralValue[_]])) {
+          val values = p.children().drop(1)
+          val filterRef = p.children()(0).asInstanceOf[FieldReference].references.head
+          val sets = values.map(_.asInstanceOf[LiteralValue[_]].value).toSet[Any]
+          dppPartitionFilters = dppPartitionFilters :+ InSet(
+            AttributeReference(
+              filterRef.toString,
+              values(0).asInstanceOf[LiteralValue[_]].dataType)(),
+            sets)
+        }
+    }
   }
 }

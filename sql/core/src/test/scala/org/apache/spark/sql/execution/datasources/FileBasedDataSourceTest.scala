@@ -67,11 +67,20 @@ private[sql] trait FileBasedDataSourceTest extends SQLTestUtils {
    * Writes `data` to a data source file, which is then passed to `f` and will be deleted after `f`
    * returns.
    */
-  protected def withDataSourceFile[T <: Product : ClassTag : TypeTag]
-      (data: Seq[T])
-      (f: String => Unit): Unit = {
+  protected def withDataSourceFile[T <: Product: ClassTag: TypeTag](
+      data: Seq[T],
+      partitionNames: Seq[String] = Seq.empty)(f: String => Unit): Unit = {
     withTempPath { file =>
-      spark.createDataFrame(data).write.format(dataSourceName).save(file.getCanonicalPath)
+      if (partitionNames.isEmpty) {
+        spark.createDataFrame(data).write.format(dataSourceName).save(file.getCanonicalPath)
+      } else {
+        spark
+          .createDataFrame(data)
+          .write
+          .format(dataSourceName)
+          .partitionBy(partitionNames: _*)
+          .save(file.getCanonicalPath)
+      }
       f(file.getCanonicalPath)
     }
   }
@@ -80,10 +89,11 @@ private[sql] trait FileBasedDataSourceTest extends SQLTestUtils {
    * Writes `data` to a data source file and reads it back as a [[DataFrame]],
    * which is then passed to `f`. The file will be deleted after `f` returns.
    */
-  protected def withDataSourceDataFrame[T <: Product : ClassTag : TypeTag]
-      (data: Seq[T], testVectorized: Boolean = true)
-      (f: DataFrame => Unit): Unit = {
-    withDataSourceFile(data)(path => readFile(path.toString, testVectorized)(f))
+  protected def withDataSourceDataFrame[T <: Product: ClassTag: TypeTag](
+      data: Seq[T],
+      testVectorized: Boolean = true,
+      partitionNames: Seq[String] = Seq.empty)(f: DataFrame => Unit): Unit = {
+    withDataSourceFile(data, partitionNames)(path => readFile(path.toString, testVectorized)(f))
   }
 
   /**
@@ -91,10 +101,12 @@ private[sql] trait FileBasedDataSourceTest extends SQLTestUtils {
    * temporary table named `tableName`, then call `f`. The temporary table together with the
    * data file will be dropped/deleted after `f` returns.
    */
-  protected def withDataSourceTable[T <: Product : ClassTag : TypeTag]
-      (data: Seq[T], tableName: String, testVectorized: Boolean = true)
-      (f: => Unit): Unit = {
-    withDataSourceDataFrame(data, testVectorized) { df =>
+  protected def withDataSourceTable[T <: Product: ClassTag: TypeTag](
+      data: Seq[T],
+      tableName: String,
+      testVectorized: Boolean = true,
+      partitionNames: Seq[String] = Seq.empty)(f: => Unit): Unit = {
+    withDataSourceDataFrame(data, testVectorized, partitionNames) { df =>
       df.createOrReplaceTempView(tableName)
       withTempView(tableName)(f)
     }
