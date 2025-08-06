@@ -26,8 +26,6 @@ import org.junit.jupiter.api.Test;
 import java.io.File;
 import java.io.IOException;
 
-import org.apache.spark.util.SparkSystemUtils$;
-
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 public class DBProviderSuite {
@@ -39,7 +37,7 @@ public class DBProviderSuite {
 
   @Test
   public void testLevelDBCheckVersionFailed() throws IOException, InterruptedException {
-    assumeFalse(SparkSystemUtils$.MODULE$.isMacOnAppleSilicon());
+    assumeFalse(JavaUtils.isMacOnAppleSilicon);
     testCheckVersionFailed(DBBackend.LEVELDB, "leveldb");
   }
 
