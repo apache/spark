@@ -39,8 +39,13 @@ class InternalRowComparableWrapper(val row: InternalRow, val dataTypes: Seq[Data
   private val structType = structTypeCache.get(dataTypes)
   private val ordering = orderingCache.get(dataTypes)
 
-  override def hashCode(): Int =
-    Murmur3HashFunction.hash(row, structType, 42L, isCollationAware = true).toInt
+  override def hashCode(): Int = Murmur3HashFunction.hash(
+    row,
+    structType,
+    42L,
+    isCollationAware = true,
+    // legacyCollationAwareHashing only matters when isCollationAware is false.
+    legacyCollationAwareHashing = false).toInt
 
   override def equals(other: Any): Boolean = {
     if (!other.isInstanceOf[InternalRowComparableWrapper]) {
