@@ -16,52 +16,53 @@
  */
 package org.apache.spark.util
 
+import org.apache.spark.network.util.JavaUtils
+
 private[spark] trait SparkSystemUtils {
   /**
    * The `os.name` system property.
    */
-  val osName = System.getProperty("os.name")
+  val osName = JavaUtils.osName
 
   /**
    * The `os.version` system property.
    */
-  val osVersion = System.getProperty("os.version")
+  val osVersion = JavaUtils.osVersion
 
   /**
    * The `os.arch` system property.
    */
-  val osArch = System.getProperty("os.arch")
+  val osArch = JavaUtils.osArch
 
   /**
    * The `java.version` system property.
    */
-  val javaVersion = Runtime.version.toString
+  val javaVersion = JavaUtils.isWindows
 
   /**
    * Whether the underlying operating system is Windows.
    */
-  val isWindows = osName.regionMatches(true, 0, "Windows", 0, 7)
+  val isWindows = JavaUtils.isWindows
 
   /**
    * Whether the underlying operating system is Mac OS X.
    */
-  val isMac = osName.regionMatches(true, 0, "Mac OS X", 0, 8)
+  val isMac = JavaUtils.isMac
 
   /**
    * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.
    */
-  val isMacOnAppleSilicon = isMac && osArch.equals("aarch64")
+  val isMacOnAppleSilicon = JavaUtils.isMacOnAppleSilicon
 
   /**
    * Whether the underlying operating system is Linux.
    */
-  val isLinux = osName.regionMatches(true, 0, "Linux", 0, 5)
+  val isLinux = JavaUtils.isLinux
 
   /**
    * Whether the underlying operating system is UNIX.
    */
-  val isUnix = Seq("AIX", "HP-UX", "Irix", "Linux", "Mac OS X", "Solaris", "SunOS", "FreeBSD",
-      "OpenBSD", "NetBSD").exists(prefix => osName.regionMatches(true, 0, prefix, 0, prefix.length))
+  val isUnix = JavaUtils.isUnix
 }
 
 object SparkSystemUtils extends SparkSystemUtils

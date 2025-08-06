@@ -43,7 +43,6 @@ import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
-import org.apache.spark.util.SparkSystemUtils$;
 
 /**
  * General utilities available in the network package. Many of these are sourced from Spark's
@@ -265,9 +264,7 @@ public class JavaUtils {
     // On Unix systems, use operating system command to run faster
     // If that does not work out, fallback to the Java IO way
     // We exclude Apple Silicon test environment due to the limited resource issues.
-    if (SparkSystemUtils$.MODULE$.isUnix() && filter == null &&
-        !(SparkSystemUtils$.MODULE$.isMac() && (System.getenv("SPARK_TESTING") != null ||
-        System.getProperty("spark.testing") != null))) {
+    if (isUnix && filter == null && !(isMac && isTesting())) {
       try {
         deleteRecursivelyUsingUnixNative(file);
         return;
@@ -663,4 +660,58 @@ public class JavaUtils {
     }
     return (int) value;
   }
+
+  /**
+   * Indicates whether Spark is currently running unit tests.
+   */
+  public static boolean isTesting() {
+    return System.getenv("SPARK_TESTING") != null || System.getProperty("spark.testing") != null;
+  }
+
+  /**
+   * The `os.name` system property.
+   */
+  public static String osName = System.getProperty("os.name");
+
+  /**
+   * The `os.version` system property.
+   */
+  public static String osVersion = System.getProperty("os.version");
+
+  /**
+   * The `java.version` system property.
+   */
+  public static String javaVersion = Runtime.version().toString();
+
+  /**
+   * The `os.arch` system property.
+   */
+  public static String osArch = System.getProperty("os.arch");
+
+  /**
+   * Whether the underlying operating system is Windows.
+   */
+  public static boolean isWindows = osName.regionMatches(true, 0, "Windows", 0, 7);
+
+  /**
+   * Whether the underlying operating system is Mac OS X.
+   */
+  public static boolean isMac = osName.regionMatches(true, 0, "Mac OS X", 0, 8);
+
+  /**
+   * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.
+   */
+  public static boolean isMacOnAppleSilicon = isMac && osArch.equals("aarch64");
+
+  /**
+   * Whether the underlying operating system is Linux.
+   */
+  public static boolean isLinux = osName.regionMatches(true, 0, "Linux", 0, 5);
+
+  /**
+   * Whether the underlying operating system is UNIX.
+   */
+  public static boolean isUnix = Stream.of("AIX", "HP-UX", "Irix", "Linux", "Mac OS X", "Solaris",
+    "SunOS", "FreeBSD", "OpenBSD", "NetBSD")
+    .anyMatch(prefix -> osName.regionMatches(true, 0, prefix, 0, prefix.length()));
 }
