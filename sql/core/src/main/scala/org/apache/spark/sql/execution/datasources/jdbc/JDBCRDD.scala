@@ -296,6 +296,7 @@ class JDBCRDD(
     }
 
     val sqlText = generateJdbcQuery(Some(part))
+    logInfo(log"Generated JDBC query: ${MDC(SQL_TEXT, sqlText)}")
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)
