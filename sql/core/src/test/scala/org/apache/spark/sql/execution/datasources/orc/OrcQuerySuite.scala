@@ -36,7 +36,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
-import org.apache.spark.sql.execution.FileSourceScanExec
+import org.apache.spark.sql.execution.{ExplainMode, FileSourceScanExec}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
@@ -330,6 +330,72 @@ abstract class OrcQueryTest extends OrcTest {
       }
 
       checkAnswer(selfJoin, List(Row(1, "1", 1, "1"), Row(3, "3", 3, "3")))
+    }
+  }
+
+  test("dpp") {
+    // 4 rows, cells of column 1 of row 2 and row 4 are null
+    val fact = (0 to 99).map { i =>
+      (i, i + 1, (i + 2).toByte, (i + 3).toShort, (i * 20) % 100, (i + 1).toString)
+    }
+
+    val dim = (0 to 9).map { i =>
+      (i, i + 1, (i + 2).toByte, (i + 3).toShort, (i * 10), (i + 1).toString)
+    }
+
+    withOrcTable(fact, "fact", true, Seq.apply("_1", "_2", "_3")) {
+      withOrcTable(dim, "dim") {
+        val df = sql(
+          """
+            |SELECT f._1, f._2, f._3, f._4 FROM fact f
+            |JOIN dim d
+            |ON (f._2 = d._2)
+            |WHERE d._5 > 80
+            """.stripMargin)
+        val explainDF = df.queryExecution.explainString(ExplainMode
+          .fromString("extended"))
+        assert(explainDF.contains("dynamicpruningexpression"))
+        checkAnswer(df, Row(9, 10, 11, 12) :: Nil)
+
+        // reuse a single Byte key
+        val dfByte = sql(
+          """
+            |SELECT f._1, f._2, f._3, f._4 FROM fact f
+            |JOIN dim d
+            |ON (f._3 = d._3)
+            |WHERE d._5 > 80
+            """.stripMargin)
+        val explainDFByte = dfByte.queryExecution.explainString(ExplainMode
+          .fromString("extended"))
+        assert(explainDFByte.contains("dynamicpruningexpression"))
+        checkAnswer(dfByte, Row(9, 10, 11, 12) :: Nil)
+
+        // reuse a single String key
+        val dfStr = sql(
+          """
+            |SELECT f._1, f._2, f._3, f._4 FROM fact f
+            |JOIN dim d
+            |ON (f._3 = d._3)
+            |WHERE d._5 > 80
+            """.stripMargin)
+        val explainDFStr = dfStr.queryExecution.explainString(ExplainMode
+          .fromString("extended"))
+        assert(explainDFStr.contains("dynamicpruningexpression"))
+        checkAnswer(dfStr, Row(9, 10, 11, 12) :: Nil)
+
+        // mult results
+        val dfMultStr = sql(
+          """
+            |SELECT f._1, f._2, f._3, f._4 FROM fact f
+            |JOIN dim d
+            |ON (f._3 = d._3)
+            |WHERE d._5 > 70
+            """.stripMargin)
+        val explainDFMultStr = dfMultStr.queryExecution.explainString(ExplainMode
+          .fromString("extended"))
+        assert(explainDFMultStr.contains("dynamicpruningexpression"))
+        checkAnswer(dfMultStr, Seq(Row(8, 9, 10, 11), Row(9, 10, 11, 12)))
+      }
     }
   }
 

@@ -68,10 +68,15 @@ private[sql] trait FileBasedDataSourceTest extends SQLTestUtils {
    * returns.
    */
   protected def withDataSourceFile[T <: Product : ClassTag : TypeTag]
-      (data: Seq[T])
+      (data: Seq[T], partitionNames: Seq[String] = Seq.empty)
       (f: String => Unit): Unit = {
     withTempPath { file =>
-      spark.createDataFrame(data).write.format(dataSourceName).save(file.getCanonicalPath)
+      if (partitionNames.isEmpty) {
+        spark.createDataFrame(data).write.format(dataSourceName).save(file.getCanonicalPath)
+      } else {
+        spark.createDataFrame(data).write.format(dataSourceName)
+          .partitionBy(partitionNames: _*).save(file.getCanonicalPath)
+      }
       f(file.getCanonicalPath)
     }
   }
@@ -81,9 +86,9 @@ private[sql] trait FileBasedDataSourceTest extends SQLTestUtils {
    * which is then passed to `f`. The file will be deleted after `f` returns.
    */
   protected def withDataSourceDataFrame[T <: Product : ClassTag : TypeTag]
-      (data: Seq[T], testVectorized: Boolean = true)
+      (data: Seq[T], testVectorized: Boolean = true, partitionNames: Seq[String] = Seq.empty)
       (f: DataFrame => Unit): Unit = {
-    withDataSourceFile(data)(path => readFile(path.toString, testVectorized)(f))
+    withDataSourceFile(data, partitionNames)(path => readFile(path.toString, testVectorized)(f))
   }
 
   /**
@@ -92,9 +97,19 @@ private[sql] trait FileBasedDataSourceTest extends SQLTestUtils {
    * data file will be dropped/deleted after `f` returns.
    */
   protected def withDataSourceTable[T <: Product : ClassTag : TypeTag]
-      (data: Seq[T], tableName: String, testVectorized: Boolean = true)
+      (data: Seq[T], tableName: String, testVectorized: Boolean = true
+       , partitionNames: Seq[String] = Seq.empty)
       (f: => Unit): Unit = {
-    withDataSourceDataFrame(data, testVectorized) { df =>
+    withDataSourceDataFrame(data, testVectorized, partitionNames) { df =>
+      df.createOrReplaceTempView(tableName)
+      withTempView(tableName)(f)
+    }
+  }
+
+  protected def withDataSourcePartitionsTable[T <: Product : ClassTag : TypeTag]
+    (data: Seq[T], tableName: String, testVectorized: Boolean, colNames: Seq[String])
+    (f: => Unit): Unit = {
+    withDataSourceDataFrame(data, testVectorized, colNames) { df =>
       df.createOrReplaceTempView(tableName)
       withTempView(tableName)(f)
     }
