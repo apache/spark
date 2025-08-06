@@ -82,8 +82,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = map.get(key)
 
-    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
-      map.iterator()
+    override def iterator(colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      val iter = map.iterator()
+      new StateStoreIterator(iter)
     }
 
     override def abort(): Unit = {}
@@ -94,9 +95,11 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       s"HDFSReadStateStore[stateStoreId=$stateStoreId_, version=$version]"
     }
 
-    override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
-      Iterator[UnsafeRowPair] = {
-      map.prefixScan(prefixKey)
+    override def prefixScan(
+        prefixKey: UnsafeRow,
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      val iter = map.prefixScan(prefixKey)
+      new StateStoreIterator(iter)
     }
 
     override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
@@ -214,15 +217,18 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
      * Get an iterator of all the store data.
      * This can be called only after committing all the updates made in the current thread.
      */
-    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
+    override def iterator(colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       assertUseOfDefaultColFamily(colFamilyName)
-      mapToUpdate.iterator()
+      val iter = mapToUpdate.iterator()
+      new StateStoreIterator(iter)
     }
 
-    override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
-      Iterator[UnsafeRowPair] = {
+    override def prefixScan(
+        prefixKey: UnsafeRow,
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       assertUseOfDefaultColFamily(colFamilyName)
-      mapToUpdate.prefixScan(prefixKey)
+      val iter = mapToUpdate.prefixScan(prefixKey)
+      new StateStoreIterator(iter)
     }
 
     override def metrics: StateStoreMetrics = {

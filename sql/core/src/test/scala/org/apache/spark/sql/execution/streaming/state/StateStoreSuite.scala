@@ -2172,6 +2172,46 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     assert(combinedMetrics.customMetrics(customTimingMetric) == 400L)
   }
 
+  test("StateStoreIterator onClose method is called only when close() is called") {
+    // Test that the iterator functions as normal without closing
+    {
+      var closed = false
+
+      val iterator = new StateStoreIterator(Iterator(1, 2, 3, 4), () => {
+        closed = true
+      })
+
+      // next() should work as expected
+      for (i <- 1 to 4) {
+        assert(iterator.next() == i)
+      }
+
+      // close() is never called, so closed should remain false
+      assert(!closed)
+    }
+    // Test that the onClose method is called when close() is called
+    {
+      var closed = false
+
+      val iterator = new StateStoreIterator(Iterator(1, 2, 3, 4), () => {
+        closed = true
+      })
+
+      // next() should work as expected
+      assert(iterator.next() == 1)
+      assert(iterator.next() == 2)
+
+      // close() should call the onClose function which sets closed to true
+      assert(!closed)
+      iterator.close()
+      assert(closed)
+
+      // Calling close() again should not cause any issue
+      iterator.close()
+      assert(closed)
+    }
+  }
+
   test("SPARK-35659: StateStore.put cannot put null value") {
     tryWithProviderResource(newStoreProvider()) { provider =>
       // Verify state before starting a new set of updates
