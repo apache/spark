@@ -290,7 +290,7 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery), originalQuery)
   }
 
-  test("global lower agggregation should not be removed") {
+  test("SPARK-53155: global lower aggregation should not be removed") {
     object OptimizeNonRemovedRedundantAgg extends RuleExecutor[LogicalPlan] {
       val batches = Batch("RemoveRedundantAggregates", FixedPoint(10),
         PropagateEmptyRelation,
