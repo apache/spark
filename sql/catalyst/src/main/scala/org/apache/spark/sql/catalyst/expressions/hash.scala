@@ -836,7 +836,7 @@ case class XxHash64(children: Seq[Expression], seed: Long) extends HashExpressio
   override protected def isCollationAware: Boolean = false
 
   override protected def computeHash(value: Any, dataType: DataType, seed: Long): Long = {
-    XxHash64Function.hash(value, dataType, seed, isCollationAware)
+    XxHash64Function.hash(value, dataType, seed, isCollationAware, legacyCollationAwareHashing)
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): XxHash64 =
@@ -898,7 +898,9 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
   override protected def isCollationAware: Boolean = true
 
   override protected def computeHash(value: Any, dataType: DataType, seed: Int): Int = {
-    HiveHashFunction.hash(value, dataType, this.seed, isCollationAware).toInt
+    HiveHashFunction.hash(
+      value, dataType, this.seed, isCollationAware, legacyCollationAwareHashing
+    ).toInt
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1248,7 +1250,7 @@ object HiveHashFunction extends InterpretedHashFunction {
       case d: Decimal => normalizeDecimal(d.toJavaBigDecimal).hashCode()
       case timestamp: Long if dataType.isInstanceOf[TimestampType] => hashTimestamp(timestamp)
       case calendarInterval: CalendarInterval => hashCalendarInterval(calendarInterval)
-      case _ => super.hash(value, dataType, 0, isCollationAware)
+      case _ => super.hash(value, dataType, 0, isCollationAware, legacyCollationAwareHashing)
     }
   }
 }
