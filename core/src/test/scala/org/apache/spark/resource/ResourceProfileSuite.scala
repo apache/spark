@@ -332,7 +332,7 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
       "Executor resources should have 2000 overhead memory")
     assert(rprof.getPySparkMemory.get === 500,
       "Executor resources should have 512 pyspark memory")
-    assert(rprof.getExecutorOffHeap === 1024,
+    assert(rprof.getExecutorOffHeap.get === 1024,
       "Executor resources should have 1024 offHeap memory")
   }
 
