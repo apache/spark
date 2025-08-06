@@ -655,9 +655,9 @@ class TypesTestsMixin:
 
         standalone_map = MapType(StringType(utf8_lcase_collation), StringType(unicode_collation))
 
-        standalone_nested = ArrayType(MapType(
-            StringType(utf8_lcase_collation),
-            ArrayType(StringType(unicode_collation))))
+        standalone_nested = ArrayType(
+            MapType(StringType(utf8_lcase_collation), ArrayType(StringType(unicode_collation)))
+        )
 
         simple_struct = StructType([StructField("c1", StringType(unicode_collation))])
 

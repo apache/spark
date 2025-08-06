@@ -1061,7 +1061,8 @@ class StructField(DataType):
         }
 
     def _dataTypeJsonValue(self, collationMetadata: Dict[str, str]) -> Union[str, Dict[str, Any]]:
-        if not collationMetadata: return self.dataType.jsonValue()
+        if not collationMetadata:
+            return self.dataType.jsonValue()
 
         def removeCollations(dt: DataType) -> DataType:
             # Only recurse into map and array types as any child struct type
@@ -1069,9 +1070,11 @@ class StructField(DataType):
             if isinstance(dt, ArrayType):
                 return ArrayType(removeCollations(dt.elementType), dt.containsNull)
             elif isinstance(dt, MapType):
-                return MapType(removeCollations(dt.keyType),
+                return MapType(
+                    removeCollations(dt.keyType),
                     removeCollations(dt.valueType),
-                    dt.valueContainsNull)
+                    dt.valueContainsNull,
+                )
             elif isinstance(dt, StringType):
                 return StringType()
             elif isinstance(dt, VarcharType):
