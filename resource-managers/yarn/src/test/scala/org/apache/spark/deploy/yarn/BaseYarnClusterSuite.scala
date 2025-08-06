@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{File, FileOutputStream, OutputStreamWriter}
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.Properties
 import java.util.concurrent.TimeUnit

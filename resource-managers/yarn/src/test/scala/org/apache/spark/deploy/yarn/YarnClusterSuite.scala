@@ -20,7 +20,7 @@ package org.apache.spark.deploy.yarn
 import java.io.File
 import java.net.URL
 import java.nio.charset.StandardCharsets
-import java.nio.file.Paths
+import java.nio.file.{Files, Paths}
 import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable
