@@ -30,6 +30,7 @@ import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearM
 class DataTypeSuite extends SparkFunSuite {
 
   private val UNICODE_COLLATION_ID = CollationFactory.collationNameToId("UNICODE")
+  private val UTF8_LCASE_COLLATION_ID = CollationFactory.collationNameToId("UTF8_LCASE")
 
   test("construct an ArrayType") {
     val array = ArrayType(StringType)
@@ -1143,6 +1144,17 @@ class DataTypeSuite extends SparkFunSuite {
   }
 
   test("schema with collation should not change during ser/de") {
+    val standaloneString = StringType(UNICODE_COLLATION_ID)
+
+    val standaloneArray = ArrayType(StringType(UNICODE_COLLATION_ID))
+
+    val standaloneMap = MapType(StringType(UNICODE_COLLATION_ID),
+      StringType(UTF8_LCASE_COLLATION_ID))
+
+    val standaloneNested = ArrayType(MapType(
+      StringType(UNICODE_COLLATION_ID),
+      ArrayType(StringType(UTF8_LCASE_COLLATION_ID))))
+
     val simpleStruct = StructType(
       StructField("c1", StringType(UNICODE_COLLATION_ID)) :: Nil)
 
@@ -1183,6 +1195,7 @@ class DataTypeSuite extends SparkFunSuite {
         mapWithKeyInNameInSchema ++ arrayInMapInNestedSchema.fields ++ nestedArrayInMap.fields)
 
     Seq(
+      standaloneString, standaloneArray, standaloneMap, standaloneNested,
       simpleStruct, caseInsensitiveNames, specialCharsInName, nestedStruct, arrayInSchema,
       mapInSchema, mapWithKeyInNameInSchema, nestedArrayInMap, arrayInMapInNestedSchema,
       schemaWithMultipleFields)

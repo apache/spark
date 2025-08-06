@@ -126,6 +126,7 @@ object DataType {
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
   private val CHAR_TYPE = """char\(\s*(\d+)\s*\)""".r
   private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
+  private val STRING_WITH_COLLATION = """string\s+collate\s+(\w+)""".r
 
   val COLLATIONS_METADATA_KEY = "__COLLATIONS"
 
@@ -214,6 +215,7 @@ object DataType {
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
       case CHAR_TYPE(length) => CharType(length.toInt)
       case VARCHAR_TYPE(length) => VarcharType(length.toInt)
+      case STRING_WITH_COLLATION(collation) => StringType(collation)
       // For backwards compatibility, previously the type name of NullType is "null"
       case "null" => NullType
       case "timestamp_ltz" => TimestampType

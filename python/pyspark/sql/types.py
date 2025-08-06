@@ -296,11 +296,8 @@ class StringType(AtomicType):
 
         return f"string collate {self.collation}"
 
-    # For backwards compatibility and compatibility with other readers all string types
-    # are serialized in json as regular strings and the collation info is written to
-    # struct field metadata
     def jsonValue(self) -> str:
-        return "string"
+        return self.simpleString()
 
     def __repr__(self) -> str:
         return (
@@ -1010,10 +1007,38 @@ class StructField(DataType):
 
         return {
             "name": self.name,
-            "type": self.dataType.jsonValue(),
+            "type": self._dataTypeJsonValue(collationMetadata),
             "nullable": self.nullable,
             "metadata": metadata,
         }
+
+    def _dataTypeJsonValue(self, collationMetadata: Dict[str, str]) -> Union[str, Dict[str, Any]]:
+        if not collationMetadata:
+            return self.dataType.jsonValue()
+
+        def removeCollations(dt: DataType) -> DataType:
+            # Only recurse into map and array types as any child struct type
+            # will have already been processed.
+            if isinstance(dt, ArrayType):
+                return ArrayType(removeCollations(dt.elementType), dt.containsNull)
+            elif isinstance(dt, MapType):
+                return MapType(
+                    removeCollations(dt.keyType),
+                    removeCollations(dt.valueType),
+                    dt.valueContainsNull,
+                )
+            elif isinstance(dt, StringType):
+                return StringType()
+            elif isinstance(dt, VarcharType):
+                return VarcharType(dt.length)
+            elif isinstance(dt, CharType):
+                return CharType(dt.length)
+            else:
+                return dt
+
+        # As we want to be backwards compatible we should remove all collations information from the
+        # json and only keep that information in the metadata.
+        return removeCollations(self.dataType).jsonValue()
 
     @classmethod
     def fromJson(cls, json: Dict[str, Any]) -> "StructField":
@@ -1843,6 +1868,7 @@ _all_mappable_types: Dict[str, Type[DataType]] = {
 
 _LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)")
 _LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
+_STRING_WITH_COLLATION = re.compile(r"string\s+collate\s+(\w+)")
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
 _INTERVAL_DAYTIME = re.compile(r"interval (day|hour|minute|second)( to (day|hour|minute|second))?")
 _INTERVAL_YEARMONTH = re.compile(r"interval (year|month)( to (year|month))?")
@@ -2003,6 +2029,9 @@ def _parse_datatype_json_value(
             if first_field is not None and second_field is None:
                 return YearMonthIntervalType(first_field)
             return YearMonthIntervalType(first_field, second_field)
+        elif _STRING_WITH_COLLATION.match(json_value):
+            m = _STRING_WITH_COLLATION.match(json_value)
+            return StringType(m.group(1))  # type: ignore[union-attr]
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
             return CharType(int(m.group(1)))  # type: ignore[union-attr]
