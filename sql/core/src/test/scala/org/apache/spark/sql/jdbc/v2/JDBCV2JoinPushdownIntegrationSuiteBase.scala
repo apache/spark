@@ -665,9 +665,6 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     }
   }
 
-  // TODO: test currently doesn't assert on anything. We can assert on pushedJoins from explain
-  // when https://github.com/apache/spark/pull/51686 is checked in, since we would have
-  // deterministic column names.
   test("Test explain formatted") {
     val sqlQuery = s"""
       |SELECT * FROM $catalogAndNamespace.$casedJoinTableName1 a

@@ -192,7 +192,9 @@ case class RowDataSourceScanExec(
 
     val pushedJoins = if (pushedDownOperators.joinedRelationPushedDownOperators.nonEmpty) {
       Map("PushedJoins" ->
-        s"[\n${getPushedJoinString(pushedDownOperators.joinedRelationPushedDownOperators)}]")
+        s"[\n${getPushedJoinString(
+          pushedDownOperators.joinedRelationPushedDownOperators(0),
+          pushedDownOperators.joinedRelationPushedDownOperators(1))}]")
     } else {
       Map()
     }
@@ -217,30 +219,32 @@ case class RowDataSourceScanExec(
    * The exmaple of resulting string is the following:
    *
    * PushedJoins:
-   * [0]: [PushedFilters: [ID_1 = (ID_2 + 1)],
+   * [L]: [PushedFilters: [ID_1 = (ID_2 + 1)],
    *      PushedJoins: [
-   *      [0]: [PushedFilters: [ID_1 = (ID + 1)],
+   *      [L]: [PushedFilters: [ID_1 = (ID + 1)],
    *         PushedJoins: [
-   *            [0]: [Relation: join_pushdown_catalog.tbl1, PushedFilters: [ID IS NOT NULL]],
-   *            [1]: [Relation: join_pushdown_catalog.tbl2, PushedFilters: [ID IS NOT NULL]]
+   *            [L]: [Relation: join_pushdown_catalog.tbl1, PushedFilters: [ID IS NOT NULL]],
+   *            [R]: [Relation: join_pushdown_catalog.tbl2, PushedFilters: [ID IS NOT NULL]]
    *        ]],
-   *      [1]: [Relation: join_pushdown_catalog.tbl13, PushedFilters: [ID IS NOT NULL]]
+   *      [R]: [Relation: join_pushdown_catalog.tbl13, PushedFilters: [ID IS NOT NULL]]
    *    ]],
-   * [1]: [Relation: join_pushdown_catalog.tbl4, PushedFilters: [ID IS NOT NULL]]
+   * [R]: [Relation: join_pushdown_catalog.tbl4, PushedFilters: [ID IS NOT NULL]]
    */
   private def getPushedJoinString(
-      joinedPushedDownOperators: Seq[PushedDownOperators],
+      leftSidePushedDownOperators: PushedDownOperators,
+      rightSidePushedDownOperators: PushedDownOperators,
       indent: Int = 0): String = {
     val indentStr = " ".repeat(2 * indent)
 
-    val joinStrings = joinedPushedDownOperators.zipWithIndex.map { case (operators, index) =>
-      val joinSideStr = if (index == 0) "L" else "R"
-      val parts = buildOperatorParts(operators, indent)
-      val metadataStr = formatMetadata(parts, indentStr)
-      s"$indentStr[$joinSideStr]: [$metadataStr]"
-    }
+    val leftSideOperators = buildOperatorParts(leftSidePushedDownOperators, indent)
+    val leftSideMetadataStr = formatMetadata(leftSideOperators, indentStr)
 
-    joinStrings.mkString(",\n")
+    val rightSideOperators = buildOperatorParts(rightSidePushedDownOperators, indent)
+    val rightSideMetadataStr = formatMetadata(rightSideOperators, indentStr)
+
+    val leftSideString = s"$indentStr[L]: [$leftSideMetadataStr]"
+    val rightSideString = s"$indentStr[R]: [$rightSideMetadataStr]"
+    Seq(leftSideString, rightSideString).mkString(",\n")
   }
 
   private def buildOperatorParts(operators: PushedDownOperators, indent: Int): List[String] = {
@@ -262,7 +266,10 @@ case class RowDataSourceScanExec(
 
     // Recursively get the pushed join string for child with correct indentation.
     if (operators.joinedRelationPushedDownOperators.nonEmpty) {
-      val nestedJoins = getPushedJoinString(operators.joinedRelationPushedDownOperators, indent + 2)
+      val nestedJoins = getPushedJoinString(
+        operators.joinedRelationPushedDownOperators(0),
+        operators.joinedRelationPushedDownOperators(1),
+        indent + 2)
       parts += s"PushedJoins: [\n$nestedJoins\n$indentStr  ]"
     }
 
