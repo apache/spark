@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.text.StringEscapeUtils
 
-import org.apache.spark.{sql, TaskContext}
+import org.apache.spark.{sql, SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
@@ -649,7 +649,7 @@ class Dataset[T] private[sql](
   private def resolveSelfJoinCondition(
       right: Dataset[_],
       joinExprs: Option[Column],
-      joinType: String): Join = {
+      joinType: String): LogicalPlan = {
     // Note that in this function, we introduce a hack in the case of self-join to automatically
     // resolve ambiguous join conditions into ones that might make sense [SPARK-6231].
     // Consider this case: df.join(df, df("key") === df("key"))
@@ -660,28 +660,40 @@ class Dataset[T] private[sql](
 
     // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
     // After the cloning, left and right side will have distinct expression ids.
-    val plan = withPlan(
-      Join(logicalPlan, right.logicalPlan,
-        JoinType(joinType), joinExprs.map(_.expr), JoinHint.NONE))
-      .queryExecution.analyzed.asInstanceOf[Join]
+    val planToAnalyze = Join(
+      logicalPlan, right.logicalPlan, JoinType(joinType), joinExprs.map(_.expr), JoinHint.NONE)
+    val analyzedJoinPlan = withPlan(planToAnalyze).queryExecution.analyzed
 
     // If auto self join alias is disabled, return the plan.
     if (!sparkSession.sessionState.conf.dataFrameSelfJoinAutoResolveAmbiguity) {
-      return plan
+      return analyzedJoinPlan
     }
 
     // If left/right have no output set intersection, return the plan.
     val lanalyzed = this.queryExecution.analyzed
     val ranalyzed = right.queryExecution.analyzed
     if (lanalyzed.outputSet.intersect(ranalyzed.outputSet).isEmpty) {
-      return plan
+      return analyzedJoinPlan
     }
 
     // Otherwise, find the trivially true predicates and automatically resolves them to both sides.
     // By the time we get here, since we have already run analysis, all attributes should've been
     // resolved and become AttributeReference.
-
-    JoinWith.resolveSelfJoinCondition(sparkSession.sessionState.analyzer.resolver, plan)
+    analyzedJoinPlan match {
+      case project @ Project(_, join: Join) =>
+        // SPARK-53143: Handling edge-cases when `AddMetadataColumns` analyzer rule adds `Project`
+        //   node on top of `Join` node.
+        // Check "SPARK-53143: self join edge-case when Join is not returned by the analyzer" in
+        //   `DataframeSelfJoinSuite` for more details.
+        val newProject = project.copy(child = JoinWith.resolveSelfJoinCondition(
+          sparkSession.sessionState.analyzer.resolver, join))
+        newProject.copyTagsFrom(project)
+        newProject
+      case join: Join =>
+        JoinWith.resolveSelfJoinCondition(sparkSession.sessionState.analyzer.resolver, join)
+      case _ => throw SparkException.internalError(
+        s"Unexpected plan type: ${analyzedJoinPlan.getClass.getName} for self join resolution.")
+    }
   }
 
   /** @inheritdoc */
@@ -781,27 +793,37 @@ class Dataset[T] private[sql](
       tolerance: Column,
       allowExactMatches: Boolean,
       direction: String): DataFrame = {
-    val joined = resolveSelfJoinCondition(other, Option(joinExprs), joinType)
-    val leftAsOfExpr = leftAsOf.expr.transformUp {
-      case a: AttributeReference if logicalPlan.outputSet.contains(a) =>
-        val index = logicalPlan.output.indexWhere(_.exprId == a.exprId)
-        joined.left.output(index)
-    }
-    val rightAsOfExpr = rightAsOf.expr.transformUp {
-      case a: AttributeReference if other.logicalPlan.outputSet.contains(a) =>
-        val index = other.logicalPlan.output.indexWhere(_.exprId == a.exprId)
-        joined.right.output(index)
-    }
-    withPlan {
+
+    def createAsOfJoinPlan(joinPlan: Join): AsOfJoin = {
+      val leftAsOfExpr = leftAsOf.expr.transformUp {
+        case a: AttributeReference if logicalPlan.outputSet.contains(a) =>
+          val index = logicalPlan.output.indexWhere(_.exprId == a.exprId)
+          joinPlan.left.output(index)
+      }
+      val rightAsOfExpr = rightAsOf.expr.transformUp {
+        case a: AttributeReference if other.logicalPlan.outputSet.contains(a) =>
+          val index = other.logicalPlan.output.indexWhere(_.exprId == a.exprId)
+          joinPlan.right.output(index)
+      }
       AsOfJoin(
-        joined.left, joined.right,
+        joinPlan.left, joinPlan.right,
         leftAsOfExpr, rightAsOfExpr,
-        joined.condition,
-        joined.joinType,
+        joinPlan.condition,
+        joinPlan.joinType,
         Option(tolerance).map(_.expr),
         allowExactMatches,
         AsOfJoinDirection(direction)
       )
+    }
+
+    resolveSelfJoinCondition(other, Option(joinExprs), joinType) match {
+      case project @ Project(_, join: Join) =>
+        val newProjectPlan = project.copy(child = createAsOfJoinPlan(join))
+        newProjectPlan.copyTagsFrom(project)
+        withPlan { newProjectPlan }
+      case join: Join => withPlan { createAsOfJoinPlan(join) }
+      case plan => throw SparkException.internalError(
+        s"Unexpected plan type: ${plan.getClass.getName} returned from self join resolution.")
     }
   }
 

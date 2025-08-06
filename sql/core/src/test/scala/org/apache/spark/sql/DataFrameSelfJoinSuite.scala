@@ -524,4 +524,30 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-53143: self join edge-case when Join is not returned by the analyzer") {
+    withTable("table_1", "table_2") {
+      // Edge case with multiple joins. Example: two joins, where the latter one is self join.
+      // The first one is the "using" join - in this case, analyzer's
+      //   `ResolveNaturalAndUsingJoin` will add `Project` as the top node.
+      // The second join is a self join, but with specified join condition (i.e. `joinExprs`) -
+      //   if the join condition uses columns that are not part of the project list (of the first
+      //   join), `AddMetadataColumns` rule will be hit to add metadata for those columns. As a
+      //   consequence, `Project` will be added to the top of joined plan to return the
+      //   original/expected list of projected columns.
+      // Whereas similar (i.e. `Project` node on top) can happen in multiple other cases,
+      //   from `Dataset` perspective the issue is specific to self joins only, since
+      //   `resolveSelfJoinCondition` assumed that the analyzed plan will be always of `Join` type.
+      sql("CREATE TABLE IF NOT EXISTS table_1 (id INT);")
+      sql("INSERT INTO table_1 VALUES (1), (2);")
+      sql("CREATE TABLE IF NOT EXISTS table_2 (id INT, col_1 STRING);")
+      sql("INSERT INTO table_2 VALUES (1, 'str'), (2, 'test');")
+      val df = spark.table("table_2").where("col_1 = 'test'").select("id")
+      assert(
+        spark.table("table_1").alias("t")
+          .join(df.alias("df1"), usingColumns = Seq("id"))
+          .join(df.alias("df2"), joinExprs = $"df1.id" === $"df2.id", joinType = "left")
+          .count() == 1)
+    }
+  }
 }
