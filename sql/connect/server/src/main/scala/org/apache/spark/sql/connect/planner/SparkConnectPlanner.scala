@@ -2651,6 +2651,8 @@ class SparkConnectPlanner(
         Some(transformWriteOperation(command.getWriteOperation))
       case proto.Command.CommandTypeCase.WRITE_OPERATION_V2 =>
         Some(transformWriteOperationV2(command.getWriteOperationV2))
+      case proto.Command.CommandTypeCase.MERGE_INTO_TABLE_COMMAND =>
+        Some(transformMergeIntoTableCommand(command.getMergeIntoTableCommand))
       case _ =>
         None
     }
@@ -2700,8 +2702,6 @@ class SparkConnectPlanner(
         handleCheckpointCommand(command.getCheckpointCommand, responseObserver)
       case proto.Command.CommandTypeCase.REMOVE_CACHED_REMOTE_RELATION_COMMAND =>
         handleRemoveCachedRemoteRelationCommand(command.getRemoveCachedRemoteRelationCommand)
-      case proto.Command.CommandTypeCase.MERGE_INTO_TABLE_COMMAND =>
-        handleMergeIntoTableCommand(command.getMergeIntoTableCommand)
       case proto.Command.CommandTypeCase.ML_COMMAND =>
         handleMlCommand(command.getMlCommand, responseObserver)
       case proto.Command.CommandTypeCase.PIPELINE_COMMAND =>
@@ -3759,7 +3759,8 @@ class SparkConnectPlanner(
     executeHolder.eventsManager.postFinished()
   }
 
-  private def handleMergeIntoTableCommand(cmd: proto.MergeIntoTableCommand): Unit = {
+  private def transformMergeIntoTableCommand(cmd: proto.MergeIntoTableCommand)(
+      tracker: QueryPlanningTracker): LogicalPlan = {
     def transformActions(actions: java.util.List[proto.Expression]): Seq[MergeAction] =
       actions.asScala.map(transformExpression).map(_.asInstanceOf[MergeAction]).toSeq
 
@@ -3767,7 +3768,7 @@ class SparkConnectPlanner(
     val notMatchedActions = transformActions(cmd.getNotMatchedActionsList)
     val notMatchedBySourceActions = transformActions(cmd.getNotMatchedBySourceActionsList)
 
-    val sourceDs = Dataset.ofRows(session, transformRelation(cmd.getSourceTablePlan))
+    val sourceDs = Dataset.ofRows(session, transformRelation(cmd.getSourceTablePlan), tracker)
     val mergeInto = sourceDs
       .mergeInto(cmd.getTargetTableName, Column(transformExpression(cmd.getMergeCondition)))
       .asInstanceOf[MergeIntoWriter[Row]]
@@ -3777,8 +3778,7 @@ class SparkConnectPlanner(
     if (cmd.getWithSchemaEvolution) {
       mergeInto.withSchemaEvolution()
     }
-    mergeInto.merge()
-    executeHolder.eventsManager.postFinished()
+    mergeInto.mergeCommand()
   }
 
   private val emptyLocalRelation = LocalRelation(
