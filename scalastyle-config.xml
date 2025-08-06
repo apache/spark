@@ -454,6 +454,11 @@ This file is divided into 3 sections:
     <customMessage>Use Utils.strip method instead</customMessage>
   </check>
 
+  <check customId="commonsiofileutils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.commons\.io\.FileUtils\b</parameter></parameters>
+    <customMessage>Use Java API or Spark's JavaUtils/SparkSystemUtils/Utils instead</customMessage>
+  </check>
+
   <check customId="commonslang3stringutils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.lang3\.StringUtils\b</parameter></parameters>
     <customMessage>Use Java String or Spark's Utils/JavaUtils methods instead</customMessage>
