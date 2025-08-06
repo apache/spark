@@ -28,7 +28,6 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hive.service.CompositeService;
@@ -43,6 +42,7 @@ import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.util.Utils;
 
 /**
@@ -138,7 +138,7 @@ public class SessionManager extends CompositeService {
       LOG.info("Operation log root directory is created: {}",
         MDC.of(LogKeys.PATH, operationLogRootDir.getAbsolutePath()));
       try {
-        FileUtils.forceDeleteOnExit(operationLogRootDir);
+        JavaUtils.forceDeleteOnExit(operationLogRootDir);
       } catch (IOException e) {
         LOG.warn("Failed to schedule cleanup HS2 operation logging root dir: {}", e,
           MDC.of(LogKeys.PATH, operationLogRootDir.getAbsolutePath()));

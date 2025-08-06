@@ -216,6 +216,10 @@
             <property name="message" value="Use deleteRecursively of JavaUtils/SparkFileUtils/Utils instead." />
         </module>
         <module name="RegexpSinglelineJava">
+            <property name="format" value="FileUtils\.forceDeleteOnExit\("/>
+            <property name="message" value="Use forceDeleteOnExit of JavaUtils/SparkFileUtils/Utils instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
             <property name="format" value="FileUtils\.deleteQuietly"/>
             <property name="message" value="Use deleteQuietly of JavaUtils/SparkFileUtils/Utils instead." />
         </module>
