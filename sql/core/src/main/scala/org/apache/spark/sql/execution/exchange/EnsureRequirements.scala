@@ -381,7 +381,14 @@ case class EnsureRequirements(
    */
   private def canApplyPartialClusteredDistribution(plan: SparkPlan): Boolean = {
     !plan.exists {
-      case u: UnaryExecNode => u.requiredChildDistribution.head != UnspecifiedDistribution
+      // Unary nodes are safe as long as they don't have a required distribution (for example, a
+      // project or filter). If they have a required distribution, then we should assume that this
+      // plan can't be partially clustered (since the key-grouped partitioning may be needed to
+      // satisfy this distribution.
+      case u if u.children.length == 1 =>
+        u.requiredChildDistribution.head != UnspecifiedDistribution
+      // Only allow a non-unary node if it's a leaf node - binary nodes (like JOINs) aren't safe to
+      // partially cluster.
       case other => other.children.nonEmpty
     }
   }
