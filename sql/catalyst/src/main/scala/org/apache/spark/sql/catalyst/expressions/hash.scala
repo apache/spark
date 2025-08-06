@@ -288,6 +288,9 @@ abstract class HashExpression[E] extends Expression {
 
   protected def isCollationAware: Boolean
 
+  protected val legacyCollationAwareHashing: Boolean =
+    SQLConf.get.getConf(SQLConf.COLLATION_AWARE_HASHING_ENABLED)
+
   private def hasMapType(dt: DataType): Boolean = {
     dt.existsRecursively(_.isInstanceOf[MapType])
   }
@@ -433,9 +436,6 @@ abstract class HashExpression[E] extends Expression {
     val microsecondsHash = s"$hasherClassName.hashLong($input.microseconds, $result)"
     s"$result = $hasherClassName.hashInt($input.months, $microsecondsHash);"
   }
-
-  private def legacyCollationAwareHashing: Boolean =
-    SQLConf.get.getConf(SQLConf.COLLATION_AWARE_HASHING_ENABLED)
 
   protected def genHashString(
       ctx: CodegenContext, stringType: StringType, input: String, result: String): String = {
@@ -590,9 +590,6 @@ abstract class InterpretedHashFunction {
 
   protected def hashUnsafeBytes(base: AnyRef, offset: Long, length: Int, seed: Long): Long
 
-  private def legacyCollationAwareHashing: Boolean =
-    SQLConf.get.getConf(SQLConf.COLLATION_AWARE_HASHING_ENABLED)
-
   /**
    * This method is intended for callers using the old hash API and preserves compatibility for
    * supported data types. It must only be used for data types that do not include collated strings
@@ -606,7 +603,12 @@ abstract class InterpretedHashFunction {
   def hash(value: Any, dataType: DataType, seed: Long): Long = {
     require(!SchemaUtils.hasNonUTF8BinaryCollation(dataType))
     // For UTF8_BINARY, hashing behavior is the same regardless of the isCollationAware flag.
-    hash(value = value, dataType = dataType, seed = seed, isCollationAware = false)
+    hash(
+      value = value,
+      dataType = dataType,
+      seed = seed,
+      isCollationAware = false,
+      legacyCollationAwareHashing = false)
   }
 
   /**
@@ -615,7 +617,12 @@ abstract class InterpretedHashFunction {
    * a string's collation into account. If not, the bytes of the string are hashed, otherwise the
    * collation key of the string is hashed.
    */
-  def hash(value: Any, dataType: DataType, seed: Long, isCollationAware: Boolean): Long = {
+  def hash(
+      value: Any,
+      dataType: DataType,
+      seed: Long,
+      isCollationAware: Boolean,
+      legacyCollationAwareHashing: Boolean): Long = {
     value match {
       case null => seed
       case b: Boolean => hashInt(if (b) 1 else 0, seed)
@@ -670,7 +677,12 @@ abstract class InterpretedHashFunction {
         var result = seed
         var i = 0
         while (i < array.numElements()) {
-          result = hash(array.get(i, elementType), elementType, result, isCollationAware)
+          result = hash(
+            array.get(i, elementType),
+            elementType,
+            result,
+            isCollationAware,
+            legacyCollationAwareHashing)
           i += 1
         }
         result
@@ -687,8 +699,18 @@ abstract class InterpretedHashFunction {
         var result = seed
         var i = 0
         while (i < map.numElements()) {
-          result = hash(keys.get(i, kt), kt, result, isCollationAware)
-          result = hash(values.get(i, vt), vt, result, isCollationAware)
+          result = hash(
+            keys.get(i, kt),
+            kt,
+            result,
+            isCollationAware,
+            legacyCollationAwareHashing)
+          result = hash(
+            values.get(i, vt),
+            vt,
+            result,
+            isCollationAware,
+            legacyCollationAwareHashing)
           i += 1
         }
         result
@@ -703,7 +725,12 @@ abstract class InterpretedHashFunction {
         var i = 0
         val len = struct.numFields
         while (i < len) {
-          result = hash(struct.get(i, types(i)), types(i), result, isCollationAware)
+          result = hash(
+            struct.get(i, types(i)),
+            types(i),
+            result,
+            isCollationAware,
+            legacyCollationAwareHashing)
           i += 1
         }
         result
@@ -738,7 +765,9 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends HashExpress
   override protected def isCollationAware: Boolean = false
 
   override protected def computeHash(value: Any, dataType: DataType, seed: Int): Int = {
-    Murmur3HashFunction.hash(value, dataType, seed, isCollationAware).toInt
+    Murmur3HashFunction.hash(
+      value, dataType, seed, isCollationAware, legacyCollationAwareHashing
+    ).toInt
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Murmur3Hash =
@@ -773,7 +802,9 @@ case class CollationAwareMurmur3Hash(children: Seq[Expression], seed: Int)
   override protected def isCollationAware: Boolean = true
 
   override protected def computeHash(value: Any, dataType: DataType, seed: Int): Int = {
-    Murmur3HashFunction.hash(value, dataType, seed, isCollationAware).toInt
+    Murmur3HashFunction.hash(
+      value, dataType, seed, isCollationAware, legacyCollationAwareHashing
+    ).toInt
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]):
@@ -836,7 +867,8 @@ case class CollationAwareXxHash64(children: Seq[Expression], seed: Long)
   override protected def isCollationAware: Boolean = true
 
   override protected def computeHash(value: Any, dataType: DataType, seed: Long): Long = {
-    XxHash64Function.hash(value, dataType, seed, isCollationAware)
+    XxHash64Function.hash(
+      value, dataType, seed, isCollationAware, legacyCollationAwareHashing)
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]):
@@ -1146,7 +1178,12 @@ object HiveHashFunction extends InterpretedHashFunction {
      (result * 37) + nanoSeconds
   }
 
-  override def hash(value: Any, dataType: DataType, seed: Long, isCollationAware: Boolean): Long = {
+  override def hash(
+      value: Any,
+      dataType: DataType,
+      seed: Long,
+      isCollationAware: Boolean,
+      legacyCollationAwareHashing: Boolean): Long = {
     value match {
       case null => 0
       case array: ArrayData =>
@@ -1159,8 +1196,9 @@ object HiveHashFunction extends InterpretedHashFunction {
         var i = 0
         val length = array.numElements()
         while (i < length) {
-          result = (31 * result) +
-            hash(array.get(i, elementType), elementType, 0, isCollationAware).toInt
+          result = (31 * result) + hash(
+            array.get(i, elementType), elementType, 0, isCollationAware, legacyCollationAwareHashing
+          ).toInt
           i += 1
         }
         result
@@ -1179,8 +1217,11 @@ object HiveHashFunction extends InterpretedHashFunction {
         var i = 0
         val length = map.numElements()
         while (i < length) {
-          result += hash(keys.get(i, kt), kt, 0, isCollationAware).toInt ^
-            hash(values.get(i, vt), vt, 0, isCollationAware).toInt
+          result += hash(
+            keys.get(i, kt), kt, 0, isCollationAware, legacyCollationAwareHashing
+          ).toInt ^ hash(
+            values.get(i, vt), vt, 0, isCollationAware, legacyCollationAwareHashing
+          ).toInt
           i += 1
         }
         result
@@ -1197,7 +1238,9 @@ object HiveHashFunction extends InterpretedHashFunction {
         val length = struct.numFields
         while (i < length) {
           result = (31 * result) +
-            hash(struct.get(i, types(i)), types(i), 0, isCollationAware).toInt
+            hash(
+              struct.get(i, types(i)), types(i), 0, isCollationAware, legacyCollationAwareHashing
+            ).toInt
           i += 1
         }
         result
