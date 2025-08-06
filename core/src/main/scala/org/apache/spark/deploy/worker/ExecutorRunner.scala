@@ -18,11 +18,9 @@
 package org.apache.spark.deploy.worker
 
 import java.io._
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import scala.jdk.CollectionConverters._
-
-import com.google.common.io.Files
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
@@ -191,7 +189,7 @@ private[deploy] class ExecutorRunner(
       stdoutAppender = FileAppender(process.getInputStream, stdout, conf, true)
 
       val stderr = new File(executorDir, "stderr")
-      Files.asCharSink(stderr, StandardCharsets.UTF_8).write(header)
+      Files.writeString(stderr.toPath, header)
       stderrAppender = FileAppender(process.getErrorStream, stderr, conf, true)
 
       state = ExecutorState.RUNNING

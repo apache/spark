@@ -17,12 +17,11 @@
 package org.apache.spark.deploy.k8s.features
 
 import java.io.File
-import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.Files
 import java.security.PrivilegedExceptionAction
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.{ConfigMap, Secret}
 import org.apache.commons.codec.binary.Base64
 import org.apache.hadoop.io.Text
@@ -55,7 +54,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
 
   test("create krb5.conf config map if local config provided") {
     val krbConf = File.createTempFile("krb5", ".conf", tmpDir)
-    Files.asCharSink(krbConf, UTF_8).write("some data")
+    Files.writeString(krbConf.toPath, "some data")
 
     val sparkConf = new SparkConf(false)
       .set(KUBERNETES_KERBEROS_KRB5_FILE, krbConf.getAbsolutePath())
@@ -70,7 +69,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
 
   test("create keytab secret if client keytab file used") {
     val keytab = File.createTempFile("keytab", ".bin", tmpDir)
-    Files.asCharSink(keytab, UTF_8).write("some data")
+    Files.writeString(keytab.toPath, "some data")
 
     val sparkConf = new SparkConf(false)
       .set(KEYTAB, keytab.getAbsolutePath())

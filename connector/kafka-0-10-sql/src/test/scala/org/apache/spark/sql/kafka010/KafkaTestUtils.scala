@@ -19,7 +19,7 @@ package org.apache.spark.sql.kafka010
 
 import java.io.{File, IOException}
 import java.net.InetSocketAddress
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.{Collections, Properties, UUID}
 import java.util.concurrent.TimeUnit
 import javax.security.auth.login.Configuration
@@ -27,7 +27,6 @@ import javax.security.auth.login.Configuration
 import scala.io.Source
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.Files
 import kafka.log.LogManager
 import kafka.server.{HostedPartition, KafkaConfig, KafkaServer}
 import kafka.server.checkpoints.OffsetCheckpointFile
@@ -176,7 +175,7 @@ class KafkaTestUtils(
     }
 
     kdc.getKrb5conf.delete()
-    Files.asCharSink(kdc.getKrb5conf, StandardCharsets.UTF_8).write(krb5confStr)
+    Files.writeString(kdc.getKrb5conf.toPath, krb5confStr)
     logDebug(s"krb5.conf file content: $krb5confStr")
   }
 
@@ -240,7 +239,7 @@ class KafkaTestUtils(
       |  principal="$kafkaServerUser@$realm";
       |};
       """.stripMargin.trim
-    Files.asCharSink(file, StandardCharsets.UTF_8).write(content)
+    Files.writeString(file.toPath, content)
     logDebug(s"Created JAAS file: ${file.getPath}")
     logDebug(s"JAAS file content: $content")
     file.getAbsolutePath()

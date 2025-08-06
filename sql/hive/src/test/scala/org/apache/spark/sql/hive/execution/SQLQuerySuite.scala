@@ -19,11 +19,11 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.StandardOpenOption
 import java.sql.{Date, Timestamp}
 import java.util.{Locale, Set}
 
-import com.google.common.io.{Files, FileWriteMode}
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, TestUtils}
@@ -1950,10 +1950,10 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
       for (i <- 1 to 3) {
-        Files.asCharSink(new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8).write(s"$i")
+        Files.writeString(new File(dirPath, s"part-r-0000$i").toPath, s"$i")
       }
       for (i <- 5 to 7) {
-        Files.asCharSink(new File(dirPath, s"part-s-0000$i"), StandardCharsets.UTF_8).write(s"$i")
+        Files.writeString(new File(dirPath, s"part-s-0000$i").toPath, s"$i")
       }
 
       withTable("load_t") {
@@ -1974,7 +1974,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
       for (i <- 1 to 3) {
-        Files.asCharSink(new File(dirPath, s"part-r-0000 $i"), StandardCharsets.UTF_8).write(s"$i")
+        Files.writeString(new File(dirPath, s"part-r-0000 $i").toPath, s"$i")
       }
       withTable("load_t") {
         sql("CREATE TABLE load_t (a STRING) USING hive")
@@ -1989,7 +1989,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
       for (i <- 1 to 3) {
-        Files.asCharSink(new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8).write(s"$i")
+        Files.writeString(new File(dirPath, s"part-r-0000$i").toPath, s"$i")
       }
       withTable("load_t") {
         sql("CREATE TABLE load_t (a STRING) USING hive")
@@ -2013,7 +2013,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
       for (i <- 1 to 3) {
-        Files.asCharSink(new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8).write(s"$i")
+        Files.writeString(new File(dirPath, s"part-r-0000$i").toPath, s"$i")
       }
       withTable("load_t1") {
         sql("CREATE TABLE load_t1 (a STRING) USING hive")
@@ -2028,7 +2028,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
       for (i <- 1 to 3) {
-        Files.asCharSink(new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8).write(s"$i")
+        Files.writeString(new File(dirPath, s"part-r-0000$i").toPath, s"$i")
       }
       withTable("load_t2") {
         sql("CREATE TABLE load_t2 (a STRING) USING hive")
@@ -2042,8 +2042,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     withTempDir { dir =>
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
-      Files.asCharSink(
-        new File(dirPath, "part-r-000011"), StandardCharsets.UTF_8, FileWriteMode.APPEND).write("1")
+      Files.writeString(new File(dirPath, "part-r-000011").toPath, "1", StandardOpenOption.APPEND)
       withTable("part_table") {
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
           sql(
