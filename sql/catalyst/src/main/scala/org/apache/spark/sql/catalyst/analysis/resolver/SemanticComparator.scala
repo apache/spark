@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  * match, we perform an early return. Otherwise, we invoke the heavy [[Expression.semanticEquals]]
  * method to make sure that expression trees are indeed identical.
  */
-class SemanticComparator(targetExpressions: Seq[Expression]) {
+class SemanticComparator(targetExpressions: Seq[Expression] = Seq.empty) {
   private val targetExpressionsBySemanticHash =
     new HashMap[Int, ArrayList[Expression]](targetExpressions.size)
 
