@@ -82,6 +82,7 @@
     <module>common/network-shuffle</module>
     <module>common/unsafe</module>
     <module>common/utils</module>
+    <module>common/utils-java</module>
     <module>common/variant</module>
     <module>common/tags</module>
     <module>sql/connect/shims</module>
