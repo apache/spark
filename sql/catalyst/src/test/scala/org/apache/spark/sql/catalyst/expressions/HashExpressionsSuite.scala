@@ -92,7 +92,14 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   def checkHiveHash(input: Any, dataType: DataType, expected: Long): Unit = {
     // Note : All expected hashes need to be computed using Hive 1.2.1
-    val actual = HiveHashFunction.hash(input, dataType, seed = 0, isCollationAware = true)
+    val actual = HiveHashFunction.hash(
+      input,
+      dataType,
+      seed = 0,
+      isCollationAware = true,
+      // legacyCollationAwareHashing only matters when isCollationAware is false.
+      legacyCollationAwareHashing = false
+    )
 
     withClue(s"hash mismatch for input = `$input` of type `$dataType`.") {
       assert(actual == expected)
