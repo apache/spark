@@ -12746,11 +12746,7 @@ def time_trunc(unit: str, time: "ColumnOrName") -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function(
-        "time_trunc",
-        _enum_to_value(unit),
-        _to_java_column(time)
-    )
+    return _invoke_function("time_trunc", _enum_to_value(unit), _to_java_column(time))
 
 
 @_try_remote_functions
