@@ -35,9 +35,16 @@ class SemanticComparator(targetExpressions: Seq[Expression]) {
     new HashMap[Int, ArrayList[Expression]](targetExpressions.size)
 
   for (targetExpression <- targetExpressions) {
+    add(targetExpression)
+  }
+
+  /**
+   * Inserts expression into the appropriate bucket based on its semantic hash.
+   */
+  def add(expression: Expression): Unit = {
     targetExpressionsBySemanticHash
-      .computeIfAbsent(targetExpression.semanticHash(), _ => new ArrayList[Expression])
-      .add(targetExpression)
+      .computeIfAbsent(expression.semanticHash(), _ => new ArrayList[Expression])
+      .add(expression)
   }
 
   /**
