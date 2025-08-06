@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.net.URI
 import java.nio.file.Files
-import java.nio.file.StandardOpenOption
 import java.sql.{Date, Timestamp}
 import java.util.{Locale, Set}
 
@@ -2042,7 +2041,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     withTempDir { dir =>
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
-      Files.writeString(new File(dirPath, "part-r-000011").toPath, "1", StandardOpenOption.APPEND)
+      Files.writeString(new File(dirPath, "part-r-000011").toPath, "1")
       withTable("part_table") {
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
           sql(
