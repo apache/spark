@@ -50,7 +50,6 @@ import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
 import jakarta.ws.rs.core.UriBuilder
 import org.apache.commons.codec.binary.Hex
-import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.fs.audit.CommonAuditContext.currentAuditContext
@@ -68,7 +67,7 @@ import org.slf4j.Logger
 
 import org.apache.spark.{SPARK_VERSION, _}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
@@ -3074,7 +3073,7 @@ private[spark] object Utils
           val outFile = new File(localDir, fileName)
           files += outFile
           out = new FileOutputStream(outFile)
-          IOUtils.copy(in, out)
+          in.transferTo(out)
           out.close()
           in.closeEntry()
         }
@@ -3084,8 +3083,8 @@ private[spark] object Utils
       logDebug(log"Unzipped from ${MDC(PATH, dfsZipFile)}\n\t${MDC(PATHS, files.mkString("\n\t"))}")
     } finally {
       // Close everything no matter what happened
-      IOUtils.closeQuietly(in)
-      IOUtils.closeQuietly(out)
+      Utils.closeQuietly(in)
+      Utils.closeQuietly(out)
     }
     files.toSeq
   }

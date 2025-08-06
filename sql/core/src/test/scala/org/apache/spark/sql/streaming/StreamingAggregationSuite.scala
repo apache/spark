@@ -22,7 +22,6 @@ import java.util.{Locale, TimeZone}
 
 import scala.annotation.tailrec
 
-import org.apache.commons.io.FileUtils
 import org.scalatest.Assertions
 
 import org.apache.spark.{SparkEnv, SparkException, SparkUnsupportedOperationException}
@@ -733,7 +732,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
     inputData.addData(3)
     inputData.addData(3, 2)

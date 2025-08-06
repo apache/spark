@@ -22,12 +22,11 @@ import java.io.{DataInputStream, DataOutputStream, FileNotFoundException, IOExce
 import scala.util.control.NonFatal
 
 import com.google.common.io.ByteStreams
-import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs.{FSError, Path}
 import org.json4s._
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -36,6 +35,7 @@ import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.execution.streaming.state.RecordType.RecordType
 import org.apache.spark.util.NextIterator
+import org.apache.spark.util.Utils
 
 /**
  * Enum used to write record types to changelog files used with RocksDBStateStoreProvider.
@@ -132,7 +132,7 @@ abstract class StateStoreChangelogWriter(
   def abort(): Unit = {
     try {
       if (backingFileStream != null) backingFileStream.cancel()
-      if (compressedStream != null) IOUtils.closeQuietly(compressedStream)
+      if (compressedStream != null) Utils.closeQuietly(compressedStream)
     } catch {
       // Closing the compressedStream causes the stream to write/flush data into the
       // rawStream. Since the rawStream is already closed, there may be errors.

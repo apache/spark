@@ -649,6 +649,7 @@ UDF, UDTF and UDT
 .. autosummary::
     :toctree: api/
 
+    arrow_udf
     call_udf
     pandas_udf
     udf

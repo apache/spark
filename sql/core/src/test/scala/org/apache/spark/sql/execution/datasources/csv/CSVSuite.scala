@@ -2596,7 +2596,7 @@ abstract class CSVSuite
   test("SPARK-28431: prevent CSV datasource throw TextParsingException with large size message") {
     withTempPath { path =>
       val maxCharsPerCol = 10000
-      val str = "a" * (maxCharsPerCol + 1)
+      val str = "a".repeat(maxCharsPerCol + 1)
 
       Files.write(
         path.toPath,
@@ -2906,7 +2906,7 @@ abstract class CSVSuite
 
   test("SPARK-34768: counting a long record with ignoreTrailingWhiteSpace set to true") {
     val bufSize = 128
-    val line = "X" * (bufSize - 1) + "| |"
+    val line = "X".repeat(bufSize - 1) + "| |"
     withTempPath { path =>
       Seq(line).toDF().write.text(path.getAbsolutePath)
       assert(spark.read.format("csv")

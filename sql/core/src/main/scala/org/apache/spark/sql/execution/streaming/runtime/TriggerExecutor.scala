@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ELAPSED_TIME, TRIGGER_INTERVAL}
 import org.apache.spark.util.{Clock, SystemClock}
 

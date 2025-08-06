@@ -184,7 +184,12 @@
             <property name="illegalPkgs" value="org.apache.log4j" />
             <property name="illegalPkgs" value="org.apache.commons.lang" />
             <property name="illegalPkgs" value="org.apache.commons.lang3.tuple" />
+            <property name="illegalClasses" value="org.apache.commons.io.FileUtils" />
             <property name="illegalClasses" value="org.apache.commons.lang3.JavaVersion" />
+            <property name="illegalClasses" value="org.apache.commons.lang3.Strings" />
+            <property name="illegalClasses" value="org.apache.commons.lang3.StringUtils" />
+            <property name="illegalClasses" value="org.apache.commons.lang3.SystemUtils" />
+            <property name="illegalClasses" value="org.apache.hadoop.io.IOUtils" />
             <property name="illegalClasses" value="com.google.common.base.Strings" />
         </module>
         <module name="RegexpSinglelineJava">
@@ -205,7 +210,19 @@
         </module>
         <module name="RegexpSinglelineJava">
             <property name="format" value="FileUtils\.deleteDirectory"/>
-            <property name="message" value="Use deleteRecursively of SparkFileUtils or Utils instead." />
+            <property name="message" value="Use deleteRecursively of JavaUtils/SparkFileUtils/Utils instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="FileUtils\.forceDelete\("/>
+            <property name="message" value="Use deleteRecursively of JavaUtils/SparkFileUtils/Utils instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="FileUtils\.forceDeleteOnExit\("/>
+            <property name="message" value="Use forceDeleteOnExit of JavaUtils/SparkFileUtils/Utils instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="FileUtils\.deleteQuietly"/>
+            <property name="message" value="Use deleteQuietly of JavaUtils/SparkFileUtils/Utils instead." />
         </module>
         <!-- support structured logging -->
         <module name="RegexpSinglelineJava">

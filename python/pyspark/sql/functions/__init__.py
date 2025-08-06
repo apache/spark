@@ -517,5 +517,6 @@ __all__ = [  # noqa: F405
     "pandas_udf",
     "udf",
     "udtf",
+    "arrow_udtf",
     "unwrap_udt",
 ]

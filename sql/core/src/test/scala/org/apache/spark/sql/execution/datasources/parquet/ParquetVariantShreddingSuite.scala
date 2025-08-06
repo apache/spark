@@ -47,17 +47,21 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
     ParquetOutputTimestampType.values.foreach { timestampParquetType =>
       withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> timestampParquetType.toString) {
         withTempDir { dir =>
-          val schema = "t timestamp, st struct<t timestamp>"
+          val schema = "t timestamp, st struct<t timestamp>, at array<timestamp>"
           val fullSchema = "v struct<metadata binary, value binary, typed_value struct<" +
             "t struct<value binary, typed_value timestamp>," +
             "st struct<" +
-            "value binary, typed_value struct<t struct<value binary, typed_value timestamp>>>>>, " +
+            "value binary, typed_value struct<t struct<value binary, typed_value timestamp>>>," +
+            "at struct<" +
+              "value binary, typed_value array<struct<value binary, typed_value timestamp>>>" +
+            ">>, " +
             "t1 timestamp, st1 struct<t1 timestamp>"
           val df = spark.sql(
             """
               | select
               |   to_variant_object(
-              |     named_struct('t', 1::timestamp, 'st', named_struct('t', 2::timestamp))
+              |     named_struct('t', 1::timestamp, 'st', named_struct('t', 2::timestamp),
+              |     'at', array(5::timestamp))
               |   ) v, 3::timestamp t1, named_struct('t1', 4::timestamp) st1
               | from range(1)
               |""".stripMargin)
@@ -82,6 +86,9 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
             checkAnswer(
               shreddedDf.selectExpr("st1.t1::long"),
               Seq(Row(4)))
+            checkAnswer(
+              shreddedDf.selectExpr("v.typed_value.at.typed_value[0].typed_value::long"),
+              Seq(Row(5)))
             val file = dir.listFiles().find(_.getName.endsWith(".parquet")).get
             val parquetFilePath = file.getAbsolutePath
             val inputFile = HadoopInputFile.fromPath(new Path(parquetFilePath), new Configuration())
@@ -104,6 +111,16 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
             val typedValue2 = stTGroup.getType("typed_value").asPrimitiveType()
             assert(typedValue2.getPrimitiveTypeName == PrimitiveTypeName.INT64)
             assert(typedValue2.getLogicalTypeAnnotation == LogicalTypeAnnotation.timestampType(
+              true, LogicalTypeAnnotation.TimeUnit.MICROS))
+
+            // v.typed_value.at.typed_value[0].typed_value
+            val atGroup = typedValueGroup.getType("at").asGroupType()
+            val atTypedValueGroup = atGroup.getType("typed_value").asGroupType()
+            val atLGroup = atTypedValueGroup.getType("list").asGroupType()
+            val atLEGroup = atLGroup.getType("element").asGroupType()
+            val typedValue3 = atLEGroup.getType("typed_value").asPrimitiveType()
+            assert(typedValue3.getPrimitiveTypeName == PrimitiveTypeName.INT64)
+            assert(typedValue3.getLogicalTypeAnnotation == LogicalTypeAnnotation.timestampType(
               true, LogicalTypeAnnotation.TimeUnit.MICROS))
 
             def verifyNonVariantTimestampType(t: PrimitiveType): Unit = {

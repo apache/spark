@@ -27,6 +27,7 @@ import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.window
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.SlowSQLTest
 
 case class InputEventRow(
     key: String,
@@ -103,6 +104,7 @@ case class AggEventRow(
     window: Window,
     count: Long)
 
+@SlowSQLTest
 class TransformWithStateChainingSuite extends StreamTest
   with AlsoTestWithEncodingTypes
   with AlsoTestWithRocksDBFeatures {

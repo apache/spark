@@ -48,7 +48,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         .map(_.get(0).asInstanceOf[VariantVal].toString)
         .sorted
         .toSeq
-      val expected = (1 until 10).map(id => "1" * id)
+      val expected = (1 until 10).map(id => "1".repeat(id))
       assert(result == expected)
     }
 
@@ -290,7 +290,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         .map(_.get(0).asInstanceOf[VariantVal].toString)
         .sorted
         .toSeq
-      val expected = (1 until 10).map(id => "1" * id)
+      val expected = (1 until 10).map(id => "1".repeat(id))
       assert(result == expected)
     }
 
@@ -831,7 +831,7 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
   }
 
   test("variant_get size") {
-    val largeKey = "x" * 1000
+    val largeKey = "x".repeat(1000)
     val df = Seq(s"""{ "$largeKey": {"a" : 1 },
                        "b" : 2,
                        "c": [1,2,3,{"$largeKey": 4}] }""").toDF("json")
