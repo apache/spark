@@ -361,7 +361,7 @@ package object config {
 
   private[spark] val DRIVER_HEARTBEAT_INTERVAL =
     ConfigBuilder("spark.driver.heartbeatInterval")
-      .version("3.1.1")
+      .version("4.1.0")
       .fallbackConf(EXECUTOR_HEARTBEAT_INTERVAL)
 
   private[spark] val EXECUTOR_HEARTBEAT_MAX_FAILURES =
