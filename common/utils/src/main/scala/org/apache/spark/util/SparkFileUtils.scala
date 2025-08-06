@@ -17,11 +17,11 @@
 package org.apache.spark.util
 
 import java.io.File
-import java.net.{URI, URISyntaxException}
+import java.net.{URI, URISyntaxException, URL}
 import java.nio.file.{Files, Path, StandardCopyOption}
 import java.nio.file.attribute.FileTime
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.network.util.JavaUtils
 
 private[spark] trait SparkFileUtils extends Logging {
@@ -71,6 +71,20 @@ private[spark] trait SparkFileUtils extends Logging {
       dirList ++= files.filter(_.isDirectory)
     }
     result.toArray
+  }
+
+  /**
+   * Lists regular files recursively.
+   */
+  def listFiles(f: File): java.util.Set[File] = {
+    JavaUtils.listFiles(f)
+  }
+
+  /**
+   * Lists regular paths recursively.
+   */
+  def listPaths(f: File): java.util.Set[Path] = {
+    JavaUtils.listPaths(f)
   }
 
   /**
@@ -139,6 +153,11 @@ private[spark] trait SparkFileUtils extends Logging {
     JavaUtils.deleteQuietly(file)
   }
 
+  /** Registers the file or directory for deletion when the JVM exists. */
+  def forceDeleteOnExit(file: File): Unit = {
+    JavaUtils.forceDeleteOnExit(file)
+  }
+
   def getFile(names: String*): File = {
     require(names != null && names.forall(_ != null))
     names.tail.foldLeft(Path.of(names.head)) { (path, part) =>
@@ -183,6 +202,10 @@ private[spark] trait SparkFileUtils extends Logging {
       throw new IllegalArgumentException(s"Invalid input file $src or directory $dst")
     }
     Files.copy(src.toPath(), dst.toPath(), StandardCopyOption.REPLACE_EXISTING)
+  }
+
+  def copyURLToFile(url: URL, file: File): Unit = {
+    JavaUtils.copyURLToFile(url, file)
   }
 
   /** Return true if the content of the files are equal or they both don't exist */

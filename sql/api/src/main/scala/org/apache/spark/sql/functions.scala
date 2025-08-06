@@ -6316,6 +6316,27 @@ object functions {
   }
 
   /**
+   * Returns `time` truncated to the `unit`.
+   *
+   * @param unit
+   *   A STRING representing the unit to truncate the time to. Supported units are: "HOUR",
+   *   "MINUTE", "SECOND", "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
+   * @param time
+   *   A TIME to truncate.
+   * @return
+   *   A TIME truncated to the specified unit.
+   * @note
+   *   If any of the inputs is `NULL`, the result is `NULL`.
+   * @throws IllegalArgumentException
+   *   If the `unit` is not supported.
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def time_trunc(unit: Column, time: Column): Column = {
+    Column.fn("time_trunc", unit, time)
+  }
+
+  /**
    * Parses the `timestamp` expression with the `format` expression to a timestamp without time
    * zone. Returns null with invalid input.
    *

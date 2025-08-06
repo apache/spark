@@ -142,7 +142,8 @@ class EvolvedMapStateProcessor extends StatefulProcessor[String, String, (String
 @SlowSQLTest
 class TransformWithMapStateSuite extends StreamTest
   with AlsoTestWithEncodingTypes
-  with AlsoTestWithRocksDBFeatures {
+  with AlsoTestWithRocksDBFeatures
+  with StateStoreMetricsTest {
   import testImplicits._
 
   private def testMapStateWithNullUserKey(inputMapRow: InputMapRow): Unit = {
@@ -184,7 +185,8 @@ class TransformWithMapStateSuite extends StreamTest
 
       testStream(result, OutputMode.Update())(
         AddData(inputData, InputMapRow("k1", "getValue", ("v1", ""))),
-        CheckAnswer(("k1", "v1", null))
+        CheckAnswer(("k1", "v1", null)),
+        assertNumStateRows(total = 0, updated = 0)
       )
     }
   }
@@ -234,6 +236,7 @@ class TransformWithMapStateSuite extends StreamTest
         AddData(inputData, InputMapRow("k1", "exists", ("", ""))),
         AddData(inputData, InputMapRow("k2", "exists", ("", ""))),
         CheckNewAnswer(("k1", "exists", "true"), ("k2", "exists", "false")),
+        assertNumStateRows(total = 1, updated = 1),
 
         // Test get and put with composite key
         AddData(inputData, InputMapRow("k1", "updateValue", ("v2", "5"))),
@@ -245,32 +248,42 @@ class TransformWithMapStateSuite extends StreamTest
         // Different grouping key, same user key
         AddData(inputData, InputMapRow("k1", "getValue", ("v2", ""))),
         CheckNewAnswer(("k1", "v2", "5")),
+        assertNumStateRows(total = 4, updated = 4), // new state store row for each (k, v) pair
+
         // Same grouping key, same user key, update value should reflect
         AddData(inputData, InputMapRow("k2", "getValue", ("v2", ""))),
         CheckNewAnswer(("k2", "v2", "12")),
+        assertNumStateRows(total = 4, updated = 0),
 
         // Test get full map for a given grouping key - prefixScan
         AddData(inputData, InputMapRow("k2", "iterator", ("", ""))),
         CheckNewAnswer(("k2", "v2", "12"), ("k2", "v4", "1")),
+        assertNumStateRows(total = 4, updated = 0),
 
         AddData(inputData, InputMapRow("k2", "keys", ("", ""))),
         CheckNewAnswer(("k2", "v2", ""), ("k2", "v4", "")),
+        assertNumStateRows(total = 4, updated = 0),
 
         AddData(inputData, InputMapRow("k2", "values", ("", ""))),
         CheckNewAnswer(("k2", "", "12"), ("k2", "", "1")),
+        assertNumStateRows(total = 4, updated = 0),
 
         // Test remove functionalities
         AddData(inputData, InputMapRow("k1", "removeKey", ("v2", ""))),
         AddData(inputData, InputMapRow("k1", "containsKey", ("v2", ""))),
         CheckNewAnswer(("k1", "v2", "false")),
+        assertNumStateRows(total = 3, updated = 0), // remove does not count as update
 
         AddData(inputData, InputMapRow("k2", "clear", ("", ""))),
         AddData(inputData, InputMapRow("k2", "iterator", ("", ""))),
         CheckNewAnswer(),
+        assertNumStateRows(total = 1, updated = 0),
+
         AddData(inputData, InputMapRow("k2", "exists", ("", ""))),
         AddData(inputData, InputMapRow("k1", "clear", ("", ""))),
         AddData(inputData, InputMapRow("k3", "updateValue", ("v7", "11"))),
         CheckNewAnswer(("k2", "exists", "false")),
+        assertNumStateRows(total = 1, updated = 1),
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numMapStateVars") > 0)
           assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
@@ -311,8 +324,10 @@ class TransformWithMapStateSuite extends StreamTest
           StartStream(checkpointLocation = dir.getCanonicalPath),
           AddData(inputData, "a", "b"),
           CheckNewAnswer(("a", "a", 1), ("b", "b", 1)),
+          assertNumStateRows(total = 2, updated = 2),
           AddData(inputData, "a"),
           CheckNewAnswer(("a", "a", 2)),
+          assertNumStateRows(total = 2, updated = 1),
           StopStream
         )
 
@@ -327,9 +342,11 @@ class TransformWithMapStateSuite extends StreamTest
           StartStream(checkpointLocation = dir.getCanonicalPath),
           AddData(inputData, "c"),
           CheckNewAnswer(("c", "c", 1)),
+          assertNumStateRows(total = 3, updated = 1),
           // Verify we can still read old state format
           AddData(inputData, "a"),
           CheckNewAnswer(("a", "a", 3)), // Count should continue from previous state
+          assertNumStateRows(total = 3, updated = 1),
           StopStream
         )
       }

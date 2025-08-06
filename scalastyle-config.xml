@@ -282,6 +282,11 @@ This file is divided into 3 sections:
       scala.jdk.CollectionConverters._ and use .asScala / .asJava methods</customMessage>
   </check>
 
+  <check customId="getTempDirectory" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.getTempDirectory\b</parameter></parameters>
+    <customMessage>Use System.getProperty instead.</customMessage>
+  </check>
+
   <check customId="readLines" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bFileUtils\.readLines\b</parameter></parameters>
     <customMessage>Use Files.readAllLines instead.</customMessage>
@@ -317,6 +322,11 @@ This file is divided into 3 sections:
     <customMessage>Use deleteRecursively of JavaUtils/SparkFileUtils/Utils</customMessage>
   </check>
 
+  <check customId="forceDeleteOnExit" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.forceDeleteOnExit\b</parameter></parameters>
+    <customMessage>Use forceDeleteOnExit of JavaUtils/SparkFileUtils/Utils instead.</customMessage>
+  </check>
+
   <check customId="deleteQuietly" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bFileUtils\.deleteQuietly\b</parameter></parameters>
     <customMessage>Use deleteQuietly of JavaUtils/SparkFileUtils/Utils</customMessage>
@@ -335,6 +345,11 @@ This file is divided into 3 sections:
   <check customId="moveFile" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bFileUtils\.moveFile\b</parameter></parameters>
     <customMessage>Use copyFile of JavaUtils/SparkFileUtils/Utils instead.</customMessage>
+  </check>
+
+  <check customId="copyURLToFile" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.copyURLToFile\b</parameter></parameters>
+    <customMessage>Use copyURLToFile of JavaUtils instead.</customMessage>
   </check>
 
   <check customId="copyFile" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
@@ -383,6 +398,11 @@ This file is divided into 3 sections:
     <customMessage>Use java.nio.file.Files.writeString instead.</customMessage>
   </check>
 
+  <check customId="listFiles" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.listFiles\b</parameter></parameters>
+    <customMessage>Use listFiles of SparkFileUtil or Utils instead.</customMessage>
+  </check>
+
   <check customId="commonslang3javaversion" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.lang3\..*JavaVersion</parameter></parameters>
     <customMessage>Use JEP 223 API (java.lang.Runtime.Version) instead of
@@ -414,6 +434,16 @@ This file is divided into 3 sections:
     <customMessage>Use Utils.is(Not)?(Blank|Empty) instead</customMessage>
   </check>
 
+  <check customId="commonslang3getrootcause" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bExceptionUtils\.getRootCause\b</parameter></parameters>
+    <customMessage>Use getRootCause of SparkErrorUtils or Utils instead</customMessage>
+  </check>
+
+  <check customId="commonslang3getstacktrace" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bExceptionUtils\.getStackTrace\b</parameter></parameters>
+    <customMessage>Use stackTraceToString of SparkErrorUtils or Utils instead</customMessage>
+  </check>
+
   <check customId="commonslang3strings" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.lang3\.Strings\b</parameter></parameters>
     <customMessage>Use Java String methods instead</customMessage>
@@ -422,6 +452,11 @@ This file is divided into 3 sections:
   <check customId="commonslang3strip" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bStringUtils\.strip\b</parameter></parameters>
     <customMessage>Use Utils.strip method instead</customMessage>
+  </check>
+
+  <check customId="commonsiofileutils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.commons\.io\.FileUtils\b</parameter></parameters>
+    <customMessage>Use Java API or Spark's JavaUtils/SparkSystemUtils/Utils instead</customMessage>
   </check>
 
   <check customId="commonslang3stringutils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">

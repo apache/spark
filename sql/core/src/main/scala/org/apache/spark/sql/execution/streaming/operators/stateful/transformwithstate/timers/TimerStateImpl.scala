@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{EXPIRY_TIMESTAMP, KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -199,7 +199,9 @@ class TimerStateImpl(
         }
       }
 
-      override protected def close(): Unit = { }
+      override protected def close(): Unit = {
+        iter.close()
+      }
     }
   }
 }

@@ -26,7 +26,6 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 
 import com.fasterxml.jackson.core.JsonFactory
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
@@ -3372,7 +3371,7 @@ abstract class JsonSuite
     )
 
     checkError(
-      exception = ExceptionUtils.getRootCause(exception).asInstanceOf[SparkRuntimeException],
+      exception = Utils.getRootCause(exception).asInstanceOf[SparkRuntimeException],
       condition = "INVALID_JSON_ROOT_FIELD",
       parameters = Map.empty
     )

@@ -83,7 +83,8 @@ class FunctionsTestsMixin:
         # Functions that we expect to be missing in python until they are added to pyspark
         expected_missing_in_py = set(
             # TODO(SPARK-53108): Implement the time_diff function in Python
-            ["time_diff"]
+            # TODO(SPARK-53107): Implement the time_trunc function in Python
+            ["time_diff", "time_trunc"]
         )
 
         self.assertEqual(

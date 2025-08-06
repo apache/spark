@@ -18,6 +18,7 @@
 package org.apache.spark.network.util;
 
 import java.io.*;
+import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
@@ -35,6 +36,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import java.util.stream.Collectors;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
@@ -73,6 +75,31 @@ public class JavaUtils {
       try (Stream<Path> walk = Files.walk(path)) {
         walk.sorted(Comparator.reverseOrder()).map(Path::toFile).forEach(File::delete);
       } catch (Exception ignored) { /* No-op */ }
+    }
+  }
+
+  /** Registers the file or directory for deletion when the JVM exists. */
+  public static void forceDeleteOnExit(File file) throws IOException {
+    if (file != null && file.exists()) {
+      if (!file.isDirectory()) {
+        file.deleteOnExit();
+      } else {
+        Path path = file.toPath();
+        Files.walkFileTree(path, new SimpleFileVisitor<Path>() {
+          @Override
+          public FileVisitResult preVisitDirectory(Path p, BasicFileAttributes a)
+              throws IOException {
+            p.toFile().deleteOnExit();
+            return a.isSymbolicLink() ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
+          }
+
+          @Override
+          public FileVisitResult visitFile(Path p, BasicFileAttributes a) throws IOException {
+            p.toFile().deleteOnExit();
+            return FileVisitResult.CONTINUE;
+          }
+        });
+      }
     }
   }
 
@@ -245,7 +272,7 @@ public class JavaUtils {
         return;
       } catch (IOException e) {
         logger.warn("Attempt to delete using native Unix OS command failed for path = {}. " +
-          "Falling back to Java IO way", e, MDC.of(LogKeys.PATH$.MODULE$, file.getAbsolutePath()));
+          "Falling back to Java IO way", e, MDC.of(LogKeys.PATH, file.getAbsolutePath()));
       }
     }
 
@@ -337,6 +364,27 @@ public class JavaUtils {
       return files;
     } else {
       return new File[0];
+    }
+  }
+
+  public static Set<Path> listPaths(File dir) throws IOException {
+    if (dir == null || !dir.exists() || !dir.isDirectory()) {
+      throw new IllegalArgumentException("Invalid input " + dir);
+    }
+    try (var stream = Files.walk(dir.toPath())) {
+      return stream.filter(Files::isRegularFile).collect(Collectors.toCollection(HashSet::new));
+    }
+  }
+
+  public static Set<File> listFiles(File dir) throws IOException {
+    if (dir == null || !dir.exists() || !dir.isDirectory()) {
+      throw new IllegalArgumentException("Invalid input " + dir);
+    }
+    try (var stream = Files.walk(dir.toPath())) {
+      return stream
+        .filter(Files::isRegularFile)
+        .map(Path::toFile)
+        .collect(Collectors.toCollection(HashSet::new));
     }
   }
 
@@ -543,7 +591,7 @@ public class JavaUtils {
         dir = new File(root, namePrefix + "-" + UUID.randomUUID());
         Files.createDirectories(dir.toPath());
       } catch (IOException | SecurityException e) {
-        logger.error("Failed to create directory {}", e, MDC.of(LogKeys.PATH$.MODULE$, dir));
+        logger.error("Failed to create directory {}", e, MDC.of(LogKeys.PATH, dir));
         dir = null;
       }
     }
@@ -560,6 +608,19 @@ public class JavaUtils {
         throw new EOFException(String.format("Not enough bytes in channel (expected %d).",
           expected));
       }
+    }
+  }
+
+  /**
+   * Copy the content of a URL into a file.
+   */
+  public static void copyURLToFile(URL url, File file) throws IOException {
+    if (url == null || file == null || (file.exists() && file.isDirectory())) {
+      throw new IllegalArgumentException("Invalid input " + url + " or " + file);
+    }
+    Files.createDirectories(file.getParentFile().toPath());
+    try (InputStream in = url.openStream()) {
+      Files.copy(in, file.toPath(), StandardCopyOption.REPLACE_EXISTING);
     }
   }
 

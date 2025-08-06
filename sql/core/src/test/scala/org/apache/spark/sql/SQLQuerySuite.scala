@@ -5057,6 +5057,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
+
+  test("SPARK-53094: Fix cube-related data quality problem") {
+    val df = sql(
+      """SELECT product, region, sum(amount) AS s
+        |FROM VALUES
+        |  ('a', 'east', 100),
+        |  ('b', 'east', 200),
+        |  ('a', 'west', 150),
+        |  ('b', 'west', 250),
+        |  ('a', 'east', 120) AS t(product, region, amount)
+        |GROUP BY product, region WITH CUBE
+        |HAVING count(product) > 2
+        |ORDER BY s DESC""".stripMargin)
+
+    checkAnswer(df, Seq(Row(null, null, 820), Row(null, "east", 420), Row("a", null, 370)))
+  }
 }
 
 case class Foo(bar: Option[String])

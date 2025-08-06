@@ -21,7 +21,7 @@ import java.io._
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow

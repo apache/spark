@@ -48,8 +48,34 @@ trait AlsoTestWithVirtualColumnFamilyJoins extends SQLTestUtils {
   /** Tests both with and without join ops using virtual column families */
   override protected def test(testName: String, testTags: Tag*)(testBody: => Any)(
     implicit pos: Position): Unit = {
-    testWithVirtualColumnFamilyJoins(testName, testTags: _*)(testBody)
-    testWithoutVirtualColumnFamilyJoins(testName, testTags: _*)(testBody)
+    // Test with virtual column family joins with changelog checkpointing enabled and disabled
+    // Since virtual column family joins require RocksDB, we only test with RocksDB here.
+    Seq("false", "true").foreach { enabled =>
+      testWithVirtualColumnFamilyJoins(
+        testName + s" with (with changelog checkpointing = $enabled)", testTags: _*) {
+        withSQLConf(
+          "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" -> enabled
+        ) {
+          testBody
+        }
+      }
+    }
+
+    // Test with both RocksDB and HDFS state store providers without virtual column family joins
+    val providers = Seq(
+      classOf[RocksDBStateStoreProvider].getName,
+      classOf[HDFSBackedStateStoreProvider].getName
+    )
+
+    providers.foreach { provider =>
+      testWithoutVirtualColumnFamilyJoins(testName + s" (with $provider)", testTags: _*) {
+        withSQLConf(
+          SQLConf.STATE_STORE_PROVIDER_CLASS.key -> provider
+        ) {
+          testBody
+        }
+      }
+    }
   }
 
   def testWithVirtualColumnFamilyJoins(testName: String, testTags: Tag*)(testBody: => Any): Unit = {

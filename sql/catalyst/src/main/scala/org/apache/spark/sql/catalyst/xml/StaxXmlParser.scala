@@ -33,7 +33,6 @@ import scala.util.control.Exception.allCatch
 import scala.util.control.NonFatal
 import scala.xml.SAXException
 
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.security.AccessControlException
 
@@ -51,6 +50,7 @@ import org.apache.spark.types.variant.{Variant, VariantBuilder}
 import org.apache.spark.types.variant.VariantBuilder.FieldEntry
 import org.apache.spark.types.variant.VariantUtil
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
+import org.apache.spark.util.Utils
 
 class StaxXmlParser(
     schema: StructType,
@@ -687,7 +687,7 @@ class XmlTokenizer(
               " the content in the missing file during schema inference",
             e)
         case NonFatal(e) =>
-          ExceptionUtils.getRootCause(e) match {
+          Utils.getRootCause(e) match {
             case _: AccessControlException | _: BlockMissingException =>
               reader.close()
               reader = null

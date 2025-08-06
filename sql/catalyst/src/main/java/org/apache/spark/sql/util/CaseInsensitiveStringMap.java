@@ -63,7 +63,7 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
       String key = toLowerCase(entry.getKey());
       if (delegate.containsKey(key)) {
         logger.warn("Converting duplicated key {} into CaseInsensitiveStringMap.",
-          MDC.of(LogKeys.KEY$.MODULE$, entry.getKey()));
+          MDC.of(LogKeys.KEY, entry.getKey()));
       }
       delegate.put(key, entry.getValue());
     }

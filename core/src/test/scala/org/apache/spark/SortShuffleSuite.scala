@@ -17,12 +17,8 @@
 
 package org.apache.spark
 
-import java.io.File
-
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.io.FileUtils
-import org.apache.commons.io.filefilter.TrueFileFilter
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.matchers.should.Matchers._
 
@@ -30,6 +26,7 @@ import org.apache.spark.internal.config.{SHUFFLE_CHECKSUM_ALGORITHM, SHUFFLE_MAN
 import org.apache.spark.rdd.ShuffledRDD
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.shuffle.sort.SortShuffleManager
+import org.apache.spark.util.Utils
 
 class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
 
@@ -62,8 +59,7 @@ class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
   }
 
   private def ensureFilesAreCleanedUp(shuffledRdd: ShuffledRDD[_, _, _]): Unit = {
-    def getAllFiles: Set[File] =
-      FileUtils.listFiles(tempDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
+    def getAllFiles = Utils.listFiles(tempDir).asScala.toSet
     val filesBeforeShuffle = getAllFiles
     // Force the shuffle to be performed
     shuffledRdd.count()
