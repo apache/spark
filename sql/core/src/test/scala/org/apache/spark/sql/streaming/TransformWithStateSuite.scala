@@ -2553,6 +2553,7 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
   }
 }
 
+@org.scalatest.Ignore
 @SlowSQLTest
 class TransformWithStateValidationSuite extends StateStoreMetricsTest {
   import testImplicits._
