@@ -768,6 +768,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       } else {
         colResolved.havingCondition
       }
+      // `cond` might contain unresolved aggregate functions so defer its resolution to
+      // `ResolveAggregateFunctions` rule if needed.
+      if (!cond.resolved) return colResolved
+
       // Try resolving the condition of the filter as though it is in the aggregate clause
       val (extraAggExprs, Seq(resolvedHavingCond)) =
         ResolveAggregateFunctions.resolveExprsWithAggregate(Seq(cond), aggForResolving)
