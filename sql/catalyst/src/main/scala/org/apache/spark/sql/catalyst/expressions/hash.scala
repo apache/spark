@@ -288,7 +288,7 @@ abstract class HashExpression[E] extends Expression {
 
   protected def isCollationAware: Boolean
 
-  protected val legacyCollationAwareHashing: Boolean =
+  protected lazy val legacyCollationAwareHashing: Boolean =
     SQLConf.get.getConf(SQLConf.COLLATION_AWARE_HASHING_ENABLED)
 
   private def hasMapType(dt: DataType): Boolean = {
