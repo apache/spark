@@ -47,7 +47,11 @@ private[spark] trait SparkErrorUtils extends Logging {
 
   def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {
     val resource = createResource
-    try f.apply(resource) finally resource.close()
+    try {
+      f.apply(resource)
+    } finally {
+      closeQuietly(resource)
+    }
   }
 
   /**
@@ -61,7 +65,7 @@ private[spark] trait SparkErrorUtils extends Logging {
       initialize(resource)
     } catch {
       case e: Throwable =>
-        resource.close()
+        closeQuietly(resource)
         throw e
     }
   }
