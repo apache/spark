@@ -3438,21 +3438,11 @@ object SparkContext extends Logging {
   }
 
   private def supplementJavaGCOptions(conf: SparkConf): Unit = {
-    // These flags contain "GC" in their names but aren't standalone garbage collection algorithms.
-    // They're specific policy options that modify GC behavior rather than representing
-    // complete GC implementations, so we exclude them when detecting available GC algorithms.
-    val nonGCAlgorithmFlags: Set[String] = Set(
-      "-XX:+UseAdaptiveSizePolicyWithSystemGC",
-      "-XX:+UseMaximumCompactionOnSystemGC")
-
     def supplement(key: OptionalConfigEntry[String]): Unit = {
       conf.get(key).foreach { opts =>
         val hasGCAlgorithm = opts.split("\\s+").exists { option =>
-          option.startsWith("-XX:+Use") &&
-            option.endsWith("GC") &&
-            !nonGCAlgorithmFlags.contains(option)
+          option.startsWith("-XX:+Use") && option.endsWith("GC")
         }
-
         if (!hasGCAlgorithm) {
           conf.set(key.key, s"-XX:+UseParallelGC $opts")
         }
