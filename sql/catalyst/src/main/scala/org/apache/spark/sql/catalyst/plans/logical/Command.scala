@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.analysis.AnalysisContext
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, NaryLike, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, TreePattern}
 
 /**
@@ -41,7 +41,6 @@ trait Command extends LogicalPlan {
 trait LeafCommand extends Command with LeafLike[LogicalPlan]
 trait UnaryCommand extends Command with UnaryLike[LogicalPlan]
 trait BinaryCommand extends Command with BinaryLike[LogicalPlan]
-trait NaryCommand extends Command with NaryLike[LogicalPlan]
 
 /**
  * A logical node that can be used for a command that requires its children to be only analyzed,

@@ -1369,39 +1369,6 @@ trait QuaternaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   protected def withNewChildrenInternal(newFirst: T, newSecond: T, newThird: T, newFourth: T): T
 }
 
-trait NaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
-  def naryChildren: Seq[T]
-
-  @transient override final lazy val children: Seq[T] = naryChildren
-
-  override final def mapChildren(f: T => T): T = {
-    val newChildren = naryChildren.map { child =>
-      val mapped = f(child)
-      if (mapped fastEquals child) child else mapped
-    }
-
-    val allUnchanged = naryChildren.iterator.zip(newChildren.iterator).forall {
-      case (orig, mapped) => orig.eq(mapped)
-    }
-    if (allUnchanged) {
-      this.asInstanceOf[T]
-    } else {
-      CurrentOrigin.withOrigin(origin) {
-        val res = withNaryChildren(newChildren)
-        res.copyTagsFrom(this.asInstanceOf[T])
-        res
-      }
-    }
-  }
-
-  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = {
-    assert(newChildren.size == naryChildren.size, "Incorrect number of children")
-    withNaryChildren(newChildren)
-  }
-
-  protected def withNaryChildren(newChildren: Seq[T]): T
-}
-
 object MultiTransform {
 
   /**

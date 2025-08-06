@@ -1686,10 +1686,18 @@ case class TableSpec(
 case class CreateVariable(
     names: Seq[LogicalPlan],
     defaultExpr: DefaultValueExpression,
-    replace: Boolean) extends NaryCommand with SupportsSubquery {
-  override def naryChildren: IndexedSeq[LogicalPlan] = names.toIndexedSeq
-  override protected def withNaryChildren(newChildren: Seq[LogicalPlan]): LogicalPlan =
+    replace: Boolean) extends Command with SupportsSubquery {
+  override def children: Seq[LogicalPlan] = names
+  override def mapChildren(f: LogicalPlan => LogicalPlan): LogicalPlan = {
+    val newNames = names.map(f)
+    val allUnchanged = names.iterator.zip(newNames.iterator).forall { case (a, b) => a eq b }
+    if (allUnchanged) this
+    else copy(names = newNames)
+  }
+  override def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    assert(newChildren.size == names.size, "Incorrect number of children")
     copy(names = newChildren)
+  }
 }
 
 /**
