@@ -219,7 +219,7 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
       val execFiles =
         children.filter(_.getName.startsWith(NonLocalModeSparkPlugin.executorFileStr))
       assert(execFiles.length === 1)
-      val allLines = Files.readLines(execFiles(0), StandardCharsets.UTF_8)
+      val allLines = java.nio.file.Files.readAllLines(execFiles(0).toPath)
       assert(allLines.size === 1)
       val addrs = NonLocalModeSparkPlugin.extractGpuAddrs(allLines.get(0))
       assert(addrs.length === 2)
