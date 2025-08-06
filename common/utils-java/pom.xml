@@ -26,12 +26,12 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-common-utils_2.13</artifactId>
+  <artifactId>spark-common-utils-java_2.13</artifactId>
   <packaging>jar</packaging>
-  <name>Spark Project Common Utils</name>
+  <name>Spark Project Common Java Utils</name>
   <url>https://spark.apache.org/</url>
   <properties>
-    <sbt.project.name>common-utils</sbt.project.name>
+    <sbt.project.name>common-utils-java</sbt.project.name>
   </properties>
 
   <dependencies>
@@ -40,21 +40,12 @@
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-common-utils-java_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
       <groupId>org.apache.xbean</groupId>
       <artifactId>xbean-asm9-shaded</artifactId>
     </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.fasterxml.jackson.module</groupId>
-      <artifactId>jackson-module-scala_${scala.binary.version}</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.ivy</groupId>
@@ -103,69 +94,5 @@
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
-    <resources>
-      <resource>
-        <directory>${project.basedir}/src/main/resources</directory>
-      </resource>
-      <resource>
-        <!-- Include the properties file to provide the build information. -->
-        <directory>${project.build.directory}/extra-resources</directory>
-        <filtering>true</filtering>
-      </resource>
-    </resources>
-    <plugins>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-antrun-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>choose-shell-and-script</id>
-            <phase>validate</phase>
-            <goals>
-              <goal>run</goal>
-            </goals>
-            <configuration>
-              <exportAntProperties>true</exportAntProperties>
-              <target>
-                <condition property="shell" value="powershell.exe" else="bash">
-                  <and>
-                    <os family="windows"/>
-                  </and>
-                </condition>
-                <condition property="spark-build-info-script" value="spark-build-info.ps1"
-                           else="spark-build-info">
-                  <and>
-                    <os family="windows"/>
-                  </and>
-                </condition>
-                <echo>Shell to use for generating spark-version-info.properties file =
-                  ${shell}
-                </echo>
-                <echo>Script to use for generating spark-version-info.properties file =
-                  ${spark-build-info-script}
-                </echo>
-              </target>
-            </configuration>
-          </execution>
-          <execution>
-            <id>generate-spark-build-info</id>
-            <phase>generate-resources</phase>
-            <configuration>
-              <!-- Execute the shell script to generate the spark build information. -->
-              <target>
-                <exec executable="${shell}">
-                  <arg value="${project.basedir}/../../build/${spark-build-info-script}"/>
-                  <arg value="${project.build.directory}/extra-resources"/>
-                  <arg value="${project.version}"/>
-                </exec>
-              </target>
-            </configuration>
-            <goals>
-              <goal>run</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
-    </plugins>
   </build>
 </project>
