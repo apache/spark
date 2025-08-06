@@ -19,7 +19,6 @@ package org.apache.spark.deploy.history
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File}
 import java.net.URI
-import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
@@ -221,8 +220,8 @@ class SingleFileEventLogFileReaderSuite extends EventLogFileReadersSuite {
 
       val entry = is.getNextEntry
       assert(entry != null)
-      val actual = new String(ByteStreams.toByteArray(is), StandardCharsets.UTF_8)
-      val expected = Files.readString(new File(logPath.toString).toPath)
+      val actual = ByteStreams.toByteArray(is)
+      val expected = Files.readAllBytes(new File(logPath.toString).toPath)
       assert(actual === expected)
       assert(is.getNextEntry === null)
     }
@@ -368,8 +367,8 @@ class RollingEventLogFilesReaderSuite extends EventLogFileReadersSuite {
           val fileName = entry.getName.stripPrefix(logPath.getName + "/")
           assert(allFileNames.contains(fileName))
 
-          val actual = new String(ByteStreams.toByteArray(is), StandardCharsets.UTF_8)
-          val expected = Files.readString(new File(logPath.toString, fileName).toPath)
+          val actual = ByteStreams.toByteArray(is)
+          val expected = Files.readAllBytes(new File(logPath.toString, fileName).toPath)
           assert(actual === expected)
         }
       }
