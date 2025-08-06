@@ -860,7 +860,7 @@ class RocksDB(
   /**
    * Get an iterator of all committed and uncommitted key-value pairs.
    */
-  def iterator(): Iterator[ByteArrayPair] = {
+  def iterator(): NextIterator[ByteArrayPair] = {
     val iter = db.newIterator()
     logInfo(log"Getting iterator from version ${MDC(LogKeys.LOADED_VERSION, loadedVersion)}")
     iter.seekToFirst()
@@ -896,7 +896,7 @@ class RocksDB(
   /**
    * Get an iterator of all committed and uncommitted key-value pairs for the given column family.
    */
-  def iterator(cfName: String): Iterator[ByteArrayPair] = {
+  def iterator(cfName: String): NextIterator[ByteArrayPair] = {
     if (!useColumnFamilies) {
       iterator()
     } else {
@@ -945,7 +945,7 @@ class RocksDB(
 
   def prefixScan(
       prefix: Array[Byte],
-      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[ByteArrayPair] = {
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): NextIterator[ByteArrayPair] = {
     val iter = db.newIterator()
     val updatedPrefix = if (useColumnFamilies) {
       encodeStateRowWithPrefix(prefix, cfName)
