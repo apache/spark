@@ -29,9 +29,6 @@ import org.apache.spark.sql.types._
 class HyperLogLogPlusPlusHelper(relativeSD: Double) extends Serializable {
   import HyperLogLogPlusPlusHelper._
 
-  private val legacyCollationAwareHashing: Boolean =
-    SQLConf.get.getConf(SQLConf.COLLATION_AWARE_HASHING_ENABLED)
-
   /**
    * HLL++ uses 'p' bits for addressing. The more addressing bits we use, the more precise the
    * algorithm will be, and the more memory it will require. The 'p' value is based on the relative
@@ -104,7 +101,8 @@ class HyperLogLogPlusPlusHelper(relativeSD: Double) extends Serializable {
       dataType,
       42L,
       isCollationAware = true,
-      legacyCollationAwareHashing = legacyCollationAwareHashing)
+      // legacyCollationAwareHashing only matters when isCollationAware is false.
+      legacyCollationAwareHashing = false)
 
     // Determine the index of the register we are going to use.
     val idx = (x >>> idxShift).toInt
