@@ -23,8 +23,6 @@ import java.nio.file.Files
 
 import scala.collection.mutable
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution._
@@ -138,7 +136,7 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
 
   private def checkWithApproved(plan: SparkPlan, name: String, explain: String): Unit = {
     val dir = getDirForTest(name)
-    val tempDir = FileUtils.getTempDirectory
+    val tempDir = System.getProperty("java.io.tmpdir")
     val actualSimplified = getSimplifiedPlan(plan)
     val foundMatch = isApproved(dir, actualSimplified, explain)
 
