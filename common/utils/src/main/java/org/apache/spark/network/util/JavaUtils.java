@@ -18,6 +18,7 @@
 package org.apache.spark.network.util;
 
 import java.io.*;
+import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
@@ -582,6 +583,19 @@ public class JavaUtils {
         throw new EOFException(String.format("Not enough bytes in channel (expected %d).",
           expected));
       }
+    }
+  }
+
+  /**
+   * Copy the content of a URL into a file.
+   */
+  public static void copyURLToFile(URL url, File file) throws IOException {
+    if (url == null || file == null || (file.exists() && file.isDirectory())) {
+      throw new IllegalArgumentException("Invalid input " + url + " or " + file);
+    }
+    Files.createDirectories(file.getParentFile().toPath());
+    try (InputStream in = url.openStream()) {
+      Files.copy(in, file.toPath(), StandardCopyOption.REPLACE_EXISTING);
     }
   }
 
