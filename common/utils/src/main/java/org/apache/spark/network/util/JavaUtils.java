@@ -26,6 +26,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
@@ -368,19 +369,17 @@ public class JavaUtils {
   }
 
   public static Set<Path> listPaths(File dir) throws IOException {
-    if (dir == null || !dir.exists() || !dir.isDirectory()) {
-      throw new IllegalArgumentException("Invalid input " + dir);
-    }
-    try (var stream = Files.walk(dir.toPath())) {
+    if (dir == null) throw new IllegalArgumentException("Input directory is null");
+    if (!dir.exists() || !dir.isDirectory()) return Collections.emptySet();
+    try (var stream = Files.walk(dir.toPath(), FileVisitOption.FOLLOW_LINKS)) {
       return stream.filter(Files::isRegularFile).collect(Collectors.toCollection(HashSet::new));
     }
   }
 
   public static Set<File> listFiles(File dir) throws IOException {
-    if (dir == null || !dir.exists() || !dir.isDirectory()) {
-      throw new IllegalArgumentException("Invalid input " + dir);
-    }
-    try (var stream = Files.walk(dir.toPath())) {
+    if (dir == null) throw new IllegalArgumentException("Input directory is null");
+    if (!dir.exists() || !dir.isDirectory()) return Collections.emptySet();
+    try (var stream = Files.walk(dir.toPath(), FileVisitOption.FOLLOW_LINKS)) {
       return stream
         .filter(Files::isRegularFile)
         .map(Path::toFile)
