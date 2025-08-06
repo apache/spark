@@ -78,6 +78,31 @@ public class JavaUtils {
     }
   }
 
+  /** Registers the file or directory for deletion when the JVM exists. */
+  public static void forceDeleteOnExit(File file) throws IOException {
+    if (file != null && file.exists()) {
+      if (!file.isDirectory()) {
+        file.deleteOnExit();
+      } else {
+        Path path = file.toPath();
+        Files.walkFileTree(path, new SimpleFileVisitor<Path>() {
+          @Override
+          public FileVisitResult preVisitDirectory(Path p, BasicFileAttributes a)
+              throws IOException {
+            p.toFile().deleteOnExit();
+            return a.isSymbolicLink() ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
+          }
+
+          @Override
+          public FileVisitResult visitFile(Path p, BasicFileAttributes a) throws IOException {
+            p.toFile().deleteOnExit();
+            return FileVisitResult.CONTINUE;
+          }
+        });
+      }
+    }
+  }
+
   /** Move a file from src to dst. */
   public static void moveFile(File src, File dst) throws IOException {
     if (src == null || dst == null || !src.exists() || src.isDirectory() || dst.exists()) {
