@@ -39,9 +39,9 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
  * The main entry point for the Spark SQL port of HiveServer2.  Starts up a `SparkSQLContext` and a
- * `HiveThriftServer2` thrift server.
+ * `NRHiveThriftServer2` thrift server.
  */
-object HiveThriftServer2 extends Logging {
+object NRHiveThriftServer2 extends Logging {
   var uiTab: Option[ThriftServerTab] = None
   var listener: HiveThriftServer2Listener = _
   var eventManager: HiveThriftServer2EventManager = _
@@ -52,7 +52,7 @@ object HiveThriftServer2 extends Logging {
    * Starts a new thrift server with the given SparkSession.
    *
    * @param sparkSession SparkSession to use for the server
-   * @param exitOnError Whether to exit the JVM if HiveThriftServer2 fails to initialize. When true,
+   * @param exitOnError Whether to exit the JVM if NRHiveThriftServer2 fails to initialize. When true,
    *                    the call logs the error and exits the JVM with exit code -1. When false, the
    *                    call throws an exception instead.
    */
@@ -60,7 +60,7 @@ object HiveThriftServer2 extends Logging {
   @DeveloperApi
   def startWithSparkSession(
       sparkSession: SparkSession,
-      exitOnError: Boolean): HiveThriftServer2 = {
+      exitOnError: Boolean): NRHiveThriftServer2 = {
     systemExitOnError.set(exitOnError)
 
     val executionHive = HiveUtils.newClientForExecution(
@@ -69,11 +69,11 @@ object HiveThriftServer2 extends Logging {
 
     // Cleanup the scratch dir before starting
     ServerUtils.cleanUpScratchDir(executionHive.conf)
-    val server = new HiveThriftServer2(sparkSession)
+    val server = new NRHiveThriftServer2(sparkSession)
 
     server.init(executionHive.conf)
     server.start()
-    logInfo("HiveThriftServer2 started")
+    logInfo("NRHiveThriftServer2 started")
     createListenerAndUI(server, sparkSession.sparkContext)
     server
   }
@@ -87,11 +87,11 @@ object HiveThriftServer2 extends Logging {
   @deprecated("Use startWithSparkSession instead", since = "4.0.0")
   @Since("2.0.0")
   @DeveloperApi
-  def startWithContext(sqlContext: SQLContext): HiveThriftServer2 = {
+  def startWithContext(sqlContext: SQLContext): NRHiveThriftServer2 = {
     startWithSparkSession(sqlContext.sparkSession, exitOnError = true)
   }
 
-  private def createListenerAndUI(server: HiveThriftServer2, sc: SparkContext): Unit = {
+  private def createListenerAndUI(server: NRHiveThriftServer2, sc: SparkContext): Unit = {
     val kvStore = sc.statusStore.store.asInstanceOf[ElementTrackingStore]
     eventManager = new HiveThriftServer2EventManager(sc)
     listener = new HiveThriftServer2Listener(kvStore, sc.conf, Some(server))
@@ -126,7 +126,7 @@ object HiveThriftServer2 extends Logging {
 
     try {
       startWithContext(SparkSQLEnv.sparkSession.sqlContext)
-      // If application was killed before HiveThriftServer2 start successfully then SparkSubmit
+      // If application was killed before NRHiveThriftServer2 start successfully then SparkSubmit
       // process can not exit, so check whether if SparkContext was stopped.
       if (SparkSQLEnv.sparkContext.stopped.get()) {
         logError("SparkContext has stopped even if HiveServer2 has started, so exit")
@@ -134,8 +134,12 @@ object HiveThriftServer2 extends Logging {
       }
     } catch {
       case e: Exception =>
-        logError("Error starting HiveThriftServer2", e)
+        logError("Error starting NRHiveThriftServer2", e)
         System.exit(-1)
+    }
+
+    while (true) {
+      Thread.sleep(9999999)
     }
   }
 
@@ -145,7 +149,7 @@ object HiveThriftServer2 extends Logging {
   }
 }
 
-private[hive] class HiveThriftServer2(sparkSession: SparkSession)
+private[hive] class NRHiveThriftServer2(sparkSession: SparkSession)
   extends HiveServer2
   with ReflectedCompositeService {
   // state is tracked internally so that the server only attempts to shut down if it successfully
