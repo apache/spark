@@ -39,6 +39,8 @@ case class InputRowForConnectTest(key: String, value: String)
 case class OutputRowForConnectTest(key: String, value: String)
 case class StateRowForConnectTest(count: Long)
 
+case class StateRowForConnectTestWithTwoLongs(count1: Long, count2: Long)
+
 // A basic stateful processor which will return the occurrences of key
 class BasicCountStatefulProcessor
     extends StatefulProcessor[String, InputRowForConnectTest, OutputRowForConnectTest]
@@ -64,6 +66,36 @@ class BasicCountStatefulProcessor
       }
     }
     _countState.update(StateRowForConnectTest(count))
+    Iterator(OutputRowForConnectTest(key, count.toString))
+  }
+}
+
+// A stateful processor with Two Longs as state
+// which will return the occurrences of key to test TWS schema evolution
+class CountStatefulProcessorTwoLongs
+  extends StatefulProcessor[String, InputRowForConnectTest, OutputRowForConnectTest]
+    with Logging {
+  @transient protected var _countState: ValueState[StateRowForConnectTestWithTwoLongs] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[StateRowForConnectTestWithTwoLongs](
+      "countState",
+      Encoders.product[StateRowForConnectTestWithTwoLongs],
+      TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[InputRowForConnectTest],
+      timerValues: TimerValues): Iterator[OutputRowForConnectTest] = {
+    val count = inputRows.toSeq.length + {
+      if (_countState.exists()) {
+        _countState.get().count1
+      } else {
+        0L
+      }
+    }
+    _countState.update(StateRowForConnectTestWithTwoLongs(count, count))
     Iterator(OutputRowForConnectTest(key, count.toString))
   }
 }
@@ -490,7 +522,94 @@ class TransformWithStateConnectSuite
   }
 
   test("transformWithState - schema evolution") {
+    withSQLConf(twsAdditionalSQLConf: _*) {
+      val session: SparkSession = spark
+      import session.implicits._
 
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val checkpointPath = s"$path/cpt"
+        val dataPath = s"$path/data"
+
+        testData
+          .toDS()
+          .toDF("key", "value")
+          .repartition(3)
+          .write
+          .mode("append")
+          .parquet(dataPath)
+
+        val testSchema =
+          StructType(Array(StructField("key", StringType), StructField("value", StringType)))
+
+        val q1 = spark.readStream
+          .schema(testSchema)
+          .option("maxFilesPerTrigger", 1)
+          .parquet(dataPath)
+          .as[InputRowForConnectTest]
+          .groupByKey(x => x.key)
+          .transformWithState[OutputRowForConnectTest](
+            new BasicCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+          .writeStream
+          .format("memory")
+          .queryName("my_sink")
+          .option("checkpointLocation", checkpointPath)
+          .start()
+
+        try {
+          q1.processAllAvailable()
+          eventually(timeout(30.seconds)) {
+            checkDatasetUnorderly(
+              spark.table("my_sink").toDF().as[(String, String)],
+              ("a", "1"),
+              ("a", "2"),
+              ("b", "1"))
+          }
+        } finally {
+          q1.stop()
+        }
+
+        testData
+          .toDS()
+          .toDF("key", "value")
+          .repartition(3)
+          .write
+          .mode("append")
+          .parquet(dataPath)
+
+        // Do schema evolution on state
+        val q2 = spark.readStream
+          .schema(testSchema)
+          .option("maxFilesPerTrigger", 1)
+          .parquet(dataPath)
+          .as[InputRowForConnectTest]
+          .groupByKey(x => x.key)
+          .transformWithState[OutputRowForConnectTest](
+            new CountStatefulProcessorTwoLongs(),
+            TimeMode.None(),
+            OutputMode.Update())
+          .writeStream
+          .format("memory")
+          .queryName("my_sink")
+          .option("checkpointLocation", checkpointPath)
+          .start()
+
+        try {
+          q2.processAllAvailable()
+          eventually(timeout(30.seconds)) {
+            checkDatasetUnorderly(
+              spark.table("my_sink").toDF().as[(String, String)],
+              ("a", "3"),
+              ("a", "4"),
+              ("b", "2"))
+          }
+        } finally {
+          q2.stop()
+        }
+      }
+    }
   }
 
   /* Utils functions for tests */
