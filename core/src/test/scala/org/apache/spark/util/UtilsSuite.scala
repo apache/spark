@@ -22,7 +22,7 @@ import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.{Files => JFiles}
+import java.nio.file.Files
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -31,7 +31,6 @@ import java.util.zip.GZIPOutputStream
 import scala.collection.mutable.ListBuffer
 import scala.util.{Random, Try}
 
-import com.google.common.io.Files
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -525,7 +524,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
     // The following 3 scenarios are only for the method: createDirectory(File)
     // 6. Symbolic link
-    val scenario6 = java.nio.file.Files.createSymbolicLink(new File(testDir, "scenario6")
+    val scenario6 = Files.createSymbolicLink(new File(testDir, "scenario6")
       .toPath, scenario1.toPath).toFile
     if (Utils.isJavaVersionAtLeast21) {
       assert(Utils.createDirectory(scenario6))
@@ -718,7 +717,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
 
     val tempDir2 = Utils.createTempDir()
     val sourceFile1 = new File(tempDir2, "foo.txt")
-    Files.touch(sourceFile1)
+    Utils.touch(sourceFile1)
     assert(sourceFile1.exists())
     Utils.deleteRecursively(sourceFile1)
     assert(!sourceFile1.exists())
@@ -726,7 +725,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val tempDir3 = new File(tempDir2, "subdir")
     assert(tempDir3.mkdir())
     val sourceFile2 = new File(tempDir3, "bar.txt")
-    Files.touch(sourceFile2)
+    Utils.touch(sourceFile2)
     assert(sourceFile2.exists())
     Utils.deleteRecursively(tempDir2)
     assert(!tempDir2.exists())
@@ -737,14 +736,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
   test("SPARK-50716: deleteRecursively - SymbolicLink To File") {
     val tempDir = Utils.createTempDir()
     val sourceFile = new File(tempDir, "foo.txt")
-    JFiles.write(sourceFile.toPath, "Some content".getBytes)
+    Files.writeString(sourceFile.toPath, "Some content")
     assert(sourceFile.exists())
 
     val symlinkFile = new File(tempDir, "bar.txt")
-    JFiles.createSymbolicLink(symlinkFile.toPath, sourceFile.toPath)
+    Files.createSymbolicLink(symlinkFile.toPath, sourceFile.toPath)
 
     // Check that the symlink was created successfully
-    assert(JFiles.isSymbolicLink(symlinkFile.toPath))
+    assert(Files.isSymbolicLink(symlinkFile.toPath))
     Utils.deleteRecursively(tempDir)
 
     // Verify that everything is deleted
@@ -756,13 +755,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val sourceDir = new File(tempDir, "sourceDir")
     assert(sourceDir.mkdir())
     val sourceFile = new File(sourceDir, "file.txt")
-    JFiles.write(sourceFile.toPath, "Some content".getBytes)
+    Files.writeString(sourceFile.toPath, "Some content")
 
     val symlinkDir = new File(tempDir, "targetDir")
-    JFiles.createSymbolicLink(symlinkDir.toPath, sourceDir.toPath)
+    Files.createSymbolicLink(symlinkDir.toPath, sourceDir.toPath)
 
     // Check that the symlink was created successfully
-    assert(JFiles.isSymbolicLink(symlinkDir.toPath))
+    assert(Files.isSymbolicLink(symlinkDir.toPath))
 
     // Now delete recursively
     Utils.deleteRecursively(tempDir)
@@ -775,7 +774,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     withTempDir { tmpDir =>
       val outFile = File.createTempFile("test-load-spark-properties", "test", tmpDir)
       System.setProperty("spark.test.fileNameLoadB", "2")
-      Files.asCharSink(outFile, UTF_8).write("spark.test.fileNameLoadA true\n" +
+      Files.writeString(outFile.toPath, "spark.test.fileNameLoadA true\n" +
         "spark.test.fileNameLoadB 1\n")
       val properties = Utils.getPropertiesFromFile(outFile.getAbsolutePath)
       properties
@@ -805,7 +804,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       val innerSourceDir = Utils.createTempDir(root = sourceDir.getPath)
       val sourceFile = File.createTempFile("someprefix", "somesuffix", innerSourceDir)
       val targetDir = new File(tempDir, "target-dir")
-      Files.asCharSink(sourceFile, UTF_8).write("some text")
+      Files.writeString(sourceFile.toPath, "some text")
 
       val path =
         if (Utils.isWindows) {
@@ -1071,7 +1070,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
            |trap "" SIGTERM
            |sleep 10
          """.stripMargin
-      Files.write(cmd.getBytes(UTF_8), file)
+      Files.writeString(file.toPath, cmd)
       file.getAbsoluteFile.setExecutable(true)
 
       process = new ProcessBuilder(file.getAbsolutePath).start()

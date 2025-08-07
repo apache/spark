@@ -18,10 +18,11 @@ package org.apache.spark.deploy.k8s.features
 
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.{BaseEncoding, Files}
+import com.google.common.io.BaseEncoding
 import io.fabric8.kubernetes.api.model.Secret
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -128,7 +129,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite {
 
   private def writeCredentials(credentialsFileName: String, credentialsContents: String): File = {
     val credentialsFile = new File(credentialsTempDirectory, credentialsFileName)
-    Files.asCharSink(credentialsFile, StandardCharsets.UTF_8).write(credentialsContents)
+    Files.writeString(credentialsFile.toPath, credentialsContents)
     credentialsFile
   }
 }

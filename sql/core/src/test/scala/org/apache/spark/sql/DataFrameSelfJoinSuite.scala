@@ -510,7 +510,10 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
         // Disable auto-resolution of ambiguity because we want to test behavior before
         // `resolveSelfJoinCondition` fully kicks in (while we still have ambiguous join condition)
         SQLConf.DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY.key -> "false",
-        SQLConf.DONT_DEDUPLICATE_EXPRESSION_IF_EXPR_ID_IN_OUTPUT.key -> conf.toString
+        SQLConf.DONT_DEDUPLICATE_EXPRESSION_IF_EXPR_ID_IN_OUTPUT.key -> conf.toString,
+        // Single-pass analyzer always maps self-join condition to the left branch, regardless of
+        // conf so we return single-pass result only if deduplication conf is true.
+        SQLConf.ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT.key -> conf.toString
       ) {
         val analyzedPlan =
           df1.join(df3, df1.col("key") === df3.col("key"), "left_outer").queryExecution.analyzed

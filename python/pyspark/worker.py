@@ -2285,6 +2285,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 safecheck,
                 _assign_cols_by_name,
                 int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+                arrow_cast=True,
             )
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
             arrow_max_records_per_batch = runner_conf.get(
@@ -2374,8 +2375,6 @@ def read_udfs(pickleSer, infile, eval_type):
                 "row" if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF else "dict"
             )
             ndarray_as_list = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
-            # Arrow-optimized Python UDF uses explicit Arrow cast for type coercion
-            arrow_cast = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             # Arrow-optimized Python UDF takes input types
             input_types = (
                 [f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))]
@@ -2390,7 +2389,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 df_for_struct,
                 struct_in_pandas,
                 ndarray_as_list,
-                arrow_cast,
+                True,
                 input_types,
                 int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )

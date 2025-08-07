@@ -17,10 +17,9 @@
 package org.apache.spark.deploy.k8s
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.google.common.io.Files
 import io.fabric8.kubernetes.client.{ConfigBuilder, KubernetesClient, KubernetesClientBuilder}
 import io.fabric8.kubernetes.client.Config.KUBERNETES_REQUEST_RETRY_BACKOFFLIMIT_SYSTEM_PROPERTY
 import io.fabric8.kubernetes.client.Config.autoConfigure
@@ -98,8 +97,7 @@ object SparkKubernetesClientFactory extends Logging {
       .withOption(oauthTokenValue) {
         (token, configBuilder) => configBuilder.withOauthToken(token)
       }.withOption(oauthTokenFile) {
-        (file, configBuilder) =>
-            configBuilder.withOauthToken(Files.asCharSource(file, StandardCharsets.UTF_8).read())
+        (file, configBuilder) => configBuilder.withOauthToken(Files.readString(file.toPath))
       }.withOption(caCertFile) {
         (file, configBuilder) => configBuilder.withCaCertFile(file)
       }.withOption(clientKeyFile) {

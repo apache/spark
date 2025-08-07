@@ -292,13 +292,28 @@ This file is divided into 3 sections:
     <customMessage>Use Files.readAllLines instead.</customMessage>
   </check>
 
-  <check customId="readLines" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+  <check customId="filesreadLines" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFiles\.readLines\b</parameter></parameters>
+    <customMessage>Use Files.readAllLines instead.</customMessage>
+  </check>
+
+  <check customId="readFileToString" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bFileUtils\.readFileToString\b</parameter></parameters>
+    <customMessage>Use Files.readString instead.</customMessage>
+  </check>
+
+  <check customId="asCharSource" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFiles\.asCharSource\b</parameter></parameters>
     <customMessage>Use Files.readString instead.</customMessage>
   </check>
 
   <check customId="write" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bFileUtils\.write\b</parameter></parameters>
+    <customMessage>Use Files.writeString instead.</customMessage>
+  </check>
+
+  <check customId="asCharSink" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFiles\.asCharSink\b</parameter></parameters>
     <customMessage>Use Files.writeString instead.</customMessage>
   </check>
 

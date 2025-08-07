@@ -205,6 +205,10 @@
             <property name="message" value="Use String concatenation instead." />
         </module>
         <module name="RegexpSinglelineJava">
+            <property name="format" value="Files\.asCharSink"/>
+            <property name="message" value="Use java.nio.file.Files.writeString instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
             <property name="format" value="FileUtils.writeStringToFile"/>
             <property name="message" value="Use java.nio.file.Files.writeString instead." />
         </module>
