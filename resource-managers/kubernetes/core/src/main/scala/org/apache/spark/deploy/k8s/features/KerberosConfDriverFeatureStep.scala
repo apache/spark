@@ -17,11 +17,11 @@
 package org.apache.spark.deploy.k8s.features
 
 import java.io.File
+import java.nio.file.Files
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model._
 import org.apache.commons.codec.binary.Base64
 import org.apache.hadoop.security.UserGroupInformation
@@ -235,7 +235,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
             .endMetadata()
           .withImmutable(true)
           .addToData(
-            Map(file.getName() -> java.nio.file.Files.readString(file.toPath)).asJava)
+            Map(file.getName() -> Files.readString(file.toPath)).asJava)
           .build()
       }
     } ++ {
@@ -247,7 +247,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
             .withName(ktSecretName)
             .endMetadata()
           .withImmutable(true)
-          .addToData(kt.getName(), Base64.encodeBase64String(Files.toByteArray(kt)))
+          .addToData(kt.getName(), Base64.encodeBase64String(Files.readAllBytes(kt.toPath)))
           .build())
       } else {
         Nil
