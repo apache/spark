@@ -27,7 +27,6 @@ import org.apache.spark.ErrorMessageFormat.MINIMAL
 import org.apache.spark.SparkThrowableHelper.getMessage
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.IntegratedUDFTestUtils.{TestUDF, TestUDTFSet}
-import org.apache.spark.sql.catalyst.CurrentUserContext
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTime, CurrentTimestampLike, CurrentUser, Literal}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -41,8 +40,6 @@ import org.apache.spark.sql.types.{DateType, StructType, TimestampType}
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
 trait SQLQueryTestHelper extends SQLConfHelper with Logging {
-
-  CurrentUserContext.CURRENT_USER.set("test_user")
 
   private val notIncludedMsg = "[not included in comparison]"
   private val clsName = this.getClass.getCanonicalName
