@@ -366,7 +366,7 @@ class ExecutorPodsAllocator(
         !(snapshots.isEmpty && podAllocOnPVC && maxPVCs <= PVC_COUNTER.get())) {
       ExecutorPodsAllocator.splitSlots(podsToAllocateWithRpId, remainingSlotFromPendingPods)
         .foreach { case ((rpId, podCountForRpId, targetNum, pendingPodCountForRpId), sharedSlotFromPendingPods) =>
-        val remainingSlotForRpId = maxPendingPodsPerRpid - pendingPodCountForRpId 
+        val remainingSlotsForRpId = maxPendingPodsPerRpid - pendingPodCountForRpId 
         val numMissingPodsForRpId = targetNum - podCountForRpId
 
         val numExecutorsToAllocate =
@@ -377,9 +377,8 @@ class ExecutorPodsAllocator(
           log"target: ${MDC(LogKeys.NUM_POD_TARGET, targetNum)}, " +
           log"known: ${MDC(LogKeys.NUM_POD, podCountForRpId)}, sharedSlotFromPendingPods: " +
           log"${MDC(LogKeys.NUM_POD_SHARED_SLOT, sharedSlotFromPendingPods)}, " +
-          s"remainingSlotForRpId: $remainingSlotForRpId.")
+          s"remainingSlotsForRpId: $remainingSlotsForRpId.")
         requestNewExecutors(numExecutorsToAllocate, applicationId, rpId, k8sKnownPVCNames)
-        }
       }
     }
     deletedExecutorIds = _deletedExecutorIds
