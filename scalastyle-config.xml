@@ -722,6 +722,11 @@ This file is divided into 3 sections:
     <customMessage>Use toString of SparkStreamUtils or Utils instead.</customMessage>
   </check>
 
+  <check customId="charstreamstostring" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bCharStreams\.toString\b</parameter></parameters>
+    <customMessage>Use toString of SparkStreamUtils or Utils instead.</customMessage>
+  </check>
+
   <check customId="ioutilswrite" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bIOUtils\.write\b</parameter></parameters>
     <customMessage>Use Java `write` instead.</customMessage>
