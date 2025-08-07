@@ -372,17 +372,13 @@ class ExecutorPodsAllocator(
         val numExecutorsToAllocate =
           math.min(math.min(math.min(numMissingPodsForRpId, podAllocationSize), sharedSlotFromPendingPods), remainingSlotForRpId)
           
-        if (numExecutorsToAllocate > 0) {
-          logInfo(log"Going to request ${MDC(LogKeys.COUNT, numExecutorsToAllocate)} executors from" +
-            log" Kubernetes for ResourceProfile Id: ${MDC(LogKeys.RESOURCE_PROFILE_ID, rpId)}, " +
-            log"target: ${MDC(LogKeys.NUM_POD_TARGET, targetNum)}, " +
-            log"known: ${MDC(LogKeys.NUM_POD, podCountForRpId)}, sharedSlotFromPendingPods: " +
-            log"${MDC(LogKeys.NUM_POD_SHARED_SLOT, sharedSlotFromPendingPods)}, " +
-            s"remainingSlotForRpId: $remainingSlotForRpId.")
-          requestNewExecutors(numExecutorsToAllocate, applicationId, rpId, k8sKnownPVCNames)
-        } else if (remainingSlotForRpId <= 0) {
-          logDebug(s"ResourceProfile Id $rpId cannot allocate more pods due to per-rpid limit " +
-            s"(pending: $notRunningPodCountForRpId, limit: $maxPendingPodsPerRpid)")
+        logInfo(log"Going to request ${MDC(LogKeys.COUNT, numExecutorsToAllocate)} executors from" +
+          log" Kubernetes for ResourceProfile Id: ${MDC(LogKeys.RESOURCE_PROFILE_ID, rpId)}, " +
+          log"target: ${MDC(LogKeys.NUM_POD_TARGET, targetNum)}, " +
+          log"known: ${MDC(LogKeys.NUM_POD, podCountForRpId)}, sharedSlotFromPendingPods: " +
+          log"${MDC(LogKeys.NUM_POD_SHARED_SLOT, sharedSlotFromPendingPods)}, " +
+          s"remainingSlotForRpId: $remainingSlotForRpId.")
+        requestNewExecutors(numExecutorsToAllocate, applicationId, rpId, k8sKnownPVCNames)
         }
       }
     }
