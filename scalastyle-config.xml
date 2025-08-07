@@ -731,4 +731,9 @@ This file is divided into 3 sections:
     <parameters><parameter name="regex">org\.apache\.commons\.collections4\.MapUtils\b</parameter></parameters>
     <customMessage>Use org.apache.spark.util.collection.Utils instead.</customMessage>
   </check>
+
+  <check customId="maputils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">com\.google\.common\.io\.BaseEncoding\b</parameter></parameters>
+    <customMessage>Use Java APIs (like java.util.Base64) instead.</customMessage>
+  </check>
 </scalastyle>
