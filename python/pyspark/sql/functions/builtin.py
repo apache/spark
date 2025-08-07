@@ -12703,7 +12703,7 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def time_trunc(unit: str, time: "ColumnOrName") -> Column:
+def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
     """
     Returns `time` truncated to the `unit`.
 
@@ -12711,7 +12711,7 @@ def time_trunc(unit: str, time: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    unit : literal string
+    unit : :class:`~pyspark.sql.Column` or column name
         The unit to truncate the time to. Supported units are: "HOUR", "MINUTE", "SECOND",
         "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
     time : :class:`~pyspark.sql.Column` or column name
@@ -12730,23 +12730,17 @@ def time_trunc(unit: str, time: "ColumnOrName") -> Column:
     --------
     >>> import datetime
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([("13:08:15",)],['t']).withColumn("t", sf.col("t").cast("time"))
-    >>> df.select('*', sf.time_trunc('HOUR', 't')).show()
-    +--------+-------------------+
-    |       t|time_trunc(HOUR, t)|
-    +--------+-------------------+
-    |13:08:15|           13:00:00|
-    +--------+-------------------+
-    >>> df.select('*', sf.time_trunc('minute', 't')).show()
-    +--------+---------------------+
-    |       t|time_trunc(MINUTE, t)|
-    +--------+---------------------+
-    |13:08:15|             13:08:00|
-    +--------+---------------------+
+    >>> df = spark.createDataFrame(
+    ...     ["HOUR", "13:08:15")],
+    ...     ['unit', 'time']).withColumn("time", sf.col("time").cast("time"))
+    >>> df.select('*', sf.time_trunc('unit', 'time')).show()
+    +----+--------+----------------------+
+    |unit|    time|time_trunc(unit, time)|
+    +----+--------+----------------------+
+    |HOUR|13:08:15|              13:00:00|
+    +----+--------+----------------------+
     """
-    from pyspark.sql.classic.column import _to_java_column
-
-    return _invoke_function("time_trunc", _enum_to_value(unit), _to_java_column(time))
+    return _invoke_function_over_columns("time_trunc", unit, time)
 
 
 @_try_remote_functions

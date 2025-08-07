@@ -402,12 +402,15 @@ class FunctionsTestsMixin:
 
     def test_time_trunc(self):
         # SPARK-53110: test the time_trunc function.
-        df = self.spark.createDataFrame([(datetime.time(1, 2, 3))], ["time"])
+        df = self.spark.range(1).select(
+            F.lit("minute").alias("unit"),
+            F.lit(datetime.time(1, 2, 3)).alias("time")
+        )
         result = datetime.time(1, 2, 0)
-        row_from_col = df.select(F.time_trunc("minute", df.time)).first()
+        row_from_col = df.select(F.time_trunc(df.unit, df.time)).first()
         self.assertIsInstance(row_from_col[0], datetime.time)
         self.assertEqual(row_from_col[0], result)
-        row_from_name = df.select(F.time_trunc("minute", "time")).first()
+        row_from_name = df.select(F.time_trunc("unit", "time")).first()
         self.assertIsInstance(row_from_name[0], datetime.time)
         self.assertEqual(row_from_name[0], result)
 
