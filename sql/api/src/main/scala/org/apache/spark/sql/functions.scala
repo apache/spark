@@ -6296,14 +6296,14 @@ object functions {
    * Returns the difference between two times, measured in specified units.
    *
    * @param unit
-   *   A STRING representing the unit to truncate the time to. Supported units are: "HOUR",
+   *   A STRING representing the unit of the time difference. Supported units are: "HOUR",
    *   "MINUTE", "SECOND", "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
    * @param start
    *   A starting TIME.
    * @param end
    *   An ending TIME.
    * @return
-   *   A TIME truncated to the specified unit.
+   *   The difference between two times, measured in specified units.
    * @note
    *   If any of the inputs is `NULL`, the result is `NULL`.
    * @throws IllegalArgumentException
