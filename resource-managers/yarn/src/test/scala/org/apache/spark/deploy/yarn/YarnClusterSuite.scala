@@ -20,14 +20,14 @@ package org.apache.spark.deploy.yarn
 import java.io.File
 import java.net.URL
 import java.nio.charset.StandardCharsets
-import java.nio.file.Paths
+import java.nio.file.{Files, Paths}
 import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.io.Source
 
-import com.google.common.io.{ByteStreams, Files}
+import com.google.common.io.ByteStreams
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.exceptions.TestFailedException
@@ -180,7 +180,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       |  </property>
       |</configuration>
       |""".stripMargin
-    Files.asCharSink(new File(customConf, "core-site.xml"), StandardCharsets.UTF_8).write(coreSite)
+    Files.writeString(new File(customConf, "core-site.xml").toPath, coreSite)
 
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(false,
@@ -353,7 +353,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   test("running Spark in yarn-cluster mode displays driver log links") {
     val log4jConf = new File(tempDir, "log4j2.properties")
     val logOutFile = new File(tempDir, "logs")
-    Files.asCharSink(log4jConf, StandardCharsets.UTF_8).write(
+    Files.writeString(log4jConf.toPath,
       s"""rootLogger.level = debug
          |rootLogger.appenderRef.file.ref = file
          |appender.file.type = File
@@ -367,8 +367,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val confDir = new File(tempDir, "conf")
     confDir.mkdir()
     val javaOptsFile = new File(confDir, "java-opts")
-    Files.asCharSink(javaOptsFile, StandardCharsets.UTF_8)
-      .write(s"-Dlog4j.configurationFile=file://$log4jConf\n")
+    Files.writeString(javaOptsFile.toPath, s"-Dlog4j.configurationFile=file://$log4jConf\n")
 
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(clientMode = false,
@@ -377,7 +376,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       extraEnv = Map("SPARK_CONF_DIR" -> confDir.getAbsolutePath),
       extraConf = Map(CLIENT_INCLUDE_DRIVER_LOGS_LINK.key -> true.toString))
     checkResult(finalState, result)
-    val logOutput = java.nio.file.Files.readString(logOutFile.toPath)
+    val logOutput = Files.readString(logOutFile.toPath)
     val logFilePattern = raw"""(?s).+\sDriver Logs \(<NAME>\): https?://.+/<NAME>(\?\S+)?\s.+"""
     logOutput should fullyMatch regex logFilePattern.replace("<NAME>", "stdout")
     logOutput should fullyMatch regex logFilePattern.replace("<NAME>", "stderr")
@@ -432,7 +431,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       script: String = TEST_PYFILE): Unit = {
     assume(isPythonAvailable)
     val primaryPyFile = new File(tempDir, "test.py")
-    Files.asCharSink(primaryPyFile, StandardCharsets.UTF_8).write(script)
+    Files.writeString(primaryPyFile.toPath, script)
 
     // When running tests, let's not assume the user has built the assembly module, which also
     // creates the pyspark archive. Instead, let's use PYSPARK_ARCHIVES_PATH to point at the
@@ -460,7 +459,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       subdir
     }
     val pyModule = new File(moduleDir, "mod1.py")
-    Files.asCharSink(pyModule, StandardCharsets.UTF_8).write(TEST_PYMODULE)
+    Files.writeString(pyModule.toPath, TEST_PYMODULE)
 
     val mod2Archive = TestUtils.createJarWithFiles(Map("mod2.py" -> TEST_PYMODULE), moduleDir)
     val pyFiles = Seq(pyModule.getAbsolutePath(), mod2Archive.getPath()).mkString(",")
@@ -507,7 +506,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 
   def createEmptyIvySettingsFile: File = {
     val emptyIvySettings = File.createTempFile("ivy", ".xml")
-    Files.asCharSink(emptyIvySettings, StandardCharsets.UTF_8).write("<ivysettings />")
+    Files.writeString(emptyIvySettings.toPath, "<ivysettings />")
     emptyIvySettings
   }
 
@@ -619,7 +618,7 @@ private object YarnClusterDriverUseSparkHadoopUtilConf extends Logging with Matc
       }
       result = "success"
     } finally {
-      Files.asCharSink(status, StandardCharsets.UTF_8).write(result)
+      Files.writeString(status.toPath, result)
       sc.stop()
     }
   }
@@ -722,7 +721,7 @@ private object YarnClusterDriver extends Logging with Matchers {
         assert(driverAttributes === expectationAttributes)
       }
     } finally {
-      Files.asCharSink(status, StandardCharsets.UTF_8).write(result)
+      Files.writeString(status.toPath, result)
       sc.stop()
     }
   }
@@ -771,7 +770,7 @@ private object YarnClasspathTest extends Logging {
       case t: Throwable =>
         error(s"loading test.resource to $resultPath", t)
     } finally {
-      Files.asCharSink(new File(resultPath), StandardCharsets.UTF_8).write(result)
+      Files.writeString(new File(resultPath).toPath, result)
     }
   }
 
@@ -815,7 +814,7 @@ private object YarnAddJarTest extends Logging {
         result = "success"
       }
     } finally {
-      Files.asCharSink(new File(resultPath), StandardCharsets.UTF_8).write(result)
+      Files.writeString(new File(resultPath).toPath, result)
       sc.stop()
     }
   }
@@ -860,7 +859,7 @@ private object ExecutorEnvTestApp {
       executorEnvs.get(k).contains(v)
     }
 
-    Files.asCharSink(new File(status), StandardCharsets.UTF_8).write(result.toString)
+    Files.writeString(new File(status).toPath, result.toString)
     sc.stop()
   }
 
@@ -875,7 +874,7 @@ private class PyConnectDepChecker(python: String, libPath: Seq[String]) {
   lazy val isSparkConnectJarAvailable: Boolean = {
     val filePath = s"$sparkHome/assembly/target/$scalaDir/jars/" +
       s"spark-connect_$scalaVersion-$SPARK_VERSION.jar"
-    java.nio.file.Files.exists(Paths.get(filePath))
+    Files.exists(Paths.get(filePath))
   }
 
   lazy val isConnectPythonPackagesAvailable: Boolean = Try {

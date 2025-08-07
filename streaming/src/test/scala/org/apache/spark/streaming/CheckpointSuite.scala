@@ -18,7 +18,6 @@
 package org.apache.spark.streaming
 
 import java.io._
-import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.jdk.CollectionConverters._
@@ -649,7 +648,7 @@ class CheckpointSuite extends TestSuiteBase with LocalStreamingContext with DStr
      */
     def writeFile(i: Int, clock: Clock): Unit = {
       val file = new File(testDir, i.toString)
-      Files.asCharSink(file, StandardCharsets.UTF_8).write(s"$i\n")
+      java.nio.file.Files.writeString(file.toPath, s"$i\n")
       assert(file.setLastModified(clock.getTimeMillis()))
       // Check that the file's modification date is actually the value we wrote, since rounding or
       // truncation will break the test:

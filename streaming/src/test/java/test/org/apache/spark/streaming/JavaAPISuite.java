@@ -19,6 +19,7 @@ package test.org.apache.spark.streaming;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -39,7 +40,6 @@ import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import com.google.common.io.Files;
 import com.google.common.collect.Sets;
 
 import org.apache.spark.HashPartitioner;
@@ -1641,7 +1641,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   private static List<List<String>> fileTestPrepare(File testDir) throws IOException {
     File existingFile = new File(testDir, "0");
-    Files.asCharSink(existingFile, StandardCharsets.UTF_8).write("0\n");
+    Files.writeString(existingFile.toPath(), "0\n");
     Assertions.assertTrue(existingFile.setLastModified(1000));
     Assertions.assertEquals(1000, existingFile.lastModified());
     return Arrays.asList(Arrays.asList("0"));

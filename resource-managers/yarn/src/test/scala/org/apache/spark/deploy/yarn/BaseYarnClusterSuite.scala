@@ -19,13 +19,13 @@ package org.apache.spark.deploy.yarn
 
 import java.io.{File, FileOutputStream, OutputStreamWriter}
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.Files
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.MiniYARNCluster
 import org.scalactic.source.Position
@@ -86,7 +86,7 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
     logConfDir.mkdir()
 
     val logConfFile = new File(logConfDir, "log4j2.properties")
-    Files.asCharSink(logConfFile, StandardCharsets.UTF_8).write(LOG4J_CONF)
+    Files.writeString(logConfFile.toPath, LOG4J_CONF)
 
     // Disable the disk utilization check to avoid the test hanging when people's disks are
     // getting full.
@@ -240,7 +240,7 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
           .getOrElse("(stdout/stderr was not captured)")
     }
     assert(finalState === SparkAppHandle.State.FINISHED, output)
-    val resultString = java.nio.file.Files.readString(result.toPath)
+    val resultString = Files.readString(result.toPath)
     assert(resultString === expected, output)
   }
 
