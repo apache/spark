@@ -3892,6 +3892,9 @@ def _test() -> None:
     globs["ps"] = pyspark.pandas
     globs["sf"] = F
 
+    if is_ansi_mode_test:
+        del pyspark.pandas.namespace.melt.__doc__
+
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.namespace tests")
