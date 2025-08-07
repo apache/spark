@@ -274,7 +274,7 @@ abstract class SparkFunSuite
   protected def withLogAppender(
       appender: AbstractAppender,
       loggerNames: Seq[String] = Seq.empty,
-      level: Option[Level] = None)(
+      level: Option[Level] = Some(Level.INFO))(
       f: => Unit): Unit = {
     val loggers = if (loggerNames.nonEmpty) {
       loggerNames.map(LogManager.getLogger)
