@@ -18,9 +18,10 @@
 package org.apache.spark.storage
 
 import java.nio.{ByteBuffer, MappedByteBuffer}
+import java.nio.file.Files
 import java.util.{Arrays, Random}
 
-import com.google.common.io.{ByteStreams, Files}
+import com.google.common.io.ByteStreams
 import io.netty.channel.FileRegion
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
@@ -150,7 +151,7 @@ class DiskStoreSuite extends SparkFunSuite {
 
     assert(diskStore.getSize(blockId) === testData.length)
 
-    val diskData = Files.toByteArray(diskBlockManager.getFile(blockId.name))
+    val diskData = Files.readAllBytes(diskBlockManager.getFile(blockId.name).toPath)
     assert(!Arrays.equals(testData, diskData))
 
     val blockData = diskStore.getBytes(blockId)

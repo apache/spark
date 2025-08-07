@@ -18,10 +18,11 @@ package org.apache.spark.deploy.k8s.features
 
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.{BaseEncoding, Files}
+import com.google.common.io.BaseEncoding
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, PodBuilder, Secret, SecretBuilder}
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
@@ -153,7 +154,7 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
       .map { file =>
         require(file.isFile, String.format("%s provided at %s does not exist or is not a file.",
           fileType, file.getAbsolutePath))
-        BaseEncoding.base64().encode(Files.toByteArray(file))
+        BaseEncoding.base64().encode(Files.readAllBytes(file.toPath))
       }
   }
 
