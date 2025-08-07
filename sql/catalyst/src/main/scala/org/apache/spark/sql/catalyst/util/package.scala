@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst
 
 import java.io._
-import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets.UTF_8
 
 import com.google.common.io.ByteStreams
@@ -45,15 +44,6 @@ package object util extends Logging {
     } finally {
       System.setErr(origErr)
       System.setOut(origOut)
-    }
-  }
-
-  def fileToString(file: File, encoding: Charset = UTF_8): String = {
-    val inStream = new FileInputStream(file)
-    try {
-      new String(ByteStreams.toByteArray(inStream), encoding)
-    } finally {
-      inStream.close()
     }
   }
 
