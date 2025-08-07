@@ -20,10 +20,9 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.{LogKeys, MDC}
+import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression.hasCorrelatedSubquery
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -74,6 +73,21 @@ abstract class Optimizer(catalogManager: CatalogManager)
       maxIterationsSetting = SQLConf.OPTIMIZER_MAX_ITERATIONS.key)
 
   /**
+   * A helper method that takes as input a Seq of Batch or Seq[Batch], and flattens it out.
+   */
+  def flattenBatches(nestedBatchSequence: Seq[Any]): Seq[Batch] = {
+    assert(nestedBatchSequence.forall {
+      case _: Batch => true
+      case s: Seq[_] => s.forall(_.isInstanceOf[Batch])
+      case _ => false
+    })
+    nestedBatchSequence.flatMap {
+      case batches: Seq[Batch @unchecked] => batches
+      case batch: Batch => Seq(batch)
+    }
+  }
+
+  /**
    * Defines the default rule batches in the Optimizer.
    *
    * Implementations of this class should override this method, and [[nonExcludableRules]] if
@@ -85,7 +99,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       Seq(
         // Operator push down
         PushProjectionThroughUnion,
-        PushProjectionThroughLimit,
+        PushProjectionThroughLimitAndOffset,
         ReorderJoin,
         EliminateOuterJoin,
         PushDownPredicates,
@@ -143,39 +157,38 @@ abstract class Optimizer(catalogManager: CatalogManager)
         PushdownPredicatesAndPruneColumnsForCTEDef) ++
         extendedOperatorOptimizationRules
 
-    val operatorOptimizationBatch: Seq[Batch] = {
+    val operatorOptimizationBatch: Seq[Batch] = Seq(
       Batch("Operator Optimization before Inferring Filters", fixedPoint,
-        operatorOptimizationRuleSet: _*) ::
+        operatorOptimizationRuleSet: _*),
       Batch("Infer Filters", Once,
         InferFiltersFromGenerate,
-        InferFiltersFromConstraints) ::
+        InferFiltersFromConstraints),
       Batch("Operator Optimization after Inferring Filters", fixedPoint,
-        operatorOptimizationRuleSet: _*) ::
+        operatorOptimizationRuleSet: _*),
       Batch("Push extra predicate through join", fixedPoint,
         PushExtraPredicateThroughJoin,
-        PushDownPredicates) :: Nil
-    }
+        PushDownPredicates))
 
-    val batches = (
-    Batch("Finish Analysis", FixedPoint(1), FinishAnalysis) ::
+    val batches: Seq[Batch] = flattenBatches(Seq(
+    Batch("Finish Analysis", FixedPoint(1), FinishAnalysis),
     // We must run this batch after `ReplaceExpressions`, as `RuntimeReplaceable` expression
     // may produce `With` expressions that need to be rewritten.
-    Batch("Rewrite With expression", Once, RewriteWithExpression) ::
+    Batch("Rewrite With expression", fixedPoint, RewriteWithExpression),
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
-    Batch("Eliminate Distinct", Once, EliminateDistinct) ::
+    Batch("Eliminate Distinct", Once, EliminateDistinct),
     // - Do the first call of CombineUnions before starting the major Optimizer rules,
     //   since it can reduce the number of iteration and the other rules could add/move
     //   extra operators between two adjacent Union operators.
     // - Call CombineUnions again in Batch("Operator Optimizations"),
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Inline CTE", Once,
-      InlineCTE()) ::
+      InlineCTE()),
     Batch("Union", fixedPoint,
       RemoveNoopOperators,
       CombineUnions,
-      RemoveNoopUnion) ::
+      RemoveNoopUnion),
     // Run this once earlier. This might simplify the plan and reduce cost of optimizer.
     // For example, a query such as Filter(LocalRelation) would go through all the heavy
     // optimizer rules that are triggered when there is a filter
@@ -186,16 +199,16 @@ abstract class Optimizer(catalogManager: CatalogManager)
       PropagateEmptyRelation,
       // PropagateEmptyRelation can change the nullability of an attribute from nullable to
       // non-nullable when an empty relation child of a Union is removed
-      UpdateAttributeNullability) ::
+      UpdateAttributeNullability),
     Batch("Pullup Correlated Expressions", Once,
       OptimizeOneRowRelationSubquery,
       PullOutNestedDataOuterRefExpressions,
-      PullupCorrelatedPredicates) ::
+      PullupCorrelatedPredicates),
     // Subquery batch applies the optimizer rules recursively. Therefore, it makes no sense
     // to enforce idempotence on it and we change this batch from Once to FixedPoint(1).
     Batch("Subquery", FixedPoint(1),
       OptimizeSubqueries,
-      OptimizeOneRowRelationSubquery) ::
+      OptimizeOneRowRelationSubquery),
     Batch("Replace Operators", fixedPoint,
       RewriteExceptAll,
       RewriteIntersectAll,
@@ -203,48 +216,48 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceExceptWithFilter,
       ReplaceExceptWithAntiJoin,
       ReplaceDistinctWithAggregate,
-      ReplaceDeduplicateWithAggregate) ::
+      ReplaceDeduplicateWithAggregate),
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions,
-      RemoveRepetitionFromGroupExpressions) :: Nil ++
-    operatorOptimizationBatch) :+
-    Batch("Clean Up Temporary CTE Info", Once, CleanUpTempCTEInfo) :+
+      RemoveRepetitionFromGroupExpressions),
+    operatorOptimizationBatch,
+    Batch("Clean Up Temporary CTE Info", Once, CleanUpTempCTEInfo),
     // This batch rewrites plans after the operator optimization and
     // before any batches that depend on stats.
-    Batch("Pre CBO Rules", Once, preCBORules: _*) :+
+    Batch("Pre CBO Rules", Once, preCBORules: _*),
     // This batch pushes filters and projections into scan nodes. Before this batch, the logical
     // plan may contain nodes that do not report stats. Anything that uses stats must run after
     // this batch.
-    Batch("Early Filter and Projection Push-Down", Once, earlyScanPushDownRules: _*) :+
-    Batch("Update CTE Relation Stats", Once, UpdateCTERelationStats) :+
+    Batch("Early Filter and Projection Push-Down", Once, earlyScanPushDownRules: _*),
+    Batch("Update CTE Relation Stats", Once, UpdateCTERelationStats),
     // Since join costs in AQP can change between multiple runs, there is no reason that we have an
     // idempotence enforcement on this batch. We thus make it FixedPoint(1) instead of Once.
     Batch("Join Reorder", FixedPoint(1),
-      CostBasedJoinReorder) :+
+      CostBasedJoinReorder),
     Batch("Eliminate Sorts", Once,
       EliminateSorts,
-      RemoveRedundantSorts) :+
+      RemoveRedundantSorts),
     Batch("Decimal Optimizations", fixedPoint,
-      DecimalAggregates) :+
+      DecimalAggregates),
     // This batch must run after "Decimal Optimizations", as that one may change the
     // aggregate distinct column
     Batch("Distinct Aggregate Rewrite", Once,
-      RewriteDistinctAggregates) :+
+      RewriteDistinctAggregates),
     Batch("Object Expressions Optimization", fixedPoint,
       EliminateMapObjects,
       CombineTypedFilters,
       ObjectSerializerPruning,
-      ReassignLambdaVariableID) :+
+      ReassignLambdaVariableID),
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelation,
       // PropagateEmptyRelation can change the nullability of an attribute from nullable to
       // non-nullable when an empty relation child of a Union is removed
-      UpdateAttributeNullability) :+
-    Batch("Optimize One Row Plan", fixedPoint, OptimizeOneRowPlan) :+
+      UpdateAttributeNullability),
+    Batch("Optimize One Row Plan", fixedPoint, OptimizeOneRowPlan),
     // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
     Batch("Check Cartesian Products", Once,
-      CheckCartesianProducts) :+
+      CheckCartesianProducts),
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
       PushPredicateThroughJoin,
@@ -252,10 +265,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ColumnPruning,
       CollapseProject,
       RemoveRedundantAliases,
-      RemoveNoopOperators) :+
+      RemoveNoopOperators),
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
-    Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
-    Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)
+    Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers),
+    Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)))
 
     // remove any batches with no rules. this may happen when subclasses do not add optional rules.
     batches.filter(_.rules.nonEmpty)
@@ -270,22 +283,23 @@ abstract class Optimizer(catalogManager: CatalogManager)
    * (defaultBatches - (excludedRules - nonExcludableRules)).
    */
   def nonExcludableRules: Seq[String] =
-    FinishAnalysis.ruleName ::
-      RewriteDistinctAggregates.ruleName ::
-      ReplaceDeduplicateWithAggregate.ruleName ::
-      ReplaceIntersectWithSemiJoin.ruleName ::
-      ReplaceExceptWithFilter.ruleName ::
-      ReplaceExceptWithAntiJoin.ruleName ::
-      RewriteExceptAll.ruleName ::
-      RewriteIntersectAll.ruleName ::
-      ReplaceDistinctWithAggregate.ruleName ::
-      PullupCorrelatedPredicates.ruleName ::
-      RewriteCorrelatedScalarSubquery.ruleName ::
-      RewritePredicateSubquery.ruleName ::
-      NormalizeFloatingNumbers.ruleName ::
-      ReplaceUpdateFieldsExpression.ruleName ::
-      RewriteLateralSubquery.ruleName ::
-      OptimizeSubqueries.ruleName :: Nil
+    Seq(
+      FinishAnalysis.ruleName,
+      RewriteDistinctAggregates.ruleName,
+      ReplaceDeduplicateWithAggregate.ruleName,
+      ReplaceIntersectWithSemiJoin.ruleName,
+      ReplaceExceptWithFilter.ruleName,
+      ReplaceExceptWithAntiJoin.ruleName,
+      RewriteExceptAll.ruleName,
+      RewriteIntersectAll.ruleName,
+      ReplaceDistinctWithAggregate.ruleName,
+      PullupCorrelatedPredicates.ruleName,
+      RewriteCorrelatedScalarSubquery.ruleName,
+      RewritePredicateSubquery.ruleName,
+      NormalizeFloatingNumbers.ruleName,
+      ReplaceUpdateFieldsExpression.ruleName,
+      RewriteLateralSubquery.ruleName,
+      OptimizeSubqueries.ruleName)
 
   /**
    * Apply finish-analysis rules for the entire plan including all subqueries.
@@ -298,7 +312,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
     private val rules = Seq(
       EliminateResolvedHint,
       EliminateSubqueryAliases,
+      EliminatePipeOperators,
       EliminateView,
+      EliminateSQLFunctionNode,
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
       PullOutGroupingExpressions,
@@ -306,6 +322,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // so the grouping keys can only be attribute and literal which makes
       // `InsertMapSortInGroupingExpressions` easy to insert `MapSort`.
       InsertMapSortInGroupingExpressions,
+      InsertMapSortInRepartitionExpressions,
       ComputeCurrentTime,
       ReplaceCurrentLike(catalogManager),
       SpecialDatetimeValues,
@@ -346,7 +363,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       case d: DynamicPruningSubquery => d
       case s @ ScalarSubquery(
         PhysicalOperation(projections, predicates, a @ Aggregate(group, _, child, _)),
-        _, _, _, _, mayHaveCountBug, _, _)
+        _, _, _, _, mayHaveCountBug, _)
         if conf.getConf(SQLConf.DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG) &&
           mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
         // This is a subquery with an aggregate that may suffer from a COUNT bug.
@@ -556,19 +573,6 @@ object EliminateAggregateFilter extends Rule[LogicalPlan] {
 }
 
 /**
- * An optimizer used in test code.
- *
- * To ensure extendability, we leave the standard rules in the abstract optimizer rules, while
- * specific rules go to the subclasses
- */
-object SimpleTestOptimizer extends SimpleTestOptimizer
-
-class SimpleTestOptimizer extends Optimizer(
-  new CatalogManager(
-    FakeV2SessionCatalog,
-    new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, EmptyTableFunctionRegistry)))
-
-/**
  * Remove redundant aliases from a query plan. A redundant alias is an alias that does not change
  * the name or metadata of a column, and does not deduplicate it.
  */
@@ -593,7 +597,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
     // If the alias name is different from attribute name, we can't strip it either, or we
     // may accidentally change the output schema name of the root plan.
     case a @ Alias(attr: Attribute, name)
-      if (a.metadata == Metadata.empty || a.metadata == attr.metadata) &&
+      if (a.metadata == attr.metadata) &&
         name == attr.name &&
         !excludeList.contains(attr) &&
         !excludeList.contains(a) =>
@@ -653,8 +657,10 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         val subQueryAttributes = if (conf.getConf(SQLConf
           .EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES)) {
           // Collect the references for all the subquery expressions in the plan.
-          AttributeSet.fromAttributeSets(plan.expressions.collect {
-            case e: SubqueryExpression => e.references
+          AttributeSet.fromAttributeSets(plan.expressions.flatMap { e =>
+            e.collect {
+              case s: SubqueryExpression => s.references
+            }
           })
         } else {
           AttributeSet.empty
@@ -830,6 +836,13 @@ object LimitPushDown extends Rule[LogicalPlan] {
     case LocalLimit(exp, u: Union) =>
       LocalLimit(exp, u.copy(children = u.children.map(maybePushLocalLimit(exp, _))))
 
+    // If limit node is present, we should propagate it down to UnionLoop, so that it is later
+    // propagated to UnionLoopExec.
+    case LocalLimit(IntegerLiteral(limit), p @ Project(_, ul: UnionLoop)) =>
+      p.copy(child = ul.copy(limit = Some(limit)))
+    case LocalLimit(IntegerLiteral(limit), ul: UnionLoop) =>
+      ul.copy(limit = Some(limit))
+
     // Add extra limits below JOIN:
     // 1. For LEFT OUTER and RIGHT OUTER JOIN, we push limits to the left and right sides
     //    respectively if join condition is not empty.
@@ -909,6 +922,15 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
     result.asInstanceOf[A]
   }
 
+  /**
+   * If [[SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED]] is true, [[Project]] can
+   * only be pushed down if there are no duplicate [[ExprId]]s in the project list.
+   */
+  def canPushProjectionThroughUnion(project: Project): Boolean = {
+    !conf.unionIsResolvedWhenDuplicatesPerChildResolved ||
+    project.outputSet.size == project.projectList.size
+  }
+
   def pushProjectionThroughUnion(projectList: Seq[NamedExpression], u: Union): Seq[LogicalPlan] = {
     val newFirstChild = Project(projectList, u.children.head)
     val newOtherChildren = u.children.tail.map { child =>
@@ -922,8 +944,9 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
     _.containsAllPatterns(UNION, PROJECT)) {
 
     // Push down deterministic projection through UNION ALL
-    case Project(projectList, u: Union)
-        if projectList.forall(_.deterministic) && u.children.nonEmpty =>
+    case project @ Project(projectList, u: Union)
+      if projectList.forall(_.deterministic) && u.children.nonEmpty &&
+        canPushProjectionThroughUnion(project) =>
       u.copy(children = pushProjectionThroughUnion(projectList, u))
   }
 }
@@ -1014,6 +1037,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
         p
       }
 
+    // Avoid pruning UnionLoop because of its recursive nature.
+    case p @ Project(_, _: UnionLoop) => p
+
     // Prune unnecessary window expressions
     case p @ Project(_, w: Window) if !w.windowOutputSet.subsetOf(p.references) =>
       val windowExprs = w.windowExpressions.filter(p.references.contains)
@@ -1030,6 +1056,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
+
+    // Can't prune the columns on UpdateEventTimeWatermarkColumn
+    case p @ Project(_, _: UpdateEventTimeWatermarkColumn) => p
 
     case NestedColumnAliasing(rewrittenPlan) => rewrittenPlan
 
@@ -1246,8 +1275,22 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
   def buildCleanedProjectList(
       upper: Seq[NamedExpression],
       lower: Seq[NamedExpression]): Seq[NamedExpression] = {
+    val explicitlyPreserveAliasMetadata =
+      conf.getConf(SQLConf.PRESERVE_ALIAS_METADATA_WHEN_COLLAPSING_PROJECTS)
     val aliases = getAliasMap(lower)
-    upper.map(replaceAliasButKeepName(_, aliases))
+    upper.map {
+      case alias: Alias if !alias.metadata.isEmpty && explicitlyPreserveAliasMetadata =>
+        replaceAliasButKeepName(alias, aliases) match {
+          case newAlias: Alias => Alias(child = newAlias.child, name = newAlias.name)(
+            exprId = newAlias.exprId,
+            qualifier = newAlias.qualifier,
+            explicitMetadata = Some(alias.metadata),
+            nonInheritableMetadataKeys = newAlias.nonInheritableMetadataKeys
+          )
+          case other => other
+        }
+      case other => replaceAliasButKeepName(other, aliases)
+    }
   }
 
   /**
@@ -1542,7 +1585,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
  */
 object CombineUnions extends Rule[LogicalPlan] {
   import CollapseProject.{buildCleanedProjectList, canCollapseExpressions}
-  import PushProjectionThroughUnion.pushProjectionThroughUnion
+  import PushProjectionThroughUnion.{canPushProjectionThroughUnion, pushProjectionThroughUnion}
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
     _.containsAnyPattern(UNION, DISTINCT_LIKE), ruleId) {
@@ -1587,17 +1630,19 @@ object CombineUnions extends Rule[LogicalPlan] {
           stack.pushAll(children.reverse)
         // Push down projection through Union and then push pushed plan to Stack if
         // there is a Project.
-        case Project(projectList, Distinct(u @ Union(children, byName, allowMissingCol)))
+        case project @ Project(projectList, Distinct(u @ Union(children, byName, allowMissingCol)))
             if projectList.forall(_.deterministic) && children.nonEmpty &&
-              flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol =>
+              flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol &&
+              canPushProjectionThroughUnion(project) =>
           stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
-        case Project(projectList, Deduplicate(keys: Seq[Attribute], u: Union))
+        case project @ Project(projectList, Deduplicate(keys: Seq[Attribute], u: Union))
             if projectList.forall(_.deterministic) && flattenDistinct && u.byName == topByName &&
-              u.allowMissingCol == topAllowMissingCol && AttributeSet(keys) == u.outputSet =>
+              u.allowMissingCol == topAllowMissingCol && AttributeSet(keys) == u.outputSet &&
+              canPushProjectionThroughUnion(project) =>
           stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
-        case Project(projectList, u @ Union(children, byName, allowMissingCol))
-            if projectList.forall(_.deterministic) && children.nonEmpty &&
-              byName == topByName && allowMissingCol == topAllowMissingCol =>
+        case project @ Project(projectList, u @ Union(children, byName, allowMissingCol))
+            if projectList.forall(_.deterministic) && children.nonEmpty && byName == topByName &&
+              allowMissingCol == topAllowMissingCol && canPushProjectionThroughUnion(project) =>
           stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
         case child =>
           flattened += child
@@ -2108,6 +2153,8 @@ object EliminateLimits extends Rule[LogicalPlan] {
       child
     case GlobalLimit(l, child) if canEliminate(l, child) =>
       child
+    case LocalLimit(l, child) if canEliminate(l, child) =>
+      child
 
     case LocalLimit(IntegerLiteral(0), child) =>
       LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
@@ -2245,6 +2292,9 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
     case Limit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming, stream)) =>
       LocalRelation(output, data.take(limit), isStreaming, stream)
 
+    case LocalLimit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming, stream)) =>
+      LocalRelation(output, data.take(limit), isStreaming, stream)
+
     case Filter(condition, LocalRelation(output, data, isStreaming, stream))
         if !hasUnevaluableExpr(condition) =>
       val predicate = Predicate.create(condition, output)
@@ -2252,7 +2302,7 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
       LocalRelation(output, data.filter(row => predicate.eval(row)), isStreaming, stream)
   }
 
-  private def hasUnevaluableExpr(expr: Expression): Boolean = {
+  def hasUnevaluableExpr(expr: Expression): Boolean = {
     expr.exists(e => e.isInstanceOf[Unevaluable] && !e.isInstanceOf[AttributeReference])
   }
 }

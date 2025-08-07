@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Literal, ScalarSubquery, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.RELATION_TIME_TRAVEL
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.{QueryExecution, ScalarSubquery => ScalarSubqueryExec, SubqueryExec}
 
 class EvalSubqueriesForTimeTravel extends Rule[LogicalPlan] {

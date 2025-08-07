@@ -116,6 +116,7 @@ case class Size(child: Expression, legacySizeOfNull: Boolean)
   def this(child: Expression) = this(child, SQLConf.get.legacySizeOfNull)
 
   override def dataType: DataType = IntegerType
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
   override def nullable: Boolean = if (legacySizeOfNull) false else super.nullable
 
@@ -1267,6 +1268,9 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None) extends U
 
   override def withNewSeed(seed: Long): Shuffle = copy(randomSeed = Some(seed))
 
+  override def withShiftedSeed(shift: Long): Shuffle =
+    copy(randomSeed = randomSeed.map(_ + shift))
+
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && randomSeed.isDefined
 
@@ -1354,7 +1358,7 @@ case class Reverse(child: Expression)
   override def nullIntolerant: Boolean = true
   // Input types are utilized by type coercion in ImplicitTypeCasts.
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(StringTypeWithCollation, ArrayType))
+    Seq(TypeCollection(StringTypeWithCollation(supportsTrimCollation = true), ArrayType))
 
   override def dataType: DataType = child.dataType
 
@@ -2127,12 +2131,12 @@ case class ArrayJoin(
     this(array, delimiter, Some(nullReplacement))
 
   override def inputTypes: Seq[AbstractDataType] = if (nullReplacement.isDefined) {
-    Seq(AbstractArrayType(StringTypeWithCollation),
-      StringTypeWithCollation,
-        StringTypeWithCollation)
+    Seq(AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)),
+      StringTypeWithCollation(supportsTrimCollation = true),
+        StringTypeWithCollation(supportsTrimCollation = true))
   } else {
-    Seq(AbstractArrayType(StringTypeWithCollation),
-        StringTypeWithCollation)
+    Seq(AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)),
+        StringTypeWithCollation(supportsTrimCollation = true))
   }
 
   override def children: Seq[Expression] = if (nullReplacement.isDefined) {
@@ -2154,6 +2158,8 @@ case class ArrayJoin(
   override def nullable: Boolean = children.exists(_.nullable)
 
   override def foldable: Boolean = children.forall(_.foldable)
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def eval(input: InternalRow): Any = {
     val arrayEval = array.eval(input)
@@ -2609,9 +2615,6 @@ case class ElementAt(
 
   @transient private lazy val mapKeyType = left.dataType.asInstanceOf[MapType].keyType
 
-  @transient private lazy val mapValueContainsNull =
-    left.dataType.asInstanceOf[MapType].valueContainsNull
-
   @transient private lazy val arrayElementNullable =
     left.dataType.asInstanceOf[ArrayType].containsNull
 
@@ -2855,7 +2858,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   with QueryErrorsBase {
 
   private def allowedTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCollation, BinaryType, ArrayType)
+    Seq(StringTypeWithCollation(supportsTrimCollation = true), BinaryType, ArrayType)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CONCAT)
 
@@ -2896,6 +2899,8 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   override def nullable: Boolean = children.exists(_.nullable)
 
   override def foldable: Boolean = children.forall(_.foldable)
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def eval(input: InternalRow): Any = doConcat(input)
 

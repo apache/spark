@@ -17,22 +17,23 @@
 package org.apache.spark.sql.execution.arrow
 
 import java.io.{ByteArrayOutputStream, DataOutputStream, File}
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
+import java.time.LocalTime
 import java.util.Locale
 
-import com.google.common.io.Files
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot}
 import org.apache.arrow.vector.ipc.JsonFileReader
 import org.apache.arrow.vector.util.{ByteArrayReadableSeekableByteChannel, Validator}
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, BinaryType, Decimal, IntegerType, NullType, StringType, StructField, StructType}
@@ -730,6 +731,43 @@ class ArrowConvertersSuite extends SharedSparkSession {
     }
   }
 
+  test("time type conversion") {
+    val json =
+      s"""
+         |{
+         |  "schema" : {
+         |    "fields" : [ {
+         |      "name" : "time",
+         |      "type" : {
+         |        "name" : "time",
+         |        "unit" : "NANOSECOND",
+         |        "bitWidth" : 64
+         |      },
+         |      "nullable" : true,
+         |      "children" : [ ]
+         |    } ]
+         |  },
+         |  "batches" : [ {
+         |    "count" : 3,
+         |    "columns" : [ {
+         |      "name" : "time",
+         |      "count" : 3,
+         |      "VALIDITY" : [ 1, 1, 1 ],
+         |      "DATA" : [ 0, 43200000000000, 3723123456789 ]
+         |    } ]
+         |  } ]
+         |}
+       """.stripMargin
+
+    val t1 = LocalTime.of(0, 0, 0)
+    val t2 = LocalTime.of(12, 0, 0)
+    val t3 = LocalTime.of(1, 2, 3, 123456789)
+
+    val df = Seq(t1, t2, t3).toDF("time")
+
+    collectAndValidate(df, json, "timeData.json")
+  }
+
   test("floating-point NaN") {
     val json =
       s"""
@@ -1217,8 +1255,8 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
     val tempFile1 = new File(tempDataPath, "testData2-ints-part1.json")
     val tempFile2 = new File(tempDataPath, "testData2-ints-part2.json")
-    Files.asCharSink(tempFile1, StandardCharsets.UTF_8).write(json1)
-    Files.asCharSink(tempFile2, StandardCharsets.UTF_8).write(json2)
+    Files.writeString(tempFile1.toPath, json1)
+    Files.writeString(tempFile2.toPath, json2)
 
     validateConversion(schema, arrowBatches(0), tempFile1)
     validateConversion(schema, arrowBatches(1), tempFile2)
@@ -1375,8 +1413,10 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
 
     val ctx = TaskContext.empty()
-    val batchIter = ArrowConverters.toBatchIterator(inputRows.iterator, schema, 5, null, true, ctx)
-    val outputRowIter = ArrowConverters.fromBatchIterator(batchIter, schema, null, true, ctx)
+    val batchIter = ArrowConverters.toBatchIterator(
+      inputRows.iterator, schema, 5, null, true, false, ctx)
+    val outputRowIter = ArrowConverters.fromBatchIterator(
+      batchIter, schema, null, true, false, ctx)
 
     var count = 0
     outputRowIter.zipWithIndex.foreach { case (row, i) =>
@@ -1396,12 +1436,13 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
     val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
     val ctx = TaskContext.empty()
-    val batchIter = ArrowConverters.toBatchIterator(inputRows.iterator, schema, 5, null, true, ctx)
+    val batchIter = ArrowConverters.toBatchIterator(
+      inputRows.iterator, schema, 5, null, true, false, ctx)
 
     // Write batches to Arrow stream format as a byte array
     val out = new ByteArrayOutputStream()
     Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
-      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true)
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
       writer.writeBatches(batchIter)
       writer.end()
     }
@@ -1409,7 +1450,8 @@ class ArrowConvertersSuite extends SharedSparkSession {
     // Read Arrow stream into batches, then convert back to rows
     val in = new ByteArrayReadableSeekableByteChannel(out.toByteArray)
     val readBatches = ArrowConverters.getBatchesFromStream(in)
-    val outputRowIter = ArrowConverters.fromBatchIterator(readBatches, schema, null, true, ctx)
+    val outputRowIter = ArrowConverters.fromBatchIterator(
+      readBatches, schema, null, true, false, ctx)
 
     var count = 0
     outputRowIter.zipWithIndex.foreach { case (row, i) =>
@@ -1440,7 +1482,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
     }
     val ctx = TaskContext.empty()
     val batchIter = ArrowConverters.toBatchWithSchemaIterator(
-      inputRows.iterator, schema, 5, 1024 * 1024, null, true)
+      inputRows.iterator, schema, 5, 1024 * 1024, null, true, false)
     val (outputRowIter, outputType) = ArrowConverters.fromBatchWithSchemaIterator(batchIter, ctx)
 
     var count = 0
@@ -1459,7 +1501,8 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
     val ctx = TaskContext.empty()
     val batchIter =
-      ArrowConverters.toBatchWithSchemaIterator(Iterator.empty, schema, 5, 1024 * 1024, null, true)
+      ArrowConverters.toBatchWithSchemaIterator(
+        Iterator.empty, schema, 5, 1024 * 1024, null, true, false)
     val (outputRowIter, outputType) = ArrowConverters.fromBatchWithSchemaIterator(batchIter, ctx)
 
     assert(0 == outputRowIter.length)
@@ -1473,7 +1516,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
       proj(row).copy()
     }
     val batchIter1 = ArrowConverters.toBatchWithSchemaIterator(
-      inputRows1.iterator, schema1, 5, 1024 * 1024, null, true)
+      inputRows1.iterator, schema1, 5, 1024 * 1024, null, true, false)
 
     val schema2 = StructType(Seq(StructField("field2", IntegerType, nullable = true)))
     val inputRows2 = Array(InternalRow(1)).map { row =>
@@ -1481,7 +1524,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
       proj(row).copy()
     }
     val batchIter2 = ArrowConverters.toBatchWithSchemaIterator(
-      inputRows2.iterator, schema2, 5, 1024 * 1024, null, true)
+      inputRows2.iterator, schema2, 5, 1024 * 1024, null, true, false)
 
     val iter = batchIter1.toArray ++ batchIter2
 
@@ -1501,7 +1544,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
     // NOTE: coalesce to single partition because can only load 1 batch in validator
     val batchBytes = df.coalesce(1).toArrowBatchRdd.collect().head
     val tempFile = new File(tempDataPath, file)
-    Files.asCharSink(tempFile, StandardCharsets.UTF_8).write(json)
+    Files.writeString(tempFile.toPath, json)
     validateConversion(df.schema, batchBytes, tempFile, timeZoneId, errorOnDuplicatedFieldNames)
   }
 
@@ -1510,11 +1553,13 @@ class ArrowConvertersSuite extends SharedSparkSession {
       batchBytes: Array[Byte],
       jsonFile: File,
       timeZoneId: String = null,
-      errorOnDuplicatedFieldNames: Boolean = true): Unit = {
+      errorOnDuplicatedFieldNames: Boolean = true,
+      largeVarTypes: Boolean = false): Unit = {
     val allocator = new RootAllocator(Long.MaxValue)
     val jsonReader = new JsonFileReader(jsonFile, allocator)
 
-    val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema, timeZoneId, errorOnDuplicatedFieldNames)
+    val arrowSchema = ArrowUtils.toArrowSchema(
+      sparkSchema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
     val jsonSchema = jsonReader.start()
     Validator.compareSchemas(arrowSchema, jsonSchema)
 

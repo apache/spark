@@ -59,6 +59,8 @@ class _LogisticRegressionParams(
     Params for :py:class:`LogisticRegression` and :py:class:`LogisticRegressionModel`.
 
     .. versionadded:: 3.0.0
+
+    .. deprecated:: 4.0.0
     """
 
     def __init__(self, *args: Any):
@@ -149,6 +151,8 @@ class LogisticRegression(
     Logistic regression estimator.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
 
     Examples
     --------
@@ -287,6 +291,8 @@ class LogisticRegressionModel(
     Model fitted by LogisticRegression.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     def __init__(

@@ -292,7 +292,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
 
     Seq("""{"a":1, "b":2, "c": 123, "d": "test"}""", null).foreach(v => {
       val row = create_row(v)
-      checkEvaluation(e1, replace(e2).eval(row), row)
+      checkEvaluation(e1, e2.eval(row), row)
     })
   }
 

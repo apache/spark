@@ -16,7 +16,20 @@
 #
 from abc import ABC, abstractmethod
 from collections import UserDict
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Type, Union, TYPE_CHECKING
+from dataclasses import dataclass
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+    TYPE_CHECKING,
+)
 
 from pyspark.sql import Row
 from pyspark.sql.types import StructType
@@ -32,11 +45,26 @@ __all__ = [
     "DataSourceStreamReader",
     "SimpleDataSourceStreamReader",
     "DataSourceWriter",
+    "DataSourceArrowWriter",
     "DataSourceStreamWriter",
     "DataSourceRegistration",
     "InputPartition",
     "SimpleDataSourceStreamReader",
     "WriterCommitMessage",
+    "Filter",
+    "EqualTo",
+    "EqualNullSafe",
+    "GreaterThan",
+    "GreaterThanOrEqual",
+    "LessThan",
+    "LessThanOrEqual",
+    "In",
+    "IsNull",
+    "IsNotNull",
+    "Not",
+    "StringStartsWith",
+    "StringEndsWith",
+    "StringContains",
 ]
 
 
@@ -233,6 +261,215 @@ class DataSource(ABC):
         )
 
 
+ColumnPath = Tuple[str, ...]
+"""
+A tuple of strings representing a column reference.
+
+For example, `("a", "b", "c")` represents the column `a.b.c`.
+
+.. versionadded: 4.1.0
+"""
+
+
+@dataclass(frozen=True)
+class Filter(ABC):
+    """
+    The base class for filters used for filter pushdown.
+
+    .. versionadded: 4.1.0
+
+    Notes
+    -----
+    Column references are represented as a tuple of strings. For example:
+
+    +----------------+----------------------+
+    | Column         | Representation       |
+    +----------------+----------------------+
+    | `col1`         | `("col1",)`          |
+    | `a.b.c`        | `("a", "b", "c")`    |
+    +----------------+----------------------+
+
+    Literal values are represented as Python objects of types such as
+    `int`, `float`, `str`, `bool`, `datetime`, etc.
+    See `Data Types <https://spark.apache.org/docs/latest/sql-ref-datatypes.html>`_
+    for more information about how values are represented in Python.
+
+    Examples
+    --------
+    Supported filters
+
+    +---------------------+--------------------------------------------+
+    | SQL filter          | Representation                             |
+    +---------------------+--------------------------------------------+
+    | `a.b.c = 1`         | `EqualTo(("a", "b", "c"), 1)`              |
+    | `a = 1`             | `EqualTo(("a",), 1)`                       |
+    | `a = 'hi'`          | `EqualTo(("a",), "hi")`                    |
+    | `a = array(1, 2)`   | `EqualTo(("a",), [1, 2])`                  |
+    | `a`                 | `EqualTo(("a",), True)`                    |
+    | `not a`             | `Not(EqualTo(("a",), True))`               |
+    | `a <> 1`            | `Not(EqualTo(("a",), 1))`                  |
+    | `a > 1`             | `GreaterThan(("a",), 1)`                   |
+    | `a >= 1`            | `GreaterThanOrEqual(("a",), 1)`            |
+    | `a < 1`             | `LessThan(("a",), 1)`                      |
+    | `a <= 1`            | `LessThanOrEqual(("a",), 1)`               |
+    | `a in (1, 2, 3)`    | `In(("a",), (1, 2, 3))`                    |
+    | `a is null`         | `IsNull(("a",))`                           |
+    | `a is not null`     | `IsNotNull(("a",))`                        |
+    | `a like 'abc%'`     | `StringStartsWith(("a",), "abc")`          |
+    | `a like '%abc'`     | `StringEndsWith(("a",), "abc")`            |
+    | `a like '%abc%'`    | `StringContains(("a",), "abc")`            |
+    +---------------------+--------------------------------------------+
+
+    Unsupported filters
+    - `a = b`
+    - `f(a, b) = 1`
+    - `a % 2 = 1`
+    - `a[0] = 1`
+    - `a < 0 or a > 1`
+    - `a like 'c%c%'`
+    - `a ilike 'hi'`
+    - `a = 'hi' collate zh`
+    """
+
+
+@dataclass(frozen=True)
+class EqualTo(Filter):
+    """
+    A filter that evaluates to `True` iff the column evaluates to a value
+    equal to `value`.
+    """
+
+    attribute: ColumnPath
+    value: Any
+
+
+@dataclass(frozen=True)
+class EqualNullSafe(Filter):
+    """
+    Performs equality comparison, similar to EqualTo. However, this differs from EqualTo
+    in that it returns `true` (rather than NULL) if both inputs are NULL, and `false`
+    (rather than NULL) if one of the input is NULL and the other is not NULL.
+    """
+
+    attribute: ColumnPath
+    value: Any
+
+
+@dataclass(frozen=True)
+class GreaterThan(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to a value
+    greater than `value`.
+    """
+
+    attribute: ColumnPath
+    value: Any
+
+
+@dataclass(frozen=True)
+class GreaterThanOrEqual(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to a value
+    greater than or equal to `value`.
+    """
+
+    attribute: ColumnPath
+    value: Any
+
+
+@dataclass(frozen=True)
+class LessThan(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to a value
+    less than `value`.
+    """
+
+    attribute: ColumnPath
+    value: Any
+
+
+@dataclass(frozen=True)
+class LessThanOrEqual(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to a value
+    less than or equal to `value`.
+    """
+
+    attribute: ColumnPath
+    value: Any
+
+
+@dataclass(frozen=True)
+class In(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to one of the values
+    in the array.
+    """
+
+    attribute: ColumnPath
+    value: Tuple[Any, ...]
+
+
+@dataclass(frozen=True)
+class IsNull(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to null.
+    """
+
+    attribute: ColumnPath
+
+
+@dataclass(frozen=True)
+class IsNotNull(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to a non-null value.
+    """
+
+    attribute: ColumnPath
+
+
+@dataclass(frozen=True)
+class Not(Filter):
+    """
+    A filter that evaluates to `True` iff `child` is evaluated to `False`.
+    """
+
+    child: Filter
+
+
+@dataclass(frozen=True)
+class StringStartsWith(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to
+    a string that starts with `value`.
+    """
+
+    attribute: ColumnPath
+    value: str
+
+
+@dataclass(frozen=True)
+class StringEndsWith(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to
+    a string that ends with `value`.
+    """
+
+    attribute: ColumnPath
+    value: str
+
+
+@dataclass(frozen=True)
+class StringContains(Filter):
+    """
+    A filter that evaluates to `True` iff the attribute evaluates to
+    a string that contains the string `value`.
+    """
+
+    attribute: ColumnPath
+    value: str
+
+
 class InputPartition:
     """
     A base class representing an input partition returned by the `partitions()`
@@ -278,6 +515,67 @@ class DataSourceReader(ABC):
 
     .. versionadded: 4.0.0
     """
+
+    def pushFilters(self, filters: List["Filter"]) -> Iterable["Filter"]:
+        """
+        Called with the list of filters that can be pushed down to the data source.
+
+        The list of filters should be interpreted as the AND of the elements.
+
+        Filter pushdown allows the data source to handle a subset of filters. This
+        can improve performance by reducing the amount of data that needs to be
+        processed by Spark.
+
+        This method is called once during query planning. By default, it returns
+        all filters, indicating that no filters can be pushed down. Subclasses can
+        override this method to implement filter pushdown.
+
+        It's recommended to implement this method only for data sources that natively
+        support filtering, such as databases and GraphQL APIs.
+
+        .. versionadded: 4.1.0
+
+        Parameters
+        ----------
+        filters : list of :class:`Filter`\\s
+
+        Returns
+        -------
+        iterable of :class:`Filter`\\s
+            Filters that still need to be evaluated by Spark post the data source
+            scan. This includes unsupported filters and partially pushed filters.
+            Every returned filter must be one of the input filters by reference.
+
+        Side effects
+        ------------
+        This method is allowed to modify `self`. The object must remain picklable.
+        Modifications to `self` are visible to the `partitions()` and `read()` methods.
+
+        Examples
+        --------
+        Example filters and the resulting arguments passed to pushFilters:
+
+        +-------------------------------+---------------------------------------------+
+        | Filters                       | Pushdown Arguments                          |
+        +-------------------------------+---------------------------------------------+
+        | `a = 1 and b = 2`             | `[EqualTo(("a",), 1), EqualTo(("b",), 2)]`  |
+        | `a = 1 or b = 2`              | `[]`                                        |
+        | `a = 1 or (b = 2 and c = 3)`  | `[]`                                        |
+        | `a = 1 and (b = 2 or c = 3)`  | `[EqualTo(("a",), 1)]`                      |
+        +-------------------------------+---------------------------------------------+
+
+        Implement pushFilters to support EqualTo filters only:
+
+        >>> def pushFilters(self, filters):
+        ...     for filter in filters:
+        ...         if isinstance(filter, EqualTo):
+        ...             # Save supported filter for handling in partitions() and read()
+        ...             self.filters.append(filter)
+        ...         else:
+        ...             # Unsupported filter
+        ...             yield filter
+        """
+        return filters
 
     def partitions(self) -> Sequence[InputPartition]:
         """
@@ -369,6 +667,18 @@ class DataSourceReader(ABC):
         >>> def read(self, partition: InputPartition):
         ...     yield Row(partition=partition.value, value=0)
         ...     yield Row(partition=partition.value, value=1)
+
+        Yields PyArrow RecordBatches:
+
+        >>> def read(self, partition: InputPartition):
+        ...     import pyarrow as pa
+        ...     data = {
+        ...         "partition": [partition.value] * 2,
+        ...         "value": [0, 1]
+        ...     }
+        ...     table = pa.Table.from_pydict(data)
+        ...     for batch in table.to_batches():
+        ...         yield batch
         """
         ...
 
@@ -666,6 +976,57 @@ class DataSourceWriter(ABC):
         ...
 
 
+class DataSourceArrowWriter(DataSourceWriter):
+    """
+    A base class for data source writers that process data using PyArrow's `RecordBatch`.
+
+    Unlike :class:`DataSourceWriter`, which works with an iterator of Spark Rows, this class
+    is optimized for using the Arrow format when writing data. It can offer better performance
+    when interfacing with systems or libraries that natively support Arrow.
+
+    .. versionadded: 4.0.0
+    """
+
+    @abstractmethod
+    def write(self, iterator: Iterator["RecordBatch"]) -> "WriterCommitMessage":
+        """
+        Writes an iterator of PyArrow `RecordBatch` objects to the sink.
+
+        This method is called once on each executor to write data to the data source.
+        It accepts an iterator of PyArrow `RecordBatch`\\s and returns a single row
+        representing a commit message, or None if there is no commit message.
+
+        The driver collects commit messages, if any, from all executors and passes them
+        to the :class:`DataSourceWriter.commit` method if all tasks run successfully. If any
+        task fails, the :class:`DataSourceWriter.abort` method will be called with the
+        collected commit messages.
+
+        Parameters
+        ----------
+        iterator : iterator of :class:`RecordBatch`\\s
+            An iterator of PyArrow `RecordBatch` objects representing the input data.
+
+        Returns
+        -------
+        :class:`WriterCommitMessage`
+            a serializable commit message
+
+        Examples
+        --------
+        >>> from dataclasses import dataclass
+        >>> @dataclass
+        ... class MyCommitMessage(WriterCommitMessage):
+        ...     num_rows: int
+        ...
+        >>> def write(self, iterator: Iterator["RecordBatch"]) -> "WriterCommitMessage":
+        ...     total_rows = 0
+        ...     for batch in iterator:
+        ...         total_rows += len(batch)
+        ...     return MyCommitMessage(num_rows=total_rows)
+        """
+        ...
+
+
 class DataSourceStreamWriter(ABC):
     """
     A base class for data stream writers. Data stream writers are responsible for writing
@@ -783,9 +1144,9 @@ class DataSourceRegistration:
         wrapped = _wrap_function(sc, dataSource)
         assert sc._jvm is not None
         jvm = sc._jvm
-        ds = jvm.org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource(
-            wrapped
-        )
+        ds = getattr(
+            jvm, "org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource"
+        )(wrapped)
         self.sparkSession._jsparkSession.dataSource().registerPython(name, ds)
 
 

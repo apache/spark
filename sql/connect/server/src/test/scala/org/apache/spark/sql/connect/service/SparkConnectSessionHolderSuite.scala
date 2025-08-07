@@ -37,6 +37,8 @@ import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.{PythonStreamingQueryListener, SparkConnectPlanner, StreamingForeachBatchHelper}
 import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper.RunnerCleaner
+import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl}
+import org.apache.spark.sql.pipelines.logging.PipelineEvent
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.ArrayImplicits._
 
@@ -421,5 +423,21 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
       sessionHolder.addOperationId("DUMMY")
     }
     assert(ex.getMessage.contains("already exists"))
+  }
+
+  test("Pipeline execution cache") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val graphId = "test_graph"
+    val pipelineUpdateContext = new PipelineUpdateContextImpl(
+      new DataflowGraph(Seq(), Seq(), Seq()),
+      (_: PipelineEvent) => None)
+    sessionHolder.cachePipelineExecution(graphId, pipelineUpdateContext)
+    assert(
+      sessionHolder.getPipelineExecution(graphId).nonEmpty,
+      "pipeline execution was not cached")
+    sessionHolder.removeAllPipelineExecutions()
+    assert(
+      sessionHolder.getPipelineExecution(graphId).isEmpty,
+      "pipeline execution was not removed")
   }
 }

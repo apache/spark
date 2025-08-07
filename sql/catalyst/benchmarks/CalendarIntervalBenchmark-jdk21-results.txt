@@ -2,10 +2,10 @@
 CalendarInterval
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 CalendarInterval:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Call setInterval & getInterval                     1028           1028           0        130.5           7.7       1.0X
+Call setInterval & getInterval                     1032           1033           1        130.0           7.7       1.0X
 
 

@@ -25,31 +25,23 @@ import org.apache.spark.sql.execution.datasources.jdbc.connection.SecureConnecti
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., mariadb:10.6.19):
+ * To run this test suite for a specific version (e.g., mariadb:11.4.5):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MARIADB_DOCKER_IMAGE_NAME=mariadb:10.6.19
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MARIADB_DOCKER_IMAGE_NAME=mariadb:11.4.5
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.MariaDBKrbIntegrationSuite"
  * }}}
  */
 @DockerTest
-class MariaDBKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
+class MariaDBKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite
+  with SharedJDBCIntegrationTests {
   override protected val userName = s"mariadb/$dockerIp"
   override protected val keytabFileName = "mariadb.keytab"
 
-  override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("MARIADB_DOCKER_IMAGE_NAME", "mariadb:10.6.19")
-    override val env = Map(
-      "MYSQL_ROOT_PASSWORD" -> "rootpass"
-    )
-    override val usesIpc = false
-    override val jdbcPort = 3306
+  override val db = new MariaDBDatabaseOnDocker() {
 
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:mysql://$ip:$port/mysql?user=$principal"
-
-    override def getEntryPoint: Option[String] =
-      Some("/docker-entrypoint/mariadb-docker-entrypoint.sh")
 
     override def beforeContainerStart(
         hostConfigBuilder: HostConfig,

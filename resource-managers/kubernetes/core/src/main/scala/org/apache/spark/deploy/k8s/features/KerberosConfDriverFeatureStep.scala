@@ -17,11 +17,11 @@
 package org.apache.spark.deploy.k8s.features
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
-import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model._
 import org.apache.commons.codec.binary.Base64
 import org.apache.hadoop.security.UserGroupInformation
@@ -91,14 +91,20 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
     if (keytab.isEmpty && existingSecretName.isEmpty) {
       val tokenManager = new HadoopDelegationTokenManager(kubernetesConf.sparkConf,
         SparkHadoopUtil.get.newConfiguration(kubernetesConf.sparkConf), null)
-      val creds = UserGroupInformation.getCurrentUser().getCredentials()
-      tokenManager.obtainDelegationTokens(creds)
-      // If no tokens and no secrets are stored in the credentials, make sure nothing is returned,
-      // to avoid creating an unnecessary secret.
-      if (creds.numberOfTokens() > 0 || creds.numberOfSecretKeys() > 0) {
-        SparkHadoopUtil.get.serialize(creds)
-      } else {
-        null
+      try {
+        val creds = UserGroupInformation.getCurrentUser().getCredentials()
+        tokenManager.obtainDelegationTokens(creds)
+        // If no tokens and no secrets are stored in the credentials, make sure nothing is returned,
+        // to avoid creating an unnecessary secret.
+        if (creds.numberOfTokens() > 0 || creds.numberOfSecretKeys() > 0) {
+          SparkHadoopUtil.get.serialize(creds)
+        } else {
+          null
+        }
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Fail to get credentials", e)
+          null
       }
     } else {
       null
@@ -229,7 +235,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
             .endMetadata()
           .withImmutable(true)
           .addToData(
-            Map(file.getName() -> Files.asCharSource(file, StandardCharsets.UTF_8).read()).asJava)
+            Map(file.getName() -> Files.readString(file.toPath)).asJava)
           .build()
       }
     } ++ {
@@ -241,7 +247,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
             .withName(ktSecretName)
             .endMetadata()
           .withImmutable(true)
-          .addToData(kt.getName(), Base64.encodeBase64String(Files.toByteArray(kt)))
+          .addToData(kt.getName(), Base64.encodeBase64String(Files.readAllBytes(kt.toPath)))
           .build())
       } else {
         Nil

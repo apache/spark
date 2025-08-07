@@ -1,105 +1,105 @@
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Test contains use empty Set:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Use HashSet                                           1              1           0       1390.0           0.7       1.0X
-Use EnumSet                                           2              2           0        441.2           2.3       0.3X
+Use HashSet                                           1              1           0       1389.0           0.7       1.0X
+Use EnumSet                                           2              2           0        560.9           1.8       0.4X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Test contains use 1 item Set:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Use HashSet                                           2              2           0        485.8           2.1       1.0X
-Use EnumSet                                           2              2           0        544.4           1.8       1.1X
+Use HashSet                                           2              2           0        424.0           2.4       1.0X
+Use EnumSet                                           2              2           0        571.0           1.8       1.3X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Test contains use 3 items Set:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Use HashSet                                           2              2           0        493.1           2.0       1.0X
-Use EnumSet                                           2              2           0        575.2           1.7       1.2X
+Use HashSet                                           2              3           0        413.2           2.4       1.0X
+Use EnumSet                                           2              2           0        601.3           1.7       1.5X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Test contains use 5 items Set:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Use HashSet                                           9              9           0        107.2           9.3       1.0X
-Use EnumSet                                           2              2           0        534.9           1.9       5.0X
+Use HashSet                                           9              9           0        109.4           9.1       1.0X
+Use EnumSet                                           2              2           0        550.6           1.8       5.0X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Test contains use 10 items Set:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Use HashSet                                          10             10           0         98.5          10.1       1.0X
-Use EnumSet                                           2              2           0        534.9           1.9       5.4X
+Use HashSet                                          10             10           0         99.7          10.0       1.0X
+Use EnumSet                                           2              2           0        550.7           1.8       5.5X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Test create empty Set:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Use HashSet                                           0              0           0        408.8           2.4       1.0X
-Use EnumSet                                           1              1           0        136.6           7.3       0.3X
+Use HashSet                                           0              0           0        413.1           2.4       1.0X
+Use EnumSet                                           0              0           0        291.1           3.4       0.7X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Test create 1 item Set:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Use HashSet                                           1              1           0        102.5           9.8       1.0X
-Use EnumSet                                           0              0           0        291.4           3.4       2.8X
+Use HashSet                                           1              1           0        102.3           9.8       1.0X
+Use EnumSet                                           0              0           0        290.9           3.4       2.8X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Test create 3 items Set:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Use HashSet                                           7              7           0         14.6          68.6       1.0X
-Use EnumSet                                           1              1           0        132.3           7.6       9.1X
+Use HashSet                                           9             10           0         10.6          94.7       1.0X
+Use EnumSet                                           1              1           0        132.0           7.6      12.5X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Test create 5 items Set:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Use HashSet                                          34             35           0          2.9         342.4       1.0X
-Use EnumSet                                           1              1           0        150.1           6.7      51.4X
+Use HashSet                                          35             36           1          2.8         354.1       1.0X
+Use EnumSet                                           1              1           0        144.5           6.9      51.2X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Test create 10 items Set:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Use HashSet                                          63             63           1          1.6         627.2       1.0X
-Use EnumSet                                           1              1           0        138.3           7.2      86.8X
+Use HashSet                                          57             57           0          1.8         569.8       1.0X
+Use EnumSet                                           1              1           0        138.3           7.2      78.8X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Test create and contains use empty Set:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Use HashSet                                           4              4           0        227.4           4.4       1.0X
-Use EnumSet                                           5              5           0        187.2           5.3       0.8X
+Use HashSet                                           4              4           0        267.5           3.7       1.0X
+Use EnumSet                                           5              5           0        198.5           5.0       0.7X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Test create and contains use 1 item Set:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Use HashSet                                          14             14           0         70.4          14.2       1.0X
-Use EnumSet                                           7              7           0        150.5           6.6       2.1X
+Use HashSet                                          12             13           0         85.1          11.8       1.0X
+Use EnumSet                                           6              6           0        160.1           6.2       1.9X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Test create and contains use 3 items Set:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Use HashSet                                          27             28           0         36.6          27.3       1.0X
-Use EnumSet                                           7              7           0        151.3           6.6       4.1X
+Use HashSet                                          26             27           0         38.4          26.1       1.0X
+Use EnumSet                                           6              6           0        163.7           6.1       4.3X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Test create and contains use 5 items Set:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Use HashSet                                          54             55           1         18.4          54.4       1.0X
-Use EnumSet                                           7              7           0        147.6           6.8       8.0X
+Use HashSet                                          51             51           1         19.7          50.8       1.0X
+Use EnumSet                                           6              6           0        160.4           6.2       8.1X
 
-OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Test create and contains use 10 items Set:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-Use HashSet                                           84             85           0         11.9          83.9       1.0X
-Use EnumSet                                            7              7           0        137.2           7.3      11.5X
+Use HashSet                                           78             79           0         12.8          78.1       1.0X
+Use EnumSet                                            7              7           0        149.0           6.7      11.6X
 

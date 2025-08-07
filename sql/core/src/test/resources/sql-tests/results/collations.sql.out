@@ -479,7 +479,7 @@ struct<array_except(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lca
 -- !query
 select 'a' collate unicode < 'A'
 -- !query schema
-struct<(collate(a, unicode) < A):boolean>
+struct<(collate(a, unicode) < 'A' collate UNICODE):boolean>
 -- !query output
 true
 
@@ -487,7 +487,7 @@ true
 -- !query
 select 'a' collate unicode_ci = 'A'
 -- !query schema
-struct<(collate(a, unicode_ci) = A):boolean>
+struct<(collate(a, unicode_ci) = 'A' collate UNICODE_CI):boolean>
 -- !query output
 true
 
@@ -495,7 +495,7 @@ true
 -- !query
 select 'a' collate unicode_ai = 'å'
 -- !query schema
-struct<(collate(a, unicode_ai) = å):boolean>
+struct<(collate(a, unicode_ai) = 'å' collate UNICODE_AI):boolean>
 -- !query output
 true
 
@@ -503,7 +503,7 @@ true
 -- !query
 select 'a' collate unicode_ci_ai = 'Å'
 -- !query schema
-struct<(collate(a, unicode_ci_ai) = Å):boolean>
+struct<(collate(a, unicode_ci_ai) = 'Å' collate UNICODE_CI_AI):boolean>
 -- !query output
 true
 
@@ -511,7 +511,7 @@ true
 -- !query
 select 'a' collate en < 'A'
 -- !query schema
-struct<(collate(a, en) < A):boolean>
+struct<(collate(a, en) < 'A' collate en):boolean>
 -- !query output
 true
 
@@ -519,7 +519,7 @@ true
 -- !query
 select 'a' collate en_ci = 'A'
 -- !query schema
-struct<(collate(a, en_ci) = A):boolean>
+struct<(collate(a, en_ci) = 'A' collate en_CI):boolean>
 -- !query output
 true
 
@@ -527,7 +527,7 @@ true
 -- !query
 select 'a' collate en_ai = 'å'
 -- !query schema
-struct<(collate(a, en_ai) = å):boolean>
+struct<(collate(a, en_ai) = 'å' collate en_AI):boolean>
 -- !query output
 true
 
@@ -535,7 +535,7 @@ true
 -- !query
 select 'a' collate en_ci_ai = 'Å'
 -- !query schema
-struct<(collate(a, en_ci_ai) = Å):boolean>
+struct<(collate(a, en_ci_ai) = 'Å' collate en_CI_AI):boolean>
 -- !query output
 true
 
@@ -543,7 +543,7 @@ true
 -- !query
 select 'Kypper' collate sv < 'Köpfe'
 -- !query schema
-struct<(collate(Kypper, sv) < Köpfe):boolean>
+struct<(collate(Kypper, sv) < 'Köpfe' collate sv):boolean>
 -- !query output
 true
 
@@ -551,7 +551,7 @@ true
 -- !query
 select 'Kypper' collate de > 'Köpfe'
 -- !query schema
-struct<(collate(Kypper, de) > Köpfe):boolean>
+struct<(collate(Kypper, de) > 'Köpfe' collate de):boolean>
 -- !query output
 true
 
@@ -559,7 +559,7 @@ true
 -- !query
 select 'I' collate tr_ci = 'ı'
 -- !query schema
-struct<(collate(I, tr_ci) = ı):boolean>
+struct<(collate(I, tr_ci) = 'ı' collate tr_CI):boolean>
 -- !query output
 true
 
@@ -585,13 +585,10 @@ select str_to_map(text, pairDelim, keyValueDelim) from t4
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
-  }
+  "errorClass" : "INDETERMINATE_COLLATION",
+  "sqlState" : "42P22"
 }
 
 
@@ -895,7 +892,7 @@ struct<>
 -- !query
 select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
 -- !query schema
-struct<concat_ws( , utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day. Hello, world! Nice day.
 SQL SQL
@@ -917,16 +914,23 @@ sitTing sitTing
 -- !query
 select concat_ws(' ', utf8_binary, utf8_lcase) from t5
 -- !query schema
-struct<>
+struct<concat_ws(' ' collate null, utf8_binary, utf8_lcase):string collate null>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
-  }
-}
+Hello, world! Nice day. Hello, world! Nice day.
+Something else. Nothing here. Something else. Nothing here.
+Spark SQL
+aaAaAAaA aaAaAAaA
+aaAaAAaA aaAaaAaA
+aaAaAAaA aaAaaAaAaaAaaAaAaaAaaAaA
+abc abc
+abcdcba aBcDCbA
+bbAbAAbA a
+efd2 efd2
+kitten sitTing
+İo  İo
+İo i̇o
+İo İo
+İo İo
 
 
 -- !query
@@ -969,7 +973,7 @@ kitten SQL
 -- !query
 select concat_ws(',', utf8_lcase, 'word'), concat_ws(',', utf8_binary, 'word') from t5
 -- !query schema
-struct<concat_ws(,, utf8_lcase, word):string collate UTF8_LCASE,concat_ws(,, utf8_binary, word):string>
+struct<concat_ws(',' collate UTF8_LCASE, utf8_lcase, 'word' collate UTF8_LCASE):string collate UTF8_LCASE,concat_ws(,, utf8_binary, word):string>
 -- !query output
 Hello, world! Nice day.,word	Hello, world! Nice day.,word
 SQL,word	Spark,word
@@ -991,7 +995,7 @@ sitTing,word	kitten,word
 -- !query
 select concat_ws(',', utf8_lcase, 'word' collate utf8_binary), concat_ws(',', utf8_binary, 'word' collate utf8_lcase) from t5
 -- !query schema
-struct<concat_ws(,, utf8_lcase, collate(word, utf8_binary)):string,concat_ws(,, utf8_binary, collate(word, utf8_lcase)):string collate UTF8_LCASE>
+struct<concat_ws(,, utf8_lcase, collate(word, utf8_binary)):string,concat_ws(',' collate UTF8_LCASE, utf8_binary, collate(word, utf8_lcase)):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.,word	Hello, world! Nice day.,word
 SQL,word	Spark,word
@@ -1035,16 +1039,23 @@ kitten
 -- !query
 select elt(2, utf8_binary, utf8_lcase, s) from t5
 -- !query schema
-struct<>
+struct<elt(2, utf8_binary, utf8_lcase, s):string collate null>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
-  }
-}
+Hello, world! Nice day.
+SQL
+Something else. Nothing here.
+a
+aBcDCbA
+aaAaAAaA
+aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA
+abc
+efd2
+i̇o
+sitTing
+İo
+İo
+İo
 
 
 -- !query
@@ -1109,7 +1120,7 @@ kitten
 -- !query
 select elt(1, utf8_binary, 'word'), elt(1, utf8_lcase, 'word') from t5
 -- !query schema
-struct<elt(1, utf8_binary, word):string,elt(1, utf8_lcase, word):string collate UTF8_LCASE>
+struct<elt(1, utf8_binary, word):string,elt(1, utf8_lcase, 'word' collate UTF8_LCASE):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -1155,13 +1166,10 @@ select split_part(utf8_binary, utf8_lcase, 3) from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
-  }
+  "errorClass" : "INDETERMINATE_COLLATION",
+  "sqlState" : "42P22"
 }
 
 
@@ -1261,7 +1269,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select split_part(utf8_binary, 'a', 3), split_part(utf8_lcase, 'a', 3) from t5
 -- !query schema
-struct<split_part(utf8_binary, a, 3):string,split_part(utf8_lcase, a, 3):string collate UTF8_LCASE>
+struct<split_part(utf8_binary, a, 3):string,split_part(utf8_lcase, 'a' collate UTF8_LCASE, 3):string collate UTF8_LCASE>
 -- !query output
 	
 	
@@ -1331,11 +1339,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
+  "sqlState" : "42P22",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
-  }
+    "expr" : "\"contains(utf8_binary, utf8_lcase)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 40,
+    "fragment" : "contains(utf8_binary, utf8_lcase)"
+  } ]
 }
 
 
@@ -1449,7 +1464,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select contains(utf8_binary, 'a'), contains(utf8_lcase, 'a') from t5
 -- !query schema
-struct<contains(utf8_binary, a):boolean,contains(utf8_lcase, a):boolean>
+struct<contains(utf8_binary, a):boolean,contains(utf8_lcase, 'a' collate UTF8_LCASE):boolean>
 -- !query output
 false	false
 false	false
@@ -1519,11 +1534,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
+  "sqlState" : "42P22",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
-  }
+    "expr" : "\"substring_index(utf8_binary, utf8_lcase, 2)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 50,
+    "fragment" : "substring_index(utf8_binary, utf8_lcase, 2)"
+  } ]
 }
 
 
@@ -1637,7 +1659,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select substring_index(utf8_binary, 'a', 2), substring_index(utf8_lcase, 'a', 2) from t5
 -- !query schema
-struct<substring_index(utf8_binary, a, 2):string,substring_index(utf8_lcase, a, 2):string collate UTF8_LCASE>
+struct<substring_index(utf8_binary, a, 2):string,substring_index(utf8_lcase, 'a' collate UTF8_LCASE, 2):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -1707,11 +1729,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
+  "sqlState" : "42P22",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
-  }
+    "expr" : "\"instr(utf8_binary, utf8_lcase)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "instr(utf8_binary, utf8_lcase)"
+  } ]
 }
 
 
@@ -1825,7 +1854,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select instr(utf8_binary, 'a'), instr(utf8_lcase, 'a') from t5
 -- !query schema
-struct<instr(utf8_binary, a):int,instr(utf8_lcase, a):int>
+struct<instr(utf8_binary, a):int,instr(utf8_lcase, 'a' collate UTF8_LCASE):int>
 -- !query output
 0	0
 0	0
@@ -1873,11 +1902,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
+  "sqlState" : "42P22",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
-  }
+    "expr" : "\"find_in_set(utf8_binary, utf8_lcase)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "find_in_set(utf8_binary, utf8_lcase)"
+  } ]
 }
 
 
@@ -1965,7 +2001,7 @@ struct<find_in_set(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lc
 -- !query
 select find_in_set(utf8_binary, 'aaAaaAaA,i̇o'), find_in_set(utf8_lcase, 'aaAaaAaA,i̇o') from t5
 -- !query schema
-struct<find_in_set(utf8_binary, aaAaaAaA,i̇o):int,find_in_set(utf8_lcase, aaAaaAaA,i̇o):int>
+struct<find_in_set(utf8_binary, aaAaaAaA,i̇o):int,find_in_set(utf8_lcase, 'aaAaaAaA,i̇o' collate UTF8_LCASE):int>
 -- !query output
 0	0
 0	0
@@ -2035,11 +2071,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
+  "sqlState" : "42P22",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
-  }
+    "expr" : "\"startswith(utf8_binary, utf8_lcase)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "startswith(utf8_binary, utf8_lcase)"
+  } ]
 }
 
 
@@ -2153,7 +2196,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select startswith(utf8_binary, 'aaAaaAaA'), startswith(utf8_lcase, 'aaAaaAaA') from t5
 -- !query schema
-struct<startswith(utf8_binary, aaAaaAaA):boolean,startswith(utf8_lcase, aaAaaAaA):boolean>
+struct<startswith(utf8_binary, aaAaaAaA):boolean,startswith(utf8_lcase, 'aaAaaAaA' collate UTF8_LCASE):boolean>
 -- !query output
 false	false
 false	false
@@ -2219,7 +2262,7 @@ true	true
 -- !query
 select translate(utf8_lcase, utf8_lcase, '12345') from t5
 -- !query schema
-struct<translate(utf8_lcase, utf8_lcase, 12345):string collate UTF8_LCASE>
+struct<translate(utf8_lcase, utf8_lcase, '12345' collate UTF8_LCASE):string collate UTF8_LCASE>
 -- !query output
 1
 11111111
@@ -2245,11 +2288,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
+  "sqlState" : "42P22",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
-  }
+    "expr" : "\"translate(utf8_binary, utf8_lcase, 12345)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 50,
+    "fragment" : "translate(utf8_binary, utf8_lcase, '12345')"
+  } ]
 }
 
 
@@ -2319,7 +2369,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select translate(utf8_lcase, 'aaAaaAaA', '12345'), translate(utf8_binary, 'aaAaaAaA', '12345') from t5
 -- !query schema
-struct<translate(utf8_lcase, aaAaaAaA, 12345):string collate UTF8_LCASE,translate(utf8_binary, aaAaaAaA, 12345):string>
+struct<translate(utf8_lcase, 'aaAaaAaA' collate UTF8_LCASE, '12345' collate UTF8_LCASE):string collate UTF8_LCASE,translate(utf8_binary, aaAaaAaA, 12345):string>
 -- !query output
 1	bb3b33b3
 11111111	11313313
@@ -2341,7 +2391,7 @@ sitTing	kitten
 -- !query
 select translate(utf8_lcase, 'aBc' collate utf8_binary, '12345'), translate(utf8_binary, 'aBc' collate utf8_lcase, '12345') from t5
 -- !query schema
-struct<translate(utf8_lcase, collate(aBc, utf8_binary), 12345):string,translate(utf8_binary, collate(aBc, utf8_lcase), 12345):string collate UTF8_LCASE>
+struct<translate(utf8_lcase, collate(aBc, utf8_binary), 12345):string,translate(utf8_binary, collate(aBc, utf8_lcase), '12345' collate UTF8_LCASE):string collate UTF8_LCASE>
 -- !query output
 1	22121121
 11A11A1A	11111111
@@ -2363,7 +2413,7 @@ sitTing	kitten
 -- !query
 select translate(utf8_lcase, 'aBc ' collate utf8_binary_rtrim, '12345'), translate(utf8_binary, 'aBc' collate utf8_lcase, '12345') from t5
 -- !query schema
-struct<translate(utf8_lcase, collate(aBc , utf8_binary_rtrim), 12345):string collate UTF8_BINARY_RTRIM,translate(utf8_binary, collate(aBc, utf8_lcase), 12345):string collate UTF8_LCASE>
+struct<translate(utf8_lcase, collate(aBc , utf8_binary_rtrim), '12345' collate UTF8_BINARY_RTRIM):string collate UTF8_BINARY_RTRIM,translate(utf8_binary, collate(aBc, utf8_lcase), '12345' collate UTF8_LCASE):string collate UTF8_LCASE>
 -- !query output
 1	22121121
 11A11A1A	11111111
@@ -2389,11 +2439,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
+  "sqlState" : "42P22",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
-  }
+    "expr" : "\"replace(utf8_binary, utf8_lcase, abc)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 46,
+    "fragment" : "replace(utf8_binary, utf8_lcase, 'abc')"
+  } ]
 }
 
 
@@ -2459,7 +2516,7 @@ kitten
 -- !query
 select replace(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase, 'abc') from t5
 -- !query schema
-struct<replace(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase), abc):string collate UTF8_LCASE>
+struct<replace(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase), 'abc' collate UTF8_LCASE):string collate UTF8_LCASE>
 -- !query output
 Spark
 aaAaAAaA
@@ -2492,7 +2549,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"STRING COLLATE UNICODE_AI\"",
     "paramIndex" : "first",
     "requiredType" : "\"STRING\"",
-    "sqlExpr" : "\"replace(collate(utf8_binary, unicode_ai), collate(utf8_lcase, unicode_ai), abc)\""
+    "sqlExpr" : "\"replace(collate(utf8_binary, unicode_ai), collate(utf8_lcase, unicode_ai), 'abc' collate UNICODE_AI)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2507,7 +2564,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select replace(utf8_binary, 'aaAaaAaA', 'abc'), replace(utf8_lcase, 'aaAaaAaA', 'abc') from t5
 -- !query schema
-struct<replace(utf8_binary, aaAaaAaA, abc):string,replace(utf8_lcase, aaAaaAaA, abc):string collate UTF8_LCASE>
+struct<replace(utf8_binary, aaAaaAaA, abc):string,replace(utf8_lcase, 'aaAaaAaA' collate UTF8_LCASE, 'abc' collate UTF8_LCASE):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -2529,7 +2586,7 @@ kitten	sitTing
 -- !query
 select replace(utf8_binary, 'aaAaaAaA' collate utf8_lcase, 'abc'), replace(utf8_lcase, 'aaAaaAaA' collate utf8_binary, 'abc') from t5
 -- !query schema
-struct<replace(utf8_binary, collate(aaAaaAaA, utf8_lcase), abc):string collate UTF8_LCASE,replace(utf8_lcase, collate(aaAaaAaA, utf8_binary), abc):string>
+struct<replace(utf8_binary, collate(aaAaaAaA, utf8_lcase), 'abc' collate UTF8_LCASE):string collate UTF8_LCASE,replace(utf8_lcase, collate(aaAaaAaA, utf8_binary), abc):string>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -2551,7 +2608,7 @@ kitten	sitTing
 -- !query
 select replace(utf8_binary, 'aaAaaAaA ' collate utf8_lcase_rtrim, 'abc'), replace(utf8_lcase, 'aaAaaAaA' collate utf8_binary, 'abc') from t5
 -- !query schema
-struct<replace(utf8_binary, collate(aaAaaAaA , utf8_lcase_rtrim), abc):string collate UTF8_LCASE_RTRIM,replace(utf8_lcase, collate(aaAaaAaA, utf8_binary), abc):string>
+struct<replace(utf8_binary, collate(aaAaaAaA , utf8_lcase_rtrim), 'abc' collate UTF8_LCASE_RTRIM):string collate UTF8_LCASE_RTRIM,replace(utf8_lcase, collate(aaAaaAaA, utf8_binary), abc):string>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -2577,11 +2634,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
+  "sqlState" : "42P22",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
-  }
+    "expr" : "\"endswith(utf8_binary, utf8_lcase)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 40,
+    "fragment" : "endswith(utf8_binary, utf8_lcase)"
+  } ]
 }
 
 
@@ -2695,7 +2759,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select endswith(utf8_binary, 'aaAaaAaA'), endswith(utf8_lcase, 'aaAaaAaA') from t5
 -- !query schema
-struct<endswith(utf8_binary, aaAaaAaA):boolean,endswith(utf8_lcase, aaAaaAaA):boolean>
+struct<endswith(utf8_binary, aaAaaAaA):boolean,endswith(utf8_lcase, 'aaAaaAaA' collate UTF8_LCASE):boolean>
 -- !query output
 false	false
 false	false
@@ -3246,16 +3310,23 @@ Spark	Sql
 -- !query
 select overlay(utf8_binary, utf8_lcase, 2) from t5
 -- !query schema
-struct<>
+struct<overlay(utf8_binary, utf8_lcase, 2, -1):string collate null>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
-  }
-}
+HHello, world! Nice day.
+SSQLk
+SSomething else. Nothing here.
+aaBcDCbA
+aaaAaAAaA
+aaaAaaAaA
+aaaAaaAaAaaAaaAaAaaAaaAaA
+aabc
+baAbAAbA
+eefd2
+ksitTing
+İi̇o
+İİo
+İİo
+İİo
 
 
 -- !query
@@ -3342,7 +3413,7 @@ ksitTing
 -- !query
 select overlay(utf8_binary, 'a', 2), overlay(utf8_lcase, 'a', 2) from t5
 -- !query schema
-struct<overlay(utf8_binary, a, 2, -1):string,overlay(utf8_lcase, a, 2, -1):string collate UTF8_LCASE>
+struct<overlay(utf8_binary, a, 2, -1):string,overlay(utf8_lcase, 'a' collate UTF8_LCASE, 2, -1):string collate UTF8_LCASE>
 -- !query output
 Hallo, world! Nice day.	Hallo, world! Nice day.
 Saark	SaL
@@ -3584,6 +3655,28 @@ struct<octet_length(collate(utf8_binary, utf8_lcase)):int,octet_length(collate(u
 
 
 -- !query
+select octet_length(utf8_binary collate utf8_lcase_rtrim), octet_length(utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<octet_length(collate(utf8_binary, utf8_lcase_rtrim)):int,octet_length(collate(utf8_lcase, utf8_binary_rtrim)):int>
+-- !query output
+23	23
+29	29
+3	3
+3	3
+3	4
+3	4
+4	3
+4	4
+5	3
+6	7
+7	7
+8	1
+8	24
+8	8
+8	8
+
+
+-- !query
 select luhn_check(num) from t9
 -- !query schema
 struct<luhn_check(num):boolean>
@@ -3595,16 +3688,23 @@ false
 -- !query
 select levenshtein(utf8_binary, utf8_lcase) from t5
 -- !query schema
-struct<>
+struct<levenshtein(utf8_binary, utf8_lcase):int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
-  }
-}
+0
+0
+0
+0
+0
+0
+1
+1
+1
+16
+2
+4
+4
+4
+8
 
 
 -- !query
@@ -3691,7 +3791,7 @@ struct<levenshtein(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lc
 -- !query
 select levenshtein(utf8_binary, 'a'), levenshtein(utf8_lcase, 'a') from t5
 -- !query schema
-struct<levenshtein(utf8_binary, a):int,levenshtein(utf8_lcase, a):int>
+struct<levenshtein(utf8_binary, a):int,levenshtein(utf8_lcase, 'a' collate UTF8_LCASE):int>
 -- !query output
 2	2
 2	2
@@ -3777,6 +3877,28 @@ true	true
 
 
 -- !query
+select is_valid_utf8(utf8_binary collate utf8_lcase_rtrim), is_valid_utf8(utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<is_valid_utf8(collate(utf8_binary, utf8_lcase_rtrim)):boolean,is_valid_utf8(collate(utf8_lcase, utf8_binary_rtrim)):boolean>
+-- !query output
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+
+
+-- !query
 select make_valid_utf8(utf8_binary), make_valid_utf8(utf8_lcase) from t5
 -- !query schema
 struct<make_valid_utf8(utf8_binary):string,make_valid_utf8(utf8_lcase):string collate UTF8_LCASE>
@@ -3802,6 +3924,28 @@ kitten	sitTing
 select make_valid_utf8(utf8_binary collate utf8_lcase), make_valid_utf8(utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<make_valid_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,make_valid_utf8(collate(utf8_lcase, utf8_binary)):string>
+-- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
+abc	abc
+abcdcba	aBcDCbA
+bbAbAAbA	a
+efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
+İo	İo 
+İo 	İo
+
+
+-- !query
+select make_valid_utf8(utf8_binary collate utf8_lcase_rtrim), make_valid_utf8(utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<make_valid_utf8(collate(utf8_binary, utf8_lcase_rtrim)):string collate UTF8_LCASE_RTRIM,make_valid_utf8(collate(utf8_lcase, utf8_binary_rtrim)):string collate UTF8_BINARY_RTRIM>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -3865,6 +4009,28 @@ kitten	sitTing
 
 
 -- !query
+select validate_utf8(utf8_binary collate utf8_lcase_rtrim), validate_utf8(utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<validate_utf8(collate(utf8_binary, utf8_lcase_rtrim)):string collate UTF8_LCASE_RTRIM,validate_utf8(collate(utf8_lcase, utf8_binary_rtrim)):string collate UTF8_BINARY_RTRIM>
+-- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
+abc	abc
+abcdcba	aBcDCbA
+bbAbAAbA	a
+efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
+İo	İo 
+İo 	İo
+
+
+-- !query
 select try_validate_utf8(utf8_binary), try_validate_utf8(utf8_lcase) from t5
 -- !query schema
 struct<try_validate_utf8(utf8_binary):string,try_validate_utf8(utf8_lcase):string collate UTF8_LCASE>
@@ -3890,6 +4056,28 @@ kitten	sitTing
 select try_validate_utf8(utf8_binary collate utf8_lcase), try_validate_utf8(utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<try_validate_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,try_validate_utf8(collate(utf8_lcase, utf8_binary)):string>
+-- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
+abc	abc
+abcdcba	aBcDCbA
+bbAbAAbA	a
+efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
+İo	İo 
+İo 	İo
+
+
+-- !query
+select try_validate_utf8(utf8_binary collate utf8_lcase_rtrim), try_validate_utf8(utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<try_validate_utf8(collate(utf8_binary, utf8_lcase_rtrim)):string collate UTF8_LCASE_RTRIM,try_validate_utf8(collate(utf8_lcase, utf8_binary_rtrim)):string collate UTF8_BINARY_RTRIM>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -4043,16 +4231,23 @@ ki	si
 -- !query
 select rpad(utf8_binary, 8, utf8_lcase) from t5
 -- !query schema
-struct<>
+struct<rpad(utf8_binary, 8, utf8_lcase):string collate null>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
-  }
-}
+Hello, w
+Somethin
+SparkSQL
+aaAaAAaA
+aaAaAAaA
+aaAaAAaA
+abcabcab
+abcdcbaa
+bbAbAAbA
+efd2efd2
+kittensi
+İo İoİoİ
+İoi̇oi̇o
+İoİo İo 
+İoİoİoİo
 
 
 -- !query
@@ -4161,7 +4356,7 @@ sikitten
 -- !query
 select rpad(utf8_binary, 8, 'a'), rpad(utf8_lcase, 8, 'a') from t5
 -- !query schema
-struct<rpad(utf8_binary, 8, a):string,rpad(utf8_lcase, 8, a):string collate UTF8_LCASE>
+struct<rpad(utf8_binary, 8, a):string,rpad(utf8_lcase, 8, 'a' collate UTF8_LCASE):string collate UTF8_LCASE>
 -- !query output
 Hello, w	Hello, w
 Somethin	Somethin
@@ -4205,16 +4400,23 @@ kittenAa	sitTingA
 -- !query
 select lpad(utf8_binary, 8, utf8_lcase) from t5
 -- !query schema
-struct<>
+struct<lpad(utf8_binary, 8, utf8_lcase):string collate null>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
-  "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
-  }
-}
+Hello, w
+SQLSpark
+Somethin
+aaAaAAaA
+aaAaAAaA
+aaAaAAaA
+aabcdcba
+abcababc
+bbAbAAbA
+efd2efd2
+i̇oi̇oİo
+sikitten
+İo İo İo
+İoİoİoİo
+İoİoİİo
 
 
 -- !query
@@ -4323,7 +4525,7 @@ sikitten
 -- !query
 select lpad(utf8_binary, 8, 'a'), lpad(utf8_lcase, 8, 'a') from t5
 -- !query schema
-struct<lpad(utf8_binary, 8, a):string,lpad(utf8_lcase, 8, a):string collate UTF8_LCASE>
+struct<lpad(utf8_binary, 8, a):string,lpad(utf8_lcase, 8, 'a' collate UTF8_LCASE):string collate UTF8_LCASE>
 -- !query output
 Hello, w	Hello, w
 Somethin	Somethin
@@ -4371,11 +4573,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
+  "sqlState" : "42P22",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
-  }
+    "expr" : "\"locate(utf8_binary, utf8_lcase, 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 38,
+    "fragment" : "locate(utf8_binary, utf8_lcase)"
+  } ]
 }
 
 
@@ -4489,7 +4698,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select locate(utf8_binary, 'a'), locate(utf8_lcase, 'a') from t5
 -- !query schema
-struct<locate(utf8_binary, a, 1):int,locate(utf8_lcase, a, 1):int>
+struct<locate(utf8_binary, a, 1):int,locate(utf8_lcase, 'a' collate UTF8_LCASE, 1):int>
 -- !query output
 0	0
 0	0
@@ -4559,11 +4768,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
+  "sqlState" : "42P22",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
-  }
+    "expr" : "\"TRIM(BOTH utf8_binary FROM utf8_lcase)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "TRIM(utf8_binary, utf8_lcase)"
+  } ]
 }
 
 
@@ -4685,7 +4901,7 @@ sitTing
 -- !query
 select TRIM('ABc', utf8_binary), TRIM('ABc', utf8_lcase) from t5
 -- !query schema
-struct<TRIM(BOTH ABc FROM utf8_binary):string,TRIM(BOTH ABc FROM utf8_lcase):string collate UTF8_LCASE>
+struct<TRIM(BOTH ABc FROM utf8_binary):string,TRIM(BOTH 'ABc' collate UTF8_LCASE FROM utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -4733,11 +4949,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
+  "sqlState" : "42P22",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
-  }
+    "expr" : "\"TRIM(BOTH utf8_lcase FROM utf8_binary)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "BTRIM(utf8_binary, utf8_lcase)"
+  } ]
 }
 
 
@@ -4921,11 +5144,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
+  "sqlState" : "42P22",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
-  }
+    "expr" : "\"TRIM(LEADING utf8_binary FROM utf8_lcase)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "LTRIM(utf8_binary, utf8_lcase)"
+  } ]
 }
 
 
@@ -5047,7 +5277,7 @@ sitTing
 -- !query
 select LTRIM('ABc', utf8_binary), LTRIM('ABc', utf8_lcase) from t5
 -- !query schema
-struct<TRIM(LEADING ABc FROM utf8_binary):string,TRIM(LEADING ABc FROM utf8_lcase):string collate UTF8_LCASE>
+struct<TRIM(LEADING ABc FROM utf8_binary):string,TRIM(LEADING 'ABc' collate UTF8_LCASE FROM utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -5095,11 +5325,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
-  "sqlState" : "42P21",
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
+  "sqlState" : "42P22",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
-  }
+    "expr" : "\"TRIM(TRAILING utf8_binary FROM utf8_lcase)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "RTRIM(utf8_binary, utf8_lcase)"
+  } ]
 }
 
 
@@ -5235,7 +5472,7 @@ sitTing
 -- !query
 select RTRIM('ABc', utf8_binary), RTRIM('ABc', utf8_lcase) from t5
 -- !query schema
-struct<TRIM(TRAILING ABc FROM utf8_binary):string,TRIM(TRAILING ABc FROM utf8_lcase):string collate UTF8_LCASE>
+struct<TRIM(TRAILING ABc FROM utf8_binary):string,TRIM(TRAILING 'ABc' collate UTF8_LCASE FROM utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -5274,6 +5511,279 @@ kitten	sitTing
 İo	İo
 İo	İo 
 İo 	İo
+
+
+-- !query
+select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+Hello, world! Nice day. Hello, world! Nice day.
+SQL SQL
+Something else. Nothing here. Something else. Nothing here.
+a a
+aBcDCbA aBcDCbA
+aaAaAAaA aaAaAAaA
+aaAaaAaA aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA aaAaaAaAaaAaaAaAaaAaaAaA
+abc abc
+efd2 efd2
+i̇o i̇o
+sitTing sitTing
+İo  İo 
+İo İo
+İo İo
+
+
+-- !query
+select `concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)` from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+)
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+Hello, world! Nice day. Hello, world! Nice day.
+SQL SQL
+Something else. Nothing here. Something else. Nothing here.
+a a
+aBcDCbA aBcDCbA
+aaAaAAaA aaAaAAaA
+aaAaaAaA aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA aaAaaAaAaaAaaAaAaaAaaAaA
+abc abc
+efd2 efd2
+i̇o i̇o
+sitTing sitTing
+İo  İo 
+İo İo
+İo İo
+
+
+-- !query
+select * from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+)
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+Hello, world! Nice day. Hello, world! Nice day.
+SQL SQL
+Something else. Nothing here. Something else. Nothing here.
+a a
+aBcDCbA aBcDCbA
+aaAaAAaA aaAaAAaA
+aaAaaAaA aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA aaAaaAaAaaAaaAaAaaAaaAaA
+abc abc
+efd2 efd2
+i̇o i̇o
+sitTing sitTing
+İo  İo 
+İo İo
+İo İo
+
+
+-- !query
+select subq1.* from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+) AS subq1
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+Hello, world! Nice day. Hello, world! Nice day.
+SQL SQL
+Something else. Nothing here. Something else. Nothing here.
+a a
+aBcDCbA aBcDCbA
+aaAaAAaA aaAaAAaA
+aaAaaAaA aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA aaAaaAaAaaAaaAaAaaAaaAaA
+abc abc
+efd2 efd2
+i̇o i̇o
+sitTing sitTing
+İo  İo 
+İo İo
+İo İo
+
+
+-- !query
+with cte as (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+)
+select * from cte
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+Hello, world! Nice day. Hello, world! Nice day.
+SQL SQL
+Something else. Nothing here. Something else. Nothing here.
+a a
+aBcDCbA aBcDCbA
+aaAaAAaA aaAaAAaA
+aaAaaAaA aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA aaAaaAaAaaAaaAaAaaAaaAaA
+abc abc
+efd2 efd2
+i̇o i̇o
+sitTing sitTing
+İo  İo 
+İo İo
+İo İo
+
+
+-- !query
+select * from values (1) where exists (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+)
+-- !query schema
+struct<col1:int>
+-- !query output
+1
+
+
+-- !query
+select (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5 limit 1
+)
+-- !query schema
+struct<scalarsubquery():string collate UTF8_LCASE>
+-- !query output
+Something else. Nothing here. Something else. Nothing here.
+
+
+-- !query
+select (
+  with cte as (
+    select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+  )
+  select * from cte limit 1
+)
+-- !query schema
+struct<scalarsubquery():string collate UTF8_LCASE>
+-- !query output
+Something else. Nothing here. Something else. Nothing here.
+
+
+-- !query
+select * from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5 limit 1
+)
+where (
+  `concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)` == 'aaa'
+)
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+
+
+
+-- !query
+select lower(`concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)`) from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+  group by 1
+  order by 1
+)
+-- !query schema
+struct<lower(concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)):string collate UTF8_LCASE>
+-- !query output
+a a
+aaaaaaaa aaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaa aaaaaaaaaaaaaaaaaaaaaaaa
+abc abc
+abcdcba abcdcba
+efd2 efd2
+hello, world! nice day. hello, world! nice day.
+i̇o  i̇o 
+i̇o i̇o
+sitting sitting
+something else. nothing here. something else. nothing here.
+sql sql
+
+
+-- !query
+select lower(`concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)`) from (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+  group by 1
+  order by max(concat_ws(' ', utf8_lcase, utf8_lcase))
+)
+-- !query schema
+struct<lower(concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)):string collate UTF8_LCASE>
+-- !query output
+a a
+aaaaaaaa aaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaa aaaaaaaaaaaaaaaaaaaaaaaa
+abc abc
+abcdcba abcdcba
+efd2 efd2
+hello, world! nice day. hello, world! nice day.
+i̇o  i̇o 
+i̇o i̇o
+sitting sitting
+something else. nothing here. something else. nothing here.
+sql sql
+
+
+-- !query
+create temporary view v1 as (
+  select concat_ws(' ', utf8_lcase, utf8_lcase) from t5
+)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select * from v1
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+Hello, world! Nice day. Hello, world! Nice day.
+SQL SQL
+Something else. Nothing here. Something else. Nothing here.
+a a
+aBcDCbA aBcDCbA
+aaAaAAaA aaAaAAaA
+aaAaaAaA aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA aaAaaAaAaaAaaAaAaaAaaAaA
+abc abc
+efd2 efd2
+i̇o i̇o
+sitTing sitTing
+İo  İo 
+İo İo
+İo İo
+
+
+-- !query
+select `concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)` from v1
+-- !query schema
+struct<concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+Hello, world! Nice day. Hello, world! Nice day.
+SQL SQL
+Something else. Nothing here. Something else. Nothing here.
+a a
+aBcDCbA aBcDCbA
+aaAaAAaA aaAaAAaA
+aaAaaAaA aaAaaAaA
+aaAaaAaAaaAaaAaAaaAaaAaA aaAaaAaAaaAaaAaAaaAaaAaA
+abc abc
+efd2 efd2
+i̇o i̇o
+sitTing sitTing
+İo  İo 
+İo İo
+İo İo
+
+
+-- !query
+drop view v1
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query

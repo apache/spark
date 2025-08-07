@@ -43,11 +43,17 @@ class ArrowPythonUDTFRunner(
     jobArtifactUUID: Option[String])
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
       Seq(ChainedPythonFunctions(Seq(udtf.func))), evalType, Array(argMetas.map(_.offset)),
-      jobArtifactUUID)
-  with BasicPythonArrowInput
+      jobArtifactUUID, pythonMetrics)
+  with BatchedPythonArrowInput
   with BasicPythonArrowOutput {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
+    // For arrow-optimized Python UDTFs (@udtf(useArrow=True)), we need to write
+    // the schema to the worker to support UDT (user-defined type).
+    // Currently, UDT is not supported in PyArrow native UDTFs (arrow_udf)
+    if (evalType == PythonEvalType.SQL_ARROW_TABLE_UDF) {
+      PythonWorkerUtils.writeUTF(schema.json, dataOut)
+    }
     PythonUDTFRunner.writeUDTF(dataOut, udtf, argMetas)
   }
 
@@ -56,9 +62,14 @@ class ArrowPythonUDTFRunner(
       funcs.head.funcs.head.pythonExec)
 
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
+  override val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds
+  override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
+  override val tracebackDumpIntervalSeconds: Long =
+    SQLConf.get.pythonUDFWorkerTracebackDumpIntervalSeconds
 
   override val errorOnDuplicatedFieldNames: Boolean = true
 
+  override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   override val bufferSize: Int = SQLConf.get.pandasUDFBufferSize

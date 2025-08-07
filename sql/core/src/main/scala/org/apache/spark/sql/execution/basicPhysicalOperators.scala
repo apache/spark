@@ -25,7 +25,7 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
 
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
-import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD}
+import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD, SQLPartitioningAwareUnionRDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
@@ -699,8 +699,80 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
     }
   }
 
-  protected override def doExecute(): RDD[InternalRow] =
-    sparkContext.union(children.map(_.execute()))
+  /**
+   * Returns the output partitionings of the children, with the attributes converted to
+   * the first child's attributes at the same position.
+   */
+  private def prepareOutputPartitioning(): Seq[Partitioning] = {
+    // Create a map of attributes from the other children to the first child.
+    val firstAttrs = children.head.output
+    val attributesMap = children.tail.map(_.output).map { otherAttrs =>
+      otherAttrs.zip(firstAttrs).map { case (attr, firstAttr) =>
+        attr -> firstAttr
+      }.toMap
+    }
+
+    val partitionings = children.map(_.outputPartitioning)
+    val firstPartitioning = partitionings.head
+    val otherPartitionings = partitionings.tail
+
+    val convertedOtherPartitionings = otherPartitionings.zipWithIndex.map { case (p, idx) =>
+      val attributeMap = attributesMap(idx)
+      p match {
+        case e: Expression =>
+          e.transform {
+            case a: Attribute if attributeMap.contains(a) => attributeMap(a)
+          }.asInstanceOf[Partitioning]
+        case _ => p
+      }
+    }
+    Seq(firstPartitioning) ++ convertedOtherPartitionings
+  }
+
+  private def comparePartitioning(left: Partitioning, right: Partitioning): Boolean = {
+    (left, right) match {
+      case (SinglePartition, SinglePartition) => true
+      case (l: HashPartitioningLike, r: HashPartitioningLike) => l == r
+      // Note: two `RangePartitioning`s with even same ordering and number of partitions
+      // are not equal, because they might have different partition bounds.
+      case _ => false
+    }
+  }
+
+  override def outputPartitioning: Partitioning = {
+    if (conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING)) {
+      val partitionings = prepareOutputPartitioning()
+      if (partitionings.forall(comparePartitioning(_, partitionings.head))) {
+        val partitioner = partitionings.head
+
+        // Take the output attributes of this union and map the partitioner to them.
+        val attributeMap = children.head.output.zip(output).toMap
+        partitioner match {
+          case e: Expression =>
+            e.transform {
+              case a: Attribute if attributeMap.contains(a) => attributeMap(a)
+            }.asInstanceOf[Partitioning]
+          case _ => partitioner
+        }
+      } else {
+        super.outputPartitioning
+      }
+    } else {
+      super.outputPartitioning
+    }
+  }
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    if (outputPartitioning.isInstanceOf[UnknownPartitioning]) {
+      sparkContext.union(children.map(_.execute()))
+    } else {
+      // This union has a known partitioning, i.e., its children have the same partitioning
+      // in semantics so this union can choose not to change the partitioning by using a
+      // custom partitioning aware union RDD.
+      val nonEmptyRdds = children.map(_.execute()).filter(!_.partitions.isEmpty)
+      new SQLPartitioningAwareUnionRDD(sparkContext, nonEmptyRdds, outputPartitioning.numPartitions)
+    }
+  }
 
   override def supportsColumnar: Boolean = children.forall(_.supportsColumnar)
 
@@ -790,6 +862,7 @@ abstract class BaseSubqueryExec extends SparkPlan {
       addSuffix: Boolean = false,
       maxFields: Int,
       printNodeId: Boolean,
+      printOutputColumns: Boolean,
       indent: Int = 0): Unit = {
     /**
      * In the new explain mode `EXPLAIN FORMATTED`, the subqueries are not shown in the
@@ -807,6 +880,7 @@ abstract class BaseSubqueryExec extends SparkPlan {
         false,
         maxFields,
         printNodeId,
+        printOutputColumns,
         indent)
     }
   }

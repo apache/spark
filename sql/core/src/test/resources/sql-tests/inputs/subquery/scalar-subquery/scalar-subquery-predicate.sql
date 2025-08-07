@@ -532,3 +532,14 @@ WHERE (SELECT max(t2c)
 
 
 SELECT * FROM t0 WHERE t0a = (SELECT distinct(t1c) FROM t1 WHERE t1a = t0a);
+
+-- SPARK-52531: Inner aggregate expressions are properly decorrelated from outer aggregate expressions
+SELECT MAX(a.col1)
+FROM VALUES (1) AS a(col1)
+GROUP BY a.col1
+HAVING COUNT(*) = (
+        SELECT COUNT(*)
+        FROM VALUES (1),(1),(2),(2) AS c(col1)
+        WHERE c.col1 >= a.col1
+        LIMIT 1
+    );

@@ -50,6 +50,11 @@ on:
         description: 'Number of job splits'
         required: true
         default: '1'
+      create-commit:
+        type: boolean
+        description: 'Commit the benchmark results to the current branch'
+        required: true
+        default: false
 
 jobs:
   matrix-gen:
@@ -66,9 +71,9 @@ jobs:
 
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g job of build_and_test.yml as well
   tpcds-1g-gen:
-    name: "Generate an input dataset for TPCDSQueryBenchmark with SF=1"
-    if: contains(inputs.class, 'TPCDSQueryBenchmark') || contains(inputs.class, '*')
-    runs-on: ubuntu-20.04
+    name: "Generate an TPC-DS dataset with SF=1"
+    if: contains(inputs.class, 'TPCDSQueryBenchmark') || contains(inputs.class, 'ZStandardTPCDSDataBenchmark') || contains(inputs.class, '*')
+    runs-on: ubuntu-latest
     env:
       SPARK_LOCAL_IP: localhost
     steps:
@@ -98,14 +103,16 @@ jobs:
         id: cache-tpcds-sf-1
         uses: actions/cache@v4
         with:
-          path: ./tpcds-sf-1
+          path: |
+            ./tpcds-sf-1
+            ./tpcds-sf-1-text
           key: tpcds-${{ hashFiles('.github/workflows/benchmark.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
       - name: Checkout tpcds-kit repository
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
           repository: databricks/tpcds-kit
-          ref: 2a5078a782192ddb6efbcead8de9973d6ab4f069
+          ref: 1b7fb7529edae091684201fab142d956d6afd881
           path: ./tpcds-kit
       - name: Build tpcds-kit
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
@@ -118,7 +125,9 @@ jobs:
           java-version: ${{ inputs.jdk }}
       - name: Generate TPC-DS (SF=1) table data
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
-        run: build/sbt "sql/Test/runMain org.apache.spark.sql.GenTPCDSData --dsdgenDir `pwd`/tpcds-kit/tools --location `pwd`/tpcds-sf-1 --scaleFactor 1 --numPartitions 1 --overwrite"
+        run: |
+          build/sbt "sql/Test/runMain org.apache.spark.sql.GenTPCDSData --dsdgenDir `pwd`/tpcds-kit/tools --location `pwd`/tpcds-sf-1 --scaleFactor 1 --numPartitions 1 --overwrite"
+          mkdir -p `pwd`/tpcds-sf-1-text && rm -f `pwd`/tpcds-sf-1-text/* && `pwd`/tpcds-kit/tools/dsdgen -DISTRIBUTIONS `pwd`/tpcds-kit/tools/tpcds.idx -SCALE 1 -DIR `pwd`/tpcds-sf-1-text
 
   benchmark:
     name: "Run benchmarks: ${{ inputs.class }} (JDK ${{ inputs.jdk }}, Scala ${{ inputs.scala }}, ${{ matrix.split }} out of ${{ inputs.num-splits }} splits)"
@@ -138,6 +147,7 @@ jobs:
       # To prevent spark.test.home not being set. See more detail in SPARK-36007.
       SPARK_HOME: ${{ github.workspace }}
       SPARK_TPCDS_DATA: ${{ github.workspace }}/tpcds-sf-1
+      SPARK_TPCDS_DATA_TEXT: ${{ github.workspace }}/tpcds-sf-1-text
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -167,11 +177,13 @@ jobs:
         distribution: zulu
         java-version: ${{ inputs.jdk }}
     - name: Cache TPC-DS generated data
-      if: contains(inputs.class, 'TPCDSQueryBenchmark') || contains(inputs.class, '*')
+      if: contains(inputs.class, 'TPCDSQueryBenchmark') || contains(inputs.class, 'ZStandardTPCDSDataBenchmark') || contains(inputs.class, '*')
       id: cache-tpcds-sf-1
       uses: actions/cache@v4
       with:
-        path: ./tpcds-sf-1
+        path: |
+          ./tpcds-sf-1
+          ./tpcds-sf-1-text
         key: tpcds-${{ hashFiles('.github/workflows/benchmark.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
     - name: Run benchmarks
       run: |
@@ -188,10 +200,31 @@ jobs:
         # To keep the directory structure and file permissions, tar them
         # See also https://github.com/actions/upload-artifact#maintaining-file-permissions-and-case-sensitive-files
         echo "Preparing the benchmark results:"
-        tar -cvf benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}.tar `git diff --name-only` `git ls-files --others --exclude=tpcds-sf-1 --exclude-standard`
+        tar -cvf target/benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}.tar `git diff --name-only` `git ls-files --others --exclude=tpcds-sf-1 --exclude=tpcds-sf-1-text --exclude-standard`
+    - name: Create a pull request with the results
+      if: ${{ inputs.create-commit && success() }}
+      run: |
+        git config --local user.name "${{ github.actor }}"
+        git config --local user.email "${{ github.event.pusher.email || format('{0}@users.noreply.github.com', github.actor) }}"
+        git add -A
+        git commit -m "Benchmark results for ${{ inputs.class }} (JDK ${{ inputs.jdk }}, Scala ${{ inputs.scala }}, split ${{ matrix.split }} of ${{ inputs.num-splits }})"
+        for i in {1..5}; do
+          echo "Attempt $i to push..."
+          git fetch origin ${{ github.ref_name }}
+          git rebase origin/${{ github.ref_name }}
+          if git push origin ${{ github.ref_name }}:${{ github.ref_name }}; then
+            echo "Push successful."
+            exit 0
+          else
+            echo "Push failed, retrying in 3 seconds..."
+            sleep 3
+          fi
+        done
+        echo "Error: Failed to push after 5 attempts."
+        exit 1
     - name: Upload benchmark results
       uses: actions/upload-artifact@v4
       with:
         name: benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}-${{ matrix.split }}
-        path: benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}.tar
+        path: target/benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}.tar
 

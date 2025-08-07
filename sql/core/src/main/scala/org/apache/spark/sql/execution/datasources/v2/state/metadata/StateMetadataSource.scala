@@ -23,7 +23,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
@@ -50,7 +50,7 @@ case class StateMetadataTableEntry(
     version: Int,
     operatorPropertiesJson: String,
     numColsPrefixKey: Int,
-    stateSchemaFilePath: Option[String]) {
+    stateSchemaFilePaths: List[String]) {
   def toRow(): InternalRow = {
     new GenericInternalRow(
       Array[Any](operatorId,
@@ -256,7 +256,7 @@ class StateMetadataPartitionReader(
               operatorStateMetadata.version,
               null,
               stateStoreMetadata.numColsPrefixKey,
-              None
+              List.empty
             )
           }
         case v2: OperatorStateMetadataV2 =>
@@ -270,7 +270,7 @@ class StateMetadataPartitionReader(
               operatorStateMetadata.version,
               v2.operatorPropertiesJson,
               -1, // numColsPrefixKey is not available in OperatorStateMetadataV2
-              Some(stateStoreMetadata.stateSchemaFilePath)
+              stateStoreMetadata.stateSchemaFilePaths
             )
           }
         }

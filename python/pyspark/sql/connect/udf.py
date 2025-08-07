@@ -21,10 +21,9 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import warnings
 import sys
 import functools
-import warnings
-from inspect import getfullargspec
 from typing import cast, Callable, Any, List, TYPE_CHECKING, Optional, Union
 
 from pyspark.util import PythonEvalType
@@ -41,6 +40,7 @@ from pyspark.sql.udf import (
     UDFRegistration as PySparkUDFRegistration,
     UserDefinedFunction as PySparkUserDefinedFunction,
 )
+from pyspark.sql.pandas.utils import require_minimum_pyarrow_version, require_minimum_pandas_version
 from pyspark.errors import PySparkTypeError, PySparkRuntimeError
 
 if TYPE_CHECKING:
@@ -58,6 +58,7 @@ def _create_py_udf(
     returnType: "DataTypeOrString",
     useArrow: Optional[bool] = None,
 ) -> "UserDefinedFunctionLike":
+    is_arrow_enabled = False
     if useArrow is None:
         is_arrow_enabled = False
         try:
@@ -69,7 +70,7 @@ def _create_py_udf(
                 == "true"
             )
         except PySparkRuntimeError as e:
-            if e.getErrorClass() == "NO_ACTIVE_OR_DEFAULT_SESSION":
+            if e.getCondition() == "NO_ACTIVE_OR_DEFAULT_SESSION":
                 pass  # Just uses the default if no session found.
             else:
                 raise e
@@ -79,17 +80,16 @@ def _create_py_udf(
     eval_type: int = PythonEvalType.SQL_BATCHED_UDF
 
     if is_arrow_enabled:
+        eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
         try:
-            is_func_with_args = len(getfullargspec(f).args) > 0
-        except TypeError:
-            is_func_with_args = False
-        if is_func_with_args:
-            eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
-        else:
+            require_minimum_pandas_version()
+            require_minimum_pyarrow_version()
+        except ImportError:
+            is_arrow_enabled = False
             warnings.warn(
-                "Arrow optimization for Python UDFs cannot be enabled for functions"
-                " without arguments.",
-                UserWarning,
+                "Arrow optimization failed to enable because PyArrow or Pandas is not installed. "
+                "Falling back to a non-Arrow-optimized UDF.",
+                RuntimeWarning,
             )
 
     return _create_udf(f, returnType, eval_type)
@@ -276,15 +276,18 @@ class UDFRegistration:
                 PythonEvalType.SQL_BATCHED_UDF,
                 PythonEvalType.SQL_ARROW_BATCHED_UDF,
                 PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                PythonEvalType.SQL_SCALAR_ARROW_UDF,
                 PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+                PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
                 PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+                PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
             ]:
                 raise PySparkTypeError(
                     errorClass="INVALID_UDF_EVAL_TYPE",
                     messageParameters={
                         "eval_type": "SQL_BATCHED_UDF, SQL_ARROW_BATCHED_UDF, "
-                        "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_PANDAS_ITER_UDF or "
-                        "SQL_GROUPED_AGG_PANDAS_UDF"
+                        "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_PANDAS_ITER_UDF, "
+                        "SQL_GROUPED_AGG_PANDAS_UDF or SQL_GROUPED_AGG_ARROW_UDF"
                     },
                 )
             self.sparkSession._client.register_udf(

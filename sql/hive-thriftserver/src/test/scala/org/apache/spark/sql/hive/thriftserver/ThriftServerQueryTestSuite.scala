@@ -23,8 +23,6 @@ import java.util.{Locale, MissingFormatArgumentException}
 
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.exception.ExceptionUtils
-
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLQueryTestSuite
@@ -94,6 +92,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     // SPARK-28636
     "decimalArithmeticOperations.sql",
     "literals.sql",
+    "random.sql",
     "subquery/scalar-subquery/scalar-subquery-predicate.sql",
     "subquery/in-subquery/in-limit.sql",
     "subquery/in-subquery/in-group-by.sql",
@@ -103,10 +102,13 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     // SPARK-42921
     "timestampNTZ/datetime-special-ansi.sql",
     // SPARK-47264
+    "view-with-default-collation.sql",
     "collations.sql",
+    "listagg-collations.sql",
     "pipe-operators.sql",
     // VARIANT type
-    "variant/named-function-arguments.sql"
+    "variant/named-function-arguments.sql",
+    "variant-field-extractions.sql"
   )
 
   override def runQueries(
@@ -133,11 +135,13 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
       }
 
+      val rowCounts = new Array[Int](queries.size)
       // Run the SQL queries preparing them for comparison.
       val outputs: Seq[QueryTestOutput] = withSQLConf(configSet: _*) {
-        queries.map { sql =>
+        queries.zipWithIndex.map { case (sql, i) =>
           val (_, output) = handleExceptions(getNormalizedResult(statement, sql))
           // We might need to do some query canonicalization in the future.
+          rowCounts(i) = output.length
           ExecutionOutput(
             sql = sql,
             schema = Some(""),
@@ -158,11 +162,19 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
           val sql = segments(i * 3 + 1).trim
           val schema = segments(i * 3 + 2).trim
           val originalOut = segments(i * 3 + 3)
-          val output = if (schema != emptySchema && isNeedSort(sql)) {
-            originalOut.split("\n").sorted.mkString("\n")
-          } else {
-            originalOut
-          }
+          val output =
+            if (schema != emptySchema && isNeedSort(sql)) {
+              val splits = originalOut.split("\n")
+              if (splits.length > rowCounts(i)) {
+                // the result is multiline
+                val step = splits.length / rowCounts(i)
+                splits.grouped(step).map(_.mkString("\n")).toSeq.sorted.mkString("\n")
+              } else {
+                splits.sorted.mkString("\n")
+              }
+            } else {
+              originalOut
+            }
           ExecutionOutput(
             sql = sql,
             schema = Some(""),
@@ -294,7 +306,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       try {
         result
       } catch {
-        case NonFatal(e) => throw ExceptionUtils.getRootCause(e)
+        case NonFatal(e) => throw Utils.getRootCause(e)
       }
     }
   }

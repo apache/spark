@@ -224,9 +224,9 @@ public class ExternalBlockHandler extends RpcHandler
     } else if (msgObj instanceof RemoveShuffleMerge msg) {
       checkAuth(client, msg.appId);
       logger.info("Removing shuffle merge data for application {} shuffle {} shuffleMerge {}",
-        MDC.of(LogKeys.APP_ID$.MODULE$, msg.appId),
-        MDC.of(LogKeys.SHUFFLE_ID$.MODULE$, msg.shuffleId),
-        MDC.of(LogKeys.SHUFFLE_MERGE_ID$.MODULE$, msg.shuffleMergeId));
+        MDC.of(LogKeys.APP_ID, msg.appId),
+        MDC.of(LogKeys.SHUFFLE_ID, msg.shuffleId),
+        MDC.of(LogKeys.SHUFFLE_MERGE_ID, msg.shuffleMergeId));
       mergeManager.removeShuffleMerge(msg);
     } else if (msgObj instanceof DiagnoseCorruption msg) {
       checkAuth(client, msg.appId);

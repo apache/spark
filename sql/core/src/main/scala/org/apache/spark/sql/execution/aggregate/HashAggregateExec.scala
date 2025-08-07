@@ -23,7 +23,6 @@ import scala.collection.mutable
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.LogKeys.CONFIG
-import org.apache.spark.internal.MDC
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -682,7 +681,7 @@ case class HashAggregateExec(
          |    $unsafeRowKeys, $unsafeRowKeyHash);
          |  if ($unsafeRowBuffer == null) {
          |    // failed to allocate the first page
-         |    throw new $oomeClassName("_LEGACY_ERROR_TEMP_3302", new java.util.HashMap());
+         |    throw new $oomeClassName("AGGREGATE_OUT_OF_MEMORY", new java.util.HashMap());
          |  }
          |}
        """.stripMargin

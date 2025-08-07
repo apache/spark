@@ -42,6 +42,7 @@ from pyspark.sql.types import (
     IntegerType,
     FloatType,
     DateType,
+    TimeType,
     TimestampType,
     TimestampNTZType,
     DayTimeIntervalType,
@@ -71,14 +72,14 @@ from pyspark.sql.types import (
     _make_type_verifier,
     _merge_type,
 )
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.objects import (
     ExamplePointUDT,
     PythonOnlyUDT,
     ExamplePoint,
     PythonOnlyPoint,
     MyObject,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import PySparkErrorTestUtils
 
 
@@ -477,6 +478,25 @@ class TypesTestsMixin:
             df.first(),
         )
 
+    def test_infer_variant_type(self):
+        # SPARK-52355: Test inferring variant type
+        value = VariantVal.parseJson('{"a": 1}')
+
+        data = [Row(f1=value)]
+        df = self.spark.createDataFrame(data)
+        actual = df.first()["f1"]
+
+        self.assertEqual(type(df.schema["f1"].dataType), VariantType)
+        # As of writing VariantVal can also include bytearray
+        self.assertEqual(
+            bytes(actual.value),
+            bytes(value.value),
+        )
+        self.assertEqual(
+            bytes(actual.metadata),
+            bytes(value.metadata),
+        )
+
     def test_create_dataframe_from_dict_respects_schema(self):
         df = self.spark.createDataFrame([{"a": 1}], ["b"])
         self.assertEqual(df.columns, ["b"])
@@ -506,7 +526,7 @@ class TypesTestsMixin:
         self.assertEqual(df.first(), Row(key=1, value="1"))
 
     def test_apply_schema(self):
-        from datetime import date, datetime, timedelta
+        from datetime import date, time, datetime, timedelta
 
         rdd = self.sc.parallelize(
             [
@@ -518,6 +538,7 @@ class TypesTestsMixin:
                     2147483647,
                     1.0,
                     date(2010, 1, 1),
+                    time(23, 23, 59, 999999),
                     datetime(2010, 1, 1, 1, 1, 1),
                     timedelta(days=1),
                     {"a": 1},
@@ -536,6 +557,7 @@ class TypesTestsMixin:
                 StructField("int1", IntegerType(), False),
                 StructField("float1", FloatType(), False),
                 StructField("date1", DateType(), False),
+                StructField("time", TimeType(), False),
                 StructField("time1", TimestampType(), False),
                 StructField("daytime1", DayTimeIntervalType(), False),
                 StructField("map1", MapType(StringType(), IntegerType(), False), False),
@@ -554,6 +576,7 @@ class TypesTestsMixin:
                 x.int1,
                 x.float1,
                 x.date1,
+                x.time,
                 x.time1,
                 x.daytime1,
                 x.map1["a"],
@@ -570,6 +593,7 @@ class TypesTestsMixin:
             2147483647,
             1.0,
             date(2010, 1, 1),
+            time(23, 23, 59, 999999),
             datetime(2010, 1, 1, 1, 1, 1),
             timedelta(days=1),
             1,
@@ -623,6 +647,17 @@ class TypesTestsMixin:
         from pyspark.sql.types import _parse_datatype_json_string
 
         unicode_collation = "UNICODE"
+        utf8_lcase_collation = "UTF8_LCASE"
+
+        standalone_string = StringType(unicode_collation)
+
+        standalone_array = ArrayType(StringType(unicode_collation))
+
+        standalone_map = MapType(StringType(utf8_lcase_collation), StringType(unicode_collation))
+
+        standalone_nested = ArrayType(
+            MapType(StringType(utf8_lcase_collation), ArrayType(StringType(unicode_collation)))
+        )
 
         simple_struct = StructType([StructField("c1", StringType(unicode_collation))])
 
@@ -694,6 +729,10 @@ class TypesTestsMixin:
         )
 
         schemas = [
+            standalone_string,
+            standalone_array,
+            standalone_map,
+            standalone_nested,
             simple_struct,
             nested_struct,
             array_in_schema,
@@ -950,6 +989,9 @@ class TypesTestsMixin:
         udf = F.udf(lambda k, v: [(k, v[0])], ArrayType(df.schema))
         gd.select(udf(*gd)).collect()
 
+        arrow_udf = F.udf(lambda k, v: [(k, v[0])], ArrayType(df.schema), useArrow=True)
+        gd.select(arrow_udf(*gd)).collect()
+
     def test_udt_with_none(self):
         df = self.spark.range(0, 10, 1, 1)
 
@@ -1054,19 +1096,34 @@ class TypesTestsMixin:
         self.assertEqual(points, [PythonOnlyPoint(1.0, 2.0), None])
 
     def test_udf_with_udt(self):
+        # UDT input
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
         df = self.spark.createDataFrame([row])
         udf = F.udf(lambda p: p.y, DoubleType())
         self.assertEqual(2.0, df.select(udf(df.point)).first()[0])
+        arrow_udf = F.udf(lambda p: p.y, DoubleType(), useArrow=True)
+        self.assertEqual(2.0, df.select(arrow_udf(df.point)).first()[0])
+
         udf2 = F.udf(lambda p: ExamplePoint(p.x + 1, p.y + 1), ExamplePointUDT())
         self.assertEqual(ExamplePoint(2.0, 3.0), df.select(udf2(df.point)).first()[0])
+        arrow_udf2 = F.udf(
+            lambda p: ExamplePoint(p.x + 1, p.y + 1), ExamplePointUDT(), useArrow=True
+        )
+        self.assertEqual(ExamplePoint(2.0, 3.0), df.select(arrow_udf2(df.point)).first()[0])
 
         row = Row(label=1.0, point=PythonOnlyPoint(1.0, 2.0))
         df = self.spark.createDataFrame([row])
         udf = F.udf(lambda p: p.y, DoubleType())
         self.assertEqual(2.0, df.select(udf(df.point)).first()[0])
+        arrow_udf = F.udf(lambda p: p.y, DoubleType(), useArrow=True)
+        self.assertEqual(2.0, df.select(arrow_udf(df.point)).first()[0])
+
         udf2 = F.udf(lambda p: PythonOnlyPoint(p.x + 1, p.y + 1), PythonOnlyUDT())
         self.assertEqual(PythonOnlyPoint(2.0, 3.0), df.select(udf2(df.point)).first()[0])
+        arrow_udf2 = F.udf(
+            lambda p: PythonOnlyPoint(p.x + 1, p.y + 1), PythonOnlyUDT(), useArrow=True
+        )
+        self.assertEqual(PythonOnlyPoint(2.0, 3.0), df.select(arrow_udf2(df.point)).first()[0])
 
     def test_rdd_with_udt(self):
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
@@ -1204,6 +1261,7 @@ class TypesTestsMixin:
             IntegerType(),
             LongType(),
             DateType(),
+            TimeType(5),
             TimestampType(),
             TimestampNTZType(),
             NullType(),
@@ -1254,6 +1312,8 @@ class TypesTestsMixin:
             _parse_datatype_string("a INT, c DOUBLE"),
         )
         self.assertEqual(VariantType(), _parse_datatype_string("variant"))
+        self.assertEqual(TimeType(5), _parse_datatype_string("time(5)"))
+        self.assertEqual(TimeType(), _parse_datatype_string("time( 6 )"))
 
     def test_tree_string(self):
         schema1 = DataType.fromDDL("c1 INT, c2 STRUCT<c3: INT, c4: STRUCT<c5: INT, c6: INT>>")
@@ -1506,6 +1566,7 @@ class TypesTestsMixin:
             .add("bin", BinaryType())
             .add("bool", BooleanType())
             .add("date", DateType())
+            .add("time", TimeType())
             .add("ts", TimestampType())
             .add("ts_ntz", TimestampNTZType())
             .add("dec", DecimalType(10, 2))
@@ -1541,6 +1602,7 @@ class TypesTestsMixin:
                 " |-- bin: binary (nullable = true)",
                 " |-- bool: boolean (nullable = true)",
                 " |-- date: date (nullable = true)",
+                " |-- time: time(6) (nullable = true)",
                 " |-- ts: timestamp (nullable = true)",
                 " |-- ts_ntz: timestamp_ntz (nullable = true)",
                 " |-- dec: decimal(10,2) (nullable = true)",
@@ -1888,6 +1950,7 @@ class TypesTestsMixin:
             BinaryType(),
             BooleanType(),
             DateType(),
+            TimeType(),
             TimestampType(),
             DecimalType(),
             DoubleType(),
@@ -2240,6 +2303,66 @@ class TypesTestsMixin:
             PySparkValueError, lambda: str(VariantVal(bytes([32, 10, 1, 0, 0, 0]), metadata))
         )
 
+        # check parse_json
+        for key, json, obj in expected_values:
+            self.assertEqual(VariantVal.parseJson(json).toJson(), json)
+            self.assertEqual(VariantVal.parseJson(json).toPython(), obj)
+
+        # compare the parse_json in Spark vs python. `json_str` contains all of `expected_values`.
+        parse_json_spark_output = variants[0]
+        parse_json_python_output = VariantVal.parseJson(json_str)
+        self.assertEqual(parse_json_spark_output.value, parse_json_python_output.value)
+        self.assertEqual(parse_json_spark_output.metadata, parse_json_python_output.metadata)
+
+        # Test createDataFrame
+        create_df_variants = self.spark.createDataFrame(
+            [
+                (
+                    VariantVal.parseJson("2"),
+                    [VariantVal.parseJson("3")],
+                    {"v": VariantVal.parseJson("4")},
+                    {"v": VariantVal.parseJson("5")},
+                ),
+                (None, [None], {"v": None}, {"v": None}),
+                (None, None, None, None),
+            ],
+            "v variant, a array<variant>, s struct<v variant>, m map<string, variant>",
+        ).collect()
+        self.assertEqual(create_df_variants[0][0].toJson(), "2")
+        self.assertEqual(create_df_variants[0][1][0].toJson(), "3")
+        self.assertEqual(create_df_variants[0][2][0].toJson(), "4")
+        self.assertEqual(create_df_variants[0][3]["v"].toJson(), "5")
+        self.assertEqual(create_df_variants[1][0], None)
+        self.assertEqual(create_df_variants[1][1][0], None)
+        self.assertEqual(create_df_variants[1][2][0], None)
+        self.assertEqual(create_df_variants[1][3]["v"], None)
+        self.assertEqual(create_df_variants[2][0], None)
+        self.assertEqual(create_df_variants[2][1], None)
+        self.assertEqual(create_df_variants[2][2], None)
+        self.assertEqual(create_df_variants[2][3], None)
+
+        # Rows in createDataFrame cannot be of type VariantVal
+        with self.assertRaises(PySparkValueError, msg="Rows cannot be of type VariantVal"):
+            self.spark.createDataFrame([VariantVal.parseJson("2")], "v variant")
+
+    def test_to_ddl(self):
+        schema = StructType().add("a", NullType()).add("b", BooleanType()).add("c", BinaryType())
+        self.assertEqual(schema.toDDL(), "a VOID,b BOOLEAN,c BINARY")
+
+        schema = StructType().add("a", IntegerType()).add("b", StringType())
+        self.assertEqual(schema.toDDL(), "a INT,b STRING")
+
+        schema = StructType().add("a", FloatType()).add("b", LongType(), False)
+        self.assertEqual(schema.toDDL(), "a FLOAT,b BIGINT NOT NULL")
+
+        schema = StructType().add("a", ArrayType(DoubleType()), False).add("b", DateType())
+        self.assertEqual(schema.toDDL(), "a ARRAY<DOUBLE> NOT NULL,b DATE")
+
+        schema = (
+            StructType().add("a", TimestampType()).add("b", TimestampNTZType()).add("c", TimeType())
+        )
+        self.assertEqual(schema.toDDL(), "a TIMESTAMP,b TIMESTAMP_NTZ,c TIME(6)")
+
     def test_from_ddl(self):
         self.assertEqual(DataType.fromDDL("long"), LongType())
         self.assertEqual(
@@ -2253,6 +2376,10 @@ class TypesTestsMixin:
         self.assertEqual(
             DataType.fromDDL("a int, v variant"),
             StructType([StructField("a", IntegerType()), StructField("v", VariantType())]),
+        )
+        self.assertEqual(
+            DataType.fromDDL("a time(6)"),
+            StructType([StructField("a", TimeType(6))]),
         )
 
     # Ensures that changing the implementation of `DataType.fromDDL` in PR #47253 does not change
@@ -2291,7 +2418,7 @@ class TypesTestsMixin:
                 with self.assertRaises(ParseException) as udf_pe:
                     schema_from_udf(test)
                 self.assertEqual(
-                    from_ddl_pe.exception.getErrorClass(), udf_pe.exception.getErrorClass()
+                    from_ddl_pe.exception.getCondition(), udf_pe.exception.getCondition()
                 )
 
     def test_collated_string(self):
@@ -2507,8 +2634,9 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
             (decimal.Decimal("1.0"), DecimalType()),
             # Binary
             (bytearray([1, 2]), BinaryType()),
-            # Date/Timestamp
+            # Date/Time/Timestamp
             (datetime.date(2000, 1, 2), DateType()),
+            (datetime.time(1, 0, 0), TimeType()),
             (datetime.datetime(2000, 1, 2, 3, 4), DateType()),
             (datetime.datetime(2000, 1, 2, 3, 4), TimestampType()),
             # Array
@@ -2571,8 +2699,9 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
             ("1.0", DecimalType(), TypeError),
             # Binary
             (1, BinaryType(), TypeError),
-            # Date/Timestamp
+            # Date/Time/Timestamp
             ("2000-01-02", DateType(), TypeError),
+            ("23:59:59", TimeType(), TypeError),
             (946811040, TimestampType(), TypeError),
             # Array
             (["1", None], ArrayType(StringType(), containsNull=False), ValueError),

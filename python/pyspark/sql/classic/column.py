@@ -177,13 +177,11 @@ def _reverse_op(
 
 @with_origin_to_class
 class Column(ParentColumn):
-    def __new__(
-        cls,
-        jc: "JavaObject",
-    ) -> "Column":
-        self = object.__new__(cls)
-        self.__init__(jc)  # type: ignore[misc]
-        return self
+    def __new__(cls, *args: Any, **kwargs: Any) -> "Column":
+        return object.__new__(cls)
+
+    def __getnewargs__(self) -> Tuple[Any, ...]:
+        return (self._jc,)
 
     def __init__(self, jc: "JavaObject") -> None:
         self._jc = jc
@@ -476,6 +474,13 @@ class Column(ParentColumn):
         return Column(jc)
 
     def isin(self, *cols: Any) -> ParentColumn:
+        from pyspark.sql.classic.dataframe import DataFrame
+
+        if len(cols) == 1 and isinstance(cols[0], DataFrame):
+            df: DataFrame = cols[0]
+            jc = self._jc.isin(df._jdf)
+            return Column(jc)
+
         if len(cols) == 1 and isinstance(cols[0], (list, set)):
             cols = cast(Tuple, cols[0])
         cols = cast(
@@ -522,7 +527,9 @@ class Column(ParentColumn):
         if len(alias) == 1:
             if metadata:
                 assert sc._jvm is not None
-                jmeta = sc._jvm.org.apache.spark.sql.types.Metadata.fromJson(json.dumps(metadata))
+                jmeta = getattr(sc._jvm, "org.apache.spark.sql.types.Metadata").fromJson(
+                    json.dumps(metadata)
+                )
                 return Column(getattr(self._jc, "as")(alias[0], jmeta))
             else:
                 return Column(getattr(self._jc, "as")(alias[0]))

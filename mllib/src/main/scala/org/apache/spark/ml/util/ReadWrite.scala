@@ -17,12 +17,18 @@
 
 package org.apache.spark.ml.util
 
-import java.io.IOException
+import java.io.{
+  BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream,
+  File, FileInputStream, FileOutputStream, IOException
+}
+import java.nio.file.{Files, Paths}
 import java.util.{Locale, ServiceLoader}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
-import scala.util.{Failure, Success, Try}
+import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
+import scala.util.{Failure, Success, Try, Using}
 
 import org.apache.hadoop.fs.Path
 import org.json4s._
@@ -32,11 +38,12 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.{Since, Unstable}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
 import org.apache.spark.ml.feature.RFormulaModel
+import org.apache.spark.ml.linalg.{DenseMatrix, DenseVector, Matrix, SparseMatrix, SparseVector, Vector}
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.ml.tuning.ValidatorParams
 import org.apache.spark.sql.{SparkSession, SQLContext}
@@ -167,6 +174,19 @@ abstract class MLWriter extends BaseReadWrite with Logging {
   def save(path: String): Unit = {
     new FileSystemOverwrite().handleOverwrite(path, shouldOverwrite, sparkSession)
     saveImpl(path)
+  }
+
+  /**
+   * Saves the ML instances to the local file system path.
+   */
+  @throws[IOException]("If the input path already exists but overwrite is not enabled.")
+  private[spark] def saveToLocal(path: String): Unit = {
+    ReadWriteUtils.localSavingModeState.set(true)
+    try {
+      save(path)
+    } finally {
+      ReadWriteUtils.localSavingModeState.set(false)
+    }
   }
 
   /**
@@ -329,6 +349,18 @@ abstract class MLReader[T] extends BaseReadWrite {
   @Since("1.6.0")
   def load(path: String): T
 
+  /**
+   * Loads the ML component from the local file system path.
+   */
+  private[spark] def loadFromLocal(path: String): T = {
+    ReadWriteUtils.localSavingModeState.set(true)
+    try {
+      load(path)
+    } finally {
+      ReadWriteUtils.localSavingModeState.set(false)
+    }
+  }
+
   // override for Java compatibility
   override def session(sparkSession: SparkSession): this.type = super.session(sparkSession)
 }
@@ -442,7 +474,7 @@ private[ml] object DefaultParamsWriter {
     val metadataJson = getMetadataToSave(instance, spark, extraMetadata, paramMap)
     // Note that we should write single file. If there are more than one row
     // it produces more partitions.
-    spark.createDataFrame(Seq(Tuple1(metadataJson))).write.text(metadataPath)
+    ReadWriteUtils.saveText(metadataPath, metadataJson, spark)
   }
 
   def saveMetadata(
@@ -486,8 +518,8 @@ private[ml] object DefaultParamsWriter {
       paramMap: Option[JValue]): String = {
     val uid = instance.uid
     val cls = instance.getClass.getName
-    val params = instance.paramMap.toSeq
-    val defaultParams = instance.defaultParamMap.toSeq
+    val params = instance.paramMap.toSeq.sortBy(_.param.name)
+    val defaultParams = instance.defaultParamMap.toSeq.sortBy(_.param.name)
     val jsonParams = paramMap.getOrElse(render(params.map { case ParamPair(p, v) =>
       p.name -> parse(p.jsonEncode(v))
     }.toList))
@@ -522,6 +554,30 @@ private[ml] object DefaultParamsWriter {
     getMetadataToSave(instance, spark, None, None)
 }
 
+
+private[ml] object MLAllowListedLoader {
+
+  val safeMLClassLoader: String => Class[_] = {
+    try {
+      // Use Spark Connect ML safe class loader if it is available.
+      val MLHandlerClazz = Utils.classForName("org.apache.spark.sql.connect.ml.MLHandler")
+      MLHandlerClazz.getMethod("safeMLClassLoader").invoke(null)
+        .asInstanceOf[String => Class[_]]
+    } catch {
+      case _: ClassNotFoundException => null
+    }
+  }
+
+  def load(className: String): Class[_] = {
+    if (safeMLClassLoader == null) {
+      Utils.classForName(className)
+    } else {
+      // Only loads allow-listed classes. This is for preventing RCE in Spark Connect mode.
+      safeMLClassLoader(className)
+    }
+  }
+}
+
 /**
  * Default `MLReader` implementation for transformers and estimators that contain basic
  * (json4s-serializable) params and no data. This will not handle more complex params or types with
@@ -534,7 +590,7 @@ private[ml] class DefaultParamsReader[T] extends MLReader[T] {
 
   override def load(path: String): T = {
     val metadata = DefaultParamsReader.loadMetadata(path, sparkSession)
-    val cls = Utils.classForName(metadata.className)
+    val cls = MLAllowListedLoader.load(metadata.className)
     val instance =
       cls.getConstructor(classOf[String]).newInstance(metadata.uid).asInstanceOf[Params]
     metadata.getAndSetParams(instance)
@@ -662,7 +718,7 @@ private[ml] object DefaultParamsReader {
 
   def loadMetadata(path: String, spark: SparkSession, expectedClassName: String): Metadata = {
     val metadataPath = new Path(path, "metadata").toString
-    val metadataStr = spark.read.text(metadataPath).first().getString(0)
+    val metadataStr = ReadWriteUtils.loadText(metadataPath, spark)
     parseMetadata(metadataStr, expectedClassName)
   }
 
@@ -754,23 +810,336 @@ private[ml] object MetaAlgorithmReadWrite {
   }
 }
 
-private[ml] class FileSystemOverwrite extends Logging {
+private[spark] class FileSystemOverwrite extends Logging {
 
   def handleOverwrite(path: String, shouldOverwrite: Boolean, session: SparkSession): Unit = {
-    val hadoopConf = session.sessionState.newHadoopConf()
-    val outputPath = new Path(path)
-    val fs = outputPath.getFileSystem(hadoopConf)
-    val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-    if (fs.exists(qualifiedOutputPath)) {
-      if (shouldOverwrite) {
-        logInfo(log"Path ${MDC(PATH, path)} already exists. It will be overwritten.")
-        // TODO: Revert back to the original content if save is not successful.
-        fs.delete(qualifiedOutputPath, true)
-      } else {
-        throw new IOException(s"Path $path already exists. To overwrite it, " +
-          s"please use write.overwrite().save(path) for Scala and use " +
-          s"write().overwrite().save(path) for Java and Python.")
+    val errMsg = s"Path $path already exists. To overwrite it, " +
+      s"please use write.overwrite().save(path) for Scala and use " +
+      s"write().overwrite().save(path) for Java and Python."
+
+    if (ReadWriteUtils.localSavingModeState.get()) {
+      val filePath = new File(path)
+      if (filePath.exists()) {
+        if (shouldOverwrite) {
+          Utils.deleteRecursively(filePath)
+        } else {
+          throw new IOException(errMsg)
+        }
       }
+
+    } else {
+      val hadoopConf = session.sessionState.newHadoopConf()
+      val outputPath = new Path(path)
+      val fs = outputPath.getFileSystem(hadoopConf)
+      val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+      if (fs.exists(qualifiedOutputPath)) {
+        if (shouldOverwrite) {
+          logInfo(log"Path ${MDC(PATH, path)} already exists. It will be overwritten.")
+          // TODO: Revert back to the original content if save is not successful.
+          fs.delete(qualifiedOutputPath, true)
+        } else {
+          throw new IOException(errMsg)
+        }
+      }
+    }
+  }
+}
+
+
+private[spark] object ReadWriteUtils {
+  val localSavingModeState = new ThreadLocal[Boolean]() {
+    override def initialValue: Boolean = false
+  }
+
+  def serializeIntArray(array: Array[Int], dos: DataOutputStream): Unit = {
+    dos.writeInt(array.length)
+    for (i <- 0 until array.length) {
+      dos.writeInt(array(i))
+    }
+  }
+
+  def deserializeIntArray(dis: DataInputStream): Array[Int] = {
+    val len = dis.readInt()
+    val data = new Array[Int](len)
+    for (i <- 0 until len) {
+      data(i) = dis.readInt()
+    }
+    data
+  }
+
+  def serializeLongArray(array: Array[Long], dos: DataOutputStream): Unit = {
+    dos.writeInt(array.length)
+    for (i <- 0 until array.length) {
+      dos.writeLong(array(i))
+    }
+  }
+
+  def deserializeLongArray(dis: DataInputStream): Array[Long] = {
+    val len = dis.readInt()
+    val data = new Array[Long](len)
+    for (i <- 0 until len) {
+      data(i) = dis.readLong()
+    }
+    data
+  }
+
+  def serializeFloatArray(array: Array[Float], dos: DataOutputStream): Unit = {
+    dos.writeInt(array.length)
+    for (i <- 0 until array.length) {
+      dos.writeFloat(array(i))
+    }
+  }
+
+  def deserializeFloatArray(dis: DataInputStream): Array[Float] = {
+    val len = dis.readInt()
+    val data = new Array[Float](len)
+    for (i <- 0 until len) {
+      data(i) = dis.readFloat()
+    }
+    data
+  }
+
+  def serializeDoubleArray(array: Array[Double], dos: DataOutputStream): Unit = {
+    dos.writeInt(array.length)
+    for (i <- 0 until array.length) {
+      dos.writeDouble(array(i))
+    }
+  }
+
+  def deserializeDoubleArray(dis: DataInputStream): Array[Double] = {
+    val len = dis.readInt()
+    val data = new Array[Double](len)
+    for (i <- 0 until len) {
+      data(i) = dis.readDouble()
+    }
+    data
+  }
+
+  def serializeStringArray(array: Array[String], dos: DataOutputStream): Unit = {
+    serializeGenericArray[String](array, dos, (s, dos) => dos.writeUTF(s))
+  }
+
+  def deserializeStringArray(dis: DataInputStream): Array[String] = {
+    deserializeGenericArray[String](dis, dis => dis.readUTF())
+  }
+
+  def serializeMap[K, V](
+      map: Map[K, V], dos: DataOutputStream,
+      keySerializer: (K, DataOutputStream) => Unit,
+      valueSerializer: (V, DataOutputStream) => Unit
+  ): Unit = {
+    dos.writeInt(map.size)
+    map.foreach { case (k, v) =>
+      keySerializer(k, dos)
+      valueSerializer(v, dos)
+    }
+  }
+
+  def deserializeMap[K, V](
+      dis: DataInputStream,
+      keyDeserializer: DataInputStream => K,
+      valueDeserializer: DataInputStream => V
+  ): Map[K, V] = {
+    val len = dis.readInt()
+    val kvList = new Array[(K, V)](len)
+    for (i <- 0 until len) {
+      val key = keyDeserializer(dis)
+      val value = valueDeserializer(dis)
+      kvList(i) = (key, value)
+    }
+    kvList.toMap
+  }
+
+  def serializeVector(vector: Vector, dos: DataOutputStream): Unit = {
+    if (vector.isInstanceOf[DenseVector]) {
+      dos.writeBoolean(false)
+      serializeDoubleArray(vector.toArray, dos)
+    } else {
+      val sparseVec = vector.asInstanceOf[SparseVector]
+      dos.writeBoolean(true)
+      dos.writeInt(sparseVec.size)
+      serializeIntArray(sparseVec.indices, dos)
+      serializeDoubleArray(sparseVec.values, dos)
+    }
+  }
+
+  def deserializeVector(dis: DataInputStream): Vector = {
+    val isSparse = dis.readBoolean()
+    if (isSparse) {
+      val len = dis.readInt()
+      val indices = deserializeIntArray(dis)
+      val values = deserializeDoubleArray(dis)
+      new SparseVector(len, indices, values)
+    } else {
+      val values = deserializeDoubleArray(dis)
+      new DenseVector(values)
+    }
+  }
+
+  def serializeMatrix(matrix: Matrix, dos: DataOutputStream): Unit = {
+    def serializeCommon(): Unit = {
+      dos.writeInt(matrix.numRows)
+      dos.writeInt(matrix.numCols)
+      dos.writeBoolean(matrix.isTransposed)
+    }
+
+    if (matrix.isInstanceOf[DenseMatrix]) {
+      val denseMatrix = matrix.asInstanceOf[DenseMatrix]
+      dos.writeBoolean(false)
+      serializeCommon()
+      serializeDoubleArray(denseMatrix.values, dos)
+    } else {
+      val sparseMatrix = matrix.asInstanceOf[SparseMatrix]
+      dos.writeBoolean(true)
+      serializeCommon()
+      serializeIntArray(sparseMatrix.colPtrs, dos)
+      serializeIntArray(sparseMatrix.rowIndices, dos)
+      serializeDoubleArray(sparseMatrix.values, dos)
+    }
+  }
+
+  def deserializeMatrix(dis: DataInputStream): Matrix = {
+    def deserializeCommon(): (Int, Int, Boolean) = {
+      val numRows = dis.readInt()
+      val numCols = dis.readInt()
+      val transposed = dis.readBoolean()
+      (numRows, numCols, transposed)
+    }
+
+    val isSparse = dis.readBoolean()
+    if (isSparse) {
+      val (numRows, numCols, transposed) = deserializeCommon()
+      val colPtrs = deserializeIntArray(dis)
+      val rowIndices = deserializeIntArray(dis)
+      val values = deserializeDoubleArray(dis)
+      new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, transposed)
+    } else {
+      val (numRows, numCols, transposed) = deserializeCommon()
+      val values = deserializeDoubleArray(dis)
+      new DenseMatrix(numRows, numCols, values, transposed)
+    }
+  }
+
+  def serializeGenericArray[T: ClassTag](
+    array: Array[T], dos: DataOutputStream, serializer: (T, DataOutputStream) => Unit
+  ): Unit = {
+    dos.writeInt(array.length)
+    for (item <- array) {
+      serializer(item, dos)
+    }
+  }
+
+  def deserializeGenericArray[T: ClassTag](
+    dis: DataInputStream, deserializer: DataInputStream => T
+  ): Array[T] = {
+    val len = dis.readInt()
+    val data = new Array[T](len)
+    for (i <- 0 until len) {
+      data(i) = deserializer(dis)
+    }
+    data
+  }
+
+  def saveText(path: String, data: String, spark: SparkSession): Unit = {
+    if (localSavingModeState.get()) {
+      val filePath = Paths.get(path)
+
+      Files.createDirectories(filePath.getParent)
+      Files.writeString(filePath, data)
+    } else {
+      spark.createDataFrame(Seq(Tuple1(data))).write.text(path)
+    }
+  }
+
+  def loadText(path: String, spark: SparkSession): String = {
+    if (localSavingModeState.get()) {
+      Files.readString(Paths.get(path))
+    } else {
+      spark.read.text(path).first().getString(0)
+    }
+  }
+
+  def saveObjectToLocal[T <: Product: ClassTag: TypeTag](
+      path: String, data: T, serializer: (T, DataOutputStream) => Unit
+    ): Unit = {
+    val filePath = Paths.get(path)
+    Files.createDirectories(filePath.getParent)
+
+    Using.resource(
+      new DataOutputStream(new BufferedOutputStream(new FileOutputStream(filePath.toFile)))
+    ) { dos =>
+      serializer(data, dos)
+    }
+  }
+
+  def saveObject[T <: Product: ClassTag: TypeTag](
+      path: String, data: T, spark: SparkSession, localSerializer: (T, DataOutputStream) => Unit
+  ): Unit = {
+    if (localSavingModeState.get()) {
+      saveObjectToLocal(path, data, localSerializer)
+    } else {
+      spark.createDataFrame[T](Seq(data)).write.parquet(path)
+    }
+  }
+
+  def loadObjectFromLocal[T <: Product: ClassTag: TypeTag](
+      path: String, deserializer: DataInputStream => T
+    ): T = {
+    Using.resource(
+      new DataInputStream(new BufferedInputStream(new FileInputStream(path)))
+    ) { dis =>
+      deserializer(dis)
+    }
+  }
+
+  def loadObject[T <: Product: ClassTag: TypeTag](
+    path: String, spark: SparkSession, localDeserializer: DataInputStream => T
+  ): T = {
+    if (localSavingModeState.get()) {
+      loadObjectFromLocal(path, localDeserializer)
+    } else {
+      import spark.implicits._
+      spark.read.parquet(path).as[T].head()
+    }
+  }
+
+  def saveArray[T <: Product: ClassTag: TypeTag](
+      path: String, data: Array[T], spark: SparkSession,
+      localSerializer: (T, DataOutputStream) => Unit,
+      numDataParts: Int = -1
+  ): Unit = {
+    if (localSavingModeState.get()) {
+      val filePath = Paths.get(path)
+      Files.createDirectories(filePath.getParent)
+
+      Using.resource(
+        new DataOutputStream(new BufferedOutputStream(new FileOutputStream(filePath.toFile)))
+      ) { dos =>
+        serializeGenericArray(data, dos, localSerializer)
+      }
+    } else {
+      import org.apache.spark.util.ArrayImplicits._
+      val df = spark.createDataFrame[T](data.toImmutableArraySeq)
+      if (numDataParts == -1) {
+        df.write.parquet(path)
+      } else {
+        df.repartition(numDataParts).write.parquet(path)
+      }
+    }
+  }
+
+  def loadArray[T <: Product: ClassTag: TypeTag](
+      path: String, spark: SparkSession, localDeserializer: DataInputStream => T
+    ): Array[T] = {
+    if (localSavingModeState.get()) {
+      Using.resource(
+        new DataInputStream(new BufferedInputStream(new FileInputStream(path)))
+      ) { dis =>
+        deserializeGenericArray(dis, localDeserializer)
+      }
+    } else {
+      import spark.implicits._
+      spark.read.parquet(path).as[T].collect()
     }
   }
 }

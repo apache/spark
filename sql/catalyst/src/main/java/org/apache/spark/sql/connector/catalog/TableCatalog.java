@@ -26,6 +26,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.StructType;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
@@ -33,11 +34,11 @@ import java.util.Set;
 /**
  * Catalog methods for working with Tables.
  * <p>
- * TableCatalog implementations may be case sensitive or case insensitive. Spark will pass
+ * TableCatalog implementations may be case-sensitive or case-insensitive. Spark will pass
  * {@link Identifier table identifiers} without modification. Field names passed to
  * {@link #alterTable(Identifier, TableChange...)} will be normalized to match the case used in the
- * table schema when updating, renaming, or dropping existing columns when catalyst analysis is case
- * insensitive.
+ * table schema when updating, renaming, or dropping existing columns when catalyst analysis is
+ * case-insensitive.
  *
  * @since 3.0.0
  */
@@ -63,9 +64,19 @@ public interface TableCatalog extends CatalogPlugin {
   String PROP_EXTERNAL = "external";
 
   /**
+   * A reserved property that indicates table entity type (external, managed, view, etc.).
+   */
+  String PROP_TABLE_TYPE = "table_type";
+
+  /**
    * A reserved property to specify the description of the table.
    */
   String PROP_COMMENT = "comment";
+
+  /**
+   * A reserved property to specify the collation of the table.
+   */
+  String PROP_COLLATION = "collation";
 
   /**
    * A reserved property to specify the provider of the table.
@@ -97,6 +108,35 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws NoSuchNamespaceException If the namespace does not exist (optional).
    */
   Identifier[] listTables(String[] namespace) throws NoSuchNamespaceException;
+
+  /**
+   * List the table summaries in a namespace from the catalog.
+   * <p>
+   * This method should return all tables entities from a catalog regardless of type (i.e. views
+   * should be listed as well).
+   *
+   * @param namespace a multi-part namespace
+   * @return an array of Identifiers for tables
+   * @throws NoSuchNamespaceException If the namespace does not exist (optional).
+   * @throws NoSuchTableException If certain table listed by listTables API does not exist.
+   */
+  default TableSummary[] listTableSummaries(String[] namespace)
+          throws NoSuchNamespaceException, NoSuchTableException {
+    Identifier[] tableIdentifiers = this.listTables(namespace);
+    ArrayList<TableSummary> tableSummaries = new ArrayList<>(tableIdentifiers.length);
+    for (Identifier identifier : tableIdentifiers) {
+      Table table = this.loadTable(identifier);
+
+      // If table type property is not present, we assume that table type is `FOREIGN`.
+      String tableType = table.properties().getOrDefault(
+              TableCatalog.PROP_TABLE_TYPE,
+              TableSummary.FOREIGN_TABLE_TYPE);
+
+      tableSummaries.add(TableSummary.of(identifier, tableType));
+    };
+
+    return tableSummaries.toArray(TableSummary[]::new);
+  }
 
   /**
    * Load table metadata by {@link Identifier identifier} from the catalog.
@@ -205,24 +245,35 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * Create a table in the catalog.
-   *
-   * @param ident a table identifier
-   * @param columns the columns of the new table.
-   * @param partitions transforms to use for partitioning data in the table
-   * @param properties a string map of table properties
-   * @return metadata for the new table. This can be null if getting the metadata for the new table
-   *         is expensive. Spark will call {@link #loadTable(Identifier)} if needed (e.g. CTAS).
-   *
-   * @throws TableAlreadyExistsException If a table or view already exists for the identifier
-   * @throws UnsupportedOperationException If a requested partition transform is not supported
-   * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
+   * <p>
+   * @deprecated This is deprecated. Please override
+   * {@link #createTable(Identifier, TableInfo)} instead.
    */
+  @Deprecated(since = "4.1.0")
   default Table createTable(
       Identifier ident,
       Column[] columns,
       Transform[] partitions,
       Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
     return createTable(ident, CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties);
+  }
+
+  /**
+   * Create a table in the catalog.
+   *
+   * @param ident a table identifier
+   * @param tableInfo information about the table.
+   * @return metadata for the new table. This can be null if getting the metadata for the new table
+   *         is expensive. Spark will call {@link #loadTable(Identifier)} if needed (e.g. CTAS).
+   *
+   * @throws TableAlreadyExistsException If a table or view already exists for the identifier
+   * @throws UnsupportedOperationException If a requested partition transform is not supported
+   * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
+   * @since 4.1.0
+   */
+  default Table createTable(Identifier ident, TableInfo tableInfo)
+      throws TableAlreadyExistsException, NoSuchNamespaceException {
+    return createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties());
   }
 
   /**

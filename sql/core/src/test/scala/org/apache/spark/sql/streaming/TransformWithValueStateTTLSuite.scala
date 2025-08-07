@@ -23,11 +23,12 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, ListStateImplWithTTL, MapStateImplWithTTL, MemoryStream, TimerStateUtils, ValueStateImpl, ValueStateImplWithTTL}
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MemoryStream, ValueStateImpl, ValueStateImplWithTTL}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowSQLTest
 
 object TTLInputProcessFunction {
   def processRow(
@@ -36,7 +37,7 @@ object TTLInputProcessFunction {
     var results = List[OutputEvent]()
     val key = row.key
     if (row.action == "get") {
-      val currState = valueState.getOption()
+      val currState = Option(valueState.get())
       if (currState.isDefined) {
         results = OutputEvent(key, currState.get, isTTLValue = false, -1) :: results
       }
@@ -55,10 +56,12 @@ object TTLInputProcessFunction {
     } else if (row.action == "put") {
       valueState.update(row.value)
     } else if (row.action == "get_values_in_ttl_state") {
-      val ttlValues = valueState.getValuesInTTLState()
+      val ttlValues = valueState.getValueInTTLState()
       ttlValues.foreach { v =>
         results = OutputEvent(key, -1, isTTLValue = true, ttlValue = v) :: results
       }
+    } else if (row.action == "clear") {
+      valueState.clear()
     }
 
     results.iterator
@@ -70,12 +73,14 @@ object TTLInputProcessFunction {
     var results = List[OutputEvent]()
     val key = row.key
     if (row.action == "get") {
-      val currState = valueState.getOption()
+      val currState = Option(valueState.get())
       if (currState.isDefined) {
         results = OutputEvent(key, currState.get, isTTLValue = false, -1) :: results
       }
     } else if (row.action == "put") {
       valueState.update(row.value)
+    } else if (row.action == "clear") {
+      valueState.clear()
     }
 
     results.iterator
@@ -86,14 +91,13 @@ class ValueStateTTLProcessor(ttlConfig: TTLConfig)
   extends StatefulProcessor[String, InputEvent, OutputEvent]
   with Logging {
 
-  @transient private var _valueState: ValueStateImplWithTTL[Int] = _
+  @transient private var _valueState: ValueState[Int] = _
 
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _valueState = getHandle
       .getValueState("valueState", Encoders.scalaInt, ttlConfig)
-      .asInstanceOf[ValueStateImplWithTTL[Int]]
   }
 
   override def handleInputRows(
@@ -103,7 +107,8 @@ class ValueStateTTLProcessor(ttlConfig: TTLConfig)
     var results = List[OutputEvent]()
 
     inputRows.foreach { row =>
-      val resultIter = TTLInputProcessFunction.processRow(row, _valueState)
+      val resultIter = TTLInputProcessFunction.processRow(row,
+        _valueState.asInstanceOf[ValueStateImplWithTTL[Int]])
       resultIter.foreach { r =>
         results = r :: results
       }
@@ -120,18 +125,16 @@ class MultipleValueStatesTTLProcessor(
   extends StatefulProcessor[String, InputEvent, OutputEvent]
     with Logging {
 
-  @transient var _valueStateWithTTL: ValueStateImplWithTTL[Int] = _
-  @transient var _valueStateWithoutTTL: ValueStateImpl[Int] = _
+  @transient var _valueStateWithTTL: ValueState[Int] = _
+  @transient var _valueStateWithoutTTL: ValueState[Int] = _
 
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _valueStateWithTTL = getHandle
       .getValueState("valueStateTTL", Encoders.scalaInt, ttlConfig)
-      .asInstanceOf[ValueStateImplWithTTL[Int]]
     _valueStateWithoutTTL = getHandle
       .getValueState[Int]("valueState", Encoders.scalaInt, TTLConfig.NONE)
-      .asInstanceOf[ValueStateImpl[Int]]
   }
 
   override def handleInputRows(
@@ -142,7 +145,8 @@ class MultipleValueStatesTTLProcessor(
 
     if (key == ttlKey) {
       inputRows.foreach { row =>
-        val resultIterator = TTLInputProcessFunction.processRow(row, _valueStateWithTTL)
+        val resultIterator = TTLInputProcessFunction.processRow(row,
+          _valueStateWithTTL.asInstanceOf[ValueStateImplWithTTL[Int]])
         resultIterator.foreach { r =>
           results = r :: results
         }
@@ -150,7 +154,7 @@ class MultipleValueStatesTTLProcessor(
     } else {
       inputRows.foreach { row =>
         val resultIterator = TTLInputProcessFunction.processNonTTLStateRow(row,
-          _valueStateWithoutTTL)
+          _valueStateWithoutTTL.asInstanceOf[ValueStateImpl[Int]])
         resultIterator.foreach { r =>
           results = r :: results
         }
@@ -167,8 +171,8 @@ class TTLProcessorWithCompositeTypes(
     noTtlKey: String,
     ttlConfig: TTLConfig)
   extends MultipleValueStatesTTLProcessor(ttlKey, noTtlKey, ttlConfig) {
-  @transient private var _listStateWithTTL: ListStateImplWithTTL[TestClass] = _
-  @transient private var _mapStateWithTTL: MapStateImplWithTTL[POJOTestClass, String] = _
+  @transient private var _listStateWithTTL: ListState[TestClass] = _
+  @transient private var _mapStateWithTTL: MapState[POJOTestClass, String] = _
 
   override def init(
       outputMode: OutputMode,
@@ -176,14 +180,13 @@ class TTLProcessorWithCompositeTypes(
     super.init(outputMode, timeMode)
     _listStateWithTTL = getHandle
       .getListState("listState", Encoders.product[TestClass], ttlConfig)
-      .asInstanceOf[ListStateImplWithTTL[TestClass]]
     _mapStateWithTTL = getHandle
       .getMapState("mapState", Encoders.bean(classOf[POJOTestClass]),
         Encoders.STRING, ttlConfig)
-      .asInstanceOf[MapStateImplWithTTL[POJOTestClass, String]]
   }
 }
 
+@SlowSQLTest
 class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
 
   import testImplicits._
@@ -217,6 +220,8 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         // advance clock to trigger processing
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
+        assertNumStateRows(total = 2, updated = 2),
+
         // get both state values, and make sure we get unexpired value
         AddData(inputStream, InputEvent(ttlKey, "get", -1)),
         AddData(inputStream, InputEvent(noTtlKey, "get", -1)),
@@ -225,15 +230,21 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           OutputEvent(ttlKey, 1, isTTLValue = false, -1),
           OutputEvent(noTtlKey, 2, isTTLValue = false, -1)
         ),
+        assertNumStateRows(total = 2, updated = 0),
+
         // ensure ttl values were added correctly, and noTtlKey has no ttl values
         AddData(inputStream, InputEvent(ttlKey, "get_ttl_value_from_state", -1)),
         AddData(inputStream, InputEvent(noTtlKey, "get_ttl_value_from_state", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(OutputEvent(ttlKey, 1, isTTLValue = true, 61000)),
+        assertNumStateRows(total = 2, updated = 0),
+
         AddData(inputStream, InputEvent(ttlKey, "get_values_in_ttl_state", -1)),
         AddData(inputStream, InputEvent(noTtlKey, "get_values_in_ttl_state", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(OutputEvent(ttlKey, -1, isTTLValue = true, 61000)),
+        assertNumStateRows(total = 2, updated = 0),
+
         // advance clock after expiry
         AdvanceManualClock(60 * 1000),
         AddData(inputStream, InputEvent(ttlKey, "get", -1)),
@@ -242,19 +253,27 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         AdvanceManualClock(1 * 1000),
         // validate ttlKey is expired, bot noTtlKey is still present
         CheckNewAnswer(OutputEvent(noTtlKey, 2, isTTLValue = false, -1)),
+        assertNumStateRows(total = 1, updated = 0),
+
         // validate ttl value is removed in the value state column family
         AddData(inputStream, InputEvent(ttlKey, "get_ttl_value_from_state", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
+        assertNumStateRows(total = 1, updated = 0),
+
         AddData(inputStream, InputEvent(ttlKey, "put", 3)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
+        assertNumStateRows(total = 2, updated = 1),
+
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
         },
         AddData(inputStream, InputEvent(noTtlKey, "get", -1)),
         AdvanceManualClock(60 * 1000),
         CheckNewAnswer(OutputEvent(noTtlKey, 2, isTTLValue = false, -1)),
+        assertNumStateRows(total = 1, updated = 0),
+
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
         }
@@ -263,73 +282,189 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
   }
 
   test("verify StateSchemaV3 writes correct SQL schema of key/value and with TTL") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key ->
-        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString
+    ) {
       withTempDir { checkpointDir =>
+        // When Avro is used, we want to set the StructFields to nullable
+        val shouldBeNullable = usingAvroEncoding()
         val metadataPathPostfix = "state/0/_stateSchema/default"
-        val stateSchemaPath = new Path(checkpointDir.toString,
-          s"$metadataPathPostfix")
+        val stateSchemaPath = new Path(checkpointDir.toString, s"$metadataPathPostfix")
         val hadoopConf = spark.sessionState.newHadoopConf()
         val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
 
+        // Base key schema used in multiple places
         val keySchema = new StructType().add("value", StringType)
+
+        // Timer state schemas
         val schemaForKeyRow: StructType = new StructType()
           .add("key", new StructType(keySchema.fields))
           .add("expiryTimestampMs", LongType, nullable = false)
         val schemaForValueRow: StructType = StructType(Array(StructField("__dummy__", NullType)))
+
+        // Schema for proc timers key to timestamp
         val schema0 = StateStoreColFamilySchema(
-          TimerStateUtils.getTimerStateVarName(TimeMode.ProcessingTime().toString),
-          schemaForKeyRow,
+          "$procTimers_keyToTimestamp", 0,
+          schemaForKeyRow, 0,
           schemaForValueRow,
-          Some(PrefixKeyScanStateEncoderSpec(schemaForKeyRow, 1)))
+          Some(PrefixKeyScanStateEncoderSpec(schemaForKeyRow, 1)),
+          None
+        )
+
+        // Schema for proc timers timestamp to key
         val schema1 = StateStoreColFamilySchema(
-          "valueStateTTL",
-          keySchema,
-          new StructType().add("value",
+          "$procTimers_timestampToKey", 0,
+          new StructType()
+            .add("expiryTimestampMs", LongType, nullable = false)
+            .add("key", new StructType(keySchema.fields)),
+          0,
+          schemaForValueRow,
+          Some(RangeKeyScanStateEncoderSpec(
             new StructType()
-              .add("value", IntegerType, false))
-          .add("ttlExpirationMs", LongType),
-          Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+              .add("expiryTimestampMs", LongType, nullable = false)
+              .add("key", new StructType(keySchema.fields)),
+            List(0))),
           None
         )
+
+        // Counter schemas
         val schema2 = StateStoreColFamilySchema(
-          "valueState",
-          keySchema,
-          new StructType().add("value", IntegerType, false),
+          "$count_listState", 0,
+          keySchema, 0,
+          new StructType().add("count", LongType, nullable = true),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None
         )
+
         val schema3 = StateStoreColFamilySchema(
-          "listState",
-          keySchema,
-          new StructType().add("value",
+          "$rowCounter_listState", 0,
+          keySchema, 0,
+          new StructType().add("count", LongType, nullable = true),
+          Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+          None
+        )
+
+        // Min list state schema
+        val schema4 = StateStoreColFamilySchema(
+          "$min_listState", 0,
+          keySchema, 0,
+          new StructType().add("expirationMs", LongType),
+          Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+          None
+        )
+
+        // TTL schemas
+        val schema5 = StateStoreColFamilySchema(
+          "$ttl_listState", 0,
+          new StructType()
+            .add("expirationMs", LongType)
+            .add("elementKey", new StructType(keySchema.fields)),
+          0,
+          new StructType().add("__empty__", NullType),
+          Some(RangeKeyScanStateEncoderSpec(
             new StructType()
-              .add("id", LongType, false)
+              .add("expirationMs", LongType)
+              .add("elementKey", new StructType(keySchema.fields)),
+            List(0))),
+          None
+        )
+
+        // User composite key schema
+        val userKeySchema = new StructType()
+          .add("id", IntegerType, nullable = false)
+          .add("name", StringType)
+
+        val schema6 = StateStoreColFamilySchema(
+          "$ttl_mapState", 0,
+          new StructType()
+            .add("expirationMs", LongType)
+            .add("elementKey", new StructType()
+              .add("key", new StructType(keySchema.fields))
+              .add("userKey", userKeySchema)),
+          0,
+          new StructType().add("__empty__", NullType),
+          Some(RangeKeyScanStateEncoderSpec(
+            new StructType()
+              .add("expirationMs", LongType)
+              .add("elementKey", new StructType()
+                .add("key", new StructType(keySchema.fields))
+                .add("userKey", userKeySchema)),
+            List(0))),
+          None
+        )
+
+        // Value state TTL schema
+        val schema7 = StateStoreColFamilySchema(
+          "$ttl_valueStateTTL", 0,
+          new StructType()
+            .add("expirationMs", LongType)
+            .add("elementKey", new StructType(keySchema.fields)),
+          0,
+          new StructType().add("__empty__", NullType),
+          Some(RangeKeyScanStateEncoderSpec(
+            new StructType()
+              .add("expirationMs", LongType)
+              .add("elementKey", new StructType(keySchema.fields)),
+            List(0))),
+          None
+        )
+
+        // Default schema
+        val schema8 = StateStoreColFamilySchema(
+          "default", 0,
+          keySchema, 0,
+          new StructType().add("value", BinaryType),
+          Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+          None
+        )
+
+        // Original schemas from the test
+        val schema9 = StateStoreColFamilySchema(
+          "valueStateTTL", 0,
+          keySchema, 0,
+          new StructType()
+            .add("value", new StructType().add("value", IntegerType, nullable = shouldBeNullable))
+            .add("ttlExpirationMs", LongType),
+          Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+          None
+        )
+
+        val schema10 = StateStoreColFamilySchema(
+          "valueState", 0,
+          keySchema, 0,
+          new StructType().add("value", IntegerType, nullable = shouldBeNullable),
+          Some(NoPrefixKeyStateEncoderSpec(keySchema)),
+          None
+        )
+
+        val schema11 = StateStoreColFamilySchema(
+          "listState", 0,
+          keySchema, 0,
+          new StructType()
+            .add("value", new StructType()
+              .add("id", LongType, nullable = shouldBeNullable)
               .add("name", StringType))
             .add("ttlExpirationMs", LongType),
           Some(NoPrefixKeyStateEncoderSpec(keySchema)),
           None
         )
 
-        val userKeySchema = new StructType()
-          .add("id", IntegerType, false)
-          .add("name", StringType)
         val compositeKeySchema = new StructType()
           .add("key", new StructType().add("value", StringType))
           .add("userKey", userKeySchema)
-        val schema4 = StateStoreColFamilySchema(
-          "mapState",
-          compositeKeySchema,
-          new StructType().add("value",
-            new StructType()
-              .add("value", StringType))
+
+        val schema12 = StateStoreColFamilySchema(
+          "mapState", 0,
+          compositeKeySchema, 0,
+          new StructType()
+            .add("value", new StructType().add("value", StringType))
             .add("ttlExpirationMs", LongType),
           Some(PrefixKeyScanStateEncoderSpec(compositeKeySchema, 1)),
-          Option(userKeySchema)
+          Some(userKeySchema)
         )
 
+        // Rest of the test remains the same until the assertion
         val ttlKey = "k1"
         val noTtlKey = "k2"
         val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
@@ -343,36 +478,56 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
 
         val clock = new StreamManualClock
         testStream(result)(
-          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
-            checkpointLocation = checkpointDir.getCanonicalPath),
+          StartStream(
+            Trigger.ProcessingTime("1 second"),
+            triggerClock = clock,
+            checkpointLocation = checkpointDir.getCanonicalPath
+          ),
           AddData(inputStream, InputEvent(ttlKey, "put", 1)),
           AddData(inputStream, InputEvent(noTtlKey, "put", 2)),
-          // advance clock to trigger processing
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
+          assertNumStateRows(total = 2, updated = 2),
           Execute { q =>
             val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
-            val providerId = StateStoreProviderId(StateStoreId(
-              checkpointDir.getCanonicalPath, 0, 0), q.lastProgress.runId)
-            val checker = new StateSchemaCompatibilityChecker(providerId,
-              hadoopConf, Some(schemaFilePath))
+            val providerId = StateStoreProviderId(
+              StateStoreId(checkpointDir.getCanonicalPath, 0, 0),
+              q.lastProgress.runId
+            )
+            val checker = new StateSchemaCompatibilityChecker(
+              providerId,
+              hadoopConf,
+              List(schemaFilePath)
+            )
             val colFamilySeq = checker.readSchemaFile()
 
-            assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
-              q.lastProgress.stateOperators.head.customMetrics.get("numValueStateVars").toInt)
-            assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
-              q.lastProgress.stateOperators.head.customMetrics
-                .get("numValueStateWithTTLVars").toInt)
-            assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
-              q.lastProgress.stateOperators.head.customMetrics
-                .get("numListStateWithTTLVars").toInt)
-            assert(TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
-              q.lastProgress.stateOperators.head.customMetrics
-                .get("numMapStateWithTTLVars").toInt)
+            // Verify metrics
+            assert(
+              TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
+                q.lastProgress.stateOperators.head
+                  .customMetrics.get("numValueStateVars").toInt
+            )
+            assert(
+              TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
+                q.lastProgress.stateOperators.head
+                  .customMetrics.get("numValueStateWithTTLVars").toInt
+            )
+            assert(
+              TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
+                q.lastProgress.stateOperators.head
+                  .customMetrics.get("numListStateWithTTLVars").toInt
+            )
+            assert(
+              TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS ==
+                q.lastProgress.stateOperators.head.customMetrics.get("numMapStateWithTTLVars").toInt
+            )
 
-            assert(colFamilySeq.length == 5)
+            // Verify schema count and contents
+            assert(colFamilySeq.length == 13)
             assert(colFamilySeq.map(_.toString).toSet == Set(
-              schema0, schema1, schema2, schema3, schema4
+              schema0, schema1, schema2, schema3, schema4,
+              schema5, schema6, schema7, schema8, schema9,
+              schema10, schema11, schema12
             ).map(_.toString))
           },
           StopStream

@@ -61,7 +61,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     }
 
     (1 to 10).foreach { _ =>
-      spark.cloneSession()
+      spark.asInstanceOf[classic.SparkSession].cloneSession()
       SparkSession.clearActiveSession()
     }
 
@@ -330,8 +330,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
       .set(wh, "./data1")
       .set(td, "bob")
 
-    val sc = new SparkContext(conf)
-
+    // This creates an active SparkContext, which will be picked up by the session below.
+    new SparkContext(conf)
     val spark = SparkSession.builder()
       .config(wh, "./data2")
       .config(td, "alice")

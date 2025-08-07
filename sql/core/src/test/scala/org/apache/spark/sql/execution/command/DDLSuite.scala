@@ -24,7 +24,7 @@ import java.util.Locale
 import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
 import org.apache.hadoop.fs.permission.{AclEntry, AclStatus}
 
-import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFiles, SparkRuntimeException}
+import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFiles, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -1376,6 +1377,87 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     }
   }
 
+  test("SPARK-51747: Data source cached plan respects options if ignore conf disabled") {
+    val catalog = spark.sessionState.catalog
+
+    // util to get cached table plan options
+    def getCachedTableOptions(
+        qualifiedTableName: QualifiedTableName): Map[String, String] = {
+      catalog.getCachedTable(qualifiedTableName) match {
+        case LogicalRelation(fsRelation: HadoopFsRelation, _, _, _, _) => fsRelation.options
+      }
+    }
+
+    Seq(true, false).foreach { ignoreOption =>
+      withSQLConf(
+        SQLConf.READ_FILE_SOURCE_TABLE_CACHE_IGNORE_OPTIONS.key -> ignoreOption.toString) {
+        withNamespace("ns") {
+          withTable("t") {
+            spark.sql(("CREATE TABLE t(a string, b string) " +
+              "USING CSV OPTIONS (maxColumns 500)").stripMargin)
+            spark.sql("INSERT INTO TABLE t VALUES ('a;b', 'c')")
+            spark.sql("INSERT INTO TABLE t VALUES ('hello; world', 'test')")
+
+            // check initial contents of table
+            val resultNoOptions = Row("a;b", "c") :: Row("hello; world", "test") :: Nil
+            checkAnswer(spark.table("t"), resultNoOptions)
+
+            // check cached plan contains create table options
+            val qualifiedTableName = QualifiedTableName(
+              CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, "t")
+            val pathOption = catalog.getTableMetadata(TableIdentifier("t"))
+              .storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
+            val createTableOptions: Map[String, String] = Map("maxcolumns" -> "500") ++ pathOption
+            assert(getCachedTableOptions(qualifiedTableName) == createTableOptions)
+
+            // delimiter ; option
+            val expectedResultDelimiter =
+              if (ignoreOption) {
+                resultNoOptions
+              } else {
+                Row("a", "b,c") :: Row("hello", " world,test") :: Nil
+              }
+            checkAnswer(
+              spark.sql("SELECT * FROM t WITH ('delimiter' = ';')"),
+              expectedResultDelimiter
+            )
+            checkAnswer(
+              spark.read.option("delimiter", ";").table("t"), // scala API test
+              expectedResultDelimiter
+            )
+            // cached plan should still only contain create table options
+            assert(getCachedTableOptions(qualifiedTableName) == createTableOptions)
+
+            // no option
+            checkAnswer(
+              spark.sql("SELECT * FROM t"),
+              resultNoOptions
+            )
+            assert(getCachedTableOptions(qualifiedTableName) == createTableOptions)
+
+            // lineSep ; option
+            val expectedResultLineSep =
+              if (ignoreOption) {
+                resultNoOptions
+              } else {
+                Row("a", null) :: Row("b", "c\n") :: Row("hello", null) ::
+                  Row(" world", "test\n") :: Nil
+              }
+            checkAnswer(
+              spark.sql("SELECT * FROM t WITH ('lineSep' = ';')"),
+              expectedResultLineSep
+            )
+            checkAnswer(
+              spark.read.option("lineSep", ";").table("t"), // scala API test
+              expectedResultLineSep
+            )
+            assert(getCachedTableOptions(qualifiedTableName) == createTableOptions)
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-18009 calling toLocalIterator on commands") {
     import scala.jdk.CollectionConverters._
     val df = sql("show databases")
@@ -2324,9 +2406,9 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       // Plain `StringType`.
       sql("CREATE TABLE t1(col STRING) USING parquet")
       sql("INSERT INTO t1 VALUES ('a')")
-      checkAnswer(sql("SELECT COLLATION(col) FROM t1"), Row("UTF8_BINARY"))
+      checkAnswer(sql("SELECT COLLATION(col) FROM t1"), Row("SYSTEM.BUILTIN.UTF8_BINARY"))
       sql("ALTER TABLE t1 ALTER COLUMN col TYPE STRING COLLATE UTF8_LCASE")
-      checkAnswer(sql("SELECT COLLATION(col) FROM t1"), Row("UTF8_LCASE"))
+      checkAnswer(sql("SELECT COLLATION(col) FROM t1"), Row("SYSTEM.BUILTIN.UTF8_LCASE"))
 
       // Invalid "ALTER COLUMN" to Integer.
       val alterInt = "ALTER TABLE t1 ALTER COLUMN col TYPE INTEGER"
@@ -2348,23 +2430,23 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       // `ArrayType` with collation.
       sql("CREATE TABLE t2(col ARRAY<STRING>) USING parquet")
       sql("INSERT INTO t2 VALUES (ARRAY('a'))")
-      checkAnswer(sql("SELECT COLLATION(col[0]) FROM t2"), Row("UTF8_BINARY"))
+      checkAnswer(sql("SELECT COLLATION(col[0]) FROM t2"), Row("SYSTEM.BUILTIN.UTF8_BINARY"))
       assertThrows[AnalysisException] {
         sql("ALTER TABLE t2 ALTER COLUMN col TYPE ARRAY<STRING COLLATE UTF8_LCASE>")
       }
-      checkAnswer(sql("SELECT COLLATION(col[0]) FROM t2"), Row("UTF8_BINARY"))
+      checkAnswer(sql("SELECT COLLATION(col[0]) FROM t2"), Row("SYSTEM.BUILTIN.UTF8_BINARY"))
 
       // `MapType` with collation.
       sql("CREATE TABLE t3(col MAP<STRING, STRING>) USING parquet")
       sql("INSERT INTO t3 VALUES (MAP('k', 'v'))")
-      checkAnswer(sql("SELECT COLLATION(col['k']) FROM t3"), Row("UTF8_BINARY"))
+      checkAnswer(sql("SELECT COLLATION(col['k']) FROM t3"), Row("SYSTEM.BUILTIN.UTF8_BINARY"))
       assertThrows[AnalysisException] {
         sql(
           """
             |ALTER TABLE t3 ALTER COLUMN col TYPE
             |MAP<STRING, STRING COLLATE UTF8_LCASE>""".stripMargin)
       }
-      checkAnswer(sql("SELECT COLLATION(col['k']) FROM t3"), Row("UTF8_BINARY"))
+      checkAnswer(sql("SELECT COLLATION(col['k']) FROM t3"), Row("SYSTEM.BUILTIN.UTF8_BINARY"))
 
       // Invalid change of map key collation.
       val alterMap =
@@ -2388,11 +2470,11 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       // `StructType` with collation.
       sql("CREATE TABLE t4(col STRUCT<a:STRING>) USING parquet")
       sql("INSERT INTO t4 VALUES (NAMED_STRUCT('a', 'value'))")
-      checkAnswer(sql("SELECT COLLATION(col.a) FROM t4"), Row("UTF8_BINARY"))
+      checkAnswer(sql("SELECT COLLATION(col.a) FROM t4"), Row("SYSTEM.BUILTIN.UTF8_BINARY"))
       assertThrows[AnalysisException] {
         sql("ALTER TABLE t4 ALTER COLUMN col TYPE STRUCT<a:STRING COLLATE UTF8_LCASE>")
       }
-      checkAnswer(sql("SELECT COLLATION(col.a) FROM t4"), Row("UTF8_BINARY"))
+      checkAnswer(sql("SELECT COLLATION(col.a) FROM t4"), Row("SYSTEM.BUILTIN.UTF8_BINARY"))
     }
   }
 
@@ -2417,6 +2499,68 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         parameters = Map("tableName" -> "`spark_catalog`.`default`.`t2`", "columnName" -> "`col`")
       )
     }
+  }
+
+  test("SPARK-51418: Partitioned by Hive type incompatible columns") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(a timestamp_ntz, b INTEGER) USING parquet PARTITIONED BY (a)")
+      sql("INSERT INTO t1 PARTITION(a=timestamp_ntz'2018-11-17 13:33:33') VALUES (1)")
+      checkAnswer(sql("SELECT * FROM t1"), sql("select 1, timestamp_ntz'2018-11-17 13:33:33'"))
+      sql("ALTER TABLE t1 ADD COLUMN (c string)")
+      checkAnswer(sql("SELECT * FROM t1"),
+        sql("select 1, null, timestamp_ntz'2018-11-17 13:33:33'"))
+    }
+  }
+
+  test("Executing relation with STREAM fails") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 AS SELECT 1")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("CREATE TABLE t2 AS SELECT * FROM STREAM t1")
+        },
+        condition = "_LEGACY_ERROR_TEMP_3102",
+        sqlState = None,
+        parameters = Map("msg" -> ("Queries with streaming sources must be executed with " +
+          "writeStream.start(), or from a streaming table or flow definition within a Spark " +
+          "Declarative Pipeline."))
+      )
+    }
+  }
+
+  test("CREATE MATERIALIZED VIEW cannot be directly executed") {
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        sql(s"CREATE MATERIALIZED VIEW table1 AS SELECT 1")
+      },
+      condition = "UNSUPPORTED_FEATURE.CREATE_PIPELINE_DATASET_QUERY_EXECUTION",
+      sqlState = "0A000",
+      parameters = Map("pipelineDatasetType" -> "MATERIALIZED VIEW")
+    )
+  }
+
+  test("CREATE STREAMING TABLE cannot be directly executed") {
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        sql(s"CREATE STREAMING TABLE table1 AS SELECT 1")
+      },
+      condition = "UNSUPPORTED_FEATURE.CREATE_PIPELINE_DATASET_QUERY_EXECUTION",
+      sqlState = "0A000",
+      parameters = Map("pipelineDatasetType" -> "STREAMING TABLE")
+    )
+  }
+
+  test(s"CREATE FLOW statement cannot be directly executed") {
+    sql("CREATE TABLE table1 AS SELECT 1")
+    sql("CREATE TABLE table2 AS SELECT 2")
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        sql("CREATE FLOW f AS INSERT INTO table2 SELECT * FROM table1")
+      },
+      condition = "UNSUPPORTED_FEATURE.CREATE_FLOW_QUERY_EXECUTION",
+      sqlState = "0A000",
+      parameters = Map.empty
+    )
   }
 }
 

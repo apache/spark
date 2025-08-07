@@ -33,10 +33,9 @@ import org.apache.parquet.schema.{PrimitiveType, Types}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONFIG}
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
@@ -45,7 +44,7 @@ import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, Outpu
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, StructField, StructType, UserDefinedType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, StructField, StructType, UserDefinedType, VariantType}
 import org.apache.spark.util.ArrayImplicits._
 
 object ParquetUtils extends Logging {
@@ -420,6 +419,22 @@ object ParquetUtils extends Logging {
     statistics.getNumNulls;
   }
 
+  // Replaces each VariantType in the schema with the corresponding type in the shredding schema.
+  // Used for testing, where we force a single shredding schema for all Variant fields.
+  // Does not touch Variant fields nested in arrays, maps, or UDTs.
+  private def replaceVariantTypes(schema: StructType, shreddingSchema: StructType): StructType = {
+    val newFields = schema.fields.zip(shreddingSchema.fields).map {
+      case (field, shreddingField) =>
+        field.dataType match {
+          case s: StructType =>
+            field.copy(dataType = replaceVariantTypes(s, shreddingSchema))
+          case VariantType => field.copy(dataType = shreddingSchema)
+          case _ => field
+        }
+    }
+    StructType(newFields)
+  }
+
   def prepareWrite(
       sqlConf: SQLConf,
       job: Job,
@@ -454,8 +469,23 @@ object ParquetUtils extends Logging {
 
     ParquetOutputFormat.setWriteSupportClass(job, classOf[ParquetWriteSupport])
 
+    val shreddingSchema = if (sqlConf.getConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED) &&
+        !sqlConf.getConf(SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST).isEmpty) {
+      // Convert the schema to a shredding schema, and replace it anywhere that there is a
+      // VariantType in the original schema.
+      val simpleShreddingSchema = DataType.fromDDL(
+        sqlConf.getConf(SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST)
+      )
+      val oneShreddingSchema = SparkShreddingUtils.variantShreddingSchema(simpleShreddingSchema)
+      val schemaWithMetadata = SparkShreddingUtils.addWriteShreddingMetadata(oneShreddingSchema)
+      Some(replaceVariantTypes(dataSchema, schemaWithMetadata))
+    } else {
+      None
+    }
+
     // This metadata is useful for keeping UDTs like Vector/Matrix.
     ParquetWriteSupport.setSchema(dataSchema, conf)
+    shreddingSchema.foreach(ParquetWriteSupport.setShreddingSchema(_, conf))
 
     // Sets flags for `ParquetWriteSupport`, which converts Catalyst schema to Parquet
     // schema and writes actual rows to Parquet files.

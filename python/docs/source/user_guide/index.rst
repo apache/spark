@@ -16,22 +16,22 @@
     under the License.
 
 
-===========
-User Guides
-===========
+================
+User Guide
+================
 
-PySpark specific user guides are available here:
- 
+Welcome to the PySpark user guide!
+Each of the below sections contains code-driven examples to help you get familiar with PySpark.
+
 .. toctree::
    :maxdepth: 2
 
-   python_packaging
-   sql/index
-   pandas_on_spark/index
+   dataframes
+   touroftypes
+   dataprep
+   bugbusting
+   udfandudtf
+   sql
+   loadandbehold
 
-There are also basic programming guides covering multiple languages available in
-`the Spark documentation <https://spark.apache.org/docs/latest/index.html#where-to-go-from-here>`_, including these:
 
-- `Spark SQL, DataFrames and Datasets Guide <https://spark.apache.org/docs/latest/sql-programming-guide.html>`_
-- `Structured Streaming Programming Guide <https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html>`_
-- `Machine Learning Library (MLlib) Guide <https://spark.apache.org/docs/latest/ml-guide.html>`_

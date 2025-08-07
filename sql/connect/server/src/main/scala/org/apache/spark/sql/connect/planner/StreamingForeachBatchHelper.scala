@@ -26,13 +26,17 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.{PythonException, PythonWorkerUtils, SimplePythonFunction, SpecialLengths, StreamingPythonRunner}
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, QUERY_ID, RUN_ID, SESSION_ID}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, PYTHON_EXEC, QUERY_ID, RUN_ID_STRING, SESSION_ID, USER_ID}
+import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders}
+import org.apache.spark.sql.connect.common.ForeachWriterPacket
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.connect.service.SparkConnectService
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.StreamingQueryListener
+import org.apache.spark.util.Utils
 
 /**
  * A helper class for handling ForeachBatch related functionality in Spark Connect servers
@@ -65,7 +69,9 @@ object StreamingForeachBatchHelper extends Logging {
     {
       val dfId = UUID.randomUUID().toString
       // TODO: Add query id to the log.
-      logInfo(log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")
+      logInfo(
+        log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +
+          log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")
 
       // TODO(SPARK-44462): Sanity check there is no other active DataFrame for this query.
       //  The query id needs to be saved in the cache for this check.
@@ -74,7 +80,9 @@ object StreamingForeachBatchHelper extends Logging {
       try {
         fn(FnArgsWithId(dfId, df, batchId))
       } finally {
-        logInfo(log"Removing DataFrame with id ${MDC(DATAFRAME_ID, dfId)} from the cache")
+        logInfo(
+          log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +
+            log"Removing DataFrame with id ${MDC(DATAFRAME_ID, dfId)} from the cache")
         sessionHolder.removeCachedDataFrame(dfId)
       }
     }
@@ -88,13 +96,31 @@ object StreamingForeachBatchHelper extends Logging {
    * DataFrame, so the user code actually runs with legacy DataFrame and session..
    */
   def scalaForeachBatchWrapper(
-      fn: ForeachBatchFnType,
+      payloadBytes: Array[Byte],
       sessionHolder: SessionHolder): ForeachBatchFnType = {
+    val foreachBatchPkt =
+      Utils.deserialize[ForeachWriterPacket](payloadBytes, Utils.getContextOrSparkClassLoader)
+    val fn = foreachBatchPkt.foreachWriter.asInstanceOf[(Dataset[Any], Long) => Unit]
+    val encoder = foreachBatchPkt.datasetEncoder.asInstanceOf[AgnosticEncoder[Any]]
     // TODO(SPARK-44462): Set up Spark Connect session.
     // Do we actually need this for the first version?
     dataFrameCachingWrapper(
       (args: FnArgsWithId) => {
-        fn(args.df, args.batchId) // dfId is not used, see hack comment above.
+        // dfId is not used, see hack comment above.
+        try {
+          val ds = if (AgnosticEncoders.UnboundRowEncoder == encoder) {
+            // When the dataset is a DataFrame (Dataset[Row).
+            args.df.asInstanceOf[Dataset[Any]]
+          } else {
+            // Recover the Dataset from the DataFrame using the encoder.
+            args.df.as(encoder)
+          }
+          fn(ds, args.batchId)
+        } catch {
+          case t: Throwable =>
+            logError(s"Calling foreachBatch fn failed", t)
+            throw t
+        }
       },
       sessionHolder)
   }
@@ -110,12 +136,21 @@ object StreamingForeachBatchHelper extends Logging {
       sessionHolder: SessionHolder): (ForeachBatchFnType, AutoCloseable) = {
 
     val port = SparkConnectService.localPort
-    val connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
+    var connectUrl = s"sc://localhost:$port/;user_id=${sessionHolder.userId}"
+    Connect.getAuthenticateToken.foreach { token =>
+      connectUrl = s"$connectUrl;token=$token"
+    }
     val runner = StreamingPythonRunner(
       pythonFn,
       connectUrl,
       sessionHolder.sessionId,
       "pyspark.sql.connect.streaming.worker.foreach_batch_worker")
+
+    logInfo(
+      log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +
+        log"[userId: ${MDC(USER_ID, sessionHolder.userId)}] Initializing Python runner, " +
+        log"pythonExec: ${MDC(PYTHON_EXEC, pythonFn.pythonExec)})")
+
     val (dataOut, dataIn) = runner.init()
 
     val foreachBatchRunnerFn: FnArgsWithId => Unit = (args: FnArgsWithId) => {
@@ -136,23 +171,30 @@ object StreamingForeachBatchHelper extends Logging {
         dataIn.readInt() match {
           case 0 =>
             logInfo(
-              log"Python foreach batch for dfId ${MDC(DATAFRAME_ID, args.dfId)} " +
+              log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +
+                log"[userId: ${MDC(USER_ID, sessionHolder.userId)}] " +
+                log"Python foreach batch for dfId ${MDC(DATAFRAME_ID, args.dfId)} " +
                 log"completed (ret: 0)")
           case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
             val msg = PythonWorkerUtils.readUTF(dataIn)
             throw new PythonException(
-              s"Found error inside foreachBatch Python process: $msg",
+              s"[session: ${sessionHolder.sessionId}] [userId: ${sessionHolder.userId}] " +
+                s"Found error inside foreachBatch Python process: $msg",
               null)
           case otherValue =>
             throw new IllegalStateException(
-              s"Unexpected return value $otherValue from the " +
+              s"[session: ${sessionHolder.sessionId}] [userId: ${sessionHolder.userId}] " +
+                s"Unexpected return value $otherValue from the " +
                 s"Python worker.")
         }
       } catch {
         // TODO: Better handling (e.g. retries) on exceptions like EOFException to avoid
         // transient errors, same for StreamingQueryListenerHelper.
         case eof: EOFException =>
-          throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
+          throw new SparkException(
+            s"[session: ${sessionHolder.sessionId}] [userId: ${sessionHolder.userId}] " +
+              "Python worker exited unexpectedly (crashed)",
+            eof)
       }
     }
 
@@ -174,8 +216,9 @@ object StreamingForeachBatchHelper extends Logging {
       val listener = new StreamingRunnerCleanerListener
       sessionHolder.session.streams.addListener(listener)
       logInfo(
-        log"Registered runner clean up listener for " +
-          log"session ${MDC(SESSION_ID, sessionHolder.sessionId)}")
+        log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +
+          log"[userId: ${MDC(USER_ID, sessionHolder.userId)}] " +
+          log"Registered runner clean up listener.")
       listener
     }
 
@@ -203,7 +246,7 @@ object StreamingForeachBatchHelper extends Logging {
       Option(cleanerCache.remove(key)).foreach { cleaner =>
         logInfo(
           log"Cleaning up runner for queryId ${MDC(QUERY_ID, key.queryId)} " +
-            log"runId ${MDC(RUN_ID, key.runId)}.")
+            log"runId ${MDC(RUN_ID_STRING, key.runId)}.")
         cleaner.close()
       }
     }

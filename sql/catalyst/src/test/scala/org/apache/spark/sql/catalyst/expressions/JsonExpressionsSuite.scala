@@ -28,13 +28,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{PST, UTC, UTC_OPT}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
-class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with PlanTestBase {
+class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val json =
     """
       |{"store":{"fruit":[{"weight":8,"type":"apple"},{"weight":9,"type":"pear"}],
@@ -255,7 +254,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   }
 
   test("some big value") {
-    val value = "x" * 3000
+    val value = "x".repeat(3000)
     checkEvaluation(
       GetJsonObject(NonFoldableLiteral((s"""{"big": "$value"}""")),
       NonFoldableLiteral("$.big")), value)
@@ -273,8 +272,9 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   }
 
   test("json_tuple escaping") {
-    GenerateUnsafeProjection.generate(
-      JsonTuple(Literal("\"quote") ::  Literal("\"quote") :: Nil) :: Nil)
+    checkJsonTuple(
+      JsonTuple(Literal("\"quote") ::  Literal("\"quote") :: Nil),
+      InternalRow.fromSeq(Seq(null).map(UTF8String.fromString)))
   }
 
   test("json_tuple - hive key 1") {
@@ -420,7 +420,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   test("from_json escaping") {
     val schema = StructType(StructField("\"quote", IntegerType) :: Nil)
     GenerateUnsafeProjection.generate(
-      JsonToStructs(schema, Map.empty, Literal("\"quote"), UTC_OPT).replacement :: Nil)
+      JsonToStructs(schema, Map.empty, Literal("\"quote"), UTC_OPT) :: Nil)
   }
 
   test("from_json") {

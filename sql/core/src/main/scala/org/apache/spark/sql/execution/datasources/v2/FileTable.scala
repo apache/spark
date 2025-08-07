@@ -26,6 +26,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.streaming.{FileStreamSink, MetadataLogFileIndex}
@@ -158,6 +159,19 @@ abstract class FileTable(
     val finalOptions = this.options.asCaseSensitiveMap().asScala ++
       options.asCaseSensitiveMap().asScala
     new CaseInsensitiveStringMap(finalOptions.asJava)
+  }
+
+  /**
+   * Merge the options of FileTable and the LogicalWriteInfo while respecting the
+   * keys of the options carried by LogicalWriteInfo.
+   */
+  protected def mergedWriteInfo(writeInfo: LogicalWriteInfo): LogicalWriteInfo = {
+    LogicalWriteInfoImpl(
+      writeInfo.queryId(),
+      writeInfo.schema(),
+      mergedOptions(writeInfo.options()),
+      writeInfo.rowIdSchema(),
+      writeInfo.metadataSchema())
   }
 }
 

@@ -185,7 +185,6 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
   "errorClass" : "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "3",
     "indexValue" : "5"
   },
@@ -209,7 +208,6 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
   "errorClass" : "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "3",
     "indexValue" : "-5"
   },
@@ -252,7 +250,6 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
   "errorClass" : "INVALID_ARRAY_INDEX",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "2",
     "indexValue" : "4"
   },
@@ -276,7 +273,6 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
   "errorClass" : "INVALID_ARRAY_INDEX",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "2",
     "indexValue" : "0"
   },
@@ -300,7 +296,6 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
   "errorClass" : "INVALID_ARRAY_INDEX",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "2",
     "indexValue" : "-1"
   },
@@ -356,7 +351,6 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
   "errorClass" : "INVALID_ARRAY_INDEX",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "3",
     "indexValue" : "5"
   },
@@ -380,7 +374,6 @@ org.apache.spark.SparkArrayIndexOutOfBoundsException
   "errorClass" : "INVALID_ARRAY_INDEX",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "3",
     "indexValue" : "-1"
   },
@@ -530,6 +523,214 @@ select get(array(1, 2, 3), -1)
 struct<get(array(1, 2, 3), -1):int>
 -- !query output
 NULL
+
+
+-- !query
+select get(1, 0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\")",
+    "sqlExpr" : "\"1[0]\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "get(1, 0)"
+  } ]
+}
+
+
+-- !query
+select get(1, -1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\")",
+    "sqlExpr" : "\"1[-1]\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "get(1, -1)"
+  } ]
+}
+
+
+-- !query
+select get('1', 0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\")",
+    "sqlExpr" : "\"1[0]\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "get('1', 0)"
+  } ]
+}
+
+
+-- !query
+select get('1', -1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\")",
+    "sqlExpr" : "\"1[-1]\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "get('1', -1)"
+  } ]
+}
+
+
+-- !query
+select get(null, 0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"NULL\"",
+    "inputType" : "\"VOID\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\")",
+    "sqlExpr" : "\"NULL[0]\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "get(null, 0)"
+  } ]
+}
+
+
+-- !query
+select get(null, -1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"NULL\"",
+    "inputType" : "\"VOID\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\")",
+    "sqlExpr" : "\"NULL[-1]\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "get(null, -1)"
+  } ]
+}
+
+
+-- !query
+select get(null, null)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"NULL\"",
+    "inputType" : "\"VOID\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\")",
+    "sqlExpr" : "\"NULL[NULL]\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "get(null, null)"
+  } ]
+}
+
+
+-- !query
+select get(CAST (null AS string), 0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"CAST(NULL AS STRING)\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\")",
+    "sqlExpr" : "\"CAST(NULL AS STRING)[0]\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "get(CAST (null AS string), 0)"
+  } ]
+}
 
 
 -- !query

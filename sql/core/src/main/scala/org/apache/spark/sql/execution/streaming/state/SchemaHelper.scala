@@ -70,7 +70,9 @@ object SchemaHelper {
       val keySchemaStr = inputStream.readUTF()
       val valueSchemaStr = inputStream.readUTF()
       List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+        0,
         StructType.fromString(keySchemaStr),
+        0,
         StructType.fromString(valueSchemaStr)))
     }
   }
@@ -83,7 +85,9 @@ object SchemaHelper {
       val valueSchemaStr = readJsonSchema(inputStream)
 
       List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+        0,
         StructType.fromString(keySchemaStr),
+        0,
         StructType.fromString(valueSchemaStr)))
     }
   }
@@ -97,7 +101,9 @@ object SchemaHelper {
       (0 until numEntries).map { _ =>
         // read the col family name and the key and value schema
         val colFamilyName = inputStream.readUTF()
+        val keySchemaId = inputStream.readShort()
         val keySchemaStr = readJsonSchema(inputStream)
+        val valSchemaId = inputStream.readShort()
         val valueSchemaStr = readJsonSchema(inputStream)
         val keySchema = StructType.fromString(keySchemaStr)
 
@@ -111,7 +117,9 @@ object SchemaHelper {
         val userKeyEncoderSchema = Try(StructType.fromString(userKeyEncoderSchemaStr)).toOption
 
         StateStoreColFamilySchema(colFamilyName,
+          keySchemaId,
           keySchema,
+          valSchemaId,
           StructType.fromString(valueSchemaStr),
           Some(encoderSpec),
           userKeyEncoderSchema)
@@ -206,7 +214,9 @@ object SchemaHelper {
       stateStoreColFamilySchema.foreach { colFamilySchema =>
         assert(colFamilySchema.keyStateEncoderSpec.isDefined)
         outputStream.writeUTF(colFamilySchema.colFamilyName)
+        outputStream.writeShort(colFamilySchema.keySchemaId)
         writeJsonSchema(outputStream, colFamilySchema.keySchema.json)
+        outputStream.writeShort(colFamilySchema.valueSchemaId)
         writeJsonSchema(outputStream, colFamilySchema.valueSchema.json)
         writeJsonSchema(outputStream, colFamilySchema.keyStateEncoderSpec.get.json)
         // write user key encoder schema if provided and empty json otherwise

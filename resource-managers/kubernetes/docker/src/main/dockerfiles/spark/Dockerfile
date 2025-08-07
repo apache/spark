@@ -14,9 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+ARG java_image_name=azul/zulu-openjdk
 ARG java_image_tag=21
 
-FROM azul/zulu-openjdk:${java_image_tag}
+FROM ${java_image_name}:${java_image_tag}
 LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.ref.name="Apache Spark Scala/Java Image"
@@ -35,7 +36,7 @@ ARG spark_uid=185
 RUN set -ex && \
     apt-get update && \
     ln -s /lib /lib64 && \
-    apt install -y bash tini libc6 libpam-modules krb5-user libnss3 procps net-tools logrotate && \
+    apt install -y bash tini libc6 libpam-modules krb5-user libnss3 procps net-tools logrotate libssl-dev && \
     mkdir -p /opt/spark && \
     mkdir -p /opt/spark/examples && \
     mkdir -p /opt/spark/work-dir && \
@@ -47,8 +48,6 @@ RUN set -ex && \
     rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/*
 
 COPY jars /opt/spark/jars
-# Copy hive-jackson directory if exists
-COPY hive-jackso[n] /opt/spark/hive-jackson
 # Copy RELEASE file if exists
 COPY RELEAS[E] /opt/spark/RELEASE
 COPY bin /opt/spark/bin

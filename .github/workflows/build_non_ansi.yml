@@ -22,6 +22,7 @@ name: "Build / Non-ANSI (master, Hadoop 3, JDK 17, Scala 2.13)"
 on:
   schedule:
     - cron: '0 1 * * *'
+  workflow_dispatch:
 
 jobs:
   run-build:
@@ -36,13 +37,17 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
+          "PYSPARK_IMAGE_TO_TEST": "python-311",
+          "PYTHON_TO_TEST": "python3.11",
           "SPARK_ANSI_SQL_MODE": "false",
+          "SPARK_TEST_SPARK_BLOOM_FILTER_SUITE_ENABLED": "true"
         }
       jobs: >-
         {
           "build": "true",
           "docs": "true",
           "pyspark": "true",
+          "pyspark-pandas": "true",
           "sparkr": "true",
           "tpcds-1g": "true",
           "docker-integration-tests": "true",

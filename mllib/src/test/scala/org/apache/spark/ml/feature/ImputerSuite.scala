@@ -298,12 +298,8 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("ImputerModel read/write") {
-    val spark = this.spark
-    import spark.implicits._
-    val surrogateDF = Seq(1.234).toDF("myInputCol")
-
     val instance = new ImputerModel(
-      "myImputer", surrogateDF)
+      "myImputer", Array("myInputCol"), Array(1.234))
       .setInputCols(Array("myInputCol"))
       .setOutputCols(Array("myOutputCol"))
     val newInstance = testDefaultReadWrite(instance)
@@ -312,12 +308,8 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Single Column: ImputerModel read/write") {
-    val spark = this.spark
-    import spark.implicits._
-    val surrogateDF = Seq(1.234).toDF("myInputCol")
-
     val instance = new ImputerModel(
-      "myImputer", surrogateDF)
+      "myImputer", Array("myInputCol"), Array(1.234))
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
     val newInstance = testDefaultReadWrite(instance)

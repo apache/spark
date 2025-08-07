@@ -28,7 +28,7 @@ on:
         description: 'list of branches to publish (JSON)'
         required: true
         # keep in sync with default value of strategy matrix 'branch'
-        default: '["master", "branch-3.5"]'
+        default: '["master", "branch-4.0", "branch-3.5"]'
 
 jobs:
   publish-snapshot:
@@ -38,7 +38,7 @@ jobs:
       fail-fast: false
       matrix:
         # keep in sync with default value of workflow_dispatch input 'branch'
-        branch: ${{ fromJSON( inputs.branch || '["master", "branch-3.5"]' ) }}
+        branch: ${{ fromJSON( inputs.branch || '["master", "branch-4.0", "branch-3.5"]' ) }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4

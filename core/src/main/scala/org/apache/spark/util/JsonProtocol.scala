@@ -22,7 +22,7 @@ import java.util.{Properties, UUID}
 import scala.collection.Map
 import scala.jdk.CollectionConverters._
 
-import com.fasterxml.jackson.core.JsonGenerator
+import com.fasterxml.jackson.core.{JsonGenerator, StreamReadConstraints}
 import com.fasterxml.jackson.databind.JsonNode
 import org.json4s.jackson.JsonMethods.compact
 
@@ -39,16 +39,6 @@ import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils.weakIntern
 
 /**
- * Helper class for passing configuration options to JsonProtocol.
- * We use this instead of passing SparkConf directly because it lets us avoid
- * repeated re-parsing of configuration values on each read.
- */
-private[spark] class JsonProtocolOptions(conf: SparkConf) {
-  val includeTaskMetricsAccumulators: Boolean =
-    conf.get(EVENT_LOG_INCLUDE_TASK_METRICS_ACCUMULATORS)
-}
-
-/**
  * Serializes SparkListener events to/from JSON.  This protocol provides strong backwards-
  * and forwards-compatibility guarantees: any version of Spark should be able to read JSON output
  * written by any other version, including newer versions.
@@ -63,44 +53,45 @@ private[spark] class JsonProtocolOptions(conf: SparkConf) {
  *  - Any new JSON fields should be optional; use `jsonOption` when reading these fields
  *    in `*FromJson` methods.
  */
-private[spark] object JsonProtocol extends JsonUtils {
+private[spark] class JsonProtocol(sparkConf: SparkConf) extends JsonUtils {
   // TODO: Remove this file and put JSON serialization into each individual class.
 
-  private[util]
-  val defaultOptions: JsonProtocolOptions = new JsonProtocolOptions(new SparkConf(false))
+  // SPARK-49872 remove limit on string lengths
+  mapper.getFactory.setStreamReadConstraints(
+    StreamReadConstraints.builder().maxStringLength(
+      sparkConf.get(EVENT_LOG_READER_MAX_STRING_LENGTH)
+    ).build()
+  )
+
+  val includeTaskMetricsAccumulators: Boolean =
+    sparkConf.get(EVENT_LOG_INCLUDE_TASK_METRICS_ACCUMULATORS)
 
   /** ------------------------------------------------- *
    * JSON serialization methods for SparkListenerEvents |
    * -------------------------------------------------- */
 
-  // Only for use in tests. Production code should use the two-argument overload defined below.
   def sparkEventToJsonString(event: SparkListenerEvent): String = {
-    sparkEventToJsonString(event, defaultOptions)
-  }
-
-  def sparkEventToJsonString(event: SparkListenerEvent, options: JsonProtocolOptions): String = {
     toJsonString { generator =>
-      writeSparkEventToJson(event, generator, options)
+      writeSparkEventToJson(event, generator)
     }
   }
 
   def writeSparkEventToJson(
       event: SparkListenerEvent,
-      g: JsonGenerator,
-      options: JsonProtocolOptions): Unit = {
+      g: JsonGenerator): Unit = {
     event match {
       case stageSubmitted: SparkListenerStageSubmitted =>
-        stageSubmittedToJson(stageSubmitted, g, options)
+        stageSubmittedToJson(stageSubmitted, g)
       case stageCompleted: SparkListenerStageCompleted =>
-        stageCompletedToJson(stageCompleted, g, options)
+        stageCompletedToJson(stageCompleted, g)
       case taskStart: SparkListenerTaskStart =>
-        taskStartToJson(taskStart, g, options)
+        taskStartToJson(taskStart, g)
       case taskGettingResult: SparkListenerTaskGettingResult =>
-        taskGettingResultToJson(taskGettingResult, g, options)
+        taskGettingResultToJson(taskGettingResult, g)
       case taskEnd: SparkListenerTaskEnd =>
-        taskEndToJson(taskEnd, g, options)
+        taskEndToJson(taskEnd, g)
       case jobStart: SparkListenerJobStart =>
-        jobStartToJson(jobStart, g, options)
+        jobStartToJson(jobStart, g)
       case jobEnd: SparkListenerJobEnd =>
         jobEndToJson(jobEnd, g)
       case environmentUpdate: SparkListenerEnvironmentUpdate =>
@@ -134,15 +125,16 @@ private[spark] object JsonProtocol extends JsonUtils {
     }
   }
 
+  import JsonProtocol.SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES
+
   def stageSubmittedToJson(
       stageSubmitted: SparkListenerStageSubmitted,
-      g: JsonGenerator,
-      options: JsonProtocolOptions): Unit = {
+      g: JsonGenerator): Unit = {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.stageSubmitted)
     g.writeFieldName("Stage Info")
     // SPARK-42205: don't log accumulables in start events:
-    stageInfoToJson(stageSubmitted.stageInfo, g, options, includeAccumulables = false)
+    stageInfoToJson(stageSubmitted.stageInfo, g, includeAccumulables = false)
     Option(stageSubmitted.properties).foreach { properties =>
       g.writeFieldName("Properties")
       propertiesToJson(properties, g)
@@ -152,46 +144,42 @@ private[spark] object JsonProtocol extends JsonUtils {
 
   def stageCompletedToJson(
       stageCompleted: SparkListenerStageCompleted,
-      g: JsonGenerator,
-      options: JsonProtocolOptions): Unit = {
+      g: JsonGenerator): Unit = {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.stageCompleted)
     g.writeFieldName("Stage Info")
-    stageInfoToJson(stageCompleted.stageInfo, g, options, includeAccumulables = true)
+    stageInfoToJson(stageCompleted.stageInfo, g, includeAccumulables = true)
     g.writeEndObject()
   }
 
   def taskStartToJson(
       taskStart: SparkListenerTaskStart,
-      g: JsonGenerator,
-      options: JsonProtocolOptions): Unit = {
+      g: JsonGenerator): Unit = {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskStart)
     g.writeNumberField("Stage ID", taskStart.stageId)
     g.writeNumberField("Stage Attempt ID", taskStart.stageAttemptId)
     g.writeFieldName("Task Info")
     // SPARK-42205: don't log accumulables in start events:
-    taskInfoToJson(taskStart.taskInfo, g, options, includeAccumulables = false)
+    taskInfoToJson(taskStart.taskInfo, g, includeAccumulables = false)
     g.writeEndObject()
   }
 
   def taskGettingResultToJson(
       taskGettingResult: SparkListenerTaskGettingResult,
-      g: JsonGenerator,
-      options: JsonProtocolOptions): Unit = {
+      g: JsonGenerator): Unit = {
     val taskInfo = taskGettingResult.taskInfo
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskGettingResult)
     g.writeFieldName("Task Info")
     // SPARK-42205: don't log accumulables in "task getting result" events:
-    taskInfoToJson(taskInfo, g, options, includeAccumulables = false)
+    taskInfoToJson(taskInfo, g, includeAccumulables = false)
     g.writeEndObject()
   }
 
   def taskEndToJson(
       taskEnd: SparkListenerTaskEnd,
-      g: JsonGenerator,
-      options: JsonProtocolOptions): Unit = {
+      g: JsonGenerator): Unit = {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskEnd)
     g.writeNumberField("Stage ID", taskEnd.stageId)
@@ -200,7 +188,7 @@ private[spark] object JsonProtocol extends JsonUtils {
     g.writeFieldName("Task End Reason")
     taskEndReasonToJson(taskEnd.reason, g)
     g.writeFieldName("Task Info")
-    taskInfoToJson(taskEnd.taskInfo, g, options, includeAccumulables = true)
+    taskInfoToJson(taskEnd.taskInfo, g, includeAccumulables = true)
     g.writeFieldName("Task Executor Metrics")
     executorMetricsToJson(taskEnd.taskExecutorMetrics, g)
     Option(taskEnd.taskMetrics).foreach { m =>
@@ -212,8 +200,7 @@ private[spark] object JsonProtocol extends JsonUtils {
 
   def jobStartToJson(
       jobStart: SparkListenerJobStart,
-      g: JsonGenerator,
-      options: JsonProtocolOptions): Unit = {
+      g: JsonGenerator): Unit = {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.jobStart)
     g.writeNumberField("Job ID", jobStart.jobId)
@@ -224,7 +211,7 @@ private[spark] object JsonProtocol extends JsonUtils {
     // the job was submitted: it is technically possible for a stage to belong to multiple
     // concurrent jobs, so this situation can arise even without races occurring between
     // event logging and stage completion.
-    jobStart.stageInfos.foreach(stageInfoToJson(_, g, options, includeAccumulables = true))
+    jobStart.stageInfos.foreach(stageInfoToJson(_, g, includeAccumulables = true))
     g.writeEndArray()
     g.writeArrayFieldStart("Stage IDs")
     jobStart.stageIds.foreach(g.writeNumber)
@@ -376,9 +363,8 @@ private[spark] object JsonProtocol extends JsonUtils {
       g.writeNumberField("Task ID", taskId)
       g.writeNumberField("Stage ID", stageId)
       g.writeNumberField("Stage Attempt ID", stageAttemptId)
-      g.writeArrayFieldStart("Accumulator Updates")
-      updates.foreach(accumulableInfoToJson(_, g))
-      g.writeEndArray()
+      g.writeFieldName("Accumulator Updates")
+      accumulablesToJson(updates, g)
       g.writeEndObject()
     }
     g.writeEndArray()
@@ -424,7 +410,6 @@ private[spark] object JsonProtocol extends JsonUtils {
   def stageInfoToJson(
       stageInfo: StageInfo,
       g: JsonGenerator,
-      options: JsonProtocolOptions,
       includeAccumulables: Boolean): Unit = {
     g.writeStartObject()
     g.writeNumberField("Stage ID", stageInfo.stageId)
@@ -446,7 +431,7 @@ private[spark] object JsonProtocol extends JsonUtils {
       accumulablesToJson(
         stageInfo.accumulables.values,
         g,
-        includeTaskMetricsAccumulators = options.includeTaskMetricsAccumulators)
+        includeTaskMetricsAccumulators = includeTaskMetricsAccumulators)
     } else {
       g.writeStartArray()
       g.writeEndArray()
@@ -460,7 +445,6 @@ private[spark] object JsonProtocol extends JsonUtils {
   def taskInfoToJson(
       taskInfo: TaskInfo,
       g: JsonGenerator,
-      options: JsonProtocolOptions,
       includeAccumulables: Boolean): Unit = {
     g.writeStartObject()
     g.writeNumberField("Task ID", taskInfo.taskId)
@@ -481,7 +465,7 @@ private[spark] object JsonProtocol extends JsonUtils {
       accumulablesToJson(
         taskInfo.accumulables,
         g,
-        includeTaskMetricsAccumulators = options.includeTaskMetricsAccumulators)
+        includeTaskMetricsAccumulators = includeTaskMetricsAccumulators)
     } else {
       g.writeStartArray()
       g.writeEndArray()
@@ -489,14 +473,17 @@ private[spark] object JsonProtocol extends JsonUtils {
     g.writeEndObject()
   }
 
-  private[util] val accumulableExcludeList = Set(InternalAccumulator.UPDATED_BLOCK_STATUSES)
+  private[util] val accumulableExcludeList = Set(
+    InternalAccumulator.UPDATED_BLOCK_STATUSES,
+    InternalAccumulator.COLLECT_METRICS_ACCUMULATOR
+  )
 
   private[this] val taskMetricAccumulableNames = TaskMetrics.empty.nameToAccums.keySet.toSet
 
   def accumulablesToJson(
       accumulables: Iterable[AccumulableInfo],
       g: JsonGenerator,
-    includeTaskMetricsAccumulators: Boolean = true): Unit = {
+      includeTaskMetricsAccumulators: Boolean = true): Unit = {
     g.writeStartArray()
     accumulables
         .filterNot { acc =>
@@ -714,11 +701,8 @@ private[spark] object JsonProtocol extends JsonUtils {
         reason.foreach(g.writeStringField("Loss Reason", _))
       case taskKilled: TaskKilled =>
         g.writeStringField("Kill Reason", taskKilled.reason)
-        g.writeArrayFieldStart("Accumulator Updates")
-        taskKilled.accumUpdates.foreach { info =>
-          accumulableInfoToJson(info, g)
-        }
-        g.writeEndArray()
+        g.writeFieldName("Accumulator Updates")
+        accumulablesToJson(taskKilled.accumUpdates, g)
       case _ =>
         // no extra fields to write
     }
@@ -907,29 +891,6 @@ private[spark] object JsonProtocol extends JsonUtils {
    * JSON deserialization methods for SparkListenerEvents |
    * ---------------------------------------------------- */
 
-  private object SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES {
-    val stageSubmitted = Utils.getFormattedClassName(SparkListenerStageSubmitted)
-    val stageCompleted = Utils.getFormattedClassName(SparkListenerStageCompleted)
-    val taskStart = Utils.getFormattedClassName(SparkListenerTaskStart)
-    val taskGettingResult = Utils.getFormattedClassName(SparkListenerTaskGettingResult)
-    val taskEnd = Utils.getFormattedClassName(SparkListenerTaskEnd)
-    val jobStart = Utils.getFormattedClassName(SparkListenerJobStart)
-    val jobEnd = Utils.getFormattedClassName(SparkListenerJobEnd)
-    val environmentUpdate = Utils.getFormattedClassName(SparkListenerEnvironmentUpdate)
-    val blockManagerAdded = Utils.getFormattedClassName(SparkListenerBlockManagerAdded)
-    val blockManagerRemoved = Utils.getFormattedClassName(SparkListenerBlockManagerRemoved)
-    val unpersistRDD = Utils.getFormattedClassName(SparkListenerUnpersistRDD)
-    val applicationStart = Utils.getFormattedClassName(SparkListenerApplicationStart)
-    val applicationEnd = Utils.getFormattedClassName(SparkListenerApplicationEnd)
-    val executorAdded = Utils.getFormattedClassName(SparkListenerExecutorAdded)
-    val executorRemoved = Utils.getFormattedClassName(SparkListenerExecutorRemoved)
-    val logStart = Utils.getFormattedClassName(SparkListenerLogStart)
-    val metricsUpdate = Utils.getFormattedClassName(SparkListenerExecutorMetricsUpdate)
-    val stageExecutorMetrics = Utils.getFormattedClassName(SparkListenerStageExecutorMetrics)
-    val blockUpdate = Utils.getFormattedClassName(SparkListenerBlockUpdated)
-    val resourceProfileAdded = Utils.getFormattedClassName(SparkListenerResourceProfileAdded)
-  }
-
   def sparkEventFromJson(json: String): SparkListenerEvent = {
     sparkEventFromJson(mapper.readTree(json))
   }
@@ -958,8 +919,14 @@ private[spark] object JsonProtocol extends JsonUtils {
       case `stageExecutorMetrics` => stageExecutorMetricsFromJson(json)
       case `blockUpdate` => blockUpdateFromJson(json)
       case `resourceProfileAdded` => resourceProfileAddedFromJson(json)
-      case other => mapper.readValue(json.toString, Utils.classForName(other))
-        .asInstanceOf[SparkListenerEvent]
+      case other =>
+        val otherClass = Utils.classForName(other)
+        if (classOf[SparkListenerEvent].isAssignableFrom(otherClass)) {
+          mapper.readValue(json.toString, otherClass)
+            .asInstanceOf[SparkListenerEvent]
+        } else {
+          throw new SparkException(s"Unknown event type: $other")
+        }
     }
   }
 
@@ -1062,14 +1029,14 @@ private[spark] object JsonProtocol extends JsonUtils {
   }
 
   def taskResourceRequestMapFromJson(json: JsonNode): Map[String, TaskResourceRequest] = {
-    json.fields().asScala.collect { case field =>
+    json.properties().asScala.collect { case field =>
       val req = taskResourceRequestFromJson(field.getValue)
       (field.getKey, req)
     }.toMap
   }
 
   def executorResourceRequestMapFromJson(json: JsonNode): Map[String, ExecutorResourceRequest] = {
-    json.fields().asScala.collect { case field =>
+    json.properties().asScala.collect { case field =>
       val req = executorResourceRequestFromJson(field.getValue)
       (field.getKey, req)
     }.toMap
@@ -1337,12 +1304,12 @@ private[spark] object JsonProtocol extends JsonUtils {
         jsonOption(readJson.get("Total Records Read")).map(_.extractLong).getOrElse(0L))
       readMetrics.incRemoteReqsDuration(jsonOption(readJson.get("Remote Requests Duration"))
         .map(_.extractLong).getOrElse(0L))
-      jsonOption(readJson.get("Shuffle Push Read Metrics")).foreach { shufflePushReadJson =>
+      jsonOption(readJson.get("Push Based Shuffle")).foreach { shufflePushReadJson =>
         readMetrics.incCorruptMergedBlockChunks(jsonOption(
           shufflePushReadJson.get("Corrupt Merged Block Chunks"))
             .map(_.extractLong).getOrElse(0L))
         readMetrics.incMergedFetchFallbackCount(jsonOption(
-          shufflePushReadJson.get("Merged Fallback Count")).map(_.extractLong).getOrElse(0L))
+          shufflePushReadJson.get("Merged Fetch Fallback Count")).map(_.extractLong).getOrElse(0L))
         readMetrics.incRemoteMergedBlocksFetched(jsonOption(shufflePushReadJson
           .get("Merged Remote Blocks Fetched")).map(_.extractLong).getOrElse(0L))
         readMetrics.incLocalMergedBlocksFetched(jsonOption(shufflePushReadJson
@@ -1399,20 +1366,8 @@ private[spark] object JsonProtocol extends JsonUtils {
     metrics
   }
 
-  private object TASK_END_REASON_FORMATTED_CLASS_NAMES {
-    val success = Utils.getFormattedClassName(Success)
-    val resubmitted = Utils.getFormattedClassName(Resubmitted)
-    val fetchFailed = Utils.getFormattedClassName(FetchFailed)
-    val exceptionFailure = Utils.getFormattedClassName(ExceptionFailure)
-    val taskResultLost = Utils.getFormattedClassName(TaskResultLost)
-    val taskKilled = Utils.getFormattedClassName(TaskKilled)
-    val taskCommitDenied = Utils.getFormattedClassName(TaskCommitDenied)
-    val executorLostFailure = Utils.getFormattedClassName(ExecutorLostFailure)
-    val unknownReason = Utils.getFormattedClassName(UnknownReason)
-  }
-
   def taskEndReasonFromJson(json: JsonNode): TaskEndReason = {
-    import TASK_END_REASON_FORMATTED_CLASS_NAMES._
+    import JsonProtocol.TASK_END_REASON_FORMATTED_CLASS_NAMES._
 
     json.get("Reason").extractString match {
       case `success` => Success
@@ -1485,13 +1440,8 @@ private[spark] object JsonProtocol extends JsonUtils {
     BlockManagerId(executorId, host, port)
   }
 
-  private object JOB_RESULT_FORMATTED_CLASS_NAMES {
-    val jobSucceeded = Utils.getFormattedClassName(JobSucceeded)
-    val jobFailed = Utils.getFormattedClassName(JobFailed)
-  }
-
   def jobResultFromJson(json: JsonNode): JobResult = {
-    import JOB_RESULT_FORMATTED_CLASS_NAMES._
+    import JsonProtocol.JOB_RESULT_FORMATTED_CLASS_NAMES._
 
     json.get("Result").extractString match {
       case `jobSucceeded` => JobSucceeded
@@ -1599,7 +1549,7 @@ private[spark] object JsonProtocol extends JsonUtils {
 
   def resourcesMapFromJson(json: JsonNode): Map[String, ResourceInformation] = {
     assert(json.isObject, s"expected object, got ${json.getNodeType}")
-    json.fields.asScala.map { field =>
+    json.properties.asScala.map { field =>
       val resourceInfo = ResourceInformation.parseJson(field.getValue.toString)
       (field.getKey, resourceInfo)
     }.toMap
@@ -1611,7 +1561,7 @@ private[spark] object JsonProtocol extends JsonUtils {
 
   def mapFromJson(json: JsonNode): Map[String, String] = {
     assert(json.isObject, s"expected object, got ${json.getNodeType}")
-    json.fields.asScala.map { field =>
+    json.properties.asScala.map { field =>
       (field.getKey, field.getValue.extractString)
     }.toMap
   }
@@ -1691,5 +1641,47 @@ private[spark] object JsonProtocol extends JsonUtils {
       require(json.isTextual || json.isNull, s"Expected string or NULL, got ${json.getNodeType}")
       json.textValue
     }
+  }
+}
+
+private[spark] object JsonProtocol {
+  private object JOB_RESULT_FORMATTED_CLASS_NAMES {
+    val jobSucceeded = Utils.getFormattedClassName(JobSucceeded)
+    val jobFailed = Utils.getFormattedClassName(JobFailed)
+  }
+
+  private object SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES {
+    val stageSubmitted = Utils.getFormattedClassName(SparkListenerStageSubmitted)
+    val stageCompleted = Utils.getFormattedClassName(SparkListenerStageCompleted)
+    val taskStart = Utils.getFormattedClassName(SparkListenerTaskStart)
+    val taskGettingResult = Utils.getFormattedClassName(SparkListenerTaskGettingResult)
+    val taskEnd = Utils.getFormattedClassName(SparkListenerTaskEnd)
+    val jobStart = Utils.getFormattedClassName(SparkListenerJobStart)
+    val jobEnd = Utils.getFormattedClassName(SparkListenerJobEnd)
+    val environmentUpdate = Utils.getFormattedClassName(SparkListenerEnvironmentUpdate)
+    val blockManagerAdded = Utils.getFormattedClassName(SparkListenerBlockManagerAdded)
+    val blockManagerRemoved = Utils.getFormattedClassName(SparkListenerBlockManagerRemoved)
+    val unpersistRDD = Utils.getFormattedClassName(SparkListenerUnpersistRDD)
+    val applicationStart = Utils.getFormattedClassName(SparkListenerApplicationStart)
+    val applicationEnd = Utils.getFormattedClassName(SparkListenerApplicationEnd)
+    val executorAdded = Utils.getFormattedClassName(SparkListenerExecutorAdded)
+    val executorRemoved = Utils.getFormattedClassName(SparkListenerExecutorRemoved)
+    val logStart = Utils.getFormattedClassName(SparkListenerLogStart)
+    val metricsUpdate = Utils.getFormattedClassName(SparkListenerExecutorMetricsUpdate)
+    val stageExecutorMetrics = Utils.getFormattedClassName(SparkListenerStageExecutorMetrics)
+    val blockUpdate = Utils.getFormattedClassName(SparkListenerBlockUpdated)
+    val resourceProfileAdded = Utils.getFormattedClassName(SparkListenerResourceProfileAdded)
+  }
+
+  private object TASK_END_REASON_FORMATTED_CLASS_NAMES {
+    val success = Utils.getFormattedClassName(Success)
+    val resubmitted = Utils.getFormattedClassName(Resubmitted)
+    val fetchFailed = Utils.getFormattedClassName(FetchFailed)
+    val exceptionFailure = Utils.getFormattedClassName(ExceptionFailure)
+    val taskResultLost = Utils.getFormattedClassName(TaskResultLost)
+    val taskKilled = Utils.getFormattedClassName(TaskKilled)
+    val taskCommitDenied = Utils.getFormattedClassName(TaskCommitDenied)
+    val executorLostFailure = Utils.getFormattedClassName(ExecutorLostFailure)
+    val unknownReason = Utils.getFormattedClassName(UnknownReason)
   }
 }

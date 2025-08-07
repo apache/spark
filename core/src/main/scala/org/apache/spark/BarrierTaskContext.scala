@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import java.io.Closeable
 import java.util.{Properties, TimerTask}
 import java.util.concurrent.{ScheduledThreadPoolExecutor, TimeUnit}
 
@@ -26,7 +27,7 @@ import scala.util.{Failure, Success => ScalaSuccess, Try}
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
@@ -62,7 +63,7 @@ class BarrierTaskContext private[spark] (
       log"for ${MDC(TOTAL_TIME, System.currentTimeMillis() - st)} ms,")
     logInfo(log"Task ${MDC(TASK_ATTEMPT_ID, taskAttemptId())}" +
       log" from Stage ${MDC(STAGE_ID, stageId())}" +
-      log"(Attempt ${MDC(STAGE_ATTEMPT, stageAttemptNumber())}) " +
+      log"(Attempt ${MDC(STAGE_ATTEMPT_ID, stageAttemptNumber())}) " +
       msg + waitMsg +
       log" current barrier epoch is ${MDC(BARRIER_EPOCH, barrierEpoch)}.")
   }
@@ -81,7 +82,7 @@ class BarrierTaskContext private[spark] (
       }
     }
     // Log the update of global sync every 1 minute.
-    timer.scheduleAtFixedRate(timerTask, 1, 1, TimeUnit.MINUTES)
+    val timerFuture = timer.scheduleAtFixedRate(timerTask, 1, 1, TimeUnit.MINUTES)
 
     try {
       val abortableRpcFuture = barrierCoordinator.askAbortable[Array[String]](
@@ -120,7 +121,7 @@ class BarrierTaskContext private[spark] (
         logProgressInfo(log"failed to perform global sync", Some(startTime))
         throw e
     } finally {
-      timerTask.cancel()
+      timerFuture.cancel(false)
       timer.purge()
     }
   }
@@ -273,6 +274,18 @@ class BarrierTaskContext private[spark] (
   }
 
   override private[spark] def getLocalProperties: Properties = taskContext.getLocalProperties
+
+  override private[spark] def interruptible(): Boolean = taskContext.interruptible()
+
+  override private[spark] def pendingInterrupt(threadToInterrupt: Option[Thread], reason: String)
+    : Unit = {
+    taskContext.pendingInterrupt(threadToInterrupt, reason)
+  }
+
+  override private[spark] def createResourceUninterruptibly[T <: Closeable](resourceBuilder: => T)
+    : T = {
+    taskContext.createResourceUninterruptibly(resourceBuilder)
+  }
 }
 
 @Experimental

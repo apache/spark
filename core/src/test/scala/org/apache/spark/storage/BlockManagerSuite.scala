@@ -152,7 +152,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   }
 
   // Save modified system properties so that we can restore them after tests.
-  val originalArch = System.getProperty("os.arch")
+  val originalArch = Utils.osArch
   val originalCompressedOops = System.getProperty(TEST_USE_COMPRESSED_OOPS_KEY)
 
   def reinitializeSizeEstimator(arch: String, useCompressedOops: String): Unit = {
@@ -472,6 +472,26 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   test("BlockManagerId.isDriver() with DRIVER_IDENTIFIER (SPARK-27090)") {
     assert(BlockManagerId(SparkContext.DRIVER_IDENTIFIER, "XXX", 1).isDriver)
     assert(!BlockManagerId("notADriverIdentifier", "XXX", 1).isDriver)
+  }
+
+  test("SPARK-43221: Host local block fetching should use a block status with disk size") {
+    conf.set(IO_ENCRYPTION_ENABLED, true)
+    conf.set(SHUFFLE_SERVICE_FETCH_RDD_ENABLED, true)
+    val store1 = makeBlockManager(2000, "exec1")
+    val store2 = makeBlockManager(2000, "exec2")
+    val store3 = makeBlockManager(2000, "exec3")
+    val store4 = makeBlockManager(2000, "exec4")
+    val value = new Array[Byte](100)
+    val broadcastId = BroadcastBlockId(0)
+    store1.putSingle(broadcastId, value, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store2.putSingle(broadcastId, value, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store3.putSingle(broadcastId, value, StorageLevel.DISK_ONLY, tellMaster = true)
+    store4.getRemoteBytes(broadcastId) match {
+      case Some(block) =>
+        assert(block.size > 0, "The block size must be greater than 0 for a nonempty block!")
+      case None =>
+        assert(false, "Block not found!")
+    }
   }
 
   test("master + 1 manager interaction") {
@@ -851,8 +871,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     when(bmMaster.getLocations(mc.any[BlockId])).thenReturn(Seq(bmId1, bmId2, bmId3))
 
     val blockManager = makeBlockManager(128, "exec", bmMaster)
-    val sortLocations = PrivateMethod[Seq[BlockManagerId]](Symbol("sortLocations"))
-    val locations = blockManager invokePrivate sortLocations(bmMaster.getLocations("test"))
+    val locations = blockManager.sortLocations(bmMaster.getLocations("test"))
     assert(locations.map(_.host) === Seq(localHost, localHost, otherHost))
   }
 
@@ -874,8 +893,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val blockManager = makeBlockManager(128, "exec", bmMaster)
     blockManager.blockManagerId =
       BlockManagerId(SparkContext.DRIVER_IDENTIFIER, localHost, 1, Some(localRack))
-    val sortLocations = PrivateMethod[Seq[BlockManagerId]](Symbol("sortLocations"))
-    val locations = blockManager invokePrivate sortLocations(bmMaster.getLocations("test"))
+    val locations = blockManager.sortLocations(bmMaster.getLocations("test"))
     assert(locations.map(_.host) === Seq(localHost, localHost, otherHost, otherHost, otherHost))
     assert(locations.flatMap(_.topologyInfo)
       === Seq(localRack, localRack, localRack, otherRack, otherRack))

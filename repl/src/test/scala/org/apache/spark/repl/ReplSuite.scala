@@ -25,7 +25,7 @@ import org.apache.logging.log4j.core.{Logger, LoggerContext}
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
 class ReplSuite extends SparkFunSuite {
@@ -400,6 +400,7 @@ class ReplSuite extends SparkFunSuite {
   test("register UDF via SparkSession.addArtifact") {
     val artifactPath = new File("src/test/resources").toPath
     val intSumUdfPath = artifactPath.resolve("IntSumUdf.class")
+    assume(intSumUdfPath.toFile.exists)
     val output = runInterpreterInPasteMode("local",
       s"""
          |import org.apache.spark.sql.api.java.UDF2
@@ -438,6 +439,7 @@ class ReplSuite extends SparkFunSuite {
   test("register a class via SparkSession.addArtifact") {
     val artifactPath = new File("src/test/resources").toPath
     val intSumUdfPath = artifactPath.resolve("IntSumUdf.class")
+    assume(intSumUdfPath.toFile.exists)
     val output = runInterpreterInPasteMode("local",
       s"""
          |import org.apache.spark.sql.functions.udf
@@ -458,5 +460,21 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertDoesNotContain("assertion failed", output)
+  }
+
+  test("SPARK-53129: spark-shell imports java.net._ by default") {
+    val output = runInterpreter("local",
+      """
+        |new URI("https://spark.apache.org")
+      """.stripMargin)
+    assertDoesNotContain("error: not found: type URI", output)
+  }
+
+  test("SPARK-53131: spark-shell imports java.nio.file._ by default") {
+    val output = runInterpreter("local",
+      """
+        |Path.of("/tmp")
+      """.stripMargin)
+    assertDoesNotContain("error: not found: type URI", output)
   }
 }

@@ -146,7 +146,7 @@ class StreamingTestsForeachBatchMixin:
     def my_test_function_2():
         return 2
 
-    def test_streaming_foreach_batch_fuction_calling(self):
+    def test_streaming_foreach_batch_function_calling(self):
         def my_test_function_3():
             return 3
 
@@ -203,6 +203,27 @@ class StreamingTestsForeachBatchMixin:
             actual = self.spark.read.table(table_name)
             df = self.spark.read.format("text").load("python/test_support/sql/streaming")
             self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+
+    def test_streaming_foreach_batch_external_column(self):
+        from pyspark.sql import functions as sf
+
+        table_name = "testTable_foreach_batch_external_column"
+        with self.table(table_name):
+            # Define 'col' outside the `func` below, so it'd have to be serialized.
+            col = sf.col("value")
+
+            def func(df: DataFrame, batch_id: int):
+                result_df = df.select(col.alias("result"))
+                result_df.write.mode("append").saveAsTable(table_name)
+
+            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+            q = df.writeStream.foreachBatch(func).start()
+            q.processAllAvailable()
+            q.stop()
+
+            collected = self.spark.sql("select * from " + table_name).collect()
+            results = [row["result"] for row in collected]
+            self.assertEqual(sorted(results), ["hello", "this"])
 
 
 class StreamingTestsForeachBatch(StreamingTestsForeachBatchMixin, ReusedSQLTestCase):

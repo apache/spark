@@ -27,16 +27,21 @@ import org.apache.spark.sql.catalyst.util.CollationFactory.fetchCollation
 // scalastyle:off
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.must.Matchers
+import com.ibm.icu.util.VersionInfo.ICU_VERSION
 
 import org.apache.spark.sql.catalyst.util.CollationFactory._
 import org.apache.spark.unsafe.types.UTF8String.{fromString => toUTF8}
 
 class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ignore funsuite
 
-  val currentIcuVersion: String = "76.1"
+  val currentIcuVersion: String = s"${ICU_VERSION.getMajor}.${ICU_VERSION.getMinor}"
 
   test("collationId stability") {
     assert(INDETERMINATE_COLLATION_ID == -1)
+    val indeterminate = fetchCollation(INDETERMINATE_COLLATION_ID)
+    assert(indeterminate.collationName == "null")
+    assert(indeterminate.provider == "null")
+    assert(indeterminate.version == null)
 
     assert(UTF8_BINARY_COLLATION_ID == 0)
     val utf8Binary = fetchCollation(UTF8_BINARY_COLLATION_ID)
@@ -134,7 +139,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
 
   case class CollationTestCase[R](collationName: String, s1: String, s2: String, expectedResult: R)
 
-  test("collation aware equality and hash") {
+  test("collation aware equality and sort key") {
     val checks = Seq(
       CollationTestCase("UTF8_BINARY", "aaa", "aaa", true),
       CollationTestCase("UTF8_BINARY", "aaa", "AAA", false),
@@ -189,9 +194,9 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       assert(collation.equalsFunction(toUTF8(testCase.s1), toUTF8(testCase.s2)) ==
         testCase.expectedResult)
 
-      val hash1 = collation.hashFunction.applyAsLong(toUTF8(testCase.s1))
-      val hash2 = collation.hashFunction.applyAsLong(toUTF8(testCase.s2))
-      assert((hash1 == hash2) == testCase.expectedResult)
+      val sortKey1 = collation.sortKeyFunction.apply(toUTF8(testCase.s1)).asInstanceOf[Array[Byte]]
+      val sortKey2 = collation.sortKeyFunction.apply(toUTF8(testCase.s2)).asInstanceOf[Array[Byte]]
+      assert(sortKey1.sameElements(sortKey2) == testCase.expectedResult)
     })
   }
 
@@ -286,7 +291,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     // if we don't handle the concurrency properly on Collator level
 
     (0 to 10).foreach(_ => {
-      val collator = fetchCollation("UNICODE").collator
+      val collator = fetchCollation("UNICODE").getCollator
 
       ParSeq(0 to 100).foreach { _ =>
         collator.getCollationKey("aaa")
@@ -340,7 +345,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       "sr_Cyrl_SRB_AI"
     ).foreach(collationICU => {
       val col = fetchCollation(collationICU)
-      assert(col.collator.getLocale(ULocale.VALID_LOCALE) != ULocale.ROOT)
+      assert(col.getCollator.getLocale(ULocale.VALID_LOCALE) != ULocale.ROOT)
     })
   }
 
@@ -431,7 +436,6 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
 
   test("invalid collationId") {
     val badCollationIds = Seq(
-      INDETERMINATE_COLLATION_ID, // Indeterminate collation.
       1 << 30, // User-defined collation range.
       (1 << 30) | 1, // User-defined collation range.
       (1 << 30) | (1 << 29), // User-defined collation range.

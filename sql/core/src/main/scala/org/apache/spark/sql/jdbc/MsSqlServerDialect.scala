@@ -38,6 +38,10 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:sqlserver")
 
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getErrorCode == 208
+  }
+
   // Microsoft SQL Server does not have the boolean type.
   // Compile the boolean value to the bit data type instead.
   // scalastyle:off line.size.limit
@@ -45,6 +49,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   // scalastyle:on line.size.limit
   override def compileValue(value: Any): Any = value match {
     case booleanValue: Boolean => if (booleanValue) 1 else 0
+    case binaryValue: Array[Byte] => binaryValue.map("%02X".format(_)).mkString("0x", "", "")
     case other => super.compileValue(other)
   }
 
@@ -53,7 +58,8 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   // scalastyle:on line.size.limit
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
     "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
-  private val supportedFunctions = supportedAggregateFunctions
+  private val supportedStringFunctions = Set("RPAD", "LPAD")
+  private val supportedFunctions = supportedAggregateFunctions ++ supportedStringFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
@@ -82,6 +88,17 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       case "STDDEV_SAMP" => "STDEV"
       case _ => super.dialectFunctionName(funcName)
     }
+
+    override def visitSQLFunction(funcName: String, inputs: Array[String]): String =
+      funcName match {
+        case "RPAD" =>
+          val Array(str, len, pad) = inputs
+          s"LEFT(CONCAT($str, REPLICATE($pad, $len)), $len)"
+        case "LPAD" =>
+          val Array(str, len, pad) = inputs
+          s"RIGHT(CONCAT(REPLICATE($pad, $len), $str), $len)"
+        case _ => super.visitSQLFunction(funcName, inputs)
+      }
 
     override def build(expr: Expression): String = {
       // MsSqlServer does not support boolean comparison using standard comparison operators
@@ -219,7 +236,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
 
   override def classifyException(
       e: Throwable,
-      errorClass: String,
+      condition: String,
       messageParameters: Map[String, String],
       description: String,
       isRuntime: Boolean): Throwable with SparkThrowable = {
@@ -231,13 +248,13 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
-           case 15335 if errorClass == "FAILED_JDBC.RENAME_TABLE" =>
+           case 15335 if condition == "FAILED_JDBC.RENAME_TABLE" =>
              val newTable = messageParameters("newName")
              throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
           case _ =>
-            super.classifyException(e, errorClass, messageParameters, description, isRuntime)
+            super.classifyException(e, condition, messageParameters, description, isRuntime)
         }
-      case _ => super.classifyException(e, errorClass, messageParameters, description, isRuntime)
+      case _ => super.classifyException(e, condition, messageParameters, description, isRuntime)
     }
   }
 
@@ -248,7 +265,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       val limitClause = dialect.getLimitClause(limit)
 
       options.prepareQuery +
-        s"SELECT $limitClause $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+        s"SELECT $limitClause $columnList FROM $tableOrQuery" +
         s" $whereClause $groupByClause $orderByClause"
     }
   }
@@ -256,7 +273,21 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   override def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
     new MsSqlServerSQLQueryBuilder(this, options)
 
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    val exceptionMessage = Option(exception.getMessage)
+      .map(_.toLowerCase(Locale.ROOT))
+      .getOrElse("")
+    // scalastyle:off line.size.limit
+    // All errors are shown here, but there is no consistent error code to identify
+    // most syntax errors so we have to base off the exception message.
+    // https://learn.microsoft.com/en-us/sql/relational-databases/errors-events/database-engine-events-and-errors?view=sql-server-ver16
+    // scalastyle:on line.size.limit
+    exceptionMessage.contains("incorrect syntax") || exceptionMessage.contains("syntax error")
+  }
+
   override def supportsLimit: Boolean = true
+
+  override def supportsJoin: Boolean = true
 }
 
 private object MsSqlServerDialect {

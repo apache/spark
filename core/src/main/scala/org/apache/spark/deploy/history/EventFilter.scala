@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.deploy.history.EventFilter.FilterStatistics
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{LINE, LINE_NUM, PATH}
 import org.apache.spark.scheduler._
 import org.apache.spark.util.{JsonProtocol, Utils}
@@ -72,6 +72,7 @@ private[spark] object EventFilter extends Logging {
       fs: FileSystem,
       filters: Seq[EventFilter],
       path: Path,
+      jsonProtocol: JsonProtocol,
       onAccepted: (String, SparkListenerEvent) => Unit,
       onRejected: (String, SparkListenerEvent) => Unit,
       onUnidentified: String => Unit): Unit = {
@@ -81,7 +82,7 @@ private[spark] object EventFilter extends Logging {
       lines.zipWithIndex.foreach { case (line, lineNum) =>
         try {
           val event = try {
-            Some(JsonProtocol.sparkEventFromJson(line))
+            Some(jsonProtocol.sparkEventFromJson(line))
           } catch {
             // ignore any exception occurred from unidentified json
             case NonFatal(_) =>

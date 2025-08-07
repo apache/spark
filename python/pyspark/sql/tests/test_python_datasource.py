@@ -15,32 +15,53 @@
 # limitations under the License.
 #
 import os
+import platform
 import tempfile
 import unittest
-from typing import Callable, Union
+from datetime import datetime
+from decimal import Decimal
+from typing import Callable, Iterable, List, Union
 
-from pyspark.errors import PythonException, AnalysisException
+from pyspark.errors import AnalysisException, PythonException
 from pyspark.sql.datasource import (
-    DataSource,
-    DataSourceReader,
-    InputPartition,
-    DataSourceWriter,
-    WriterCommitMessage,
     CaseInsensitiveDict,
+    DataSource,
+    DataSourceArrowWriter,
+    DataSourceReader,
+    DataSourceWriter,
+    EqualNullSafe,
+    EqualTo,
+    Filter,
+    GreaterThan,
+    GreaterThanOrEqual,
+    In,
+    InputPartition,
+    IsNotNull,
+    IsNull,
+    LessThan,
+    LessThanOrEqual,
+    Not,
+    StringContains,
+    StringEndsWith,
+    StringStartsWith,
+    WriterCommitMessage,
 )
 from pyspark.sql.functions import spark_partition_id
-from pyspark.sql.types import Row, StructType
+from pyspark.sql.session import SparkSession
+from pyspark.sql.types import Row, StructType, VariantVal
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
+    SPARK_HOME,
+    ReusedSQLTestCase,
     have_pyarrow,
     pyarrow_requirement_message,
 )
-from pyspark.testing import assertDataFrameEqual
-from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.testing.utils import SPARK_HOME
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class BasePythonDataSourceTestsMixin:
+    spark: SparkSession
+
     def test_basic_data_source_class(self):
         class MyDataSource(DataSource):
             ...
@@ -67,18 +88,33 @@ class BasePythonDataSourceTestsMixin:
     def test_data_source_register(self):
         class TestReader(DataSourceReader):
             def read(self, partition):
-                yield (0, 1)
+                yield (
+                    0,
+                    1,
+                    VariantVal.parseJson('{"c":1}'),
+                    {"v": VariantVal.parseJson('{"d":2}')},
+                    [VariantVal.parseJson('{"e":3}')],
+                    {"v1": VariantVal.parseJson('{"f":4}'), "v2": VariantVal.parseJson('{"g":5}')},
+                )
 
         class TestDataSource(DataSource):
             def schema(self):
-                return "a INT, b INT"
+                return (
+                    "a INT, b INT, c VARIANT, d STRUCT<v VARIANT>, e ARRAY<VARIANT>,"
+                    "f MAP<STRING, VARIANT>"
+                )
 
             def reader(self, schema):
                 return TestReader()
 
         self.spark.dataSource.register(TestDataSource)
         df = self.spark.read.format("TestDataSource").load()
-        assertDataFrameEqual(df, [Row(a=0, b=1)])
+        assertDataFrameEqual(
+            df.selectExpr(
+                "a", "b", "to_json(c) c", "to_json(d.v) d", "to_json(e[0]) e", "to_json(f['v2']) f"
+            ),
+            [Row(a=0, b=1, c='{"c":1}', d='{"d":2}', e='{"e":3}', f='{"g":5}')],
+        )
 
         class MyDataSource(TestDataSource):
             @classmethod
@@ -86,13 +122,21 @@ class BasePythonDataSourceTestsMixin:
                 return "TestDataSource"
 
             def schema(self):
-                return "c INT, d INT"
+                return (
+                    "c INT, d INT, e VARIANT, f STRUCT<v VARIANT>, g ARRAY<VARIANT>,"
+                    "h MAP<STRING, VARIANT>"
+                )
 
         # Should be able to register the data source with the same name.
         self.spark.dataSource.register(MyDataSource)
 
         df = self.spark.read.format("TestDataSource").load()
-        assertDataFrameEqual(df, [Row(c=0, d=1)])
+        assertDataFrameEqual(
+            df.selectExpr(
+                "c", "d", "to_json(e) e", "to_json(f.v) f", "to_json(g[0]) g", "to_json(h['v2']) h"
+            ),
+            [Row(c=0, d=1, e='{"c":1}', f='{"d":2}', g='{"e":3}', h='{"g":5}')],
+        )
 
     def register_data_source(
         self,
@@ -245,6 +289,209 @@ class BasePythonDataSourceTestsMixin:
         assertDataFrameEqual(df, [Row(x=0, y="0"), Row(x=1, y="1")])
         self.assertEqual(df.select(spark_partition_id()).distinct().count(), 2)
 
+    def test_filter_pushdown(self):
+        class TestDataSourceReader(DataSourceReader):
+            def __init__(self):
+                self.has_filter = False
+
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                assert set(filters) == {
+                    IsNotNull(("x",)),
+                    IsNotNull(("y",)),
+                    EqualTo(("x",), 1),
+                    EqualTo(("y",), 2),
+                }, filters
+                self.has_filter = True
+                # pretend we support x = 1 filter but in fact we don't
+                # so we only return y = 2 filter
+                yield filters[filters.index(EqualTo(("y",), 2))]
+
+            def partitions(self):
+                assert self.has_filter
+                return super().partitions()
+
+            def read(self, partition):
+                assert self.has_filter
+                yield [1, 1]
+                yield [1, 2]
+                yield [2, 2]
+
+        class TestDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "test"
+
+            def schema(self):
+                return "x int, y int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("test").load().filter("x = 1 and y = 2")
+            # only the y = 2 filter is applied post scan
+            assertDataFrameEqual(df, [Row(x=1, y=2), Row(x=2, y=2)])
+
+    def test_extraneous_filter(self):
+        class TestDataSourceReader(DataSourceReader):
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                yield EqualTo(("x",), 1)
+
+            def partitions(self):
+                assert False
+
+            def read(self, partition):
+                assert False
+
+        class TestDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "test"
+
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            with self.assertRaisesRegex(Exception, "DATA_SOURCE_EXTRANEOUS_FILTERS"):
+                self.spark.read.format("test").load().filter("x = 1").show()
+
+    def test_filter_pushdown_error(self):
+        error_str = "dummy error"
+
+        class TestDataSourceReader(DataSourceReader):
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                raise Exception(error_str)
+
+            def read(self, partition):
+                yield [1]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().filter("x = 1 or x is null")
+            assertDataFrameEqual(df, [Row(x=1)])  # works when not pushing down filters
+            with self.assertRaisesRegex(Exception, error_str):
+                df.filter("x = 1").explain()
+
+    def test_filter_pushdown_disabled(self):
+        class TestDataSourceReader(DataSourceReader):
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                assert False
+
+            def read(self, partition):
+                assert False
+
+        class TestDataSource(DataSource):
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": False}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").schema("x int").load()
+            with self.assertRaisesRegex(Exception, "DATA_SOURCE_PUSHDOWN_DISABLED"):
+                df.show()
+
+    def _check_filters(self, sql_type, sql_filter, python_filters):
+        """
+        Parameters
+        ----------
+        sql_type: str
+            The SQL type of the column x.
+        sql_filter: str
+            A SQL filter using the column x.
+        python_filters: List[Filter]
+            The expected python filters to be pushed down.
+        """
+
+        class TestDataSourceReader(DataSourceReader):
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                actual = [f for f in filters if not isinstance(f, IsNotNull)]
+                expected = python_filters
+                assert actual == expected, (actual, expected)
+                return filters
+
+            def read(self, partition):
+                yield from []
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return f"x {sql_type}"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().filter(sql_filter)
+            df.count()
+
+    def test_unsupported_filter(self):
+        self._check_filters(
+            "struct<a:int, b:int, c:int>", "x.a = 1 and x.b = x.c", [EqualTo(("x", "a"), 1)]
+        )
+        self._check_filters("int", "x = 1 or x > 2", [])
+        self._check_filters("int", "(0 < x and x < 1) or x = 2", [])
+        self._check_filters("int", "x % 5 = 1", [])
+        self._check_filters("array<int>", "x[0] = 1", [])
+        self._check_filters("string", "x like 'a%a%'", [])
+        self._check_filters("string", "x ilike 'a'", [])
+        self._check_filters("string", "x = 'a' collate zh", [])
+
+    def test_filter_value_type(self):
+        self._check_filters("int", "x = 1", [EqualTo(("x",), 1)])
+        self._check_filters("int", "x = null", [EqualTo(("x",), None)])
+        self._check_filters("float", "x = 3 / 2", [EqualTo(("x",), 1.5)])
+        self._check_filters("string", "x = '1'", [EqualTo(("x",), "1")])
+        self._check_filters("array<int>", "x = array(1, 2)", [EqualTo(("x",), [1, 2])])
+        self._check_filters(
+            "struct<x:int>", "x = named_struct('x', 1)", [EqualTo(("x",), {"x": 1})]
+        )
+        self._check_filters(
+            "decimal", "x in (1.1, 2.1)", [In(("x",), [Decimal(1.1), Decimal(2.1)])]
+        )
+        self._check_filters(
+            "timestamp_ntz",
+            "x = timestamp_ntz '2020-01-01 00:00:00'",
+            [EqualTo(("x",), datetime.strptime("2020-01-01 00:00:00", "%Y-%m-%d %H:%M:%S"))],
+        )
+        self._check_filters(
+            "interval second",
+            "x = interval '2' second",
+            [],  # intervals are not supported
+        )
+
+    def test_filter_type(self):
+        self._check_filters("boolean", "x", [EqualTo(("x",), True)])
+        self._check_filters("boolean", "not x", [Not(EqualTo(("x",), True))])
+        self._check_filters("int", "x is null", [IsNull(("x",))])
+        self._check_filters("int", "x <> 0", [Not(EqualTo(("x",), 0))])
+        self._check_filters("int", "x <=> 1", [EqualNullSafe(("x",), 1)])
+        self._check_filters("int", "1 < x", [GreaterThan(("x",), 1)])
+        self._check_filters("int", "1 <= x", [GreaterThanOrEqual(("x",), 1)])
+        self._check_filters("int", "x < 1", [LessThan(("x",), 1)])
+        self._check_filters("int", "x <= 1", [LessThanOrEqual(("x",), 1)])
+        self._check_filters("string", "x like 'a%'", [StringStartsWith(("x",), "a")])
+        self._check_filters("string", "x like '%a'", [StringEndsWith(("x",), "a")])
+        self._check_filters("string", "x like '%a%'", [StringContains(("x",), "a")])
+        self._check_filters(
+            "string", "x like 'a%b'", [StringStartsWith(("x",), "a"), StringEndsWith(("x",), "b")]
+        )
+        self._check_filters("int", "x in (1, 2)", [In(("x",), [1, 2])])
+
+    def test_filter_nested_column(self):
+        self._check_filters("struct<y:int>", "x.y = 1", [EqualTo(("x", "y"), 1)])
+
     def _get_test_json_data_source(self):
         import json
         import os
@@ -277,7 +524,7 @@ class BasePythonDataSourceTestsMixin:
                 from pyspark import TaskContext
 
                 context = TaskContext.get()
-                output_path = os.path.join(self.path, f"{context.partitionId}.json")
+                output_path = os.path.join(self.path, f"{context.partitionId()}.json")
                 count = 0
                 with open(output_path, "w") as file:
                     for row in iterator:
@@ -436,6 +683,37 @@ class BasePythonDataSourceTestsMixin:
         ):
             self.spark.read.format("arrowbatch").schema("key int, dummy string").load().show()
 
+    def test_arrow_batch_sink(self):
+        class TestDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "arrow_sink"
+
+            def writer(self, schema, overwrite):
+                return TestArrowWriter(self.options["path"])
+
+        class TestArrowWriter(DataSourceArrowWriter):
+            def __init__(self, path):
+                self.path = path
+
+            def write(self, iterator):
+                from pyspark import TaskContext
+
+                context = TaskContext.get()
+                output_path = os.path.join(self.path, f"{context.partitionId()}.json")
+                with open(output_path, "w") as file:
+                    for batch in iterator:
+                        df = batch.to_pandas()
+                        df.to_json(file, orient="records", lines=True)
+                return WriterCommitMessage()
+
+        self.spark.dataSource.register(TestDataSource)
+        df = self.spark.range(3)
+        with tempfile.TemporaryDirectory(prefix="test_arrow_batch_sink") as d:
+            df.write.format("arrow_sink").mode("append").save(d)
+            df2 = self.spark.read.format("json").load(d)
+            assertDataFrameEqual(df2, df)
+
     def test_data_source_type_mismatch(self):
         class TestDataSource(DataSource):
             @classmethod
@@ -476,6 +754,129 @@ class BasePythonDataSourceTestsMixin:
             r"\[DATA_SOURCE_TYPE_MISMATCH\] Expected an instance of DataSourceWriter",
         ):
             df.write.format("test").mode("append").saveAsTable("test_table")
+
+    @unittest.skipIf(
+        "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+    )
+    def test_data_source_segfault(self):
+        import ctypes
+
+        for enabled, expected in [
+            (True, "Segmentation fault"),
+            (False, "Consider setting .* for the better Python traceback."),
+        ]:
+            with self.subTest(enabled=enabled), self.sql_conf(
+                {"spark.sql.execution.pyspark.udf.faulthandler.enabled": enabled}
+            ):
+                with self.subTest(worker="pyspark.sql.worker.create_data_source"):
+
+                    class TestDataSource(DataSource):
+                        @classmethod
+                        def name(cls):
+                            return "test"
+
+                        def schema(self):
+                            return ctypes.string_at(0)
+
+                    self.spark.dataSource.register(TestDataSource)
+
+                    with self.assertRaisesRegex(Exception, expected):
+                        self.spark.read.format("test").load().show()
+
+                with self.subTest(worker="pyspark.sql.worker.plan_data_source_read"):
+
+                    class TestDataSource(DataSource):
+                        @classmethod
+                        def name(cls):
+                            return "test"
+
+                        def schema(self):
+                            return "x string"
+
+                        def reader(self, schema):
+                            return TestReader()
+
+                    class TestReader(DataSourceReader):
+                        def partitions(self):
+                            ctypes.string_at(0)
+                            return []
+
+                        def read(self, partition):
+                            return []
+
+                    self.spark.dataSource.register(TestDataSource)
+
+                    with self.assertRaisesRegex(Exception, expected):
+                        self.spark.read.format("test").load().show()
+
+                with self.subTest(worker="pyspark.worker"):
+
+                    class TestDataSource(DataSource):
+                        @classmethod
+                        def name(cls):
+                            return "test"
+
+                        def schema(self):
+                            return "x string"
+
+                        def reader(self, schema):
+                            return TestReader()
+
+                    class TestReader(DataSourceReader):
+                        def read(self, partition):
+                            ctypes.string_at(0)
+                            yield "x",
+
+                    self.spark.dataSource.register(TestDataSource)
+
+                    with self.assertRaisesRegex(Exception, expected):
+                        self.spark.read.format("test").load().show()
+
+                with self.subTest(worker="pyspark.sql.worker.write_into_data_source"):
+
+                    class TestDataSource(DataSource):
+                        @classmethod
+                        def name(cls):
+                            return "test"
+
+                        def writer(self, schema, overwrite):
+                            return TestWriter()
+
+                    class TestWriter(DataSourceWriter):
+                        def write(self, iterator):
+                            ctypes.string_at(0)
+                            return WriterCommitMessage()
+
+                    self.spark.dataSource.register(TestDataSource)
+
+                    with self.assertRaisesRegex(Exception, expected):
+                        self.spark.range(10).write.format("test").mode("append").saveAsTable(
+                            "test_table"
+                        )
+
+                with self.subTest(worker="pyspark.sql.worker.commit_data_source_write"):
+
+                    class TestDataSource(DataSource):
+                        @classmethod
+                        def name(cls):
+                            return "test"
+
+                        def writer(self, schema, overwrite):
+                            return TestWriter()
+
+                    class TestWriter(DataSourceWriter):
+                        def write(self, iterator):
+                            return WriterCommitMessage()
+
+                        def commit(self, messages):
+                            ctypes.string_at(0)
+
+                    self.spark.dataSource.register(TestDataSource)
+
+                    with self.assertRaisesRegex(Exception, expected):
+                        self.spark.range(10).write.format("test").mode("append").saveAsTable(
+                            "test_table"
+                        )
 
 
 class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):

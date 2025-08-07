@@ -18,16 +18,15 @@ package org.apache.spark.sql.streaming
 
 import java.io.Serializable
 
-import org.apache.spark.annotation.{Evolving, Experimental}
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.Encoder
 
 /**
  * Represents the operation handle provided to the stateful processor used in the arbitrary state
  * API v2.
  */
-@Experimental
 @Evolving
-private[sql] trait StatefulProcessorHandle extends Serializable {
+trait StatefulProcessorHandle extends Serializable {
 
   /**
    * Function to create new or return existing single value state variable of given type with ttl.
@@ -47,6 +46,7 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    *   \- the ttl configuration (time to live duration etc.)
    * @tparam T
    *   \- type of state variable
+   *
    * @return
    *   \- instance of ValueState of type T that can be used to store state persistently
    */
@@ -72,6 +72,7 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    *   \- the ttl configuration (time to live duration etc.)
    * @tparam T
    *   \- type of state variable
+   *
    * @return
    *   \- instance of ValueState of type T that can be used to store state persistently
    */
@@ -96,6 +97,7 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    *   \- the ttl configuration (time to live duration etc.)
    * @tparam T
    *   \- type of state variable
+   *
    * @return
    *   \- instance of ListState of type T that can be used to store state persistently
    */
@@ -121,6 +123,7 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    *   \- the ttl configuration (time to live duration etc.)
    * @tparam T
    *   \- type of state variable
+   *
    * @return
    *   \- instance of ListState of type T that can be used to store state persistently
    */
@@ -149,6 +152,7 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    *   \- type of key for map state variable
    * @tparam V
    *   \- type of value for map state variable
+   *
    * @return
    *   \- instance of MapState of type [K,V] that can be used to store state persistently
    */
@@ -177,17 +181,23 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    *   \- type of key for map state variable
    * @tparam V
    *   \- type of value for map state variable
+   *
    * @return
    *   \- instance of MapState of type [K,V] that can be used to store state persistently
    */
   def getMapState[K: Encoder, V: Encoder](stateName: String, ttlConfig: TTLConfig): MapState[K, V]
 
-  /** Function to return queryInfo for currently running task */
+  /**
+   * Function to return query info for the current query
+   *
+   * @return - QueryInfo object with access to streaming query metadata
+   */
   def getQueryInfo(): QueryInfo
 
   /**
    * Function to register a processing/event time based timer for given implicit grouping key and
    * provided timestamp
+   *
    * @param expiryTimestampMs
    *   \- timer expiry timestamp in milliseconds
    */
@@ -196,6 +206,7 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
   /**
    * Function to delete a processing/event time based timer for given implicit grouping key and
    * provided timestamp
+   *
    * @param expiryTimestampMs
    *   \- timer expiry timestamp in milliseconds
    */
@@ -206,6 +217,7 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    * listTimers() within the `handleInputRows` method of the StatefulProcessor will return all the
    * unprocessed registered timers, including the one being fired within the invocation of
    * `handleInputRows`.
+   *
    * @return
    *   \- list of all the registered timers for given implicit grouping key
    */
@@ -213,6 +225,7 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
 
   /**
    * Function to delete and purge state variable if defined previously
+   *
    * @param stateName
    *   \- name of the state variable
    */

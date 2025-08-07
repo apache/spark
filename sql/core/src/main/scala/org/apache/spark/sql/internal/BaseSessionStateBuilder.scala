@@ -17,15 +17,17 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
+import org.apache.spark.sql.{DataSourceRegistration, ExperimentalMethods, SparkSessionExtensions, UDTFRegistration}
 import org.apache.spark.sql.artifact.ArtifactManager
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveSessionCatalog, ResolveTranspose, TableFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveSessionCatalog, ResolveTranspose, TableFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverExtension
 import org.apache.spark.sql.catalyst.catalog.{FunctionExpressionBuilder, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExtractSemiStructuredFields}
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.classic.{SparkSession, Strategy, StreamingQueryManager, UDFRegistration}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
@@ -37,7 +39,6 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
 import org.apache.spark.sql.execution.streaming.ResolveWriteToStream
 import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
-import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.ExecutionListenerManager
 
 /**
@@ -199,8 +200,42 @@ abstract class BaseSessionStateBuilder(
   protected def analyzer: Analyzer = new Analyzer(catalogManager) {
     override val hintResolutionRules: Seq[Rule[LogicalPlan]] =
       customHintResolutionRules
+
+    override val singlePassResolverExtensions: Seq[ResolverExtension] = Seq(
+      new LogicalRelationResolver
+    )
+
+    override val singlePassMetadataResolverExtensions: Seq[ResolverExtension] = Seq(
+      new DataSourceResolver(session),
+      new FileResolver(session)
+    )
+
+    override val singlePassPostHocResolutionRules: Seq[Rule[LogicalPlan]] =
+      DetectAmbiguousSelfJoin +:
+      ApplyCharTypePadding +:
+      singlePassCustomPostHocResolutionRules
+
+    override val singlePassExtendedResolutionChecks: Seq[LogicalPlan => Unit] = {
+      val heavyChecks = if (session.conf.get(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_RUN_HEAVY_EXTENDED_RESOLUTION_CHECKS
+        )) {
+        Seq(
+          // [[ViewSyncSchemaToMetaStore]] calls `alterTable` if the view schema needs to be
+          // updated.
+          ViewSyncSchemaToMetaStore
+        )
+      } else {
+        Nil
+      }
+
+      PreReadCheck +:
+      heavyChecks ++:
+      singlePassCustomResolutionChecks
+    }
+
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
-      new FindDataSourceTable(session) +:
+      new ResolveDataSource(session) +:
+        new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
@@ -209,6 +244,7 @@ abstract class BaseSessionStateBuilder(
         new EvalSubqueriesForTimeTravel +:
         new ResolveTranspose(session) +:
         new InvokeProcedures(session) +:
+        ExtractSemiStructuredFields +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
@@ -229,6 +265,20 @@ abstract class BaseSessionStateBuilder(
         CommandCheck +:
         ViewSyncSchemaToMetaStore +:
         customCheckRules
+  }
+
+  /**
+   * Custom post resolution rules to add to the single-pass Resolver.
+   *
+   * Using this mechanism is discouraged. Prefer to implement a given feature in the single-pass
+   * Resolver directly.
+   */
+  protected def singlePassCustomPostHocResolutionRules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildPostHocResolutionRules(session)
+  }
+
+  protected def singlePassCustomResolutionChecks: Seq[LogicalPlan => Unit] = {
+    extensions.buildCheckRules(session)
   }
 
   /**

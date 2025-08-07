@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.objects.MapObjects
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, BooleanType, Decimal, DoubleType, IntegerType, MapType, StringType, StructField, StructType}
@@ -92,8 +91,8 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSparkSession {
 
       // items: Seq[Int] => items.map { item => Seq(Struct(item)) }
       val result = df.select(
-        column(MapObjects(
-          (item: Expression) => array(struct(column(item))).expr,
+        Column(MapObjects(
+          (item: Expression) => array(struct(Column(item))).expr,
           $"items".expr,
           df.schema("items").dataType.asInstanceOf[ArrayType].elementType
         )) as "items"

@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.util.{fileToString, resourceToString, strin
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.util.Utils
 
 /**
  * End-to-end tests to check TPCDS query results.
@@ -62,6 +63,7 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
   // To make output results deterministic
   override protected def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
+    .remove("spark.hadoop.fs.file.impl")
 
   protected override def createSparkSession: TestSparkSession = {
     new TestSparkSession(new SparkContext("local[1]", this.getClass.getSimpleName, sparkConf))
@@ -121,7 +123,7 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
           }
           val parent = goldenFile.getParentFile
           if (!parent.exists()) {
-            assert(parent.mkdirs(), "Could not create directory: " + parent)
+            assert(Utils.createDirectory(parent), "Could not create directory: " + parent)
           }
           stringToFile(goldenFile, goldenOutput)
         }

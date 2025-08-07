@@ -24,18 +24,21 @@ import com.google.protobuf.ByteString
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
-import org.apache.spark.sql.{AnalysisException, Dataset, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
+import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -88,7 +91,8 @@ trait SparkConnectPlanTest extends SharedSparkSession {
   def createLocalRelationProto(
       attrs: Seq[AttributeReference],
       data: Seq[InternalRow],
-      timeZoneId: String = "UTC"): proto.Relation = {
+      timeZoneId: String = "UTC",
+      schema: Option[StructType] = None): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
 
     val bytes = ArrowConverters
@@ -98,10 +102,12 @@ trait SparkConnectPlanTest extends SharedSparkSession {
         Long.MaxValue,
         Long.MaxValue,
         timeZoneId,
-        true)
+        true,
+        false)
       .next()
 
     localRelationBuilder.setData(ByteString.copyFrom(bytes))
+    schema.foreach(s => localRelationBuilder.setSchema(s.json))
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
   }
 }
@@ -114,7 +120,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
 class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Simple Limit") {
-    assertThrows[IndexOutOfBoundsException] {
+    assertThrows[InvalidPlanInput] {
       new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(None.orNull))
         .transformRelation(
           proto.Relation.newBuilder
@@ -125,14 +131,20 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("InvalidInputs") {
     // No Relation Set
-    intercept[IndexOutOfBoundsException](
+    val notSetException = intercept[InvalidPlanInput](
       new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(None.orNull))
         .transformRelation(proto.Relation.newBuilder().build()))
+    assert(
+      notSetException.getMessage.contains(
+        "This oneOf field in spark.connect.Relation is not set: RELTYPE_NOT_SET"))
 
-    intercept[InvalidPlanInput](
+    val notSupportedException = intercept[InvalidPlanInput](
       new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(None.orNull))
         .transformRelation(
           proto.Relation.newBuilder.setUnknown(proto.Unknown.newBuilder().build()).build()))
+    assert(
+      notSupportedException.getMessage.contains(
+        "This oneOf field message in spark.connect.Relation is not supported: UNKNOWN(999)"))
   }
 
   test("Simple Read") {
@@ -189,7 +201,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val sort = proto.Sort.newBuilder
       .addAllOrder(Seq(proto.Expression.SortOrder.newBuilder().build()).asJava)
       .build()
-    intercept[IndexOutOfBoundsException](
+    intercept[InvalidPlanInput](
       transform(proto.Relation.newBuilder().setSort(sort).build()),
       "No Input set.")
 
@@ -237,7 +249,9 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val msg = intercept[InvalidPlanInput] {
       transform(union)
     }
-    assert(msg.getMessage.contains("Unsupported set operation"))
+    assert(
+      msg.getMessage.contains("This enum value of spark.connect.SetOperation.SetOpType " +
+        "is invalid: SET_OP_TYPE_UNSPECIFIED(0)"))
 
     val res = transform(
       proto.Relation.newBuilder
@@ -274,7 +288,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("Simple Join") {
     val incompleteJoin =
       proto.Relation.newBuilder.setJoin(proto.Join.newBuilder.setLeft(readRel)).build()
-    intercept[AssertionError](transform(incompleteJoin))
+    intercept[InvalidPlanInput](transform(incompleteJoin))
 
     // Join type JOIN_TYPE_UNSPECIFIED is not supported.
     intercept[InvalidPlanInput] {
@@ -474,7 +488,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Empty ArrowBatch") {
     val schema = StructType(Seq(StructField("int", IntegerType)))
-    val data = ArrowConverters.createEmptyArrowBatch(schema, null, true)
+    val data = ArrowConverters.createEmptyArrowBatch(schema, null, true, false)
     val localRelation = proto.Relation
       .newBuilder()
       .setLocalRelation(
@@ -503,26 +517,27 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("Test duplicated names in WithColumns") {
-    intercept[AnalysisException] {
-      transform(
-        proto.Relation
-          .newBuilder()
-          .setWithColumns(
-            proto.WithColumns
-              .newBuilder()
-              .setInput(readRel)
-              .addAliases(proto.Expression.Alias
+    val logical = transform(
+      proto.Relation
+        .newBuilder()
+        .setWithColumns(
+          proto.WithColumns
+            .newBuilder()
+            .setInput(readRel)
+            .addAliases(
+              proto.Expression.Alias
                 .newBuilder()
                 .addName("test")
                 .setExpr(proto.Expression.newBuilder
                   .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32))))
-              .addAliases(proto.Expression.Alias
-                .newBuilder()
-                .addName("test")
-                .setExpr(proto.Expression.newBuilder
-                  .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32)))))
-          .build())
-    }
+            .addAliases(proto.Expression.Alias
+              .newBuilder()
+              .addName("test")
+              .setExpr(proto.Expression.newBuilder
+                .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32)))))
+        .build())
+
+    intercept[AnalysisException](Dataset.ofRows(spark, logical))
   }
 
   test("Test multi nameparts for column names in WithColumns") {
@@ -883,5 +898,112 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .build())
 
     intercept[AnalysisException](Dataset.ofRows(spark, logical))
+  }
+
+  test("Internal functions") {
+    def getProjectRelationWithFn(name: String, isInternal: Option[Boolean]): proto.Relation = {
+      val fn = proto.Expression.UnresolvedFunction.newBuilder.setFunctionName(name)
+      isInternal.foreach(fn.setIsInternal)
+      val proj = proto.Project.newBuilder
+        .setInput(readRel)
+        .addExpressions(proto.Expression.newBuilder.setUnresolvedFunction(fn))
+      proto.Relation.newBuilder.setProject(proj).build()
+    }
+
+    def getUnresolvedFunction(plan: LogicalPlan): UnresolvedFunction =
+      plan.expressions.head.asInstanceOf[UnresolvedAlias].child.asInstanceOf[UnresolvedFunction]
+
+    // "bloom_filter_agg" is an internal function.
+    val plan1 = transform(getProjectRelationWithFn("bloom_filter_agg", isInternal = None))
+    val fn1 = getUnresolvedFunction(plan1)
+    assert(fn1.nameParts.head == "bloom_filter_agg")
+    assert(fn1.isInternal)
+
+    // "abcde" is not an internal function.
+    val plan2 = transform(getProjectRelationWithFn("abcde", isInternal = None))
+    val fn2 = getUnresolvedFunction(plan2)
+    assert(fn2.nameParts.head == "abcde")
+    assert(!fn2.isInternal)
+
+    // "abcde" is not an internal function but we could set it to be internal.
+    val plan3 = transform(getProjectRelationWithFn("abcde", isInternal = Some(true)))
+    val fn3 = getUnresolvedFunction(plan3)
+    assert(fn3.nameParts.head == "abcde")
+    assert(fn3.isInternal)
+  }
+
+  test("SPARK-51820 aggregate list should not contain UnresolvedOrdinal") {
+    val ordinal = proto.Expression
+      .newBuilder()
+      .setLiteral(proto.Expression.Literal.newBuilder().setInteger(1).build())
+      .build()
+
+    val sum =
+      proto.Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          proto.Expression.UnresolvedFunction
+            .newBuilder()
+            .setFunctionName("sum")
+            .addArguments(ordinal))
+        .build()
+
+    val aggregate = proto.Aggregate.newBuilder
+      .setInput(readRel)
+      .addAggregateExpressions(sum)
+      .addGroupingExpressions(ordinal)
+      .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP)
+      .build()
+
+    val plan =
+      transform(proto.Relation.newBuilder.setAggregate(aggregate).build()).asInstanceOf[Aggregate]
+
+    assert(plan.aggregateExpressions.forall(aggregateExpression =>
+      !aggregateExpression.containsPattern(TreePattern.UNRESOLVED_ORDINAL)))
+  }
+
+  test("Time literal") {
+    val project = proto.Project.newBuilder
+      .addExpressions(
+        proto.Expression.newBuilder
+          .setLiteral(proto.Expression.Literal.newBuilder.setTime(
+            proto.Expression.Literal.newBuilder.getTimeBuilder
+              .setNano(86399999999999L)
+              .setPrecision(TimeType.MIN_PRECISION)))
+          .build())
+      .addExpressions(
+        proto.Expression.newBuilder
+          .setLiteral(
+            proto.Expression.Literal.newBuilder.setTime(
+              proto.Expression.Literal.newBuilder.getTimeBuilder
+                .setNano(86399999999999L)
+                .setPrecision(TimeType.MAX_PRECISION)))
+          .build())
+      .addExpressions(
+        proto.Expression.newBuilder
+          .setLiteral(
+            proto.Expression.Literal.newBuilder.setTime(
+              proto.Expression.Literal.newBuilder.getTimeBuilder
+                .setNano(86399999999999L)
+                .setPrecision(TimeType.DEFAULT_PRECISION)))
+          .build())
+      .addExpressions(proto.Expression.newBuilder
+        .setLiteral(proto.Expression.Literal.newBuilder.setTime(
+          proto.Expression.Literal.newBuilder.getTimeBuilder.setNano(86399999999999L)))
+        .build())
+      .build()
+
+    val logical = transform(proto.Relation.newBuilder.setProject(project).build())
+    val df = Dataset.ofRows(spark, logical)
+    assertResult(df.schema.fields(0).dataType)(TimeType(TimeType.MIN_PRECISION))
+    assertResult(df.schema.fields(1).dataType)(TimeType(TimeType.MAX_PRECISION))
+    assertResult(df.schema.fields(2).dataType)(TimeType(TimeType.DEFAULT_PRECISION))
+    assertResult(df.schema.fields(3).dataType)(TimeType(TimeType.DEFAULT_PRECISION))
+    assertResult(df.collect()(0).toString)(
+      InternalRow(
+        "23:59:59.999999999",
+        "23:59:59.999999999",
+        "23:59:59.999999999",
+        "23:59:59.999999999").toString)
   }
 }

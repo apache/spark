@@ -167,7 +167,7 @@ class MemoryProfilerTests(PySparkTestCase):
     def exec_pandas_udf_ser_to_scalar(self):
         import pandas as pd
 
-        @pandas_udf("int")
+        @pandas_udf("double")
         def ser_to_scalar(ser: pd.Series) -> float:
             return ser.median()
 
@@ -219,6 +219,21 @@ class MemoryProfiler2TestsMixin:
         finally:
             sys.stdout = old_stdout
 
+    def assert_udf_memory_profile_present(self, udf_id, dump_dir=None):
+        """
+        Assert that a memory profile for the given UDF ID exists, has expected content,
+        and is associated with the source file of `_do_computation`.
+        """
+        with self.trap_stdout() as io:
+            self.spark.profile.show(udf_id, type="memory")
+
+        self.assertIn(f"Profile of UDF<id={udf_id}>", io.getvalue())
+        self.assertRegex(
+            io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
+        )
+        if dump_dir:
+            self.assertTrue(f"udf_{udf_id}_memory.txt" in os.listdir(dump_dir))
+
     @property
     def profile_results(self):
         return self.spark._profiler_collector._memory_profile_results
@@ -246,15 +261,7 @@ class MemoryProfiler2TestsMixin:
 
             for id in self.profile_results:
                 self.assertIn(f"Profile of UDF<id={id}>", io_all.getvalue())
-
-                with self.trap_stdout() as io:
-                    self.spark.profile.show(id, type="memory")
-
-                self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
-                self.assertRegex(
-                    io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
-                )
-                self.assertTrue(f"udf_{id}_memory.txt" in os.listdir(d))
+                self.assert_udf_memory_profile_present(udf_id=id, dump_dir=d)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -267,13 +274,7 @@ class MemoryProfiler2TestsMixin:
         self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
 
         for id in self.profile_results:
-            with self.trap_stdout() as io:
-                self.spark.profile.show(id, type="memory")
-
-            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
-            self.assertRegex(
-                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
-            )
+            self.assert_udf_memory_profile_present(udf_id=id)
 
     def test_memory_profiler_udf_multiple_actions(self):
         def action(df):
@@ -286,13 +287,7 @@ class MemoryProfiler2TestsMixin:
         self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
 
         for id in self.profile_results:
-            with self.trap_stdout() as io:
-                self.spark.profile.show(id, type="memory")
-
-            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
-            self.assertRegex(
-                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
-            )
+            self.assert_udf_memory_profile_present(udf_id=id)
 
     def test_memory_profiler_udf_registered(self):
         @udf("long")
@@ -307,13 +302,7 @@ class MemoryProfiler2TestsMixin:
         self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
 
         for id in self.profile_results:
-            with self.trap_stdout() as io:
-                self.spark.profile.show(id, type="memory")
-
-            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
-            self.assertRegex(
-                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
-            )
+            self.assert_udf_memory_profile_present(udf_id=id)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -337,13 +326,7 @@ class MemoryProfiler2TestsMixin:
         self.assertEqual(3, len(self.profile_results), str(self.profile_results.keys()))
 
         for id in self.profile_results:
-            with self.trap_stdout() as io:
-                self.spark.profile.show(id, type="memory")
-
-            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
-            self.assertRegex(
-                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
-            )
+            self.assert_udf_memory_profile_present(udf_id=id)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -370,13 +353,7 @@ class MemoryProfiler2TestsMixin:
         self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
 
         for id in self.profile_results:
-            with self.trap_stdout() as io:
-                self.spark.profile.show(id, type="memory")
-
-            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
-            self.assertRegex(
-                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
-            )
+            self.assert_udf_memory_profile_present(udf_id=id)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -417,13 +394,7 @@ class MemoryProfiler2TestsMixin:
         self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
 
         for id in self.profile_results:
-            with self.trap_stdout() as io:
-                self.spark.profile.show(id, type="memory")
-
-            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
-            self.assertRegex(
-                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
-            )
+            self.assert_udf_memory_profile_present(udf_id=id)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -446,13 +417,7 @@ class MemoryProfiler2TestsMixin:
         self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
 
         for id in self.profile_results:
-            with self.trap_stdout() as io:
-                self.spark.profile.show(id, type="memory")
-
-            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
-            self.assertRegex(
-                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
-            )
+            self.assert_udf_memory_profile_present(udf_id=id)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -474,13 +439,7 @@ class MemoryProfiler2TestsMixin:
         self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
 
         for id in self.profile_results:
-            with self.trap_stdout() as io:
-                self.spark.profile.show(id, type="memory")
-
-            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
-            self.assertRegex(
-                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
-            )
+            self.assert_udf_memory_profile_present(udf_id=id)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -509,13 +468,7 @@ class MemoryProfiler2TestsMixin:
         self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
 
         for id in self.profile_results:
-            with self.trap_stdout() as io:
-                self.spark.profile.show(id, type="memory")
-
-            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
-            self.assertRegex(
-                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
-            )
+            self.assert_udf_memory_profile_present(udf_id=id)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -540,13 +493,7 @@ class MemoryProfiler2TestsMixin:
         self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
 
         for id in self.profile_results:
-            with self.trap_stdout() as io:
-                self.spark.profile.show(id, type="memory")
-
-            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
-            self.assertRegex(
-                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
-            )
+            self.assert_udf_memory_profile_present(udf_id=id)
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -569,13 +516,7 @@ class MemoryProfiler2TestsMixin:
         self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
 
         for id in self.profile_results:
-            with self.trap_stdout() as io:
-                self.spark.profile.show(id, type="memory")
-
-            self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
-            self.assertRegex(
-                io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
-            )
+            self.assert_udf_memory_profile_present(udf_id=id)
 
     def test_memory_profiler_clear(self):
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):

@@ -203,8 +203,8 @@ GROUP BY t1a, t1b, t1c
 HAVING COUNT (DISTINCT t1b) < 10
 -- !query analysis
 Project [t1a#x, t1b#x, t1c#x]
-+- Filter (count(distinct t1b#x)#xL < cast(10 as bigint))
-   +- Aggregate [t1a#x, t1b#x, t1c#x], [t1a#x, t1b#x, t1c#x, count(distinct t1b#x) AS count(distinct t1b#x)#xL]
++- Filter (count(DISTINCT t1b)#xL < cast(10 as bigint))
+   +- Aggregate [t1a#x, t1b#x, t1c#x], [t1a#x, t1b#x, t1c#x, count(distinct t1b#x) AS count(DISTINCT t1b)#xL]
       +- Filter t1b#x IN (list#x [t1c#x])
          :  +- Project [t2b#x]
          :     +- Filter (outer(t1c#x) = t2c#x)

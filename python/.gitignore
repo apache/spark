@@ -1,6 +1,7 @@
 *.pyc
 docs/_build/
 pyspark.egg-info
+pyspark_client.egg-info
 pyspark_connect.egg-info
 build/
 dist/

@@ -26,7 +26,6 @@ import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.io.FileUtils
 import org.apache.logging.log4j._
 import org.apache.logging.log4j.core.{LogEvent, Logger, LoggerContext}
 import org.apache.logging.log4j.core.appender.AbstractAppender
@@ -126,7 +125,7 @@ abstract class SparkFunSuite
     // copy it into a temporary one for accessing it from the dependent module.
     val file = File.createTempFile("test-resource", suffix)
     file.deleteOnExit()
-    FileUtils.copyURLToFile(url, file)
+    Utils.copyURLToFile(url, file)
     file
   }
 
@@ -205,7 +204,7 @@ abstract class SparkFunSuite
         logInfo("\n\n===== EXTRA LOGS FOR THE FAILED TEST\n")
         workerLogfiles.foreach { logFile =>
           logInfo(s"\n----- Logfile: ${logFile.getAbsolutePath()}")
-          logInfo(FileUtils.readFileToString(logFile, "UTF-8"))
+          logInfo(Files.readString(logFile.toPath))
         }
       }
     }
@@ -233,6 +232,13 @@ abstract class SparkFunSuite
       outcome
     } finally {
       logInfo(s"\n\n===== FINISHED $shortSuiteName: '$testName' =====\n")
+    }
+  }
+
+  protected def gridTest[A](testNamePrefix: String, testTags: Tag*)(params: Seq[A])(
+    testFun: A => Unit): Unit = {
+    for (param <- params) {
+      test(testNamePrefix + s" ($param)", testTags: _*)(testFun(param))
     }
   }
 
@@ -371,10 +377,17 @@ abstract class SparkFunSuite
           "Invalid objectType of a query context Actual:" + actual.toString)
         assert(actual.objectName() === expected.objectName,
           "Invalid objectName of a query context. Actual:" + actual.toString)
-        assert(actual.startIndex() === expected.startIndex,
-          "Invalid startIndex of a query context. Actual:" + actual.toString)
-        assert(actual.stopIndex() === expected.stopIndex,
-          "Invalid stopIndex of a query context. Actual:" + actual.toString)
+        // If startIndex and stopIndex are -1, it means we simply want to check the
+        // fragment of the query context. This should be the case when the fragment is
+        // distinguished within the query text.
+        if (expected.startIndex != -1) {
+          assert(actual.startIndex() === expected.startIndex,
+            "Invalid startIndex of a query context. Actual:" + actual.toString)
+        }
+        if (expected.stopIndex != -1) {
+          assert(actual.stopIndex() === expected.stopIndex,
+            "Invalid stopIndex of a query context. Actual:" + actual.toString)
+        }
         assert(actual.fragment() === expected.fragment,
           "Invalid fragment of a query context. Actual:" + actual.toString)
       } else if (actual.contextType() == QueryContextType.DataFrame) {
@@ -476,6 +489,12 @@ abstract class SparkFunSuite
   object ExpectedContext {
     def apply(fragment: String, start: Int, stop: Int): ExpectedContext = {
       ExpectedContext("", "", start, stop, fragment)
+    }
+
+    // Check the fragment only. This is only used when the fragment is distinguished within
+    // the query text
+    def apply(fragment: String): ExpectedContext = {
+      ExpectedContext("", "", -1, -1, fragment)
     }
 
     def apply(

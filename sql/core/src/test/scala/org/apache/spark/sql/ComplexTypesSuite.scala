@@ -19,10 +19,10 @@ package org.apache.spark.sql
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.expressions.CreateNamedStruct
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CreateNamedStruct, GetStructField, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, MetadataBuilder, StringType, StructField, StructType}
 
 class ComplexTypesSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -170,5 +170,19 @@ class ComplexTypesSuite extends QueryTest with SharedSparkSession {
 
     assert(df.schema == expectedSchema)
     checkAnswer(df, Seq(Row(Row(1, 2))))
+  }
+
+  test("SPARK-51624: Propagate StructField metadata in CreateNamedStruct.dataType") {
+    val metadata = new MetadataBuilder().putString("comment", "hello").build()
+    val structRef = AttributeReference("s1",
+      StructType(StructField("col1", StringType, false, metadata) :: Nil))()
+    val createNamedStruct = CreateNamedStruct(
+      Seq(
+        Literal("a"),
+        GetStructField(structRef, 0)
+      )
+    )
+    val dataType = createNamedStruct.dataType
+    assert(dataType.asInstanceOf[StructType].fields.head.metadata == metadata)
   }
 }

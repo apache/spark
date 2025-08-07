@@ -19,6 +19,8 @@ package org.apache.spark.sql.connector.write
 
 import java.util.Optional
 
+import scala.jdk.OptionConverters._
+
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -29,3 +31,19 @@ private[sql] case class LogicalWriteInfoImpl(
     override val rowIdSchema: Optional[StructType] = Optional.empty[StructType],
     override val metadataSchema: Optional[StructType] = Optional.empty[StructType])
   extends LogicalWriteInfo
+
+object LogicalWriteInfoImpl {
+  def apply(
+      queryId: String,
+      schema: StructType,
+      options: CaseInsensitiveStringMap,
+      rowIdSchema: Option[StructType],
+      metadataSchema: Option[StructType]): LogicalWriteInfoImpl = {
+    LogicalWriteInfoImpl(
+      queryId,
+      schema,
+      options,
+      rowIdSchema.toJava,
+      metadataSchema.toJava)
+  }
+}

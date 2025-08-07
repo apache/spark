@@ -25,19 +25,19 @@ from typing import (
     Union,
 )
 
+from pyspark.sql.tvf_argument import TableValuedFunctionArgument
 from pyspark.sql.utils import dispatch_col_method
 from pyspark.sql.types import DataType
 from pyspark.errors import PySparkValueError
 
 if TYPE_CHECKING:
-    from py4j.java_gateway import JavaObject
     from pyspark.sql._typing import LiteralType, DecimalLiteral, DateTimeLiteral
     from pyspark.sql.window import WindowSpec
 
 __all__ = ["Column"]
 
 
-class Column:
+class Column(TableValuedFunctionArgument):
 
     """
     A column in a DataFrame.
@@ -71,16 +71,10 @@ class Column:
     # HACK ALERT!! this is to reduce the backward compatibility concern, and returns
     # Spark Classic Column by default. This is NOT an API, and NOT supposed to
     # be directly invoked. DO NOT use this constructor.
-    def __new__(
-        cls,
-        jc: "JavaObject",
-    ) -> "Column":
+    def __new__(cls, *args: Any, **kwargs: Any) -> "Column":
         from pyspark.sql.classic.column import Column
 
-        return Column.__new__(Column, jc)
-
-    def __init__(self, jc: "JavaObject") -> None:
-        self._jc = jc
+        return Column.__new__(Column, *args, **kwargs)
 
     # arithmetic operators
     @dispatch_col_method
@@ -324,7 +318,7 @@ class Column:
     def bitwiseOR(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> "Column":
-        """ "
+        """
         Compute bitwise OR of this expression with another expression.
 
         .. versionchanged:: 3.4.0
@@ -889,6 +883,9 @@ class Column:
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
+        .. versionchanged:: 4.1.0
+            Also takes a single :class:`DataFrame` to be used as IN subquery.
+
         Parameters
         ----------
         cols : Any
@@ -906,7 +903,7 @@ class Column:
 
         Example 1: Filter rows with names in the specified values
 
-        >>> df[df.name.isin("Bob", "Mike")].show()
+        >>> df[df.name.isin("Bob", "Mike")].orderBy("age").show()
         +---+----+
         |age|name|
         +---+----+
@@ -930,6 +927,26 @@ class Column:
         |age|name|
         +---+----+
         |  8|Mike|
+        +---+----+
+
+        Example 4: Take a :class:`DataFrame` and work as IN subquery
+
+        >>> df.where(df.age.isin(spark.range(6))).orderBy("age").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+
+        Example 5: Multiple values for IN subquery
+
+        >>> from pyspark.sql.functions import lit, struct
+        >>> df.where(struct(df.age, df.name).isin(spark.range(6).select("id", lit("Bob")))).show()
+        +---+----+
+        |age|name|
+        +---+----+
+        |  5| Bob|
         +---+----+
         """
         ...
@@ -1524,7 +1541,11 @@ class Column:
     @dispatch_col_method
     def outer(self) -> "Column":
         """
-        Mark this column reference as an outer reference for subqueries.
+        Mark this column as an outer column if its expression refers to columns from an outer query.
+
+        This is used to trigger lazy analysis of Spark Classic DataFrame, so that we can use it
+        to build subquery expressions. Spark Connect DataFrame is always lazily analyzed and
+        does not need to use this function.
 
         .. versionadded:: 4.0.0
 

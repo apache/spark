@@ -49,6 +49,21 @@ public interface DeltaWriter<T> extends DataWriter<T> {
   void update(T metadata, T id, T row) throws IOException;
 
   /**
+   * Reinserts a row with metadata.
+   * <p>
+   * This method handles the insert portion of updated rows split into deletes and inserts.
+   *
+   * @param metadata values for metadata columns
+   * @param row a row to reinsert
+   * @throws IOException if failure happens during disk/network IO like writing files
+   *
+   * @since 4.0.0
+   */
+  default void reinsert(T metadata, T row) throws IOException {
+    insert(row);
+  }
+
+  /**
    * Inserts a new row.
    *
    * @param row a row to insert

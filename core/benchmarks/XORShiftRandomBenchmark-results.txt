@@ -2,43 +2,43 @@
 Pseudo random
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 nextInt:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java.util.Random                                    439            439           0        227.7           4.4       1.0X
-XORShiftRandom                                      185            185           0        539.5           1.9       2.4X
+java.util.Random                                    441            441           0        226.6           4.4       1.0X
+XORShiftRandom                                      186            186           0        536.7           1.9       2.4X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 nextLong:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java.util.Random                                    911            912           1        109.8           9.1       1.0X
-XORShiftRandom                                      371            371           1        269.7           3.7       2.5X
+java.util.Random                                    913            914           0        109.5           9.1       1.0X
+XORShiftRandom                                      373            373           0        268.4           3.7       2.5X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 nextDouble:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java.util.Random                                    904            904           0        110.6           9.0       1.0X
-XORShiftRandom                                      371            371           0        269.7           3.7       2.4X
+java.util.Random                                    909            910           1        110.0           9.1       1.0X
+XORShiftRandom                                      373            373           0        268.3           3.7       2.4X
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 nextGaussian:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-java.util.Random                                   3997           3998           1         25.0          40.0       1.0X
-XORShiftRandom                                     2926           2929           2         34.2          29.3       1.4X
+java.util.Random                                   4031           4035           3         24.8          40.3       1.0X
+XORShiftRandom                                     2952           2965          19         33.9          29.5       1.4X
 
 
 ================================================================================================
 hash seed
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
+OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Hash seed:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-XORShiftRandom.hashSeed                               2              2           0       6487.7           0.2       1.0X
+XORShiftRandom.hashSeed                               2              2           0       6455.0           0.2       1.0X
 
 

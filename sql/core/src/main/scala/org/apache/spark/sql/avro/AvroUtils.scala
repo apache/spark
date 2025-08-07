@@ -21,7 +21,7 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.avro.Schema
+import org.apache.avro.{Schema, SchemaFormatter}
 import org.apache.avro.file.{DataFileReader, FileReader}
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
@@ -31,7 +31,7 @@ import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CODEC_LEVEL, CODEC_NAME, CONFIG, PATH}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.avro.AvroCompressionCodec._
@@ -44,6 +44,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 private[sql] object AvroUtils extends Logging {
+
+  val JSON_INLINE_FORMAT: String = "json/inline"
+  val JSON_PRETTY_FORMAT: String = "json/pretty"
+
   def inferSchema(
       spark: SparkSession,
       options: Map[String, String],
@@ -71,7 +75,7 @@ private[sql] object AvroUtils extends Logging {
       case _ => throw new RuntimeException(
         s"""Avro schema cannot be converted to a Spark SQL StructType:
            |
-           |${avroSchema.toString(true)}
+           |${SchemaFormatter.format(JSON_PRETTY_FORMAT, avroSchema)}
            |""".stripMargin)
     }
   }
@@ -79,6 +83,7 @@ private[sql] object AvroUtils extends Logging {
   def supportsDataType(dataType: DataType): Boolean = dataType match {
     case _: VariantType => false
 
+    case _: TimeType => false
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportsDataType(f.dataType) }
@@ -117,18 +122,20 @@ private[sql] object AvroUtils extends Logging {
             jobConf.setBoolean("mapreduce.output.fileoutputformat.compress", true)
             jobConf.set(AvroJob.CONF_OUTPUT_CODEC, compressed.getCodecName)
             if (compressed.getSupportCompressionLevel) {
-              val level = sqlConf.getConfString(s"spark.sql.avro.$codecName.level",
-                compressed.getDefaultCompressionLevel.toString)
-              logInfo(log"Compressing Avro output using the ${MDC(CODEC_NAME, codecName)} codec " +
-                log"at level ${MDC(CODEC_LEVEL, level)}")
-              val s = if (compressed == ZSTANDARD) {
-                val bufferPoolEnabled = sqlConf.getConf(SQLConf.AVRO_ZSTANDARD_BUFFER_POOL_ENABLED)
-                jobConf.setBoolean(AvroOutputFormat.ZSTD_BUFFERPOOL_KEY, bufferPoolEnabled)
-                "zstd"
-              } else {
-                codecName
+              val levelAndCodecName = compressed match {
+                case DEFLATE => Some(sqlConf.getConf(SQLConf.AVRO_DEFLATE_LEVEL), codecName)
+                case XZ => Some(sqlConf.getConf(SQLConf.AVRO_XZ_LEVEL), codecName)
+                case ZSTANDARD =>
+                  jobConf.setBoolean(AvroOutputFormat.ZSTD_BUFFERPOOL_KEY,
+                    sqlConf.getConf(SQLConf.AVRO_ZSTANDARD_BUFFER_POOL_ENABLED))
+                  Some(sqlConf.getConf(SQLConf.AVRO_ZSTANDARD_LEVEL), "zstd")
+                case _ => None
               }
-              jobConf.setInt(s"avro.mapred.$s.level", level.toInt)
+              levelAndCodecName.foreach { case (level, mapredCodecName) =>
+                logInfo(log"Compressing Avro output using the ${MDC(CODEC_NAME, codecName)} " +
+                  log"codec at level ${MDC(CODEC_LEVEL, level)}")
+                jobConf.setInt(s"avro.mapred.$mapredCodecName.level", level.toInt)
+              }
             } else {
               logInfo(log"Compressing Avro output using the ${MDC(CODEC_NAME, codecName)} codec")
             }

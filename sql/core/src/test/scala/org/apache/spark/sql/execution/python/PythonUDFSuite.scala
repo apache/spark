@@ -91,7 +91,10 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
     val pythonSQLMetrics = List(
       "data sent to Python workers",
       "data returned from Python workers",
-      "number of output rows")
+      "number of output rows",
+      "time to initialize Python workers",
+      "time to start Python workers",
+      "time to run Python workers")
 
     val df = base.groupBy(pythonTestUDF(base("a") + 1))
       .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)))

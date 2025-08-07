@@ -28,11 +28,11 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, Resolver}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -40,12 +40,13 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.hiveTableWithAnsiIntervalsError
-import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils, FileFormat, HadoopFsRelation, LogicalRelationWithTable}
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, FileFormat, HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
@@ -65,6 +66,7 @@ import org.apache.spark.util.ArrayImplicits._
  * {{{
  *   CREATE (DATABASE|SCHEMA) [IF NOT EXISTS] database_name
  *     [COMMENT database_comment]
+ *     [DEFAULT COLLATION collation]
  *     [LOCATION database_directory]
  *     [WITH DBPROPERTIES (property_name=property_value, ...)];
  * }}}
@@ -187,8 +189,9 @@ case class DescribeDatabaseCommand(
       Row("Catalog Name", SESSION_CATALOG_NAME) ::
         Row("Database Name", dbMetadata.name) ::
         Row("Comment", dbMetadata.description) ::
-        Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri))::
-        Row("Owner", allDbProperties.getOrElse(PROP_OWNER, "")) :: Nil
+        Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri)) ::
+        Row("Owner", allDbProperties.getOrElse(PROP_OWNER, "")) ::
+        allDbProperties.get(PROP_COLLATION).map(Row("Collation", _)).toList
 
     if (extended) {
       val properties = allDbProperties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
@@ -196,7 +199,8 @@ case class DescribeDatabaseCommand(
         if (properties.isEmpty) {
           ""
         } else {
-          conf.redactOptions(properties).toSeq.sortBy(_._1).mkString("(", ", ", ")")
+          sparkSession.sessionState.conf.redactOptions(properties).toSeq
+            .sortBy(_._1).mkString("(", ", ", ")")
         }
       result :+ Row("Properties", propertiesStr)
     } else {
@@ -548,7 +552,7 @@ case class AlterTableAddPartitionCommand(
     // Hive metastore may not have enough memory to handle millions of partitions in single RPC.
     // Also the request to metastore times out when adding lot of partitions in one shot.
     // we should split them into smaller batches
-    val batchSize = conf.getConf(SQLConf.ADD_PARTITION_BATCH_SIZE)
+    val batchSize = sparkSession.sessionState.conf.getConf(SQLConf.ADD_PARTITION_BATCH_SIZE)
     parts.iterator.grouped(batchSize).foreach { batch =>
       catalog.createPartitions(table.identifier, batch, ignoreIfExists = ifNotExists)
     }
@@ -952,6 +956,64 @@ case class AlterTableSetLocationCommand(
   }
 }
 
+/**
+ * A command that saves a query as a V1 table.
+ */
+private[sql] case class SaveAsV1TableCommand(
+    tableDesc: CatalogTable,
+    mode: SaveMode,
+    query: LogicalPlan) extends LeafRunnableCommand {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val qualifiedIdent = catalog.qualifyIdentifier(tableDesc.identifier)
+    val tableDescWithQualifiedIdent = tableDesc.copy(identifier = qualifiedIdent)
+    val tableExists = catalog.tableExists(qualifiedIdent)
+
+    (tableExists, mode) match {
+      case (true, SaveMode.Ignore) =>
+        // Do nothing
+
+      case (true, SaveMode.ErrorIfExists) =>
+        throw QueryCompilationErrors.tableAlreadyExistsError(qualifiedIdent)
+
+      case (true, SaveMode.Overwrite) =>
+        // Get all input data source or hive relations of the query.
+        val srcRelations = query.collect {
+          case l: LogicalRelation => l.relation
+          case relation: HiveTableRelation => relation.tableMeta.identifier
+        }
+
+        val tableRelation = sparkSession.table(qualifiedIdent).queryExecution.analyzed
+        EliminateSubqueryAliases(tableRelation) match {
+          // check if the table is a data source table (the relation is a BaseRelation).
+          case l: LogicalRelation if srcRelations.contains(l.relation) =>
+            throw QueryCompilationErrors.cannotOverwriteTableThatIsBeingReadFromError(
+              qualifiedIdent)
+          // check hive table relation when overwrite mode
+          case relation: HiveTableRelation
+              if srcRelations.contains(relation.tableMeta.identifier) =>
+            throw QueryCompilationErrors.cannotOverwriteTableThatIsBeingReadFromError(
+              qualifiedIdent)
+          case _ => // OK
+        }
+
+        // Drop the existing table
+        catalog.dropTable(qualifiedIdent, ignoreIfNotExists = true, purge = false)
+        runCommand(sparkSession, CreateTable(tableDescWithQualifiedIdent, mode, Some(query)))
+        // Refresh the cache of the table in the catalog.
+        catalog.refreshTable(qualifiedIdent)
+
+      case _ =>
+        runCommand(sparkSession, CreateTable(tableDescWithQualifiedIdent, mode, Some(query)))
+    }
+    Seq.empty[Row]
+  }
+
+  private def runCommand(session: SparkSession, command: LogicalPlan): Unit = {
+    val qe = session.sessionState.executePlan(command)
+    qe.assertCommandExecuted()
+  }
+}
 
 object DDLUtils extends Logging {
   val HIVE_PROVIDER = "hive"

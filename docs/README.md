@@ -126,3 +126,16 @@ To control what API docs get built, you can set any combination of the following
 * `SKIP_RDOC=1`: Skip the R API docs.
 * `SKIP_SQLDOC=1`: Skip the SQL API docs.
 
+## Build docs with docker image (Optional)
+
+As a Spark developer, you can generate all documents locally as follows:
+
+Note: Before running it, you need to have `docker` installed.
+
+```sh
+$ dev/spark-test-image-util/docs/build-docs
+```
+
+It will generate all documents on the `container` and `host`.
+Especially when there are conflicts between the libraries required by Python development environment
+and the libraries required by generating Python docs environment, this is a good choice.

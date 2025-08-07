@@ -22,7 +22,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.LiveListenerBus
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.planner.SparkConnectPlanTest
 import org.apache.spark.util.ManualClock
 

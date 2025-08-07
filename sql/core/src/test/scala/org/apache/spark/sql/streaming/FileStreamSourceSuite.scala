@@ -106,7 +106,7 @@ abstract class FileStreamSourceTest
     override def addData(source: FileStreamSource): Unit = {
       val tempFile = Utils.tempFileWith(new File(tmp, tmpFilePrefix))
       val finalFile = new File(src, tempFile.getName)
-      src.mkdirs()
+      Utils.createDirectory(src)
       require(stringToFile(tempFile, content).renameTo(finalFile))
       logInfo(s"Written text '$content' to file $finalFile")
     }
@@ -127,7 +127,7 @@ abstract class FileStreamSourceTest
     def writeToFile(df: DataFrame, src: File, tmp: File): Unit = {
       val tmpDir = Utils.tempFileWith(new File(tmp, "orc"))
       df.write.orc(tmpDir.getCanonicalPath)
-      src.mkdirs()
+      Utils.createDirectory(src)
       tmpDir.listFiles().foreach { f =>
         f.renameTo(new File(src, s"${f.getName}"))
       }
@@ -149,7 +149,7 @@ abstract class FileStreamSourceTest
     def writeToFile(df: DataFrame, src: File, tmp: File): Unit = {
       val tmpDir = Utils.tempFileWith(new File(tmp, "parquet"))
       df.write.parquet(tmpDir.getCanonicalPath)
-      src.mkdirs()
+      Utils.createDirectory(src)
       tmpDir.listFiles().foreach { f =>
         f.renameTo(new File(src, s"${f.getName}"))
       }
@@ -234,14 +234,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   import testImplicits._
 
   override val streamingTimeout = 80.seconds
-
-  /** Use `format` and `path` to create FileStreamSource via DataFrameReader */
-  private def createFileStreamSource(
-      format: String,
-      path: String,
-      schema: Option[StructType] = None): FileStreamSource = {
-    getSourceFromFileStream(createFileStream(format, path, schema))
-  }
 
   private def createFileStreamSourceAndGetSchema(
       format: Option[String],
@@ -672,7 +664,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     withTempDirs { case (baseSrc, tmp) =>
       withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
         val src = new File(baseSrc, "type=X")
-        src.mkdirs()
+        Utils.createDirectory(src)
 
         // Add a file so that we can infer its schema
         stringToFile(new File(src, "existing"), "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}")
@@ -1459,7 +1451,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
   test("explain") {
     withTempDirs { case (src, tmp) =>
-      src.mkdirs()
+      Utils.createDirectory(src)
 
       val df = spark.readStream.format("text").load(src.getCanonicalPath).map(_.toString + "-x")
       // Test `explain` not throwing errors
@@ -1508,7 +1500,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
     withTempDirs { case (root, tmp) =>
       val src = new File(root, "a=1")
-      src.mkdirs()
+      Utils.createDirectory(src)
 
       (1 to numFiles).map { _.toString }.foreach { i =>
         val tempFile = Utils.tempFileWith(new File(tmp, "text"))
@@ -1932,8 +1924,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     withTempDirs { case (dir, tmp) =>
       val sourceDir1 = new File(dir, "source1")
       val sourceDir2 = new File(dir, "source2")
-      sourceDir1.mkdirs()
-      sourceDir2.mkdirs()
+      Utils.createDirectory(sourceDir1)
+      Utils.createDirectory(sourceDir2)
 
       val source1 = createFileStream("text", s"${sourceDir1.getCanonicalPath}")
       val source2 = createFileStream("text", s"${sourceDir2.getCanonicalPath}")
@@ -2603,7 +2595,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     val tempFile = Utils.tempFileWith(new File(tmp, "text"))
     val finalFile = new File(src, tempFile.getName)
     require(!src.exists(), s"$src exists, dir: ${src.isDirectory}, file: ${src.isFile}")
-    require(src.mkdirs(), s"Cannot create $src")
+    require(Utils.createDirectory(src), s"Cannot create $src")
     require(src.isDirectory(), s"$src is not a directory")
     require(stringToFile(tempFile, content).renameTo(finalFile))
     finalFile

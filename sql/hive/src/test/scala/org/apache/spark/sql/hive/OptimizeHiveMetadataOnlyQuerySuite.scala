@@ -32,7 +32,7 @@ class OptimizeHiveMetadataOnlyQuerySuite extends QueryTest with TestHiveSingleto
     with BeforeAndAfter with SQLTestUtils {
 
   import spark.implicits._
-  import spark.RichColumn
+  import spark.toRichColumn
 
   override def beforeAll(): Unit = {
     super.beforeAll()

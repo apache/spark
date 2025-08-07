@@ -99,6 +99,9 @@ public class VariantSchema {
   public static final class TimestampNTZType extends ScalarType {
   }
 
+  public static final class UuidType extends ScalarType {
+  }
+
   // The index of the typed_value, value, and metadata fields in the schema, respectively. If a
   // given field is not in the schema, its value must be set to -1 to indicate that it is invalid.
   // The indices of valid fields should be contiguous and start from 0.
@@ -136,6 +139,12 @@ public class VariantSchema {
     }
 
     this.arraySchema = arraySchema;
+  }
+
+  // Return whether the variant column is unshrededed. The user is not required to do anything
+  // special, but can have certain optimizations for unshrededed variant.
+  public boolean isUnshredded() {
+    return topLevelMetadataIdx >= 0 && variantIdx >= 0 && typedIdx < 0;
   }
 
   @Override

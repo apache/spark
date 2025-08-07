@@ -44,13 +44,14 @@ import org.apache.spark.sql.catalyst.expressions.{
   MapConcat,
   MapZipWith,
   NaNvl,
+  RandStr,
   RangeFrame,
   ScalaUDF,
   Sequence,
   SpecialFrameBoundary,
   SpecifiedWindowFrame,
   SubtractTimestamps,
-  TimeAdd,
+  TimestampAddInterval,
   WindowSpecDefinition
 }
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, Sum}
@@ -83,7 +84,8 @@ import org.apache.spark.sql.types.{
   StructType,
   TimestampNTZType,
   TimestampType,
-  TimestampTypeExpression
+  TimestampTypeExpression,
+  TimeType
 }
 
 abstract class TypeCoercionHelper {
@@ -238,16 +240,18 @@ abstract class TypeCoercionHelper {
     }
   }
 
-  protected def findWiderDateTimeType(d1: DatetimeType, d2: DatetimeType): DatetimeType =
+  protected def findWiderDateTimeType(d1: DatetimeType, d2: DatetimeType): Option[DatetimeType] =
     (d1, d2) match {
+      case (_, _: TimeType) => None
+      case (_: TimeType, _) => None
       case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
-        TimestampType
+        Some(TimestampType)
 
       case (_: TimestampType, _: TimestampNTZType) | (_: TimestampNTZType, _: TimestampType) =>
-        TimestampType
+        Some(TimestampType)
 
       case (_: TimestampNTZType, _: DateType) | (_: DateType, _: TimestampNTZType) =>
-        TimestampNTZType
+        Some(TimestampNTZType)
     }
 
   /**
@@ -272,15 +276,21 @@ abstract class TypeCoercionHelper {
         // IN subquery expression.
         if (commonTypes.length == lhs.length) {
           val castedRhs = rhs.zip(commonTypes).map {
-            case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
+            case (e, dt) if e.dataType != dt =>
+              Alias(Cast(e, dt).withTimeZone(conf.sessionLocalTimeZone), e.name)()
             case (e, _) => e
           }
           val newLhs = lhs.zip(commonTypes).map {
-            case (e, dt) if e.dataType != dt => Cast(e, dt)
+            case (e, dt) if e.dataType != dt =>
+              Cast(e, dt).withTimeZone(conf.sessionLocalTimeZone)
             case (e, _) => e
           }
 
-          InSubquery(newLhs, l.withNewPlan(Project(castedRhs, l.plan)))
+          if (newLhs != lhs || castedRhs != rhs) {
+            InSubquery(newLhs, l.withNewPlan(Project(castedRhs, l.plan)))
+          } else {
+            i
+          }
         } else {
           i
         }
@@ -318,7 +328,8 @@ abstract class TypeCoercionHelper {
         }
 
       case aj @ ArrayJoin(arr, d, nr)
-          if !AbstractArrayType(StringTypeWithCollation).acceptsType(arr.dataType) &&
+          if !AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)).
+            acceptsType(arr.dataType) &&
           ArrayType.acceptsType(arr.dataType) =>
         val containsNull = arr.dataType.asInstanceOf[ArrayType].containsNull
         implicitCast(arr, ArrayType(StringType, containsNull)) match {
@@ -399,6 +410,11 @@ abstract class TypeCoercionHelper {
         NaNvl(Cast(l, DoubleType), r)
       case NaNvl(l, r) if r.dataType == NullType => NaNvl(l, Cast(r, l.dataType))
 
+      case r: RandStr if r.length.dataType != IntegerType =>
+        implicitCast(r.length, IntegerType).map { casted =>
+          r.copy(length = casted)
+        }.getOrElse(r)
+
       case other => other
     }
   }
@@ -415,7 +431,7 @@ abstract class TypeCoercionHelper {
           if conf.concatBinaryAsString ||
           !children.map(_.dataType).forall(_ == BinaryType) =>
         val newChildren = c.children.map { e =>
-          implicitCast(e, SQLConf.get.defaultStringType).getOrElse(e)
+          implicitCast(e, StringType).getOrElse(e)
         }
         c.copy(children = newChildren)
       case other => other
@@ -465,7 +481,7 @@ abstract class TypeCoercionHelper {
           if (conf.eltOutputAsString ||
             !children.tail.map(_.dataType).forall(_ == BinaryType)) {
             children.tail.map { e =>
-              implicitCast(e, SQLConf.get.defaultStringType).getOrElse(e)
+              implicitCast(e, StringType).getOrElse(e)
             }
           } else {
             children.tail
@@ -655,7 +671,7 @@ abstract class TypeCoercionHelper {
         case (e, _: DateType) => e
         case (e, _: TimestampType) => e
         case (e: Expression, t) if e.dataType != t && canCast(e.dataType, t) =>
-          Cast(e, t)
+          Cast(child = e, dataType = t).withTimeZone(conf.sessionLocalTimeZone)
         case _ => boundary
       }
     }
@@ -684,7 +700,8 @@ abstract class TypeCoercionHelper {
         val newRight = castIfNotSameType(s.right, TimestampNTZType)
         s.copy(left = newLeft, right = newRight)
 
-      case t @ TimeAdd(StringTypeExpression(), _, _) => t.copy(start = Cast(t.start, TimestampType))
+      case t @ TimestampAddInterval(StringTypeExpression(), _, _) =>
+        t.copy(start = Cast(t.start, TimestampType))
 
       case other => other
     }

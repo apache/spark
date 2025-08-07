@@ -21,8 +21,8 @@ import scala.collection.mutable
 import scala.reflect.classTag
 
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, NullEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, TimestampEncoder, UDTEncoder, VariantEncoder, YearMonthIntervalEncoder}
-import org.apache.spark.sql.errors.{DataTypeErrorsBase, ExecutionErrors}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, LocalTimeEncoder, MapEncoder, NullEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, TimestampEncoder, UDTEncoder, VarcharEncoder, VariantEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -49,6 +49,7 @@ import org.apache.spark.util.ArrayImplicits._
  *   TimestampType -> java.time.Instant if spark.sql.datetime.java8API.enabled is true
  *
  *   TimestampNTZType -> java.time.LocalDateTime
+ *   TimeType -> java.time.LocalTime
  *
  *   DayTimeIntervalType -> java.time.Duration
  *   YearMonthIntervalType -> java.time.Period
@@ -80,12 +81,17 @@ object RowEncoder extends DataTypeErrorsBase {
       case DoubleType => BoxedDoubleEncoder
       case dt: DecimalType => JavaDecimalEncoder(dt, lenientSerialization = true)
       case BinaryType => BinaryEncoder
-      case _: StringType => StringEncoder
+      case CharType(length) if SqlApiConf.get.preserveCharVarcharTypeInfo =>
+        CharEncoder(length)
+      case VarcharType(length) if SqlApiConf.get.preserveCharVarcharTypeInfo =>
+        VarcharEncoder(length)
+      case s: StringType if StringHelper.isPlainString(s) => StringEncoder
       case TimestampType if SqlApiConf.get.datetimeJava8ApiEnabled => InstantEncoder(lenient)
       case TimestampType => TimestampEncoder(lenient)
       case TimestampNTZType => LocalDateTimeEncoder
       case DateType if SqlApiConf.get.datetimeJava8ApiEnabled => LocalDateEncoder(lenient)
       case DateType => DateEncoder(lenient)
+      case _: TimeType => LocalTimeEncoder
       case CalendarIntervalType => CalendarIntervalEncoder
       case _: DayTimeIntervalType => DayTimeIntervalEncoder
       case _: YearMonthIntervalType => YearMonthIntervalEncoder
@@ -93,16 +99,7 @@ object RowEncoder extends DataTypeErrorsBase {
       case p: PythonUserDefinedType =>
         // TODO check if this works.
         encoderForDataType(p.sqlType, lenient)
-      case udt: UserDefinedType[_] =>
-        val annotation = udt.userClass.getAnnotation(classOf[SQLUserDefinedType])
-        val udtClass: Class[_] = if (annotation != null) {
-          annotation.udt()
-        } else {
-          UDTRegistration.getUDTFor(udt.userClass.getName).getOrElse {
-            throw ExecutionErrors.userDefinedTypeNotAnnotatedAndRegisteredError(udt)
-          }
-        }
-        UDTEncoder(udt, udtClass.asInstanceOf[Class[_ <: UserDefinedType[_]]])
+      case udt: UserDefinedType[_] => UDTEncoder(udt, udt.getClass)
       case ArrayType(elementType, containsNull) =>
         IterableEncoder(
           classTag[mutable.ArraySeq[_]],

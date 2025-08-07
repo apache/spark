@@ -62,7 +62,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       assert(operatorMetadataV2.operatorPropertiesJson.nonEmpty)
       val stateStoreInfo = operatorMetadataV2.stateStoreInfo.head
       val expectedStateStoreInfo = expectedMetadataV2.stateStoreInfo.head
-      assert(stateStoreInfo.stateSchemaFilePath.nonEmpty)
+      assert(stateStoreInfo.stateSchemaFilePaths.nonEmpty)
       assert(stateStoreInfo.storeName == expectedStateStoreInfo.storeName)
       assert(stateStoreInfo.numPartitions == expectedStateStoreInfo.numPartitions)
     }
@@ -151,7 +151,8 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       // Assign some placeholder values to the state store metadata since they are generated
       // dynamically by the operator.
       val expectedMetadata = OperatorStateMetadataV2(OperatorInfoV1(0, "transformWithStateExec"),
-        Array(StateStoreMetadataV2("default", 0, numShufflePartitions, checkpointDir.toString)),
+        Array(StateStoreMetadataV2(
+          "default", 0, numShufflePartitions, List.empty)),
         "")
       checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2)
 
@@ -225,6 +226,86 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         ))
       checkAnswer(df.select(df.metadataColumn("_numColsPrefixKey")),
         Seq(Row(0), Row(0), Row(0), Row(0)))
+    }
+  }
+
+  test(
+    "SPARK-51779 Stateful operator metadata v2 for streaming join with virtual column families") {
+    withTempDir { checkpointDir =>
+      withSQLConf(
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3"
+      ) {
+        val input1 = MemoryStream[Int]
+        val input2 = MemoryStream[Int]
+
+        val df1 = input1.toDF().select($"value" as "key", ($"value" * 2) as "leftValue")
+        val df2 = input2.toDF().select($"value" as "key", ($"value" * 3) as "rightValue")
+        val joined = df1.join(df2, "key")
+
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(input1, 1),
+          CheckAnswer(),
+          AddData(input2, 1, 10),
+          CheckNewAnswer((1, 2, 3)),
+          StopStream
+        )
+
+        val expectedStateStoreInfo =
+          Array(StateStoreMetadataV2("default", 0, numShufflePartitions, List.empty))
+
+        val expectedProperties =
+          StreamingJoinOperatorProperties(useVirtualColumnFamilies = true)
+
+        val expectedMetadata = OperatorStateMetadataV2(
+          OperatorInfoV1(0, "symmetricHashJoin"),
+          expectedStateStoreInfo,
+          expectedProperties.json
+        )
+        checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2)
+
+        // Verify that the state store metadata is not available for invalid batches.
+        val ex = intercept[Exception] {
+          val invalidBatchId = OperatorStateMetadataUtils.getLastOffsetBatch(
+            spark,
+            checkpointDir.toString
+          ) + 1
+          checkOperatorStateMetadata(
+            checkpointDir.toString,
+            0,
+            expectedMetadata,
+            2,
+            Some(invalidBatchId)
+          )
+        }
+
+        checkError(
+          ex.asInstanceOf[SparkRuntimeException],
+          "STDS_FAILED_TO_READ_OPERATOR_METADATA",
+          Some("42K03"),
+          Map("checkpointLocation" -> ".*", "batchId" -> ".*"),
+          matchPVals = true
+        )
+
+        val ex1 = intercept[Exception] {
+          checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2, Some(-1))
+        }
+
+        checkError(
+          ex1.asInstanceOf[SparkRuntimeException],
+          "STDS_FAILED_TO_READ_OPERATOR_METADATA",
+          Some("42K03"),
+          Map("checkpointLocation" -> ".*", "batchId" -> ".*"),
+          matchPVals = true
+        )
+
+        val df = spark.read.format("state-metadata").load(checkpointDir.toString)
+        checkAnswer(
+          df,
+          Seq(Row(0, "symmetricHashJoin", "default", 5, 0L, 1L, expectedProperties.json))
+        )
+      }
     }
   }
 

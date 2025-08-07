@@ -222,7 +222,7 @@ object CompressionSchemeBenchmark extends BenchmarkBase with AllCompressionSchem
     val testData = allocateLocal(count * (4 + strLen))
 
     val g = {
-      val dataTable = (0 until tableSize).map(_ => RandomStringUtils.randomAlphabetic(strLen))
+      val dataTable = (0 until tableSize).map(_ => RandomStringUtils.secure.nextAlphabetic(strLen))
       val rng = genHigherSkewData()
       () => dataTable(rng().toInt % tableSize)
     }

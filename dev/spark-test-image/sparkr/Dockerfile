@@ -24,10 +24,10 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image for SparkR"
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE 20241114
+ENV FULL_REFRESH_DATE=20241114
 
-ENV DEBIAN_FRONTEND noninteractive
-ENV DEBCONF_NONINTERACTIVE_SEEN true
+ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBCONF_NONINTERACTIVE_SEEN=true
 
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -74,4 +74,4 @@ RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown',  \
     Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
 
 # See more in SPARK-39735
-ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
+ENV R_LIBS_SITE="/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"

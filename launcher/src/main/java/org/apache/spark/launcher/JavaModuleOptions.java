@@ -44,7 +44,8 @@ public class JavaModuleOptions {
       "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
       "--add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED",
       "-Djdk.reflect.useDirectMethodHandle=false",
-      "-Dio.netty.tryReflectionSetAccessible=true"};
+      "-Dio.netty.tryReflectionSetAccessible=true",
+      "--enable-native-access=ALL-UNNAMED"};
 
     /**
      * Returns the default JVM runtime options used by Spark.

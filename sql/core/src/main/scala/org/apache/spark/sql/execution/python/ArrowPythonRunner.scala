@@ -38,7 +38,7 @@ abstract class BaseArrowPythonRunner(
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
-    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID)
+    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
   with BasicPythonArrowInput
   with BasicPythonArrowOutput {
 
@@ -47,9 +47,14 @@ abstract class BaseArrowPythonRunner(
       funcs.head._1.funcs.head.pythonExec)
 
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
+  override val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds
+  override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
+  override val tracebackDumpIntervalSeconds: Long =
+    SQLConf.get.pythonUDFWorkerTracebackDumpIntervalSeconds
 
   override val errorOnDuplicatedFieldNames: Boolean = true
 
+  override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   // Use lazy val to initialize the fields before these are accessed in [[PythonArrowInput]]'s
@@ -104,8 +109,12 @@ class ArrowPythonWithNamedArgumentRunner(
     funcs, evalType, argMetas.map(_.map(_.offset)), _schema, _timeZoneId, largeVarTypes, workerConf,
     pythonMetrics, jobArtifactUUID) {
 
-  override protected def writeUDF(dataOut: DataOutputStream): Unit =
+  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
+    if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
+      PythonWorkerUtils.writeUTF(schema.json, dataOut)
+    }
     PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas, profiler)
+  }
 }
 
 object ArrowPythonRunner {
@@ -116,6 +125,23 @@ object ArrowPythonRunner {
       conf.pandasGroupedMapAssignColumnsByName.toString)
     val arrowSafeTypeCheck = Seq(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION.key ->
       conf.arrowSafeTypeConversion.toString)
-    Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck: _*)
+    val arrowAyncParallelism = conf.pythonUDFArrowConcurrencyLevel.map(v =>
+      Seq(SQLConf.PYTHON_UDF_ARROW_CONCURRENCY_LEVEL.key -> v.toString)
+    ).getOrElse(Seq.empty)
+    val useLargeVarTypes = Seq(SQLConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES.key ->
+      conf.arrowUseLargeVarTypes.toString)
+    val legacyPandasConversion = Seq(
+      SQLConf.PYTHON_TABLE_UDF_LEGACY_PANDAS_CONVERSION_ENABLED.key ->
+      conf.legacyPandasConversion.toString)
+    val legacyPandasConversionUDF = Seq(
+      SQLConf.PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED.key ->
+      conf.legacyPandasConversionUDF.toString)
+    val intToDecimalCoercion = Seq(
+      SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED.key ->
+      conf.getConf(SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED, false).toString)
+    Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++
+      arrowAyncParallelism ++ useLargeVarTypes ++
+      intToDecimalCoercion ++
+      legacyPandasConversion ++ legacyPandasConversionUDF: _*)
   }
 }

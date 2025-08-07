@@ -18,22 +18,32 @@
 package org.apache.spark.network.util;
 
 import java.io.*;
+import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.FileVisitOption;
+import java.nio.file.FileVisitResult;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import org.apache.commons.lang3.SystemUtils;
+import java.util.stream.Stream;
+import java.util.stream.Collectors;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
+import org.apache.spark.util.SparkSystemUtils$;
 
 /**
  * General utilities available in the network package. Many of these are sourced from Spark's
@@ -59,6 +69,109 @@ public class JavaUtils {
     }
   }
 
+  /** Delete a file or directory and its contents recursively without throwing exceptions. */
+  public static void deleteQuietly(File file) {
+    if (file != null && file.exists()) {
+      Path path = file.toPath();
+      try (Stream<Path> walk = Files.walk(path)) {
+        walk.sorted(Comparator.reverseOrder()).map(Path::toFile).forEach(File::delete);
+      } catch (Exception ignored) { /* No-op */ }
+    }
+  }
+
+  /** Registers the file or directory for deletion when the JVM exists. */
+  public static void forceDeleteOnExit(File file) throws IOException {
+    if (file != null && file.exists()) {
+      if (!file.isDirectory()) {
+        file.deleteOnExit();
+      } else {
+        Path path = file.toPath();
+        Files.walkFileTree(path, new SimpleFileVisitor<Path>() {
+          @Override
+          public FileVisitResult preVisitDirectory(Path p, BasicFileAttributes a)
+              throws IOException {
+            p.toFile().deleteOnExit();
+            return a.isSymbolicLink() ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
+          }
+
+          @Override
+          public FileVisitResult visitFile(Path p, BasicFileAttributes a) throws IOException {
+            p.toFile().deleteOnExit();
+            return FileVisitResult.CONTINUE;
+          }
+        });
+      }
+    }
+  }
+
+  /** Move a file from src to dst. */
+  public static void moveFile(File src, File dst) throws IOException {
+    if (src == null || dst == null || !src.exists() || src.isDirectory() || dst.exists()) {
+      throw new IllegalArgumentException("Invalid input " + src + " or " + dst);
+    }
+    if (!src.renameTo(dst)) { // Try to use File.renameTo first
+      Files.move(src.toPath(), dst.toPath());
+    }
+  }
+
+  /** Move a directory from src to dst. */
+  public static void moveDirectory(File src, File dst) throws IOException {
+    if (src == null || dst == null || !src.exists() || !src.isDirectory() || dst.exists()) {
+      throw new IllegalArgumentException("Invalid input " + src + " or " + dst);
+    }
+    if (!src.renameTo(dst)) {
+      Path from = src.toPath().toAbsolutePath().normalize();
+      Path to = dst.toPath().toAbsolutePath().normalize();
+      if (to.startsWith(from)) {
+        throw new IllegalArgumentException("Cannot move directory to itself or its subdirectory");
+      }
+      moveDirectory(from, to);
+    }
+  }
+
+  private static void moveDirectory(Path src, Path dst) throws IOException {
+    Files.createDirectories(dst);
+    try (DirectoryStream<Path> stream = Files.newDirectoryStream(src)) {
+      for (Path from : stream) {
+        Path to = dst.resolve(from.getFileName());
+        if (Files.isDirectory(from)) {
+          moveDirectory(from, to);
+        } else {
+          Files.move(from, to, StandardCopyOption.REPLACE_EXISTING);
+        }
+      }
+    }
+    Files.delete(src);
+  }
+
+  /** Copy src to the target directory simply. File attribute times are not copied. */
+  public static void copyDirectory(File src, File dst) throws IOException {
+    if (src == null || dst == null || !src.exists() || !src.isDirectory() ||
+        (dst.exists() && !dst.isDirectory())) {
+      throw new IllegalArgumentException("Invalid input file " + src + " or directory " + dst);
+    }
+    Path from = src.toPath().toAbsolutePath().normalize();
+    Path to = dst.toPath().toAbsolutePath().normalize();
+    if (to.startsWith(from)) {
+       throw new IllegalArgumentException("Cannot copy directory to itself or its subdirectory");
+    }
+    Files.createDirectories(to);
+    Files.walkFileTree(from, new SimpleFileVisitor<Path>() {
+      @Override
+      public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs)
+          throws IOException {
+        Files.createDirectories(to.resolve(from.relativize(dir)));
+        return FileVisitResult.CONTINUE;
+      }
+
+      @Override
+      public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+        Files.copy(file, to.resolve(from.relativize(file)), StandardCopyOption.REPLACE_EXISTING);
+        return FileVisitResult.CONTINUE;
+      }
+    });
+  }
+
   /** Returns a hash consistent with Spark's Utils.nonNegativeHash(). */
   public static int nonNegativeHash(Object obj) {
     if (obj == null) { return 0; }
@@ -82,6 +195,49 @@ public class JavaUtils {
     return StandardCharsets.UTF_8.decode(b.slice()).toString();
   }
 
+  public static long sizeOf(File file) throws IOException {
+    if (!file.exists()) {
+      throw new IllegalArgumentException(file.getAbsolutePath() + " not found");
+    }
+    return sizeOf(file.toPath());
+  }
+
+  public static long sizeOf(Path dirPath) throws IOException {
+    AtomicLong size = new AtomicLong(0);
+    Files.walkFileTree(dirPath, new SimpleFileVisitor<Path>() {
+        @Override
+        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+          size.addAndGet(attrs.size());
+          return FileVisitResult.CONTINUE;
+        }
+      });
+    return size.get();
+  }
+
+  public static void cleanDirectory(File dir) throws IOException {
+    if (dir == null || !dir.exists() || !dir.isDirectory()) {
+      throw new IllegalArgumentException("Invalid input directory " + dir);
+    }
+    cleanDirectory(dir.toPath());
+  }
+
+  private static void cleanDirectory(Path rootDir) throws IOException {
+    Files.walkFileTree(rootDir, new SimpleFileVisitor<Path>() {
+      @Override
+      public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+        Files.delete(file);
+        return FileVisitResult.CONTINUE;
+      }
+
+      @Override
+      public FileVisitResult postVisitDirectory(Path dir, IOException e) throws IOException {
+        if (e != null) throw e;
+        if (!dir.equals(rootDir)) Files.delete(dir);
+        return FileVisitResult.CONTINUE;
+      }
+    });
+  }
+
   /**
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
@@ -89,7 +245,7 @@ public class JavaUtils {
    * @param file Input file / dir to be deleted
    * @throws IOException if deletion is unsuccessful
    */
-  public static void deleteRecursively(File file) throws IOException {
+  public static void deleteRecursively(File file) throws IOException, InterruptedException {
     deleteRecursively(file, null);
   }
 
@@ -102,20 +258,22 @@ public class JavaUtils {
    *               are deleted.
    * @throws IOException if deletion is unsuccessful
    */
-  public static void deleteRecursively(File file, FilenameFilter filter) throws IOException {
+  public static void deleteRecursively(File file, FilenameFilter filter)
+      throws IOException, InterruptedException {
     if (file == null) { return; }
 
     // On Unix systems, use operating system command to run faster
     // If that does not work out, fallback to the Java IO way
     // We exclude Apple Silicon test environment due to the limited resource issues.
-    if (SystemUtils.IS_OS_UNIX && filter == null && !(SystemUtils.IS_OS_MAC_OSX &&
-        (System.getenv("SPARK_TESTING") != null || System.getProperty("spark.testing") != null))) {
+    if (SparkSystemUtils$.MODULE$.isUnix() && filter == null &&
+        !(SparkSystemUtils$.MODULE$.isMac() && (System.getenv("SPARK_TESTING") != null ||
+        System.getProperty("spark.testing") != null))) {
       try {
         deleteRecursivelyUsingUnixNative(file);
         return;
       } catch (IOException e) {
         logger.warn("Attempt to delete using native Unix OS command failed for path = {}. " +
-          "Falling back to Java IO way", e, MDC.of(LogKeys.PATH$.MODULE$, file.getAbsolutePath()));
+          "Falling back to Java IO way", e, MDC.of(LogKeys.PATH, file.getAbsolutePath()));
       }
     }
 
@@ -124,11 +282,12 @@ public class JavaUtils {
 
   private static void deleteRecursivelyUsingJavaIO(
       File file,
-      FilenameFilter filter) throws IOException {
-    if (!file.exists()) return;
-    BasicFileAttributes fileAttributes =
-      Files.readAttributes(file.toPath(), BasicFileAttributes.class);
-    if (fileAttributes.isDirectory() && !isSymlink(file)) {
+      FilenameFilter filter) throws IOException, InterruptedException {
+    BasicFileAttributes fileAttributes = readFileAttributes(file);
+    // SPARK-50716: If the file attributes are null, that is, the file attributes cannot be read,
+    // or if the file does not exist and is not a broken symbolic link, then return directly.
+    if (fileAttributes == null || (!file.exists() && !fileAttributes.isSymbolicLink())) return;
+    if (fileAttributes.isDirectory()) {
       IOException savedIOException = null;
       for (File child : listFilesSafely(file, filter)) {
         try {
@@ -143,8 +302,8 @@ public class JavaUtils {
       }
     }
 
-    // Delete file only when it's a normal file or an empty directory.
-    if (fileAttributes.isRegularFile() ||
+    // Delete file only when it's a normal file, a symbolic link, or an empty directory.
+    if (fileAttributes.isRegularFile() || fileAttributes.isSymbolicLink() ||
       (fileAttributes.isDirectory() && listFilesSafely(file, null).length == 0)) {
       boolean deleted = file.delete();
       // Delete can also fail if the file simply did not exist.
@@ -154,7 +313,20 @@ public class JavaUtils {
     }
   }
 
-  private static void deleteRecursivelyUsingUnixNative(File file) throws IOException {
+  /**
+   * Reads basic attributes of a given file, of return null if an I/O error occurs.
+   */
+  private static BasicFileAttributes readFileAttributes(File file) {
+    try {
+      return Files.readAttributes(
+        file.toPath(), BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+    } catch (IOException e) {
+      return null;
+    }
+  }
+
+  private static void deleteRecursivelyUsingUnixNative(File file)
+      throws InterruptedException, IOException {
     ProcessBuilder builder = new ProcessBuilder("rm", "-rf", file.getAbsolutePath());
     Process process = null;
     int exitCode = -1;
@@ -167,6 +339,10 @@ public class JavaUtils {
       process = builder.start();
 
       exitCode = process.waitFor();
+    } catch (InterruptedException e) {
+      // SPARK-51083: Specifically rethrow InterruptedException if it occurs, since swallowing
+      // it will lead to tasks missing cancellation.
+      throw e;
     } catch (Exception e) {
       throw new IOException("Failed to delete: " + file.getAbsolutePath(), e);
     } finally {
@@ -192,15 +368,23 @@ public class JavaUtils {
     }
   }
 
-  private static boolean isSymlink(File file) throws IOException {
-    Objects.requireNonNull(file);
-    File fileInCanonicalDir = null;
-    if (file.getParent() == null) {
-      fileInCanonicalDir = file;
-    } else {
-      fileInCanonicalDir = new File(file.getParentFile().getCanonicalFile(), file.getName());
+  public static Set<Path> listPaths(File dir) throws IOException {
+    if (dir == null) throw new IllegalArgumentException("Input directory is null");
+    if (!dir.exists() || !dir.isDirectory()) return Collections.emptySet();
+    try (var stream = Files.walk(dir.toPath(), FileVisitOption.FOLLOW_LINKS)) {
+      return stream.filter(Files::isRegularFile).collect(Collectors.toCollection(HashSet::new));
     }
-    return !fileInCanonicalDir.getCanonicalFile().equals(fileInCanonicalDir.getAbsoluteFile());
+  }
+
+  public static Set<File> listFiles(File dir) throws IOException {
+    if (dir == null) throw new IllegalArgumentException("Input directory is null");
+    if (!dir.exists() || !dir.isDirectory()) return Collections.emptySet();
+    try (var stream = Files.walk(dir.toPath(), FileVisitOption.FOLLOW_LINKS)) {
+      return stream
+        .filter(Files::isRegularFile)
+        .map(Path::toFile)
+        .collect(Collectors.toCollection(HashSet::new));
+    }
   }
 
   private static final Map<String, TimeUnit> timeSuffixes;
@@ -406,7 +590,7 @@ public class JavaUtils {
         dir = new File(root, namePrefix + "-" + UUID.randomUUID());
         Files.createDirectories(dir.toPath());
       } catch (IOException | SecurityException e) {
-        logger.error("Failed to create directory {}", e, MDC.of(LogKeys.PATH$.MODULE$, dir));
+        logger.error("Failed to create directory {}", e, MDC.of(LogKeys.PATH, dir));
         dir = null;
       }
     }
@@ -426,4 +610,25 @@ public class JavaUtils {
     }
   }
 
+  /**
+   * Copy the content of a URL into a file.
+   */
+  public static void copyURLToFile(URL url, File file) throws IOException {
+    if (url == null || file == null || (file.exists() && file.isDirectory())) {
+      throw new IllegalArgumentException("Invalid input " + url + " or " + file);
+    }
+    Files.createDirectories(file.getParentFile().toPath());
+    try (InputStream in = url.openStream()) {
+      Files.copy(in, file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+    }
+  }
+
+  public static String join(List<Object> arr, String sep) {
+    if (arr == null) return "";
+    StringJoiner joiner = new StringJoiner(sep == null ? "" : sep);
+    for (Object a : arr) {
+      joiner.add(a == null ? "" : a.toString());
+    }
+    return joiner.toString();
+  }
 }

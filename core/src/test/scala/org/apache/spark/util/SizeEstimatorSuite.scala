@@ -23,6 +23,7 @@ import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.config.Tests.TEST_USE_COMPRESSED_OOPS_KEY
+import org.apache.spark.util.Utils
 
 class DummyClass1 {}
 
@@ -74,7 +75,7 @@ class SizeEstimatorSuite
   with ResetSystemProperties {
 
   // Save modified system properties so that we can restore them after tests.
-  val originalArch = System.getProperty("os.arch")
+  val originalArch = Utils.osArch
   val originalCompressedOops = System.getProperty(TEST_USE_COMPRESSED_OOPS_KEY)
 
   def reinitializeSizeEstimator(arch: String, useCompressedOops: String): Unit = {

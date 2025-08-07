@@ -61,7 +61,9 @@ import org.apache.spark.tags.DockerTest
  * and with Oracle Express Edition versions 18.4.0 and 21.4.0
  */
 @DockerTest
-class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSparkSession {
+class OracleIntegrationSuite extends DockerJDBCIntegrationSuite
+  with SharedSparkSession
+  with SharedJDBCIntegrationTests {
   import testImplicits._
 
   override val db = new OracleDatabaseOnDocker
@@ -456,7 +458,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       .load()
 
     df1.logicalPlan match {
-      case LogicalRelationWithTable(JDBCRelation(_, parts, _), _) =>
+      case LogicalRelationWithTable(JDBCRelation(_, parts, _, _), _) =>
         val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
         assert(whereClauses === Set(
           """"D" < '2018-07-11' or "D" is null""",
@@ -479,7 +481,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       .load()
 
     df2.logicalPlan match {
-      case LogicalRelationWithTable(JDBCRelation(_, parts, _), _) =>
+      case LogicalRelationWithTable(JDBCRelation(_, parts, _, _), _) =>
         val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
         assert(whereClauses === Set(
           """"T" < '2018-07-15 20:50:32.5' or "T" is null""",

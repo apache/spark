@@ -28,7 +28,9 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Command, ExecutableDuringAnalysis, LogicalPlan, SupervisingCommand}
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.connector.ExternalCommandRunner
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{CommandExecutionMode, ExplainMode, LeafExecNode, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.IncrementalExecution
 import org.apache.spark.sql.types._
@@ -217,8 +219,28 @@ case class ExternalCommandExecutor(
   override def output: Seq[Attribute] =
     Seq(AttributeReference("command_output", StringType)())
 
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    val output = runner.executeCommand(command, new CaseInsensitiveStringMap(options.asJava))
-    output.map(Row(_)).toImmutableArraySeq
+  def execute(): Seq[String] = {
+    runner.executeCommand(command, new CaseInsensitiveStringMap(options.asJava)).toIndexedSeq
+  }
+
+  override def run(sparkSession: SparkSession): Seq[Row] = execute().map(Row(_))
+}
+
+object ExternalCommandExecutor {
+  def apply(
+      session: SparkSession,
+      runner: String,
+      command: String,
+      options: Map[String, String]): ExternalCommandExecutor = {
+    DataSource.lookupDataSource(runner, session.sessionState.conf) match {
+      case source if classOf[ExternalCommandRunner].isAssignableFrom(source) =>
+        ExternalCommandExecutor(
+          source.getDeclaredConstructor().newInstance().asInstanceOf[ExternalCommandRunner],
+          command,
+          options)
+
+      case _ =>
+        throw QueryCompilationErrors.commandExecutionInRunnerUnsupportedError(runner)
+    }
   }
 }

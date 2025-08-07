@@ -80,7 +80,7 @@ public class V2ExpressionSQLBuilder {
     } else if (expr instanceof Cast cast) {
       return visitCast(build(cast.expression()), cast.expressionDataType(), cast.dataType());
     } else if (expr instanceof Extract extract) {
-      return visitExtract(extract.field(), build(extract.source()));
+      return visitExtract(extract);
     } else if (expr instanceof SortOrder sortOrder) {
       return visitSortOrder(
         build(sortOrder.expression()), sortOrder.direction(), sortOrder.nullOrdering());
@@ -98,7 +98,9 @@ public class V2ExpressionSQLBuilder {
         case "ENDS_WITH" -> visitEndsWith(build(e.children()[0]), build(e.children()[1]));
         case "CONTAINS" -> visitContains(build(e.children()[0]), build(e.children()[1]));
         case "=", "<>", "<=>", "<", "<=", ">", ">=" ->
-          visitBinaryComparison(name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
+          visitBinaryComparison(name, e.children()[0], e.children()[1]);
+        case "BOOLEAN_EXPRESSION" ->
+          build(expr.children()[0]);
         case "+", "*", "/", "%", "&", "|", "^" ->
           visitBinaryArithmetic(name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
         case "-" -> {
@@ -118,8 +120,8 @@ public class V2ExpressionSQLBuilder {
           "COT", "ASIN", "ASINH", "ACOS", "ACOSH", "ATAN", "ATANH", "ATAN2", "CBRT", "DEGREES",
           "RADIANS", "SIGN", "WIDTH_BUCKET", "SUBSTRING", "UPPER", "LOWER", "TRANSLATE",
           "DATE_ADD", "DATE_DIFF", "TRUNC", "AES_ENCRYPT", "AES_DECRYPT", "SHA1", "SHA2", "MD5",
-          "CRC32", "BIT_LENGTH", "CHAR_LENGTH", "CONCAT" ->
-          visitSQLFunction(name, expressionsToStringArray(e.children()));
+          "CRC32", "BIT_LENGTH", "CHAR_LENGTH", "CONCAT", "RPAD", "LPAD" ->
+          visitSQLFunction(name, e.children());
         case "CASE_WHEN" -> visitCaseWhen(expressionsToStringArray(e.children()));
         case "TRIM" -> visitTrim("BOTH", expressionsToStringArray(e.children()));
         case "LTRIM" -> visitTrim("LEADING", expressionsToStringArray(e.children()));
@@ -147,8 +149,7 @@ public class V2ExpressionSQLBuilder {
         expressionsToStringArray(avg.children()));
     } else if (expr instanceof GeneralAggregateFunc f) {
       if (f.orderingWithinGroups().length == 0) {
-        return visitAggregateFunction(f.name(), f.isDistinct(),
-          expressionsToStringArray(f.children()));
+        return visitAggregateFunction(f.name(), f.isDistinct(), f.children());
       } else {
         return visitInverseDistributionFunction(
           f.name(),
@@ -219,6 +220,10 @@ public class V2ExpressionSQLBuilder {
     }
   }
 
+  protected String visitBinaryComparison(String name, Expression le, Expression re) {
+    return visitBinaryComparison(name, inputToSQL(le), inputToSQL(re));
+  }
+
   protected String visitBinaryComparison(String name, String l, String r) {
     if (name.equals("<=>")) {
       return "((" + l + " IS NOT NULL AND " + r + " IS NOT NULL AND " + l + " = " + r + ") " +
@@ -269,12 +274,20 @@ public class V2ExpressionSQLBuilder {
     return sb.toString();
   }
 
+  protected String visitSQLFunction(String funcName, Expression[] inputs) {
+    return visitSQLFunction(funcName, expressionsToStringArray(inputs));
+  }
+
   protected String visitSQLFunction(String funcName, String[] inputs) {
     return joinArrayToString(inputs, ", ", funcName + "(", ")");
   }
 
   protected String visitAggregateFunction(
-      String funcName, boolean isDistinct, String[] inputs) {
+      String funcName, boolean isDistinct, Expression[] inputs) {
+    return visitAggregateFunction(funcName, isDistinct, expressionsToStringArray(inputs));
+  }
+
+  protected String visitAggregateFunction(String funcName, boolean isDistinct, String[] inputs) {
     if (isDistinct) {
       return joinArrayToString(inputs, ", ", funcName + "(DISTINCT ", ")");
     } else {
@@ -327,6 +340,10 @@ public class V2ExpressionSQLBuilder {
     } else {
       return "TRIM(" + direction + " " + inputs[1] + " FROM " + inputs[0] + ")";
     }
+  }
+
+  protected String visitExtract(Extract extract) {
+    return visitExtract(extract.field(), build(extract.source()));
   }
 
   protected String visitExtract(String field, String source) {

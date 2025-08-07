@@ -27,7 +27,7 @@ import org.apache.spark.sql.types._
  */
 private[spark] class VectorUDT extends UserDefinedType[Vector] {
 
-  override final def sqlType: StructType = _sqlType
+  override final def sqlType: StructType = VectorUDT.sqlType
 
   override def serialize(obj: Vector): InternalRow = {
     obj match {
@@ -86,8 +86,11 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
   override def typeName: String = "vector"
 
   private[spark] override def asNullable: VectorUDT = this
+}
 
-  private[this] val _sqlType = {
+private[spark] object VectorUDT {
+
+  val sqlType = {
     // type: 0 = sparse, 1 = dense
     // We only use "values" for dense vectors, and "size", "indices", and "values" for sparse
     // vectors. The "values" field is nullable because we might want to add binary vectors later,

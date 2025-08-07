@@ -19,16 +19,16 @@ package org.apache.spark.sql.catalyst.expressions.csv
 import com.univocity.parsers.csv.CsvParser
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{DataSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.csv.{CSVInferSchema, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.{FailFastMode, FailureSafeParser, PermissiveMode}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{DataType, NullType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * The expression `CsvToStructs` will utilize the `Invoke` to call it, support codegen.
+ * The expression `CsvToStructs` will utilize it to support codegen.
  */
 case class CsvToStructsEvaluator(
     options: Map[String, String],
@@ -66,6 +66,7 @@ case class CsvToStructsEvaluator(
     if (mode != PermissiveMode && mode != FailFastMode) {
       throw QueryCompilationErrors.parseModeUnsupportedError("from_csv", mode)
     }
+    DataSourceOptions.validateSingleVariantColumn(parsedOptions.parameters, Some(nullableSchema))
     ExprUtils.verifyColumnNameOfCorruptRecord(
       nullableSchema,
       parsedOptions.columnNameOfCorruptRecord)
@@ -86,6 +87,7 @@ case class CsvToStructsEvaluator(
   }
 
   final def evaluate(csv: UTF8String): InternalRow = {
+    if (csv == null) return null
     converter(parser.parse(csv.toString))
   }
 }

@@ -50,9 +50,23 @@ from pyspark.ml.param.shared import (
     Param,
     Params,
 )
-from pyspark.ml.util import JavaMLReadable, JavaMLWritable
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransformer, _jvm
+from pyspark.ml.util import (
+    JavaMLReadable,
+    JavaMLWritable,
+    try_remote_attribute_relation,
+    invoke_helper_attr,
+)
+from pyspark.ml.wrapper import (
+    JavaEstimator,
+    JavaModel,
+    JavaParams,
+    JavaTransformer,
+    _jvm,
+)
 from pyspark.ml.common import inherit_doc
+from pyspark.ml.util import RemoteModelRef
+from pyspark.sql.types import ArrayType, StringType
+from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -387,6 +401,7 @@ class _LSHModel(JavaModel, _LSHParams):
         """
         return self._set(outputCol=value)
 
+    @try_remote_attribute_relation
     def approxNearestNeighbors(
         self,
         dataset: DataFrame,
@@ -424,6 +439,7 @@ class _LSHModel(JavaModel, _LSHParams):
         """
         return self._call_java("approxNearestNeighbors", dataset, key, numNearestNeighbors, distCol)
 
+    @try_remote_attribute_relation
     def approxSimilarityJoin(
         self,
         datasetA: DataFrame,
@@ -1204,15 +1220,30 @@ class CountVectorizerModel(
         Construct the model directly from a vocabulary list of strings,
         requires an active SparkContext.
         """
-        from pyspark.core.context import SparkContext
+        if len(vocabulary) == 0:
+            raise ValueError("Vocabulary list cannot be empty")
 
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._gateway is not None
-        java_class = sc._gateway.jvm.java.lang.String
-        jvocab = CountVectorizerModel._new_java_array(vocabulary, java_class)
-        model = CountVectorizerModel._create_from_java_class(
-            "org.apache.spark.ml.feature.CountVectorizerModel", jvocab
-        )
+        if is_remote():
+            model = CountVectorizerModel()
+            model._java_obj = RemoteModelRef(
+                invoke_helper_attr(
+                    "countVectorizerModelFromVocabulary",
+                    model.uid,
+                    list(vocabulary),
+                )
+            )
+
+        else:
+            from pyspark.core.context import SparkContext
+
+            sc = SparkContext._active_spark_context
+            assert sc is not None and sc._gateway is not None
+            java_class = getattr(sc._gateway.jvm, "java.lang.String")
+            jvocab = CountVectorizerModel._new_java_array(vocabulary, java_class)
+            model = CountVectorizerModel._create_from_java_class(
+                "org.apache.spark.ml.feature.CountVectorizerModel", jvocab
+            )
+
         model.setInputCol(inputCol)
         if outputCol is not None:
             model.setOutputCol(outputCol)
@@ -2261,6 +2292,7 @@ class ImputerModel(JavaModel, _ImputerParams, JavaMLReadable["ImputerModel"], Ja
 
     @property
     @since("2.2.0")
+    @try_remote_attribute_relation
     def surrogateDF(self) -> DataFrame:
         """
         Returns a DataFrame containing inputCols and their corresponding surrogates,
@@ -3751,6 +3783,23 @@ class QuantileDiscretizer(
         """
         Private method to convert the java_model to a Python model.
         """
+        if is_remote():
+            remote_model = JavaModel(java_model)
+            if self.isSet(self.inputCol):
+                return Bucketizer(
+                    splits=remote_model._call_java("getSplits"),
+                    inputCol=self.getInputCol(),
+                    outputCol=self.getOutputCol(),
+                    handleInvalid=self.getHandleInvalid(),
+                )
+            else:
+                return Bucketizer(
+                    splitsArray=remote_model._call_java("getSplitsArray"),
+                    inputCols=self.getInputCols(),
+                    outputCols=self.getOutputCols(),
+                    handleInvalid=self.getHandleInvalid(),
+                )
+
         if self.isSet(self.inputCol):
             return Bucketizer(
                 splits=list(java_model.getSplits()),
@@ -4795,15 +4844,27 @@ class StringIndexerModel(
         Construct the model directly from an array of label strings,
         requires an active SparkContext.
         """
-        from pyspark.core.context import SparkContext
+        if is_remote():
+            model = StringIndexerModel()
+            model._java_obj = RemoteModelRef(
+                invoke_helper_attr(
+                    "stringIndexerModelFromLabels",
+                    model.uid,
+                    (list(labels), ArrayType(StringType())),
+                )
+            )
 
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._gateway is not None
-        java_class = sc._gateway.jvm.java.lang.String
-        jlabels = StringIndexerModel._new_java_array(labels, java_class)
-        model = StringIndexerModel._create_from_java_class(
-            "org.apache.spark.ml.feature.StringIndexerModel", jlabels
-        )
+        else:
+            from pyspark.core.context import SparkContext
+
+            sc = SparkContext._active_spark_context
+            assert sc is not None and sc._gateway is not None
+            java_class = getattr(sc._gateway.jvm, "java.lang.String")
+            jlabels = StringIndexerModel._new_java_array(labels, java_class)
+            model = StringIndexerModel._create_from_java_class(
+                "org.apache.spark.ml.feature.StringIndexerModel", jlabels
+            )
+
         model.setInputCol(inputCol)
         if outputCol is not None:
             model.setOutputCol(outputCol)
@@ -4824,15 +4885,29 @@ class StringIndexerModel(
         Construct the model directly from an array of array of label strings,
         requires an active SparkContext.
         """
-        from pyspark.core.context import SparkContext
+        if is_remote():
+            model = StringIndexerModel()
+            model._java_obj = RemoteModelRef(
+                invoke_helper_attr(
+                    "stringIndexerModelFromLabelsArray",
+                    model.uid,
+                    (
+                        [list(labels) for labels in arrayOfLabels],
+                        ArrayType(ArrayType(StringType())),
+                    ),
+                )
+            )
 
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._gateway is not None
-        java_class = sc._gateway.jvm.java.lang.String
-        jlabels = StringIndexerModel._new_java_array(arrayOfLabels, java_class)
-        model = StringIndexerModel._create_from_java_class(
-            "org.apache.spark.ml.feature.StringIndexerModel", jlabels
-        )
+        else:
+            from pyspark.core.context import SparkContext
+
+            sc = SparkContext._active_spark_context
+            assert sc is not None and sc._gateway is not None
+            java_class = getattr(sc._gateway.jvm, "java.lang.String")
+            jlabels = StringIndexerModel._new_java_array(arrayOfLabels, java_class)
+            model = StringIndexerModel._create_from_java_class(
+                "org.apache.spark.ml.feature.StringIndexerModel", jlabels
+            )
         model.setInputCols(inputCols)
         if outputCols is not None:
             model.setOutputCols(outputCols)
@@ -4853,12 +4928,12 @@ class StringIndexerModel(
 
     @property
     @since("3.0.2")
-    def labelsArray(self) -> List[str]:
+    def labelsArray(self) -> List[List[str]]:
         """
         Array of ordered list of labels, corresponding to indices to be assigned
         for each input column.
         """
-        return self._call_java("labelsArray")
+        return [list(labels) for labels in self._call_java("labelsArray")]
 
 
 @inherit_doc
@@ -4970,7 +5045,7 @@ class StopWordsRemover(
 
     Notes
     -----
-    null values from input array are preserved unless adding null to stopWords explicitly.
+    - null values from input array are preserved unless adding null to stopWords explicitly.
 
     Examples
     --------
@@ -5069,11 +5144,13 @@ class StopWordsRemover(
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.StopWordsRemover", self.uid
         )
-        self._setDefault(
-            stopWords=StopWordsRemover.loadDefaultStopWords("english"),
-            caseSensitive=False,
-            locale=self._java_obj.getLocale(),
-        )
+        if is_remote():
+            locale = invoke_helper_attr("stopWordsRemoverGetDefaultOrUS")
+        else:
+            locale = self._java_obj.getLocale()
+
+        stopWords = StopWordsRemover.loadDefaultStopWords("english")
+        self._setDefault(stopWords=stopWords, caseSensitive=False, locale=locale)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -5198,8 +5275,13 @@ class StopWordsRemover(
         Supported languages: danish, dutch, english, finnish, french, german, hungarian,
         italian, norwegian, portuguese, russian, spanish, swedish, turkish
         """
-        stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWordsRemover
-        return list(stopWordsObj.loadDefaultStopWords(language))
+        if is_remote():
+            stopWords = invoke_helper_attr("stopWordsRemoverLoadDefaultStopWords", language)
+            return list(stopWords)
+
+        else:
+            stopWordsObj = getattr(_jvm(), "org.apache.spark.ml.feature.StopWordsRemover")
+            return list(stopWordsObj.loadDefaultStopWords(language))
 
 
 class _TargetEncoderParams(
@@ -5490,15 +5572,6 @@ class TargetEncoderModel(
         Sets the value of :py:attr:`smoothing`.
         """
         return self._set(smoothing=value)
-
-    @property
-    @since("4.0.0")
-    def stats(self) -> List[Dict[float, Tuple[float, float]]]:
-        """
-        Fitted statistics for each feature to being encoded.
-        The list contains a dictionary for each input column.
-        """
-        return self._call_java("stats")
 
 
 @inherit_doc
@@ -5944,13 +6017,26 @@ class VectorIndexerModel(
 
     @property
     @since("1.4.0")
-    def categoryMaps(self) -> Dict[int, Tuple[float, int]]:
+    def categoryMaps(self) -> Dict[int, Dict[float, int]]:
         """
         Feature value index.  Keys are categorical feature indices (column indices).
         Values are maps from original features values to 0-based category indices.
         If a feature is not in this map, it is treated as continuous.
         """
-        return self._call_java("javaCategoryMaps")
+
+        @try_remote_attribute_relation
+        def categoryMapsDF(m: VectorIndexerModel) -> DataFrame:
+            return m._call_java("categoryMapsDF")
+
+        res: Dict[int, Dict[float, int]] = {}
+        for row in categoryMapsDF(self).collect():
+            featureIndex = int(row.featureIndex)
+            originalValue = float(row.originalValue)
+            categoryIndex = int(row.categoryIndex)
+            if featureIndex not in res:
+                res[featureIndex] = {}
+            res[featureIndex][originalValue] = categoryIndex
+        return res
 
 
 @inherit_doc
@@ -6381,6 +6467,7 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable["Word2VecModel"],
     """
 
     @since("1.5.0")
+    @try_remote_attribute_relation
     def getVectors(self) -> DataFrame:
         """
         Returns the vector representation of the words as a dataframe
@@ -6401,6 +6488,7 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable["Word2VecModel"],
         return self._set(outputCol=value)
 
     @since("1.5.0")
+    @try_remote_attribute_relation
     def findSynonyms(self, word: Union[str, Vector], num: int) -> DataFrame:
         """
         Find "num" number of words closest in similarity to "word".
@@ -6420,11 +6508,10 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable["Word2VecModel"],
         Returns an array with two fields word and similarity (which
         gives the cosine similarity).
         """
-        if not isinstance(word, str):
-            word = _convert_to_vector(word)
-        assert self._java_obj is not None
-        tuples = self._java_obj.findSynonymsArray(word, num)
-        return list(map(lambda st: (st._1(), st._2()), list(tuples)))
+        res = []
+        for row in self.findSynonyms(word, num).collect():
+            res.append((str(row.word), float(row.similarity)))
+        return res
 
 
 class _PCAParams(HasInputCol, HasOutputCol):
@@ -6836,7 +6923,7 @@ class RFormulaModel(JavaModel, _RFormulaParams, JavaMLReadable["RFormulaModel"],
     """
 
     def __str__(self) -> str:
-        resolvedFormula = self._call_java("resolvedFormula")
+        resolvedFormula = self._call_java("resolvedFormulaString")
         return "RFormulaModel(%s) (uid=%s)" % (resolvedFormula, self.uid)
 
 

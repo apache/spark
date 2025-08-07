@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkFiles, TaskContext}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -239,7 +239,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         val complexTypeFactory = JsonToStructs(attr.dataType,
           ioschema.outputSerdeProps.toMap, Literal(null), Some(conf.sessionLocalTimeZone))
         wrapperConvertException(data =>
-          complexTypeFactory.evaluator.evaluate(UTF8String.fromString(data)), any => any)
+          complexTypeFactory.nullSafeEval(UTF8String.fromString(data)), any => any)
       case udt: UserDefinedType[_] =>
         wrapperConvertException(data => udt.deserialize(data), converter)
       case dt =>

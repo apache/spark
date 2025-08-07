@@ -35,6 +35,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.datasources.VariantMetadata
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 
@@ -221,6 +222,9 @@ object ParquetReadSupport extends Logging {
         clipParquetMapType(
           parquetType.asGroupType(), t.keyType, t.valueType, caseSensitive, useFieldId)
 
+      case t: StructType if VariantMetadata.isVariantStruct(t) =>
+        clipVariantSchema(parquetType.asGroupType(), t)
+
       case t: StructType =>
         clipParquetGroup(parquetType.asGroupType(), t, caseSensitive, useFieldId)
 
@@ -390,6 +394,11 @@ object ParquetReadSupport extends Logging {
       .named(parquetRecord.getName)
   }
 
+  private def clipVariantSchema(parquetType: GroupType, variantStruct: StructType): GroupType = {
+    // TODO(SHREDDING): clip `parquetType` to retain the necessary columns.
+    parquetType
+  }
+
   /**
    * Clips a Parquet [[GroupType]] which corresponds to a Catalyst [[StructType]].
    *
@@ -414,7 +423,7 @@ object ParquetReadSupport extends Logging {
       caseSensitiveParquetFieldMap
           .get(f.name)
           .map(clipParquetType(_, f.dataType, caseSensitive, useFieldId))
-          .getOrElse(toParquet.convertField(f))
+          .getOrElse(toParquet.convertField(f, inShredded = false))
     }
 
     def matchCaseInsensitiveField(f: StructField): Type = {
@@ -430,7 +439,7 @@ object ParquetReadSupport extends Logging {
             } else {
               clipParquetType(parquetTypes.head, f.dataType, caseSensitive, useFieldId)
             }
-          }.getOrElse(toParquet.convertField(f))
+          }.getOrElse(toParquet.convertField(f, inShredded = false))
     }
 
     def matchIdField(f: StructField): Type = {
@@ -449,7 +458,7 @@ object ParquetReadSupport extends Logging {
         }.getOrElse {
           // When there is no ID match, we use a fake name to avoid a name match by accident
           // We need this name to be unique as well, otherwise there will be type conflicts
-          toParquet.convertField(f.copy(name = generateFakeColumnName))
+          toParquet.convertField(f.copy(name = generateFakeColumnName), inShredded = false)
         }
     }
 

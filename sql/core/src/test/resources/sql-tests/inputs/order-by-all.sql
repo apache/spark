@@ -42,3 +42,6 @@ select * from values("z", 1), ("y", 2), ("x", 3) AS T(col1, all) order by all;
 -- shouldn't work in window functions
 select name, dept, rank() over (partition by dept order by all) as rank
 from values('Lisa', 'Sales', 10000, 35) as T(name, dept, salary, age);
+
+-- ORDER BY column can't reference an outer scope
+SELECT all, (SELECT col2 FROM VALUES (2, 2) ORDER BY ALL) FROM VALUES (1) AS t1 (all)

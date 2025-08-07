@@ -44,8 +44,8 @@ def run_cmd(cmd):
 
 
 def check_protos(module_name, cmp_path, proto_path):
-    print(f"Start checking the generated codes in pyspark-${module_name}.")
-    with tempfile.TemporaryDirectory(prefix=f"check_${module_name}__protos") as tmp:
+    print(f"Start checking the generated codes in pyspark-{module_name}.")
+    with tempfile.TemporaryDirectory(prefix=f"check_{module_name}__protos") as tmp:
         run_cmd(f"{SPARK_HOME}/dev/gen-protos.sh {module_name} {tmp}")
         result = filecmp.dircmp(
             f"{SPARK_HOME}/{cmp_path}",
@@ -71,12 +71,12 @@ def check_protos(module_name, cmp_path, proto_path):
             success = False
 
         if success:
-            print(f"Finish checking the generated codes in pyspark-${module_name}: SUCCESS")
+            print(f"Finish checking the generated codes in pyspark-{module_name}: SUCCESS")
         else:
             fail(
-                "Generated files for pyspark-connect are out of sync! "
-                f"If you have touched files under ${proto_path}, "
-                f"please run ./dev/${module_name}-gen-protos.sh. "
+                f"Generated files for pyspark-{module_name} are out of sync! "
+                f"If you have touched files under {proto_path}, "
+                f"please run ./dev/{module_name}-gen-protos.sh. "
                 "If you haven't touched any file above, please rebase your PR against main branch."
             )
 

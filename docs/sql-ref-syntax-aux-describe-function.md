@@ -85,7 +85,7 @@ DESC FUNCTION max;
 
 -- Describe a builtin user defined aggregate function
 -- Returns function name, implementing class and usage and examples.
-DESC FUNCTION EXTENDED explode
+DESC FUNCTION EXTENDED explode;
 +---------------------------------------------------------------+
 |function_desc                                                  |
 +---------------------------------------------------------------+

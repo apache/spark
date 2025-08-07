@@ -36,8 +36,10 @@ from pyspark._typing import PrimitiveType
 from pyspark.profiler import CodeMapDict
 import pyspark.sql.types
 from pyspark.sql.column import Column
+from pyspark.sql.tvf_argument import TableValuedFunctionArgument
 
 ColumnOrName = Union[Column, str]
+TVFArgumentOrName = Union[TableValuedFunctionArgument, str]
 ColumnOrNameOrOrdinal = Union[Column, str, int]
 DecimalLiteral = decimal.Decimal
 DateTimeLiteral = Union[datetime.datetime, datetime.date]
@@ -63,6 +65,7 @@ SQLBatchedUDFType = Literal[100]
 SQLArrowBatchedUDFType = Literal[101]
 SQLTableUDFType = Literal[300]
 SQLArrowTableUDFType = Literal[301]
+SQLArrowUDTFType = Literal[302]
 
 class SupportsOpen(Protocol):
     def open(self, partition_id: int, epoch_id: int) -> bool: ...

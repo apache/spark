@@ -24,6 +24,8 @@ import org.apache.spark.sql.catalyst.parser.ParserUtils.withOrigin
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundPlanStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.errors.QueryParsingErrors
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StructType
 
 /**
  * Base class for all ANTLR4 [[ParserInterface]] implementations.
@@ -72,9 +74,18 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
   /** Creates LogicalPlan for a given SQL string of query. */
   override def parseQuery(sqlText: String): LogicalPlan =
     parse(sqlText) { parser =>
-      val ctx = parser.query()
-      withErrorHandling(ctx, Some(sqlText)) {
-        astBuilder.visitQuery(ctx)
+      if (!SQLConf.get.getConf(SQLConf.LEGACY_PARSE_QUERY_WITHOUT_EOF)) {
+        val ctx = parser.singleQuery()
+
+        withErrorHandling(ctx, Some(sqlText)) {
+          astBuilder.visitSingleQuery(ctx)
+        }
+      } else {
+        val ctx = parser.query()
+
+        withErrorHandling(ctx, Some(sqlText)) {
+          astBuilder.visitQuery(ctx)
+        }
       }
     }
 
@@ -89,6 +100,13 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
           val position = Origin(None, None)
           throw QueryParsingErrors.sqlStatementUnsupportedError(sqlText, position)
       }
+    }
+  }
+
+  override def parseRoutineParam(sqlText: String): StructType = parse(sqlText) { parser =>
+    val ctx = parser.singleRoutineParamList()
+    withErrorHandling(ctx, Some(sqlText)) {
+      astBuilder.visitSingleRoutineParamList(ctx)
     }
   }
 

@@ -105,6 +105,13 @@ abstract class DataType extends AbstractDataType {
    */
   private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = f(this)
 
+  /**
+   * Recursively applies the provided partial function `f` to transform this DataType tree.
+   */
+  private[spark] def transformRecursively(f: PartialFunction[DataType, DataType]): DataType = {
+    if (f.isDefinedAt(this)) f(this) else this
+  }
+
   final override private[sql] def defaultConcreteType: DataType = this
 
   override private[sql] def acceptsType(other: DataType): Boolean = sameType(other)
@@ -119,6 +126,7 @@ object DataType {
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
   private val CHAR_TYPE = """char\(\s*(\d+)\s*\)""".r
   private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
+  private val STRING_WITH_COLLATION = """string\s+collate\s+(\w+)""".r
 
   val COLLATIONS_METADATA_KEY = "__COLLATIONS"
 
@@ -167,7 +175,7 @@ object DataType {
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
   private val otherTypes = {
-    Seq(
+    (Seq(
       NullType,
       DateType,
       TimestampType,
@@ -195,7 +203,8 @@ object DataType {
       YearMonthIntervalType(MONTH),
       YearMonthIntervalType(YEAR, MONTH),
       TimestampNTZType,
-      VariantType)
+      VariantType) ++
+      (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).map(TimeType(_)))
       .map(t => t.typeName -> t)
       .toMap
   }
@@ -207,6 +216,7 @@ object DataType {
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
       case CHAR_TYPE(length) => CharType(length.toInt)
       case VARCHAR_TYPE(length) => VarcharType(length.toInt)
+      case STRING_WITH_COLLATION(collation) => StringType(collation)
       // For backwards compatibility, previously the type name of NullType is "null"
       case "null" => NullType
       case "timestamp_ltz" => TimestampType
@@ -226,11 +236,15 @@ object DataType {
     }
   }
 
+  private[sql] def parseDataType(json: JValue): DataType = {
+    parseDataType(json, fieldPath = "", collationsMap = Map.empty)
+  }
+
   // NOTE: Map fields must be sorted in alphabetical order to keep consistent with the Python side.
   private[sql] def parseDataType(
       json: JValue,
-      fieldPath: String = "",
-      collationsMap: Map[String, String] = Map.empty): DataType = json match {
+      fieldPath: String,
+      collationsMap: Map[String, String]): DataType = json match {
     case JString(name) =>
       collationsMap.get(fieldPath) match {
         case Some(collation) =>
@@ -440,7 +454,7 @@ object DataType {
   private[sql] def equalsIgnoreCompatibleCollation(from: DataType, to: DataType): Boolean = {
     (from, to) match {
       // String types with possibly different collations are compatible.
-      case (_: StringType, _: StringType) => true
+      case (a: StringType, b: StringType) => a.constraint == b.constraint
 
       case (fromDataType, toDataType) => fromDataType == toDataType
     }

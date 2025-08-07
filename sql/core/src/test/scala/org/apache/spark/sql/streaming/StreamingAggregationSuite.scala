@@ -22,16 +22,16 @@ import java.util.{Locale, TimeZone}
 
 import scala.annotation.tailrec
 
-import org.apache.commons.io.FileUtils
 import org.scalatest.Assertions
 
 import org.apache.spark.{SparkEnv, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.BlockRDD
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.streaming._
@@ -732,7 +732,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
     inputData.addData(3)
     inputData.addData(3, 2)
@@ -872,6 +872,26 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       assertNumStateRows(
         total = Seq(1), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(2)))
     )
+  }
+
+  testWithAllStateVersions("test that avro encoding is not supported") {
+    val inputData = MemoryStream[Int]
+
+    val aggregated =
+      inputData.toDF()
+        .groupBy($"value")
+        .agg(count("*"))
+        .as[(Int, Long)]
+
+    val ex = intercept[Exception] {
+      withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "avro") {
+        testStream(aggregated, Update)(
+          AddData(inputData, 3),
+          ProcessAllAvailable()
+        )
+      }
+    }
+    assert(ex.getMessage.contains("State store encoding format as avro is not supported"))
   }
 
   private def prepareTestForChangingSchemaOfState(

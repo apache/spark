@@ -20,10 +20,11 @@ package org.apache.spark.sql.streaming
 import org.apache.spark.sql.{DataFrame, Dataset, Encoders, KeyValueGroupedDataset}
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.{col, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.tags.SlowSQLTest
 
 case class InitInputRow(key: String, action: String, value: Double)
 case class InputRowForInitialState(
@@ -47,6 +48,8 @@ case class UnionUnflattenInitialStateRow(
 abstract class StatefulProcessorWithInitialStateTestClass[V]
     extends StatefulProcessorWithInitialState[
         String, InitInputRow, (String, String, Double), V] {
+  import implicits._
+
   @transient var _valState: ValueState[Double] = _
   @transient var _listState: ListState[Double] = _
   @transient var _mapState: MapState[Double, Int] = _
@@ -54,13 +57,9 @@ abstract class StatefulProcessorWithInitialStateTestClass[V]
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _valState = getHandle.getValueState[Double]("testValueInit", Encoders.scalaDouble,
-      TTLConfig.NONE)
-    _listState = getHandle.getListState[Double]("testListInit", Encoders.scalaDouble,
-      TTLConfig.NONE)
-    _mapState = getHandle.getMapState[Double, Int](
-      "testMapInit", Encoders.scalaDouble, Encoders.scalaInt,
-        TTLConfig.NONE)
+    _valState = getHandle.getValueState[Double]("testValueInit", TTLConfig.NONE)
+    _listState = getHandle.getListState[Double]("testListInit", TTLConfig.NONE)
+    _mapState = getHandle.getMapState[Double, Int]("testMapInit", TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -70,7 +69,7 @@ abstract class StatefulProcessorWithInitialStateTestClass[V]
     var output = List[(String, String, Double)]()
     for (row <- inputRows) {
       if (row.action == "getOption") {
-        output = (key, row.action, _valState.getOption().getOrElse(-1.0)) :: output
+        output = (key, row.action, Option(_valState.get()).getOrElse(-1.0)) :: output
       } else if (row.action == "update") {
         _valState.update(row.value)
       } else if (row.action == "remove") {
@@ -197,10 +196,10 @@ class AccumulateStatefulProcessorWithInitState
     var output = List[(String, String, Double)]()
     for (row <- inputRows) {
       if (row.action == "getOption") {
-        output = (key, row.action, _valState.getOption().getOrElse(0.0)) :: output
+        output = (key, row.action, Option(_valState.get()).getOrElse(0.0)) :: output
       } else if (row.action == "add") {
         // Update state variable as accumulative sum
-        val accumulateSum = _valState.getOption().getOrElse(0.0) + row.value
+        val accumulateSum = Option(_valState.get()).getOrElse(0.0) + row.value
         _valState.update(accumulateSum)
       } else if (row.action == "remove") {
         _valState.clear()
@@ -279,7 +278,7 @@ class StatefulProcessorWithInitialStateProcTimerClass
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
-    val currCount = _countState.getOption().getOrElse(0L)
+    val currCount = Option(_countState.get()).getOrElse(0L)
     val count = currCount + inputRows.size
     processUnexpiredRows(key, currCount, count, timerValues)
     Iterator((key, count.toString))
@@ -319,7 +318,7 @@ class StatefulProcessorWithInitialStateEventTimerClass
     val timeoutTimestampMs = (maxEventTimeSec + timeoutDelaySec) * 1000
     _maxEventTimeState.update(maxEventTimeSec)
 
-    val registeredTimerMs: Long = _timerState.getOption().getOrElse(0L)
+    val registeredTimerMs: Long = Option(_timerState.get()).getOrElse(0L)
     if (registeredTimerMs < timeoutTimestampMs) {
       getHandle.deleteTimer(registeredTimerMs)
       getHandle.registerTimer(timeoutTimestampMs)
@@ -334,7 +333,7 @@ class StatefulProcessorWithInitialStateEventTimerClass
     // keep a _maxEventTimeState to track the max eventTime seen so far
     // register a timer if bigger eventTime is seen
     val maxEventTimeSec = math.max(initialState._2,
-      _maxEventTimeState.getOption().getOrElse(0L))
+      Option(_maxEventTimeState.get()).getOrElse(0L))
     processUnexpiredRows(maxEventTimeSec)
   }
 
@@ -344,7 +343,7 @@ class StatefulProcessorWithInitialStateEventTimerClass
       timerValues: TimerValues): Iterator[(String, Int)] = {
     val valuesSeq = inputRows.toSeq
     val maxEventTimeSec = math.max(valuesSeq.map(_._2).max,
-      _maxEventTimeState.getOption().getOrElse(0L))
+      Option(_maxEventTimeState.get()).getOrElse(0L))
     processUnexpiredRows(maxEventTimeSec)
     Iterator((key, maxEventTimeSec.toInt))
   }
@@ -362,8 +361,9 @@ class StatefulProcessorWithInitialStateEventTimerClass
  * Class that adds tests for transformWithState stateful
  * streaming operator with user-defined initial state
  */
+@SlowSQLTest
 class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
-  with AlsoTestWithChangelogCheckpointingEnabled {
+  with AlsoTestWithEncodingTypes with AlsoTestWithRocksDBFeatures {
 
   import testImplicits._
 
@@ -379,6 +379,8 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
 
+      val clock = new StreamManualClock
+
       val inputData = MemoryStream[InitInputRow]
       val kvDataSet = inputData.toDS()
         .groupByKey(x => x.key)
@@ -390,10 +392,12 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
         TimeMode.None(), OutputMode.Append(), initStateDf)
 
       testStream(query, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         // non-exist key test
         AddData(inputData, InitInputRow("k1", "update", 37.0)),
         AddData(inputData, InitInputRow("k2", "update", 40.0)),
         AddData(inputData, InitInputRow("non-exist", "getOption", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("non-exist", "getOption", -1.0)),
         Execute { q =>
           assert(q.lastProgress
@@ -402,59 +406,80 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
         AddData(inputData, InitInputRow("k1", "appendList", 37.0)),
         AddData(inputData, InitInputRow("k2", "appendList", 40.0)),
         AddData(inputData, InitInputRow("non-exist", "getList", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
 
         AddData(inputData, InitInputRow("k1", "incCount", 37.0)),
         AddData(inputData, InitInputRow("k2", "incCount", 40.0)),
         AddData(inputData, InitInputRow("non-exist", "getCount", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("non-exist", "getCount", 0.0)),
+
         AddData(inputData, InitInputRow("k2", "incCount", 40.0)),
         AddData(inputData, InitInputRow("k2", "getCount", 40.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k2", "getCount", 2.0)),
 
         // test every row in initial State is processed
         AddData(inputData, InitInputRow("init_1", "getOption", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getOption", 40.0)),
+
         AddData(inputData, InitInputRow("init_2", "getOption", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_2", "getOption", 100.0)),
 
         AddData(inputData, InitInputRow("init_1", "getList", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getList", 40.0)),
+
         AddData(inputData, InitInputRow("init_2", "getList", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_2", "getList", 100.0)),
 
         AddData(inputData, InitInputRow("init_1", "getCount", 40.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getCount", 1.0)),
+
         AddData(inputData, InitInputRow("init_2", "getCount", 100.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_2", "getCount", 1.0)),
 
         // Update row with key in initial row will work
         AddData(inputData, InitInputRow("init_1", "update", 50.0)),
         AddData(inputData, InitInputRow("init_1", "getOption", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getOption", 50.0)),
+
         AddData(inputData, InitInputRow("init_1", "remove", -1.0)),
         AddData(inputData, InitInputRow("init_1", "getOption", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getOption", -1.0)),
 
         AddData(inputData, InitInputRow("init_1", "appendList", 50.0)),
         AddData(inputData, InitInputRow("init_1", "getList", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getList", 50.0), ("init_1", "getList", 40.0)),
 
         AddData(inputData, InitInputRow("init_1", "incCount", 40.0)),
         AddData(inputData, InitInputRow("init_1", "getCount", 40.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getCount", 2.0)),
 
         // test remove
         AddData(inputData, InitInputRow("k1", "remove", -1.0)),
         AddData(inputData, InitInputRow("k1", "getOption", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k1", "getOption", -1.0)),
 
         AddData(inputData, InitInputRow("init_1", "clearCount", -1.0)),
         AddData(inputData, InitInputRow("init_1", "getCount", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("init_1", "getCount", 0.0)),
 
         AddData(inputData, InitInputRow("init_1", "clearList", -1.0)),
         AddData(inputData, InitInputRow("init_1", "getList", -1.0)),
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer()
       )
     }

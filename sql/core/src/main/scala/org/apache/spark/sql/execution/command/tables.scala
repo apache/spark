@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -240,11 +241,15 @@ case class AlterTableAddColumnsCommand(
 
     SchemaUtils.checkColumnNameDuplication(
       (colsWithProcessedDefaults ++ catalogTable.schema).map(_.name),
-      conf.caseSensitiveAnalysis)
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+    if (!conf.allowCollationsInMapKeys) {
+      colsToAdd.foreach(col => SchemaUtils.checkNoCollationsInMapKeys(col.dataType))
+    }
     DDLUtils.checkTableColumns(catalogTable, StructType(colsWithProcessedDefaults))
 
-    val existingSchema = CharVarcharUtils.getRawSchema(catalogTable.dataSchema)
-    catalog.alterTableDataSchema(table, StructType(existingSchema ++ colsWithProcessedDefaults))
+    val existingDataSchema = CharVarcharUtils.getRawSchema(catalogTable.dataSchema)
+    catalog.alterTableSchema(table,
+      StructType(existingDataSchema ++ colsWithProcessedDefaults ++ catalogTable.partitionSchema))
     Seq.empty[Row]
   }
 
@@ -498,7 +503,7 @@ case class TruncateTableCommand(
         partLocations
       }
     val hadoopConf = spark.sessionState.newHadoopConf()
-    val ignorePermissionAcl = conf.truncateTableIgnorePermissionAcl
+    val ignorePermissionAcl = spark.sessionState.conf.truncateTableIgnorePermissionAcl
     locations.foreach { location =>
       if (location.isDefined) {
         val path = new Path(location.get)
@@ -816,7 +821,8 @@ case class DescribeColumnCommand(
 
     val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
     val colStatsMap = catalogTable.stats.map(_.colStats).getOrElse(Map.empty)
-    val colStats = if (conf.caseSensitiveAnalysis) colStatsMap else CaseInsensitiveMap(colStatsMap)
+    val colStats = if (sparkSession.sessionState.conf.caseSensitiveAnalysis) colStatsMap
+      else CaseInsensitiveMap(colStatsMap)
     val cs = colStats.get(field.name)
 
     val comment = if (field.metadata.contains("comment")) {
@@ -972,7 +978,7 @@ case class ShowTablePropertiesCommand(
       Seq.empty[Row]
     } else {
       val catalogTable = catalog.getTableMetadata(table)
-      val properties = conf.redactOptions(catalogTable.properties)
+      val properties = sparkSession.sessionState.conf.redactOptions(catalogTable.properties)
       propertyKey match {
         case Some(p) =>
           val propValue = properties

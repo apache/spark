@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, LocalTime, Period}
 
 import scala.util.Random
 
@@ -39,10 +39,12 @@ import org.apache.spark.sql.test.SQLTestData.DecimalData
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.types.CalendarInterval
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
+@SlowSQLTest
 class DataFrameAggregateSuite extends QueryTest
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -618,6 +620,44 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(
       df.select(collect_set($"a"), sort_array(collect_set($"b"))),
       Seq(Row(Seq(1, 2, 3), Seq(Row(2, 2), Row(4, 1))))
+    )
+  }
+
+  test("listagg function") {
+    // Normal case.
+    val df = Seq(("a", "b"), ("b", "c"), ("c", "d")).toDF("col1", "col2")
+    checkAnswer(
+      df.selectExpr("listagg(col1)", "listagg(col2)"),
+      Seq(Row("abc", "bcd"))
+    )
+    checkAnswer(
+      df.select(listagg($"col1"), listagg($"col2")),
+      Seq(Row("abc", "bcd"))
+    )
+
+    // Distinct case.
+    val df2 = Seq(("a", "b"), ("a", "b"), ("b", "d")).toDF("col1", "col2")
+    checkAnswer(
+      df2.select(listagg_distinct($"col1"), listagg_distinct($"col2")),
+      Seq(Row("ab", "bd"))
+    )
+
+    // Null case.
+    val df3 = Seq(("a", "b", null), ("a", "b", null), (null, null, null))
+      .toDF("col1", "col2", "col3")
+    checkAnswer(
+      df3.select(
+        listagg_distinct($"col1"), listagg($"col1"),
+        listagg_distinct($"col2"), listagg($"col2"),
+        listagg_distinct($"col3"), listagg($"col3")),
+      Seq(Row("a", "aa", "b", "bb", null, null))
+    )
+
+    // Custom delimiter.
+    val df4 = Seq(("a", "b"), ("b", "c"), ("c", "d")).toDF("col1", "col2")
+    checkAnswer(
+      df4.selectExpr("listagg(col1, '|')", "listagg(col2, '|')"),
+      Seq(Row("a|b|c", "b|c|d"))
     )
   }
 
@@ -2324,7 +2364,7 @@ class DataFrameAggregateSuite extends QueryTest
             val expectedAnswer = Row(null)
             assertDecimalSumOverflow(df2, ansiEnabled, fnName, expectedAnswer)
 
-            val decStr = "1" + "0" * 19
+            val decStr = "1" + "0".repeat(19)
             val d1 = spark.range(0, 12, 1, 1)
             val d2 = d1.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(aggFn($"d"))
             assertDecimalSumOverflow(d2, ansiEnabled, fnName, expectedAnswer)
@@ -2526,6 +2566,40 @@ class DataFrameAggregateSuite extends QueryTest
               |""".stripMargin)
       checkAnswer(df, Row(1.001d, 1, 1) :: Row(6.002d, 1, 1) :: Nil)
     }
+  }
+
+  test("SPARK-52626: Support group by Time column") {
+    val ts1 = "15:00:00"
+    val ts2 = "22:00:00"
+    val localTime = Seq(ts1, ts1, ts2).map(LocalTime.parse)
+    val df = localTime.toDF("t").groupBy("t").count().orderBy("t")
+    val expectedSchema =
+      new StructType().add(StructField("t", TimeType())).add("count", LongType, false)
+    assert (df.schema == expectedSchema)
+    checkAnswer(df, Seq(Row(LocalTime.parse(ts1), 2), Row(LocalTime.parse(ts2), 1)))
+  }
+
+  test("SPARK-52660: Support aggregation of Time column when codegen is split") {
+    val res = sql(
+      "SELECT max(expr), MIN(expr) " +
+        "FROM VALUES TIME'22:01:00', " +
+        "TIME'22:00:00', " +
+        "TIME'15:00:00', " +
+        "TIME'22:01:00', " +
+        "TIME'13:22:01', " +
+        "TIME'03:00:00', " +
+        "TIME'22:00:00', " +
+        "TIME'17:45:00' AS tab(expr);")
+    checkAnswer(
+      res,
+      Row(LocalTime.of(22, 1, 0), LocalTime.of(3, 0, 0)))
+  }
+
+  test("SPARK-53155: global lower aggregation should not be removed") {
+    val df = emptyTestData
+      .groupBy().agg(lit(1).as("col1"), lit(2).as("col2"), lit(3).as("col3"))
+      .groupBy($"col1").agg(max("col1"))
+    checkAnswer(df, Seq(Row(1, 1)))
   }
 }
 

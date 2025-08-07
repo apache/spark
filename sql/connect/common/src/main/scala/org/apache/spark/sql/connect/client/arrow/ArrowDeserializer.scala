@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.connect.client.CloseableIterator
 import org.apache.spark.sql.errors.{CompilationErrors, ExecutionErrors}
 import org.apache.spark.sql.types.Decimal
+import org.apache.spark.unsafe.types.VariantVal
 
 /**
  * Helper class for converting arrow batches into user objects.
@@ -199,6 +200,10 @@ object ArrowDeserializers {
         new LeafFieldDeserializer[LocalDateTime](encoder, v, timeZoneId) {
           override def value(i: Int): LocalDateTime = reader.getLocalDateTime(i)
         }
+      case (LocalTimeEncoder, v: FieldVector) =>
+        new LeafFieldDeserializer[LocalTime](encoder, v, timeZoneId) {
+          override def value(i: Int): LocalTime = reader.getLocalTime(i)
+        }
 
       case (OptionEncoder(value), v) =>
         val deserializer = deserializerFor(value, v, timeZoneId)
@@ -336,6 +341,34 @@ object ArrowDeserializers {
           }
         }
 
+      case (VariantEncoder, StructVectors(struct, vectors)) =>
+        assert(vectors.exists(_.getName == "value"))
+        assert(
+          vectors.exists(field =>
+            field.getName == "metadata" && field.getField.getMetadata
+              .containsKey("variant") && field.getField.getMetadata.get("variant") == "true"))
+        val valueDecoder =
+          deserializerFor(
+            BinaryEncoder,
+            vectors
+              .find(_.getName == "value")
+              .getOrElse(throw CompilationErrors.columnNotFoundError("value")),
+            timeZoneId)
+        val metadataDecoder =
+          deserializerFor(
+            BinaryEncoder,
+            vectors
+              .find(_.getName == "metadata")
+              .getOrElse(throw CompilationErrors.columnNotFoundError("metadata")),
+            timeZoneId)
+        new StructFieldSerializer[VariantVal](struct) {
+          def value(i: Int): VariantVal = {
+            new VariantVal(
+              valueDecoder.get(i).asInstanceOf[Array[Byte]],
+              metadataDecoder.get(i).asInstanceOf[Array[Byte]])
+          }
+        }
+
       case (JavaBeanEncoder(tag, fields), StructVectors(struct, vectors)) =>
         val constructor =
           methodLookup.findConstructor(tag.runtimeClass, MethodType.methodType(classOf[Unit]))
@@ -359,14 +392,14 @@ object ArrowDeserializers {
           }
         }
 
-      case (TransformingEncoder(_, encoder, provider), v) =>
+      case (TransformingEncoder(_, encoder, provider, _), v) =>
         new Deserializer[Any] {
           private[this] val codec = provider()
           private[this] val deserializer = deserializerFor(encoder, v, timeZoneId)
           override def get(i: Int): Any = codec.decode(deserializer.get(i))
         }
 
-      case (CalendarIntervalEncoder | VariantEncoder | _: UDTEncoder[_], _) =>
+      case (CalendarIntervalEncoder | _: UDTEncoder[_], _) =>
         throw ExecutionErrors.unsupportedDataTypeError(encoder.dataType)
 
       case _ =>

@@ -613,7 +613,8 @@ public final class OnHeapColumnVector extends WritableColumnVector {
       }
     } else if (type instanceof LongType ||
         type instanceof TimestampType ||type instanceof TimestampNTZType ||
-        DecimalType.is64BitDecimalType(type) || type instanceof DayTimeIntervalType) {
+        DecimalType.is64BitDecimalType(type) || type instanceof DayTimeIntervalType ||
+        type instanceof TimeType) {
       if (longData == null || longData.length < newCapacity) {
         long[] newData = new long[newCapacity];
         if (longData != null) System.arraycopy(longData, 0, newData, 0, capacity);

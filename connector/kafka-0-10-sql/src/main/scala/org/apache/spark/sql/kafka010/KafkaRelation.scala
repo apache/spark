@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.kafka010
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.TOPIC_PARTITIONS
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.types.StructType
 

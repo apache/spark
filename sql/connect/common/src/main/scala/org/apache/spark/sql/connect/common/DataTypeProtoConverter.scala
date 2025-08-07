@@ -53,6 +53,12 @@ object DataTypeProtoConverter {
       case proto.DataType.KindCase.DATE => DateType
       case proto.DataType.KindCase.TIMESTAMP => TimestampType
       case proto.DataType.KindCase.TIMESTAMP_NTZ => TimestampNTZType
+      case proto.DataType.KindCase.TIME =>
+        if (t.getTime.hasPrecision) {
+          TimeType(t.getTime.getPrecision)
+        } else {
+          TimeType()
+        }
 
       case proto.DataType.KindCase.CALENDAR_INTERVAL => CalendarIntervalType
       case proto.DataType.KindCase.YEAR_MONTH_INTERVAL =>
@@ -175,16 +181,6 @@ object DataTypeProtoConverter {
             proto.DataType.Decimal.newBuilder().setPrecision(precision).setScale(scale).build())
           .build()
 
-      case s: StringType =>
-        proto.DataType
-          .newBuilder()
-          .setString(
-            proto.DataType.String
-              .newBuilder()
-              .setCollation(CollationFactory.fetchCollation(s.collationId).collationName)
-              .build())
-          .build()
-
       case CharType(length) =>
         proto.DataType
           .newBuilder()
@@ -197,11 +193,28 @@ object DataTypeProtoConverter {
           .setVarChar(proto.DataType.VarChar.newBuilder().setLength(length).build())
           .build()
 
+      // StringType must be matched after CharType and VarcharType
+      case s: StringType =>
+        proto.DataType
+          .newBuilder()
+          .setString(
+            proto.DataType.String
+              .newBuilder()
+              .setCollation(CollationFactory.fetchCollation(s.collationId).collationName)
+              .build())
+          .build()
+
       case DateType => ProtoDataTypes.DateType
 
       case TimestampType => ProtoDataTypes.TimestampType
 
       case TimestampNTZType => ProtoDataTypes.TimestampNTZType
+
+      case TimeType(precision) =>
+        proto.DataType
+          .newBuilder()
+          .setTime(proto.DataType.Time.newBuilder().setPrecision(precision).build())
+          .build()
 
       case CalendarIntervalType => ProtoDataTypes.CalendarIntervalType
 
@@ -301,20 +314,31 @@ object DataTypeProtoConverter {
 
       case udt: UserDefinedType[_] =>
         // Scala/Java UDT
-        val builder = proto.DataType.UDT.newBuilder()
-        builder
-          .setType("udt")
-          .setJvmClass(udt.getClass.getName)
-          .setSqlType(toConnectProtoType(udt.sqlType))
+        udt.getClass.getName match {
+          // To avoid making connect-common depend on ml,
+          // we use class name to identify VectorUDT and MatrixUDT.
+          case "org.apache.spark.ml.linalg.VectorUDT" =>
+            ProtoDataTypes.VectorUDT
 
-        if (udt.pyUDT != null) {
-          builder.setPythonClass(udt.pyUDT)
+          case "org.apache.spark.ml.linalg.MatrixUDT" =>
+            ProtoDataTypes.MatrixUDT
+
+          case className =>
+            val builder = proto.DataType.UDT.newBuilder()
+            builder
+              .setType("udt")
+              .setJvmClass(className)
+              .setSqlType(toConnectProtoType(udt.sqlType))
+
+            if (udt.pyUDT != null) {
+              builder.setPythonClass(udt.pyUDT)
+            }
+
+            proto.DataType
+              .newBuilder()
+              .setUdt(builder.build())
+              .build()
         }
-
-        proto.DataType
-          .newBuilder()
-          .setUdt(builder.build())
-          .build()
 
       case _ =>
         throw InvalidPlanInput(s"Does not support convert ${t.typeName} to connect proto types.")

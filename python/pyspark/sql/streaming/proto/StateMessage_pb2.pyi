@@ -34,7 +34,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import builtins
+import collections.abc
 import google.protobuf.descriptor
+import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import sys
@@ -56,19 +58,21 @@ class _HandleStateEnumTypeWrapper(
     builtins.type,
 ):  # noqa: F821
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-    CREATED: _HandleState.ValueType  # 0
-    INITIALIZED: _HandleState.ValueType  # 1
-    DATA_PROCESSED: _HandleState.ValueType  # 2
-    TIMER_PROCESSED: _HandleState.ValueType  # 3
-    CLOSED: _HandleState.ValueType  # 4
+    PRE_INIT: _HandleState.ValueType  # 0
+    CREATED: _HandleState.ValueType  # 1
+    INITIALIZED: _HandleState.ValueType  # 2
+    DATA_PROCESSED: _HandleState.ValueType  # 3
+    TIMER_PROCESSED: _HandleState.ValueType  # 4
+    CLOSED: _HandleState.ValueType  # 5
 
 class HandleState(_HandleState, metaclass=_HandleStateEnumTypeWrapper): ...
 
-CREATED: HandleState.ValueType  # 0
-INITIALIZED: HandleState.ValueType  # 1
-DATA_PROCESSED: HandleState.ValueType  # 2
-TIMER_PROCESSED: HandleState.ValueType  # 3
-CLOSED: HandleState.ValueType  # 4
+PRE_INIT: HandleState.ValueType  # 0
+CREATED: HandleState.ValueType  # 1
+INITIALIZED: HandleState.ValueType  # 2
+DATA_PROCESSED: HandleState.ValueType  # 3
+TIMER_PROCESSED: HandleState.ValueType  # 4
+CLOSED: HandleState.ValueType  # 5
 global___HandleState = HandleState
 
 class StateRequest(google.protobuf.message.Message):
@@ -79,6 +83,7 @@ class StateRequest(google.protobuf.message.Message):
     STATEVARIABLEREQUEST_FIELD_NUMBER: builtins.int
     IMPLICITGROUPINGKEYREQUEST_FIELD_NUMBER: builtins.int
     TIMERREQUEST_FIELD_NUMBER: builtins.int
+    UTILSREQUEST_FIELD_NUMBER: builtins.int
     version: builtins.int
     @property
     def statefulProcessorCall(self) -> global___StatefulProcessorCall: ...
@@ -88,6 +93,8 @@ class StateRequest(google.protobuf.message.Message):
     def implicitGroupingKeyRequest(self) -> global___ImplicitGroupingKeyRequest: ...
     @property
     def timerRequest(self) -> global___TimerRequest: ...
+    @property
+    def utilsRequest(self) -> global___UtilsRequest: ...
     def __init__(
         self,
         *,
@@ -96,6 +103,7 @@ class StateRequest(google.protobuf.message.Message):
         stateVariableRequest: global___StateVariableRequest | None = ...,
         implicitGroupingKeyRequest: global___ImplicitGroupingKeyRequest | None = ...,
         timerRequest: global___TimerRequest | None = ...,
+        utilsRequest: global___UtilsRequest | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -110,6 +118,8 @@ class StateRequest(google.protobuf.message.Message):
             b"statefulProcessorCall",
             "timerRequest",
             b"timerRequest",
+            "utilsRequest",
+            b"utilsRequest",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -125,6 +135,8 @@ class StateRequest(google.protobuf.message.Message):
             b"statefulProcessorCall",
             "timerRequest",
             b"timerRequest",
+            "utilsRequest",
+            b"utilsRequest",
             "version",
             b"version",
         ],
@@ -137,6 +149,7 @@ class StateRequest(google.protobuf.message.Message):
             "stateVariableRequest",
             "implicitGroupingKeyRequest",
             "timerRequest",
+            "utilsRequest",
         ]
         | None
     ): ...
@@ -192,6 +205,234 @@ class StateResponseWithLongTypeVal(google.protobuf.message.Message):
     ) -> None: ...
 
 global___StateResponseWithLongTypeVal = StateResponseWithLongTypeVal
+
+class StateResponseWithStringTypeVal(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    STATUSCODE_FIELD_NUMBER: builtins.int
+    ERRORMESSAGE_FIELD_NUMBER: builtins.int
+    VALUE_FIELD_NUMBER: builtins.int
+    statusCode: builtins.int
+    errorMessage: builtins.str
+    value: builtins.str
+    def __init__(
+        self,
+        *,
+        statusCode: builtins.int = ...,
+        errorMessage: builtins.str = ...,
+        value: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "errorMessage", b"errorMessage", "statusCode", b"statusCode", "value", b"value"
+        ],
+    ) -> None: ...
+
+global___StateResponseWithStringTypeVal = StateResponseWithStringTypeVal
+
+class StateResponseWithListGet(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    STATUSCODE_FIELD_NUMBER: builtins.int
+    ERRORMESSAGE_FIELD_NUMBER: builtins.int
+    VALUE_FIELD_NUMBER: builtins.int
+    REQUIRENEXTFETCH_FIELD_NUMBER: builtins.int
+    statusCode: builtins.int
+    errorMessage: builtins.str
+    @property
+    def value(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    requireNextFetch: builtins.bool
+    def __init__(
+        self,
+        *,
+        statusCode: builtins.int = ...,
+        errorMessage: builtins.str = ...,
+        value: collections.abc.Iterable[builtins.bytes] | None = ...,
+        requireNextFetch: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "errorMessage",
+            b"errorMessage",
+            "requireNextFetch",
+            b"requireNextFetch",
+            "statusCode",
+            b"statusCode",
+            "value",
+            b"value",
+        ],
+    ) -> None: ...
+
+global___StateResponseWithListGet = StateResponseWithListGet
+
+class StateResponseWithMapKeysOrValues(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    STATUSCODE_FIELD_NUMBER: builtins.int
+    ERRORMESSAGE_FIELD_NUMBER: builtins.int
+    VALUE_FIELD_NUMBER: builtins.int
+    REQUIRENEXTFETCH_FIELD_NUMBER: builtins.int
+    statusCode: builtins.int
+    errorMessage: builtins.str
+    @property
+    def value(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    requireNextFetch: builtins.bool
+    def __init__(
+        self,
+        *,
+        statusCode: builtins.int = ...,
+        errorMessage: builtins.str = ...,
+        value: collections.abc.Iterable[builtins.bytes] | None = ...,
+        requireNextFetch: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "errorMessage",
+            b"errorMessage",
+            "requireNextFetch",
+            b"requireNextFetch",
+            "statusCode",
+            b"statusCode",
+            "value",
+            b"value",
+        ],
+    ) -> None: ...
+
+global___StateResponseWithMapKeysOrValues = StateResponseWithMapKeysOrValues
+
+class KeyAndValuePair(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEY_FIELD_NUMBER: builtins.int
+    VALUE_FIELD_NUMBER: builtins.int
+    key: builtins.bytes
+    value: builtins.bytes
+    def __init__(
+        self,
+        *,
+        key: builtins.bytes = ...,
+        value: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+    ) -> None: ...
+
+global___KeyAndValuePair = KeyAndValuePair
+
+class StateResponseWithMapIterator(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    STATUSCODE_FIELD_NUMBER: builtins.int
+    ERRORMESSAGE_FIELD_NUMBER: builtins.int
+    KVPAIR_FIELD_NUMBER: builtins.int
+    REQUIRENEXTFETCH_FIELD_NUMBER: builtins.int
+    statusCode: builtins.int
+    errorMessage: builtins.str
+    @property
+    def kvPair(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___KeyAndValuePair
+    ]: ...
+    requireNextFetch: builtins.bool
+    def __init__(
+        self,
+        *,
+        statusCode: builtins.int = ...,
+        errorMessage: builtins.str = ...,
+        kvPair: collections.abc.Iterable[global___KeyAndValuePair] | None = ...,
+        requireNextFetch: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "errorMessage",
+            b"errorMessage",
+            "kvPair",
+            b"kvPair",
+            "requireNextFetch",
+            b"requireNextFetch",
+            "statusCode",
+            b"statusCode",
+        ],
+    ) -> None: ...
+
+global___StateResponseWithMapIterator = StateResponseWithMapIterator
+
+class TimerInfo(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEY_FIELD_NUMBER: builtins.int
+    TIMESTAMPMS_FIELD_NUMBER: builtins.int
+    key: builtins.bytes
+    timestampMs: builtins.int
+    def __init__(
+        self,
+        *,
+        key: builtins.bytes | None = ...,
+        timestampMs: builtins.int = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["_key", b"_key", "key", b"key"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_key", b"_key", "key", b"key", "timestampMs", b"timestampMs"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_key", b"_key"]
+    ) -> typing_extensions.Literal["key"] | None: ...
+
+global___TimerInfo = TimerInfo
+
+class StateResponseWithTimer(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    STATUSCODE_FIELD_NUMBER: builtins.int
+    ERRORMESSAGE_FIELD_NUMBER: builtins.int
+    TIMER_FIELD_NUMBER: builtins.int
+    REQUIRENEXTFETCH_FIELD_NUMBER: builtins.int
+    statusCode: builtins.int
+    errorMessage: builtins.str
+    @property
+    def timer(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___TimerInfo
+    ]: ...
+    requireNextFetch: builtins.bool
+    def __init__(
+        self,
+        *,
+        statusCode: builtins.int = ...,
+        errorMessage: builtins.str = ...,
+        timer: collections.abc.Iterable[global___TimerInfo] | None = ...,
+        requireNextFetch: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "errorMessage",
+            b"errorMessage",
+            "requireNextFetch",
+            b"requireNextFetch",
+            "statusCode",
+            b"statusCode",
+            "timer",
+            b"timer",
+        ],
+    ) -> None: ...
+
+global___StateResponseWithTimer = StateResponseWithTimer
 
 class StatefulProcessorCall(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -461,15 +702,21 @@ global___TimerValueRequest = TimerValueRequest
 class ExpiryTimerRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    ITERATORID_FIELD_NUMBER: builtins.int
     EXPIRYTIMESTAMPMS_FIELD_NUMBER: builtins.int
+    iteratorId: builtins.str
     expiryTimestampMs: builtins.int
     def __init__(
         self,
         *,
+        iteratorId: builtins.str = ...,
         expiryTimestampMs: builtins.int = ...,
     ) -> None: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["expiryTimestampMs", b"expiryTimestampMs"]
+        self,
+        field_name: typing_extensions.Literal[
+            "expiryTimestampMs", b"expiryTimestampMs", "iteratorId", b"iteratorId"
+        ],
     ) -> None: ...
 
 global___ExpiryTimerRequest = ExpiryTimerRequest
@@ -491,6 +738,49 @@ class GetWatermark(google.protobuf.message.Message):
     ) -> None: ...
 
 global___GetWatermark = GetWatermark
+
+class UtilsRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PARSESTRINGSCHEMA_FIELD_NUMBER: builtins.int
+    @property
+    def parseStringSchema(self) -> global___ParseStringSchema: ...
+    def __init__(
+        self,
+        *,
+        parseStringSchema: global___ParseStringSchema | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "method", b"method", "parseStringSchema", b"parseStringSchema"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "method", b"method", "parseStringSchema", b"parseStringSchema"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["method", b"method"]
+    ) -> typing_extensions.Literal["parseStringSchema"] | None: ...
+
+global___UtilsRequest = UtilsRequest
+
+class ParseStringSchema(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SCHEMA_FIELD_NUMBER: builtins.int
+    schema: builtins.str
+    def __init__(
+        self,
+        *,
+        schema: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["schema", b"schema"]) -> None: ...
+
+global___ParseStringSchema = ParseStringSchema
 
 class StateCallCommand(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -963,8 +1253,24 @@ global___ListStateGet = ListStateGet
 class ListStatePut(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    VALUE_FIELD_NUMBER: builtins.int
+    FETCHWITHARROW_FIELD_NUMBER: builtins.int
+    @property
+    def value(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    fetchWithArrow: builtins.bool
     def __init__(
         self,
+        *,
+        value: collections.abc.Iterable[builtins.bytes] | None = ...,
+        fetchWithArrow: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "fetchWithArrow", b"fetchWithArrow", "value", b"value"
+        ],
     ) -> None: ...
 
 global___ListStatePut = ListStatePut
@@ -986,8 +1292,24 @@ global___AppendValue = AppendValue
 class AppendList(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    VALUE_FIELD_NUMBER: builtins.int
+    FETCHWITHARROW_FIELD_NUMBER: builtins.int
+    @property
+    def value(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    fetchWithArrow: builtins.bool
     def __init__(
         self,
+        *,
+        value: collections.abc.Iterable[builtins.bytes] | None = ...,
+        fetchWithArrow: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "fetchWithArrow", b"fetchWithArrow", "value", b"value"
+        ],
     ) -> None: ...
 
 global___AppendList = AppendList

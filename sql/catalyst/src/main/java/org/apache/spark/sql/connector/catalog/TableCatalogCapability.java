@@ -62,6 +62,21 @@ public enum TableCatalogCapability {
   SUPPORT_COLUMN_DEFAULT_VALUE,
 
   /**
+   * Signals that the TableCatalog supports defining table constraints in
+   * CREATE/REPLACE/ALTER TABLE.
+   * <p>
+   * Without this capability, any CREATE/REPLACE/ALTER TABLE statement with table constraints
+   * defined in the table schema will throw an exception during analysis.
+   * <p>
+   * Table constraints include CHECK, PRIMARY KEY, UNIQUE and FOREIGN KEY constraints.
+   * <p>
+   * Table constraints are included in the table schema for APIs like
+   * {@link TableCatalog#createTable}.
+   * See {@link Table#constraints()}.
+   */
+  SUPPORT_TABLE_CONSTRAINT,
+
+  /**
    * Signals that the TableCatalog supports defining identity columns upon table creation in SQL.
    * <p>
    * Without this capability, any create/replace table statements with an identity column defined

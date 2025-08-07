@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.execution
 
-import java.time.{Duration, Period}
+import java.time.{Duration, Period, Year}
 
+import org.apache.spark.sql.YearUDT
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.execution.HiveResult._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
-import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
-import org.apache.spark.sql.types.YearMonthIntervalType
+import org.apache.spark.sql.types.{YearMonthIntervalType, YearMonthIntervalType => YM}
 
 
 class HiveResultSuite extends SharedSparkSession {
@@ -44,6 +44,21 @@ class HiveResultSuite extends SharedSparkSession {
         assert(result2 == dates.map(x => s"[$x]"))
       }
     }
+  }
+
+  test("time formatting in hive result") {
+    val times = Seq(
+      "00:00:00",
+      "00:01:02.003004",
+      "12:13:14.999999",
+      "23:59:59.1234")
+    val df = times.toDF("a").selectExpr("cast(a as time) as b")
+    val executedPlan1 = df.queryExecution.executedPlan
+    val result = hiveResultString(executedPlan1)
+    assert(result == times)
+    val executedPlan2 = df.selectExpr("array(b)").queryExecution.executedPlan
+    val result2 = hiveResultString(executedPlan2)
+    assert(result2 == times.map(x => s"[$x]"))
   }
 
   test("timestamp formatting in hive result") {
@@ -156,5 +171,19 @@ class HiveResultSuite extends SharedSparkSession {
     assert(hiveResultString(plan1) === Seq("5 00:00:00.010000000"))
     val plan2 = df.selectExpr("array(i)").queryExecution.executedPlan
     assert(hiveResultString(plan2) === Seq("[5 00:00:00.010000000]"))
+  }
+
+  test("SPARK-52650: Use stringifyValue to get UDT string representation") {
+    val year = Year.of(18)
+    val tpe = new YearUDT()
+    assert(toHiveString((year, tpe),
+      nested = false, getTimeFormatters, getBinaryFormatter) === "18")
+    val tpe2 = new YearUDT() {
+      override def stringifyValue(obj: Any): String = {
+        f"${obj.asInstanceOf[Year].getValue}%04d"
+      }
+    }
+    assert(toHiveString((year, tpe2),
+      nested = false, getTimeFormatters, getBinaryFormatter) === "0018")
   }
 }

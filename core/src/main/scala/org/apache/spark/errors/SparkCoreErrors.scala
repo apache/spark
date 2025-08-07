@@ -267,19 +267,6 @@ private[spark] object SparkCoreErrors {
     new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3026")
   }
 
-  def unrecognizedSchedulerModePropertyError(
-      schedulerModeProperty: String,
-      schedulingModeConf: String): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3027",
-      messageParameters = Map(
-        "schedulerModeProperty" -> schedulerModeProperty,
-        "schedulingModeConf" -> schedulingModeConf
-      ),
-      cause = null
-    )
-  }
-
   def sparkError(errorMsg: String): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_3028",

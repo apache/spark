@@ -479,7 +479,6 @@ class Catalog:
         """
         if dbName is None:
             dbName = self.currentDatabase()
-        iter = self._jcatalog.listFunctions(dbName).toLocalIterator()
         if pattern is None:
             iter = self._jcatalog.listFunctions(dbName).toLocalIterator()
         else:

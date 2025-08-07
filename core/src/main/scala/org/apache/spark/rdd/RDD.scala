@@ -36,7 +36,7 @@ import org.apache.spark.Partitioner._
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.RDD_LIMIT_SCALE_UP_FACTOR
@@ -1834,8 +1834,9 @@ abstract class RDD[T: ClassTag](
    * Please read the linked SPIP and design docs to understand the limitations and future plans.
    * @return an [[RDDBarrier]] instance that provides actions within a barrier stage
    * @see [[org.apache.spark.BarrierTaskContext]]
-   * @see <a href="https://jira.apache.org/jira/browse/SPARK-24374">SPIP: Barrier Execution Mode</a>
-   * @see <a href="https://jira.apache.org/jira/browse/SPARK-24582">Design Doc</a>
+   * @see <a href="https://issues.apache.org/jira/browse/SPARK-24374">
+   *        SPIP: Barrier Execution Mode</a>
+   * @see <a href="https://issues.apache.org/jira/browse/SPARK-24582">Design Doc</a>
    */
   @Experimental
   @Since("2.4.0")
@@ -2015,7 +2016,7 @@ abstract class RDD[T: ClassTag](
     def firstDebugString(rdd: RDD[_]): Seq[String] = {
       val partitionStr = "(" + rdd.partitions.length + ")"
       val leftOffset = (partitionStr.length - 1) / 2
-      val nextPrefix = (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset))
+      val nextPrefix = " ".repeat(leftOffset) + "|" + " ".repeat(partitionStr.length - leftOffset)
 
       debugSelf(rdd).zipWithIndex.map{
         case (desc: String, 0) => s"$partitionStr $desc"
@@ -2029,7 +2030,7 @@ abstract class RDD[T: ClassTag](
       val nextPrefix = (
         thisPrefix
         + (if (isLastChild) "  " else "| ")
-        + (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset)))
+        + (" ".repeat(leftOffset)) + "|" + (" ".repeat(partitionStr.length - leftOffset)))
 
       debugSelf(rdd).zipWithIndex.map{
         case (desc: String, 0) => s"$thisPrefix+-$partitionStr $desc"

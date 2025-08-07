@@ -153,7 +153,7 @@ class AmIpFilterSuite extends SparkFunSuite {
 
     // change proxy configurations
     params = new util.HashMap[String, String]
-    params.put(AmIpFilter.PROXY_HOSTS, "unknownhost")
+    params.put(AmIpFilter.PROXY_HOSTS, "unknownhostaf79d34c")
     params.put(AmIpFilter.PROXY_URI_BASES, proxyUri)
     conf = new DummyFilterConfig(params)
     filter.init(conf)
@@ -162,8 +162,10 @@ class AmIpFilterSuite extends SparkFunSuite {
     assert(!filter.getProxyAddresses.isEmpty)
     // waiting for configuration update
     eventually(timeout(5.seconds), interval(500.millis)) {
-      assertThrows[ServletException] {
-        filter.getProxyAddresses.isEmpty
+      try {
+        assert(filter.getProxyAddresses.isEmpty)
+      } catch {
+        case e: ServletException => // do nothing
       }
     }
   }

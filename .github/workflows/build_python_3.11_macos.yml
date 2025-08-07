@@ -22,11 +22,12 @@ name: "Build / Python-only (master, Python 3.11, MacOS)"
 on:
   schedule:
     - cron: '0 21 * * *'
+  workflow_dispatch:
 
 jobs:
   run-build:
     permissions:
       packages: write
     name: Run
-    uses: ./.github/workflows/python_macos_test.yml
+    uses: ./.github/workflows/python_hosted_runner_test.yml
     if: github.repository == 'apache/spark'

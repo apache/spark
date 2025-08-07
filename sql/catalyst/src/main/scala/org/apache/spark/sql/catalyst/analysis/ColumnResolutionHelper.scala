@@ -23,12 +23,13 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils.wrapOuterReference
+import org.apache.spark.sql.catalyst.parser.SqlScriptingLabelContext.isForbiddenLabelOrForVariableName
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -53,9 +54,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       (exprs, plan)
     } else {
       plan match {
-        // For `Distinct` and `SubqueryAlias`, we can't recursively resolve and add attributes
-        // via its children.
-        case u: UnaryNode if !u.isInstanceOf[Distinct] && !u.isInstanceOf[SubqueryAlias] =>
+        // For `Distinct` and `SubqueryAlias` and `PipeOperator`, we can't recursively resolve and
+        // add attributes via its children.
+        case u: UnaryNode if !u.isInstanceOf[Distinct] && !u.isInstanceOf[SubqueryAlias]
+          && !u.isInstanceOf[PipeOperator] =>
           val (newExprs, newChild) = {
             // Resolving expressions against current plan.
             val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, u))
@@ -92,30 +94,6 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         case other =>
           (exprs.map(resolveExpressionByPlanOutput(_, other)), other)
       }
-    }
-  }
-
-  // support CURRENT_DATE, CURRENT_TIMESTAMP, CURRENT_USER, USER, SESSION_USER and grouping__id
-  private val literalFunctions: Seq[(String, () => Expression, Expression => String)] = Seq(
-    (CurrentDate().prettyName, () => CurrentDate(), toPrettySQL(_)),
-    (CurrentTimestamp().prettyName, () => CurrentTimestamp(), toPrettySQL(_)),
-    (CurrentUser().prettyName, () => CurrentUser(), toPrettySQL),
-    ("user", () => CurrentUser(), toPrettySQL),
-    ("session_user", () => CurrentUser(), toPrettySQL),
-    (VirtualColumn.hiveGroupingIdName, () => GroupingID(Nil), _ => VirtualColumn.hiveGroupingIdName)
-  )
-
-  /**
-   * Literal functions do not require the user to specify braces when calling them
-   * When an attributes is not resolvable, we try to resolve it as a literal function.
-   */
-  private def resolveLiteralFunction(nameParts: Seq[String]): Option[NamedExpression] = {
-    if (nameParts.length != 1) return None
-    val name = nameParts.head
-    literalFunctions.find(func => caseInsensitiveResolution(func._1, name)).map {
-      case (_, getFuncExpr, getAliasName) =>
-        val funcExpr = getFuncExpr()
-        Alias(funcExpr, getAliasName(funcExpr))()
     }
   }
 
@@ -166,14 +144,17 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
         case u @ UnresolvedAttribute(nameParts) =>
           val result = withPosition(u) {
-            resolveColumnByName(nameParts).orElse(resolveLiteralFunction(nameParts)).map {
-              // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
-              // as we should resolve `UnresolvedAttribute` to a named expression. The caller side
-              // can trim the top-level alias if it's safe to do so. Since we will call
-              // CleanupAliases later in Analyzer, trim non top-level unnecessary alias is safe.
-              case Alias(child, _) if !isTopLevel => child
-              case other => other
-            }.getOrElse(u)
+            resolveColumnByName(nameParts)
+              .orElse(LiteralFunctionResolution.resolve(nameParts))
+              .map {
+                // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
+                // as we should resolve `UnresolvedAttribute` to a named expression. The caller side
+                // can trim the top-level alias if it's safe to do so. Since we will call
+                // CleanupAliases later in Analyzer, trim non top-level unnecessary alias is safe.
+                case Alias(child, _) if !isTopLevel => child
+                case other => other
+              }
+              .getOrElse(u)
           }
           logDebug(s"Resolving $u to $result")
           result
@@ -221,35 +202,47 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     val outerPlan = AnalysisContext.get.outerPlan
     if (outerPlan.isEmpty) return e
 
-    e.transformWithPruning(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) {
+    def resolve(nameParts: Seq[String]): Option[Expression] = try {
+      outerPlan.get match {
+        // Subqueries in UnresolvedHaving can host grouping expressions and aggregate functions.
+        // We should resolve columns with `agg.output` and the rule `ResolveAggregateFunctions` will
+        // push them down to Aggregate later. This is similar to what we do in `resolveColumns`.
+        case u @ UnresolvedHaving(_, agg: Aggregate) =>
+          agg.resolveChildren(nameParts, conf.resolver)
+            .orElse(u.resolveChildren(nameParts, conf.resolver))
+            .map {
+              case alias: Alias =>
+                wrapOuterReference(alias.child)
+              case other => wrapOuterReference(other)
+            }
+        case other =>
+          other.resolveChildren(nameParts, conf.resolver).map(wrapOuterReference)
+      }
+    } catch {
+      case ae: AnalysisException =>
+        logDebug(ae.getMessage)
+        None
+    }
+
+    e.transformWithPruning(
+      _.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) {
       case u: UnresolvedAttribute =>
-        resolveOuterReference(u.nameParts, outerPlan.get).getOrElse(u)
+        resolve(u.nameParts).getOrElse(u)
       // Re-resolves `TempResolvedColumn` as outer references if it has tried to be resolved with
       // Aggregate but failed.
       case t: TempResolvedColumn if t.hasTried =>
-        resolveOuterReference(t.nameParts, outerPlan.get).getOrElse(t)
+        resolve(t.nameParts).getOrElse(t)
     }
   }
 
-  protected def resolveOuterReference(
-      nameParts: Seq[String], outerPlan: LogicalPlan): Option[Expression] = try {
-    outerPlan match {
-      // Subqueries in UnresolvedHaving can host grouping expressions and aggregate functions.
-      // We should resolve columns with `agg.output` and the rule `ResolveAggregateFunctions` will
-      // push them down to Aggregate later. This is similar to what we do in `resolveColumns`.
-      case u @ UnresolvedHaving(_, agg: Aggregate) =>
-        agg.resolveChildren(nameParts, conf.resolver)
-          .orElse(u.resolveChildren(nameParts, conf.resolver))
-          .map(wrapOuterReference)
-      case other =>
-        other.resolveChildren(nameParts, conf.resolver).map(wrapOuterReference)
-    }
-  } catch {
-    case ae: AnalysisException =>
-      logDebug(ae.getMessage)
-      None
-  }
-
+  /**
+   * Look up variable by nameParts.
+   * If in SQL Script, first check local variables, unless in EXECUTE IMMEDIATE
+   * (EXECUTE IMMEDIATE generated query cannot access local variables).
+   * if not found fall back to session variables.
+   * @param nameParts NameParts of the variable.
+   * @return Reference to the variable.
+   */
   def lookupVariable(nameParts: Seq[String]): Option[VariableReference] = {
     // The temp variables live in `SYSTEM.SESSION`, and the name can be qualified or not.
     def maybeTempVariableName(nameParts: Seq[String]): Boolean = {
@@ -265,22 +258,42 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       }
     }
 
-    if (maybeTempVariableName(nameParts)) {
-      val variableName = if (conf.caseSensitiveAnalysis) {
-        nameParts.last
-      } else {
-        nameParts.last.toLowerCase(Locale.ROOT)
-      }
-      catalogManager.tempVariableManager.get(variableName).map { varDef =>
+    val namePartsCaseAdjusted = if (conf.caseSensitiveAnalysis) {
+      nameParts
+    } else {
+      nameParts.map(_.toLowerCase(Locale.ROOT))
+    }
+
+    SqlScriptingContextManager.get().map(_.getVariableManager)
+      // If we are in EXECUTE IMMEDIATE lookup only session variables.
+      .filterNot(_ => AnalysisContext.get.isExecuteImmediate)
+      // If variable name is qualified with session.<varName> treat it as a session variable.
+      .filterNot(_ =>
+        nameParts.length > 2
+          || (nameParts.length == 2 && isForbiddenLabelOrForVariableName(nameParts.head)))
+      .flatMap(_.get(namePartsCaseAdjusted))
+      .map { varDef =>
         VariableReference(
           nameParts,
-          FakeSystemCatalog,
-          Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), variableName),
+          FakeLocalCatalog,
+          Identifier.of(Array(varDef.identifier.namespace().last), namePartsCaseAdjusted.last),
           varDef)
       }
-    } else {
-      None
-    }
+      .orElse(
+        if (maybeTempVariableName(nameParts)) {
+          catalogManager.tempVariableManager
+            .get(namePartsCaseAdjusted)
+            .map { varDef =>
+              VariableReference(
+                nameParts,
+                FakeSystemCatalog,
+                Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), namePartsCaseAdjusted.last),
+                varDef
+              )}
+        } else {
+          None
+        }
+      )
   }
 
   // Resolves `UnresolvedAttribute` to its value.
@@ -398,7 +411,14 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           // Lateral column alias does not have qualifiers. We always use the first name part to
           // look up lateral column aliases.
           val lowerCasedName = u.nameParts.head.toLowerCase(Locale.ROOT)
-          aliasMap.get(lowerCasedName).map {
+          aliasMap.get(lowerCasedName).filter {
+            // Do not resolve LCA with aliased `Generator`, as it will be rewritten by the rule
+            // `ExtractGenerator` with fresh output attribute IDs. The `Generator` will be pulled
+            // out and put in a `Generate` node below `Project`, so that we can resolve the column
+            // normally without LCA resolution.
+            case scala.util.Left(alias) => !alias.child.isInstanceOf[Generator]
+            case _ => true
+          }.map {
             case scala.util.Left(alias) =>
               if (alias.resolved) {
                 val resolvedAttr = resolveExpressionByPlanOutput(
@@ -490,6 +510,33 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       includeLastResort = includeLastResort)
   }
 
+  // Try to resolve `UnresolvedAttribute` by the children with Plan Ids.
+  // The `UnresolvedAttribute` must have a Plan Id:
+  //  - If Plan Id not found in the plan, raise CANNOT_RESOLVE_DATAFRAME_COLUMN.
+  //  - If Plan Id found in the plan, but column not found, return None.
+  //  - Otherwise, return the resolved expression.
+  private[sql] def tryResolveColumnByPlanChildren(
+      u: UnresolvedAttribute,
+      q: LogicalPlan,
+      includeLastResort: Boolean = false): Option[Expression] = {
+    assert(u.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty,
+      s"UnresolvedAttribute $u should have a Plan Id tag")
+
+    resolveDataFrameColumn(u, q.children).map { r =>
+      resolveExpression(
+        r,
+        resolveColumnByName = nameParts => {
+          q.resolveChildren(nameParts, conf.resolver)
+        },
+        getAttrCandidates = () => {
+          assert(q.children.length == 1)
+          q.children.head.output
+        },
+        throws = true,
+        includeLastResort = includeLastResort)
+    }
+  }
+
   /**
    * The last resort to resolve columns. Currently it does two things:
    *  - Try to resolve column names as outer references
@@ -511,10 +558,15 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   // expression are from Spark Connect, and need to be resolved in this way:
   //    1. extract the attached plan id from UnresolvedAttribute;
   //    2. top-down traverse the query plan to find the plan node that matches the plan id;
-  //    3. if can not find the matching node, fail the analysis due to illegal references;
-  //    4. if more than one matching nodes are found, fail due to ambiguous column reference;
-  //    5. resolve the expression with the matching node, if any error occurs here, return the
-  //       original expression as it is.
+  //    3. if can not find the matching node, fails with 'CANNOT_RESOLVE_DATAFRAME_COLUMN';
+  //    4, if the matching node is found, but can not resolve the column, also fails with
+  //       'CANNOT_RESOLVE_DATAFRAME_COLUMN';
+  //    5, resolve the expression against the target node, the resolved attribute will be
+  //       filtered by the output attributes of nodes in the path (from matching to root node);
+  //    6. if more than one resolved attributes are found in the above recursive process,
+  //       fails with 'AMBIGUOUS_COLUMN_REFERENCE'.
+  //    7. if all the resolved attributes are filtered out, return the original expression
+  //       as it is.
   private def tryResolveDataFrameColumns(
       e: Expression,
       q: Seq[LogicalPlan]): Expression = e match {
@@ -576,18 +628,16 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       p: LogicalPlan,
       currentDepth: Int): (Option[(NamedExpression, Int)], Boolean) = {
     val (resolved, matched) = if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
-      val resolved = try {
-        if (!isMetadataAccess) {
-          p.resolve(u.nameParts, conf.resolver)
-        } else if (u.nameParts.size == 1) {
-          p.getMetadataAttributeByNameOpt(u.nameParts.head)
-        } else {
-          None
-        }
-      } catch {
-        case e: AnalysisException =>
-          logDebug(s"Fail to resolve $u with $p due to $e")
-          None
+      val resolved = if (!isMetadataAccess) {
+        p.resolve(u.nameParts, conf.resolver)
+      } else if (u.nameParts.size == 1) {
+        p.getMetadataAttributeByNameOpt(u.nameParts.head)
+      } else {
+        None
+      }
+      if (resolved.isEmpty) {
+        // The targe plan node is found, but the column cannot be resolved.
+        throw QueryCompilationErrors.cannotResolveDataFrameColumn(u)
       }
       (resolved.map(r => (r, currentDepth)), true)
     } else {
@@ -616,14 +666,20 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     // When resolving the column reference df1.a, the target node with plan_id=1
     // can be found in both sides of the Join node.
     // To correctly resolve df1.a, the analyzer discards the resolved attribute
-    // in the right side, by filtering out the result by the output attributes of
+    // on the right side, by filtering out the result by the output attributes of
     // Project plan_id=2.
     //
     // However, there are analyzer rules (e.g. ResolveReferencesInSort)
     // supporting missing column resolution. Then a valid resolved attribute
-    // maybe filtered out here. In this case, resolveDataFrameColumnByPlanId
-    // returns None, the dataframe column will remain unresolved, and the analyzer
-    // will try to resolve it without plan id later.
+    // maybe filtered out here. For example:
+    //
+    // from pyspark.sql import functions as sf
+    // df = spark.range(10).withColumn("v", sf.col("id") + 1)
+    // df.select(df.v).sort(df.id)
+    //
+    // In this case, resolveDataFrameColumnByPlanId returns None,
+    // the dataframe column 'df.id' will remain unresolved, and the analyzer
+    // will try to resolve 'id' without plan id later.
     val filtered = resolved.filter { r =>
       if (isMetadataAccess) {
         r._1.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))

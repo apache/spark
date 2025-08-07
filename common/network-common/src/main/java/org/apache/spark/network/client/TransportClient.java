@@ -33,8 +33,6 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.netty.channel.Channel;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
@@ -338,11 +336,8 @@ public class TransportClient implements Closeable {
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("remoteAddress", channel.remoteAddress())
-      .append("clientId", clientId)
-      .append("isActive", isActive())
-      .toString();
+    return "TransportClient[remoteAddress=" + channel.remoteAddress() + "clientId=" + clientId +
+        ",isActive=" + isActive() + "]";
   }
 
   private static long requestId() {
@@ -369,8 +364,8 @@ public class TransportClient implements Closeable {
         }
       } else {
         logger.error("Failed to send RPC {} to {}", future.cause(),
-            MDC.of(LogKeys.REQUEST_ID$.MODULE$, requestId),
-            MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)));
+            MDC.of(LogKeys.REQUEST_ID, requestId),
+            MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
         channel.close();
         try {
           String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,

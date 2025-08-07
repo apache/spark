@@ -29,7 +29,7 @@ import org.apache.kafka.common.Cluster
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkConf, SparkContext, SparkException, TestUtils}
+import org.apache.spark.{SparkConf, SparkContext, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, SpecificInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.streaming.{MemoryStream, MemoryStreamBase}
@@ -491,14 +491,17 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
 
   test("batch - null topic field value, and no topic option") {
     val df = Seq[(String, String)](null.asInstanceOf[String] -> "1").toDF("topic", "value")
-    val ex = intercept[SparkException] {
+    val ex = intercept[KafkaIllegalStateException] {
       df.write
         .format("kafka")
         .option("kafka.bootstrap.servers", testUtils.brokerAddress)
         .mode("append")
         .save()
     }
-    TestUtils.assertExceptionMsg(ex, "null topic present in the data")
+    checkError(
+      exception = ex,
+      condition = "KAFKA_NULL_TOPIC_IN_DATA"
+    )
   }
 
   protected def testUnsupportedSaveModes(msg: (SaveMode) => Seq[String]): Unit = {

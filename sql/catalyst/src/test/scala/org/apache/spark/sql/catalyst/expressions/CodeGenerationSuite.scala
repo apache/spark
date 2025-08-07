@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.LA
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ThreadUtils
@@ -532,6 +533,21 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     assert(appender.loggingEvents
       .exists(_.getMessage().getFormattedMessage.contains("Generated method too long")))
+  }
+
+  test("SPARK-51527: spark.sql.codegen.logLevel") {
+    withSQLConf(SQLConf.CODEGEN_LOG_LEVEL.key -> "INFO") {
+      val appender = new LogAppender("codegen log level")
+      withLogAppender(appender, loggerNames = Seq(classOf[CodeGenerator[_, _]].getName),
+        Some(Level.INFO)) {
+        GenerateUnsafeProjection.generate(Seq(Literal.TrueLiteral))
+      }
+      assert(appender.loggingEvents.exists { event =>
+        event.getLevel === Level.INFO &&
+          event.getMessage.getFormattedMessage.contains(
+            "public java.lang.Object generate(Object[] references)")
+      })
+    }
   }
 
   test("SPARK-28916: subexpression elimination can cause 64kb code limit on UnsafeProjection") {

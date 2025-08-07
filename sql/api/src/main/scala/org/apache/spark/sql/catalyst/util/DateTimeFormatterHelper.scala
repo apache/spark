@@ -264,17 +264,27 @@ private object DateTimeFormatterHelper {
     toFormatter(builder, locale)
   }
 
-  lazy val fractionFormatter: DateTimeFormatter = {
-    val builder = createBuilder()
-      .append(DateTimeFormatter.ISO_LOCAL_DATE)
-      .appendLiteral(' ')
+  private def appendTimeBuilder(builder: DateTimeFormatterBuilder) = {
+    builder
       .appendValue(ChronoField.HOUR_OF_DAY, 2)
       .appendLiteral(':')
       .appendValue(ChronoField.MINUTE_OF_HOUR, 2)
       .appendLiteral(':')
       .appendValue(ChronoField.SECOND_OF_MINUTE, 2)
       .appendFraction(ChronoField.NANO_OF_SECOND, 0, 9, true)
+  }
+
+  lazy val fractionFormatter: DateTimeFormatter = {
+    val dateBuilder = createBuilder()
+      .append(DateTimeFormatter.ISO_LOCAL_DATE)
+      .appendLiteral(' ')
+    val builder = appendTimeBuilder(dateBuilder)
     toFormatter(builder, TimestampFormatter.defaultLocale)
+  }
+
+  lazy val fractionTimeFormatter: DateTimeFormatter = {
+    val builder = appendTimeBuilder(createBuilder())
+    toFormatter(builder, TimeFormatter.defaultLocale)
   }
 
   // SPARK-31892: The week-based date fields are rarely used and really confusing for parsing values

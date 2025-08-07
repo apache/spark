@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 4.0 to 4.1
+
+- Since Spark 4.1, `mapInPandas` and `mapInArrow` enforces strict validation of the result against the schema. The column names must exactly match and types must match with compatible nullability. To restore the previous behavior, set `spark.sql.execution.arrow.pyspark.validateSchema.enabled` to `false`.
+
 ## Upgrading from Spark SQL 3.5 to 4.0
 
 - Since Spark 4.0, `spark.sql.ansi.enabled` is on by default. To restore the previous behavior, set `spark.sql.ansi.enabled` to `false` or `SPARK_ANSI_SQL_MODE` to `false`.
@@ -29,10 +33,13 @@ license: |
 - Since Spark 4.0, the default behaviour when inserting elements in a map is changed to first normalize keys -0.0 to 0.0. The affected SQL functions are `create_map`, `map_from_arrays`, `map_from_entries`, and `map_concat`. To restore the previous behaviour, set `spark.sql.legacy.disableMapKeyNormalization` to `true`.
 - Since Spark 4.0, the default value of `spark.sql.maxSinglePartitionBytes` is changed from `Long.MaxValue` to `128m`. To restore the previous behavior, set `spark.sql.maxSinglePartitionBytes` to `9223372036854775807`(`Long.MaxValue`).
 - Since Spark 4.0, any read of SQL tables takes into consideration the SQL configs `spark.sql.files.ignoreCorruptFiles`/`spark.sql.files.ignoreMissingFiles` instead of the core config `spark.files.ignoreCorruptFiles`/`spark.files.ignoreMissingFiles`.
+- Since Spark 4.0, when reading SQL tables hits `org.apache.hadoop.security.AccessControlException` and `org.apache.hadoop.hdfs.BlockMissingException`, the exception will be thrown and fail the task, even if `spark.sql.files.ignoreCorruptFiles` is set to `true`.
 - Since Spark 4.0, `spark.sql.hive.metastore` drops the support of Hive prior to 2.0.0 as they require JDK 8 that Spark does not support anymore. Users should migrate to higher versions.
+- Since Spark 4.0, Spark removes `hive-llap-common` dependency. To restore the previous behavior, add `hive-llap-common` jar to the class path.
 - Since Spark 4.0, `spark.sql.parquet.compression.codec` drops the support of codec name `lz4raw`, please use `lz4_raw` instead.
 - Since Spark 4.0, when overflowing during casting timestamp to byte/short/int under non-ansi mode, Spark will return null instead a wrapping value.
 - Since Spark 4.0, the `encode()` and `decode()` functions support only the following charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32'. To restore the previous behavior when the function accepts charsets of the current JDK used by Spark, set `spark.sql.legacy.javaCharsets` to `true`.
+- Since Spark 4.0, the `encode()` and `decode()` functions raise `MALFORMED_CHARACTER_CODING` error when handling unmappable characters, while in Spark 3.5 and earlier versions, these characters will be replaced with mojibakes. To restore the previous behavior, set `spark.sql.legacy.codingErrorAction` to `true`. For example, if you try to `decode` a string value `tést` / [116, -23, 115, 116] (encoded in latin1) with 'UTF-8', you get `t�st`.
 - Since Spark 4.0, the legacy datetime rebasing SQL configs with the prefix `spark.sql.legacy` are removed. To restore the previous behavior, use the following configs:
   - `spark.sql.parquet.int96RebaseModeInWrite` instead of `spark.sql.legacy.parquet.int96RebaseModeInWrite`
   - `spark.sql.parquet.datetimeRebaseModeInWrite` instead of `spark.sql.legacy.parquet.datetimeRebaseModeInWrite`
@@ -61,6 +68,11 @@ license: |
 - Since Spark 4.0, Views allow control over how they react to underlying query changes. By default views tolerate column type changes in the query and compensate with casts. To disable this feature set `spark.sql.legacy.viewSchemaBindingMode` to `false`. This also removes the clause from `DESCRIBE EXTENDED` and `SHOW CREATE TABLE`.
 - Since Spark 4.0, The Storage-Partitioned Join feature flag `spark.sql.sources.v2.bucketing.pushPartValues.enabled` is set to `true`. To restore the previous behavior, set `spark.sql.sources.v2.bucketing.pushPartValues.enabled` to `false`.
 - Since Spark 4.0, the `sentences` function uses `Locale(language)` instead of `Locale.US` when `language` parameter is not `NULL` and `country` parameter is `NULL`.
+- Since Spark 4.0, reading from a file source table will correctly respect query options, e.g. delimiters. Previously, the first query plan was cached and subsequent option changes ignored. To restore the previous behavior, set `spark.sql.legacy.readFileSourceTableCacheIgnoreOptions` to `true`.
+
+## Upgrading from Spark SQL 3.5.3 to 3.5.4
+
+- Since Spark 3.5.4, when reading SQL tables hits `org.apache.hadoop.security.AccessControlException` and `org.apache.hadoop.hdfs.BlockMissingException`, the exception will be thrown and fail the task, even if `spark.sql.files.ignoreCorruptFiles` is set to `true`.
 
 ## Upgrading from Spark SQL 3.5.1 to 3.5.2
 
@@ -1047,7 +1059,7 @@ Python UDF registration is unchanged.
 Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.
 Currently, Hive SerDes and UDFs are based on built-in Hive,
 and Spark SQL can be connected to different versions of Hive Metastore
-(from 2.0.0 to 2.3.10 and 3.0.0 to 3.1.3. Also see [Interacting with Different Versions of Hive Metastore](sql-data-sources-hive-tables.html#interacting-with-different-versions-of-hive-metastore)).
+(from 2.0.0 to 2.3.10 and 3.0.0 to 4.1.0. Also see [Interacting with Different Versions of Hive Metastore](sql-data-sources-hive-tables.html#interacting-with-different-versions-of-hive-metastore).
 
 #### Deploying in Existing Hive Warehouses
 {:.no_toc}

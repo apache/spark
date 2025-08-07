@@ -30,7 +30,7 @@ from pyspark.ml.param.shared import (
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.param import Params, TypeConverters, Param
-from pyspark.ml.util import JavaMLWritable, JavaMLReadable
+from pyspark.ml.util import JavaMLWritable, JavaMLReadable, try_remote_attribute_relation
 from pyspark.sql import DataFrame
 
 if TYPE_CHECKING:
@@ -617,6 +617,7 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable["ALSMo
 
     @property
     @since("1.4.0")
+    @try_remote_attribute_relation
     def userFactors(self) -> DataFrame:
         """
         a DataFrame that stores user factors in two columns: `id` and
@@ -626,6 +627,7 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable["ALSMo
 
     @property
     @since("1.4.0")
+    @try_remote_attribute_relation
     def itemFactors(self) -> DataFrame:
         """
         a DataFrame that stores item factors in two columns: `id` and
@@ -633,6 +635,7 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable["ALSMo
         """
         return self._call_java("itemFactors")
 
+    @try_remote_attribute_relation
     def recommendForAllUsers(self, numItems: int) -> DataFrame:
         """
         Returns top `numItems` items recommended for each user, for all users.
@@ -652,6 +655,7 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable["ALSMo
         """
         return self._call_java("recommendForAllUsers", numItems)
 
+    @try_remote_attribute_relation
     def recommendForAllItems(self, numUsers: int) -> DataFrame:
         """
         Returns top `numUsers` users recommended for each item, for all items.
@@ -671,6 +675,7 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable["ALSMo
         """
         return self._call_java("recommendForAllItems", numUsers)
 
+    @try_remote_attribute_relation
     def recommendForUserSubset(self, dataset: DataFrame, numItems: int) -> DataFrame:
         """
         Returns top `numItems` items recommended for each user id in the input data set. Note that
@@ -694,6 +699,7 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable["ALSMo
         """
         return self._call_java("recommendForUserSubset", dataset, numItems)
 
+    @try_remote_attribute_relation
     def recommendForItemSubset(self, dataset: DataFrame, numUsers: int) -> DataFrame:
         """
         Returns top `numUsers` users recommended for each item id in the input data set. Note that

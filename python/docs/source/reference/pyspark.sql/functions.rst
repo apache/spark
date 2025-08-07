@@ -132,6 +132,7 @@ Mathematical Functions
     radians
     rand
     randn
+    random
     rint
     round
     sec
@@ -164,6 +165,7 @@ String Functions
     char
     char_length
     character_length
+    chr
     collate
     collation
     concat_ws
@@ -192,6 +194,7 @@ String Functions
     overlay
     position
     printf
+    quote
     randstr
     regexp_count
     regexp_extract
@@ -250,6 +253,7 @@ Date and Timestamp Functions
     convert_timezone
     curdate
     current_date
+    current_time
     current_timestamp
     current_timezone
     date_add
@@ -276,6 +280,7 @@ Date and Timestamp Functions
     make_date
     make_dt_interval
     make_interval
+    make_time
     make_timestamp
     make_timestamp_ltz
     make_timestamp_ntz
@@ -295,6 +300,7 @@ Date and Timestamp Functions
     timestamp_millis
     timestamp_seconds
     to_date
+    to_time
     to_timestamp
     to_timestamp_ltz
     to_timestamp_ntz
@@ -305,7 +311,9 @@ Date and Timestamp Functions
     try_make_timestamp
     try_make_timestamp_ltz
     try_make_timestamp_ntz
+    try_to_time
     try_to_timestamp
+    try_to_date
     unix_date
     unix_micros
     unix_millis
@@ -451,6 +459,8 @@ Aggregate Functions
     kurtosis
     last
     last_value
+    listagg
+    listagg_distinct
     max
     max_by
     mean
@@ -476,6 +486,8 @@ Aggregate Functions
     stddev
     stddev_pop
     stddev_samp
+    string_agg
+    string_agg_distinct
     sum
     sum_distinct
     try_avg
@@ -627,6 +639,7 @@ Misc Functions
     try_reflect
     typeof
     user
+    uuid
     version
 
 
@@ -635,9 +648,31 @@ UDF, UDTF and UDT
 .. autosummary::
     :toctree: api/
 
+    arrow_udf
     call_udf
     pandas_udf
     udf
     udtf
     unwrap_udt
 
+
+Table-Valued Functions
+----------------------
+.. currentmodule:: pyspark.sql.tvf
+
+.. autosummary::
+    :toctree: api/
+
+    TableValuedFunction.collations
+    TableValuedFunction.explode
+    TableValuedFunction.explode_outer
+    TableValuedFunction.inline
+    TableValuedFunction.inline_outer
+    TableValuedFunction.json_tuple
+    TableValuedFunction.posexplode
+    TableValuedFunction.posexplode_outer
+    TableValuedFunction.range
+    TableValuedFunction.sql_keywords
+    TableValuedFunction.stack
+    TableValuedFunction.variant_explode
+    TableValuedFunction.variant_explode_outer

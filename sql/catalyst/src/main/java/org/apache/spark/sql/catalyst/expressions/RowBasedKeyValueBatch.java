@@ -129,7 +129,7 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Cl
       page = allocatePage(requiredSize);
     } catch (SparkOutOfMemoryError e) {
       logger.warn("Failed to allocate page ({} bytes).",
-        MDC.of(LogKeys.PAGE_SIZE$.MODULE$, requiredSize));
+        MDC.of(LogKeys.PAGE_SIZE, requiredSize));
       return false;
     }
     base = page.getBaseObject();
@@ -174,7 +174,7 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Cl
    */
   @Override
   public final long spill(long size, MemoryConsumer trigger) throws IOException {
-    logger.warn("Calling spill() on RowBasedKeyValueBatch. Will not spill but return 0.");
+    logger.debug("Calling spill() on RowBasedKeyValueBatch. Will not spill but return 0.");
     return 0;
   }
 

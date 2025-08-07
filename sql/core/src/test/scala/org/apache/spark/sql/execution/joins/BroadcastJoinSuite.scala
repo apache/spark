@@ -21,12 +21,13 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.AccumulatorSuite
 import org.apache.spark.internal.config.EXECUTOR_MEMORY
-import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession}
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BitwiseAnd, BitwiseOr, Cast, Expression, Literal, ShiftLeft}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.BROADCAST
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, PartitioningCollection}
+import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.execution.{DummySparkPlan, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec

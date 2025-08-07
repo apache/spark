@@ -43,7 +43,6 @@ import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.expressions.{Aggregator, Window}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.test.SQLTestData.{ArrayStringWrapper, ContainerStringWrapper, StringWrapper, TestData2}
@@ -309,6 +308,69 @@ class DataFrameSuite extends QueryTest
       testData.select("key").collect().toSeq)
   }
 
+  test("SPARK-50503 - cannot partition by variant columns") {
+    val df = sql("select parse_json(case when id = 0 then 'null' else '1' end)" +
+      " as v, id % 5 as id, named_struct('v', parse_json(id::string)) s from range(0, 100, 1, 5)")
+    // variant column
+    checkError(
+      exception = intercept[AnalysisException](df.repartition(5, col("v"))),
+      condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
+      parameters = Map(
+        "expr" -> "\"v\"",
+        "dataType" -> "\"VARIANT\"")
+    )
+    // nested variant column
+    checkError(
+      exception = intercept[AnalysisException](df.repartition(5, col("s"))),
+      condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
+      parameters = Map(
+        "expr" -> "\"s\"",
+        "dataType" -> "\"STRUCT<v: VARIANT NOT NULL>\"")
+    )
+    // variant producing expression
+    checkError(
+      exception =
+        intercept[AnalysisException](df.repartition(5, parse_json(col("id").cast("string")))),
+      condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
+      parameters = Map(
+        "expr" -> "\"parse_json(CAST(id AS STRING))\"",
+        "dataType" -> "\"VARIANT\"")
+    )
+    // Partitioning by non-variant column works
+    try {
+      df.repartition(5, col("id")).collect()
+    } catch {
+      case e: Exception =>
+        fail(s"Expected no exception to be thrown but an exception was thrown: ${e.getMessage}")
+    }
+    // SQL
+    withTempView("tv") {
+      df.createOrReplaceTempView("tv")
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT * FROM tv DISTRIBUTE BY v")),
+        condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
+        parameters = Map(
+          "expr" -> "\"v\"",
+          "dataType" -> "\"VARIANT\""),
+        context = ExpectedContext(
+          fragment = "DISTRIBUTE BY v",
+          start = 17,
+          stop = 31)
+      )
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT * FROM tv DISTRIBUTE BY s")),
+        condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
+        parameters = Map(
+          "expr" -> "\"s\"",
+          "dataType" -> "\"STRUCT<v: VARIANT NOT NULL>\""),
+        context = ExpectedContext(
+          fragment = "DISTRIBUTE BY s",
+          start = 17,
+          stop = 31)
+      )
+    }
+  }
+
   test("repartition with SortOrder") {
     // passing SortOrder expressions to .repartition() should result in an informative error
 
@@ -364,6 +426,35 @@ class DataFrameSuite extends QueryTest
     intercept[IllegalArgumentException] {
       data1d.toDF("val").repartitionByRange(data1d.size, Seq.empty: _*)
     }
+  }
+
+  test("repartition by MapType") {
+    Seq("int", "long", "float", "double", "decimal(10, 2)", "string", "varchar(6)").foreach { dt =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        val df = spark.range(20)
+          .withColumn("c1",
+            when(col("id") % 3 === 1, typedLit(Map(1 -> 1)))
+              .when(col("id") % 3 === 2, typedLit(Map(1 -> 1, 2 -> 2)))
+              .otherwise(typedLit(Map(2 -> 2, 1 -> 1))).cast(s"map<$dt, $dt>"))
+          .withColumn("c2", typedLit(Map(1 -> null)).cast(s"map<$dt, $dt>"))
+          .withColumn("c3", lit(null).cast(s"map<$dt, $dt>"))
+
+        assertPartitionNumber(df.repartition(4, col("c1")), 2)
+        assertPartitionNumber(df.repartition(4, col("c2")), 1)
+        assertPartitionNumber(df.repartition(4, col("c3")), 1)
+        assertPartitionNumber(df.repartition(4, col("c1"), col("c2")), 2)
+        assertPartitionNumber(df.repartition(4, col("c1"), col("c3")), 2)
+        assertPartitionNumber(df.repartition(4, col("c1"), col("c2"), col("c3")), 2)
+        assertPartitionNumber(df.repartition(4, col("c2"), col("c3")), 2)
+      }
+    }
+  }
+
+  private def assertPartitionNumber(df: => DataFrame, max: Int): Unit = {
+    val dfGrouped = df.groupBy(spark_partition_id()).count()
+    // Result number of partition can be lower or equal to max,
+    // but no more than that.
+    assert(dfGrouped.count() <= max, dfGrouped.queryExecution.simpleString)
   }
 
   test("coalesce") {
@@ -1261,7 +1352,7 @@ class DataFrameSuite extends QueryTest
         )
 
         // error case: insert into an OneRowRelation
-        Dataset.ofRows(spark, OneRowRelation()).createOrReplaceTempView("one_row")
+        classic.Dataset.ofRows(spark, OneRowRelation()).createOrReplaceTempView("one_row")
         checkError(
           exception = intercept[AnalysisException] {
             insertion.write.insertInto("one_row")
@@ -1379,7 +1470,7 @@ class DataFrameSuite extends QueryTest
   /**
    * Verifies that there is no Exchange between the Aggregations for `df`
    */
-  private def verifyNonExchangingAgg(df: DataFrame) = {
+  private def verifyNonExchangingAgg(df: classic.DataFrame) = {
     var atFirstAgg: Boolean = false
     df.queryExecution.executedPlan.foreach {
       case agg: HashAggregateExec =>
@@ -1394,7 +1485,7 @@ class DataFrameSuite extends QueryTest
   /**
    * Verifies that there is an Exchange between the Aggregations for `df`
    */
-  private def verifyExchangingAgg(df: DataFrame) = {
+  private def verifyExchangingAgg(df: classic.DataFrame) = {
     var atFirstAgg: Boolean = false
     df.queryExecution.executedPlan.foreach {
       case agg: HashAggregateExec =>
@@ -1532,7 +1623,7 @@ class DataFrameSuite extends QueryTest
 
     val statsPlan = OutputListAwareConstraintsTestPlan(outputList = outputList)
 
-    val df = Dataset.ofRows(spark, statsPlan)
+    val df = classic.Dataset.ofRows(spark, statsPlan)
       // add some map-like operations which optimizer will optimize away, and make a divergence
       // for output between logical plan and optimized plan
       // logical plan
@@ -1567,7 +1658,7 @@ class DataFrameSuite extends QueryTest
   test("SPARK-46794: exclude subqueries from LogicalRDD constraints") {
     withTempDir { checkpointDir =>
       val subquery =
-        column(ScalarSubquery(spark.range(10).selectExpr("max(id)").logicalPlan))
+        Column(ScalarSubquery(spark.range(10).selectExpr("max(id)").logicalPlan))
       val df = spark.range(1000).filter($"id" === subquery)
       assert(df.logicalPlan.constraints.exists(_.exists(_.isInstanceOf[ScalarSubquery])))
 
@@ -1700,7 +1791,7 @@ class DataFrameSuite extends QueryTest
   }
 
   private def verifyNullabilityInFilterExec(
-      df: DataFrame,
+      df: classic.DataFrame,
       expr: String,
       expectedNonNullableColumns: Seq[String]): Unit = {
     val dfWithFilter = df.where(s"isnotnull($expr)").selectExpr(expr)
@@ -1967,7 +2058,7 @@ class DataFrameSuite extends QueryTest
   test("SPARK-29442 Set `default` mode should override the existing mode") {
     val df = Seq(Tuple1(1)).toDF()
     val writer = df.write.mode("overwrite").mode("default")
-    val modeField = classOf[DataFrameWriter[_]].getDeclaredField("mode")
+    val modeField = classOf[DataFrameWriter[_]].getDeclaredField("curmode")
     modeField.setAccessible(true)
     assert(SaveMode.ErrorIfExists === modeField.get(writer).asInstanceOf[SaveMode])
   }
@@ -2054,18 +2145,18 @@ class DataFrameSuite extends QueryTest
     // the number of keys must match
     val exception1 = intercept[IllegalArgumentException] {
       df1.groupBy($"key1", $"key2").flatMapCoGroupsInPandas(
-        df2.groupBy($"key2"), flatMapCoGroupsInPandasUDF)
+        df2.groupBy($"key2"), Column(flatMapCoGroupsInPandasUDF))
     }
     assert(exception1.getMessage.contains("Cogroup keys must have same size: 2 != 1"))
     val exception2 = intercept[IllegalArgumentException] {
       df1.groupBy($"key1").flatMapCoGroupsInPandas(
-        df2.groupBy($"key1", $"key2"), flatMapCoGroupsInPandasUDF)
+        df2.groupBy($"key1", $"key2"), Column(flatMapCoGroupsInPandasUDF))
     }
     assert(exception2.getMessage.contains("Cogroup keys must have same size: 1 != 2"))
 
     // but different keys are allowed
     val actual = df1.groupBy($"key1").flatMapCoGroupsInPandas(
-      df2.groupBy($"key2"), flatMapCoGroupsInPandasUDF)
+      df2.groupBy($"key2"), Column(flatMapCoGroupsInPandasUDF))
     // can't evaluate the DataFrame as there is no PythonFunction given
     assert(actual != null)
   }
@@ -2419,7 +2510,7 @@ class DataFrameSuite extends QueryTest
         |  SELECT a, b FROM (SELECT a, b FROM VALUES (1, 2) AS t(a, b))
         |)
         |""".stripMargin)
-    val stringCols = df.logicalPlan.output.map(column(_).cast(StringType))
+    val stringCols = df.logicalPlan.output.map(Column(_).cast(StringType))
     val castedDf = df.select(stringCols: _*)
     checkAnswer(castedDf, Row("1", "1") :: Row("1", "2") :: Nil)
   }
@@ -2619,6 +2710,80 @@ class DataFrameSuite extends QueryTest
     val actual = getQueryResult(true).map(_.getTimestamp(0).toString).sorted
     val expected = getQueryResult(false).map(_.getTimestamp(0).toString).sorted
     assert(actual == expected)
+  }
+
+  test("SPARK-50962: Avoid StringIndexOutOfBoundsException in AttributeNameParser") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.emptyDataFrame.colRegex(".whatever")
+      },
+      condition = "INVALID_ATTRIBUTE_NAME_SYNTAX",
+      parameters = Map("name" -> ".whatever")
+    )
+  }
+
+  test("SPARK-50994: RDD conversion is performed with execution context") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        withTempDir(dir => {
+          val dummyDF = Seq((1, 1.0), (2, 2.0), (3, 3.0), (1, 1.0)).toDF("a", "A")
+          dummyDF.write.format("parquet").mode("overwrite").save(dir.getCanonicalPath)
+
+          val df = spark.read.parquet(dir.getCanonicalPath)
+          val encoder = ExpressionEncoder(df.schema)
+          val deduplicated = df.dropDuplicates(Array("a"))
+          val df2 = deduplicated.flatMap(row => Seq(row))(encoder).rdd
+
+          val output = spark.createDataFrame(df2, df.schema)
+          checkAnswer(output, Seq(Row(1, 1.0), Row(2, 2.0), Row(3, 3.0)))
+        })
+      }
+    }
+  }
+
+  test("Nested order by") {
+    val df = sql("SELECT * FROM VALUES (4,5,6), (1,2,3)")
+
+    checkAnswer(df.select("col1").orderBy("col2"), Seq(Row(1), Row(4)))
+    checkAnswer(df.select("col1").orderBy("col2").orderBy("col3"), Seq(Row(1), Row(4)))
+    checkAnswer(df.select("col1").orderBy(df("col2")), Seq(Row(1), Row(4)))
+    val df1 = df.select("col1").orderBy("col2").orderBy("col1").orderBy("col2").orderBy("col3")
+    checkAnswer(df1, Seq(Row(1), Row(4)))
+
+    // Cannot order by missing attribute under SubqueryAlias
+    val df2 = df1.select("col1").as("q1")
+    checkAnswer(df2.orderBy("col1"), Seq(Row(1), Row(4)))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df2.orderBy("col2")
+      },
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`col2`", "proposal" -> "`col1`"),
+      context = ExpectedContext("orderBy", getCurrentClassCallSitePattern)
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        df2.orderBy(df1("col2"))
+      },
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`col2`", "proposal" -> "`col1`")
+    )
+  }
+
+  test("Column reference above JOIN takes precedence over ALL keyword") {
+    val df1 = sql("select * from values(4, 5, 6), (1, 2, 3) as t1(a, b, all1)")
+    val df2 = sql("select * from values(4, 8, 9), (1, 5, 6) as t2(a, b, all)")
+    val df3 = df1.join(df2, df1("a") === df2("a"))
+
+    checkAnswer(df3.select(df2("all").as("all1")).orderBy("all"), Seq(Row(6), Row(9)))
+    checkAnswer(df3.orderBy("all"), Seq(Row(1, 2, 3, 1, 5, 6), Row(4, 5, 6, 4, 8, 9)))
+  }
+
+  test("Column reference takes precedence over ALL keyword with nested ORDER BY") {
+    val df = sql("SELECT * FROM VALUES(4, 5, 6), (1, 2, 3) as t(a, b, all)")
+
+    val df1 = df.select("a").orderBy("b").orderBy("all")
+    checkAnswer(df1, Seq(Row(1), Row(4)))
   }
 }
 

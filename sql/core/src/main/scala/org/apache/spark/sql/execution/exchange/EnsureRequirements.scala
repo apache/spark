@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.exchange
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.internal.{LogKeys, MDC}
+import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -64,7 +64,7 @@ case class EnsureRequirements(
     // Ensure that the operator's children satisfy their output distribution requirements.
     var children = originalChildren.zip(requiredChildDistributions).map {
       case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
-        child
+        ensureOrdering(child, distribution)
       case (child, BroadcastDistribution(mode)) =>
         BroadcastExchangeExec(mode, child)
       case (child, distribution) =>
@@ -288,6 +288,23 @@ case class EnsureRequirements(
     } else {
       (leftKeys, rightKeys)
     }
+  }
+
+  private def ensureOrdering(plan: SparkPlan, distribution: Distribution) = {
+    (plan.outputPartitioning, distribution) match {
+      case (p @ KeyGroupedPartitioning(expressions, _, partitionValues, _),
+        d @ OrderedDistribution(ordering)) if p.satisfies(d) =>
+        val attrs = expressions.flatMap(_.collectLeaves()).map(_.asInstanceOf[Attribute])
+        val partitionOrdering: Ordering[InternalRow] = {
+          RowOrdering.create(ordering, attrs)
+        }
+        // Sort 'commonPartitionValues' and use this mechanism to ensure BatchScan's
+        // output partitions are ordered
+        val sorted = partitionValues.sorted(partitionOrdering)
+        populateCommonPartitionInfo(plan, sorted.map((_, 1)),
+          None, None, applyPartialClustering = false, replicatePartitions = false)
+      case _ => plan
+      }
   }
 
   /**

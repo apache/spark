@@ -50,15 +50,14 @@ import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
 import jakarta.ws.rs.core.UriBuilder
 import org.apache.commons.codec.binary.Hex
-import org.apache.commons.io.IOUtils
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
+import org.apache.hadoop.fs.audit.CommonAuditContext.currentAuditContext
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.hadoop.ipc.CallerContext.{Builder => HadoopCallerContextBuilder}
 import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hadoop.util.{RunJar, StringUtils}
+import org.apache.hadoop.util.RunJar
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.LoggerContext
@@ -66,9 +65,9 @@ import org.apache.logging.log4j.core.config.LoggerConfig
 import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
 
-import org.apache.spark._
+import org.apache.spark.{SPARK_VERSION, _}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
@@ -103,7 +102,9 @@ private[spark] object Utils
   with SparkErrorUtils
   with SparkFileUtils
   with SparkSerDeUtils
-  with SparkStreamUtils {
+  with SparkStreamUtils
+  with SparkStringUtils
+  with SparkSystemUtils {
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
   @volatile private var cachedLocalDir: String = ""
@@ -433,7 +434,7 @@ private[spark] object Utils
     if (!source.exists()) {
       throw new FileNotFoundException(source.getAbsolutePath)
     }
-    val lowerSrc = StringUtils.toLowerCase(source.getName)
+    val lowerSrc = source.getName.toLowerCase(Locale.ENGLISH)
     if (lowerSrc.endsWith(".jar")) {
       RunJar.unJar(source, dest, RunJar.MATCH_ANY)
     } else if (lowerSrc.endsWith(".zip")) {
@@ -456,7 +457,7 @@ private[spark] object Utils
    * to work around a security issue, see also SPARK-38631.
    */
   private def unTarUsingJava(source: File, dest: File): Unit = {
-    if (!dest.mkdirs && !dest.isDirectory) {
+    if (!Utils.createDirectory(dest) && !dest.isDirectory) {
       throw new IOException(s"Mkdirs failed to create $dest")
     } else {
       try {
@@ -808,19 +809,18 @@ private[spark] object Utils
     configuredLocalDirs.flatMap { root =>
       try {
         val rootDir = new File(root)
-        if (rootDir.exists || rootDir.mkdirs()) {
+        if (rootDir.exists || Utils.createDirectory(rootDir)) {
           val dir = createTempDir(root)
           chmod700(dir)
           Some(dir.getAbsolutePath)
         } else {
           logError(log"Failed to create dir in ${MDC(PATH, root)}. Ignoring this directory.")
-
           None
         }
       } catch {
         case e: IOException =>
           logError(
-            log"Failed to create local root dir in ${MDC(PATH, root)}. Ignoring this directory.")
+            log"Failed to create local root dir in ${MDC(PATH, root)}. Ignoring this directory.", e)
           None
       }
     }
@@ -1354,8 +1354,10 @@ private[spark] object Utils
   val TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE =
     "Full stacktrace of original doTryWithCallerStacktrace caller"
 
-  val TRY_WITH_CALLER_STACKTRACE_TRY_STACKTRACE =
-    "Stacktrace under doTryWithCallerStacktrace"
+  class OriginalTryStackTraceException()
+    extends Exception(TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE) {
+    var doTryWithCallerStacktraceDepth: Int = 0
+  }
 
   /**
    * Use Try with stacktrace substitution for the caller retrieving the error.
@@ -1383,14 +1385,19 @@ private[spark] object Utils
         val commonSuffixLen = origStackTrace.reverse.zip(currentStackTrace.reverse).takeWhile {
           case (exElem, currentElem) => exElem == currentElem
         }.length
-        val belowEx = new Exception(TRY_WITH_CALLER_STACKTRACE_TRY_STACKTRACE)
-        belowEx.setStackTrace(origStackTrace.dropRight(commonSuffixLen))
-        ex.addSuppressed(belowEx)
-
-        // keep the full original stack trace in a suppressed exception.
-        val fullEx = new Exception(TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE)
-        fullEx.setStackTrace(origStackTrace)
-        ex.addSuppressed(fullEx)
+        // Add the full stack trace of the original caller as the suppressed exception.
+        // It may already be there if it's a nested call to doTryWithCallerStacktrace.
+        val origEx = ex.getSuppressed.find { e =>
+          e.isInstanceOf[OriginalTryStackTraceException]
+        }.getOrElse {
+          val fullEx = new OriginalTryStackTraceException()
+          fullEx.setStackTrace(origStackTrace)
+          ex.addSuppressed(fullEx)
+          fullEx
+        }.asInstanceOf[OriginalTryStackTraceException]
+        // Update the depth of the stack of the current doTryWithCallerStacktrace, for stitching
+        // it with the stack of getTryWithCallerStacktrace.
+        origEx.doTryWithCallerStacktraceDepth = origStackTrace.size - commonSuffixLen
       case Success(_) => // nothing
     }
     t
@@ -1406,7 +1413,7 @@ private[spark] object Utils
    * Full stack trace of the original doTryWithCallerStacktrace caller can be retrieved with
    * ```
    * ex.getSuppressed.find { e =>
-   * e.getMessage == Utils.TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE
+   *   e.isInstanceOf[Utils.OriginalTryStackTraceException]
    * }
    * ```
    *
@@ -1416,13 +1423,15 @@ private[spark] object Utils
    */
   def getTryWithCallerStacktrace[T](t: Try[T]): T = t match {
     case Failure(ex) =>
-      val belowStacktrace = ex.getSuppressed.find { e =>
+      val originalStacktraceEx = ex.getSuppressed.find { e =>
         // added in doTryWithCallerStacktrace
-        e.getMessage == TRY_WITH_CALLER_STACKTRACE_TRY_STACKTRACE
+        e.isInstanceOf[OriginalTryStackTraceException]
       }.getOrElse {
         // If we don't have the expected stacktrace information, just rethrow
         throw ex
-      }.getStackTrace
+      }.asInstanceOf[OriginalTryStackTraceException]
+      val belowStacktrace = originalStacktraceEx.getStackTrace
+        .take(originalStacktraceEx.doTryWithCallerStacktraceDepth)
       // We are modifying and throwing the original exception. It would be better if we could
       // return a copy, but we can't easily clone it and preserve. If this is accessed from
       // multiple threads that then look at the stack trace, this could break.
@@ -1848,24 +1857,14 @@ private[spark] object Utils
   }
 
   /**
-   * Whether the underlying operating system is Windows.
+   * Whether the underlying Java version is at most 17.
    */
-  val isWindows = SystemUtils.IS_OS_WINDOWS
-
-  /**
-   * Whether the underlying operating system is Mac OS X.
-   */
-  val isMac = SystemUtils.IS_OS_MAC_OSX
+  val isJavaVersionAtMost17 = Runtime.version().feature() <= 17
 
   /**
    * Whether the underlying Java version is at least 21.
    */
-  val isJavaVersionAtLeast21 = SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_21)
-
-  /**
-   * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.
-   */
-  val isMacOnAppleSilicon = SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64")
+  val isJavaVersionAtLeast21 = Runtime.version().feature() >= 21
 
   /**
    * Whether the underlying JVM prefer IPv6 addresses.
@@ -2429,11 +2428,18 @@ private[spark] object Utils
 
   /**
    * Returns the current user name. This is the currently logged in user, unless that's been
-   * overridden by the `SPARK_USER` environment variable.
+   * overridden by the `SPARK_USER` environment variable. In case of exceptions, returns the value
+   * of {@code System.getProperty("user.name", "<unknown>")}.
    */
   def getCurrentUserName(): String = {
-    Option(System.getenv("SPARK_USER"))
-      .getOrElse(UserGroupInformation.getCurrentUser().getShortUserName())
+    try {
+      Option(System.getenv("SPARK_USER"))
+        .getOrElse(UserGroupInformation.getCurrentUser().getShortUserName())
+    } catch {
+      // JEP 486: Permanently Disable the Security Manager
+      case e: UnsupportedOperationException if e.getMessage().contains("getSubject") =>
+        System.getProperty("user.name", "<unknown>")
+    }
   }
 
   val EMPTY_USER_GROUPS = Set.empty[String]
@@ -2512,7 +2518,7 @@ private[spark] object Utils
    *
    * @return whether it is local mode
    */
-  def isLocalMaster(conf: SparkConf): Boolean = {
+  def isLocalMaster(conf: ReadOnlySparkConf): Boolean = {
     val master = conf.get("spark.master", "")
     master == "local" || master.startsWith("local[")
   }
@@ -2596,7 +2602,7 @@ private[spark] object Utils
   /**
    * Return whether dynamic allocation is enabled in the given conf.
    */
-  def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
+  def isDynamicAllocationEnabled(conf: ReadOnlySparkConf): Boolean = {
     val dynamicAllocationEnabled = conf.get(DYN_ALLOCATION_ENABLED)
     dynamicAllocationEnabled &&
       (!isLocalMaster(conf) || conf.get(DYN_ALLOCATION_TESTING))
@@ -2679,7 +2685,7 @@ private[spark] object Utils
    * loading SparkConf.
    */
   def resetStructuredLogging(sparkConf: SparkConf): Unit = {
-    if (sparkConf.getBoolean(STRUCTURED_LOGGING_ENABLED.key, defaultValue = true)) {
+    if (sparkConf.get(STRUCTURED_LOGGING_ENABLED)) {
       Logging.enableStructuredLogging()
     } else {
       Logging.disableStructuredLogging()
@@ -2799,10 +2805,6 @@ private[spark] object Utils
     }
   }
 
-  def stringToSeq(str: String): Seq[String] = {
-    str.split(",").map(_.trim()).filter(_.nonEmpty).toImmutableArraySeq
-  }
-
   /**
    * Create instances of extension classes.
    *
@@ -2906,6 +2908,13 @@ private[spark] object Utils
     opt.replace("{{APP_ID}}", appId)
   }
 
+  /**
+   * Replaces all the {{SPARK_VERSION}} occurrences with the Spark version.
+   */
+  def substituteSparkVersion(opt: String): String = {
+    opt.replace("{{SPARK_VERSION}}", SPARK_VERSION)
+  }
+
   def createSecret(conf: SparkConf): String = {
     val bits = conf.get(AUTH_SECRET_BIT_LENGTH)
     val rnd = new SecureRandom()
@@ -2948,6 +2957,15 @@ private[spark] object Utils
     str.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase(Locale.ROOT)
   }
 
+  def nameForAppAndAttempt(appId: String, appAttemptId: Option[String]): String = {
+    val base = sanitizeDirName(appId)
+    if (appAttemptId.isDefined) {
+      base + "_" + sanitizeDirName(appAttemptId.get)
+    } else {
+      base
+    }
+  }
+
   def isClientMode(conf: SparkConf): Boolean = {
     "client".equals(conf.get(SparkLauncher.DEPLOY_MODE, "client"))
   }
@@ -2983,7 +3001,7 @@ private[spark] object Utils
       return props
     }
     val resultProps = new Properties()
-    props.forEach((k, v) => resultProps.put(k, v))
+    resultProps.putAll(props.clone().asInstanceOf[Properties])
     resultProps
   }
 
@@ -3033,9 +3051,9 @@ private[spark] object Utils
   }
 
   /** Returns a string message about delegation token generation failure */
-  def createFailedToGetTokenMessage(serviceName: String, e: scala.Throwable): MessageWithContext = {
-    log"Failed to get token from service ${MDC(SERVICE_NAME, serviceName)} " +
-      log"due to ${MDC(ERROR, e)}. If ${MDC(SERVICE_NAME, serviceName)} is not used, " +
+  def createFailedToGetTokenMessage(serviceName: String): MessageWithContext = {
+    log"Failed to get token from service ${MDC(SERVICE_NAME, serviceName)}. " +
+      log"If ${MDC(SERVICE_NAME, serviceName)} is not used, " +
       log"set spark.security.credentials.${MDC(SERVICE_NAME, serviceName)}.enabled to false."
   }
 
@@ -3055,20 +3073,32 @@ private[spark] object Utils
           val outFile = new File(localDir, fileName)
           files += outFile
           out = new FileOutputStream(outFile)
-          IOUtils.copy(in, out)
+          in.transferTo(out)
           out.close()
           in.closeEntry()
         }
         entry = in.getNextEntry()
       }
       in.close() // so that any error in closing does not get ignored
-      logInfo(log"Unzipped from ${MDC(PATH, dfsZipFile)}\n\t${MDC(PATHS, files.mkString("\n\t"))}")
+      logDebug(log"Unzipped from ${MDC(PATH, dfsZipFile)}\n\t${MDC(PATHS, files.mkString("\n\t"))}")
     } finally {
       // Close everything no matter what happened
-      IOUtils.closeQuietly(in)
-      IOUtils.closeQuietly(out)
+      Utils.closeQuietly(in)
+      Utils.closeQuietly(out)
     }
     files.toSeq
+  }
+
+  /**
+   * Create a resource uninterruptibly if we are in a task thread (i.e., TaskContext.get() != null).
+   * Otherwise, create the resource normally. This is mainly used in the situation where we want to
+   * create a multi-layer resource in a task thread. The uninterruptible behavior ensures we don't
+   * leak the underlying resources when there is a task cancellation request,
+   */
+  def createResourceUninterruptiblyIfInTaskThread[R <: Closeable](createResource: => R): R = {
+    Option(TaskContext.get()).map(_.createResourceUninterruptibly {
+      createResource
+    }).getOrElse(createResource)
   }
 
   /**
@@ -3122,6 +3152,17 @@ private[spark] object Utils
       "true".equals(useG1GC)
     }.getOrElse(false)
   }
+
+  /**
+   * Return a string of printStackTrace result.
+   */
+  def stringifyException(e: Throwable): String = {
+    val stm = new StringWriter()
+    val wrt = new PrintWriter(stm)
+    e.printStackTrace(wrt)
+    wrt.close()
+    stm.toString()
+  }
 }
 
 private[util] object CallerContext extends Logging {
@@ -3137,6 +3178,9 @@ private[util] object CallerContext extends Logging {
  * specific applications impacting parts of the Hadoop system and potential problems they may be
  * creating (e.g. overloading NN). As HDFS mentioned in HDFS-9184, for a given HDFS operation, it's
  * very helpful to track which upper level job issues it.
+ * The context information is also set in the audit context for cloud storage
+ * connectors. If supported, this gets marshalled as part of the HTTP Referrer header
+ * or similar field, and so ends up in the store service logs themselves.
  *
  * @param from who sets up the caller context (TASK, CLIENT, APPMASTER)
  *
@@ -3187,11 +3231,15 @@ private[spark] class CallerContext(
 
   /**
    * Set up the caller context [[context]] by invoking Hadoop CallerContext API of
-   * [[HadoopCallerContext]].
+   * [[HadoopCallerContext]], which is included in IPC calls,
+   * and the Hadoop audit context, which may be included in cloud storage
+   * requests.
    */
   def setCurrentContext(): Unit = if (CallerContext.callerContextEnabled) {
     val hdfsContext = new HadoopCallerContextBuilder(context).build()
     HadoopCallerContext.setCurrent(hdfsContext)
+    // set the audit context for to object stores, with the prefix "spark"
+    currentAuditContext.put("spark", context)
   }
 }
 

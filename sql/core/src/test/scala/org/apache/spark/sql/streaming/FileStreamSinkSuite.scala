@@ -18,7 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.io.{File, IOException}
-import java.nio.file.Files
+import java.nio.file.{Files, Paths}
 import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
@@ -27,7 +27,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 import org.apache.hadoop.mapreduce.JobContext
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.paths.SparkPath
@@ -36,6 +36,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, FileScan, FileTable}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
@@ -292,35 +293,48 @@ abstract class FileStreamSinkSuite extends StreamTest {
   test("parquet") {
     testFormat(None) // should not throw error as default format parquet when not specified
     testFormat(Some("parquet"))
+    testFormat(None, relativizeOutputPath = true)
+    testFormat(Some("parquet"), relativizeOutputPath = true)
   }
 
   test("orc") {
     testFormat(Some("orc"))
+    testFormat(Some("orc"), relativizeOutputPath = true)
   }
 
   test("text") {
     testFormat(Some("text"))
+    testFormat(Some("text"), relativizeOutputPath = true)
   }
 
   test("json") {
     testFormat(Some("json"))
+    testFormat(Some("json"), relativizeOutputPath = true)
   }
 
-  def testFormat(format: Option[String]): Unit = {
-    val inputData = MemoryStream[Int]
+  def testFormat(format: Option[String], relativizeOutputPath: Boolean = false): Unit = {
+    val inputData = MemoryStream[String] // text format only supports String
     val ds = inputData.toDS()
 
-    val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
+    val tempDir = Utils.createTempDir(namePrefix = "stream.output")
+    val outputPath = if (relativizeOutputPath) {
+      Paths.get("").toAbsolutePath.relativize(tempDir.toPath).toString
+    } else {
+      tempDir.getCanonicalPath
+    }
     val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
 
-    var query: StreamingQuery = null
+    val writer = ds.toDF("value").writeStream
+      .option("checkpointLocation", checkpointDir)
+    if (format.nonEmpty) {
+      writer.format(format.get)
+    }
 
+    var query: StreamingQuery = null
     try {
-      val writer = ds.map(i => (i, i * 1000)).toDF("id", "value").writeStream
-      if (format.nonEmpty) {
-        writer.format(format.get)
-      }
-      query = writer.option("checkpointLocation", checkpointDir).start(outputDir)
+      query = writer.start(outputPath)
+      inputData.addData("data")
+      query.processAllAvailable()
     } finally {
       if (query != null) {
         query.stop()
@@ -663,6 +677,16 @@ abstract class FileStreamSinkSuite extends StreamTest {
         "Assume no metadata directory. Error while looking for metadata directory in the path:" +
         s" $path."))
     }
+  }
+
+  test("SPARK-50854: Make path fully qualified before passing it to FileStreamSink") {
+    val fileFormat = new ParquetFileFormat() // any valid FileFormat
+    val partitionColumnNames = Seq.empty[String]
+    val options = Map.empty[String, String]
+    val exception = intercept[SparkException] {
+      new FileStreamSink(spark, "test.parquet", fileFormat, partitionColumnNames, options)
+    }
+    assert(exception.getMessage.contains("is not absolute path."))
   }
 }
 

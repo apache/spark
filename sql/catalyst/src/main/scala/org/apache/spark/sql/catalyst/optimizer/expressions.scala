@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -58,7 +59,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case _ => false
   }
 
-  private def constantFolding(
+  private[sql] def constantFolding(
       e: Expression,
       isConditionalBranch: Boolean = false): Expression = e match {
     case c: ConditionalExpression if !c.foldable =>
@@ -90,7 +91,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
       }
 
     // Don't replace ScalarSubquery if its plan is an aggregate that may suffer from a COUNT bug.
-    case s @ ScalarSubquery(_, _, _, _, _, mayHaveCountBug, _, _)
+    case s @ ScalarSubquery(_, _, _, _, _, mayHaveCountBug, _)
       if conf.getConf(SQLConf.DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG) &&
         mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
       s
@@ -725,7 +726,7 @@ object SupportedBinaryExpr {
     case _: BinaryArithmetic => Some(expr, expr.children.head, expr.children.last)
     case _: BinaryMathExpression => Some(expr, expr.children.head, expr.children.last)
     case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub |
-         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimeAdd =>
+         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimestampAddInterval =>
       Some(expr, expr.children.head, expr.children.last)
     case _: FindInSet | _: RoundBase => Some(expr, expr.children.head, expr.children.last)
     case BinaryPredicate(expr) =>
@@ -742,10 +743,11 @@ object SupportedBinaryExpr {
 object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
   // if guards below protect from escapes on trailing %.
   // Cases like "something\%" are not optimized, but this does not affect correctness.
-  private val startsWith = "([^_%]+)%".r
-  private val endsWith = "%([^_%]+)".r
-  private val startsAndEndsWith = "([^_%]+)%([^_%]+)".r
-  private val contains = "%([^_%]+)%".r
+  // Consecutive wildcard characters are equivalent to a single wildcard character.
+  private val startsWith = "([^_%]+)%+".r
+  private val endsWith = "%+([^_%]+)".r
+  private val startsAndEndsWith = "([^_%]+)%+([^_%]+)".r
+  private val contains = "%+([^_%]+)%+".r
   private val equalTo = "([^_%]*)".r
 
   private def simplifyLike(
@@ -1091,6 +1093,8 @@ object FoldablePropagation extends Rule[LogicalPlan] {
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
     _.containsPattern(CAST), ruleId) {
+    case c @ Cast(e: NamedExpression, StringType, _, _)
+      if e.dataType == StringType && e.metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY) => c
     case Cast(e, dataType, _, _) if e.dataType == dataType => e
     case c @ Cast(Cast(e, dt1: NumericType, _, _), dt2: NumericType, _, _)
         if isWiderCast(e.dataType, dt1) && isWiderCast(dt1, dt2) =>

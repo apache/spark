@@ -30,7 +30,7 @@ import org.apache.spark.InternalAccumulator
 import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
+import org.apache.spark.internal.{config, Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.SchedulingMode._
@@ -1001,7 +1001,7 @@ private[spark] class TaskSetManager(
           logError(
             log"Task ${MDC(TASK_INDEX, info.index)}.${MDC(TASK_ATTEMPT_ID, info.attemptNumber)} " +
               log"in stage ${MDC(STAGE_ID, taskSet.stageId)}." +
-            log"${MDC(STAGE_ATTEMPT, taskSet.stageAttemptId)} (TID ${MDC(TASK_ID, tid)}) " +
+            log"${MDC(STAGE_ATTEMPT_ID, taskSet.stageAttemptId)} (TID ${MDC(TASK_ID, tid)}) " +
             log"can not write to output file: ${MDC(ERROR, ef.description)}; not retrying")
           emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), reason, null,
             accumUpdates, metricPeaks)

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -172,5 +173,21 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
       )
     )
     assertResult(Array("key", "A", "B"))(transposedDf.columns)
+  }
+
+  test("SPARK-50602: invalid index columns") {
+    val df = Seq(
+      ("A", 1, 2),
+      ("B", 3, 4),
+      (null, 5, 6)
+    ).toDF("id", "val1", "val2")
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.transpose($"id" + lit(1))
+      },
+      condition = "TRANSPOSE_INVALID_INDEX_COLUMN",
+      parameters = Map("reason" -> "Index column must be an atomic attribute")
+    )
   }
 }

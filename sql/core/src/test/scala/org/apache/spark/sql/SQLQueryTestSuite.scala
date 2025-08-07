@@ -132,7 +132,7 @@ import org.apache.spark.util.Utils
 // scalastyle:on line.size.limit
 @ExtendedSQLTest
 class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
-    with SQLQueryTestHelper {
+    with SQLQueryTestHelper with TPCDSSchema {
 
   import IntegratedUDFTestUtils._
 
@@ -156,6 +156,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     // SPARK-39564: don't print out serde to avoid introducing complicated and error-prone
     // regex magic.
     .set("spark.test.noSerdeInExplain", "true")
+    .set(SQLConf.SCHEMA_LEVEL_COLLATIONS_ENABLED, true)
 
   // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
   // here we need to ignore it.
@@ -165,13 +166,17 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected def ignoreList: Set[String] = Set(
     "ignored.sql" // Do NOT remove this one. It is here to test the ignore functionality.
   ) ++ otherIgnoreList
+  /** List of test cases that require TPCDS table schemas to be loaded. */
+  private def requireTPCDSCases: Seq[String] = Seq("pipe-operators.sql")
+  /** List of TPCDS table names and schemas to load from the [[TPCDSSchema]] base class. */
+  private val tpcDSTableNamesToSchemas: Map[String, String] = tableColumns
 
   // Create all the test cases.
   listTestCases.foreach(createScalaTestCase)
 
   protected def createScalaTestCase(testCase: TestCase): Unit = {
     if (ignoreList.exists(t =>
-        testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
+      testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }
     } else testCase match {
@@ -322,6 +327,15 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       setOperations.foreach(localSparkSession.sql)
     }
 
+    // Load TPCDS table schemas for the test case if required.
+    val lowercaseTestCase = testCase.name.toLowerCase(Locale.ROOT)
+    if (requireTPCDSCases.contains(lowercaseTestCase)) {
+      tpcDSTableNamesToSchemas.foreach { case (name: String, schema: String) =>
+        localSparkSession.sql(s"DROP TABLE IF EXISTS $name")
+        localSparkSession.sql(s"CREATE TABLE `$name` ($schema) USING parquet")
+      }
+    }
+
     // Run the SQL queries preparing them for comparison.
     val outputs: Seq[QueryTestOutput] = queries.map { sql =>
       testCase match {
@@ -348,6 +362,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       }
     }
 
+    // Drop TPCDS tables after the test case if required.
+    if (requireTPCDSCases.contains(lowercaseTestCase)) {
+      tpcDSTableNamesToSchemas.foreach { case (name: String, schema: String) =>
+        localSparkSession.sql(s"DROP TABLE IF EXISTS $name")
+      }
+    }
+
     if (regenerateGoldenFiles) {
       // Again, we are explicitly not using multi-line string due to stripMargin removing "|".
       val goldenOutput = {
@@ -357,7 +378,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       val resultFile = new File(testCase.resultFile)
       val parent = resultFile.getParentFile
       if (!parent.exists()) {
-        assert(parent.mkdirs(), "Could not create directory: " + parent)
+        assert(Utils.createDirectory(parent), "Could not create directory: " + parent)
       }
       stringToFile(resultFile, goldenOutput)
     }

@@ -44,7 +44,7 @@ Cluster administrators should use [Pod Security Policies](https://kubernetes.io/
 
 # Prerequisites
 
-* A running Kubernetes cluster at version >= 1.29 with access configured to it using
+* A running Kubernetes cluster at version >= 1.32 with access configured to it using
 [kubectl](https://kubernetes.io/docs/reference/kubectl/).  If you do not already have a working Kubernetes cluster,
 you may set up a test cluster on your local machine using
 [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
@@ -394,7 +394,7 @@ spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.
 spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.readOnly=false
 ```
 
-To enable shuffle data recovery feature via the built-in `KubernetesLocalDiskShuffleDataIO` plugin, we need to have the followings. You may want to enable `spark.kubernetes.driver.waitToReusePersistentVolumeClaim` additionally.
+To enable shuffle data recovery feature via the built-in `KubernetesLocalDiskShuffleDataIO` plugin, we need to have the following. You may want to enable `spark.kubernetes.driver.waitToReusePersistentVolumeClaim` additionally.
 
 ```
 spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.path=/data/spark-x/executor-x
@@ -643,7 +643,8 @@ See the [configuration page](configuration.html) for information on Spark config
     Container image to use for the Spark application.
     This is usually of the form <code>example.com/repo/spark:v1.0.0</code>.
     This configuration is required and must be provided by the user, unless explicit
-    images are provided for each different container type.
+    images are provided for each different container type. Note that <code>{{SPARK_VERSION}}</code> 
+    is the built-in variable that will be substituted with current Spark's version.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -651,7 +652,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.driver.container.image</code></td>
   <td><code>(value of spark.kubernetes.container.image)</code></td>
   <td>
-    Custom container image to use for the driver.
+    Custom container image to use for the driver. Note that <code>{{SPARK_VERSION}}</code> 
+    is the built-in variable that will be substituted with current Spark's version.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -659,7 +661,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.executor.container.image</code></td>
   <td><code>(value of spark.kubernetes.container.image)</code></td>
   <td>
-    Custom container image to use for executors.
+    Custom container image to use for executors. Note that <code>{{SPARK_VERSION}}</code> 
+    is the built-in variable that will be substituted with current Spark's version.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -682,7 +685,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.allocation.batch.size</code></td>
-  <td><code>5</code></td>
+  <td><code>10</code></td>
   <td>
     Number of pods to launch at once in each round of executor pod allocation.
   </td>
@@ -1470,7 +1473,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.executor.scheduler.name</code></td>
   <td>(none)</td>
   <td>
-	Specify the scheduler name for each executor pod.
+    Specify the scheduler name for each executor pod.
   </td>
   <td>3.0.0</td>
 </tr>
@@ -1493,7 +1496,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.configMap.maxSize</code></td>
-  <td><code>1572864</code></td>
+  <td><code>1048576</code></td>
   <td>
     Max size limit for a config map.
     This is configurable as per <a href="https://etcd.io/docs/latest/dev-guide/limit/">limit</a> on k8s server end.
@@ -1988,10 +1991,10 @@ Install Apache YuniKorn:
 ```bash
 helm repo add yunikorn https://apache.github.io/yunikorn-release
 helm repo update
-helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.6.0 --create-namespace --set embedAdmissionController=false
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.7.0 --create-namespace --set embedAdmissionController=false
 ```
 
-The above steps will install YuniKorn v1.6.0 on an existing Kubernetes cluster.
+The above steps will install YuniKorn v1.7.0 on an existing Kubernetes cluster.
 
 ##### Get started
 

@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkRuntimeException
-import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, NamedExpression, OuterReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project, Sort, Union}
 import org.apache.spark.sql.execution._
@@ -2722,7 +2722,7 @@ class SubquerySuite extends QueryTest
           |SELECT * FROM v1 WHERE kind = (SELECT kind FROM v1 WHERE kind = 'foo')
           |""".stripMargin)
       val df = sql("SELECT * FROM v1 JOIN v2 ON v1.id = v2.id")
-      val filter = df.queryExecution.optimizedPlan.collect {
+      val filter = df.queryExecution.optimizedPlan.collectFirst {
         case f: Filter => f
       }
       assert(filter.isEmpty,
@@ -2799,5 +2799,85 @@ class SubquerySuite extends QueryTest
       val df3 = sql(query3)
       checkAnswer(df3, Row(7))
     }
+  }
+
+  test("SPARK-50091: Handle aggregates in left-hand operand of IN-subquery") {
+    withView("v1", "v2") {
+      Seq((1, 2, 2), (1, 5, 3), (2, 0, 4), (3, 7, 7), (3, 8, 8))
+        .toDF("c1", "c2", "c3")
+        .createOrReplaceTempView("v1")
+      Seq((1, 2, 2), (1, 3, 3), (2, 2, 4), (3, 7, 7), (3, 1, 1))
+        .toDF("col1", "col2", "col3")
+        .createOrReplaceTempView("v2")
+
+      val df1 = sql("SELECT col1, SUM(col2) IN (SELECT c3 FROM v1) FROM v2 GROUP BY col1")
+      checkAnswer(df1,
+        Row(1, false) :: Row(2, true) :: Row(3, true) :: Nil)
+
+      val df2 = sql("""SELECT
+                      |  col1,
+                      |  SUM(col2) IN (SELECT c3 FROM v1) and SUM(col3) IN (SELECT c2 FROM v1) AS x
+                      |FROM v2 GROUP BY col1
+                      |ORDER BY col1""".stripMargin)
+      checkAnswer(df2,
+        Row(1, false) :: Row(2, false) :: Row(3, true) :: Nil)
+
+      val df3 = sql("""SELECT col1, (SUM(col2), SUM(col3)) IN (SELECT c3, c2 FROM v1) AS x
+                      |FROM v2
+                      |GROUP BY col1
+                      |ORDER BY col1""".stripMargin)
+      checkAnswer(df3,
+        Row(1, false) :: Row(2, false) :: Row(3, true) :: Nil)
+    }
+  }
+
+  test("SPARK-51738: IN subquery with struct type") {
+    checkAnswer(
+      sql("SELECT foo IN (SELECT struct(1 a)) FROM (SELECT struct(1 b) foo)"),
+      Row(true)
+    )
+
+    checkAnswer(
+      sql("""
+            |SELECT foo IN (SELECT struct(c, d) FROM r)
+            |FROM (SELECT struct(a, b) foo FROM l)
+            |""".stripMargin),
+      Row(false) :: Row(false) :: Row(false) :: Row(false) :: Row(false)
+        :: Row(true) :: Row(true) :: Row(true) :: Nil
+    )
+  }
+
+
+  test("SPARK-52896: Outer reference ExprId should match exposed attribute") {
+    val plan =
+      sql(
+        """
+          | SELECT col1
+          | FROM VALUES(1,2)
+          | GROUP BY col1
+          | HAVING MAX(col2) == (SELECT 1 WHERE MAX(col2) = 1)
+          |
+      """.stripMargin).queryExecution.analyzed
+
+    // Expected plan:
+    // Project
+    // +- Filter (scalar-subquery)
+    // :  +- Project
+    // :     +- Filter
+    // :        +- OneRowRelation
+    // +- Aggregate
+    //   +- LocalRelation
+
+    val havingNode = plan.asInstanceOf[Project].child.asInstanceOf[Filter]
+    val subquery =
+      havingNode.condition.asInstanceOf[EqualTo].right.asInstanceOf[SubqueryExpression]
+    val subqueryFilter = subquery.plan.asInstanceOf[Project].child.asInstanceOf[Filter]
+
+    val exposedAttribute = subquery.getOuterAttrs.head.asInstanceOf[NamedExpression]
+    val outerReferenceAttribute = subqueryFilter.condition.asInstanceOf[EqualTo].collectFirst {
+      case outerReference: OuterReference => outerReference.e
+    }.get
+
+    assert(exposedAttribute.exprId == outerReferenceAttribute.exprId)
   }
 }

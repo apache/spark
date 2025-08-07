@@ -43,35 +43,35 @@ spark = None
 
 def main(infile: IO, outfile: IO) -> None:
     global spark
-    check_python_version(infile)
-
-    # Enable Spark Connect Mode
-    os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
-
-    connect_url = os.environ["SPARK_CONNECT_LOCAL_URL"]
-    session_id = utf8_deserializer.loads(infile)
-
-    print(
-        "Streaming foreachBatch worker is starting with "
-        f"url {connect_url} and sessionId {session_id}."
-    )
-
-    # To attach to the existing SparkSession, we're setting the session_id in the URL.
-    connect_url = connect_url + ";session_id=" + session_id
-    spark_connect_session = SparkSession.builder.remote(connect_url).getOrCreate()
-    assert spark_connect_session.session_id == session_id
-    spark = spark_connect_session
 
     log_name = "Streaming ForeachBatch worker"
 
     def process(df_id, batch_id):  # type: ignore[no-untyped-def]
         global spark
-        print(f"{log_name} Started batch {batch_id} with DF id {df_id}")
+        print(f"{log_name} Started batch {batch_id} with DF id {df_id} and session id {session_id}")
         batch_df = spark_connect_session._create_remote_dataframe(df_id)
         func(batch_df, batch_id)
-        print(f"{log_name} Completed batch {batch_id} with DF id {df_id}")
+        print(
+            f"{log_name} Completed batch {batch_id} with DF id {df_id} and session id {session_id}"
+        )
 
     try:
+        check_python_version(infile)
+
+        # Enable Spark Connect Mode
+        os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
+
+        connect_url = os.environ["SPARK_CONNECT_LOCAL_URL"]
+        session_id = utf8_deserializer.loads(infile)
+
+        print(f"{log_name} is starting with " f"url {connect_url} and sessionId {session_id}.")
+
+        # To attach to the existing SparkSession, we're setting the session_id in the URL.
+        connect_url = connect_url + ";session_id=" + session_id
+        spark_connect_session = SparkSession.builder.remote(connect_url).getOrCreate()
+        assert spark_connect_session.session_id == session_id
+        spark = spark_connect_session
+
         func = worker.read_command(pickle_ser, infile)
         write_int(0, outfile)
         outfile.flush()
@@ -91,9 +91,11 @@ def main(infile: IO, outfile: IO) -> None:
 
 if __name__ == "__main__":
     # Read information about how to connect back to the JVM from the environment.
-    java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
-    auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
-    (sock_file, sock) = local_connect_and_auth(java_port, auth_secret)
+    conn_info = os.environ.get(
+        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
+    )
+    auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
+    (sock_file, sock) = local_connect_and_auth(conn_info, auth_secret)
     # There could be a long time between each micro batch.
     sock.settimeout(None)
     write_int(os.getpid(), sock_file)

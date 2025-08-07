@@ -71,6 +71,60 @@ create temporary view windowTestData as select * from values
   (3, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), null)
   AS testData(val, val_long, val_double, val_date, val_timestamp, cate);
 
+-- FROM operators: positive tests.
+----------------------------------
+
+-- FromClause alone.
+from t;
+
+-- Table alone.
+table t;
+
+-- Selecting from a constant.
+from t
+|> select 1 as x;
+
+-- Selecting using a table alias.
+from t as t_alias
+|> select t_alias.x;
+
+-- Selecting using a table alias.
+from t as t_alias
+|> select t_alias.x as tx, t_alias.y as ty
+|> where ty = 'def'
+|> select tx;
+
+-- Selecting from multiple relations.
+from t, other
+|> select t.x + other.a as z;
+
+-- Selecting from multiple relations with join.
+from t join other on (t.x = other.a)
+|> select t.x + other.a as z;
+
+-- Selecting from lateral view.
+from t lateral view explode(array(100, 101)) as ly
+|> select t.x + ly as z;
+
+-- Selecting struct fields.
+from st
+|> select col.i1;
+
+-- Selecting struct fields using a table alias.
+from st as st_alias
+|> select st_alias.col.i1;
+
+-- Selecting from a VALUES list.
+from values (0), (1) tab(col)
+|> select col as x;
+
+-- FROM operators: negative tests.
+----------------------------------
+
+-- It is not possible to use the FROM operator accepting an input relation.
+from t
+|> from t;
+
 -- SELECT operators: positive tests.
 ---------------------------------------
 
@@ -171,6 +225,15 @@ table t
 table t
 |> select y, length(y) + sum(x) as result;
 
+from t
+|> select sum(x);
+
+from t as t_alias
+|> select y, sum(x);
+
+from t as t_alias
+|> select y, sum(x) group by y;
+
 -- EXTEND operators: positive tests.
 ------------------------------------
 
@@ -240,6 +303,190 @@ table t
 -- EXTEND * is not supported.
 table t
 |> extend *;
+
+-- SET operators: positive tests.
+---------------------------------
+
+-- Setting with a constant.
+-- The indicated column is not the last column in the table, and the SET operator will replace it
+-- with the new value in its existing position.
+table t
+|> set x = 1;
+
+-- Setting with an attribute.
+table t
+|> set y = x;
+
+-- Setting with an expression.
+table t
+|> extend 1 as z
+|> set z = x + length(y);
+
+-- Setting two times.
+table t
+|> extend 1 as z
+|> extend 2 as zz
+|> set z = x + length(y), zz = x + 1;
+
+table other
+|> extend 3 as c
+|> set a = b, b = c;
+
+-- Setting two times with a lateral reference.
+table t
+|> extend 1 as z
+|> extend 2 as zz
+|> set z = x + length(y), zz = z + 1;
+
+-- Setting two times in sequence.
+table t
+|> extend 1 as z
+|> set z = x + length(y)
+|> set z = z + 1;
+
+-- SET assignments with duplicate keys. This is supported, and we can update the column as we go.
+table t
+|> extend 1 as z
+|> set z = x + length(y), z = z + 1;
+
+-- Setting with a struct field.
+select col from st
+|> extend 1 as z
+|> set z = col.i1;
+
+-- Setting with a subquery.
+table t
+|> set y = (select a from other where x = a limit 1);
+
+-- Setting with a backquoted column name with a dot inside.
+table t
+|> extend 1 as `x.y.z`
+|> set `x.y.z` = x + length(y);
+
+-- Window functions are allowed in the pipe operator SET list.
+table t
+|> extend 1 as z
+|> set z = first_value(x) over (partition by y);
+
+-- Any prior table aliases remain visible after a SET operator.
+values (0), (1) lhs(a)
+|> inner join values (1), (2) rhs(a) using (a)
+|> extend lhs.a + rhs.a as z1
+|> extend lhs.a - rhs.a as z2
+|> drop z1
+|> where z2 = 0
+|> order by lhs.a, rhs.a, z2
+|> set z2 = 4
+|> limit 2
+|> select lhs.a, rhs.a, z2;
+
+-- SET operators: negative tests.
+---------------------------------
+
+-- SET with a column name that does not exist in the input relation.
+table t
+|> set z = 1;
+
+-- SET with an alias.
+table t
+|> set x = 1 as z;
+
+-- Setting nested fields in structs is not supported.
+select col from st
+|> set col.i1 = 42;
+
+-- DROP operators: positive tests.
+------------------------------------
+
+-- Dropping a column.
+table t
+|> drop y;
+
+-- Dropping two times.
+select 1 as x, 2 as y, 3 as z
+|> drop z, y;
+
+-- Dropping two times in sequence.
+select 1 as x, 2 as y, 3 as z
+|> drop z
+|> drop y;
+
+-- Dropping all columns in the input relation.
+select x from t
+|> drop x;
+
+-- Dropping a backquoted column name with a dot inside.
+table t
+|> extend 1 as `x.y.z`
+|> drop `x.y.z`;
+
+-- DROP operators: negative tests.
+----------------------------------
+
+-- Dropping a column that is not present in the input relation.
+table t
+|> drop z;
+
+-- Attempting to drop a struct field.
+table st
+|> drop col.i1;
+
+table st
+|> drop `col.i1`;
+
+-- Duplicate fields in the drop list.
+select 1 as x, 2 as y, 3 as z
+|> drop z, y, z;
+
+-- AS operators: positive tests.
+--------------------------------
+
+-- Renaming a table.
+table t
+|> as u
+|> select u.x, u.y;
+
+-- Renaming an input relation that is not a table.
+select 1 as x, 2 as y
+|> as u
+|> select u.x, u.y;
+
+-- Renaming as a backquoted name including a period.
+table t
+|> as `u.v`
+|> select `u.v`.x, `u.v`.y;
+
+-- Renaming two times.
+table t
+|> as u
+|> as v
+|> select v.x, v.y;
+
+-- Filtering by referring to the table or table subquery alias.
+table t
+|> as u
+|> where u.x = 1;
+
+-- AS operators: negative tests.
+--------------------------------
+
+-- Multiple aliases are not supported.
+table t
+|> as u, v;
+
+-- Expressions are not supported.
+table t
+|> as 1 + 2;
+
+-- Renaming as an invalid name.
+table t
+|> as u-v;
+
+table t
+|> as u@v;
+
+table t
+|> as u#######v;
 
 -- WHERE operators: positive tests.
 -----------------------------------
@@ -314,6 +561,21 @@ select * from t where sum(x) over (partition by y) = 1;
 -- pipe operator, not from earlier ones.
 table t
 |> select x, length(y) as z
+|> where x + length(y) < 4;
+
+table t
+|> select x, length(y) as z
+|> limit 1000
+|> where x + length(y) < 4;
+
+table t
+|> select x, length(y) as z
+|> limit 1000 offset 1
+|> where x + length(y) < 4;
+
+table t
+|> select x, length(y) as z
+|> order by x, y
 |> where x + length(y) < 4;
 
 -- If the WHERE clause wants to filter rows produced by an aggregation, it is not valid to try to
@@ -617,9 +879,16 @@ values (0, 'abc') tab(x, y)
 |> union all table t;
 
 -- Union distinct with a VALUES list.
-values (0, 1) tab(x, y)
+-- The |> WHERE operator applies to the result of the |> UNION operator, not to the "table t" input.
+values (2, 'xyz') tab(x, y)
 |> union table t
 |> where x = 0;
+
+-- Union distinct with a VALUES list.
+-- The |> DROP operator applies to the result of the |> UNION operator, not to the "table t" input.
+values (2, 'xyz') tab(x, y)
+|> union table t
+|> drop x;
 
 -- Union all with a table subquery on both the source and target sides.
 (select * from t)
@@ -771,6 +1040,36 @@ select 1 as x, 2 as y
 -- Basic aggregation with group by ordinals.
 select 3 as x, 4 as y
 |> aggregate group by 1, 2;
+
+values (3, 4) as tab(x, y)
+|> aggregate sum(y) group by 1;
+
+values (3, 4), (5, 4) as tab(x, y)
+|> aggregate sum(y) group by 1;
+
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 1, 1;
+
+select 1 as `1`, 2 as `2`
+|> aggregate sum(`2`) group by `1`;
+
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2;
+
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 2;
+
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 3;
+
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 2, 3;
+
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by 1, 2, 3;
+
+select 3 as x, 4 as y, 5 as z
+|> aggregate sum(y) group by x, 2, 3;
 
 -- Basic table aggregation.
 table t
@@ -960,6 +1259,502 @@ table windowTestData
 |> select cate, val, first_value(cate) over w as first_val
 |> select cate, val, sum(val) over w as sum_val
    window w as (order by val);
+
+-- Exercise SQL compilation using a subset of TPC-DS table schemas.
+-------------------------------------------------------------------
+
+-- Q1
+with customer_total_return as
+(select
+    sr_customer_sk as ctr_customer_sk,
+    sr_store_sk as ctr_store_sk,
+    sum(sr_return_amt) as ctr_total_return
+  from store_returns, date_dim
+  where sr_returned_date_sk = d_date_sk and d_year = 2000
+  group by sr_customer_sk, sr_store_sk)
+select c_customer_id
+from customer_total_return ctr1, store, customer
+where ctr1.ctr_total_return >
+  (select avg(ctr_total_return) * 1.2
+  from customer_total_return ctr2
+  where ctr1.ctr_store_sk = ctr2.ctr_store_sk)
+  and s_store_sk = ctr1.ctr_store_sk
+  and s_state = 'tn'
+  and ctr1.ctr_customer_sk = c_customer_sk
+order by c_customer_id
+limit 100;
+
+with customer_total_return as
+  (from store_returns
+  |> join date_dim
+  |> where sr_returned_date_sk = d_date_sk and d_year = 2000
+  |> aggregate sum(sr_return_amt) as ctr_total_return
+       group by sr_customer_sk as ctr_customer_sk, sr_store_sk as ctr_store_sk)
+from customer_total_return ctr1
+|> join store
+|> join customer
+|> where ctr1.ctr_total_return >
+     (table customer_total_return
+      |> as ctr2
+      |> where ctr1.ctr_store_sk = ctr2.ctr_store_sk
+      |> aggregate avg(ctr_total_return) * 1.2)
+     and s_store_sk = ctr1.ctr_store_sk
+     and s_state = 'tn'
+     and ctr1.ctr_customer_sk = c_customer_sk
+|> order by c_customer_id
+|> limit 100
+|> select c_customer_id;
+
+-- Q2
+with wscs as
+( select
+    sold_date_sk,
+    sales_price
+  from (select
+    ws_sold_date_sk sold_date_sk,
+    ws_ext_sales_price sales_price
+  from web_sales) x
+  union all
+  (select
+    cs_sold_date_sk sold_date_sk,
+    cs_ext_sales_price sales_price
+  from catalog_sales)),
+    wswscs as
+  ( select
+    d_week_seq,
+    sum(case when (d_day_name = 'sunday')
+      then sales_price
+        else null end)
+    sun_sales,
+    sum(case when (d_day_name = 'monday')
+      then sales_price
+        else null end)
+    mon_sales,
+    sum(case when (d_day_name = 'tuesday')
+      then sales_price
+        else null end)
+    tue_sales,
+    sum(case when (d_day_name = 'wednesday')
+      then sales_price
+        else null end)
+    wed_sales,
+    sum(case when (d_day_name = 'thursday')
+      then sales_price
+        else null end)
+    thu_sales,
+    sum(case when (d_day_name = 'friday')
+      then sales_price
+        else null end)
+    fri_sales,
+    sum(case when (d_day_name = 'saturday')
+      then sales_price
+        else null end)
+    sat_sales
+  from wscs, date_dim
+  where d_date_sk = sold_date_sk
+  group by d_week_seq)
+select
+  d_week_seq1,
+  round(sun_sales1 / sun_sales2, 2),
+  round(mon_sales1 / mon_sales2, 2),
+  round(tue_sales1 / tue_sales2, 2),
+  round(wed_sales1 / wed_sales2, 2),
+  round(thu_sales1 / thu_sales2, 2),
+  round(fri_sales1 / fri_sales2, 2),
+  round(sat_sales1 / sat_sales2, 2)
+from
+  (select
+    wswscs.d_week_seq d_week_seq1,
+    sun_sales sun_sales1,
+    mon_sales mon_sales1,
+    tue_sales tue_sales1,
+    wed_sales wed_sales1,
+    thu_sales thu_sales1,
+    fri_sales fri_sales1,
+    sat_sales sat_sales1
+  from wswscs, date_dim
+  where date_dim.d_week_seq = wswscs.d_week_seq and d_year = 2001) y,
+  (select
+    wswscs.d_week_seq d_week_seq2,
+    sun_sales sun_sales2,
+    mon_sales mon_sales2,
+    tue_sales tue_sales2,
+    wed_sales wed_sales2,
+    thu_sales thu_sales2,
+    fri_sales fri_sales2,
+    sat_sales sat_sales2
+  from wswscs, date_dim
+  where date_dim.d_week_seq = wswscs.d_week_seq and d_year = 2001 + 1) z
+where d_week_seq1 = d_week_seq2 - 53
+order by d_week_seq1;
+
+with wscs as
+  (table web_sales
+  |> select
+       ws_sold_date_sk sold_date_sk,
+       ws_ext_sales_price sales_price
+  |> as x
+  |> union all (
+       table catalog_sales
+       |> select
+            cs_sold_date_sk sold_date_sk,
+            cs_ext_sales_price sales_price)
+  |> select
+       sold_date_sk,
+       sales_price),
+wswscs as
+  (table wscs
+  |> join date_dim
+  |> where d_date_sk = sold_date_sk
+  |> aggregate
+      sum(case when (d_day_name = 'sunday')
+        then sales_price
+          else null end)
+      sun_sales,
+      sum(case when (d_day_name = 'monday')
+        then sales_price
+          else null end)
+      mon_sales,
+      sum(case when (d_day_name = 'tuesday')
+        then sales_price
+          else null end)
+      tue_sales,
+      sum(case when (d_day_name = 'wednesday')
+        then sales_price
+          else null end)
+      wed_sales,
+      sum(case when (d_day_name = 'thursday')
+        then sales_price
+          else null end)
+      thu_sales,
+      sum(case when (d_day_name = 'friday')
+        then sales_price
+          else null end)
+      fri_sales,
+      sum(case when (d_day_name = 'saturday')
+        then sales_price
+          else null end)
+      sat_sales
+      group by d_week_seq)
+table wswscs
+|> join date_dim
+|> where date_dim.d_week_seq = wswscs.d_week_seq AND d_year = 2001
+|> select
+     wswscs.d_week_seq d_week_seq1,
+     sun_sales sun_sales1,
+     mon_sales mon_sales1,
+     tue_sales tue_sales1,
+     wed_sales wed_sales1,
+     thu_sales thu_sales1,
+     fri_sales fri_sales1,
+     sat_sales sat_sales1
+|> as y
+|> join (
+     table wswscs
+     |> join date_dim
+     |> where date_dim.d_week_seq = wswscs.d_week_seq AND d_year = 2001 + 1
+     |> select
+          wswscs.d_week_seq d_week_seq2,
+          sun_sales sun_sales2,
+          mon_sales mon_sales2,
+          tue_sales tue_sales2,
+          wed_sales wed_sales2,
+          thu_sales thu_sales2,
+          fri_sales fri_sales2,
+          sat_sales sat_sales2
+     |> as z)
+|> where d_week_seq1 = d_week_seq2 - 53
+|> order by d_week_seq1
+|> select
+     d_week_seq1,
+     round(sun_sales1 / sun_sales2, 2),
+     round(mon_sales1 / mon_sales2, 2),
+     round(tue_sales1 / tue_sales2, 2),
+     round(wed_sales1 / wed_sales2, 2),
+     round(thu_sales1 / thu_sales2, 2),
+     round(fri_sales1 / fri_sales2, 2),
+     round(sat_sales1 / sat_sales2, 2);
+
+-- Q3
+select
+  dt.d_year,
+  item.i_brand_id brand_id,
+  item.i_brand brand,
+  sum(ss_ext_sales_price) sum_agg
+from date_dim dt, store_sales, item
+where dt.d_date_sk = store_sales.ss_sold_date_sk
+  and store_sales.ss_item_sk = item.i_item_sk
+  and item.i_manufact_id = 128
+  and dt.d_moy = 11
+group by dt.d_year, item.i_brand, item.i_brand_id
+order by dt.d_year, sum_agg desc, brand_id
+limit 100;
+
+table date_dim
+|> as dt
+|> join store_sales
+|> join item
+|> where dt.d_date_sk = store_sales.ss_sold_date_sk
+     and store_sales.ss_item_sk = item.i_item_sk
+     and item.i_manufact_id = 128
+     and dt.d_moy = 11
+|> aggregate sum(ss_ext_sales_price) sum_agg
+     group by dt.d_year d_year, item.i_brand_id brand_id, item.i_brand brand
+|> order by d_year, sum_agg desc, brand_id
+|> limit 100;
+
+-- Q12
+select
+  i_item_desc,
+  i_category,
+  i_class,
+  i_current_price,
+  sum(ws_ext_sales_price) as itemrevenue,
+  sum(ws_ext_sales_price) * 100 / sum(sum(ws_ext_sales_price))
+  over
+  (partition by i_class) as revenueratio
+from
+  web_sales, item, date_dim
+where
+  ws_item_sk = i_item_sk
+    and i_category in ('sports', 'books', 'home')
+    and ws_sold_date_sk = d_date_sk
+    and d_date between cast('1999-02-22' as date)
+  and (cast('1999-02-22' as date) + interval 30 days)
+group by
+  i_item_id, i_item_desc, i_category, i_class, i_current_price
+order by
+  i_category, i_class, i_item_id, i_item_desc, revenueratio
+limit 100;
+
+table web_sales
+|> join item
+|> join date_dim
+|> where ws_item_sk = i_item_sk
+     and i_category in ('sports', 'books', 'home')
+     and ws_sold_date_sk = d_date_sk
+     and d_date between cast('1999-02-22' as date)
+     and (cast('1999-02-22' as date) + interval 30 days)
+|> aggregate sum(ws_ext_sales_price) AS itemrevenue
+     group by i_item_id, i_item_desc, i_category, i_class, i_current_price
+|> extend
+     itemrevenue * 100 / sum(itemrevenue)
+       over (partition by i_class) as revenueratio
+|> order by i_category, i_class, i_item_id, i_item_desc, revenueratio
+|> select i_item_desc, i_category, i_class, i_current_price, itemrevenue, revenueratio
+|> limit 100;
+
+-- Q44
+select
+  asceding.rnk,
+  i1.i_product_name best_performing,
+  i2.i_product_name worst_performing
+from (select *
+from (select
+  item_sk,
+  rank()
+  over (
+    order by rank_col asc) rnk
+from (select
+  ss_item_sk item_sk,
+  avg(ss_net_profit) rank_col
+from store_sales ss1
+where ss_store_sk = 4
+group by ss_item_sk
+having avg(ss_net_profit) > 0.9 * (select avg(ss_net_profit) rank_col
+from store_sales
+where ss_store_sk = 4
+  and ss_addr_sk is null
+group by ss_store_sk)) v1) v11
+where rnk < 11) asceding,
+  (select *
+  from (select
+    item_sk,
+    rank()
+    over (
+      order by rank_col desc) rnk
+  from (select
+    ss_item_sk item_sk,
+    avg(ss_net_profit) rank_col
+  from store_sales ss1
+  where ss_store_sk = 4
+  group by ss_item_sk
+  having avg(ss_net_profit) > 0.9 * (select avg(ss_net_profit) rank_col
+  from store_sales
+  where ss_store_sk = 4
+    and ss_addr_sk is null
+  group by ss_store_sk)) v2) v21
+  where rnk < 11) descending,
+  item i1, item i2
+where asceding.rnk = descending.rnk
+  and i1.i_item_sk = asceding.item_sk
+  and i2.i_item_sk = descending.item_sk
+order by asceding.rnk
+limit 100;
+
+from store_sales ss1
+|> where ss_store_sk = 4
+|> aggregate avg(ss_net_profit) rank_col
+     group by ss_item_sk as item_sk
+|> where rank_col > 0.9 * (
+     from store_sales
+     |> where ss_store_sk = 4
+          and ss_addr_sk is null
+     |> aggregate avg(ss_net_profit) rank_col
+          group by ss_store_sk
+     |> select rank_col)
+|> as v1
+|> select
+     item_sk,
+     rank() over (
+       order by rank_col asc) rnk
+|> as v11
+|> where rnk < 11
+|> as asceding
+|> join (
+     from store_sales ss1
+     |> where ss_store_sk = 4
+     |> aggregate avg(ss_net_profit) rank_col
+          group by ss_item_sk as item_sk
+     |> where rank_col > 0.9 * (
+          table store_sales
+          |> where ss_store_sk = 4
+               and ss_addr_sk is null
+          |> aggregate avg(ss_net_profit) rank_col
+               group by ss_store_sk
+          |> select rank_col)
+     |> as v2
+     |> select
+          item_sk,
+          rank() over (
+            order by rank_col asc) rnk
+     |> as v21
+     |> where rnk < 11) descending
+|> join item i1
+|> join item i2
+|> where asceding.rnk = descending.rnk
+     and i1.i_item_sk = asceding.item_sk
+     and i2.i_item_sk = descending.item_sk
+|> order by asceding.rnk
+|> select
+     asceding.rnk,
+     i1.i_product_name best_performing,
+     i2.i_product_name worst_performing;
+
+-- Q51
+with web_v1 as (
+  select
+    ws_item_sk item_sk,
+    d_date,
+    sum(sum(ws_sales_price))
+    over (partition by ws_item_sk
+      order by d_date
+      rows between unbounded preceding and current row) cume_sales
+  from web_sales, date_dim
+  where ws_sold_date_sk = d_date_sk
+    and d_month_seq between 1200 and 1200 + 11
+    and ws_item_sk is not null
+  group by ws_item_sk, d_date),
+    store_v1 as (
+    select
+      ss_item_sk item_sk,
+      d_date,
+      sum(sum(ss_sales_price))
+      over (partition by ss_item_sk
+        order by d_date
+        rows between unbounded preceding and current row) cume_sales
+    from store_sales, date_dim
+    where ss_sold_date_sk = d_date_sk
+      and d_month_seq between 1200 and 1200 + 11
+      and ss_item_sk is not null
+    group by ss_item_sk, d_date)
+select *
+from (select
+  item_sk,
+  d_date,
+  web_sales,
+  store_sales,
+  max(web_sales)
+  over (partition by item_sk
+    order by d_date
+    rows between unbounded preceding and current row) web_cumulative,
+  max(store_sales)
+  over (partition by item_sk
+    order by d_date
+    rows between unbounded preceding and current row) store_cumulative
+from (select
+  case when web.item_sk is not null
+    then web.item_sk
+  else store.item_sk end item_sk,
+  case when web.d_date is not null
+    then web.d_date
+  else store.d_date end d_date,
+  web.cume_sales web_sales,
+  store.cume_sales store_sales
+from web_v1 web full outer join store_v1 store on (web.item_sk = store.item_sk
+  and web.d_date = store.d_date)
+     ) x) y
+where web_cumulative > store_cumulative
+order by item_sk, d_date
+limit 100;
+
+with web_v1 as (
+  table web_sales
+  |> join date_dim
+  |> where ws_sold_date_sk = d_date_sk
+       and d_month_seq between 1200 and 1200 + 11
+       and ws_item_sk is not null
+  |> aggregate sum(ws_sales_price) as sum_ws_sales_price
+       group by ws_item_sk as item_sk, d_date
+  |> extend sum(sum_ws_sales_price)
+       over (partition by item_sk
+         order by d_date
+         rows between unbounded preceding and current row)
+       as cume_sales),
+store_v1 as (
+  table store_sales
+  |> join date_dim
+  |> where ss_sold_date_sk = d_date_sk
+       and d_month_seq between 1200 and 1200 + 11
+       and ss_item_sk is not null
+  |> aggregate sum(ss_sales_price) as sum_ss_sales_price
+       group by ss_item_sk as item_sk, d_date
+  |> extend sum(sum_ss_sales_price)
+       over (partition by item_sk
+           order by d_date
+           rows between unbounded preceding and current row)
+       as cume_sales)
+table web_v1
+|> as web
+|> full outer join store_v1 store
+     on (web.item_sk = store.item_sk and web.d_date = store.d_date)
+|> select
+     case when web.item_sk is not null
+       then web.item_sk
+       else store.item_sk end item_sk,
+     case when web.d_date is not null
+       then web.d_date
+       else store.d_date end d_date,
+     web.cume_sales web_sales,
+     store.cume_sales store_sales
+|> as x
+|> select
+     item_sk,
+     d_date,
+     web_sales,
+     store_sales,
+     max(web_sales)
+       over (partition by item_sk
+         order by d_date
+         rows between unbounded preceding and current row) web_cumulative,
+     max(store_sales)
+       over (partition by item_sk
+         order by d_date
+         rows between unbounded preceding and current row) store_cumulative
+|> as y
+|> where web_cumulative > store_cumulative
+|> order by item_sk, d_date
+|> limit 100;
 
 -- Cleanup.
 -----------

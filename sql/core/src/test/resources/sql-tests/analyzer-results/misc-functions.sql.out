@@ -50,7 +50,7 @@ Project [typeof(array(1, 2)) AS typeof(array(1, 2))#x, typeof(map(1, 2)) AS type
 -- !query
 SELECT assert_true(true), assert_true(boolean(1))
 -- !query analysis
-Project [assert_true(true, 'true' is not true!) AS assert_true(true, 'true' is not true!)#x, assert_true(cast(1 as boolean), 'cast(1 as boolean)' is not true!) AS assert_true(1, 'cast(1 as boolean)' is not true!)#x]
+Project [assert_true(true, 'true' is not true!) AS assert_true(true, 'true' is not true!)#x, assert_true(cast(1 as boolean), '1' is not true!) AS assert_true(1, '1' is not true!)#x]
 +- OneRowRelation
 
 
@@ -64,21 +64,21 @@ Project [assert_true(false, 'false' is not true!) AS assert_true(false, 'false' 
 -- !query
 SELECT assert_true(boolean(0))
 -- !query analysis
-Project [assert_true(cast(0 as boolean), 'cast(0 as boolean)' is not true!) AS assert_true(0, 'cast(0 as boolean)' is not true!)#x]
+Project [assert_true(cast(0 as boolean), '0' is not true!) AS assert_true(0, '0' is not true!)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT assert_true(null)
 -- !query analysis
-Project [assert_true(null, 'null' is not true!) AS assert_true(NULL, 'null' is not true!)#x]
+Project [assert_true(null, 'NULL' is not true!) AS assert_true(NULL, 'NULL' is not true!)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT assert_true(boolean(null))
 -- !query analysis
-Project [assert_true(cast(null as boolean), 'cast(null as boolean)' is not true!) AS assert_true(NULL, 'cast(null as boolean)' is not true!)#x]
+Project [assert_true(cast(null as boolean), 'NULL' is not true!) AS assert_true(NULL, 'NULL' is not true!)#x]
 +- OneRowRelation
 
 
@@ -226,3 +226,10 @@ Project [raise_error(_LEGACY_ERROR_USER_RAISED_EXCEPTION, map(errorMessage, hell
 SET spark.sql.legacy.raiseErrorWithoutErrorClass=false
 -- !query analysis
 SetCommand (spark.sql.legacy.raiseErrorWithoutErrorClass,Some(false))
+
+
+-- !query
+SELECT assert_true(col1 <= col2) FROM VALUES ('2025-03-01', '2025-03-10')
+-- !query analysis
+Project [assert_true((col1#x <= col2#x), '(col1 <= col2)' is not true!) AS assert_true((col1 <= col2), '(col1 <= col2)' is not true!)#x]
++- LocalRelation [col1#x, col2#x]

@@ -25,7 +25,7 @@ import org.dmg.pmml.regression.{RegressionModel => PMMLRegressionModel}
 
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.TestingUtils._
@@ -1165,7 +1165,7 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
       assert(fields(0).getOpType() == OpType.CONTINUOUS)
       val pmmlRegressionModel = pmml.getModels().get(0).asInstanceOf[PMMLRegressionModel]
       val pmmlPredictors = pmmlRegressionModel.getRegressionTables.get(0).getNumericPredictors
-      val pmmlWeights = pmmlPredictors.asScala.map(_.getCoefficient()).toList
+      val pmmlWeights = pmmlPredictors.asScala.map(_.getCoefficient().doubleValue()).toList
       assert(pmmlWeights(0) ~== model.coefficients(0) relTol 1E-3)
       assert(pmmlWeights(1) ~== model.coefficients(1) relTol 1E-3)
     }
@@ -1373,6 +1373,58 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
     val model2 = trainer2.fit(datasetWithOutlier)
     assert(model1.coefficients ~== model2.coefficients relTol 1E-3)
     assert(model1.intercept ~== model2.intercept relTol 1E-3)
+  }
+
+  test("model size estimation: dense linear regression") {
+    val rng = new Random(1)
+
+    Seq(10, 100, 1000, 10000, 100000).foreach { n =>
+      val df = Seq(
+        (Vectors.dense(Array.fill(n)(rng.nextDouble())), 0.0),
+        (Vectors.dense(Array.fill(n)(rng.nextDouble())), 1.0)
+      ).toDF("features", "label")
+
+      val lir = new LinearRegression().setMaxIter(1)
+      val size1 = lir.estimateModelSize(df)
+      val model = lir.fit(df)
+      assert(model.coefficients.isInstanceOf[DenseVector])
+      val size2 = model.estimatedSize
+
+      // the model is dense, the estimation should be relatively accurate
+      //      (n, size1, size2)
+      //      (10,5028,5028) <- when the model is small, model.params matters
+      //      (100,5748,5748)
+      //      (1000,12948,12948)
+      //      (10000,84948,84948)
+      //      (100000,804948,804948)
+      val rel = (size1 - size2).toDouble / size2
+      assert(math.abs(rel) < 0.05, (n, size1, size2))
+    }
+  }
+
+  test("model size estimation: sparse linear regression") {
+    val rng = new Random(1)
+
+    Seq(100, 1000, 10000, 100000).foreach { n =>
+      val df = Seq(
+        (Vectors.sparse(n, Array.range(0, 10), Array.fill(10)(rng.nextDouble())), 0.0),
+        (Vectors.sparse(n, Array.range(0, 10), Array.fill(10)(rng.nextDouble())), 1.0)
+      ).toDF("features", "label")
+
+      val lir = new LinearRegression().setMaxIter(1).setRegParam(10.0)
+      val size1 = lir.estimateModelSize(df)
+      val model = lir.fit(df)
+      assert(model.coefficients.isInstanceOf[SparseVector])
+      val size2 = model.estimatedSize
+
+      // the model is sparse, the estimated size is likely larger
+      //      (n, size1, size2)
+      //      (100,5748,5084)
+      //      (1000,12948,5084)
+      //      (10000,84948,5084)
+      //      (100000,804948,5084)
+      assert(size1 > size2, (n, size1, size2))
+    }
   }
 }
 

@@ -943,6 +943,7 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'hello'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -989,6 +990,7 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"INT\"",
     "targetType" : "\"SMALLINT\"",
     "value" : "100000"
@@ -1102,6 +1104,7 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"DOUBLE\"",
     "targetType" : "\"INT\"",
     "value" : "1.0E10D"
@@ -1168,6 +1171,7 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'hello'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""

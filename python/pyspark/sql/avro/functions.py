@@ -102,7 +102,7 @@ def from_avro(
 
     sc = get_active_spark_context()
     try:
-        jc = cast(JVMView, sc._jvm).org.apache.spark.sql.avro.functions.from_avro(
+        jc = getattr(cast(JVMView, sc._jvm), "org.apache.spark.sql.avro.functions").from_avro(
             _to_java_column(data), jsonFormatSchema, options or {}
         )
     except TypeError as e:
@@ -168,11 +168,11 @@ def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
     sc = get_active_spark_context()
     try:
         if jsonFormatSchema == "":
-            jc = cast(JVMView, sc._jvm).org.apache.spark.sql.avro.functions.to_avro(
+            jc = getattr(cast(JVMView, sc._jvm), "org.apache.spark.sql.avro.functions").to_avro(
                 _to_java_column(data)
             )
         else:
-            jc = cast(JVMView, sc._jvm).org.apache.spark.sql.avro.functions.to_avro(
+            jc = getattr(cast(JVMView, sc._jvm), "org.apache.spark.sql.avro.functions").to_avro(
                 _to_java_column(data), jsonFormatSchema
             )
     except TypeError as e:
@@ -185,7 +185,7 @@ def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
 def _test() -> None:
     import os
     import sys
-    from pyspark.testing.utils import search_jar
+    from pyspark.testing.sqlutils import search_jar
 
     avro_jar = search_jar("connector/avro", "spark-avro", "spark-avro")
     if avro_jar is None:

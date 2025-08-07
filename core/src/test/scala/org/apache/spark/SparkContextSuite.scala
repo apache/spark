@@ -19,16 +19,16 @@ package org.apache.spark
 
 import java.io.File
 import java.net.{MalformedURLException, URI}
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
 
 import scala.concurrent.duration._
 import scala.io.Source
 
-import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
+import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.apache.logging.log4j.{Level, LogManager}
@@ -119,8 +119,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       val absolutePath2 = file2.getAbsolutePath
 
       try {
-        Files.asCharSink(file1, StandardCharsets.UTF_8).write("somewords1")
-        Files.asCharSink(file2, StandardCharsets.UTF_8).write("somewords2")
+        Files.writeString(file1.toPath, "somewords1")
+        Files.writeString(file2.toPath, "somewords2")
         val length1 = file1.length()
         val length2 = file2.length()
 
@@ -178,10 +178,10 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         s"${jarFile.getParent}/../${jarFile.getParentFile.getName}/${jarFile.getName}#zoo"
 
       try {
-        Files.asCharSink(file1, StandardCharsets.UTF_8).write("somewords1")
-        Files.asCharSink(file2, StandardCharsets.UTF_8).write("somewords22")
-        Files.asCharSink(file3, StandardCharsets.UTF_8).write("somewords333")
-        Files.asCharSink(file4, StandardCharsets.UTF_8).write("somewords4444")
+        Files.writeString(file1.toPath, "somewords1")
+        Files.writeString(file2.toPath, "somewords22")
+        Files.writeString(file3.toPath, "somewords333")
+        Files.writeString(file4.toPath, "somewords4444")
         val length1 = file1.length()
         val length2 = file2.length()
         val length3 = file1.length()
@@ -243,10 +243,11 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test("add and list jar files") {
-    val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    val testJar = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    assume(testJar != null)
     try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-      sc.addJar(jarPath.toString)
+      sc.addJar(testJar.toString)
       assert(sc.listJars().count(_.contains("TestUDTF.jar")) == 1)
     } finally {
       sc.stop()
@@ -373,8 +374,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       assert(subdir2.mkdir())
       val file1 = new File(subdir1, "file")
       val file2 = new File(subdir2, "file")
-      Files.asCharSink(file1, StandardCharsets.UTF_8).write("old")
-      Files.asCharSink(file2, StandardCharsets.UTF_8).write("new")
+      Files.writeString(file1.toPath, "old")
+      Files.writeString(file2.toPath, "new")
       sc = new SparkContext("local-cluster[1,1,1024]", "test")
       sc.addFile(file1.getAbsolutePath)
       def getAddedFileContents(): String = {
@@ -395,13 +396,15 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     schedulingMode <- Seq("local-mode", "non-local-mode");
     method <- Seq("addJar", "addFile")
   ) {
-    val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar").toString
     val master = schedulingMode match {
       case "local-mode" => "local"
       case "non-local-mode" => "local-cluster[1,1,1024]"
     }
     test(s"$method can be called twice with same file in $schedulingMode (SPARK-16787)") {
+      val testJar = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+      assume(testJar != null)
       sc = new SparkContext(master, "test")
+      val jarPath = testJar.toString
       method match {
         case "addJar" =>
           sc.addJar(jarPath)
@@ -451,7 +454,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   test("SPARK-22585 addJar argument without scheme is interpreted literally without url decoding") {
     withTempDir { dir =>
       val tmpDir = new File(dir, "host%3A443")
-      tmpDir.mkdirs()
+      Utils.createDirectory(tmpDir)
       val tmpJar = File.createTempFile("t%2F", ".jar", tmpDir)
 
       sc = new SparkContext("local", "test")
@@ -503,15 +506,12 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
         try {
           // Create 5 text files.
-          Files.asCharSink(file1, StandardCharsets.UTF_8)
-            .write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1")
-          Files.asCharSink(file2, StandardCharsets.UTF_8)
-            .write("someline1 in file2\nsomeline2 in file2")
-          Files.asCharSink(file3, StandardCharsets.UTF_8).write("someline1 in file3")
-          Files.asCharSink(file4, StandardCharsets.UTF_8)
-            .write("someline1 in file4\nsomeline2 in file4")
-          Files.asCharSink(file5, StandardCharsets.UTF_8)
-            .write("someline1 in file2\nsomeline2 in file5")
+          Files.writeString(file1.toPath,
+            "someline1 in file1\nsomeline2 in file1\nsomeline3 in file1")
+          Files.writeString(file2.toPath, "someline1 in file2\nsomeline2 in file2")
+          Files.writeString(file3.toPath, "someline1 in file3")
+          Files.writeString(file4.toPath, "someline1 in file4\nsomeline2 in file4")
+          Files.writeString(file5.toPath, "someline1 in file2\nsomeline2 in file5")
 
           sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
 
@@ -776,7 +776,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     fs.initialize(new URI("file:///"), new Configuration())
     val file = File.createTempFile("SPARK19446", "temp")
     file.deleteOnExit()
-    Files.write(Array.ofDim[Byte](1000), file)
+    Files.write(file.toPath, Array.ofDim[Byte](1000))
     val path = new Path("file:///" + file.getCanonicalPath)
     val stream = fs.open(path)
     val exc = intercept[RuntimeException] {
@@ -1271,6 +1271,13 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test("SPARK-35383: Fill missing S3A magic committer configs if needed") {
+    Seq(
+      "org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter",
+      "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol"
+    ).foreach { className =>
+      assert(!Utils.classIsLoadable(className))
+    }
+
     val c1 = new SparkConf().setAppName("s3a-test").setMaster("local")
     sc = new SparkContext(c1)
     assert(!sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
@@ -1283,18 +1290,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     resetSparkContext()
     val c3 = c1.clone.set("spark.hadoop.fs.s3a.bucket.mybucket.committer.magic.enabled", "true")
     sc = new SparkContext(c3)
-    Seq(
-      "spark.hadoop.fs.s3a.committer.magic.enabled" -> "true",
-      "spark.hadoop.fs.s3a.committer.name" -> "magic",
-      "spark.hadoop.mapreduce.outputcommitter.factory.scheme.s3a" ->
-        "org.apache.hadoop.fs.s3a.commit.S3ACommitterFactory",
-      "spark.sql.parquet.output.committer.class" ->
-        "org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter",
-      "spark.sql.sources.commitProtocolClass" ->
-        "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol"
-    ).foreach { case (k, v) =>
-      assert(v == sc.getConf.get(k))
-    }
+    assert(!sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
 
     // Respect a user configuration
     resetSparkContext()
@@ -1460,6 +1456,15 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
     sc.stop()
   }
+
+  test("SPARK-51095: Test caller context initialization") {
+    val conf = new SparkConf().setAppName("test").setMaster("local")
+    sc = new SparkContext(conf)
+    val hadoopCallerContext = HadoopCallerContext.getCurrent()
+    assert(hadoopCallerContext.getContext().startsWith("SPARK_DRIVER"))
+    sc.stop()
+  }
+
 }
 
 object SparkContextSuite {

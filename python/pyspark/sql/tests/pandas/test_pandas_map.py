@@ -24,6 +24,8 @@ from typing import cast
 from pyspark.sql import Row
 from pyspark.sql.functions import col, encode, lit
 from pyspark.errors import PythonException
+from pyspark.sql.session import SparkSession
+from pyspark.sql.types import StructType
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -42,6 +44,8 @@ if have_pandas:
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
 class MapInPandasTestsMixin:
+    spark: SparkSession
+
     @staticmethod
     def identity_dataframes_iter(*columns: str):
         def func(iterator):
@@ -127,6 +131,27 @@ class MapInPandasTestsMixin:
         actual = df.mapInPandas(func, df.schema).collect()
         expected = df.collect()
         self.assertEqual(actual, expected)
+
+    def test_not_null(self):
+        def func(iterator):
+            for _ in iterator:
+                yield pd.DataFrame({"a": [1, 2]})
+
+        schema = "a long not null"
+        df = self.spark.range(1).mapInPandas(func, schema)
+        self.assertEqual(df.schema, StructType.fromDDL(schema))
+        self.assertEqual(df.collect(), [Row(1), Row(2)])
+
+    def test_violate_not_null(self):
+        def func(iterator):
+            for _ in iterator:
+                yield pd.DataFrame({"a": [1, None]})
+
+        schema = "a long not null"
+        df = self.spark.range(1).mapInPandas(func, schema)
+        self.assertEqual(df.schema, StructType.fromDDL(schema))
+        with self.assertRaisesRegex(Exception, "is null"):
+            df.collect()
 
     def test_different_output_length(self):
         def func(iterator):
@@ -251,16 +276,17 @@ class MapInPandasTestsMixin:
             self.check_dataframes_with_incompatible_types()
 
     def check_dataframes_with_incompatible_types(self):
-        def func(iterator):
-            for pdf in iterator:
-                yield pdf.assign(id=pdf["id"].apply(str))
-
         for safely in [True, False]:
             with self.subTest(convertToArrowArraySafely=safely), self.sql_conf(
                 {"spark.sql.execution.pandas.convertToArrowArraySafely": safely}
             ):
                 # sometimes we see ValueErrors
                 with self.subTest(convert="string to double"):
+
+                    def func(iterator):
+                        for pdf in iterator:
+                            yield pdf.assign(id="test_string")
+
                     expected = (
                         r"ValueError: Exception thrown when converting pandas.Series "
                         r"\(object\) with name 'id' to Arrow Array \(double\)."
@@ -279,18 +305,31 @@ class MapInPandasTestsMixin:
                             .collect()
                         )
 
-                # sometimes we see TypeErrors
-                with self.subTest(convert="double to string"):
-                    with self.assertRaisesRegex(
-                        PythonException,
-                        r"TypeError: Exception thrown when converting pandas.Series "
-                        r"\(float64\) with name 'id' to Arrow Array \(string\).\n",
-                    ):
-                        (
-                            self.spark.range(10, numPartitions=3)
-                            .select(col("id").cast("double"))
-                            .mapInPandas(self.identity_dataframes_iter("id"), "id string")
-                            .collect()
+                with self.subTest(convert="float to int precision loss"):
+
+                    def func(iterator):
+                        for pdf in iterator:
+                            yield pdf.assign(id=pdf["id"] + 0.1)
+
+                    df = (
+                        self.spark.range(10, numPartitions=3)
+                        .select(col("id").cast("double"))
+                        .mapInPandas(func, "id int")
+                    )
+                    if safely:
+                        expected = (
+                            r"ValueError: Exception thrown when converting pandas.Series "
+                            r"\(float64\) with name 'id' to Arrow Array \(int32\)."
+                            " It can be caused by overflows or other "
+                            "unsafe conversions warned by Arrow. Arrow safe type check "
+                            "can be disabled by using SQL config "
+                            "`spark.sql.execution.pandas.convertToArrowArraySafely`."
+                        )
+                        with self.assertRaisesRegex(PythonException, expected + "\n"):
+                            df.collect()
+                    else:
+                        self.assertEqual(
+                            df.collect(), self.spark.range(10, numPartitions=3).collect()
                         )
 
     def test_empty_iterator(self):
@@ -425,6 +464,27 @@ class MapInPandasTestsMixin:
                 yield batch
 
         df.mapInPandas(func2, "id long", True).collect()
+
+    def test_map_in_pandas_type_mismatch(self):
+        def func(iterator):
+            for _ in iterator:
+                yield pd.DataFrame({"id": ["x", "y"]})
+
+        df = self.spark.range(2).mapInPandas(func, "id int")
+        with self.assertRaisesRegex(
+            PythonException,
+            "PySparkValueError: Exception thrown when converting pandas.Series \\(object\\) "
+            "with name 'id' to Arrow Array \\(int32\\)\\.",
+        ):
+            df.collect()
+
+    def test_map_in_pandas_top_level_wrong_order(self):
+        def func(iterator):
+            for _ in iterator:
+                yield pd.DataFrame({"b": [1], "a": [2]})
+
+        df = self.spark.range(1)
+        self.assertEqual([Row(a=2, b=1)], df.mapInPandas(func, "a int, b int").collect())
 
 
 class MapInPandasTests(ReusedSQLTestCase, MapInPandasTestsMixin):

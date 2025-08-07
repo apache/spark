@@ -26,7 +26,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.io.{Codec, Source}
 
 import com.google.common.io.ByteStreams
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FSDataInputStream, Path}
 import org.scalatest.BeforeAndAfterEach
@@ -111,7 +110,7 @@ class SparkSubmitSuite
   with TestPrematureExit {
 
   private val emptyIvySettings = File.createTempFile("ivy", ".xml")
-  FileUtils.write(emptyIvySettings, "<ivysettings />", StandardCharsets.UTF_8)
+  Files.writeString(emptyIvySettings.toPath, "<ivysettings />")
 
   private val submit = new SparkSubmit()
 
@@ -506,6 +505,8 @@ class SparkSubmitSuite
 
   test("SPARK-47495: Not to add primary resource to jars again" +
     " in k8s client mode & driver runs inside a POD") {
+    val testJar = "src/test/resources/TestUDTF.jar"
+    assume(new File(testJar).exists)
     val clArgs = Seq(
       "--deploy-mode", "client",
       "--proxy-user", "test.user",
@@ -514,7 +515,7 @@ class SparkSubmitSuite
       "--class", "org.SomeClass",
       "--driver-memory", "1g",
       "--conf", "spark.kubernetes.submitInDriver=true",
-      "--jars", "src/test/resources/TestUDTF.jar",
+      "--jars", testJar,
       "/home/jarToIgnore.jar",
       "arg1")
     val appArgs = new SparkSubmitArguments(clArgs)
@@ -524,6 +525,8 @@ class SparkSubmitSuite
   }
 
   test("SPARK-33782: handles k8s files download to current directory") {
+    val testJar = "src/test/resources/TestUDTF.jar"
+    assume(new File(testJar).exists)
     val clArgs = Seq(
       "--deploy-mode", "client",
       "--proxy-user", "test.user",
@@ -537,7 +540,7 @@ class SparkSubmitSuite
       "--files", "src/test/resources/test_metrics_config.properties",
       "--py-files", "src/test/resources/test_metrics_system.properties",
       "--archives", "src/test/resources/log4j2.properties",
-      "--jars", "src/test/resources/TestUDTF.jar",
+      "--jars", testJar,
       "/home/thejar.jar",
       "arg1")
     val appArgs = new SparkSubmitArguments(clArgs)
@@ -561,6 +564,8 @@ class SparkSubmitSuite
   test("SPARK-47475: Avoid jars download if scheme matches " +
     "spark.kubernetes.jars.avoidDownloadSchemes " +
     "in k8s client mode & driver runs inside a POD") {
+    val testJar = "src/test/resources/TestUDTF.jar"
+    assume(new File(testJar).exists)
     val hadoopConf = new Configuration()
     updateConfWithFakeS3Fs(hadoopConf)
     withTempDir { tmpDir =>
@@ -579,7 +584,7 @@ class SparkSubmitSuite
         "--files", "src/test/resources/test_metrics_config.properties",
         "--py-files", "src/test/resources/test_metrics_system.properties",
         "--archives", "src/test/resources/log4j2.properties",
-        "--jars", s"src/test/resources/TestUDTF.jar,$remoteJarFile",
+        "--jars", s"$testJar,$remoteJarFile",
         "/home/jarToIgnore.jar",
         "arg1")
       val appArgs = new SparkSubmitArguments(clArgs)
@@ -898,7 +903,7 @@ class SparkSubmitSuite
     // compile a small jar containing a class that will be called from R code.
     withTempDir { tempDir =>
       val srcDir = new File(tempDir, "sparkrtest")
-      srcDir.mkdirs()
+      Utils.createDirectory(srcDir)
       val excSource = new JavaSourceFromString(new File(srcDir, "DummyClass").toURI.getPath,
         """package sparkrtest;
         |
@@ -1183,14 +1188,14 @@ class SparkSubmitSuite
 
             val appArgs = new SparkSubmitArguments(args)
             val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
-            conf.get("spark.yarn.dist.jars").split(",").toSet should be
-            (Set(jar1.toURI.toString, jar2.toURI.toString))
-            conf.get("spark.yarn.dist.files").split(",").toSet should be
-            (Set(file1.toURI.toString, file2.toURI.toString))
-            conf.get("spark.yarn.dist.pyFiles").split(",").toSet should be
-            (Set(pyFile1.getAbsolutePath, pyFile2.getAbsolutePath))
-            conf.get("spark.yarn.dist.archives").split(",").toSet should be
-            (Set(archive1.toURI.toString, archive2.toURI.toString))
+            conf.get("spark.yarn.dist.jars").split(",").toSet should be(
+              Set(jar1.toURI.toString, jar2.toURI.toString))
+            conf.get("spark.yarn.dist.files").split(",").toSet should be(
+              Set(file1.toURI.toString, file2.toURI.toString))
+            conf.get("spark.yarn.dist.pyFiles").split(",").toSet should be(
+              Set(pyFile1.toURI.toString, pyFile2.toURI.toString))
+            conf.get("spark.yarn.dist.archives").split(",").toSet should be(
+              Set(archive1.toURI.toString, archive2.toURI.toString))
           }
         }
       }
@@ -1287,8 +1292,8 @@ class SparkSubmitSuite
 
     // The path and filename are preserved.
     assert(outputUri.getPath.endsWith(new Path(sourceUri).getName))
-    assert(FileUtils.readFileToString(new File(outputUri.getPath), StandardCharsets.UTF_8) ===
-      FileUtils.readFileToString(new File(sourceUri.getPath), StandardCharsets.UTF_8))
+    assert(Files.readString(new File(outputUri.getPath).toPath) ===
+      Files.readString(new File(sourceUri.getPath).toPath))
   }
 
   private def deleteTempOutputFile(outputPath: String): Unit = {
@@ -1330,7 +1335,7 @@ class SparkSubmitSuite
     val jarFile = File.createTempFile("test", ".jar")
     jarFile.deleteOnExit()
     val content = "hello, world"
-    FileUtils.write(jarFile, content, StandardCharsets.UTF_8)
+    Files.writeString(jarFile.toPath, content)
     val hadoopConf = new Configuration()
     val tmpDir = Files.createTempDirectory("tmp").toFile
     updateConfWithFakeS3Fs(hadoopConf)
@@ -1345,7 +1350,7 @@ class SparkSubmitSuite
     val jarFile = File.createTempFile("test", ".jar")
     jarFile.deleteOnExit()
     val content = "hello, world"
-    FileUtils.write(jarFile, content, StandardCharsets.UTF_8)
+    Files.writeString(jarFile.toPath, content)
     val hadoopConf = new Configuration()
     val tmpDir = Files.createTempDirectory("tmp").toFile
     updateConfWithFakeS3Fs(hadoopConf)
@@ -1812,7 +1817,7 @@ class SparkSubmitSuite
         "spark = SparkSession.builder.getOrCreate();" +
         "assert 'connect' in str(type(spark));" +
         "assert spark.range(1).first()[0] == 0"
-    FileUtils.write(pyFile, content, StandardCharsets.UTF_8)
+    Files.writeString(pyFile.toPath, content)
     val args = Seq(
       "--name", "testPyApp",
       "--remote", "local",

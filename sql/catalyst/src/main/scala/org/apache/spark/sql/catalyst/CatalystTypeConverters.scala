@@ -21,7 +21,7 @@ import java.lang.{Iterable => JavaIterable}
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.math.{BigInteger => JavaBigInteger}
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period}
 import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
 
@@ -66,9 +66,12 @@ object CatalystTypeConverters {
       case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
       case mapType: MapType => MapConverter(mapType.keyType, mapType.valueType)
       case structType: StructType => StructConverter(structType)
+      case CharType(length) => new CharConverter(length)
+      case VarcharType(length) => new VarcharConverter(length)
       case _: StringType => StringConverter
       case DateType if SQLConf.get.datetimeJava8ApiEnabled => LocalDateConverter
       case DateType => DateConverter
+      case _: TimeType => TimeConverter
       case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
       case TimestampType => TimestampConverter
       case TimestampNTZType => TimestampNTZConverter
@@ -296,6 +299,33 @@ object CatalystTypeConverters {
       toScala(row.getStruct(column, structType.size))
   }
 
+  private class CharConverter(length: Int) extends CatalystTypeConverter[Any, String, UTF8String] {
+    override def toCatalystImpl(scalaValue: Any): UTF8String =
+      CharVarcharCodegenUtils.charTypeWriteSideCheck(
+        StringConverter.toCatalystImpl(scalaValue), length)
+    override def toScala(catalystValue: UTF8String): String = if (catalystValue == null) {
+      null
+    } else {
+      CharVarcharCodegenUtils.charTypeWriteSideCheck(catalystValue, length).toString
+    }
+    override def toScalaImpl(row: InternalRow, column: Int): String =
+      CharVarcharCodegenUtils.charTypeWriteSideCheck(row.getUTF8String(column), length).toString
+  }
+
+  private class VarcharConverter(length: Int)
+    extends CatalystTypeConverter[Any, String, UTF8String] {
+    override def toCatalystImpl(scalaValue: Any): UTF8String =
+      CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
+        StringConverter.toCatalystImpl(scalaValue), length)
+    override def toScala(catalystValue: UTF8String): String = if (catalystValue == null) {
+      null
+    } else {
+      CharVarcharCodegenUtils.varcharTypeWriteSideCheck(catalystValue, length).toString
+    }
+    override def toScalaImpl(row: InternalRow, column: Int): String =
+      CharVarcharCodegenUtils.varcharTypeWriteSideCheck(row.getUTF8String(column), length).toString
+  }
+
   private object StringConverter extends CatalystTypeConverter[Any, String, UTF8String] {
     override def toCatalystImpl(scalaValue: Any): UTF8String = scalaValue match {
       case str: String => UTF8String.fromString(str)
@@ -341,6 +371,18 @@ object CatalystTypeConverters {
     }
     override def toScalaImpl(row: InternalRow, column: Int): LocalDate =
       DateTimeUtils.daysToLocalDate(row.getInt(column))
+  }
+
+  private object TimeConverter extends CatalystTypeConverter[LocalTime, LocalTime, Any] {
+    override def toCatalystImpl(scalaValue: LocalTime): Long = {
+      DateTimeUtils.localTimeToNanos(scalaValue)
+    }
+    override def toScala(catalystValue: Any): LocalTime = {
+      if (catalystValue == null) null
+      else DateTimeUtils.nanosToLocalTime(catalystValue.asInstanceOf[Long])
+    }
+    override def toScalaImpl(row: InternalRow, column: Int): LocalTime =
+      DateTimeUtils.nanosToLocalTime(row.getLong(column))
   }
 
   private object TimestampConverter extends CatalystTypeConverter[Any, Timestamp, Any] {
@@ -529,11 +571,14 @@ object CatalystTypeConverters {
     case c: Char => StringConverter.toCatalyst(c.toString)
     case d: Date => DateConverter.toCatalyst(d)
     case ld: LocalDate => LocalDateConverter.toCatalyst(ld)
+    case t: LocalTime => TimeConverter.toCatalyst(t)
     case t: Timestamp => TimestampConverter.toCatalyst(t)
     case i: Instant => InstantConverter.toCatalyst(i)
     case l: LocalDateTime => TimestampNTZConverter.toCatalyst(l)
-    case d: BigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
-    case d: JavaBigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
+    case d: BigDecimal =>
+      new DecimalConverter(DecimalType(Math.max(d.precision, d.scale), d.scale)).toCatalyst(d)
+    case d: JavaBigDecimal =>
+      new DecimalConverter(DecimalType(Math.max(d.precision, d.scale), d.scale)).toCatalyst(d)
     case seq: Seq[Any] => new GenericArrayData(seq.map(convertToCatalyst).toArray)
     case r: Row => InternalRow(r.toSeq.map(convertToCatalyst): _*)
     case arr: Array[Byte] => arr

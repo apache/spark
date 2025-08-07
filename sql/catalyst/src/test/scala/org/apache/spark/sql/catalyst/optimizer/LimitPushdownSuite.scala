@@ -21,7 +21,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Add
+import org.apache.spark.sql.catalyst.expressions.{Add, GenericInternalRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -189,7 +189,9 @@ class LimitPushdownSuite extends PlanTest {
   }
 
   test("full outer join where neither side is limited and left side has larger statistics") {
-    val xBig = testRelation.copy(data = Seq.fill(10)(null)).subquery("x")
+    val nulls = new GenericInternalRow(
+      Seq.fill(testRelation.output.length)(null).toArray.asInstanceOf[Array[Any]])
+    val xBig = testRelation.copy(data = Seq.fill(10)(nulls)).subquery("x")
     assert(xBig.stats.sizeInBytes > y.stats.sizeInBytes)
     Seq(Some("x.a".attr === "y.b".attr), None).foreach { condition =>
       val originalQuery = xBig.join(y, FullOuter, condition).limit(1).analyze
@@ -204,7 +206,9 @@ class LimitPushdownSuite extends PlanTest {
   }
 
   test("full outer join where neither side is limited and right side has larger statistics") {
-    val yBig = testRelation.copy(data = Seq.fill(10)(null)).subquery("y")
+    val nulls = new GenericInternalRow(
+      Seq.fill(testRelation.output.length)(null).toArray.asInstanceOf[Array[Any]])
+    val yBig = testRelation.copy(data = Seq.fill(10)(nulls)).subquery("y")
     assert(x.stats.sizeInBytes < yBig.stats.sizeInBytes)
     Seq(Some("x.a".attr === "y.b".attr), None).foreach { condition =>
       val originalQuery = x.join(yBig, FullOuter, condition).limit(1).analyze

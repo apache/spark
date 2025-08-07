@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import ColumnNode._
 
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.AttributeNameParser
 import org.apache.spark.sql.errors.DataTypeErrorsBase
@@ -70,9 +71,22 @@ private[sql] trait ColumnNode extends ColumnNodeLike {
 trait ColumnNodeLike {
   private[internal] def normalize(): ColumnNodeLike = this
   private[internal] def sql: String
+  private[internal] def children: Seq[ColumnNodeLike]
+
+  private[sql] def foreach(f: ColumnNodeLike => Unit): Unit = {
+    f(this)
+    children.foreach(_.foreach(f))
+  }
+
+  private[sql] def collect[A](pf: PartialFunction[ColumnNodeLike, A]): Seq[A] = {
+    val ret = new collection.mutable.ArrayBuffer[A]()
+    val lifted = pf.lift
+    foreach(node => lifted(node).foreach(ret.+=))
+    ret.toSeq
+  }
 }
 
-private[internal] object ColumnNode {
+private[sql] object ColumnNode {
   val NO_ORIGIN: Origin = Origin()
   def normalize[T <: ColumnNodeLike](option: Option[T]): Option[T] =
     option.map(_.normalize().asInstanceOf[T])
@@ -118,6 +132,8 @@ private[sql] case class Literal(
     case v: Short => toSQLValue(v)
     case _ => value.toString
   }
+
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
 }
 
 /**
@@ -141,6 +157,8 @@ private[sql] case class UnresolvedAttribute(
     copy(planId = None, origin = NO_ORIGIN)
 
   override def sql: String = nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
+
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
 }
 
 private[sql] object UnresolvedAttribute {
@@ -168,24 +186,6 @@ private[sql] object UnresolvedAttribute {
 }
 
 /**
- * Reference to an attribute in the outer context, used for Subqueries.
- *
- * @param nameParts
- *   name of the attribute.
- * @param planId
- *   id of the plan (Dataframe) that produces the attribute.
- */
-private[sql] case class LazyOuterReference(
-    nameParts: Seq[String],
-    planId: Option[Long] = None,
-    override val origin: Origin = CurrentOrigin.get)
-    extends ColumnNode {
-  override private[internal] def normalize(): LazyOuterReference =
-    copy(planId = None, origin = NO_ORIGIN)
-  override def sql: String = nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
-}
-
-/**
  * Reference to all columns in a namespace (global, a Dataframe, or a nested struct).
  *
  * @param unparsedTarget
@@ -201,6 +201,7 @@ private[sql] case class UnresolvedStar(
   override private[internal] def normalize(): UnresolvedStar =
     copy(planId = None, origin = NO_ORIGIN)
   override def sql: String = unparsedTarget.map(_ + ".*").getOrElse("*")
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
 }
 
 /**
@@ -226,6 +227,8 @@ private[sql] case class UnresolvedFunction(
     copy(arguments = ColumnNode.normalize(arguments), origin = NO_ORIGIN)
 
   override def sql: String = functionName + argumentsToSql(arguments)
+
+  override private[internal] def children: Seq[ColumnNodeLike] = arguments
 }
 
 /**
@@ -240,6 +243,7 @@ private[sql] case class SqlExpression(
     extends ColumnNode {
   override private[internal] def normalize(): SqlExpression = copy(origin = NO_ORIGIN)
   override def sql: String = expression
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
 }
 
 /**
@@ -268,6 +272,8 @@ private[sql] case class Alias(
     }
     s"${child.sql} AS $alias"
   }
+
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq(child)
 }
 
 /**
@@ -293,10 +299,14 @@ private[sql] case class Cast(
   override def sql: String = {
     s"${optionToSql(evalMode)}CAST(${child.sql} AS ${dataType.sql})"
   }
+
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq(child) ++ evalMode
 }
 
 private[sql] object Cast {
-  sealed abstract class EvalMode(override val sql: String = "") extends ColumnNodeLike
+  sealed abstract class EvalMode(override val sql: String = "") extends ColumnNodeLike {
+    override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
+  }
   object Legacy extends EvalMode
   object Ansi extends EvalMode
   object Try extends EvalMode("TRY_")
@@ -318,6 +328,7 @@ private[sql] case class UnresolvedRegex(
   override private[internal] def normalize(): UnresolvedRegex =
     copy(planId = None, origin = NO_ORIGIN)
   override def sql: String = regex
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
 }
 
 /**
@@ -340,13 +351,19 @@ private[sql] case class SortOrder(
     copy(child = child.normalize(), origin = NO_ORIGIN)
 
   override def sql: String = s"${child.sql} ${sortDirection.sql} ${nullOrdering.sql}"
+
+  override def children: Seq[ColumnNodeLike] = Seq(child, sortDirection, nullOrdering)
 }
 
 private[sql] object SortOrder {
-  sealed abstract class SortDirection(override val sql: String) extends ColumnNodeLike
+  sealed abstract class SortDirection(override val sql: String) extends ColumnNodeLike {
+    override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
+  }
   object Ascending extends SortDirection("ASC")
   object Descending extends SortDirection("DESC")
-  sealed abstract class NullOrdering(override val sql: String) extends ColumnNodeLike
+  sealed abstract class NullOrdering(override val sql: String) extends ColumnNodeLike {
+    override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
+  }
   object NullsFirst extends NullOrdering("NULLS FIRST")
   object NullsLast extends NullOrdering("NULLS LAST")
 }
@@ -370,6 +387,8 @@ private[sql] case class Window(
     origin = NO_ORIGIN)
 
   override def sql: String = s"${windowFunction.sql} OVER (${windowSpec.sql})"
+
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq(windowFunction, windowSpec)
 }
 
 private[sql] case class WindowSpec(
@@ -388,6 +407,9 @@ private[sql] case class WindowSpec(
       optionToSql(frame))
     parts.filter(_.nonEmpty).mkString(" ")
   }
+  override private[internal] def children: Seq[ColumnNodeLike] = {
+    partitionColumns ++ sortColumns ++ frame
+  }
 }
 
 private[sql] case class WindowFrame(
@@ -399,15 +421,19 @@ private[sql] case class WindowFrame(
     copy(lower = lower.normalize(), upper = upper.normalize())
   override private[internal] def sql: String =
     s"${frameType.sql} BETWEEN ${lower.sql} AND ${upper.sql}"
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq(frameType, lower, upper)
 }
 
 private[sql] object WindowFrame {
-  sealed abstract class FrameType(override val sql: String) extends ColumnNodeLike
+  sealed abstract class FrameType(override val sql: String) extends ColumnNodeLike {
+    override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
+  }
   object Row extends FrameType("ROWS")
   object Range extends FrameType("RANGE")
 
   sealed abstract class FrameBoundary extends ColumnNodeLike {
     override private[internal] def normalize(): FrameBoundary = this
+    override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
   }
   object CurrentRow extends FrameBoundary {
     override private[internal] def sql = "CURRENT ROW"
@@ -421,6 +447,7 @@ private[sql] object WindowFrame {
   case class Value(value: ColumnNode) extends FrameBoundary {
     override private[internal] def normalize(): Value = copy(value.normalize())
     override private[internal] def sql: String = value.sql
+    override private[internal] def children: Seq[ColumnNodeLike] = Seq(value)
   }
   def value(i: Int): Value = Value(Literal(i, Some(IntegerType)))
   def value(l: Long): Value = Value(Literal(l, Some(LongType)))
@@ -452,6 +479,8 @@ private[sql] case class LambdaFunction(
     }
     argumentsSql + " -> " + function.sql
   }
+
+  override private[internal] def children: Seq[ColumnNodeLike] = function +: arguments
 }
 
 object LambdaFunction {
@@ -473,6 +502,8 @@ private[sql] case class UnresolvedNamedLambdaVariable(
     copy(origin = NO_ORIGIN)
 
   override def sql: String = name
+
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
 }
 
 object UnresolvedNamedLambdaVariable {
@@ -513,6 +544,8 @@ private[sql] case class UnresolvedExtractValue(
     copy(child = child.normalize(), extraction = extraction.normalize(), origin = NO_ORIGIN)
 
   override def sql: String = s"${child.sql}[${extraction.sql}]"
+
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq(child, extraction)
 }
 
 /**
@@ -538,6 +571,9 @@ private[sql] case class UpdateFields(
   override def sql: String = valueExpression match {
     case Some(value) => s"update_field(${structExpression.sql}, $fieldName, ${value.sql})"
     case None => s"drop_field(${structExpression.sql}, $fieldName)"
+  }
+  override private[internal] def children: Seq[ColumnNodeLike] = {
+    structExpression +: valueExpression.toSeq
   }
 }
 
@@ -567,6 +603,11 @@ private[sql] case class CaseWhenOtherwise(
       branches.map(cv => s" WHEN ${cv._1.sql} THEN ${cv._2.sql}").mkString +
       otherwise.map(o => s" ELSE ${o.sql}").getOrElse("") +
       " END"
+
+  override private[internal] def children: Seq[ColumnNodeLike] = {
+    val branchChildren = branches.flatMap { case (condition, value) => Seq(condition, value) }
+    branchChildren ++ otherwise
+  }
 }
 
 /**
@@ -588,8 +629,47 @@ private[sql] case class InvokeInlineUserDefinedFunction(
 
   override def sql: String =
     function.name + argumentsToSql(arguments)
+
+  override private[internal] def children: Seq[ColumnNodeLike] = arguments
 }
 
 private[sql] trait UserDefinedFunctionLike {
   def name: String = SparkClassUtils.getFormattedClassName(this)
+}
+
+/**
+ * A marker node to trigger Spark Classic DataFrame lazy analysis.
+ *
+ * @param child
+ *   that needs to be lazily analyzed in Spark Classic DataFrame.
+ */
+private[sql] case class LazyExpression(
+    child: ColumnNode,
+    override val origin: Origin = CurrentOrigin.get)
+    extends ColumnNode {
+  override private[internal] def normalize(): ColumnNode =
+    copy(child = child.normalize(), origin = NO_ORIGIN)
+  override def sql: String = "lazy" + argumentsToSql(Seq(child))
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq(child)
+}
+
+sealed trait SubqueryType
+
+object SubqueryType {
+  case object SCALAR extends SubqueryType
+  case object EXISTS extends SubqueryType
+  case class IN(values: Seq[ColumnNode]) extends SubqueryType
+}
+
+case class SubqueryExpression(
+    ds: Dataset[_],
+    subqueryType: SubqueryType,
+    override val origin: Origin = CurrentOrigin.get)
+    extends ColumnNode {
+  override def sql: String = subqueryType match {
+    case SubqueryType.SCALAR => s"($ds)"
+    case SubqueryType.IN(values) => s"(${values.map(_.sql).mkString(",")}) IN ($ds)"
+    case _ => s"$subqueryType ($ds)"
+  }
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
 }

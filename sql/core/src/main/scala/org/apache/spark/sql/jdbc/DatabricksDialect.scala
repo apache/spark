@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Connection
+import java.sql.{Connection, SQLException}
 
 import scala.collection.mutable.ArrayBuilder
 
@@ -29,6 +29,10 @@ private case class DatabricksDialect() extends JdbcDialect with NoLegacyJDBCErro
 
   override def canHandle(url: String): Boolean = {
     url.startsWith("jdbc:databricks")
+  }
+
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getSQLState == "42P01" || e.getSQLState == "42704"
   }
 
   override def getCatalystType(
@@ -49,8 +53,18 @@ private case class DatabricksDialect() extends JdbcDialect with NoLegacyJDBCErro
     case _ => None
   }
 
+  // See https://docs.databricks.com/aws/en/error-messages/sqlstates
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    Option(exception.getSQLState).exists(_.startsWith("42"))
+  }
+
   override def quoteIdentifier(colName: String): String = {
-    s"`$colName`"
+    // Per Databricks documentation:
+    // https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-identifiers
+    //
+    // "Any character from the Unicode character set. Use ` to escape ` itself."
+    val escapedColName = colName.replace("`", "``")
+    s"`$escapedColName`"
   }
 
   override def supportsLimit: Boolean = true
@@ -62,6 +76,8 @@ private case class DatabricksDialect() extends JdbcDialect with NoLegacyJDBCErro
   override def getTableSample(sample: TableSampleInfo): String = {
     s"TABLESAMPLE (${(sample.upperBound - sample.lowerBound) * 100}) REPEATABLE (${sample.seed})"
   }
+
+  override def supportsHint: Boolean = true
 
   // Override listSchemas to run "show schemas" as a PreparedStatement instead of
   // invoking getMetaData.getSchemas as it may not work correctly in older versions of the driver.

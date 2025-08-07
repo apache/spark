@@ -34,6 +34,7 @@ class HiveMetastoreLazyInitializationSuite extends SparkFunSuite {
       .master("local[2]")
       .enableHiveSupport()
       .config("spark.hadoop.hive.metastore.uris", "thrift://127.0.0.1:11111")
+      .config("spark.hadoop.hive.thrift.client.max.message.size", "1gb")
       .getOrCreate()
     val originalLevel = LogManager.getRootLogger.asInstanceOf[Logger].getLevel
     val originalClassLoader = Thread.currentThread().getContextClassLoader

@@ -23,9 +23,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.TableSpec
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.util.Utils
 
 case class ReplaceTableExec(
@@ -47,7 +48,13 @@ case class ReplaceTableExec(
     } else if (!orCreate) {
       throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
     }
-    catalog.createTable(ident, columns, partitioning.toArray, tableProperties.asJava)
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(columns)
+      .withPartitions(partitioning.toArray)
+      .withProperties(tableProperties.asJava)
+      .withConstraints(tableSpec.constraints.toArray)
+      .build()
+    catalog.createTable(ident, tableInfo)
     Seq.empty
   }
 
@@ -65,18 +72,29 @@ case class AtomicReplaceTableExec(
 
   val tableProperties = CatalogV2Util.convertTableProperties(tableSpec)
 
+  override val metrics: Map[String, SQLMetric] =
+    DataSourceV2Utils.commitMetrics(sparkContext, catalog)
+
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(identifier)) {
       val table = catalog.loadTable(identifier)
       invalidateCache(catalog, table, identifier)
     }
     val staged = if (orCreate) {
-      catalog.stageCreateOrReplace(
-        identifier, columns, partitioning.toArray, tableProperties.asJava)
+      val tableInfo = new TableInfo.Builder()
+        .withColumns(columns)
+        .withPartitions(partitioning.toArray)
+        .withProperties(tableProperties.asJava)
+        .build()
+      catalog.stageCreateOrReplace(identifier, tableInfo)
     } else if (catalog.tableExists(identifier)) {
       try {
-        catalog.stageReplace(
-          identifier, columns, partitioning.toArray, tableProperties.asJava)
+        val tableInfo = new TableInfo.Builder()
+          .withColumns(columns)
+          .withPartitions(partitioning.toArray)
+          .withProperties(tableProperties.asJava)
+          .build()
+        catalog.stageReplace(identifier, tableInfo)
       } catch {
         case e: NoSuchTableException =>
           throw QueryCompilationErrors.cannotReplaceMissingTableError(identifier, Some(e))
@@ -92,7 +110,7 @@ case class AtomicReplaceTableExec(
 
   private def commitOrAbortStagedChanges(staged: StagedTable): Unit = {
     Utils.tryWithSafeFinallyAndFailureCallbacks({
-      staged.commitStagedChanges()
+      DataSourceV2Utils.commitStagedChanges(sparkContext, staged, metrics)
     })(catchBlock = {
       staged.abortStagedChanges()
     })

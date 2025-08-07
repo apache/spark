@@ -20,6 +20,7 @@ package org.apache.spark.util.kvstore;
 import java.io.File;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
@@ -29,12 +30,13 @@ import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 import com.google.common.collect.ImmutableSet;
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang3.SystemUtils;
 import org.iq80.leveldb.DBIterator;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.util.SparkSystemUtils$;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
@@ -50,13 +52,13 @@ public class LevelDBSuite {
       db.close();
     }
     if (dbpath != null) {
-      FileUtils.deleteQuietly(dbpath);
+      JavaUtils.deleteQuietly(dbpath);
     }
   }
 
   @BeforeEach
   public void setup() throws Exception {
-    assumeFalse(SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64"));
+    assumeFalse(SparkSystemUtils$.MODULE$.isMacOnAppleSilicon());
     dbpath = File.createTempFile("test.", ".ldb");
     dbpath.delete();
     db = new LevelDB(dbpath);
@@ -304,7 +306,7 @@ public class LevelDBSuite {
     }
     dbForCloseTest.close();
     assertTrue(dbPathForCloseTest.exists());
-    FileUtils.deleteQuietly(dbPathForCloseTest);
+    JavaUtils.deleteQuietly(dbPathForCloseTest);
     assertTrue(!dbPathForCloseTest.exists());
   }
 
@@ -418,9 +420,40 @@ public class LevelDBSuite {
       assertTrue(resourceCleaner.isCompleted());
     } finally {
       dbForCleanerTest.close();
-      FileUtils.deleteQuietly(dbPathForCleanerTest);
+      JavaUtils.deleteQuietly(dbPathForCleanerTest);
     }
   }
+
+  @Test
+  public void testMultipleTypesWriteAll() throws Exception {
+
+    List<CustomType1> type1List = Arrays.asList(
+      createCustomType1(1),
+      createCustomType1(2),
+      createCustomType1(3),
+      createCustomType1(4)
+    );
+
+    List<CustomType2> type2List = Arrays.asList(
+      createCustomType2(10),
+      createCustomType2(11),
+      createCustomType2(12),
+      createCustomType2(13)
+    );
+
+    List fullList = new ArrayList();
+    fullList.addAll(type1List);
+    fullList.addAll(type2List);
+
+    db.writeAll(fullList);
+    for (CustomType1 value : type1List) {
+      assertEquals(value, db.read(value.getClass(), value.key));
+    }
+    for (CustomType2 value : type2List) {
+      assertEquals(value, db.read(value.getClass(), value.key));
+    }
+  }
+
 
   private CustomType1 createCustomType1(int i) {
     CustomType1 t = new CustomType1();
@@ -429,6 +462,14 @@ public class LevelDBSuite {
     t.name = "name" + i;
     t.num = i;
     t.child = "child" + i;
+    return t;
+  }
+
+  private CustomType2 createCustomType2(int i) {
+    CustomType2 t = new CustomType2();
+    t.key = "key" + i;
+    t.id = "id" + i;
+    t.parentId = "parent_id" + (i / 2);
     return t;
   }
 

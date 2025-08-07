@@ -24,7 +24,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode, SparkSession, SQLContext}
-import org.apache.spark.sql.QueryTest.withPhysicalPlansCaptured
+import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -213,8 +213,8 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
         .getOrCreate()
 
       def captureWrite(sparkSession: SparkSession)(thunk: => Unit): SparkPlan = {
-        val physicalPlans = withPhysicalPlansCaptured(sparkSession, thunk)
-        val v1FallbackWritePlans = physicalPlans.filter {
+        val queryExecutions = withQueryExecutionsCaptured(sparkSession)(thunk)
+        val v1FallbackWritePlans = queryExecutions.map(_.executedPlan).filter {
           case _: AppendDataExecV1 | _: OverwriteByExpressionExecV1 => true
           case _ => false
         }
@@ -234,6 +234,14 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
         df2.writeTo("test").overwrite(lit(true))
       }
       assert(overwritePlan.metrics("numOutputRows").value === 1)
+
+      val failingPlan = captureWrite(session) {
+        assertThrows[IllegalStateException] {
+          val df3 = session.createDataFrame(Seq((3, "this-value-fails-the-write")))
+          df3.writeTo("test").overwrite(lit(true))
+        }
+      }
+      assert(failingPlan.metrics("numOutputRows").value === 1)
     } finally {
       SparkSession.setActiveSession(spark)
       SparkSession.setDefaultSession(spark)
@@ -435,7 +443,9 @@ class InMemoryTableWithV1Fallback(
           writeMetrics = Array(V1WriteTaskMetric("numOutputRows", rows.length))
 
           rows.groupBy(getPartitionValues).foreach { case (partition, elements) =>
-            if (dataMap.contains(partition) && mode == "append") {
+            if (elements.exists(_.toSeq.contains("this-value-fails-the-write"))) {
+              throw new IllegalStateException("Test only mock write failure")
+            } else if (dataMap.contains(partition) && mode == "append") {
               dataMap.put(partition, dataMap(partition) ++ elements)
             } else if (dataMap.contains(partition)) {
               throw new IllegalStateException("Partition was not removed properly")

@@ -100,8 +100,8 @@ trait DeleteFromTests extends DatasourceV2SQLBase {
   }
 
   test("DeleteFrom: DELETE is only supported with v2 tables") {
-    // unset this config to use the default v2 session catalog.
-    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    // use the default v2 session catalog.
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
     val v1Table = "tbl"
     withTable(v1Table) {
       sql(s"CREATE TABLE $v1Table" +

@@ -396,6 +396,7 @@ class CliSuite extends SparkFunSuite {
 
   test("list jars") {
     val jarFile = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    assume(jarFile != null)
     runCliWithin(2.minute)(
       s"ADD JAR $jarFile;" -> "",
       s"LIST JARS;" -> "TestUDTF.jar"
@@ -404,6 +405,7 @@ class CliSuite extends SparkFunSuite {
 
   test("list jar <jarfile>") {
     val jarFile = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    assume(jarFile != null)
     runCliWithin(2.minute)(
       s"ADD JAR $jarFile;" -> "",
       s"List JAR $jarFile;" -> "TestUDTF.jar"
@@ -449,10 +451,11 @@ class CliSuite extends SparkFunSuite {
   }
 
   test("SPARK-28840 test --jars command") {
-    val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
+    val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar")
+    assume(jarFile.exists)
     runCliWithin(
       1.minute,
-      Seq("--jars", s"$jarFile"))(
+      Seq("--jars", s"${jarFile.getCanonicalPath}"))(
       "CREATE TEMPORARY FUNCTION testjar AS" +
         " 'org.apache.spark.sql.hive.execution.UDTFStack';" -> "",
       "SELECT testjar(1,'TEST-SPARK-TEST-jar', 28840);" -> "TEST-SPARK-TEST-jar\t28840"
@@ -460,11 +463,12 @@ class CliSuite extends SparkFunSuite {
   }
 
   test("SPARK-28840 test --jars and hive.aux.jars.path command") {
-    val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
+    val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar")
+    assume(jarFile.exists)
     val hiveContribJar = HiveTestJars.getHiveContribJar().getCanonicalPath
     runCliWithin(
       2.minutes,
-      Seq("--jars", s"$jarFile", "--conf",
+      Seq("--jars", s"${jarFile.getCanonicalPath}", "--conf",
         s"spark.hadoop.hive.aux.jars.path=$hiveContribJar"))(
       "CREATE TEMPORARY FUNCTION testjar AS" +
         " 'org.apache.spark.sql.hive.execution.UDTFStack';" -> "",

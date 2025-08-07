@@ -22,10 +22,11 @@ import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, In}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.execution.{FilterExec, InputAdapter, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper

@@ -20,10 +20,12 @@ package org.apache.spark.sql.execution.datasources
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.{Dataset, Row, SaveMode, SparkSession}
+import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.LeafRunnableCommand
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider}

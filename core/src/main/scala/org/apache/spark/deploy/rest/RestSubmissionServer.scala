@@ -25,14 +25,14 @@ import scala.io.Source
 import com.fasterxml.jackson.core.JsonProcessingException
 import jakarta.servlet.DispatcherType
 import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
-import org.eclipse.jetty.server.{HttpConnectionFactory, Server, ServerConnector}
+import org.eclipse.jetty.server.{HttpConfiguration, HttpConnectionFactory, Server, ServerConnector}
 import org.eclipse.jetty.servlet.{FilterHolder, ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.thread.{QueuedThreadPool, ScheduledExecutorScheduler}
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.{MASTER_REST_SERVER_FILTERS, MASTER_REST_SERVER_MAX_THREADS, MASTER_REST_SERVER_VIRTUAL_THREADS}
 import org.apache.spark.util.Utils
@@ -104,6 +104,13 @@ private[spark] abstract class RestSubmissionServer(
     threadPool.setDaemon(true)
     val server = new Server(threadPool)
 
+    // Hide information.
+    val httpConfig = new HttpConfiguration()
+    logDebug("Using setSendServerVersion: false")
+    httpConfig.setSendServerVersion(false)
+    logDebug("Using setSendXPoweredBy: false")
+    httpConfig.setSendXPoweredBy(false)
+
     val connector = new ServerConnector(
       server,
       null,
@@ -112,7 +119,7 @@ private[spark] abstract class RestSubmissionServer(
       null,
       -1,
       -1,
-      new HttpConnectionFactory())
+      new HttpConnectionFactory(httpConfig))
     connector.setHost(host)
     connector.setPort(startPort)
     connector.setReuseAddress(!Utils.isWindows)

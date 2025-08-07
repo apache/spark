@@ -69,7 +69,12 @@ message DataType {
 
     // UnparsedDataType
     Unparsed unparsed = 24;
+
+    Time time = 28;
   }
+
+  // Reserved for geometry and geography types
+  reserved 26, 27;
 
   message Boolean {
     uint32 type_variation_reference = 1;
@@ -122,6 +127,11 @@ message DataType {
 
   message TimestampNTZ {
     uint32 type_variation_reference = 1;
+  }
+
+  message Time {
+    optional int32 precision = 1;
+    uint32 type_variation_reference = 2;
   }
 
   message CalendarInterval {
@@ -188,10 +198,14 @@ message DataType {
 
   message UDT {
     string type = 1;
+    // Required for Scala/Java UDT
     optional string jvm_class = 2;
+    // Required for Python UDT
     optional string python_class = 3;
+    // Required for Python UDT
     optional string serialized_python_class = 4;
-    DataType sql_type = 5;
+    // Required for Python UDT
+    optional DataType sql_type = 5;
   }
 
   message Unparsed {

@@ -324,7 +324,9 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def charTypeMissingLengthError(dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
+  def charVarcharTypeMissingLengthError(
+      dataType: String,
+      ctx: PrimitiveDataTypeContext): Throwable = {
     new ParseException(
       errorClass = "DATATYPE_MISSING_SIZE",
       messageParameters = Map("type" -> toSQLType(dataType)),
@@ -333,7 +335,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def nestedTypeMissingElementTypeError(
       dataType: String,
-      ctx: PrimitiveDataTypeContext): Throwable = {
+      ctx: ComplexDataTypeContext): Throwable = {
     dataType.toUpperCase(Locale.ROOT) match {
       case "ARRAY" =>
         new ParseException(
@@ -500,7 +502,6 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       command = Option(sqlText),
       start = position,
-      stop = position,
       errorClass = "INVALID_SQL_SYNTAX.UNSUPPORTED_SQL_STATEMENT",
       messageParameters = Map("sqlText" -> sqlText))
   }
@@ -632,7 +633,6 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       command = origin.sqlText,
       start = origin,
-      stop = origin,
       errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
       messageParameters = Map("statement" -> statement))
   }
@@ -654,6 +654,20 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.CREATE_ROUTINE_WITH_IF_NOT_EXISTS_AND_REPLACE",
       ctx)
+  }
+
+  def createTempTableUsingProviderError(ctx: CreateTableContext): Throwable = {
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.CREATE_TEMP_TABLE_USING_PROVIDER", ctx)
+  }
+
+  def createFuncWithGeneratedColumnsError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_GENERATED_COLUMNS_AS_PARAMETERS",
+      ctx)
+  }
+
+  def createFuncWithConstraintError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_COLUMN_CONSTRAINTS", ctx)
   }
 
   def defineTempFuncWithIfNotExistsError(ctx: ParserRuleContext): Throwable = {
@@ -690,7 +704,6 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       command = Some(command),
       start = start,
-      stop = stop,
       errorClass = "UNCLOSED_BRACKETED_COMMENT",
       messageParameters = Map.empty)
   }
@@ -790,5 +803,21 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def clusterByWithBucketing(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED", ctx)
+  }
+
+  def invalidConstraintCharacteristics(
+      ctx: ParserRuleContext,
+      characteristics: String): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_CONSTRAINT_CHARACTERISTICS",
+      messageParameters = Map("characteristics" -> characteristics),
+      ctx)
+  }
+
+  def multiplePrimaryKeysError(ctx: ParserRuleContext, columns: String): Throwable = {
+    new ParseException(
+      errorClass = "MULTIPLE_PRIMARY_KEYS",
+      messageParameters = Map("columns" -> columns),
+      ctx)
   }
 }

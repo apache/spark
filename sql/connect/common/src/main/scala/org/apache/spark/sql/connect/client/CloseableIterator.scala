@@ -25,6 +25,16 @@ private[sql] trait CloseableIterator[E] extends Iterator[E] with AutoCloseable {
 
     override def close() = self.close()
   }
+
+  override def map[B](f: E => B): CloseableIterator[B] = {
+    new CloseableIterator[B] {
+      override def next(): B = f(self.next())
+
+      override def hasNext: Boolean = self.hasNext
+
+      override def close(): Unit = self.close()
+    }
+  }
 }
 
 private[sql] abstract class WrappedCloseableIterator[E] extends CloseableIterator[E] {

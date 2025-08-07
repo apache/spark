@@ -1,0 +1,2 @@
+--SET spark.sql.legacy.parseQueryWithoutEof=true
+--IMPORT parse-query-correctness.sql

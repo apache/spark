@@ -55,8 +55,7 @@ To enable authorization, Spark Master should have
 `spark.master.rest.filters=org.apache.spark.ui.JWSFilter` and
 `spark.org.apache.spark.ui.JWSFilter.param.secretKey=BASE64URL-ENCODED-KEY` configurations, and
 client should provide HTTP `Authorization` header which contains JSON Web Token signed by
-the shared secret key. Please note that this feature requires a Spark distribution built with
-`jjwt` profile.
+the shared secret key.
 
 ### YARN
 
@@ -72,7 +71,7 @@ secrets to be secure.
   <td>false</td>
   <td>
     Set to true for applications that have higher security requirements and prefer that their
-    secret is not saved in the db. The shuffle data of such applications wll not be recovered after
+    secret is not saved in the db. The shuffle data of such applications will not be recovered after
     the External Shuffle Service restarts.
   </td>
   <td>3.5.0</td>
@@ -816,7 +815,7 @@ be limited to origin hosts that need to access the services.
 
 However, like the REST Submission port, Spark also supports HTTP `Authorization` header
 with a cryptographically signed JSON Web Token (JWT) for all UI ports.
-To use it, a user needs the Spark distribution built with `jjwt` profile and to configure
+To use it, a user needs to configure
 `spark.ui.filters=org.apache.spark.ui.JWSFilter` and
 `spark.org.apache.spark.ui.JWSFilter.param.secretKey=BASE64URL-ENCODED-KEY`.
 

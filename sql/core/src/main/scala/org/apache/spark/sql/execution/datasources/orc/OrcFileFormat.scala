@@ -162,7 +162,7 @@ class OrcFileFormat
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(hadoopConf, sqlConf.caseSensitiveAnalysis)
 
     val broadcastedConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+        SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     val orcFilterPushDown = sparkSession.sessionState.conf.orcFilterPushDown
 
@@ -246,6 +246,7 @@ class OrcFileFormat
   override def supportDataType(dataType: DataType): Boolean = dataType match {
     case _: VariantType => false
 
+    case _: TimeType => false
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }

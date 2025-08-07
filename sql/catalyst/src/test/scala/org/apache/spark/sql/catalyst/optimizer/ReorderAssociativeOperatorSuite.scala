@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 
 class ReorderAssociativeOperatorSuite extends PlanTest {
 
@@ -109,15 +110,17 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
   }
 
   test("SPARK-50380: conditional branches with error expression") {
-    val originalQuery1 = testRelation.select(If($"a" === 1, 1L, Literal(1).div(0) + $"b")).analyze
-    val optimized1 = Optimize.execute(originalQuery1)
-    comparePlans(optimized1, originalQuery1)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> true.toString) {
+      val originalQuery1 = testRelation.select(If($"a" === 1, 1L, Literal(1).div(0) + $"b")).analyze
+      val optimized1 = Optimize.execute(originalQuery1)
+      comparePlans(optimized1, originalQuery1)
 
-    val originalQuery2 = testRelation.select(
-      If($"a" === 1, 1, ($"b" + Literal(Int.MaxValue)) + 1).as("col")).analyze
-    val optimized2 = Optimize.execute(originalQuery2)
-    val correctAnswer2 = testRelation.select(
-      If($"a" === 1, 1, $"b" + (Literal(Int.MaxValue) + 1)).as("col")).analyze
-    comparePlans(optimized2, correctAnswer2)
+      val originalQuery2 = testRelation.select(
+        If($"a" === 1, 1, ($"b" + Literal(Int.MaxValue)) + 1).as("col")).analyze
+      val optimized2 = Optimize.execute(originalQuery2)
+      val correctAnswer2 = testRelation.select(
+        If($"a" === 1, 1, $"b" + (Literal(Int.MaxValue) + 1)).as("col")).analyze
+      comparePlans(optimized2, correctAnswer2)
+    }
   }
 }

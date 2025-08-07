@@ -19,6 +19,7 @@ package org.apache.spark.sql.avro
 
 import java.math.BigDecimal
 import java.nio.ByteBuffer
+import java.time.ZoneOffset
 
 import scala.jdk.CollectionConverters._
 
@@ -57,7 +58,7 @@ private[sql] class AvroDeserializer(
   def this(
       rootAvroType: Schema,
       rootCatalystType: DataType,
-      datetimeRebaseMode: String,
+      datetimeRebaseMode: LegacyBehaviorPolicy.Value,
       useStableIdForUnionType: Boolean,
       stableIdPrefixForUnionType: String,
       recursiveFieldMaxDepth: Int) = {
@@ -65,7 +66,7 @@ private[sql] class AvroDeserializer(
       rootAvroType,
       rootCatalystType,
       positionalFieldMatch = false,
-      RebaseSpec(LegacyBehaviorPolicy.withName(datetimeRebaseMode)),
+      RebaseSpec(datetimeRebaseMode),
       new NoopFilters,
       useStableIdForUnionType,
       stableIdPrefixForUnionType,
@@ -158,6 +159,12 @@ private[sql] class AvroDeserializer(
 
       case (INT, DateType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, dateRebaseFunc(value.asInstanceOf[Int]))
+
+      case (INT, TimestampNTZType) if avroType.getLogicalType.isInstanceOf[LogicalTypes.Date] =>
+        (updater, ordinal, value) =>
+          val days = dateRebaseFunc(value.asInstanceOf[Int])
+          val micros = DateTimeUtils.daysToMicros(days, ZoneOffset.UTC)
+          updater.setLong(ordinal, micros)
 
       case (LONG, dt: DatetimeType)
         if preventReadingIncorrectType && realDataType.isInstanceOf[DayTimeIntervalType] =>

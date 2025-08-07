@@ -139,11 +139,17 @@ class ResolveHintsSuite extends AnalysisTest {
       UnresolvedHint("coalesce", Seq(Literal(20)), table("TaBlE")),
       Repartition(numPartitions = 20, shuffle = false, child = testRelation))
     checkAnalysisWithoutViewWrapper(
+      UnresolvedHint("coalesce", Seq(Literal(20.toByte)), table("TaBlE")),
+      Repartition(numPartitions = 20, shuffle = false, child = testRelation))
+    checkAnalysisWithoutViewWrapper(
       UnresolvedHint("REPARTITION", Seq(Literal(100)), table("TaBlE")),
       Repartition(numPartitions = 100, shuffle = true, child = testRelation))
     checkAnalysisWithoutViewWrapper(
       UnresolvedHint("RePARTITion", Seq(Literal(200)), table("TaBlE")),
       Repartition(numPartitions = 200, shuffle = true, child = testRelation))
+    checkAnalysisWithoutViewWrapper(
+      UnresolvedHint("REPARTITION", Seq(Literal(100.toShort)), table("TaBlE")),
+      Repartition(numPartitions = 100, shuffle = true, child = testRelation))
 
     val errMsg = "COALESCE Hint expects a partition number as a parameter"
 
@@ -194,7 +200,8 @@ class ResolveHintsSuite extends AnalysisTest {
         Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)),
         testRelation, None))
 
-    val errMsg2 = "REPARTITION Hint parameter should include columns, but"
+    val errMsg2 = "REPARTITION Hint parameters should include an optional integral partitionNum " +
+      "and/or columns, but"
 
     assertAnalysisError(
       UnresolvedHint("REPARTITION", Seq(Literal(true)), table("TaBlE")),
@@ -206,8 +213,8 @@ class ResolveHintsSuite extends AnalysisTest {
         table("TaBlE")),
       Seq(errMsg2))
 
-    val errMsg3 = "REPARTITION_BY_RANGE Hint parameter should include columns, but"
-
+    val errMsg3 = "REPARTITION_BY_RANGE Hint parameters should include an optional " +
+      "integral partitionNum and/or columns, but"
     assertAnalysisError(
       UnresolvedHint("REPARTITION_BY_RANGE",
         Seq(Literal(1.0), AttributeReference("a", IntegerType)()),
@@ -339,13 +346,19 @@ class ResolveHintsSuite extends AnalysisTest {
         testRelation)
     }
 
+    val msg = "REBALANCE Hint parameters should include an optional integral partitionNum " +
+      "and/or columns, but \"1\" can not be recognized as either partitionNum or columns."
     assertAnalysisError(
       UnresolvedHint("REBALANCE", Seq(Literal(1), Literal(1)), table("TaBlE")),
-      Seq("Hint parameter should include columns"))
+      Seq(msg))
 
     assertAnalysisError(
       UnresolvedHint("REBALANCE", Seq(1, Literal(1)), table("TaBlE")),
-      Seq("Hint parameter should include columns"))
+      Seq(msg))
+
+    assertAnalysisError(
+      UnresolvedHint("REBALANCE", Seq(1, Literal(Array[Byte](0, 1, 3))), table("TaBlE")),
+      Seq("X'000103'"))
   }
 
   test("SPARK-38410: Support specify initial partition number for rebalance") {

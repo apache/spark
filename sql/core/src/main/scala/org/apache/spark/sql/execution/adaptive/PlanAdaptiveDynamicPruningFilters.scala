@@ -25,12 +25,16 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, HashedRelationBroadcastMode, HashJoin}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A rule to insert dynamic pruning predicates in order to reuse the results of broadcast.
  */
 case class PlanAdaptiveDynamicPruningFilters(
     rootPlan: AdaptiveSparkPlanExec) extends Rule[SparkPlan] with AdaptiveSparkPlanHelper {
+
+  override def conf: SQLConf = rootPlan.context.session.sessionState.conf
+
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.dynamicPartitionPruningEnabled) {
       return plan
@@ -70,9 +74,7 @@ case class PlanAdaptiveDynamicPruningFilters(
           val aliases = indices.map(idx => Alias(buildKeys(idx), buildKeys(idx).toString)())
           val aggregate = Aggregate(aliases, aliases, buildPlan)
 
-          val session = adaptivePlan.context.session
-          val sparkPlan = QueryExecution.prepareExecutedPlan(
-            session, aggregate, adaptivePlan.context)
+          val sparkPlan = QueryExecution.prepareExecutedPlan(aggregate, adaptivePlan.context)
           assert(sparkPlan.isInstanceOf[AdaptiveSparkPlanExec])
           val newAdaptivePlan = sparkPlan.asInstanceOf[AdaptiveSparkPlanExec]
           val values = SubqueryExec(name, newAdaptivePlan)

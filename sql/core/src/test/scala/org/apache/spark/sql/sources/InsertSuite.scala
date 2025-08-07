@@ -1170,7 +1170,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("create table t(i boolean, s bigint default badvalue) using parquet")
         },
-        condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
+        condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
         parameters = Map(
           "statement" -> "CREATE TABLE",
           "colName" -> "`s`",
@@ -1977,41 +1977,108 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     withSQLConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "true",
       SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
       withTable("t") {
-        sql("create table t (a int default 42) using json")
-        sql("insert into t values (null)")
-        checkAnswer(spark.table("t"), Row(null))
+        sql("create table t (a int default 42, b int) using json")
+        sql("insert into t values (null, null)")
+        // nulls should be written for fields with defaults, but not for fields without defaults.
+        checkAnswer(readTableAsText("t"), Row("{\"a\":null}"))
+        // default value is not filled in for existing fields.
+        checkAnswer(spark.table("t"), Row(null, null))
       }
     }
     withSQLConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "false",
       SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
       withTable("t") {
-        sql("create table t (a int default 42) using json")
-        sql("insert into t values (null)")
-        checkAnswer(spark.table("t"), Row(42))
+        sql("create table t (a int default 42, b int) using json")
+        sql("insert into t(a,b) values (null, null)")
+        // nulls should not be written for either field
+        checkAnswer(readTableAsText("t"), Row("{}"))
+        // default value is filled in for missing fields.
+        checkAnswer(spark.table("t"), Row(42, null))
+      }
+    }
+    // SPARK-52772 complex types get same null handling.
+    withSQLConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "true",
+      SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
+      withTable("t") {
+        sql("create table t (a struct<x: long> default struct(42), b int) using json")
+        // The cast gets the TableOutputResolver to enter the Struct,Struct case.
+        sql("insert into t values (cast(null as struct<x: int>), null)")
+        // nulls should be written for fields with defaults, but not for fields without defaults.
+        checkAnswer(readTableAsText("t"), Row("{\"a\":null}"))
+        // default value is not filled in for existing fields.
+        checkAnswer(spark.table("t"), Row(null, null))
+      }
+    }
+    withSQLConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "false",
+      SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
+      withTable("t") {
+        sql("create table t (a struct<x: long> default struct(42), b int) using json")
+        sql("insert into t values (cast(null as struct<x: int>), null)")
+        // nulls should not be written for either field
+        checkAnswer(readTableAsText("t"), Row("{}"))
+        // default value is filled in for missing fields.
+        checkAnswer(spark.table("t"), Row(Row(42), null))
+      }
+    }
+    // SPARK-52772 Should not pick up JSON DEFAULT from source
+    withSQLConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "true",
+      SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
+      withTable("t", "u") {
+        sql("create table t (a int default 42, b int) using json")
+        sql("create table u (a int, b int) using json") // NO DEFAULT
+        sql("insert into t values (null, null)")
+        sql("insert into u select a, b from t")
+        // t.a gets explicit null
+        checkAnswer(readTableAsText("t"), Row("{\"a\":null}"))
+        // u.a has null ignored
+        checkAnswer(readTableAsText("u"), Row("{}"))
+        // t.a reads explicit null
+        checkAnswer(spark.table("t"), Row(null, null))
+        // u.a reads implicit null
+        checkAnswer(spark.table("u"), Row(null, null))
+      }
+    }
+    withSQLConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "false",
+      SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
+      withTable("t", "u") {
+        sql("create table t (a int default null, b int) using json")
+        sql("create table u (a int, b int) using json") // NO DEFAULT
+        sql("insert into t values (null, null)")
+        sql("insert into u select a, b from t")
+        // t.a gets explicit null
+        checkAnswer(readTableAsText("t"), Row("{}"))
+        // u.a has null ignored
+        checkAnswer(readTableAsText("u"), Row("{}"))
+        // t.a missing key becomes default value.
+        checkAnswer(spark.table("t"), Row(null, null))
+        // u.a reads implicit null
+        checkAnswer(spark.table("u"), Row(null, null))
+      }
+    }
+    // SPARK-52772 Should not pick up JSON DEFAULT from source, even after rewrites
+    withSQLConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "true",
+      SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
+      withTable("t", "u") {
+        sql("create table t (a int default 42, b int) using json")
+        sql("create table u (a int, b int) using json") // NO DEFAULT
+        sql("insert into t values (null, null)")
+        sql("insert into u select cast(a as int), b from t")
+        // t.a gets explicit null
+        checkAnswer(readTableAsText("t"), Row("{\"a\":null}"))
+        // u.a has null ignored
+        checkAnswer(readTableAsText("u"), Row("{}"))
+        // t.a reads explicit null
+        checkAnswer(spark.table("t"), Row(null, null))
+        // u.a reads implicit null
+        checkAnswer(spark.table("u"), Row(null, null))
       }
     }
   }
 
-  test("SPARK-39359 Restrict DEFAULT columns to allowlist of supported data source types") {
-    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "csv,json,orc") {
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"create table t(a string default 'abc') using parquet")
-        },
-        condition = "DEFAULT_UNSUPPORTED",
-        parameters = Map("statementType" -> "CREATE TABLE", "dataSource" -> "parquet"))
-      withTable("t") {
-        sql(s"create table t(a string, b int) using parquet")
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql("alter table t add column s bigint default 42")
-          },
-          condition = "DEFAULT_UNSUPPORTED",
-          parameters = Map(
-            "statementType" -> "ALTER TABLE ADD COLUMNS",
-            "dataSource" -> "parquet"))
-      }
-    }
+  private def readTableAsText(tableName: String): DataFrame = {
+    val meta = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
+    val path = meta.location.toString
+    spark.read.text(path)
   }
 
   test("SPARK-39557 INSERT INTO statements with tables with array defaults") {
@@ -2150,11 +2217,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       Config(
         "parquet",
         useDataFrames = true),
-      // SPARK-47029: ALTER COLUMN DROP DEFAULT fails to work correctly with JSON data sources.
-      /*
       Config(
         "json"),
-        */
       Config(
         "json",
         useDataFrames = true),

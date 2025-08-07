@@ -21,7 +21,7 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.ml.linalg.{BLAS, Vector}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
@@ -241,6 +241,11 @@ class GBTRegressionModel private[ml](
   @Since("1.4.0")
   def this(uid: String, _trees: Array[DecisionTreeRegressionModel], _treeWeights: Array[Double]) =
     this(uid, _trees, _treeWeights, -1)
+
+  // For ml connect only
+  private[ml] def this() = this("", Array(new DecisionTreeRegressionModel), Array(Double.NaN), -1)
+
+  override def estimatedSize: Long = getEstimatedSize()
 
   @Since("1.4.0")
   override def trees: Array[DecisionTreeRegressionModel] = _trees

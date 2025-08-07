@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile, CollationFactory}
+import org.apache.spark.util.Utils
 
 // scalastyle:off line.size.limit
 /**
@@ -54,7 +55,7 @@ class ICUCollationsMapSuite extends SparkFunSuite {
     }
     val parent = collationsMapFile.getParentFile
     if (!parent.exists()) {
-      assert(parent.mkdirs(), "Could not create directory: " + parent)
+      assert(Utils.createDirectory(parent), "Could not create directory: " + parent)
     }
     stringToFile(collationsMapFile, goldenOutput)
   }

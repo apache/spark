@@ -609,12 +609,15 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        val message = intercept[AnalysisException] {
-          sql(s"ANALYZE TABLE $tableName PARTITION (DS='2010-01-01') COMPUTE STATISTICS")
-        }.getMessage
-        assert(message.contains(
-          "DS is not a valid partition column in table " +
-            s"`$SESSION_CATALOG_NAME`.`default`.`$tableName`"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ANALYZE TABLE $tableName PARTITION (DS='2010-01-01') COMPUTE STATISTICS")
+          },
+          condition = "PARTITIONS_NOT_FOUND",
+          parameters = Map(
+            "partitionList" -> "`DS`",
+            "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$tableName`")
+        )
       }
     }
   }
@@ -692,16 +695,26 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
       sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2010-01-01') SELECT * FROM src")
 
-      assertAnalysisException(
-        s"ANALYZE TABLE $tableName PARTITION (hour=20) COMPUTE STATISTICS",
-        "hour is not a valid partition column in table " +
-          s"`$SESSION_CATALOG_NAME`.`default`.`${tableName.toLowerCase(Locale.ROOT)}`"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName PARTITION (hour=20) COMPUTE STATISTICS")
+        },
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "`hour`",
+          "tableName" ->
+            s"`$SESSION_CATALOG_NAME`.`default`.`${tableName.toLowerCase(Locale.ROOT)}`")
       )
 
-      assertAnalysisException(
-        s"ANALYZE TABLE $tableName PARTITION (hour) COMPUTE STATISTICS",
-        "hour is not a valid partition column in table " +
-          s"`$SESSION_CATALOG_NAME`.`default`.`${tableName.toLowerCase(Locale.ROOT)}`"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName PARTITION (hour) COMPUTE STATISTICS")
+        },
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "`hour`",
+          "tableName" ->
+            s"`$SESSION_CATALOG_NAME`.`default`.`${tableName.toLowerCase(Locale.ROOT)}`")
       )
 
       intercept[NoSuchPartitionException] {
@@ -1055,14 +1068,14 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           withTempPaths(numPaths = 2) { case Seq(dir1, dir2) =>
             val partDir1 = new File(new File(dir1, "ds=2008-04-09"), "hr=11")
             val file1 = new File(partDir1, "data")
-            file1.getParentFile.mkdirs()
+            Utils.createDirectory(file1.getParentFile)
             Utils.tryWithResource(new PrintWriter(file1)) { writer =>
               writer.write("1,a")
             }
 
             val partDir2 = new File(new File(dir2, "ds=2008-04-09"), "hr=12")
             val file2 = new File(partDir2, "data")
-            file2.getParentFile.mkdirs()
+            Utils.createDirectory(file2.getParentFile)
             Utils.tryWithResource(new PrintWriter(file2)) { writer =>
               writer.write("1,a")
             }
@@ -1657,14 +1670,14 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         withTempPaths(numPaths = 2) { case Seq(dir1, dir2) =>
           val partDir1 = new File(new File(dir1, "ds=2008-04-09"), "hr=11")
           val file1 = new File(partDir1, "data")
-          file1.getParentFile.mkdirs()
+          Utils.createDirectory(file1.getParentFile)
           Utils.tryWithResource(new PrintWriter(file1)) { writer =>
             writer.write("1,a")
           }
 
           val partDir2 = new File(new File(dir2, "ds=2008-04-09"), "hr=12")
           val file2 = new File(partDir2, "data")
-          file2.getParentFile.mkdirs()
+          Utils.createDirectory(file2.getParentFile)
           Utils.tryWithResource(new PrintWriter(file2)) { writer =>
             writer.write("1,a")
           }

@@ -23,11 +23,12 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow}
-import org.apache.spark.sql.catalyst.plans.logical.{Call, LocalRelation, LogicalPlan, MultiResult}
+import org.apache.spark.sql.catalyst.plans.logical.{Call, CommandResult, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.connector.read.{LocalScan, Scan}
+import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.util.ArrayImplicits._
 
 class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
@@ -36,20 +37,33 @@ class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
     case c: Call if c.resolved && c.bound && c.execute && c.checkArgTypes().isSuccess =>
       session.sessionState.optimizer.execute(c) match {
         case Call(ResolvedProcedure(_, _, procedure: BoundProcedure), args, _) =>
-          invoke(procedure, args)
+          invoke(procedure, args, c)
         case _ =>
           throw SparkException.internalError("Unexpected plan for optimized CALL statement")
       }
   }
 
-  private def invoke(procedure: BoundProcedure, args: Seq[Expression]): LogicalPlan = {
+  private def invoke(procedure: BoundProcedure, args: Seq[Expression], call: Call): LogicalPlan = {
     val input = toInternalRow(args)
     val scanIterator = procedure.call(input)
     val relations = scanIterator.asScala.map(toRelation).toSeq
+    // Wrap the result in a CommandResult so SparkConnect
+    // recognizes it as an eagerly executed SQL Command.
     relations match {
-      case Nil => LocalRelation(Nil)
-      case Seq(relation) => relation
-      case _ => MultiResult(relations)
+      case Nil =>
+        CommandResult(
+          Seq.empty,
+          call,
+          LocalTableScanExec(Seq.empty, Seq.empty, None),
+          Seq.empty)
+      case Seq(relation: LocalRelation) =>
+        CommandResult(
+          relation.output,
+          call,
+          LocalTableScanExec(relation.output, relation.data, None),
+          relation.data)
+      case _ =>
+        throw SparkException.internalError(s"Multi-result procedures are temporarily not supported")
     }
   }
 

@@ -428,6 +428,198 @@ Project [get(array(1, 2, 3), -1) AS get(array(1, 2, 3), -1)#x]
 
 
 -- !query
+select get(1, 0)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\")",
+    "sqlExpr" : "\"1[0]\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "get(1, 0)"
+  } ]
+}
+
+
+-- !query
+select get(1, -1)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\")",
+    "sqlExpr" : "\"1[-1]\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "get(1, -1)"
+  } ]
+}
+
+
+-- !query
+select get('1', 0)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\")",
+    "sqlExpr" : "\"1[0]\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "get('1', 0)"
+  } ]
+}
+
+
+-- !query
+select get('1', -1)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\")",
+    "sqlExpr" : "\"1[-1]\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "get('1', -1)"
+  } ]
+}
+
+
+-- !query
+select get(null, 0)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"NULL\"",
+    "inputType" : "\"VOID\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\")",
+    "sqlExpr" : "\"NULL[0]\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "get(null, 0)"
+  } ]
+}
+
+
+-- !query
+select get(null, -1)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"NULL\"",
+    "inputType" : "\"VOID\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\")",
+    "sqlExpr" : "\"NULL[-1]\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "get(null, -1)"
+  } ]
+}
+
+
+-- !query
+select get(null, null)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"NULL\"",
+    "inputType" : "\"VOID\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\")",
+    "sqlExpr" : "\"NULL[NULL]\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "get(null, null)"
+  } ]
+}
+
+
+-- !query
+select get(CAST (null AS string), 0)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"CAST(NULL AS STRING)\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\")",
+    "sqlExpr" : "\"CAST(NULL AS STRING)[0]\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "get(CAST (null AS string), 0)"
+  } ]
+}
+
+
+-- !query
 select array_insert(array(1, 2, 3), 3, 4)
 -- !query analysis
 Project [array_insert(array(1, 2, 3), 3, 4, false) AS array_insert(array(1, 2, 3), 3, 4)#x]

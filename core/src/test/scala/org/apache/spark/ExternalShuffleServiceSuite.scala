@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.io.File
+import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermission
 
@@ -35,8 +36,9 @@ import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.server.TransportServer
 import org.apache.spark.network.shuffle.{ExecutorDiskUtils, ExternalBlockHandler, ExternalBlockStoreClient}
-import org.apache.spark.storage.{RDDBlockId, ShuffleBlockId, ShuffleDataBlockId, ShuffleIndexBlockId, StorageLevel}
+import org.apache.spark.storage.{BroadcastBlockId, RDDBlockId, ShuffleBlockId, ShuffleDataBlockId, ShuffleIndexBlockId, StorageLevel}
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
  * This suite creates an external shuffle server and routes all shuffle fetches through it.
@@ -117,12 +119,15 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
       .set(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, true)
       .set(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, true)
       .set(config.EXECUTOR_REMOVE_DELAY.key, "0s")
+      .set(config.DRIVER_BIND_ADDRESS.key, Utils.localHostName())
     sc = new SparkContext("local-cluster[1,1,1024]", "test", confWithRddFetchEnabled)
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
     sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
     try {
+      val list = List[Int](1, 2, 3, 4)
+      val broadcast = sc.broadcast(list)
       val rdd = sc.parallelize(0 until 100, 2)
-        .map { i => (i, 1) }
+        .map { i => (i, broadcast.value.size) }
         .persist(StorageLevel.DISK_ONLY)
 
       rdd.count()
@@ -173,7 +178,58 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
           "external shuffle service port should be contained")
       }
 
+      eventually(timeout(2.seconds), interval(100.milliseconds)) {
+        val locationStatusForLocalHost =
+          sc.env.blockManager.master.getLocationsAndStatus(blockId, Utils.localHostName())
+        assert(locationStatusForLocalHost.isDefined)
+        assert(locationStatusForLocalHost.get.localDirs.isDefined)
+        assert(locationStatusForLocalHost.get.locations.head.executorId == "0")
+        assert(locationStatusForLocalHost.get.locations.head.host == Utils.localHostName())
+      }
+
+      eventually(timeout(2.seconds), interval(100.milliseconds)) {
+        val locationStatusForRemoteHost =
+          sc.env.blockManager.master.getLocationsAndStatus(blockId, "<invalid-host>")
+        assert(locationStatusForRemoteHost.isDefined)
+        assert(locationStatusForRemoteHost.get.localDirs.isEmpty)
+        assert(locationStatusForRemoteHost.get.locations.head.executorId == "0")
+        assert(locationStatusForRemoteHost.get.locations.head.host == Utils.localHostName())
+      }
+
       assert(sc.env.blockManager.getRemoteValues(blockId).isDefined)
+
+      eventually(timeout(2.seconds), interval(100.milliseconds)) {
+        val broadcastBlockId = BroadcastBlockId(broadcast.id, "piece0")
+        val locStatusForMemBroadcast =
+          sc.env.blockManager.master.getLocationsAndStatus(broadcastBlockId, Utils.localHostName())
+        assert(locStatusForMemBroadcast.isDefined)
+        assert(locStatusForMemBroadcast.get.localDirs.isEmpty)
+        assert(locStatusForMemBroadcast.get.locations.head.executorId == "driver")
+        assert(locStatusForMemBroadcast.get.locations.head.host == Utils.localHostName())
+      }
+
+      val byteBuffer = ByteBuffer.wrap(Array[Byte](7))
+      val bytes = new ChunkedByteBuffer(Array(byteBuffer))
+      val diskBroadcastId = BroadcastBlockId(Long.MaxValue, "piece0")
+      sc.env.blockManager.putBytes(diskBroadcastId, bytes, StorageLevel.DISK_ONLY,
+        tellMaster = true)
+      eventually(timeout(2.seconds), interval(100.milliseconds)) {
+        val locStatusForDiskBroadcast =
+          sc.env.blockManager.master.getLocationsAndStatus(diskBroadcastId, Utils.localHostName())
+        assert(locStatusForDiskBroadcast.isDefined)
+        assert(locStatusForDiskBroadcast.get.localDirs.isDefined)
+        assert(locStatusForDiskBroadcast.get.locations.head.executorId == "driver")
+        assert(locStatusForDiskBroadcast.get.locations.head.host == Utils.localHostName())
+      }
+
+      eventually(timeout(2.seconds), interval(100.milliseconds)) {
+        val locStatusForDiskBroadcastForFetch =
+          sc.env.blockManager.master.getLocationsAndStatus(diskBroadcastId, "<invalid-host>")
+        assert(locStatusForDiskBroadcastForFetch.isDefined)
+        assert(locStatusForDiskBroadcastForFetch.get.localDirs.isEmpty)
+        assert(locStatusForDiskBroadcastForFetch.get.locations.head.executorId == "driver")
+        assert(locStatusForDiskBroadcastForFetch.get.locations.head.host == Utils.localHostName())
+      }
 
       // test unpersist: as executors are killed the blocks will be removed via the shuffle service
       rdd.unpersist(true)

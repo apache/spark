@@ -19,13 +19,26 @@
 Upgrading PySpark
 ==================
 
+Upgrading from PySpark 4.0 to 4.1
+---------------------------------
+
+* In Spark 4.1, Python 3.9 support was dropped in PySpark.
+* In Spark 4.1, the minimum supported version for PyArrow has been raised from 11.0.0 to 15.0.0 in PySpark.
+* In Spark 4.1, the minimum supported version for Pandas has been raised from 2.0.0 to 2.2.0 in PySpark.
+* In Spark 4.1, ``DataFrame['name']`` on Spark Connect Python Client no longer eagerly validate the column name. To restore the legacy behavior, set ``PYSPARK_VALIDATE_COLUMN_NAME_LEGACY`` environment variable to ``1``.
+* In Spark 4.1, Arrow-optimized Python UDF supports UDT input / output instead of falling back to the regular UDF. To restore the legacy behavior, set ``spark.sql.execution.pythonUDF.arrow.legacy.fallbackOnUDT`` to ``true``.
+* In Spark 4.1, unnecessary conversion to pandas instances is removed when ``spark.sql.execution.pythonUDF.arrow.enabled`` is enabled. As a result, the type coercion changes when the produced output has a schema different from the specified schema. To restore the previous behavior, enable ``spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled``.
+* In Spark 4.1, unnecessary conversion to pandas instances is removed when ``spark.sql.execution.pythonUDTF.arrow.enabled`` is enabled. As a result, the type coercion changes when the produced output has a schema different from the specified schema. To restore the previous behavior, enable ``spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled``.
+
+* In Spark 4.1, the ``spark.sql.execution.pandas.convertToArrowArraySafely`` configuration is enabled by default. When this setting is enabled, PyArrow raises errors for unsafe conversions such as integer overflows, floating point truncation, and loss of precision. This change affects the return data serialization of arrow-enabled UDFs/pandas_udfs, and the creation of PySpark DataFrames. To restore the previous behavior, set the configuration to ``false``.
+
 Upgrading from PySpark 3.5 to 4.0
 ---------------------------------
 
 * In Spark 4.0, Python 3.8 support was dropped in PySpark.
 * In Spark 4.0, the minimum supported version for Pandas has been raised from 1.0.5 to 2.0.0 in PySpark.
 * In Spark 4.0, the minimum supported version for Numpy has been raised from 1.15 to 1.21 in PySpark.
-* In Spark 4.0, the minimum supported version for PyArrow has been raised from 4.0.0 to 10.0.0 in PySpark.
+* In Spark 4.0, the minimum supported version for PyArrow has been raised from 4.0.0 to 11.0.0 in PySpark.
 * In Spark 4.0, ``Int64Index`` and ``Float64Index`` have been removed from pandas API on Spark, ``Index`` should be used directly.
 * In Spark 4.0, ``DataFrame.iteritems`` has been removed from pandas API on Spark, use ``DataFrame.items`` instead.
 * In Spark 4.0, ``Series.iteritems`` has been removed from pandas API on Spark, use ``Series.items`` instead.
@@ -40,7 +53,7 @@ Upgrading from PySpark 3.5 to 4.0
 * In Spark 4.0, ``include_start`` and ``include_end`` parameters from ``DataFrame.between_time`` have been removed from pandas API on Spark, use ``inclusive`` instead.
 * In Spark 4.0, ``include_start`` and ``include_end`` parameters from ``Series.between_time`` have been removed from pandas API on Spark, use ``inclusive`` instead.
 * In Spark 4.0, the various datetime attributes of ``DatetimeIndex`` (``day``, ``month``, ``year`` etc.) are now ``int32`` instead of ``int64`` from pandas API on Spark.
-* In Spark 4.0, ``sort_columns`` parameter from ``DataFrame.plot`` and `Series.plot`` has been removed from pandas API on Spark.
+* In Spark 4.0, ``sort_columns`` parameter from ``DataFrame.plot`` and ``Series.plot`` has been removed from pandas API on Spark.
 * In Spark 4.0, the default value of ``regex`` parameter for ``Series.str.replace`` has been changed from ``True`` to ``False`` from pandas API on Spark. Additionally, a single character ``pat`` with ``regex=True`` is now treated as a regular expression instead of a string literal.
 * In Spark 4.0, the resulting name from ``value_counts`` for all objects sets to ``'count'`` (or ``'proportion'`` if ``normalize=True`` was passed) from pandas API on Spark, and the index will be named after the original object.
 * In Spark 4.0, ``squeeze`` parameter from ``ps.read_csv`` and ``ps.read_excel`` has been removed from pandas API on Spark.
@@ -72,8 +85,10 @@ Upgrading from PySpark 3.5 to 4.0
 * In Spark 4.0, ``pyspark.testing.assertPandasOnSparkEqual`` has been removed from Pandas API on Spark, use ``pyspark.pandas.testing.assert_frame_equal`` instead.
 * In Spark 4.0, the aliases ``Y``, ``M``, ``H``, ``T``, ``S`` have been deprecated from Pandas API on Spark, use ``YE``, ``ME``, ``h``, ``min``, ``s`` instead respectively.
 * In Spark 4.0, the schema of a map column is inferred by merging the schemas of all pairs in the map. To restore the previous behavior where the schema is only inferred from the first non-null pair, you can set ``spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled`` to ``true``.
-* In Spark 4.0, `compute.ops_on_diff_frames` is on by default. To restore the previous behavior, set `compute.ops_on_diff_frames` to `false`.
-* In Spark 4.0, the data type `YearMonthIntervalType` in ``DataFrame.collect`` no longer returns the underlying integers. To restore the previous behavior, set ``PYSPARK_YM_INTERVAL_LEGACY`` environment variable to ``1``.
+* In Spark 4.0, ``compute.ops_on_diff_frames`` is on by default. To restore the previous behavior, set ``compute.ops_on_diff_frames`` to ``false``.
+* In Spark 4.0, the data type ``YearMonthIntervalType`` in ``DataFrame.collect`` no longer returns the underlying integers. To restore the previous behavior, set ``PYSPARK_YM_INTERVAL_LEGACY`` environment variable to ``1``.
+* In Spark 4.0, items other than functions (e.g. ``DataFrame``, ``Column``, ``StructType``) have been removed from the wildcard import ``from pyspark.sql.functions import *``, you should import these items from proper modules (e.g. ``from pyspark.sql import DataFrame, Column``, ``from pyspark.sql.types import StructType``).
+* In Spark 4.0, pandas API on Spark will raise an exception if the underlying Spark is working with ANSI mode enabled that is enabled by default, as it will not work properly with ANSI mode. To make it work, you need to explicitly disable ANSI mode by setting ``spark.sql.ansi.enabled`` to ``false``. Alternatively you can set a pandas-on-spark option ``compute.fail_on_ansi_mode`` to ``False`` to force it to work, although it can cause unexpected behavior.
 
 
 Upgrading from PySpark 3.3 to 3.4

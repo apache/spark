@@ -176,6 +176,13 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
   override def createPartitioning(numPartitions: Int): Partitioning = {
     RangePartitioning(ordering, numPartitions)
   }
+
+  def areAllClusterKeysMatched(expressions: Seq[Expression]): Boolean = {
+    expressions.length == ordering.length &&
+      expressions.zip(ordering).forall {
+        case (x, o) => x.semanticEquals(o.child)
+      }
+  }
 }
 
 /**
@@ -309,7 +316,9 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
    * Returns an expression that will produce a valid partition ID(i.e. non-negative and is less
    * than numPartitions) based on hashing expressions.
    */
-  def partitionIdExpression: Expression = Pmod(new Murmur3Hash(expressions), Literal(numPartitions))
+  def partitionIdExpression: Expression = Pmod(
+    new CollationAwareMurmur3Hash(expressions), Literal(numPartitions)
+  )
 
   override protected def withNewChildrenInternal(
     newChildren: IndexedSeq[Expression]): HashPartitioning = copy(expressions = newChildren)
@@ -393,6 +402,9 @@ case class KeyGroupedPartitioning(
               attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
             }
           }
+
+        case o @ OrderedDistribution(_) if SQLConf.get.v2BucketingAllowSorting =>
+          o.areAllClusterKeysMatched(expressions)
 
         case _ =>
           false

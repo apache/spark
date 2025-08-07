@@ -23,7 +23,7 @@ import org.scalatest.Tag
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, ExpressionSet}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1364,5 +1364,32 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
 
     // the states are cleared - a subsequent correct query should succeed
     sql("select 1 as a, a").queryExecution.assertAnalyzed()
+  }
+
+  test("LateralColumnAlias with Generate") {
+    checkAnswer(
+      sql("WITH cte AS (SELECT EXPLODE(ARRAY(1, 2, 3)) AS c1, c1) SELECT * FROM cte"),
+      Row(1, 1) :: Row(2, 2) :: Row(3, 3) :: Nil
+    )
+    checkAnswer(
+      sql(
+        s"""
+           |SELECT
+           |  explode(split(name , ',')) AS new_name,
+           |  new_name like 'a%'
+           |FROM $testTable
+           |""".stripMargin),
+      Row("alex", true) :: Row("amy", true) :: Row("cathy", false) ::
+        Row("david", false) :: Row("jen", false) :: Nil
+    )
+  }
+
+  test("Order in inner project lists should respect original project list order") {
+    val plan = sql("SELECT 0 AS a, 1 AS b, b AS c, a AS d").queryExecution.analyzed
+    plan match {
+      case Project(outerProjectList, Project(innerProjectList, _)) =>
+        assert(outerProjectList.map(_.name) == Seq("a", "b", "c", "d"))
+        assert(innerProjectList.map(_.name) == Seq("a", "b"))
+    }
   }
 }

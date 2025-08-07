@@ -23,6 +23,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.connect.SparkConnectServerTest
+import org.apache.spark.sql.connect.config.Connect
 
 class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
 
@@ -31,6 +32,27 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
   // even if the connection got closed, the client would see it as succeeded because the results
   // were all already in the buffer.
   val BIG_ENOUGH_QUERY = "select * from range(1000000)"
+
+  test("SQL Script over Spark Connect.") {
+    val sessionId = UUID.randomUUID.toString()
+    val userId = "ScriptUser"
+    val sqlScriptText =
+      """BEGIN
+        |IF 1 = 1 THEN
+        |  SELECT 1;
+        |ELSE
+        |  SELECT 2;
+        |END IF;
+        |END
+        """.stripMargin
+    withClient(sessionId = sessionId, userId = userId) { client =>
+      // this will create the session, and then ReleaseSession at the end of withClient.
+      val enableSqlScripting = client.execute(buildPlan("SET spark.sql.scripting.enabled=true"))
+      enableSqlScripting.hasNext // trigger execution
+      val query = client.execute(buildSqlCommandPlan(sqlScriptText))
+      checkSqlCommandResponse(query.next().getSqlCommandResult, Seq(Seq(1)))
+    }
+  }
 
   test("Execute is sent eagerly to the server upon iterator creation") {
     // This behavior changed with grpc upgrade from 1.56.0 to 1.59.0.
@@ -243,6 +265,49 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
         newest_query.hasNext
       }
       assert(queryError.getMessage.contains("INVALID_HANDLE.SESSION_CHANGED"))
+    }
+  }
+
+  test("Client is allowed to reconnect to released session if allow_reconnect is set") {
+    withRawBlockingStub { stub =>
+      val sessionId = UUID.randomUUID.toString()
+      val iter =
+        stub.executePlan(
+          buildExecutePlanRequest(
+            buildPlan("select * from range(1000000)"),
+            sessionId = sessionId))
+      iter.hasNext // guarantees the request was received by server.
+
+      stub.releaseSession(buildReleaseSessionRequest(sessionId, allowReconnect = true))
+
+      val iter2 =
+        stub.executePlan(
+          buildExecutePlanRequest(
+            buildPlan("select * from range(1000000)"),
+            sessionId = sessionId))
+      // guarantees the request was received by server. No exception should be thrown on reuse
+      iter2.hasNext
+    }
+  }
+
+  test("Exceptions thrown in the gRPC response observer does not lead to infinite retries") {
+    withSparkEnvConfs(
+      (Connect.CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION.key, "10")) {
+      withClient { client =>
+        val query = client.execute(buildPlan("SELECT 1"))
+        query.hasNext
+        val execution = eventuallyGetExecutionHolder
+        Eventually.eventually(timeout(eventuallyTimeout)) {
+          assert(!execution.isExecuteThreadRunnerAlive())
+        }
+
+        execution.undoResponseObserverCompletion()
+
+        val error = intercept[SparkException] {
+          while (query.hasNext) query.next()
+        }
+        assert(error.getMessage.contains("IllegalStateException"))
+      }
     }
   }
 }

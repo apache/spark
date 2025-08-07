@@ -24,8 +24,9 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
-import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -86,7 +87,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType().add("id", IntegerType))
+      assert(table.columns sameElements Array(Column.create("id", IntegerType)))
     }
   }
 
@@ -99,7 +100,9 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType().add("id", IntegerType).add("data", StringType))
+      assert(table.columns sameElements
+        Array(Column.create("id", IntegerType),
+          Column.create("data", StringType)))
     }
   }
 
@@ -112,9 +115,9 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === StructType(Seq(
-        StructField("id", IntegerType),
-        StructField("data", StringType, nullable = false))))
+      assert(table.columns sameElements
+        Array(Column.create("id", IntegerType),
+          Column.create("data", StringType, false)))
     }
   }
 
@@ -127,9 +130,9 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === StructType(Seq(
-        StructField("id", IntegerType),
-        StructField("data", StringType).withComment("doc"))))
+      assert(table.columns sameElements
+        Array(Column.create("id", IntegerType),
+          Column.create("data", StringType, true, "doc", null)))
     }
   }
 
@@ -152,15 +155,17 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       sql(s"CREATE TABLE $t (point struct<x: int>) USING $v2Format")
 
       sql(s"ALTER TABLE $t ADD COLUMN a string FIRST")
-      assert(getTableMetadata(t).schema == new StructType()
-        .add("a", StringType)
-        .add("point", new StructType().add("x", IntegerType)))
+      assert(getTableMetadata(t).columns sameElements
+        Array(
+          Column.create("a", StringType),
+          Column.create("point", new StructType().add("x", IntegerType))))
 
       sql(s"ALTER TABLE $t ADD COLUMN b string AFTER point")
-      assert(getTableMetadata(t).schema == new StructType()
-        .add("a", StringType)
-        .add("point", new StructType().add("x", IntegerType))
-        .add("b", StringType))
+      assert(getTableMetadata(t).columns sameElements
+        Array(
+          Column.create("a", StringType),
+          Column.create("point", new StructType().add("x", IntegerType)),
+          Column.create("b", StringType)))
 
       val e1 = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ADD COLUMN c string AFTER non_exist"))
@@ -171,21 +176,22 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       )
 
       sql(s"ALTER TABLE $t ADD COLUMN point.y int FIRST")
-      assert(getTableMetadata(t).schema == new StructType()
-        .add("a", StringType)
-        .add("point", new StructType()
-          .add("y", IntegerType)
-          .add("x", IntegerType))
-        .add("b", StringType))
+      assert(getTableMetadata(t).columns sameElements
+        Array(Column.create("a", StringType),
+          Column.create("point", new StructType()
+            .add("y", IntegerType)
+            .add("x", IntegerType)),
+          Column.create("b", StringType)))
 
       sql(s"ALTER TABLE $t ADD COLUMN point.z int AFTER x")
-      assert(getTableMetadata(t).schema == new StructType()
-        .add("a", StringType)
-        .add("point", new StructType()
-          .add("y", IntegerType)
-          .add("x", IntegerType)
-          .add("z", IntegerType))
-        .add("b", StringType))
+      assert(getTableMetadata(t).columns sameElements
+        Array(
+          Column.create("a", StringType),
+          Column.create("point", new StructType()
+            .add("y", IntegerType)
+            .add("x", IntegerType)
+            .add("z", IntegerType)),
+          Column.create("b", StringType)))
 
       val e2 = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ADD COLUMN point.x2 int AFTER non_exist"))
@@ -203,28 +209,30 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       sql(s"CREATE TABLE $t (a string, b int, point struct<x: double, y: double>) USING $v2Format")
       sql(s"ALTER TABLE $t ADD COLUMNS (x int AFTER a, y int AFTER x, z int AFTER y)")
 
-      assert(getTableMetadata(t).schema === new StructType()
-        .add("a", StringType)
-        .add("x", IntegerType)
-        .add("y", IntegerType)
-        .add("z", IntegerType)
-        .add("b", IntegerType)
-        .add("point", new StructType()
-          .add("x", DoubleType)
-          .add("y", DoubleType)))
+      assert(getTableMetadata(t).columns sameElements
+        Array(
+          Column.create("a", StringType),
+          Column.create("x", IntegerType),
+          Column.create("y", IntegerType),
+          Column.create("z", IntegerType),
+          Column.create("b", IntegerType),
+          Column.create("point", new StructType()
+            .add("x", DoubleType)
+            .add("y", DoubleType))))
 
       sql(s"ALTER TABLE $t ADD COLUMNS (point.z double AFTER x, point.zz double AFTER z)")
-      assert(getTableMetadata(t).schema === new StructType()
-        .add("a", StringType)
-        .add("x", IntegerType)
-        .add("y", IntegerType)
-        .add("z", IntegerType)
-        .add("b", IntegerType)
-        .add("point", new StructType()
-          .add("x", DoubleType)
-          .add("z", DoubleType)
-          .add("zz", DoubleType)
-          .add("y", DoubleType)))
+      assert(getTableMetadata(t).columns sameElements
+        Array(
+          Column.create("a", StringType),
+          Column.create("x", IntegerType),
+          Column.create("y", IntegerType),
+          Column.create("z", IntegerType),
+          Column.create("b", IntegerType),
+          Column.create("point", new StructType()
+            .add("x", DoubleType)
+            .add("z", DoubleType)
+            .add("zz", DoubleType)
+            .add("y", DoubleType))))
 
       // The new column being referenced should come before being referenced.
       val e = intercept[AnalysisException](
@@ -246,10 +254,10 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === StructType(Seq(
-        StructField("id", IntegerType),
-        StructField("data", StringType).withComment("doc"),
-        StructField("ts", TimestampType))))
+      assert(table.columns sameElements Array(
+          Column.create("id", IntegerType),
+          Column.create("data", StringType, true, "doc", null),
+          Column.create("ts", TimestampType)))
     }
   }
 
@@ -262,12 +270,12 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("point", StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType),
-          StructField("z", DoubleType)))))
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("point", new StructType()
+          .add("x", DoubleType)
+          .add("y", DoubleType)
+          .add("z", DoubleType))))
     }
   }
 
@@ -281,12 +289,14 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", MapType(StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType),
-          StructField("z", DoubleType))), LongType)))
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points",
+          MapType(StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType),
+            StructField("z", DoubleType))),
+            LongType))))
     }
   }
 
@@ -300,12 +310,13 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", MapType(StringType, StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType),
-          StructField("z", DoubleType))))))
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points",
+          MapType(StringType, StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType),
+            StructField("z", DoubleType)))))))
     }
   }
 
@@ -318,12 +329,12 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", ArrayType(StructType(Seq(
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points", ArrayType(StructType(Seq(
           StructField("x", DoubleType),
           StructField("y", DoubleType),
-          StructField("z", DoubleType))))))
+          StructField("z", DoubleType)))))))
     }
   }
 
@@ -337,28 +348,25 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         val table = getTableMetadata(t)
 
         assert(table.name === t)
-        assert(table.schema === new StructType()
-          .add("a", StringType)
-          .add(StructField("b", IntegerType)
-            .withCurrentDefaultValue("2 + 3")
-            .withExistenceDefaultValue("5")))
+        assert(table.columns sameElements Array(
+          Column.create("a", StringType),
+          Column.create("b", IntegerType, true, null,
+            new ColumnDefaultValue("2 + 3", LiteralValue(5, IntegerType)), null)))
 
         sql(s"alter table $t alter column b set default 2 + 3")
 
         assert(
-          getTableMetadata(t).schema === new StructType()
-            .add("a", StringType)
-            .add(StructField("b", IntegerType)
-              .withCurrentDefaultValue("2 + 3")
-              .withExistenceDefaultValue("5")))
+          getTableMetadata(t).columns sameElements Array(
+            Column.create("a", StringType),
+            Column.create("b", IntegerType, true, null,
+              new ColumnDefaultValue("2 + 3", LiteralValue(5, IntegerType)), null)))
 
         sql(s"alter table $t alter column b drop default")
 
         assert(
-          getTableMetadata(t).schema === new StructType()
-            .add("a", StringType)
-            .add(StructField("b", IntegerType)
-              .withExistenceDefaultValue("5")))
+          getTableMetadata(t).columns sameElements Array(
+            Column.create("a", StringType),
+            Column.create("b", IntegerType, true, null, """{"EXISTS_DEFAULT":"5"}""")))
       }
     }
   }
@@ -374,7 +382,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
           },
           condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
           parameters = Map(
-            "statement" -> "ALTER TABLE",
+            "statement" -> "ALTER TABLE ADD COLUMNS",
             "colName" -> "`s`",
             "defaultValue" -> "badvalue"))
 
@@ -401,11 +409,12 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", ArrayType(StructType(Seq(
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points", ArrayType(StructType(Seq(
           StructField("x", DoubleType),
           StructField("y", DoubleType))))))
+      )
     }
   }
 
@@ -418,12 +427,12 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", ArrayType(StructType(Seq(
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points", ArrayType(StructType(Seq(
           StructField("x", DoubleType),
           StructField("y", DoubleType),
-          StructField("z", DoubleType).withComment("doc"))))))
+          StructField("z", DoubleType).withComment("doc")))))))
     }
   }
 
@@ -521,7 +530,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType().add("id", LongType))
+      assert(table.columns sameElements Array(Column.create("id", LongType)))
     }
   }
 
@@ -531,7 +540,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
       (DataTypeTestUtils.dayTimeIntervalTypes ++ DataTypeTestUtils.yearMonthIntervalTypes)
         .foreach {
-          case d: DataType => d.typeName
+          d: DataType => d.typeName
             val sqlText = s"ALTER TABLE $t ALTER COLUMN id TYPE ${d.typeName}"
 
             checkError(
@@ -559,12 +568,12 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
 
       val table = getTableMetadata(t)
       assert(table.name === t)
-      assert(table.schema === new StructType().add("id", LongType, nullable = false))
+      assert(table.columns sameElements Array(Column.create("id", LongType, false)))
 
       sql(s"ALTER TABLE $t ALTER COLUMN id DROP NOT NULL")
       val table2 = getTableMetadata(t)
       assert(table2.name === t)
-      assert(table2.schema === new StructType().add("id", LongType))
+      assert(table2.columns sameElements Array(Column.create("id", LongType, true)))
 
       val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t ALTER COLUMN id SET NOT NULL")
@@ -581,11 +590,11 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
 
       val table = getTableMetadata(t)
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("point", StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType)))))
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("point", new StructType()
+          .add("x", DoubleType)
+          .add("y", DoubleType))))
     }
   }
 
@@ -613,11 +622,11 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("point", StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType)))))
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("point", new StructType()
+          .add("x", DoubleType)
+          .add("y", DoubleType))))
     }
   }
 
@@ -644,9 +653,9 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", ArrayType(IntegerType)))
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points", ArrayType(IntegerType))))
     }
   }
 
@@ -659,9 +668,9 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", ArrayType(LongType)))
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points", ArrayType(LongType))))
     }
   }
 
@@ -688,9 +697,9 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("m", MapType(StringType, IntegerType)))
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("m", MapType(StringType, IntegerType))))
     }
   }
 
@@ -703,9 +712,9 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("m", MapType(StringType, LongType)))
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("m", MapType(StringType, LongType))))
     }
   }
 
@@ -719,11 +728,13 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", MapType(StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType))), LongType)))
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points",
+          MapType(StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType))),
+            LongType))))
     }
   }
 
@@ -737,11 +748,12 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", MapType(StringType, StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType))))))
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points",
+          MapType(StringType, StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType)))))))
     }
   }
 
@@ -754,11 +766,12 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", ArrayType(StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType))))))
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points",
+          ArrayType(StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType)))))))
     }
   }
 
@@ -834,7 +847,8 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === StructType(Seq(StructField("id", IntegerType).withComment("doc"))))
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType, true, "doc", null)))
     }
   }
 
@@ -844,22 +858,22 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       sql(s"CREATE TABLE $t (a int, b int, point struct<x: int, y: int, z: int>) USING $v2Format")
 
       sql(s"ALTER TABLE $t ALTER COLUMN b FIRST")
-      assert(getTableMetadata(t).schema == new StructType()
-        .add("b", IntegerType)
-        .add("a", IntegerType)
-        .add("point", new StructType()
+      assert(getTableMetadata(t).columns sameElements Array(
+        Column.create("b", IntegerType),
+        Column.create("a", IntegerType),
+        Column.create("point", new StructType()
           .add("x", IntegerType)
           .add("y", IntegerType)
-          .add("z", IntegerType)))
+          .add("z", IntegerType))))
 
       sql(s"ALTER TABLE $t ALTER COLUMN b AFTER point")
-      assert(getTableMetadata(t).schema == new StructType()
-        .add("a", IntegerType)
-        .add("point", new StructType()
+      assert(getTableMetadata(t).columns sameElements Array(
+        Column.create("a", IntegerType),
+        Column.create("point", new StructType()
           .add("x", IntegerType)
           .add("y", IntegerType)
-          .add("z", IntegerType))
-        .add("b", IntegerType))
+          .add("z", IntegerType)),
+        Column.create("b", IntegerType)))
 
       val sqlText1 = s"ALTER TABLE $t ALTER COLUMN b AFTER non_exist"
       checkError(
@@ -874,22 +888,23 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         context = ExpectedContext(fragment = sqlText1, start = 0, stop = sqlText1.length - 1))
 
       sql(s"ALTER TABLE $t ALTER COLUMN point.y FIRST")
-      assert(getTableMetadata(t).schema == new StructType()
-        .add("a", IntegerType)
-        .add("point", new StructType()
+      assert(getTableMetadata(t).columns sameElements Array(
+        Column.create("a", IntegerType),
+        Column.create("point", new StructType()
           .add("y", IntegerType)
           .add("x", IntegerType)
-          .add("z", IntegerType))
-        .add("b", IntegerType))
+          .add("z", IntegerType)),
+        Column.create("b", IntegerType)
+      ))
 
       sql(s"ALTER TABLE $t ALTER COLUMN point.y AFTER z")
-      assert(getTableMetadata(t).schema == new StructType()
-        .add("a", IntegerType)
-        .add("point", new StructType()
+      assert(getTableMetadata(t).columns sameElements Array(
+        Column.create("a", IntegerType),
+        Column.create("point", new StructType()
           .add("x", IntegerType)
           .add("z", IntegerType)
-          .add("y", IntegerType))
-        .add("b", IntegerType))
+          .add("y", IntegerType)),
+        Column.create("b", IntegerType)))
 
       val sqlText2 = s"ALTER TABLE $t ALTER COLUMN point.y AFTER non_exist"
       checkError(
@@ -918,11 +933,11 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("point", StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType).withComment("doc")))))
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("point", new StructType()
+          .add("x", DoubleType)
+          .add("y", DoubleType, nullable = true, "doc"))))
     }
   }
 
@@ -936,11 +951,12 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", MapType(StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType).withComment("doc"))), LongType)))
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points",
+          MapType(StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType).withComment("doc"))), LongType))))
     }
   }
 
@@ -954,11 +970,15 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", MapType(StringType, StructType(Seq(
-          StructField("x", DoubleType),
-          StructField("y", DoubleType).withComment("doc"))))))
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points",
+          MapType(StringType, StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType, nullable = true,
+              new MetadataBuilder()
+                .putString("comment", "doc")
+                .build())))))))
     }
   }
 
@@ -971,11 +991,14 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", ArrayType(StructType(Seq(
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points", ArrayType(StructType(Seq(
           StructField("x", DoubleType),
-          StructField("y", DoubleType).withComment("doc"))))))
+          StructField("y", DoubleType, nullable = true,
+            new MetadataBuilder()
+              .putString("comment", "doc")
+              .build())))))))
     }
   }
 
@@ -1017,6 +1040,84 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     }
   }
 
+  test("AlterTable: alter multiple columns/fields in the same command") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      val t = fullTableName("table_name")
+      withTable(t) {
+        sql(s"""CREATE TABLE $t (
+             |  id int,
+             |  data string,
+             |  ts timestamp NOT NULL,
+             |  points array<struct<x: double, y: double>>) USING $v2Format""".stripMargin)
+        sql(s"""ALTER TABLE $t ALTER COLUMN
+             |  id TYPE bigint,
+             |  data FIRST,
+             |  ts DROP NOT NULL,
+             |  points.element.x SET DEFAULT (1.0 + 2.0),
+             |  points.element.y COMMENT 'comment on y'""".stripMargin)
+
+        val table = getTableMetadata(t)
+
+        assert(table.name === t)
+        assert(
+          table.columns sameElements Array(
+            Column.create("data", StringType),
+            Column.create("id", LongType),
+            Column.create("ts", TimestampType, true),
+            Column.create("points", ArrayType(
+              StructType(
+                Seq(
+                  StructField("x", DoubleType).withCurrentDefaultValue("(1.0 + 2.0)"),
+                  StructField("y", DoubleType).withComment("comment on y")
+                ))))))
+      }
+    }
+  }
+
+  test("AlterTable: cannot alter the same column in the same command") {
+    val t = fullTableName("table_name")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, data string, ts timestamp) USING $v2Format")
+      val sqlText = s"ALTER TABLE $t ALTER COLUMN id TYPE bigint, id COMMENT 'id', data FIRST"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
+        parameters = Map(
+          "table" -> s"${toSQLId(prependCatalogName(t))}",
+          "fieldName" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1)
+      )
+    }
+  }
+
+  test("AlterTable: cannot alter parent and child fields in the same command") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      val t = fullTableName("table_name")
+      withTable(t) {
+        sql(s"CREATE TABLE $t (parent array<struct<child: int>>) USING $v2Format")
+        val sqlText = s"""ALTER TABLE $t ALTER COLUMN
+                         | parent.element.child TYPE string,
+                         | parent SET DEFAULT array(struct(1000))""".stripMargin
+
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(sqlText)
+          },
+          condition = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
+          parameters = Map(
+            "table" -> s"${toSQLId(prependCatalogName(t))}",
+            "fieldName" -> "`parent`"),
+          context = ExpectedContext(
+            fragment = sqlText,
+            start = 0,
+            stop = sqlText.length - 1)
+        )
+      }
+    }
+  }
+
   test("AlterTable: rename column") {
     val t = fullTableName("table_name")
     withTable(t) {
@@ -1026,7 +1127,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType().add("user_id", IntegerType))
+      assert(table.columns sameElements Array(Column.create("user_id", IntegerType)))
     }
   }
 
@@ -1039,11 +1140,11 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("point", StructType(Seq(
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("point", StructType(Seq(
           StructField("x", DoubleType),
-          StructField("t", DoubleType)))))
+          StructField("t", DoubleType))))))
     }
   }
 
@@ -1057,11 +1158,11 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("point", MapType(StructType(Seq(
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("point", MapType(StructType(Seq(
           StructField("x", DoubleType),
-          StructField("t", DoubleType))), LongType)))
+          StructField("t", DoubleType))), LongType))))
     }
   }
 
@@ -1075,11 +1176,11 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", MapType(StringType, StructType(Seq(
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points", MapType(StringType, StructType(Seq(
           StructField("x", DoubleType),
-          StructField("t", DoubleType))))))
+          StructField("t", DoubleType)))))))
     }
   }
 
@@ -1092,11 +1193,11 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", ArrayType(StructType(Seq(
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points", ArrayType(StructType(Seq(
           StructField("x", DoubleType),
-          StructField("t", DoubleType))))))
+          StructField("t", DoubleType)))))))
     }
   }
 
@@ -1200,7 +1301,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType().add("id", IntegerType))
+      assert(table.columns sameElements Array(Column.create("id", IntegerType)))
     }
   }
 
@@ -1214,11 +1315,11 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("point", StructType(Seq(
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("point", StructType(Seq(
           StructField("x", DoubleType),
-          StructField("y", DoubleType)))))
+          StructField("y", DoubleType))))))
     }
   }
 
@@ -1232,10 +1333,10 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("point", MapType(StructType(Seq(
-          StructField("x", DoubleType))), LongType)))
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("point", MapType(StructType(Seq(
+          StructField("x", DoubleType))), LongType))))
     }
   }
 
@@ -1249,10 +1350,10 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", MapType(StringType, StructType(Seq(
-          StructField("x", DoubleType))))))
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points", MapType(StringType, StructType(Seq(
+          StructField("x", DoubleType)))))))
     }
   }
 
@@ -1265,10 +1366,10 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === new StructType()
-        .add("id", IntegerType)
-        .add("points", ArrayType(StructType(Seq(
-          StructField("x", DoubleType))))))
+      assert(table.columns sameElements Array(
+        Column.create("id", IntegerType),
+        Column.create("points", ArrayType(StructType(Seq(
+          StructField("x", DoubleType)))))))
     }
   }
 
@@ -1292,7 +1393,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       // with if exists it should pass
       sql(s"ALTER TABLE $t DROP COLUMN IF EXISTS data")
       val table = getTableMetadata(t)
-      assert(table.schema == new StructType().add("id", IntegerType))
+      assert(table.columns sameElements Array(Column.create("id", IntegerType)))
     }
   }
 
@@ -1316,7 +1417,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       // with if exists it should pass
       sql(s"ALTER TABLE $t DROP COLUMN IF EXISTS point.x")
       val table = getTableMetadata(t)
-      assert(table.schema == new StructType().add("id", IntegerType))
+      assert(table.columns sameElements Array(Column.create("id", IntegerType)))
     }
   }
 
@@ -1330,8 +1431,10 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       sql(s"ALTER TABLE $t DROP COLUMNS IF EXISTS " +
         s"names, name, points.element.z, id, points.element.x")
       val table = getTableMetadata(t)
-      assert(table.schema == new StructType()
-        .add("points", ArrayType(StructType(Seq(StructField("y", DoubleType))))))
+      assert(table.columns sameElements Array(
+        Column.create("points", ArrayType(
+          StructType(Seq(
+            StructField("y", DoubleType)))))))
     }
   }
 
@@ -1378,9 +1481,9 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       val table = getTableMetadata(t)
 
       assert(table.name === t)
-      assert(table.schema === StructType(Seq(
-        StructField("col2", StringType),
-        StructField("col3", IntegerType).withComment("c3"))))
+      assert(table.columns sameElements Array(
+        Column.create("col2", StringType),
+        Column.create("col3", IntegerType, true, "c3", null)))
     }
   }
 
@@ -1395,5 +1498,40 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         condition = "COLUMN_ALREADY_EXISTS",
         parameters = Map("columnName" -> "`data`"))
     }
+  }
+
+  test("Alter column type between string and char/varchar") {
+    val types = Seq(
+      ("STRING", "\"STRING\""),
+      ("STRING COLLATE UTF8_LCASE", "\"STRING COLLATE UTF8_LCASE\""),
+      ("CHAR(5)", "\"CHAR\\(5\\)\""),
+      ("VARCHAR(5)", "\"VARCHAR\\(5\\)\""))
+    types.flatMap { a => types.map { b => (a, b) } }
+      .filter { case (a, b) => a != b }
+      .filter { case ((a, _), (b, _)) => !a.startsWith("STRING") || !b.startsWith("STRING") }
+      .foreach { case ((from, originType), (to, newType)) =>
+        val t = "table_name"
+        withTable(t) {
+          sql(s"CREATE TABLE $t (id $from) USING PARQUET")
+          val sql1 = s"ALTER TABLE $t ALTER COLUMN id TYPE $to"
+          checkErrorMatchPVals(
+            exception = intercept[AnalysisException] {
+              sql(sql1)
+            },
+            condition = "NOT_SUPPORTED_CHANGE_COLUMN",
+            sqlState = None,
+            parameters = Map(
+              "originType" -> originType,
+              "newType" -> newType,
+              "newName" -> "`id`",
+              "originName" -> "`id`",
+              "table" -> ".*table_name.*"),
+            context = ExpectedContext(
+              fragment = sql1,
+              start = 0,
+              stop = sql1.length - 1)
+          )
+        }
+      }
   }
 }

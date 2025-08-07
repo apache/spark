@@ -84,9 +84,9 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
       keys.append(keyNormalized)
       values.append(value)
     } else {
-      if (mapKeyDedupPolicy == SQLConf.MapKeyDedupPolicy.EXCEPTION.toString) {
+      if (mapKeyDedupPolicy == SQLConf.MapKeyDedupPolicy.EXCEPTION) {
         throw QueryExecutionErrors.duplicateMapKeyFoundError(key)
-      } else if (mapKeyDedupPolicy == SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
+      } else if (mapKeyDedupPolicy == SQLConf.MapKeyDedupPolicy.LAST_WIN) {
         // Overwrite the previous value, as the policy is last wins.
         values(index) = value
       } else {

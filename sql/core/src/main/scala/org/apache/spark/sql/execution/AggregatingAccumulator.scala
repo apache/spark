@@ -44,6 +44,8 @@ class AggregatingAccumulator private(
   assert(bufferSchema.size == updateExpressions.size)
   assert(mergeExpressions == null || bufferSchema.size == mergeExpressions.size)
 
+  override def excludeFromHeartbeat: Boolean = true
+
   @transient
   private var joinedRow: JoinedRow = _
 

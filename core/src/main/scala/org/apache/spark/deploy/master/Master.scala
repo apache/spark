@@ -32,7 +32,7 @@ import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.deploy.rest.StandaloneRestServer
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
@@ -1375,7 +1375,8 @@ private[deploy] class Master(
     drivers.find(d => d.id == driverId) match {
       case Some(driver) =>
         logInfo(log"Removing driver: ${MDC(LogKeys.DRIVER_ID, driverId)}" +
-          log" (${MDC(LogKeys.DRIVER_STATE, finalState)})")
+          log" (${MDC(LogKeys.DRIVER_STATE, finalState)}, Elapsed time:" +
+          log" ${MDC(LogKeys.TOTAL_TIME, System.currentTimeMillis() - driver.startTime)} ms)")
         drivers -= driver
         if (completedDrivers.size >= retainedDrivers) {
           val toRemove = math.max(retainedDrivers / 10, 1)

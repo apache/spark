@@ -545,7 +545,8 @@ object TimestampFormatter {
 
   val defaultLocale: Locale = Locale.US
 
-  def defaultPattern(): String = s"${DateFormatter.defaultPattern} HH:mm:ss"
+  def defaultPattern(): String =
+    s"${DateFormatter.defaultPattern} ${TimeFormatter.defaultPattern}"
 
   private def getFormatter(
       format: Option[String],

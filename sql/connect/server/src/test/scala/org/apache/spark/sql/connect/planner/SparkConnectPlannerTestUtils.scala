@@ -18,8 +18,8 @@
 package org.apache.spark.sql.connect.planner
 
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteStatus, SessionStatus, SparkConnectService}
 
@@ -31,7 +31,7 @@ object SparkConnectPlannerTestUtils {
 
   def transform(spark: SparkSession, command: proto.Command): Unit = {
     val executeHolder = buildExecutePlanHolder(spark, command)
-    new SparkConnectPlanner(executeHolder).process(command, new MockObserver())
+    new SparkConnectPlanner(executeHolder).processWithoutResponseObserverForTesting(command)
   }
 
   private def buildExecutePlanHolder(

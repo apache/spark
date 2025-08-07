@@ -33,7 +33,6 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
-import org.apache.commons.lang3.SystemUtils;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
@@ -105,11 +104,13 @@ public class TransportServer implements Closeable {
     EventLoopGroup workerGroup =  NettyUtils.createEventLoop(ioMode, conf.serverThreads(),
       conf.getModuleName() + "-server");
 
+    String name = System.getProperty("os.name");
+    boolean isNotWindows = !name.regionMatches(true, 0, "Windows", 0, 7);
     bootstrap = new ServerBootstrap()
       .group(bossGroup, workerGroup)
       .channel(NettyUtils.getServerChannelClass(ioMode))
       .option(ChannelOption.ALLOCATOR, pooledAllocator)
-      .option(ChannelOption.SO_REUSEADDR, !SystemUtils.IS_OS_WINDOWS)
+      .option(ChannelOption.SO_REUSEADDR, isNotWindows)
       .childOption(ChannelOption.ALLOCATOR, pooledAllocator);
 
     this.metrics = new NettyMemoryMetrics(

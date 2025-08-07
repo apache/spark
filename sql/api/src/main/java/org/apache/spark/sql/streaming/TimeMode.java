@@ -18,7 +18,6 @@
 package org.apache.spark.sql.streaming;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.plans.logical.EventTime$;
 import org.apache.spark.sql.catalyst.plans.logical.NoTime$;
 import org.apache.spark.sql.catalyst.plans.logical.ProcessingTime$;
@@ -27,7 +26,6 @@ import org.apache.spark.sql.catalyst.plans.logical.ProcessingTime$;
  * Represents the time modes (used for specifying timers and ttl) possible for
  * the Dataset operations {@code transformWithState}.
  */
-@Experimental
 @Evolving
 public class TimeMode {
 

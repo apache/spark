@@ -27,7 +27,7 @@ import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetTablesOperation
 import org.apache.hive.service.cli.session.HiveSession
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
@@ -53,7 +53,7 @@ private[hive] class SparkGetTablesOperation(
   with SparkOperation
   with Logging {
 
-  override def runInternal(): Unit = {
+  override def runInternal(): Unit = withClassLoader { _ =>
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val tableTypesStr = if (tableTypes == null) "null" else tableTypes.asScala.mkString(",")
@@ -67,11 +67,7 @@ private[hive] class SparkGetTablesOperation(
       log"tableName: ${MDC(TABLE_NAME, tableName)}' " +
       log"with ${MDC(STATEMENT_ID, statementId)}")
     setState(OperationState.RUNNING)
-    // Always use the latest class loader provided by executionHive's state.
-    val executionHiveClassLoader = session.sharedState.jarClassLoader
-    Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
-    val catalog = session.sessionState.catalog
     val schemaPattern = convertSchemaPattern(schemaName)
     val tablePattern = convertIdentifierPattern(tableName, true)
     val matchingDbs = catalog.listDatabases(schemaPattern)

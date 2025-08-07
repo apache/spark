@@ -346,11 +346,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
       subquery2)
 
     val mergedSubquery = testRelation.as("t1")
-      .select(Symbol("a"), Symbol("b"), Symbol("c"))
-      .join(
-        testRelation.as("t2").select(Symbol("a"), Symbol("b"), Symbol("c")),
-        Inner,
-        Some($"t1.b" === $"t2.b"))
+      .join(testRelation.as("t2"), Inner, Some($"t1.b" === $"t2.b"))
       .select($"t1.a", $"t2.c")
       .select(CreateNamedStruct(Seq(
         Literal("a"), Symbol("a"),
@@ -387,11 +383,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
       subquery2)
 
     val mergedSubquery = testRelation.as("t1")
-      .select(Symbol("a"), Symbol("b"), Symbol("c"))
-      .join(
-        testRelation.as("t2").select(Symbol("a"), Symbol("b"), Symbol("c")),
-        Inner,
-        Some($"t1.b" < $"t2.b" && $"t1.a" === $"t2.c"))
+      .join(testRelation.as("t2"), Inner, Some($"t1.b" < $"t2.b" && $"t1.a" === $"t2.c"))
       .select($"t1.a", $"t2.c")
       .select(CreateNamedStruct(Seq(
         Literal("a"), Symbol("a"),

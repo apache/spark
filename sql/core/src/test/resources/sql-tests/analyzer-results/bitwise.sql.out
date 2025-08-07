@@ -248,8 +248,8 @@ Aggregate [(b1#x & 1)], [bit_xor(b3#x) AS bit_xor(b3)#x]
 SELECT b1, bit_xor(b2) FROM bitwise_test GROUP BY b1 HAVING bit_and(b2) < 7
 -- !query analysis
 Project [b1#x, bit_xor(b2)#x]
-+- Filter (bit_and(b2#x)#x < 7)
-   +- Aggregate [b1#x], [b1#x, bit_xor(b2#x) AS bit_xor(b2)#x, bit_and(b2#x) AS bit_and(b2#x)#x]
++- Filter (bit_and(b2)#x < 7)
+   +- Aggregate [b1#x], [b1#x, bit_xor(b2#x) AS bit_xor(b2)#x, bit_and(b2#x) AS bit_and(b2)#x]
       +- SubqueryAlias bitwise_test
          +- View (`bitwise_test`, [b1#x, b2#x, b3#x, b4#xL])
             +- Project [cast(b1#x as int) AS b1#x, cast(b2#x as int) AS b2#x, cast(b3#x as int) AS b3#x, cast(b4#xL as bigint) AS b4#xL]

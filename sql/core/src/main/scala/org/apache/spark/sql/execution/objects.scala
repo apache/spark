@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.plans.ReferenceAllColumns
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, FunctionUtils, LogicalGroupState}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.python.BatchIterator
 import org.apache.spark.sql.execution.r.ArrowRRunner
 import org.apache.spark.sql.execution.streaming.GroupStateImpl
@@ -252,8 +253,10 @@ case class MapPartitionsInRWithArrowExec(
       val outputProject = UnsafeProjection.create(output, output)
       columnarBatchIter.flatMap { batch =>
         val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-        assert(outputTypes == actualDataTypes, "Invalid schema from dapply(): " +
-          s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
+        if (outputTypes != actualDataTypes) {
+          throw QueryExecutionErrors.arrowDataTypeMismatchError(
+            "dapply()", outputTypes, actualDataTypes)
+        }
         batch.rowIterator.asScala
       }.map(outputProject)
     }
@@ -598,8 +601,10 @@ case class FlatMapGroupsInRWithArrowExec(
 
       columnarBatchIter.flatMap { batch =>
         val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-        assert(outputTypes == actualDataTypes, "Invalid schema from gapply(): " +
-          s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
+        if (outputTypes != actualDataTypes) {
+          throw QueryExecutionErrors.arrowDataTypeMismatchError(
+            "gapply()", outputTypes, actualDataTypes)
+        }
         batch.rowIterator().asScala
       }.map(outputProject)
     }

@@ -155,6 +155,26 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+select 1 from "not_""exists"
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`not_\"exists`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 28,
+    "fragment" : "\"not_\"\"exists\""
+  } ]
+}
+
+
+-- !query
 SELECT 1 FROM `hello`
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -418,7 +438,7 @@ CreateViewCommand `myview`, [(c1,None)], WITH "v"("a") AS (SELECT 1) SELECT "a" 
       :           +- OneRowRelation
       +- Project [a#x]
          +- SubqueryAlias v
-            +- CTERelationRef xxxx, true, [a#x], false
+            +- CTERelationRef xxxx, true, [a#x], false, false, 1
 
 
 -- !query
@@ -438,7 +458,7 @@ Project [a1#x AS a2#x]
                   :           +- OneRowRelation
                   +- Project [a#x]
                      +- SubqueryAlias v
-                        +- CTERelationRef xxxx, true, [a#x], false
+                        +- CTERelationRef xxxx, true, [a#x], false, false, 1
 
 
 -- !query

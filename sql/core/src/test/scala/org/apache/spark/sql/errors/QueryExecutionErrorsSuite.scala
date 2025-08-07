@@ -351,7 +351,7 @@ class QueryExecutionErrorsSuite
         sql("select timestampadd(YEAR, 1000000, timestamp'2022-03-09 01:02:03')").collect()
       },
       condition = "DATETIME_OVERFLOW",
-      parameters = Map("operation" -> "add 1000000 YEAR to TIMESTAMP '2022-03-09 01:02:03'"),
+      parameters = Map("operation" -> "add 1000000L YEAR to TIMESTAMP '2022-03-09 01:02:03'"),
       sqlState = "22008")
   }
 
@@ -656,6 +656,7 @@ class QueryExecutionErrorsSuite
       sqlState = "42704")
 
     JdbcDialects.unregisterDialect(testH2DialectUnrecognizedSQLType)
+    JdbcDialects.registerDialect(existH2Dialect)
   }
 
   test("INVALID_BUCKET_FILE: error if there exists any malformed bucket files") {
@@ -735,7 +736,8 @@ class QueryExecutionErrorsSuite
           parameters = Map(
             "value" -> sourceValue,
             "sourceType" -> s""""${sourceType.sql}"""",
-            "targetType" -> s""""$it""""),
+            "targetType" -> s""""$it"""",
+            "ansiConfig" -> s""""${SQLConf.ANSI_ENABLED.key}""""),
           sqlState = "22003")
       }
     }
@@ -1258,6 +1260,38 @@ class QueryExecutionErrorsSuite
       )
     )
   }
+
+  test("SPARK-50485: Unwrap SparkThrowable in UEE thrown by tableRelationCache") {
+    withTable("t") {
+      sql("CREATE TABLE t (a INT)")
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          sql("ALTER TABLE t SET LOCATION 'https://mister/spark'")
+        },
+        condition = "FAILED_READ_FILE.UNSUPPORTED_FILE_SYSTEM",
+        parameters = Map(
+          "path" -> "https://mister/spark",
+          "fileSystemClass" -> "org.apache.hadoop.fs.http.HttpsFileSystem",
+          "method" -> "listStatus"))
+      sql("ALTER TABLE t SET LOCATION '/mister/spark'")
+    }
+  }
+
+  test("SPARK-42841: SQL query with unsupported data types for ordering") {
+    import org.apache.spark.sql.catalyst.types.PhysicalDataType
+    import org.apache.spark.sql.types.CalendarIntervalType
+
+    // Test PhysicalDataType.ordering() with CalendarIntervalType
+    // It's hard to make a sql test that passes Argument verification but fails
+    // Order verification. So we directly test the error.
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        PhysicalDataType.ordering(CalendarIntervalType)
+      },
+      condition = "DATATYPE_CANNOT_ORDER",
+      parameters = Map("dataType" -> "PhysicalCalendarIntervalType"))
+  }
+
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {

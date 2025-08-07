@@ -108,6 +108,9 @@ class JacksonParser(
    */
   private def makeRootConverter(dt: DataType): JsonParser => Iterable[InternalRow] = {
     dt match {
+      case _: VariantType => (parser: JsonParser) => {
+        Some(InternalRow(parseVariant(parser)))
+      }
       case _: StructType if options.singleVariantColumn.isDefined => (parser: JsonParser) => {
         Some(InternalRow(parseVariant(parser)))
       }
@@ -292,13 +295,9 @@ class JacksonParser(
 
     case _: StringType => (parser: JsonParser) => {
       // This must be enabled if we will retrieve the bytes directly from the raw content:
-      val includeSourceInLocation = JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION
-      val originalMask = if (includeSourceInLocation.enabledIn(parser.getFeatureMask)) {
-        1
-      } else {
-        0
-      }
-      parser.overrideStdFeatures(includeSourceInLocation.getMask, includeSourceInLocation.getMask)
+      val oldFeature = parser.getFeatureMask
+      val featureToAdd = JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION.getMask
+      parser.overrideStdFeatures(oldFeature | featureToAdd, featureToAdd)
       val result = parseJsonToken[UTF8String](parser, dataType) {
         case VALUE_STRING =>
           UTF8String.fromString(parser.getText)
@@ -343,8 +342,11 @@ class JacksonParser(
               UTF8String.fromBytes(writer.toByteArray)
           }
         }
-      // Reset back to the original configuration:
-      parser.overrideStdFeatures(includeSourceInLocation.getMask, originalMask)
+      // Reset back to the original configuration using `~0` as the mask,
+      // which is a bitmask with all bits set, effectively allowing all features
+      // to be reset. This ensures that every feature is restored to its previous
+      // state as defined by `oldFeature`.
+      parser.overrideStdFeatures(oldFeature, ~0)
       result
     }
 

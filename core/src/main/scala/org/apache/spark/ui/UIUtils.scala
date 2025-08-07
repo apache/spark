@@ -222,6 +222,7 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri(request, "/static/timeline-view.js")}></script>
     <script src={prependBaseUri(request, "/static/log-view.js")}></script>
     <script src={prependBaseUri(request, "/static/webui.js")}></script>
+    <script src={prependBaseUri(request, "/static/scroll-button.js")} type="module"></script>
     <script>setUIRoot('{UIUtils.uiRoot(request)}')</script>
   }
 

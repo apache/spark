@@ -20,13 +20,13 @@ package org.apache.spark.sql
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{LEFT_EXPR, RIGHT_EXPR}
 import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{lit, map}
-import org.apache.spark.sql.internal.{ColumnNode, LazyOuterReference, UnresolvedAttribute}
+import org.apache.spark.sql.internal.{ColumnNode, TableValuedFunctionArgument}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -137,7 +137,7 @@ class TypedColumn[-T, U](node: ColumnNode, private[sql] val encoder: Encoder[U])
  * @since 1.3.0
  */
 @Stable
-class Column(val node: ColumnNode) extends Logging {
+class Column(val node: ColumnNode) extends Logging with TableValuedFunctionArgument {
   private[sql] def this(name: String, planId: Option[Long]) = this(withOrigin {
     name match {
       case "*" => internal.UnresolvedStar(None, planId)
@@ -804,6 +804,26 @@ class Column(val node: ColumnNode) extends Logging {
   def isInCollection(values: java.lang.Iterable[_]): Column = isInCollection(values.asScala)
 
   /**
+   * A boolean expression that is evaluated to true if the value of this expression is contained
+   * by the provided Dataset/DataFrame.
+   *
+   * @group subquery
+   * @since 4.1.0
+   */
+  def isin(ds: Dataset[_]): Column = {
+    if (ds == null) {
+      // A single null should be handled as a value.
+      isin(Seq(ds): _*)
+    } else {
+      val values = node match {
+        case internal.UnresolvedFunction("struct", arguments, _, _, _, _) => arguments
+        case _ => Seq(node)
+      }
+      Column(internal.SubqueryExpression(ds, internal.SubqueryType.IN(values)))
+    }
+  }
+
+  /**
    * SQL like expression. Returns a boolean column based on a SQL LIKE match.
    *
    * @group expr_ops
@@ -1383,20 +1403,27 @@ class Column(val node: ColumnNode) extends Logging {
   def over(): Column = over(Window.spec)
 
   /**
-   * Marks this column reference as an outer reference for subqueries.
+   * Mark this column as an outer column if its expression refers to columns from an outer query.
+   * This is used to trigger lazy analysis of Spark Classic DataFrame, so that we can use it to
+   * build subquery expressions. Spark Connect DataFrame is always lazily analyzed and does not
+   * need to use this function.
    *
-   * @group subquery
+   * {{{
+   *   // Spark can't analyze this `df` now as it doesn't know how to resolve `t1.col`.
+   *   val df = spark.table("t2").where($"t2.col" === $"t1.col".outer())
+   *
+   *   // Since this `df` is lazily analyzed, you won't see any error until you try to execute it.
+   *   df.collect()  // Fails with UNRESOLVED_COLUMN error.
+   *
+   *   // Now Spark can resolve `t1.col` with the outer plan `spark.table("t1")`.
+   *   spark.table("t1").where(df.exists())
+   * }}}
+   *
+   * @group expr_ops
    * @since 4.0.0
    */
-  def outer(): Column = withOrigin {
-    node match {
-      case attr: UnresolvedAttribute if !attr.isMetadataColumn =>
-        Column(LazyOuterReference(attr.nameParts, attr.planId))
-      case _ =>
-        throw new IllegalArgumentException(
-          "Only unresolved attributes can be used as outer references")
-    }
-  }
+  def outer(): Column = Column(internal.LazyExpression(node))
+
 }
 
 /**

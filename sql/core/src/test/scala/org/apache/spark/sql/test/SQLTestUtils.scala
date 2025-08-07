@@ -33,7 +33,7 @@ import org.scalatest.{BeforeAndAfterAll, Suite, Tag}
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql._
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.classic.{ClassicConversions, ColumnConversions, ColumnNodeToExpressionConverter, DataFrame, Dataset, SparkSession, SQLImplicits}
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
@@ -239,9 +240,12 @@ private[sql] trait SQLTestUtilsBase
    * This is because we create the `SparkSession` immediately before the first test is run,
    * but the implicits import is needed in the constructor.
    */
-  protected object testImplicits extends SQLImplicits {
+  protected object testImplicits
+    extends SQLImplicits
+      with ClassicConversions
+      with ColumnConversions {
     override protected def session: SparkSession = self.spark
-    implicit def toRichColumn(c: Column): SparkSession#RichColumn = session.RichColumn(c)
+    override protected def converter: ColumnNodeToExpressionConverter = self.spark.converter
   }
 
   protected override def withSQLConf[T](pairs: (String, String)*)(f: => T): T = {
@@ -416,6 +420,17 @@ private[sql] trait SQLTestUtilsBase
       f
     } finally {
       Locale.setDefault(originalLocale)
+    }
+  }
+
+  /**
+   * Drops temporary variable `variableName` after calling `f`.
+   */
+  protected def withSessionVariable(variableNames: String*)(f: => Unit): Unit = {
+    Utils.tryWithSafeFinally(f) {
+      variableNames.foreach { name =>
+        spark.sql(s"DROP TEMPORARY VARIABLE IF EXISTS $name")
+      }
     }
   }
 

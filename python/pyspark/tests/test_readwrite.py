@@ -19,7 +19,8 @@ import shutil
 import tempfile
 import unittest
 
-from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME
+from pyspark.testing.sqlutils import SPARK_HOME
+from pyspark.testing.utils import ReusedPySparkTestCase
 
 
 class InputFormatTests(ReusedPySparkTestCase):

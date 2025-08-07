@@ -30,11 +30,11 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.SqlApiAnalysis
 import org.apache.spark.sql.catalyst.parser.{DataTypeParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, SparkStringUtils, StringConcat}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, StringConcat}
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.util.SparkCollectionUtils
+import org.apache.spark.util.{SparkCollectionUtils, SparkStringUtils}
 
 /**
  * A [[StructType]] object can be constructed by
@@ -502,6 +502,18 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
     f(this) || fields.exists(field => field.dataType.existsRecursively(f))
   }
+
+  override private[spark] def transformRecursively(
+      f: PartialFunction[DataType, DataType]): DataType = {
+    if (f.isDefinedAt(this)) {
+      return f(this)
+    }
+
+    val newFields = fields.map { field =>
+      field.copy(dataType = field.dataType.transformRecursively(f))
+    }
+    StructType(newFields)
+  }
 }
 
 /**
@@ -509,6 +521,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
  */
 @Stable
 object StructType extends AbstractDataType {
+  private[sql] val SQL_FUNCTION_DEFAULT_METADATA_KEY = "default"
 
   override private[sql] def defaultConcreteType: DataType = new StructType
 

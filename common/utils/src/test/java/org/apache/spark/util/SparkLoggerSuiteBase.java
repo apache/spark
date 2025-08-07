@@ -22,11 +22,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.List;
 
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.Level;
 import org.junit.jupiter.api.Test;
 
-import org.apache.spark.internal.LogKey;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.internal.SparkLogger;
@@ -73,23 +71,20 @@ public abstract class SparkLoggerSuiteBase {
   private final String basicMsgWithEscapeChar =
     "This is a log message\nThis is a new line \t other msg";
 
-  private final MDC executorIDMDC = MDC.of(LogKeys.EXECUTOR_ID$.MODULE$, "1");
+  private final MDC executorIDMDC = MDC.of(LogKeys.EXECUTOR_ID, "1");
   private final String msgWithMDC = "Lost executor {}.";
 
   private final MDC[] mdcs = new MDC[] {
-    MDC.of(LogKeys.EXECUTOR_ID$.MODULE$, "1"),
-    MDC.of(LogKeys.REASON$.MODULE$, "the shuffle data is too large")};
+    MDC.of(LogKeys.EXECUTOR_ID, "1"),
+    MDC.of(LogKeys.REASON, "the shuffle data is too large")};
   private final String msgWithMDCs = "Lost executor {}, reason: {}";
 
   private final MDC[] emptyMDCs = new MDC[0];
 
-  private final MDC executorIDMDCValueIsNull = MDC.of(LogKeys.EXECUTOR_ID$.MODULE$, null);
+  private final MDC executorIDMDCValueIsNull = MDC.of(LogKeys.EXECUTOR_ID, null);
 
-  private final MDC scalaCustomLogMDC =
-    MDC.of(CustomLogKeys.CUSTOM_LOG_KEY$.MODULE$, "Scala custom log message.");
-
-  private final MDC javaCustomLogMDC =
-    MDC.of(JavaCustomLogKeys.CUSTOM_LOG_KEY, "Java custom log message.");
+  private final MDC customLogMDC =
+    MDC.of(CustomLogKeys.CUSTOM_LOG_KEY, "Custom log message.");
 
   // test for basic message (without any mdc)
   abstract String expectedPatternForBasicMsg(Level level);
@@ -118,10 +113,7 @@ public abstract class SparkLoggerSuiteBase {
   abstract String expectedPatternForMsgWithMDCValueIsNull(Level level);
 
   // test for scala custom LogKey
-  abstract String expectedPatternForScalaCustomLogKey(Level level);
-
-  // test for java custom LogKey
-  abstract String expectedPatternForJavaCustomLogKey(Level level);
+  abstract String expectedPatternForCustomLogKey(Level level);
 
   @Test
   public void testBasicMsg() {
@@ -241,34 +233,14 @@ public abstract class SparkLoggerSuiteBase {
   }
 
   @Test
-  public void testLoggerWithScalaCustomLogKey() {
-    Runnable errorFn = () -> logger().error("{}", scalaCustomLogMDC);
-    Runnable warnFn = () -> logger().warn("{}", scalaCustomLogMDC);
-    Runnable infoFn = () -> logger().info("{}", scalaCustomLogMDC);
+  public void testLoggerWithCustomLogKey() {
+    Runnable errorFn = () -> logger().error("{}", customLogMDC);
+    Runnable warnFn = () -> logger().warn("{}", customLogMDC);
+    Runnable infoFn = () -> logger().info("{}", customLogMDC);
     List.of(
         Pair.of(Level.ERROR, errorFn),
         Pair.of(Level.WARN, warnFn),
         Pair.of(Level.INFO, infoFn)).forEach(pair ->
-      checkLogOutput(pair.getLeft(), pair.getRight(), this::expectedPatternForScalaCustomLogKey));
+      checkLogOutput(pair.getLeft(), pair.getRight(), this::expectedPatternForCustomLogKey));
   }
-
-  @Test
-  public void testLoggerWithJavaCustomLogKey() {
-    Runnable errorFn = () -> logger().error("{}", javaCustomLogMDC);
-    Runnable warnFn = () -> logger().warn("{}", javaCustomLogMDC);
-    Runnable infoFn = () -> logger().info("{}", javaCustomLogMDC);
-    List.of(
-        Pair.of(Level.ERROR, errorFn),
-        Pair.of(Level.WARN, warnFn),
-        Pair.of(Level.INFO, infoFn)).forEach(pair ->
-      checkLogOutput(pair.getLeft(), pair.getRight(), this::expectedPatternForJavaCustomLogKey));
-  }
-}
-
-class JavaCustomLogKeys {
-  // Custom `LogKey` must be `implements LogKey`
-  public static class CUSTOM_LOG_KEY implements LogKey { }
-
-  // Singleton
-  public static final CUSTOM_LOG_KEY CUSTOM_LOG_KEY = new CUSTOM_LOG_KEY();
 }

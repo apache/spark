@@ -26,7 +26,7 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.connect.config.Connect.CONNECT_EXECUTE_REATTACHABLE_OBSERVER_RETRY_BUFFER_SIZE
 import org.apache.spark.sql.connect.service.ExecuteHolder
@@ -258,6 +258,16 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
   /** Returns if the stream is finished. */
   def completed(): Boolean = responseLock.synchronized {
     finalProducedIndex.isDefined
+  }
+
+  // Returns if this observer has already been cleaned
+  def isCleaned(): Boolean = responseLock.synchronized {
+    completed() && responses.isEmpty
+  }
+
+  // For testing.
+  private[connect] def undoCompletion(): Unit = responseLock.synchronized {
+    finalProducedIndex = None
   }
 
   /**

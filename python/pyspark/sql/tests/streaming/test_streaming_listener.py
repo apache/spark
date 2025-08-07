@@ -45,6 +45,7 @@ class StreamingListenerTestsMixin:
             datetime.strptime(event.timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
         except ValueError:
             self.fail("'%s' is not in ISO 8601 format.")
+        self.assertTrue(isinstance(event.jobTags, set))
 
     def check_progress_event(self, event, is_stateful):
         """Check QueryProgressEvent"""
@@ -287,7 +288,7 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
             get_number_of_public_methods(
                 "org.apache.spark.sql.streaming.StreamingQueryListener$QueryStartedEvent"
             ),
-            15,
+            16,
             msg,
         )
         self.assertEqual(
@@ -399,9 +400,17 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                 # Check query terminated with exception
                 from pyspark.sql.functions import col, udf
 
+                start_event = None
+                progress_event = None
+                terminated_event = None
                 bad_udf = udf(lambda x: 1 / 0)
                 q = df.select(bad_udf(col("value"))).writeStream.format("noop").start()
-                time.sleep(5)
+                wait_count = 0
+                while terminated_event is None:
+                    time.sleep(0.5)
+                    wait_count = wait_count + 1
+                    if wait_count > 100:
+                        self.fail("Not getting terminated event after 50 seconds")
                 q.stop()
                 self.spark.sparkContext._jsc.sc().listenerBus().waitUntilEmpty()
                 self.check_terminated_event(terminated_event, "ZeroDivisionError")
@@ -451,7 +460,7 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
         verify(TestListenerV2())
 
     def test_query_started_event_fromJson(self):
-        start_event = """
+        start_event_old = """
             {
                 "id" : "78923ec2-8f4d-4266-876e-1f50cf3c283b",
                 "runId" : "55a95d45-e932-4e08-9caa-0a8ecd9391e8",
@@ -459,12 +468,30 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                 "timestamp" : "2023-06-09T18:13:29.741Z"
             }
         """
-        start_event = QueryStartedEvent.fromJson(json.loads(start_event))
-        self.check_start_event(start_event)
-        self.assertEqual(start_event.id, uuid.UUID("78923ec2-8f4d-4266-876e-1f50cf3c283b"))
-        self.assertEqual(start_event.runId, uuid.UUID("55a95d45-e932-4e08-9caa-0a8ecd9391e8"))
-        self.assertIsNone(start_event.name)
-        self.assertEqual(start_event.timestamp, "2023-06-09T18:13:29.741Z")
+        start_event_old = QueryStartedEvent.fromJson(json.loads(start_event_old))
+        self.check_start_event(start_event_old)
+        self.assertEqual(start_event_old.id, uuid.UUID("78923ec2-8f4d-4266-876e-1f50cf3c283b"))
+        self.assertEqual(start_event_old.runId, uuid.UUID("55a95d45-e932-4e08-9caa-0a8ecd9391e8"))
+        self.assertIsNone(start_event_old.name)
+        self.assertEqual(start_event_old.timestamp, "2023-06-09T18:13:29.741Z")
+        self.assertEqual(start_event_old.jobTags, set())
+
+        start_event_new = """
+            {
+                "id" : "78923ec2-8f4d-4266-876e-1f50cf3c283b",
+                "runId" : "55a95d45-e932-4e08-9caa-0a8ecd9391e8",
+                "name" : null,
+                "timestamp" : "2023-06-09T18:13:29.741Z",
+                "jobTags": ["jobTag1", "jobTag2"]
+            }
+        """
+        start_event_new = QueryStartedEvent.fromJson(json.loads(start_event_new))
+        self.check_start_event(start_event_new)
+        self.assertEqual(start_event_new.id, uuid.UUID("78923ec2-8f4d-4266-876e-1f50cf3c283b"))
+        self.assertEqual(start_event_new.runId, uuid.UUID("55a95d45-e932-4e08-9caa-0a8ecd9391e8"))
+        self.assertIsNone(start_event_new.name)
+        self.assertEqual(start_event_new.timestamp, "2023-06-09T18:13:29.741Z")
+        self.assertEqual(start_event_new.jobTags, set(["jobTag1", "jobTag2"]))
 
     def test_query_terminated_event_fromJson(self):
         terminated_json = """

@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.features
 
 import java.io.File
 
-import io.fabric8.volcano.scheduling.v1beta1.PodGroup
+import io.fabric8.volcano.api.model.scheduling.v1beta1.PodGroup
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._

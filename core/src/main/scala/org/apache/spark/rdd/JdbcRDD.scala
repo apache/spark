@@ -25,7 +25,7 @@ import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.function.{Function => JFunction}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.util.NextIterator
 
@@ -54,7 +54,9 @@ private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) e
  * @param mapRow a function from a ResultSet to a single row of the desired result type(s).
  *   This should only call getInt, getString, etc; the RDD takes care of calling next.
  *   The default maps a ResultSet to an array of Object.
+ * @deprecated Jdbc RDD is deprecated, consider using JDBC data source instead.
  */
+@deprecated("Jdbc RDD is deprecated, consider using JDBC data source instead.", "4.1.0")
 class JdbcRDD[T: ClassTag](
     sc: SparkContext,
     getConnection: () => Connection,

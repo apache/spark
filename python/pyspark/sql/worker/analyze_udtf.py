@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import faulthandler
 import inspect
 import os
 import sys
@@ -106,8 +107,18 @@ def main(infile: IO, outfile: IO) -> None:
     in JVM and receive the Python UDTF and its arguments for the `analyze` static method,
     and call the `analyze` static method, and send back a AnalyzeResult as a result of the method.
     """
+    faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
+    tracebackDumpIntervalSeconds = os.environ.get("PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", None)
     try:
+        if faulthandler_log_path:
+            faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
+            faulthandler_log_file = open(faulthandler_log_path, "w")
+            faulthandler.enable(file=faulthandler_log_file)
+
         check_python_version(infile)
+
+        if tracebackDumpIntervalSeconds is not None and int(tracebackDumpIntervalSeconds) > 0:
+            faulthandler.dump_traceback_later(int(tracebackDumpIntervalSeconds), repeat=True)
 
         memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
         setup_memory_limits(memory_limit_mb)
@@ -247,6 +258,11 @@ def main(infile: IO, outfile: IO) -> None:
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
+    finally:
+        if faulthandler_log_path:
+            faulthandler.disable()
+            faulthandler_log_file.close()
+            os.remove(faulthandler_log_path)
 
     send_accumulator_updates(outfile)
 
@@ -258,12 +274,17 @@ def main(infile: IO, outfile: IO) -> None:
         write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
         sys.exit(-1)
 
+    # Force to cancel dump_traceback_later
+    faulthandler.cancel_dump_traceback_later()
+
 
 if __name__ == "__main__":
     # Read information about how to connect back to the JVM from the environment.
-    java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
-    auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
-    (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
+    conn_info = os.environ.get(
+        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
+    )
+    auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
+    (sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
     # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
     write_int(os.getpid(), sock_file)
     sock_file.flush()

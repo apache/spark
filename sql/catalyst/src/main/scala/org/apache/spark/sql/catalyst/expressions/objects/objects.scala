@@ -992,7 +992,7 @@ case class MapObjects private(
       }
     case Some(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
       // Scala sequence
-      executeFuncOnCollection(_).toSeq
+      executeFuncOnCollection(_).toIndexedSeq
     case Some(cls) if classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
       // Scala set
       executeFuncOnCollection(_).toSet
@@ -2064,7 +2064,7 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
       (value: Any) => {
         value.getClass.isArray ||
           value.isInstanceOf[scala.collection.Seq[_]] ||
-          value.isInstanceOf[Set[_]] ||
+          value.isInstanceOf[scala.collection.Set[_]] ||
           value.isInstanceOf[java.util.List[_]]
       }
     case _: DateType =>
@@ -2106,7 +2106,7 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
       case _: ArrayType =>
         val check = genCheckTypes(Seq(
           classOf[scala.collection.Seq[_]],
-          classOf[Set[_]],
+          classOf[scala.collection.Set[_]],
           classOf[java.util.List[_]]))
         s"$obj.getClass().isArray() || $check"
       case _: DateType =>

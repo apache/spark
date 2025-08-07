@@ -26,6 +26,25 @@ Note that this migration guide describes the items specific to MLlib.
 Many items of SQL migration can be applied when migrating MLlib to higher versions for DataFrame-based APIs.
 Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.html).
 
+## Upgrading from MLlib 3.5 to 4.0
+
+### Breaking changes
+{:.no_toc}
+
+There are no breaking changes.
+
+### Deprecations and changes of behavior
+{:.no_toc}
+
+**Deprecations**
+
+There are no deprecations.
+
+**Changes of behavior**
+
+* [SPARK-51132](https://issues.apache.org/jira/browse/SPARK-51132):
+  The PMML XML schema version of exported PMML format models by [PMML model export](mllib-pmml-model-export.html) has been upgraded from `PMML-4_3` to `PMML-4_4`.
+
 ## Upgrading from MLlib 2.4 to 3.0
 
 ### Breaking changes

@@ -82,6 +82,20 @@ object Encoders {
   def DOUBLE: Encoder[java.lang.Double] = BoxedDoubleEncoder
 
   /**
+   * An encoder for nullable char type.
+   *
+   * @since 4.0.0
+   */
+  def CHAR(length: Int): Encoder[java.lang.String] = CharEncoder(length)
+
+  /**
+   * An encoder for nullable varchar type.
+   *
+   * @since 4.0.0
+   */
+  def VARCHAR(length: Int): Encoder[java.lang.String] = VarcharEncoder(length)
+
+  /**
    * An encoder for nullable string type.
    *
    * @since 1.6.0
@@ -132,6 +146,14 @@ object Encoders {
    * @since 3.0.0
    */
   def INSTANT: Encoder[java.time.Instant] = STRICT_INSTANT_ENCODER
+
+  /**
+   * Creates an encoder that serializes instances of the `java.time.LocalTime` class to the
+   * internal representation of nullable Catalyst's TimeType.
+   *
+   * @since 4.1.0
+   */
+  def LOCALTIME: Encoder[java.time.LocalTime] = LocalTimeEncoder
 
   /**
    * An encoder for arrays of bytes.
@@ -346,4 +368,11 @@ object Encoders {
    */
   def scalaBoolean: Encoder[Boolean] = PrimitiveBooleanEncoder
 
+  /**
+   * An encoder for UserDefinedType.
+   * @since 4.1.0
+   */
+  def udt[T >: Null](tpe: UserDefinedType[T]): Encoder[T] = {
+    UDTEncoder(tpe)
+  }
 }

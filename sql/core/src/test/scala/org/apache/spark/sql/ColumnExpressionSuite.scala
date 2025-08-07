@@ -2596,8 +2596,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     val e3 = intercept[SparkRuntimeException] {
       intDf.select(assert_true($"a" > $"b")).collect()
     }
-    assert(e3.getMessage.matches(
-      "\\[USER_RAISED_EXCEPTION\\] '\\(a#\\d+ > b#\\d+\\)' is not true! SQLSTATE: P0001"))
+    assert(e3.getMessage.equals("[USER_RAISED_EXCEPTION] '(a > b)' is not true! SQLSTATE: P0001"))
   }
 
   test("raise_error") {

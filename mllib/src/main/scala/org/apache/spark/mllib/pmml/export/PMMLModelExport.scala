@@ -23,7 +23,7 @@ import java.util.Locale
 
 import scala.beans.BeanProperty
 
-import org.dmg.pmml.{Application, Header, PMML, Timestamp}
+import org.dmg.pmml.{Application, Header, PMML, Timestamp, Version}
 
 private[mllib] trait PMMLModelExport {
 
@@ -44,6 +44,6 @@ private[mllib] trait PMMLModelExport {
     val header = new Header()
       .setApplication(app)
       .setTimestamp(timestamp)
-    new PMML("4.2", header, null)
+    new PMML(Version.PMML_4_4.getVersion(), header, null)
   }
 }

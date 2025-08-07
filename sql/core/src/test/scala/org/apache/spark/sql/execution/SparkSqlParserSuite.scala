@@ -19,12 +19,12 @@ package org.apache.spark.sql.execution
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkConf, SparkThrowable}
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedHaving, UnresolvedRelation, UnresolvedStar}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, GreaterThan, Literal, NullsFirst, SortOrder, UnresolvedWindowExpression, UnspecifiedFrame, WindowSpecDefinition, WindowSpecReference}
-import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Cast, Concat, GreaterThan, Literal, NamedExpression, NullsFirst, ShiftRight, SortOrder, UnresolvedWindowExpression, UnspecifiedFrame, WindowSpecDefinition, WindowSpecReference}
+import org.apache.spark.sql.catalyst.parser.{AbstractParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.connector.catalog.TableCatalog
@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, RefreshResource}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -43,6 +43,10 @@ import org.apache.spark.util.ArrayImplicits._
  */
 class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
   import org.apache.spark.sql.catalyst.dsl.expressions._
+
+  override protected def sparkConf: SparkConf =
+    super.sparkConf
+      .set(SQLConf.MANAGE_PARSER_CACHES.key, true.toString)
 
   private lazy val parser = new SparkSqlParser()
 
@@ -91,6 +95,15 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       exception = parseException("SET `k`=`v` /*"),
       condition = "UNCLOSED_BRACKETED_COMMENT",
       parameters = Map.empty)
+  }
+
+  test("SET with semi-colons") {
+    assertEqual(s"SET;", SetCommand(None))
+    assertEqual(s"SET    ;", SetCommand(None))
+    assertEqual(s"SET -v;", SetCommand(Some("-v" -> None)))
+    assertEqual(s"SET -v    ;", SetCommand(Some("-v" -> None)))
+    assertEqual(s"SET spark.sql.ansi.enabled;", SetCommand(Some("spark.sql.ansi.enabled" -> None)))
+    assertEqual(s"SET spark.sql.ansi.enabled ;", SetCommand(Some("spark.sql.ansi.enabled" -> None)))
   }
 
   test("Report Error for invalid usage of SET command") {
@@ -804,6 +817,24 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
         stop = 63))
   }
 
+  test("CREATE TEMPORARY TABLE ... USING provider should be blocked under the flag") {
+    withSQLConf((SQLConf.BLOCK_CREATE_TEMP_TABLE_USING_PROVIDER.key, "true")) {
+      checkError(
+        exception = intercept[ParseException](
+          sql("CREATE TEMPORARY TABLE t (i int) USING parquet")
+        ),
+        condition = s"INVALID_SQL_SYNTAX.CREATE_TEMP_TABLE_USING_PROVIDER",
+        sqlState = Some("42000"),
+        parameters = Map(),
+        context = ExpectedContext(
+          fragment = "CREATE TEMPORARY TABLE t (i int) USING parquet",
+          start = 0,
+          stop = 45
+        )
+      )
+    }
+  }
+
   test("verify whitespace handling - standard whitespace") {
     parser.parsePlan("SELECT 1") // ASCII space
     parser.parsePlan("SELECT\r1") // ASCII carriage return
@@ -885,105 +916,323 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
   // scalastyle:on
 
   test("Operator pipe SQL syntax") {
-    withSQLConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED.key -> "true") {
-      // Basic selection.
-      // Here we check that every parsed plan contains a projection and a source relation or
-      // inline table.
-      def check(query: String, patterns: Seq[TreePattern]): Unit = {
-        val plan: LogicalPlan = parser.parsePlan(query)
-        assert(patterns.exists(plan.containsPattern), s"Failed to parse $query, plan: $plan")
-        assert(plan.containsAnyPattern(UNRESOLVED_RELATION, LOCAL_RELATION))
-      }
-      def checkPipeSelect(query: String): Unit = check(query, Seq(PROJECT))
-      checkPipeSelect("TABLE t |> SELECT 1 AS X")
-      checkPipeSelect("TABLE t |> SELECT 1 AS X, 2 AS Y |> SELECT X + Y AS Z")
-      checkPipeSelect("VALUES (0), (1) tab(col) |> SELECT col * 2 AS result")
-      checkPipeSelect("TABLE t |> EXTEND X + 1 AS Y")
-      checkPipeSelect("TABLE t |> EXTEND X + 1 AS Y, X + 2 Z")
-      // Basic WHERE operators.
-      def checkPipeWhere(query: String): Unit = check(query, Seq(FILTER))
-      checkPipeWhere("TABLE t |> WHERE X = 1")
-      checkPipeWhere("TABLE t |> SELECT X, LENGTH(Y) AS Z |> WHERE X + LENGTH(Y) < 4")
-      checkPipeWhere("TABLE t |> WHERE X = 1 AND Y = 2 |> WHERE X + Y = 3")
-      checkPipeWhere("VALUES (0), (1) tab(col) |> WHERE col < 1")
-      // PIVOT and UNPIVOT operations
-      def checkPivotUnpivot(query: String): Unit = check(query, Seq(PIVOT, UNPIVOT))
-      checkPivotUnpivot(
-        """
-          |SELECT * FROM VALUES
-          |  ("dotNET", 2012, 10000),
-          |  ("Java", 2012, 20000),
-          |  ("dotNET", 2012, 5000),
-          |  ("dotNET", 2013, 48000),
-          |  ("Java", 2013, 30000)
-          |  AS courseSales(course, year, earnings)
-          ||> PIVOT (
-          |  SUM(earnings)
-          |  FOR course IN ('dotNET', 'Java')
-          |)
-          |""".stripMargin)
-      checkPivotUnpivot(
-        """
-          |SELECT * FROM VALUES
-          |  ("dotNET", 15000, 48000, 22500),
-          |  ("Java", 20000, 30000, NULL)
-          |  AS courseEarnings(course, `2012`, `2013`, `2014`)
-          ||> UNPIVOT (
-          |  earningsYear FOR year IN (`2012`, `2013`, `2014`)
-          |)
-          |""".stripMargin)
-      // Sampling operations
-      def checkSample(query: String): Unit = {
-        val plan: LogicalPlan = parser.parsePlan(query)
-        assert(plan.collectFirst(_.isInstanceOf[Sample]).nonEmpty)
-        assert(plan.containsAnyPattern(UNRESOLVED_RELATION, LOCAL_RELATION))
-      }
-      checkSample("TABLE t |> TABLESAMPLE (50 PERCENT)")
-      checkSample("TABLE t |> TABLESAMPLE (5 ROWS)")
-      checkSample("TABLE t |> TABLESAMPLE (BUCKET 4 OUT OF 10)")
-      // Joins.
-      def checkPipeJoin(query: String): Unit = check(query, Seq(JOIN))
-      Seq("", "INNER", "LEFT", "LEFT OUTER", "SEMI", "LEFT SEMI", "RIGHT", "RIGHT OUTER", "FULL",
-        "FULL OUTER", "ANTI", "LEFT ANTI", "CROSS").foreach { joinType =>
-        checkPipeJoin(s"TABLE t |> $joinType JOIN other ON (t.x = other.x)")
-      }
-      // Set operations
-      def checkDistinct(query: String): Unit = check(query, Seq(DISTINCT_LIKE))
-      def checkExcept(query: String): Unit = check(query, Seq(EXCEPT))
-      def checkIntersect(query: String): Unit = check(query, Seq(INTERSECT))
-      def checkUnion(query: String): Unit = check(query, Seq(UNION))
-      checkDistinct("TABLE t |> UNION DISTINCT TABLE t")
-      checkExcept("TABLE t |> EXCEPT ALL TABLE t")
-      checkExcept("TABLE t |> EXCEPT DISTINCT TABLE t")
-      checkExcept("TABLE t |> MINUS ALL TABLE t")
-      checkExcept("TABLE t |> MINUS DISTINCT TABLE t")
-      checkIntersect("TABLE t |> INTERSECT ALL TABLE t")
-      checkUnion("TABLE t |> UNION ALL TABLE t")
-      // Sorting and distributing operators.
-      def checkSort(query: String): Unit = check(query, Seq(SORT))
-      def checkRepartition(query: String): Unit = check(query, Seq(REPARTITION_OPERATION))
-      def checkLimit(query: String): Unit = check(query, Seq(LIMIT))
-      checkSort("TABLE t |> ORDER BY x")
-      checkSort("TABLE t |> SELECT x |> SORT BY x")
-      checkLimit("TABLE t |> LIMIT 1")
-      checkLimit("TABLE t |> LIMIT 2 OFFSET 1")
-      checkRepartition("TABLE t |> DISTRIBUTE BY x |> WHERE x = 1")
-      checkRepartition("TABLE t |> CLUSTER BY x |> TABLESAMPLE (100 PERCENT)")
-      checkRepartition("TABLE t |> SORT BY x DISTRIBUTE BY x")
-      // Aggregation
-      def checkAggregate(query: String): Unit = check(query, Seq(AGGREGATE))
-      checkAggregate("SELECT a, b FROM t |> AGGREGATE SUM(a)")
-      checkAggregate("SELECT a, b FROM t |> AGGREGATE SUM(a) AS result GROUP BY b")
-      checkAggregate("SELECT a, b FROM t |> AGGREGATE GROUP BY b")
-      checkAggregate("SELECT a, b FROM t |> AGGREGATE COUNT(*) AS result GROUP BY b")
-      // Window
-      def checkWindow(query: String): Unit = check(query, Seq(WITH_WINDOW_DEFINITION))
-      checkWindow(
-        """
-          |TABLE windowTestData
-          ||> SELECT cate, SUM(val) OVER w
-          |   WINDOW w AS (PARTITION BY cate ORDER BY val)
-          |""".stripMargin)
+    // Basic selection.
+    // Here we check that every parsed plan contains a projection and a source relation or
+    // inline table.
+    def check(query: String, patterns: Seq[TreePattern]): Unit = {
+      val plan: LogicalPlan = parser.parsePlan(query)
+      assert(patterns.exists(plan.containsPattern), s"Failed to parse $query, plan: $plan")
+      assert(plan.containsAnyPattern(UNRESOLVED_RELATION, LOCAL_RELATION))
+    }
+    def checkPipeSelect(query: String): Unit = check(query, Seq(PROJECT))
+    checkPipeSelect("TABLE t |> SELECT 1 AS X")
+    checkPipeSelect("TABLE t |> SELECT 1 AS X, 2 AS Y |> SELECT X + Y AS Z")
+    checkPipeSelect("VALUES (0), (1) tab(col) |> SELECT col * 2 AS result")
+    checkPipeSelect("TABLE t |> EXTEND X + 1 AS Y")
+    checkPipeSelect("TABLE t |> EXTEND X + 1 AS Y, X + 2 Z")
+    checkPipeSelect("TABLE t |> EXTEND 1 AS z, 2 AS Z |> SET z = 1, Z = 2")
+    // FROM operators.
+    def checkPipeSelectFrom(query: String): Unit = check(query, Seq(PROJECT))
+    checkPipeSelectFrom("FROM t |> SELECT 1 AS X")
+    // Basic WHERE operators.
+    def checkPipeWhere(query: String): Unit = check(query, Seq(FILTER))
+    checkPipeWhere("TABLE t |> WHERE X = 1")
+    checkPipeWhere("TABLE t |> SELECT X, LENGTH(Y) AS Z |> WHERE X + LENGTH(Y) < 4")
+    checkPipeWhere("TABLE t |> WHERE X = 1 AND Y = 2 |> WHERE X + Y = 3")
+    checkPipeWhere("VALUES (0), (1) tab(col) |> WHERE col < 1")
+    // PIVOT and UNPIVOT operations
+    def checkPivotUnpivot(query: String): Unit = check(query, Seq(PIVOT, UNPIVOT))
+    checkPivotUnpivot(
+      """
+        |SELECT * FROM VALUES
+        |  ("dotNET", 2012, 10000),
+        |  ("Java", 2012, 20000),
+        |  ("dotNET", 2012, 5000),
+        |  ("dotNET", 2013, 48000),
+        |  ("Java", 2013, 30000)
+        |  AS courseSales(course, year, earnings)
+        ||> PIVOT (
+        |  SUM(earnings)
+        |  FOR course IN ('dotNET', 'Java')
+        |)
+        |""".stripMargin)
+    checkPivotUnpivot(
+      """
+        |SELECT * FROM VALUES
+        |  ("dotNET", 15000, 48000, 22500),
+        |  ("Java", 20000, 30000, NULL)
+        |  AS courseEarnings(course, `2012`, `2013`, `2014`)
+        ||> UNPIVOT (
+        |  earningsYear FOR year IN (`2012`, `2013`, `2014`)
+        |)
+        |""".stripMargin)
+    // Sampling operations
+    def checkSample(query: String): Unit = {
+      val plan: LogicalPlan = parser.parsePlan(query)
+      assert(plan.collectFirst(_.isInstanceOf[Sample]).nonEmpty)
+      assert(plan.containsAnyPattern(UNRESOLVED_RELATION, LOCAL_RELATION))
+    }
+    checkSample("TABLE t |> TABLESAMPLE (50 PERCENT)")
+    checkSample("TABLE t |> TABLESAMPLE (5 ROWS)")
+    checkSample("TABLE t |> TABLESAMPLE (BUCKET 4 OUT OF 10)")
+    // Joins.
+    def checkPipeJoin(query: String): Unit = check(query, Seq(JOIN))
+    Seq("", "INNER", "LEFT", "LEFT OUTER", "SEMI", "LEFT SEMI", "RIGHT", "RIGHT OUTER", "FULL",
+      "FULL OUTER", "ANTI", "LEFT ANTI", "CROSS").foreach { joinType =>
+      checkPipeJoin(s"TABLE t |> $joinType JOIN other ON (t.x = other.x)")
+    }
+    // Set operations
+    def checkDistinct(query: String): Unit = check(query, Seq(DISTINCT_LIKE))
+    def checkExcept(query: String): Unit = check(query, Seq(EXCEPT))
+    def checkIntersect(query: String): Unit = check(query, Seq(INTERSECT))
+    def checkUnion(query: String): Unit = check(query, Seq(UNION))
+    checkDistinct("TABLE t |> UNION DISTINCT TABLE t")
+    checkExcept("TABLE t |> EXCEPT ALL TABLE t")
+    checkExcept("TABLE t |> EXCEPT DISTINCT TABLE t")
+    checkExcept("TABLE t |> MINUS ALL TABLE t")
+    checkExcept("TABLE t |> MINUS DISTINCT TABLE t")
+    checkIntersect("TABLE t |> INTERSECT ALL TABLE t")
+    checkUnion("TABLE t |> UNION ALL TABLE t")
+    // Sorting and distributing operators.
+    def checkSort(query: String): Unit = check(query, Seq(SORT))
+    def checkRepartition(query: String): Unit = check(query, Seq(REPARTITION_OPERATION))
+    def checkLimit(query: String): Unit = check(query, Seq(LIMIT))
+    checkSort("TABLE t |> ORDER BY x")
+    checkSort("TABLE t |> SELECT x |> SORT BY x")
+    checkLimit("TABLE t |> LIMIT 1")
+    checkLimit("TABLE t |> LIMIT 2 OFFSET 1")
+    checkRepartition("TABLE t |> DISTRIBUTE BY x |> WHERE x = 1")
+    checkRepartition("TABLE t |> CLUSTER BY x |> TABLESAMPLE (100 PERCENT)")
+    checkRepartition("TABLE t |> SORT BY x DISTRIBUTE BY x")
+    // Aggregation
+    def checkAggregate(query: String): Unit = check(query, Seq(AGGREGATE))
+    checkAggregate("SELECT a, b FROM t |> AGGREGATE SUM(a)")
+    checkAggregate("SELECT a, b FROM t |> AGGREGATE SUM(a) AS result GROUP BY b")
+    checkAggregate("SELECT a, b FROM t |> AGGREGATE GROUP BY b")
+    checkAggregate("SELECT a, b FROM t |> AGGREGATE COUNT(*) AS result GROUP BY b")
+    // Window
+    def checkWindow(query: String): Unit = check(query, Seq(WITH_WINDOW_DEFINITION))
+    checkWindow(
+      """
+        |TABLE windowTestData
+        ||> SELECT cate, SUM(val) OVER w
+        |   WINDOW w AS (PARTITION BY cate ORDER BY val)
+        |""".stripMargin)
+    withSQLConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED.key -> "false") {
+      val sql = s"TABLE t |> SELECT 1 AS X"
+      checkError(
+        exception = parseException(sql),
+        condition = "_LEGACY_ERROR_TEMP_0035",
+        parameters = Map("message" -> "Operator pipe SQL syntax using |>"),
+        context = ExpectedContext(
+          fragment = sql,
+          start = 0,
+          stop = sql.length - 1))
     }
   }
+
+  private def awfulQuery(depth: Int): String = {
+    if (depth == 0) {
+      s"rand()"
+    } else {
+      s"case when ${awfulQuery(depth - 1)} > 0.5 " +
+      s"then ${awfulQuery(depth - 1)} " +
+      s"else ${awfulQuery(depth - 1)} " +
+      "end"
+    }
+  }
+
+  test("SPARK-47404: Managed parsers killswitch works") {
+    val initialSize = AbstractParser.getDFACacheNumStates
+    val mediumQuery = s"select ${awfulQuery(2)} from range(10)"
+
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> (10000).toString,
+        SQLConf.PARSER_DFA_CACHE_FLUSH_RATIO.key -> 100.toString) {
+      withSQLConf(SQLConf.MANAGE_PARSER_CACHES.key -> false.toString) {
+        parser.parsePlan(mediumQuery)
+      }
+      val disabledSize = AbstractParser.getDFACacheNumStates
+      // There should be no change to the state of the managed caches when not enabled
+      assert(disabledSize == initialSize)
+
+      withSQLConf(SQLConf.MANAGE_PARSER_CACHES.key -> true.toString) {
+        parser.parsePlan(mediumQuery)
+      }
+      val enabledSize = AbstractParser.getDFACacheNumStates
+      // Now the cache should be populated
+      assert(enabledSize > initialSize)
+    }
+  }
+
+  test("SPARK-47404: Always release Antlr cache when cache limit is 0") {
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> (-1).toString) {
+      parser.parsePlan("select id from range(10)")
+    }
+    val initialCacheSize = AbstractParser.getDFACacheNumStates
+    assert(initialCacheSize > 0)
+
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> 0.toString) {
+      parser.parsePlan("select id from range(10)")
+    }
+    val clearedCacheSize = AbstractParser.getDFACacheNumStates
+    assert(clearedCacheSize == 0)
+  }
+
+  test("SPARK-47404: Release ANTLR cache based on threshold") {
+    val smallQuery = "select id from range(10)"
+    val bigQuery = s"select ${awfulQuery(8)} from range(10)"
+
+    // Chose this value based on the observed size of the parser cache being ~27k states after
+    // parsing `bigQuery` on my machine.
+    val threshold = 10000
+
+    // Fill the cache a little
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> threshold.toString) {
+      parser.parsePlan(smallQuery)
+    }
+    val smallQueryCacheSize = AbstractParser.getDFACacheNumStates
+    assert(smallQueryCacheSize > 0)
+    assert(smallQueryCacheSize < threshold)
+
+    // Parse a big query to fill the cache
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> (-1).toString) {
+      parser.parsePlan(bigQuery)
+    }
+    val bigQueryCacheSize = AbstractParser.getDFACacheNumStates
+    assert(bigQueryCacheSize > threshold)
+
+    // Parse a small query to release the cache
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> threshold.toString) {
+      parser.parsePlan(smallQuery)
+    }
+    val clearedCacheSize = AbstractParser.getDFACacheNumStates
+    assert(clearedCacheSize == 0)
+  }
+
+  test("SPARK-47404: Release Antlr cache based on memory ratio") {
+    val smallQuery = "select id from range(10)"
+    val bigQuery = s"select ${awfulQuery(8)} from range(10)"
+
+    val driverMemory = Runtime.getRuntime.maxMemory()
+    // `bigQuery` fills the cache to about 27k states
+    val stateThreshold = 15000
+    // Calculate what ratio will give us this threshold based on driver memory
+    val ratio = stateThreshold * AbstractParser.BYTES_PER_DFA_STATE * 100.0 / driverMemory
+
+    // Fill the cache a little
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_RATIO.key -> ratio.toString) {
+      parser.parsePlan(smallQuery)
+    }
+    val smallQueryCacheSize = AbstractParser.getDFACacheNumStates
+    assert(smallQueryCacheSize > 0)
+    assert(smallQueryCacheSize < stateThreshold)
+
+    // Parse a big query to fill the cache
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_RATIO.key -> 100.toString) {
+      parser.parsePlan(bigQuery)
+    }
+    val bigQueryCacheSize = AbstractParser.getDFACacheNumStates
+    assert(bigQueryCacheSize > smallQueryCacheSize)
+
+    // Parse a small query to release the cache
+    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_RATIO.key -> ratio.toString) {
+      parser.parsePlan(smallQuery)
+    }
+    val clearedCacheSize = AbstractParser.getDFACacheNumStates
+    assert(clearedCacheSize == 0)
+  }
+
+  Seq(
+    (-1, -1, false),
+    (10000, -1, true),
+    (-1, 1, true),
+    (10000, 1, true)
+  ).foreach { case (threshold, ratio, shouldFlush) =>
+    test(s"SPARK-47404: Antlr cache combined thresholds. States: $threshold, Ratio: $ratio") {
+      // The cache should be flushed if either of the thresholds are exceeded.
+      val bigQuery = s"select ${awfulQuery(8)} from range(10)"
+      withSQLConf(
+          SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> threshold.toString,
+          SQLConf.PARSER_DFA_CACHE_FLUSH_RATIO.key -> ratio.toString) {
+        parser.parsePlan(bigQuery)
+        val bigQueryCacheSize = AbstractParser.getDFACacheNumStates
+        if (shouldFlush) {
+          assert(bigQueryCacheSize == 0)
+        } else {
+          assert(bigQueryCacheSize > 0)
+        }
+      }
+    }
+  }
+
+  test("SPARK-52709: Parsing STRUCT (empty,nested,within complex types) followed by shiftRight") {
+
+    // Test valid complex data types, and their combinations.
+    val typeStringsToTest = Seq(
+      "STRUCT<>",                               // Empty struct
+      "STRUCT<a: STRUCT<b: INT>>",              // Nested struct
+      "STRUCT<c: ARRAY<INT>>",                  // Struct containing an array
+      "MAP<STRING, STRUCT<x: STRING, y: INT>>",  // Map containing a struct
+      "ARRAY<STRUCT<>>",                        // Array containing empty structs
+      "ARRAY<STRUCT<id: INT, name: STRING>>"    // Array containing non-empty structs
+    )
+
+    /**
+    * Helper function to generate a SQL CAST fragment and its corresponding
+    * expected expression for a given type string.
+    */
+    def createCastNullAsTypeExpression(typeString: String): (String, NamedExpression) = {
+      // Use the suite's 'parser' instance to parse the DataType
+      val dataType: DataType = parser.parseDataType(typeString)
+      val castExpr = Cast(Literal(null, NullType), dataType)
+      val expectedExpr = UnresolvedAlias(castExpr) // SparkSqlParserSuite expects UnresolvedAlias
+      val sqlFragment = s"CAST(null AS $typeString)"
+        (sqlFragment, expectedExpr)
+    }
+
+    // Generate the SQL fragments and their corresponding expected expressions for all CASTs
+    val castExpressionsData = typeStringsToTest.map(createCastNullAsTypeExpression)
+
+    // Extract just the SQL fragments for the SELECT statement
+    val selectClauses = castExpressionsData.map(_._1)
+
+    val sql =
+      s"""
+         |SELECT
+         |  ${selectClauses.mkString(",\n  ")},
+         |  4 >> 1
+      """.stripMargin
+
+    // Construct the list of ALL expected expressions for the Project node.
+    // This includes all the CAST expressions generated above, plus the ShiftRight expression.
+    val allExpectedExprs = castExpressionsData.map(_._2) :+
+      UnresolvedAlias(ShiftRight(Literal(4, IntegerType), Literal(1, IntegerType)))
+
+    // Define the expected logical plan
+    val expectedPlan = Project(
+      allExpectedExprs,
+      OneRowRelation()
+    )
+
+    assertEqual(sql, expectedPlan)
+  }
+
+  test("SPARK-52709-Invalid: Parsing should fail for empty ARRAY<> type") {
+    val sql = "SELECT CAST(null AS ARRAY<>)"
+    checkError(
+      exception = parseException(sql),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'<'", "hint" -> ": missing ')'")
+    )
+  }
+
+  test("SPARK-52709-Invalid: Parsing should fail for empty MAP<> type") {
+    val sql = "SELECT CAST(null AS MAP<>)"
+    checkError(
+      exception = parseException(sql),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'<'", "hint" -> ": missing ')'")
+    )
+  }
 }
+

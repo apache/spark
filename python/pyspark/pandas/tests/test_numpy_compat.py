@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import unittest
 import numpy as np
 import pandas as pd
 
@@ -25,6 +26,12 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class NumPyCompatTestsMixin:
+    @classmethod
+    def setUpClass(cls):
+        super(NumPyCompatTestsMixin, cls).setUpClass()
+        # Some nanosecond->microsecond conversions throw loss of precision errors
+        cls.spark.conf.set("spark.sql.execution.pandas.convertToArrowArraySafely", "false")
+
     blacklist = [
         # Pandas-on-Spark does not currently support
         "conj",

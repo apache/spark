@@ -17,17 +17,13 @@
 
 import unittest
 
-from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
-from pyspark.testing.connectutils import should_test_connect
+from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.utils import have_graphviz, graphviz_requirement_message
 
-if should_test_connect:
-    from pyspark.sql.connect.dataframe import DataFrame
 
-
-class SparkConnectDataFrameDebug(SparkConnectSQLTestCase):
+class SparkConnectDataFrameDebug(ReusedConnectTestCase):
     def test_df_debug_basics(self):
-        df: DataFrame = self.connect.range(100).repartition(10).groupBy("id").count()
+        df = self.spark.range(100).repartition(10).groupBy("id").count()
         x = df.collect()  # noqa: F841
         ei = df.executionInfo
 
@@ -35,12 +31,12 @@ class SparkConnectDataFrameDebug(SparkConnectSQLTestCase):
         self.assertIn(root, graph, "The root must be rooted in the graph")
 
     def test_df_quey_execution_empty_before_execution(self):
-        df: DataFrame = self.connect.range(100).repartition(10).groupBy("id").count()
+        df = self.spark.range(100).repartition(10).groupBy("id").count()
         ei = df.executionInfo
         self.assertIsNone(ei, "The query execution must be None before the action is executed")
 
     def test_df_query_execution_with_writes(self):
-        df: DataFrame = self.connect.range(100).repartition(10).groupBy("id").count()
+        df = self.spark.range(100).repartition(10).groupBy("id").count()
         df.write.save("/tmp/test_df_query_execution_with_writes", format="json", mode="overwrite")
         ei = df.executionInfo
         self.assertIsNotNone(
@@ -48,18 +44,18 @@ class SparkConnectDataFrameDebug(SparkConnectSQLTestCase):
         )
 
     def test_query_execution_text_format(self):
-        df: DataFrame = self.connect.range(100).repartition(10).groupBy("id").count()
+        df = self.spark.range(100).repartition(10).groupBy("id").count()
         df.collect()
         self.assertIn("HashAggregate", df.executionInfo.metrics.toText())
 
         # Different execution mode.
-        df: DataFrame = self.connect.range(100).repartition(10).groupBy("id").count()
+        df = self.spark.range(100).repartition(10).groupBy("id").count()
         df.toPandas()
         self.assertIn("HashAggregate", df.executionInfo.metrics.toText())
 
     @unittest.skipIf(not have_graphviz, graphviz_requirement_message)
     def test_df_query_execution_metrics_to_dot(self):
-        df: DataFrame = self.connect.range(100).repartition(10).groupBy("id").count()
+        df = self.spark.range(100).repartition(10).groupBy("id").count()
         x = df.collect()  # noqa: F841
         ei = df.executionInfo
 

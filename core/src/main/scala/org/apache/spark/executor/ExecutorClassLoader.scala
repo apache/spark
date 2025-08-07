@@ -30,7 +30,7 @@ import org.apache.xbean.asm9.Opcodes._
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.util.ParentClassLoader
 
 /**
@@ -58,9 +58,6 @@ class ExecutorClassLoader(
   val directory = uri.getPath
 
   val parentLoader = new ParentClassLoader(parent)
-
-  // Allows HTTP connect and read timeouts to be controlled for testing / debugging purposes
-  private[executor] var httpUrlConnectionTimeoutMillis: Int = -1
 
   private val fetchFn: (String) => InputStream = uri.getScheme() match {
     case "spark" => getClassFileInputStreamFromSparkRPC

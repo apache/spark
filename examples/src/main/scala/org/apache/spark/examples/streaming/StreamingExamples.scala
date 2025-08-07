@@ -31,7 +31,7 @@ object StreamingExamples extends Logging {
       // We first log something to initialize Spark's default logging, then we override the
       // logging level.
       logInfo("Setting log level to [WARN] for streaming example." +
-        " To override add a custom log4j.properties to the classpath.")
+        " To override add a custom log4j2.properties to the classpath.")
       Configurator.setRootLevel(Level.WARN)
     }
   }

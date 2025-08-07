@@ -19,15 +19,13 @@ package org.apache.spark.sql
 
 import java.io.{File, FilenameFilter}
 import java.nio.file.{Files, Paths}
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, LocalTime, Period}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
 
-import org.apache.commons.io.FileUtils
-
-import org.apache.spark.CleanerListener
+import org.apache.spark.{CleanerListener, SparkRuntimeException}
 import org.apache.spark.executor.DataReadMethod._
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
@@ -92,7 +90,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     maybeBlock.nonEmpty && isExpectLevel
   }
 
-  private def getNumInMemoryRelations(ds: Dataset[_]): Int = {
+  private def getNumInMemoryRelations(ds: classic.Dataset[_]): Int = {
     val plan = ds.queryExecution.withCachedData
     var sum = plan.collect { case _: InMemoryRelation => 1 }.sum
     plan.transformAllExpressions {
@@ -182,7 +180,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
   test("too big for memory") {
     withTempView("bigData") {
-      val data = "*" * 1000
+      val data = "*".repeat(1000)
       sparkContext.parallelize(1 to 200000, 1).map(_ => BigData(data)).toDF()
         .createOrReplaceTempView("bigData")
       spark.table("bigData").persist(StorageLevel.MEMORY_AND_DISK)
@@ -508,14 +506,14 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           |join abc c on a.key=c.key""".stripMargin).queryExecution.sparkPlan
 
       assert(sparkPlan.collect { case e: InMemoryTableScanExec => e }.size === 3)
-      assert(sparkPlan.collect { case e: RDDScanExec => e }.size === 0)
+      assert(sparkPlan.collectFirst { case e: RDDScanExec => e }.isEmpty)
     }
   }
 
   /**
    * Verifies that the plan for `df` contains `expected` number of Exchange operators.
    */
-  private def verifyNumExchanges(df: DataFrame, expected: Int): Unit = {
+  private def verifyNumExchanges(df: classic.DataFrame, expected: Int): Unit = {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       df.collect()
     }
@@ -923,7 +921,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
         val cache = spark.range(10).cache()
         val df = cache.filter($"id" > 0)
-        val columnarToRow = df.queryExecution.executedPlan.collect {
+        val columnarToRow = df.queryExecution.executedPlan.collectFirst {
           case c: ColumnarToRowExec => c
         }
         assert(columnarToRow.isEmpty)
@@ -1052,7 +1050,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   }
 
   test("Cache should respect the hint") {
-    def testHint(df: Dataset[_], expectedHint: JoinStrategyHint): Unit = {
+    def testHint(df: classic.Dataset[_], expectedHint: JoinStrategyHint): Unit = {
       val df2 = spark.range(2000).cache()
       df2.count()
 
@@ -1097,7 +1095,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   }
 
   test("analyzes column statistics in cached query") {
-    def query(): DataFrame = {
+    def query(): classic.DataFrame = {
       spark.range(100)
         .selectExpr("id % 3 AS c0", "id % 5 AS c1", "2 AS c2")
         .groupBy("c0")
@@ -1405,7 +1403,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
         .filter(_.startsWith("Location:"))
         .head
         .replace("Location: file:", "")
-      FileUtils.copyDirectory(
+      Utils.copyDirectory(
         new File(part0Loc),
         new File(part0Loc.replace("part=0", "part=1")))
 
@@ -1659,7 +1657,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           _.nodeName.contains("TableCacheQueryStage"))
         val aqeNode = findNodeInSparkPlanInfo(inMemoryScanNode.get,
           _.nodeName.contains("AdaptiveSparkPlan"))
-        aqeNode.get.children.head.nodeName == "AQEShuffleRead"
+        val aqePlanRoot = findNodeInSparkPlanInfo(inMemoryScanNode.get,
+          _.nodeName.contains("ResultQueryStage"))
+        aqePlanRoot.get.children.head.nodeName == "AQEShuffleRead"
       }
 
       withTempView("t0", "t1", "t2") {
@@ -1790,6 +1790,19 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
+  test("SPARK-52692: Support cache/uncache table with Time type") {
+    val tableName = "timeCache"
+    withTable(tableName) {
+      sql(s"CACHE TABLE $tableName AS SELECT TIME'22:00:00'")
+      checkAnswer(spark.table(tableName), Row(LocalTime.parse("22:00:00")))
+      spark.table(tableName).queryExecution.withCachedData.collect {
+        case cached: InMemoryRelation =>
+          assert(cached.stats.sizeInBytes === 8)
+      }
+      sql(s"UNCACHE TABLE $tableName")
+    }
+  }
+
   Seq(true, false).foreach { callerEnableAQE =>
     test(s"SPARK-49982: AQE negative caching with in memory table cache - callerEnableAQE=" +
       callerEnableAQE) {
@@ -1829,6 +1842,15 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           }
         }
       }
+    }
+  }
+
+  test("SPARK-52684: Atomicity of cache table on error") {
+    withTempView("SPARK_52684") {
+      intercept[SparkRuntimeException] {
+        spark.sql("CACHE TABLE SPARK_52684 AS SELECT raise_error('SPARK-52684') AS c1")
+      }
+      assert(!spark.catalog.tableExists("SPARK_52684"))
     }
   }
 }

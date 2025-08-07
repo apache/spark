@@ -262,20 +262,11 @@ class ConnectCompatibilityTestsMixin:
         expected_missing_connect_properties = {"sparkContext"}
         expected_missing_classic_properties = {"is_stopped", "session_id"}
         expected_missing_connect_methods = {
-            "addArtifact",
-            "addArtifacts",
-            "addTag",
             "clearProgressHandlers",
-            "clearTags",
             "copyFromLocalToFs",
-            "getTags",
-            "interruptAll",
-            "interruptOperation",
-            "interruptTag",
             "newSession",
             "registerProgressHandler",
             "removeProgressHandler",
-            "removeTag",
         }
         expected_missing_classic_methods = set()
         self.check_compatibility(
@@ -388,7 +379,8 @@ class ConnectCompatibilityTestsMixin:
         """Test Functions compatibility between classic and connect."""
         expected_missing_connect_properties = set()
         expected_missing_classic_properties = set()
-        expected_missing_connect_methods = set()
+        # TODO(SPARK-53012): support arrow_udtf in Spark Connect
+        expected_missing_connect_methods = {"arrow_udtf"}
         expected_missing_classic_methods = {"check_dependencies"}
         self.check_compatibility(
             ClassicFunctions,
@@ -404,7 +396,7 @@ class ConnectCompatibilityTestsMixin:
         """Test Grouping compatibility between classic and connect."""
         expected_missing_connect_properties = set()
         expected_missing_classic_properties = set()
-        expected_missing_connect_methods = {"transformWithStateInPandas"}
+        expected_missing_connect_methods = set()
         expected_missing_classic_methods = set()
         self.check_compatibility(
             ClassicGroupedData,

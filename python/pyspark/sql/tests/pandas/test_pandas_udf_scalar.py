@@ -517,7 +517,10 @@ class ScalarPandasUDFTestsMixin:
 
         def _scalar_f(id):
             return pd.DataFrame(
-                {"ts": id.apply(lambda i: pd.Timestamp(i)), "arr": id.apply(lambda i: [i, i + 1])}
+                {
+                    "ts": id.apply(lambda i: pd.Timestamp(i, unit="s")),
+                    "arr": id.apply(lambda i: [i, i + 1]),
+                }
             )
 
         scalar_f = pandas_udf(_scalar_f, returnType=return_type)
@@ -532,7 +535,7 @@ class ScalarPandasUDFTestsMixin:
             for i, row in enumerate(actual):
                 id, f = row
                 self.assertEqual(i, id)
-                self.assertEqual(pd.Timestamp(i).to_pydatetime(), f[0])
+                self.assertEqual(pd.Timestamp(i, unit="s").to_pydatetime(), f[0])
                 self.assertListEqual([i, i + 1], f[1])
 
     def test_vectorized_udf_struct_empty(self):
@@ -834,6 +837,47 @@ class ScalarPandasUDFTestsMixin:
         ]
         for f in [scalar_f, iter_f]:
             result = df.select(f(col("map_of_v")).alias("udf")).collect()
+            self.assertEqual(result, expected)
+
+    def test_udf_struct_with_metadata_value_field(self):
+        # This makes sure that not every struct with <metadata, value> fields is treated as Variant
+        scalar_f = pandas_udf(
+            lambda u: pd.DataFrame(
+                {
+                    "value": u.apply(lambda i: bytes([12, i])),
+                    "metadata": u.apply(lambda i: bytes([1, 0, i])),
+                }
+            ),
+            StructType(
+                [
+                    StructField("value", BinaryType(), True),
+                    StructField("metadata", BinaryType(), True),
+                ]
+            ),
+        )
+        iter_f = pandas_udf(
+            lambda it: map(
+                lambda u: pd.DataFrame(
+                    {
+                        "value": u.apply(lambda i: bytes([12, i])),
+                        "metadata": u.apply(lambda i: bytes([1, 0, i])),
+                    }
+                ),
+                it,
+            ),
+            StructType(
+                [
+                    StructField("value", BinaryType(), True),
+                    StructField("metadata", BinaryType(), True),
+                ]
+            ),
+            PandasUDFType.SCALAR_ITER,
+        )
+
+        expected = [Row(udf=Row(bytes([12, i]), bytes([1, 0, i]))) for i in range(10)]
+
+        for f in [scalar_f, iter_f]:
+            result = self.spark.range(10).select(f(col("id")).alias("udf")).collect()
             self.assertEqual(result, expected)
 
     def test_udf_with_variant_nested_output(self):
@@ -1830,6 +1874,36 @@ class ScalarPandasUDFTestsMixin:
         ):
             with self.subTest(with_b=True, query_no=i):
                 assertDataFrameEqual(df, [Row(0), Row(101)])
+
+    def test_arrow_cast_enabled_numeric_to_decimal(self):
+        import numpy as np
+
+        columns = [
+            "int8",
+            "int16",
+            "int32",
+            "uint8",
+            "uint16",
+            "uint32",
+            "float64",
+        ]
+
+        pdf = pd.DataFrame({key: np.arange(1, 2).astype(key) for key in columns})
+        df = self.spark.range(2).repartition(1)
+
+        t = DecimalType(10, 0)
+        for column in columns:
+            with self.subTest(column=column):
+                v = pdf[column].iloc[:1]
+                row = df.select(pandas_udf(lambda _: v, t)(df.id)).first()
+                assert (row[0] == v).all()
+
+    def test_arrow_cast_enabled_str_to_numeric(self):
+        df = self.spark.range(2).repartition(1)
+        for t in [IntegerType(), LongType(), FloatType(), DoubleType()]:
+            with self.subTest(type=t):
+                row = df.select(pandas_udf(lambda _: pd.Series(["123"]), t)(df.id)).first()
+                assert row[0] == 123
 
 
 class ScalarPandasUDFTests(ScalarPandasUDFTestsMixin, ReusedSQLTestCase):

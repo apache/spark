@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils
 import org.apache.spark.util.random.RandomSampler
@@ -87,6 +88,22 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     )
 
     expressions.forall(_.resolved) && childrenResolved && !hasSpecialExpressions
+  }
+
+  override protected def doCanonicalize(): LogicalPlan = {
+    // During canonicalization, the name and exprId of Alias and Attributes will be
+    // erased and normalized. If the Project only changes name and exprId, then it
+    // can be striped as it doesn't change the semantic.
+    val noSemanticChange = projectList.length == child.output.length &&
+      projectList.zip(child.output).forall {
+        case (alias: Alias, attr) =>
+          alias.qualifier.isEmpty &&
+            alias.metadata == attr.metadata &&
+            alias.child.semanticEquals(attr)
+        case (attr1: Attribute, attr2) => attr1.semanticEquals(attr2)
+        case _ => false
+      }
+    if (noSemanticChange) child.canonicalized else super.doCanonicalize()
   }
 
   override lazy val validConstraints: ExpressionSet =
@@ -376,10 +393,13 @@ case class Intersect(
 
   final override val nodePatterns: Seq[TreePattern] = Seq(INTERSECT)
 
-  override def output: Seq[Attribute] =
-    left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
-      leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
+  override def output: Seq[Attribute] = {
+    if (conf.getConf(SQLConf.LAZY_SET_OPERATOR_OUTPUT)) {
+      lazyOutput
+    } else {
+      computeOutput()
     }
+  }
 
   override def metadataOutput: Seq[Attribute] = Nil
 
@@ -396,6 +416,19 @@ case class Intersect(
 
   override protected def withNewChildrenInternal(
     newLeft: LogicalPlan, newRight: LogicalPlan): Intersect = copy(left = newLeft, right = newRight)
+
+  private lazy val lazyOutput: Seq[Attribute] = computeOutput()
+
+  private def computeOutput(): Seq[Attribute] = Intersect.mergeChildOutputs(children.map(_.output))
+}
+
+/** Factory methods for `Intersect` nodes. */
+object Intersect {
+  /** We don't use right.output because those rows get excluded from the set. */
+  def mergeChildOutputs(childOutputs: Seq[Seq[Attribute]]): Seq[Attribute] =
+    childOutputs.head.zip(childOutputs.tail.head).map { case (leftAttr, rightAttr) =>
+      leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
+    }
 }
 
 case class Except(
@@ -403,8 +436,14 @@ case class Except(
     right: LogicalPlan,
     isAll: Boolean) extends SetOperation(left, right) {
   override def nodeName: String = getClass.getSimpleName + ( if ( isAll ) " All" else "" )
-  /** We don't use right.output because those rows get excluded from the set. */
-  override def output: Seq[Attribute] = left.output
+
+  override def output: Seq[Attribute] = {
+    if (conf.getConf(SQLConf.LAZY_SET_OPERATOR_OUTPUT)) {
+      lazyOutput
+    } else {
+      computeOutput()
+    }
+  }
 
   override def metadataOutput: Seq[Attribute] = Nil
 
@@ -416,12 +455,114 @@ case class Except(
 
   override protected def withNewChildrenInternal(
     newLeft: LogicalPlan, newRight: LogicalPlan): Except = copy(left = newLeft, right = newRight)
+
+  private lazy val lazyOutput: Seq[Attribute] = computeOutput()
+
+  private def computeOutput(): Seq[Attribute] = Except.mergeChildOutputs(children.map(_.output))
 }
 
-/** Factory for constructing new `Union` nodes. */
+/** Factory methods for `Except` nodes. */
+object Except {
+  /** We don't use right.output because those rows get excluded from the set. */
+  def mergeChildOutputs(childOutputs: Seq[Seq[Attribute]]): Seq[Attribute] = childOutputs.head
+}
+
+/** Factory methods for `Union` nodes. */
 object Union {
   def apply(left: LogicalPlan, right: LogicalPlan): Union = {
     Union (left :: right :: Nil)
+  }
+
+  // updating nullability to make all the children consistent
+  def mergeChildOutputs(childOutputs: Seq[Seq[Attribute]]): Seq[Attribute] = {
+    childOutputs.transpose.map { attrs =>
+      val firstAttr = attrs.head
+      val nullable = attrs.exists(_.nullable)
+      val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
+      if (firstAttr.dataType == newDt) {
+        firstAttr.withNullability(nullable)
+      } else {
+        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
+          firstAttr.exprId, firstAttr.qualifier)
+      }
+    }
+  }
+}
+
+/**
+ * Helper base class for Union and UnionLoop logical nodes that contains their commonalities.
+ * It reflects similarities of UNION ALL's two different use cases 1) for combining two or
+ * more result sets, and 2) for combining anchor and recursive parts in the recursive CTE.
+ *
+ * Most of these methods historically existed in the Union node before the implementation of
+ * the recursive CTE. One notable difference between two is that Union may have more than two
+ * children while UnionLoop strictly has two (anchor and recursion).
+ */
+abstract class UnionBase extends LogicalPlan {
+  override def output: Seq[Attribute] = {
+    if (conf.getConf(SQLConf.LAZY_SET_OPERATOR_OUTPUT)) {
+      lazyOutput
+    } else {
+      computeOutput()
+    }
+  }
+
+  override def metadataOutput: Seq[Attribute] = Nil
+
+  private lazy val lazyOutput: Seq[Attribute] = computeOutput()
+
+  protected def computeOutput(): Seq[Attribute] = Union.mergeChildOutputs(children.map(_.output))
+
+  /**
+   * Maps the constraints containing a given (original) sequence of attributes to those with a
+   * given (reference) sequence of attributes. Given the nature of union, we expect that the
+   * mapping between the original and reference sequences are symmetric.
+   */
+  private def rewriteConstraints(reference: Seq[Attribute],
+      original: Seq[Attribute],
+      constraints: ExpressionSet): ExpressionSet = {
+    require(reference.size == original.size)
+    val attributeRewrites = AttributeMap(original.zip(reference))
+    constraints.map(_ transform {
+      case a: Attribute => attributeRewrites(a)
+    })
+  }
+
+  private def merge(a: ExpressionSet, b: ExpressionSet): ExpressionSet = {
+    val common = a.intersect(b)
+    // The constraint with only one reference could be easily inferred as predicate.
+    // Grouping the constraints by it's references so we can combine the constraints with same
+    // reference together.
+    val othera = a.diff(common).filter(_.references.size == 1).groupBy(_.references.head)
+    val otherb = b.diff(common).filter(_.references.size == 1).groupBy(_.references.head)
+    // loose the constraints by: A1 && B1 || A2 && B2  ->  (A1 || A2) && (B1 || B2)
+    val others = (othera.keySet intersect otherb.keySet).map { attr =>
+      Or(othera(attr).reduceLeft(And), otherb(attr).reduceLeft(And))
+    }
+    common ++ others
+  }
+
+  override protected lazy val validConstraints: ExpressionSet = {
+    children
+      .map(child => rewriteConstraints(children.head.output, child.output, child.constraints))
+      .reduce(merge(_, _))
+  }
+
+
+
+
+  /**
+   * Checks whether the child outputs are compatible by using `DataType.equalsStructurally`. Do
+   * that by comparing the size of the output with the size of the first child's output and by
+   * comparing output data types with the data types of the first child's output.
+   *
+   * This method needs to be evaluated after `childrenResolved`.
+   */
+  def allChildrenCompatible: Boolean = childrenResolved && children.tail.forall { child =>
+    child.output.length == children.head.output.length &&
+      child.output.zip(children.head.output).forall {
+        case (l, r) => DataType.equalsStructurally(l.dataType, r.dataType, true)
+      }
   }
 }
 
@@ -436,7 +577,7 @@ object Union {
 case class Union(
     children: Seq[LogicalPlan],
     byName: Boolean = false,
-    allowMissingCol: Boolean = false) extends LogicalPlan {
+    allowMissingCol: Boolean = false) extends UnionBase {
   assert(!allowMissingCol || byName, "`allowMissingCol` can be true only if `byName` is true.")
 
   override def maxRows: Option[Long] = {
@@ -474,79 +615,47 @@ case class Union(
     Some(sum.toLong)
   }
 
-  def duplicateResolved: Boolean = {
+  private def duplicatesResolvedPerBranch: Boolean =
+    children.forall(child => child.outputSet.size == child.output.size)
+
+  def duplicatesResolvedBetweenBranches: Boolean = {
     children.map(_.outputSet.size).sum ==
       AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
   }
 
-  // updating nullability to make all the children consistent
-  override def output: Seq[Attribute] = {
-    children.map(_.output).transpose.map { attrs =>
-      val firstAttr = attrs.head
-      val nullable = attrs.exists(_.nullable)
-      val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
-      if (firstAttr.dataType == newDt) {
-        firstAttr.withNullability(nullable)
-      } else {
-        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
-          firstAttr.exprId, firstAttr.qualifier)
-      }
-    }
-  }
-
-  override def metadataOutput: Seq[Attribute] = Nil
-
   override lazy val resolved: Boolean = {
-    // allChildrenCompatible needs to be evaluated after childrenResolved
-    def allChildrenCompatible: Boolean =
-      children.tail.forall( child =>
-        // compare the attribute number with the first child
-        child.output.length == children.head.output.length &&
-        // compare the data types with the first child
-        child.output.zip(children.head.output).forall {
-          case (l, r) => DataType.equalsStructurally(l.dataType, r.dataType, true)
-        })
-    children.length > 1 && !(byName || allowMissingCol) && childrenResolved && allChildrenCompatible
-  }
-
-  /**
-   * Maps the constraints containing a given (original) sequence of attributes to those with a
-   * given (reference) sequence of attributes. Given the nature of union, we expect that the
-   * mapping between the original and reference sequences are symmetric.
-   */
-  private def rewriteConstraints(
-      reference: Seq[Attribute],
-      original: Seq[Attribute],
-      constraints: ExpressionSet): ExpressionSet = {
-    require(reference.size == original.size)
-    val attributeRewrites = AttributeMap(original.zip(reference))
-    constraints.map(_ transform {
-      case a: Attribute => attributeRewrites(a)
-    })
-  }
-
-  private def merge(a: ExpressionSet, b: ExpressionSet): ExpressionSet = {
-    val common = a.intersect(b)
-    // The constraint with only one reference could be easily inferred as predicate
-    // Grouping the constraints by it's references so we can combine the constraints with same
-    // reference together
-    val othera = a.diff(common).filter(_.references.size == 1).groupBy(_.references.head)
-    val otherb = b.diff(common).filter(_.references.size == 1).groupBy(_.references.head)
-    // loose the constraints by: A1 && B1 || A2 && B2  ->  (A1 || A2) && (B1 || B2)
-    val others = (othera.keySet intersect otherb.keySet).map { attr =>
-      Or(othera(attr).reduceLeft(And), otherb(attr).reduceLeft(And))
-    }
-    common ++ others
-  }
-
-  override protected lazy val validConstraints: ExpressionSet = {
-    children
-      .map(child => rewriteConstraints(children.head.output, child.output, child.constraints))
-      .reduce(merge(_, _))
+    children.length > 1 &&
+    !(byName || allowMissingCol) &&
+    childrenResolved &&
+    allChildrenCompatible &&
+    (!conf.unionIsResolvedWhenDuplicatesPerChildResolved || duplicatesResolvedPerBranch)
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): Union =
     copy(children = newChildren)
+}
+
+object Join {
+  def computeOutput(
+    joinType: JoinType,
+    leftOutput: Seq[Attribute],
+    rightOutput: Seq[Attribute]
+  ): Seq[Attribute] = {
+    joinType match {
+      case j: ExistenceJoin =>
+        leftOutput :+ j.exists
+      case LeftExistence(_) =>
+        leftOutput
+      case LeftOuter | LeftSingle =>
+        leftOutput ++ rightOutput.map(_.withNullability(true))
+      case RightOuter =>
+        leftOutput.map(_.withNullability(true)) ++ rightOutput
+      case FullOuter =>
+        leftOutput.map(_.withNullability(true)) ++ rightOutput.map(_.withNullability(true))
+      case _ =>
+        leftOutput ++ rightOutput
+    }
+  }
 }
 
 case class Join(
@@ -584,22 +693,7 @@ case class Join(
     }
   }
 
-  override def output: Seq[Attribute] = {
-    joinType match {
-      case j: ExistenceJoin =>
-        left.output :+ j.exists
-      case LeftExistence(_) =>
-        left.output
-      case LeftOuter | LeftSingle =>
-        left.output ++ right.output.map(_.withNullability(true))
-      case RightOuter =>
-        left.output.map(_.withNullability(true)) ++ right.output
-      case FullOuter =>
-        left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
-      case _ =>
-        left.output ++ right.output
-    }
-  }
+  override def output: Seq[Attribute] = Join.computeOutput(joinType, left.output, right.output)
 
   override def metadataOutput: Seq[Attribute] = {
     joinType match {
@@ -724,11 +818,13 @@ case class InsertIntoDir(
  * @param isTempView A flag to indicate whether the view is temporary or not.
  * @param child The logical plan of a view operator. If the view description is available, it should
  *              be a logical plan parsed from the `CatalogTable.viewText`.
+ * @param options The configuration used when reading data.
  */
 case class View(
     desc: CatalogTable,
     isTempView: Boolean,
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty) extends UnaryNode {
   require(!isTempViewStoringAnalyzedPlan || child.resolved)
 
   override def output: Seq[Attribute] = child.output
@@ -774,158 +870,13 @@ object View {
     if (activeConf.useCurrentSQLConfigsForView && !isTempView) return activeConf
 
     val sqlConf = new SQLConf()
-    // We retain below configs from current session because they are not captured by view
-    // as optimization configs but they are still needed during the view resolution.
-    // TODO: remove this `retainedConfigs` after the `RelationConversions` is moved to
-    // optimization phase.
-    val retainedConfigs = activeConf.getAllConfs.filter { case (key, _) =>
-      Seq(
-        "spark.sql.hive.convertMetastoreParquet",
-        "spark.sql.hive.convertMetastoreOrc",
-        "spark.sql.hive.convertInsertingPartitionedTable",
-        "spark.sql.hive.convertInsertingUnpartitionedTable",
-        "spark.sql.hive.convertMetastoreCtas"
-      ).contains(key) || key.startsWith("spark.sql.catalog.")
-    }
-    for ((k, v) <- configs ++ retainedConfigs) {
+    for ((k, v) <- configs) {
       sqlConf.settings.put(k, v)
     }
+    Analyzer.retainResolutionConfigsForAnalysis(newConf = sqlConf, existingConf = activeConf)
     sqlConf
   }
 }
-
-/**
- * A container for holding named common table expressions (CTEs) and a query plan.
- * This operator will be removed during analysis and the relations will be substituted into child.
- *
- * @param child The final query of this CTE.
- * @param cteRelations A sequence of pair (alias, the CTE definition) that this CTE defined
- *                     Each CTE can see the base tables and the previously defined CTEs only.
- */
-case class UnresolvedWith(
-    child: LogicalPlan,
-    cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_WITH)
-
-  override def output: Seq[Attribute] = child.output
-
-  override def simpleString(maxFields: Int): String = {
-    val cteAliases = truncatedString(cteRelations.map(_._1), "[", ", ", "]", maxFields)
-    s"CTE $cteAliases"
-  }
-
-  override def innerChildren: Seq[LogicalPlan] = cteRelations.map(_._2)
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedWith =
-    copy(child = newChild)
-}
-
-/**
- * A wrapper for CTE definition plan with a unique ID.
- * @param child The CTE definition query plan.
- * @param id    The unique ID for this CTE definition.
- * @param originalPlanWithPredicates The original query plan before predicate pushdown and the
- *                                   predicates that have been pushed down into `child`. This is
- *                                   a temporary field used by optimization rules for CTE predicate
- *                                   pushdown to help ensure rule idempotency.
- * @param underSubquery If true, it means we don't need to add a shuffle for this CTE relation as
- *                      subquery reuse will be applied to reuse CTE relation output.
- */
-case class CTERelationDef(
-    child: LogicalPlan,
-    id: Long = CTERelationDef.newId,
-    originalPlanWithPredicates: Option[(LogicalPlan, Seq[Expression])] = None,
-    underSubquery: Boolean = false) extends UnaryNode {
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(child = newChild)
-
-  override def output: Seq[Attribute] = if (resolved) child.output else Nil
-}
-
-object CTERelationDef {
-  private[sql] val curId = new java.util.concurrent.atomic.AtomicLong()
-  def newId: Long = curId.getAndIncrement()
-}
-
-/**
- * Represents the relation of a CTE reference.
- * @param cteId                The ID of the corresponding CTE definition.
- * @param _resolved            Whether this reference is resolved.
- * @param output               The output attributes of this CTE reference, which can be different
- *                             from the output of its corresponding CTE definition after attribute
- *                             de-duplication.
- * @param statsOpt             The optional statistics inferred from the corresponding CTE
- *                             definition.
- */
-case class CTERelationRef(
-    cteId: Long,
-    _resolved: Boolean,
-    override val output: Seq[Attribute],
-    override val isStreaming: Boolean,
-    statsOpt: Option[Statistics] = None) extends LeafNode with MultiInstanceRelation {
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
-
-  override lazy val resolved: Boolean = _resolved
-
-  override def newInstance(): LogicalPlan = {
-    // CTERelationRef inherits the output attributes from a query, which may contain duplicated
-    // attributes, for queries like `SELECT a, a FROM t`. It's important to keep the duplicated
-    // attributes to have the same id in the new instance, as column resolution allows more than one
-    // matching attributes if their ids are the same.
-    // For example, `Project('a, CTERelationRef(a#1, a#1))` can be resolved properly as the matching
-    // attributes `a` have the same id, but `Project('a, CTERelationRef(a#2, a#3))` can't be
-    // resolved.
-    val oldAttrToNewAttr = AttributeMap(output.zip(output.map(_.newInstance())))
-    copy(output = output.map(attr => oldAttrToNewAttr(attr)))
-  }
-
-  def withNewStats(statsOpt: Option[Statistics]): CTERelationRef = copy(statsOpt = statsOpt)
-
-  override def computeStats(): Statistics = statsOpt.getOrElse(Statistics(conf.defaultSizeInBytes))
-}
-
-/**
- * The resolved version of [[UnresolvedWith]] with CTE referrences linked to CTE definitions
- * through unique IDs instead of relation aliases.
- *
- * @param plan    The query plan.
- * @param cteDefs The CTE definitions.
- */
-case class WithCTE(plan: LogicalPlan, cteDefs: Seq[CTERelationDef]) extends LogicalPlan {
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
-
-  override def output: Seq[Attribute] = plan.output
-
-  override def children: Seq[LogicalPlan] = cteDefs :+ plan
-
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
-    copy(plan = newChildren.last, cteDefs = newChildren.init.asInstanceOf[Seq[CTERelationDef]])
-  }
-
-  def withNewPlan(newPlan: LogicalPlan): WithCTE = {
-    withNewChildren(children.init :+ newPlan).asInstanceOf[WithCTE]
-  }
-
-  override def maxRows: Option[Long] = plan.maxRows
-
-  override def maxRowsPerPartition: Option[Long] = plan.maxRowsPerPartition
-}
-
-/**
- * The logical node which is able to place the `WithCTE` node on its children.
- */
-trait CTEInChildren extends LogicalPlan {
-  def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
-    withNewChildren(children.map(WithCTE(_, cteDefs)))
-  }
-}
-
 
 case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
@@ -1255,7 +1206,14 @@ object Aggregate {
       groupingExpression.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))
   }
 
-  def supportsObjectHashAggregate(aggregateExpressions: Seq[AggregateExpression]): Boolean = {
+  def supportsObjectHashAggregate(
+      aggregateExpressions: Seq[AggregateExpression],
+      groupingExpressions: Seq[Expression]): Boolean = {
+    // We should not use hash aggregation on binary unstable types.
+    if (groupingExpressions.exists(e => !UnsafeRowUtils.isBinaryStable(e.dataType))) {
+      return false
+    }
+
     aggregateExpressions.map(_.aggregateFunction).exists {
       case _: TypedImperativeAggregate[_] => true
       case _ => false
@@ -1448,6 +1406,8 @@ case class Offset(offsetExpr: Expression, child: LogicalPlan) extends OrderPrese
   }
   override protected def withNewChildInternal(newChild: LogicalPlan): Offset =
     copy(child = newChild)
+
+  override val nodePatterns: Seq[TreePattern] = Seq(OFFSET)
 }
 
 /**
@@ -2014,6 +1974,9 @@ case class Deduplicate(
 }
 
 case class DeduplicateWithinWatermark(keys: Seq[Attribute], child: LogicalPlan) extends UnaryNode {
+  // Ensure that references include event time columns so they are not pruned away.
+  override def references: AttributeSet = AttributeSet(keys) ++
+    AttributeSet(child.output.filter(_.metadata.contains(EventTimeWatermark.delayKey)))
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)

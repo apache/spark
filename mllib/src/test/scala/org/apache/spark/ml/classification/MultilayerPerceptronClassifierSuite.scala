@@ -17,8 +17,10 @@
 
 package org.apache.spark.ml.classification
 
+import scala.util.Random
+
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
@@ -286,6 +288,33 @@ class MultilayerPerceptronClassifierSuite extends MLTest with DefaultReadWriteTe
       } else {
         assert(model.summary.totalIterations <= maxIter)
       }
+    }
+  }
+
+  test("model size estimation: multilayer perceptron") {
+    val rng = new Random(1)
+
+    Seq(10, 100, 1000, 10000, 100000).foreach { n =>
+      val df = Seq(
+        (Vectors.dense(Array.fill(n)(rng.nextDouble())), 0.0),
+        (Vectors.dense(Array.fill(n)(rng.nextDouble())), 1.0)
+      ).toDF("features", "label")
+
+      val mlp = new MultilayerPerceptronClassifier().setMaxIter(1).setLayers(Array(n, 3, 2))
+      val size1 = mlp.estimateModelSize(df)
+      val model = mlp.fit(df)
+      assert(model.weights.isInstanceOf[DenseVector]) // mlp model is always dense
+      val size2 = model.estimatedSize
+
+      // the model is dense, the estimation should be relatively accurate
+      //      (n, size1, size2)
+      //      (10,4964,4964) <- when the model is small, model.params matters
+      //      (100,7124,7124)
+      //      (1000,28724,28724)
+      //      (10000,244724,244724)
+      //      (100000,2404724,2404724)
+      val rel = (size1 - size2).toDouble / size2
+      assert(math.abs(rel) < 0.05, (n, size1, size2))
     }
   }
 }

@@ -30,7 +30,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.{Properties, Try}
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.{Configuration => HadoopConfiguration}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
@@ -39,7 +38,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
-import org.apache.spark.internal.{LogEntry, Logging, LogKeys, MDC}
+import org.apache.spark.internal.{LogEntry, Logging, LogKeys}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
@@ -249,13 +248,12 @@ private[spark] class SparkSubmit extends Logging {
     val childArgs = new ArrayBuffer[String]()
     val childClasspath = new ArrayBuffer[String]()
     val sparkConf = args.toSparkConf()
-    if (sparkConf.contains("spark.local.connect")) sparkConf.remove("spark.remote")
     var childMainClass = ""
 
     // Set the cluster manager
     val clusterManager: Int = args.maybeMaster match {
       case Some(v) =>
-        assert(args.maybeRemote.isEmpty || sparkConf.contains("spark.local.connect"))
+        assert(args.maybeRemote.isEmpty)
         v match {
           case "yarn" => YARN
           case m if m.startsWith("spark") => STANDALONE
@@ -369,7 +367,7 @@ private[spark] class SparkSubmit extends Logging {
 
       // install any R packages that may have been passed through --jars or --packages.
       // Spark Packages may contain R source code inside the jar.
-      if (args.isR && !StringUtils.isBlank(args.jars)) {
+      if (args.isR && !SparkStringUtils.isBlank(args.jars)) {
         RPackageUtils.checkAndBuildRPackage(args.jars, printStream, args.verbose)
       }
     }
@@ -643,14 +641,11 @@ private[spark] class SparkSubmit extends Logging {
       // All cluster managers
       OptionAssigner(
         // If remote is not set, sets the master,
-        // In local remote mode, starts the default master to to start the server.
-        if (args.maybeRemote.isEmpty || sparkConf.contains("spark.local.connect")) args.master
+        if (args.maybeRemote.isEmpty) args.master
         else args.maybeMaster.orNull,
         ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.master"),
       OptionAssigner(
-        // In local remote mode, do not set remote.
-        if (sparkConf.contains("spark.local.connect")) null
-        else args.maybeRemote.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.remote"),
+        args.maybeRemote.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.remote"),
       OptionAssigner(args.deployMode, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         confKey = SUBMIT_DEPLOY_MODE.key),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.app.name"),
@@ -767,8 +762,7 @@ private[spark] class SparkSubmit extends Logging {
     // In case of shells, spark.ui.showConsoleProgress can be true by default or by user. Except,
     // when Spark Connect is in local mode, because Spark Connect support its own progress
     // reporting.
-    if (isShell(args.primaryResource) && !sparkConf.contains(UI_SHOW_CONSOLE_PROGRESS) &&
-        !sparkConf.contains("spark.local.connect")) {
+    if (isShell(args.primaryResource) && !sparkConf.contains(UI_SHOW_CONSOLE_PROGRESS)) {
       sparkConf.set(UI_SHOW_CONSOLE_PROGRESS, true)
     }
 
@@ -1002,14 +996,14 @@ private[spark] class SparkSubmit extends Logging {
           // TODO(SPARK-42375): Should point out the user-facing page here instead.
           logInfo("You need to specify Spark Connect jars with --jars or --packages.")
         }
-        throw new SparkUserAppException(CLASS_NOT_FOUND_EXIT_STATUS)
+        throw new SparkUserAppException(SparkExitCode.CLASS_NOT_FOUND)
       case e: NoClassDefFoundError =>
         logError(log"Failed to load ${MDC(LogKeys.CLASS_NAME, childMainClass)}", e)
         if (e.getMessage.contains("org/apache/hadoop/hive")) {
           logInfo("Failed to load hive class.")
           logInfo("You need to build Spark with -Phive and -Phive-thriftserver.")
         }
-        throw new SparkUserAppException(CLASS_NOT_FOUND_EXIT_STATUS)
+        throw new SparkUserAppException(SparkExitCode.CLASS_NOT_FOUND)
     }
 
     val app: SparkApplication = if (classOf[SparkApplication].isAssignableFrom(mainClass)) {
@@ -1085,8 +1079,6 @@ object SparkSubmit extends CommandLineUtils with Logging {
   private val CONNECT_SHELL = "connect-shell"
   private val SPARKR_PACKAGE_ARCHIVE = "sparkr.zip"
   private val R_PACKAGE_ARCHIVE = "rpkg.zip"
-
-  private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
   // Following constants are visible for testing.
   private[deploy] val YARN_CLUSTER_SUBMIT_CLASS =

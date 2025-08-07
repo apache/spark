@@ -27,7 +27,7 @@ class FunctionPickler:
     This class provides a way to pickle a function and its arguments.
     It also provides a way to create a script that can run a
     function with arguments if they have them pickled to a file.
-    It also provides a way of extracting the conents of a pickle file.
+    It also provides a way of extracting the contents of a pickle file.
     """
 
     @staticmethod

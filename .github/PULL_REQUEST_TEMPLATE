@@ -33,7 +33,8 @@ Please clarify why the changes are needed. For instance,
 
 ### Does this PR introduce _any_ user-facing change?
 <!--
-Note that it means *any* user-facing change including all aspects such as the documentation fix.
+Note that it means *any* user-facing change including all aspects such as new features, bug fixes, or other behavior changes. Documentation-only updates are not considered user-facing changes.
+
 If yes, please clarify the previous behavior and the change this PR proposes - provide the console output, description and/or an example to show the behavior difference if possible.
 If possible, please also clarify if this is a user-facing change compared to the released Spark versions or within the unreleased branches such as master.
 If no, write 'No'.

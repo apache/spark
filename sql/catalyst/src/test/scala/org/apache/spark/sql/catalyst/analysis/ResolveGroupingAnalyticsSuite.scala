@@ -112,7 +112,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
     assert(gExpressions.size == 3)
     val firstGroupingExprAttrName =
       gExpressions(0).asInstanceOf[AttributeReference].name.replaceAll("#[0-9]*", "#0")
-    assert(firstGroupingExprAttrName == "(a#0 * 2)")
+    assert(firstGroupingExprAttrName == "(a * 2)")
     assert(gExpressions(1).asInstanceOf[AttributeReference].name == "b")
     assert(gExpressions(2).asInstanceOf[AttributeReference].name == VirtualColumn.groupingIdName)
   }

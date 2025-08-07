@@ -129,9 +129,65 @@ Project [split(hello, , -1) AS split(hello, , -1)#x]
 
 
 -- !query
+SELECT split('hello', '', 0)
+-- !query analysis
+Project [split(hello, , 0) AS split(hello, , 0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT split('hello', '', 1)
+-- !query analysis
+Project [split(hello, , 1) AS split(hello, , 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT split('hello', '', 3)
+-- !query analysis
+Project [split(hello, , 3) AS split(hello, , 3)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT split('hello', '', 5)
+-- !query analysis
+Project [split(hello, , 5) AS split(hello, , 5)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT split('hello', '', 100)
+-- !query analysis
+Project [split(hello, , 100) AS split(hello, , 100)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT split('', '')
 -- !query analysis
 Project [split(, , -1) AS split(, , -1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT split('', '', -1)
+-- !query analysis
+Project [split(, , -1) AS split(, , -1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT split('', '', 0)
+-- !query analysis
+Project [split(, , 0) AS split(, , 0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT split('', '', 1)
+-- !query analysis
+Project [split(, , 1) AS split(, , 1)#x]
 +- OneRowRelation
 
 
@@ -1795,4 +1851,25 @@ Project [try_validate_utf8(abc) AS try_validate_utf8(abc)#x]
 select try_validate_utf8(x'80')
 -- !query analysis
 Project [try_validate_utf8(cast(0x80 as string)) AS try_validate_utf8(X'80')#x]
++- OneRowRelation
+
+
+-- !query
+select quote('Spark')
+-- !query analysis
+Project [quote(Spark) AS quote(Spark)#x]
++- OneRowRelation
+
+
+-- !query
+select quote("Don't")
+-- !query analysis
+Project [quote(Don't) AS quote(Don't)#x]
++- OneRowRelation
+
+
+-- !query
+select quote(NULL)
+-- !query analysis
+Project [quote(cast(null as string)) AS quote(NULL)#x]
 +- OneRowRelation

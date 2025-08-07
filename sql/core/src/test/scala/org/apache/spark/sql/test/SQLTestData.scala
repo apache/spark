@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.time.{Duration, Period}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SparkSession, SQLImplicits}
+import org.apache.spark.sql.classic.{DataFrame, SparkSession, SQLImplicits}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}

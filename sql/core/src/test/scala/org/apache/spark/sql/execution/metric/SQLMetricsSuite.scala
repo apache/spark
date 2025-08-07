@@ -25,6 +25,7 @@ import scala.util.Random
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
@@ -104,6 +105,27 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       val expected = Map("number of output rows" -> 2L)
       testSparkPlanMetrics(df, 0, Map(
         0L -> (("CommandResult", expected))))
+    }
+  }
+
+  test("Recursive CTEs metrics") {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
+      val df = sql(
+        """WITH RECURSIVE t(n) AS(
+          | VALUES 1, 2
+          | UNION ALL
+          | SELECT n+1 FROM t WHERE n < 20
+          | )
+          | SELECT * FROM t""".stripMargin)
+      val unionLoopExec = df.queryExecution.executedPlan.collect {
+        case ule: UnionLoopExec => ule
+      }
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(unionLoopExec.size == 1)
+      val expected = Map("number of output rows" -> 39L, "number of recursive iterations" -> 20L,
+        "number of anchor output rows" -> 2L)
+      testSparkPlanMetrics(df, 22, Map(
+        2L -> (("UnionLoop", expected))))
     }
   }
 
@@ -612,9 +634,10 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     // After serializing to JSON, the original value type is lost, but we can still
     // identify that it's a SQL metric from the metadata
     val mapper = new ObjectMapper()
-    val metricInfoJson = JsonProtocol.toJsonString(
-      JsonProtocol.accumulableInfoToJson(metricInfo, _))
-    val metricInfoDeser = JsonProtocol.accumulableInfoFromJson(mapper.readTree(metricInfoJson))
+    val jsonProtocol = new JsonProtocol(new SparkConf())
+    val metricInfoJson = jsonProtocol.toJsonString(
+      jsonProtocol.accumulableInfoToJson(metricInfo, _))
+    val metricInfoDeser = jsonProtocol.accumulableInfoFromJson(mapper.readTree(metricInfoJson))
     metricInfoDeser.update match {
       case Some(v: String) => assert(v.toLong === 10L)
       case Some(v) => fail(s"deserialized metric value was not a string: ${v.getClass.getName}")
@@ -963,6 +986,18 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   test("SQLMetric#toInfoUpdate") {
     assert(SQLMetrics.createSizeMetric(sparkContext, name = "m").toInfoUpdate.update === Some(-1))
     assert(SQLMetrics.createMetric(sparkContext, name = "m").toInfoUpdate.update === Some(0))
+  }
+
+  test("withTimingNs should time and return same result") {
+    val metric = SQLMetrics.createTimingMetric(sparkContext, name = "m")
+
+    // Use a simple block that returns a value
+    val result = SQLMetrics.withTimingNs(metric) {
+      42
+    }
+
+    assert(result === 42)
+    assert(!metric.isZero, "Metric was not increased")
   }
 }
 

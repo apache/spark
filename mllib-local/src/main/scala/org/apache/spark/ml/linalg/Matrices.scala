@@ -1048,6 +1048,8 @@ object SparseMatrix {
 @Since("2.0.0")
 object Matrices {
 
+  private[ml] val empty = new DenseMatrix(0, 0, Array.emptyDoubleArray)
+
   private[ml] def fromVectors(vectors: Seq[Vector]): Matrix = {
     val numRows = vectors.length
     val numCols = vectors.head.size

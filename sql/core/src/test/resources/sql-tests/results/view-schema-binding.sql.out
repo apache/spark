@@ -50,7 +50,7 @@ View Text           	SELECT * FROM t
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	BINDING             	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1]
+View Query Output Columns	[`c1`]
 
 
 -- !query
@@ -106,7 +106,7 @@ View Text           	SELECT * FROM t
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	BINDING             	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1]
+View Query Output Columns	[`c1`]
 
 
 -- !query
@@ -161,7 +161,7 @@ View Text           	SELECT * FROM t
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	BINDING             	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1, c2]
+View Query Output Columns	[`c1`, `c2`]
 
 
 -- !query
@@ -219,7 +219,7 @@ View Text           	SELECT * FROM t
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	BINDING             	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1, c2]
+View Query Output Columns	[`c1`, `c2`]
 
 
 -- !query
@@ -281,7 +281,7 @@ View Text           	SELECT * FROM t
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	BINDING             	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1]
+View Query Output Columns	[`c1`]
 
 
 -- !query
@@ -311,7 +311,7 @@ View Text           	SELECT * FROM t
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	BINDING             	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1]
+View Query Output Columns	[`c1`]
 
 
 -- !query
@@ -367,7 +367,7 @@ View Text           	SELECT * FROM t
 View Original Text  	SELECT * FROM t     	                    
 View Schema Mode    	BINDING             	                    
 View Catalog and Namespace	spark_catalog.default	                    
-View Query Output Columns	[c1]
+View Query Output Columns	[`c1`]
 
 
 -- !query

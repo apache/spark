@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType, Timesta
 import org.apache.spark.unsafe.types.CalendarInterval
 
 
-class PushFoldableIntoBranchesSuite extends PlanTest with ExpressionEvalHelper {
+class PushFoldableIntoBranchesSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("PushFoldableIntoBranches", FixedPoint(50),
@@ -289,7 +289,7 @@ class PushFoldableIntoBranchesSuite extends PlanTest with ExpressionEvalHelper {
         Literal.create(Period.ofMonths(2), YearMonthIntervalType()))),
       If(a, Literal.create(Timestamp.valueOf("2021-02-01 00:00:00"), TimestampType),
         Literal.create(Timestamp.valueOf("2021-03-01 00:00:00"), TimestampType)))
-    assertEquivalent(TimeAdd(
+    assertEquivalent(TimestampAddInterval(
       Literal.create(Timestamp.valueOf("2021-01-01 00:00:00.000"), TimestampType),
       If(a, Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(321)),
         Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(456)))),
@@ -329,7 +329,7 @@ class PushFoldableIntoBranchesSuite extends PlanTest with ExpressionEvalHelper {
         (c, Literal.create(Period.ofMonths(2), YearMonthIntervalType()))), None)),
       CaseWhen(Seq((a, Literal.create(Timestamp.valueOf("2021-02-01 00:00:00"), TimestampType)),
         (c, Literal.create(Timestamp.valueOf("2021-03-01 00:00:00"), TimestampType))), None))
-    assertEquivalent(TimeAdd(
+    assertEquivalent(TimestampAddInterval(
       Literal.create(Timestamp.valueOf("2021-01-01 00:00:00.000"), TimestampType),
       CaseWhen(Seq((a, Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(321))),
         (c, Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(456)))), None)),

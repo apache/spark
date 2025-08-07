@@ -63,12 +63,19 @@ Other build examples can be found below.
 
 To create a Spark distribution like those distributed by the
 [Spark Downloads](https://spark.apache.org/downloads.html) page, and that is laid out so as
-to be runnable, use `./dev/make-distribution.sh` in the project root directory. It can be configured
-with Maven profile settings and so on like the direct Maven build. Example:
+to be runnable, use `./dev/make-distribution.sh` in the project root directory. By default,
+it uses Maven as building tool, and can be configured with Maven profile settings and so on
+like the direct Maven build. Example:
 
     ./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phive -Phive-thriftserver -Pyarn -Pkubernetes
 
-This will build Spark distribution along with Python pip and R packages. For more information on usage, run `./dev/make-distribution.sh --help`
+This will build Spark distribution along with Python pip and R packages.
+
+To switch to SBT (experimental), use `--sbt-enabled`. Example:
+
+    ./dev/make-distribution.sh --name custom-spark --pip --r --tgz --sbt-enabled -Psparkr -Phive -Phive-thriftserver -Pyarn -Pkubernetes
+
+For more information on usage, run `./dev/make-distribution.sh --help`
 
 ## Specifying the Hadoop Version and Enabling YARN
 
@@ -261,7 +268,7 @@ On Linux, this can be done by `sudo service docker start`.
 
 or
 
-    ./build/sbt docker-integration-tests/test
+    ./build/sbt -Pdocker-integration-tests docker-integration-tests/test
 
 <!---
 ## Change Scala Version

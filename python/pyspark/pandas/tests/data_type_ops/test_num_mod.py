@@ -41,6 +41,7 @@ class NumModTestsMixin:
             self.assert_eq(pser % pser, psser % psser, check_exact=False)
             self.assert_eq(pser % pser.astype(bool), psser % psser.astype(bool), check_exact=False)
             self.assert_eq(pser % True, psser % True, check_exact=False)
+            self.assert_eq(pser % 1, psser % 1, check_exact=False)
             if col in ["int", "int32"]:
                 self.assert_eq(
                     pd.Series([np.nan, np.nan, np.nan], dtype=float, name=col), psser % False

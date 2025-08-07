@@ -43,7 +43,9 @@ class ElementwiseProduct @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
    * @group param
    */
   @Since("2.0.0")
-  val scalingVec: Param[Vector] = new Param(this, "scalingVec", "vector for hadamard product")
+  val scalingVec: Param[Vector] = new Param(
+    this.uid, "scalingVec", "vector for hadamard product", classOf[Vector]
+  )
 
   /** @group setParam */
   @Since("2.0.0")

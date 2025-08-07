@@ -17,10 +17,17 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.io.Text
+import org.apache.hadoop.util.LineReader
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.csv.CSVExprUtils
 import org.apache.spark.sql.catalyst.csv.CSVOptions
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.datasources.CodecStreams
 import org.apache.spark.sql.functions._
 
 object CSVUtils {
@@ -130,4 +137,40 @@ object CSVUtils {
 
   def filterCommentAndEmpty(iter: Iterator[String], options: CSVOptions): Iterator[String] =
     CSVExprUtils.filterCommentAndEmpty(iter, options)
+
+  def readHeaderLine(filePath: Path, options: CSVOptions, conf: Configuration): Option[String] = {
+    val inputStream = CodecStreams.createInputStream(conf, filePath)
+    try {
+      val lines = new Iterator[String] {
+        private val in = options.lineSeparatorInRead match {
+          case Some(sep) => new LineReader(inputStream, sep)
+          case _ => new LineReader(inputStream)
+        }
+        private val text = new Text()
+        private var finished = false
+        private var hasValue = false
+
+        override def hasNext: Boolean = {
+          if (!finished && !hasValue) {
+            val bytesRead = in.readLine(text)
+            finished = bytesRead == 0
+            hasValue = !finished
+          }
+          !finished
+        }
+
+        override def next(): String = {
+          if (!hasValue) {
+            throw QueryExecutionErrors.endOfStreamError()
+          }
+          hasValue = false
+          new String(text.getBytes, 0, text.getLength, options.charset)
+        }
+      }
+      val filteredLines = CSVUtils.filterCommentAndEmpty(lines, options)
+      filteredLines.buffered.headOption
+    } finally {
+      inputStream.close()
+    }
+  }
 }

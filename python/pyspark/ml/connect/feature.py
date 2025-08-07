@@ -35,7 +35,6 @@ from pyspark.ml.param.shared import (
 )
 from pyspark.ml.connect.base import Estimator, Model, Transformer
 from pyspark.ml.connect.io_utils import ParamsReadWrite, CoreModelReadWrite
-from pyspark.ml.connect.summarizer import summarize_dataframe
 
 
 class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
@@ -45,6 +44,8 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
     any sparsity.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
 
     Examples
     --------
@@ -79,6 +80,8 @@ class MaxAbsScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
         self._set(**kwargs)
 
     def _fit(self, dataset: Union["pd.DataFrame", "DataFrame"]) -> "MaxAbsScalerModel":
+        from pyspark.ml.connect.summarizer import summarize_dataframe
+
         input_col = self.getInputCol()
 
         stat_res = summarize_dataframe(dataset, input_col, ["min", "max", "count"])
@@ -98,6 +101,8 @@ class MaxAbsScalerModel(Model, HasInputCol, HasOutputCol, ParamsReadWrite, CoreM
     Model fitted by MaxAbsScaler.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     def __init__(
@@ -158,6 +163,8 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
 
     .. versionadded:: 3.5.0
 
+    .. deprecated:: 4.0.0
+
     Examples
     --------
     >>> from pyspark.ml.connect.feature import StandardScaler
@@ -191,6 +198,8 @@ class StandardScaler(Estimator, HasInputCol, HasOutputCol, ParamsReadWrite):
         self._set(**kwargs)
 
     def _fit(self, dataset: Union[DataFrame, pd.DataFrame]) -> "StandardScalerModel":
+        from pyspark.ml.connect.summarizer import summarize_dataframe
+
         input_col = self.getInputCol()
 
         stat_result = summarize_dataframe(dataset, input_col, ["mean", "std", "count"])
@@ -208,6 +217,8 @@ class StandardScalerModel(Model, HasInputCol, HasOutputCol, ParamsReadWrite, Cor
     Model fitted by StandardScaler.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     def __init__(
@@ -293,6 +304,8 @@ class ArrayAssembler(
     if it is set to 'keep', it returns relevant number of NaN in the output.
 
     .. versionadded:: 4.0.0
+
+    .. deprecated:: 4.0.0
 
     Examples
     --------

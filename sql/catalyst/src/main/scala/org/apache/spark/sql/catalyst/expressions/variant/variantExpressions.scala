@@ -66,7 +66,8 @@ case class ParseJson(child: Expression, failOnError: Boolean = true)
     inputTypes :+ BooleanType :+ BooleanType,
     returnNullable = !failOnError)
 
-  override def inputTypes: Seq[AbstractDataType] = StringTypeWithCollation :: Nil
+  override def inputTypes: Seq[AbstractDataType] =
+    StringTypeWithCollation(supportsTrimCollation = true) :: Nil
 
   override def dataType: DataType = VariantType
 
@@ -183,33 +184,39 @@ case class ToVariantObject(child: Expression)
   }
 }
 
-object VariantPathParser extends RegexParsers {
-  // A path segment in the `VariantGet` expression represents either an object key access or an
-  // array index access.
-  type PathSegment = Either[String, Int]
+// A path segment in the `VariantGet` expression represents either an object key access or an array
+// index access.
+sealed abstract class VariantPathSegment extends Serializable
 
+case class ObjectExtraction(key: String) extends VariantPathSegment
+
+case class ArrayExtraction(index: Int) extends VariantPathSegment
+
+object VariantPathParser extends RegexParsers {
   private def root: Parser[Char] = '$'
 
   // Parse index segment like `[123]`.
-  private def index: Parser[PathSegment] =
+  private def index: Parser[VariantPathSegment] =
     for {
       index <- '[' ~> "\\d+".r <~ ']'
     } yield {
-      scala.util.Right(index.toInt)
+      ArrayExtraction(index.toInt)
     }
+
+  override def skipWhitespace: Boolean = false
 
   // Parse key segment like `.name`, `['name']`, or `["name"]`.
-  private def key: Parser[PathSegment] =
+  private def key: Parser[VariantPathSegment] =
     for {
-      key <- '.' ~> "[^\\.\\[]+".r | "['" ~> "[^\\'\\?]+".r <~ "']" |
-        "[\"" ~> "[^\\\"\\?]+".r <~ "\"]"
+      key <- '.' ~> "[^\\.\\[]+".r | "['" ~> "[^']*".r <~ "']" |
+        "[\"" ~> """[^"]*""".r <~ "\"]"
     } yield {
-      scala.util.Left(key)
+      ObjectExtraction(key)
     }
 
-  private val parser: Parser[List[PathSegment]] = phrase(root ~> rep(key | index))
+  private val parser: Parser[List[VariantPathSegment]] = phrase(root ~> rep(key | index))
 
-  def parse(str: String): Option[Array[PathSegment]] = {
+  def parse(str: String): Option[Array[VariantPathSegment]] = {
     this.parseAll(parser, str) match {
       case Success(result, _) => Some(result.toArray)
       case _ => None
@@ -241,13 +248,6 @@ case class VariantGet(
     val check = super.checkInputDataTypes()
     if (check.isFailure) {
       check
-    } else if (!path.foldable) {
-      DataTypeMismatch(
-        errorSubClass = "NON_FOLDABLE_INPUT",
-        messageParameters = Map(
-          "inputName" -> toSQLId("path"),
-          "inputType" -> toSQLType(path.dataType),
-          "inputExpr" -> toSQLExpr(path)))
     } else if (!VariantGet.checkDataType(targetType)) {
       DataTypeMismatch(
         errorSubClass = "CAST_WITHOUT_SUGGESTION",
@@ -260,47 +260,61 @@ case class VariantGet(
 
   override lazy val dataType: DataType = targetType.asNullable
 
-  @transient private lazy val parsedPath = {
-    val pathValue = path.eval().toString
-    VariantPathParser.parse(pathValue).getOrElse {
-      throw QueryExecutionErrors.invalidVariantGetPath(pathValue, prettyName)
+  @transient private lazy val parsedPath: Option[Array[VariantPathSegment]] = {
+    if (path.foldable) {
+      val pathValue = path.eval().toString
+      Some(VariantGet.getParsedPath(pathValue, prettyName))
+    } else {
+      None
     }
   }
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(VARIANT_GET)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(VariantType, StringTypeWithCollation)
+    Seq(VariantType, StringTypeWithCollation(supportsTrimCollation = true))
 
   override def prettyName: String = if (failOnError) "variant_get" else "try_variant_get"
 
   override def nullable: Boolean = true
   override def nullIntolerant: Boolean = true
 
-  protected override def nullSafeEval(input: Any, path: Any): Any = {
-    VariantGet.variantGet(
-      input.asInstanceOf[VariantVal],
-      parsedPath,
-      dataType,
-      failOnError,
-      timeZoneId,
-      zoneId)
+  private lazy val castArgs = VariantCastArgs(
+    failOnError,
+    timeZoneId,
+    zoneId)
+
+  protected override def nullSafeEval(input: Any, path: Any): Any = parsedPath match {
+    case Some(pp) =>
+      VariantGet.variantGet(input.asInstanceOf[VariantVal], pp, dataType, castArgs)
+    case _ =>
+      VariantGet.variantGet(input.asInstanceOf[VariantVal], path.asInstanceOf[UTF8String], dataType,
+        castArgs, prettyName)
   }
 
   protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val childCode = child.genCode(ctx)
     val tmp = ctx.freshVariable("tmp", classOf[Object])
-    val parsedPathArg = ctx.addReferenceObj("parsedPath", parsedPath)
+    val childCode = child.genCode(ctx)
     val dataTypeArg = ctx.addReferenceObj("dataType", dataType)
-    val zoneStrArg = ctx.addReferenceObj("zoneStr", timeZoneId)
-    val zoneIdArg = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+    val castArgsArg = ctx.addReferenceObj("castArgs", castArgs)
+    val (pathCode, parsedPathArg) = if (parsedPath.isEmpty) {
+      val pathCode = path.genCode(ctx)
+      (pathCode, pathCode.value)
+    } else {
+      (
+        new ExprCode(EmptyBlock, FalseLiteral, TrueLiteral),
+        ctx.addReferenceObj("parsedPath", parsedPath.get)
+      )
+    }
     val code = code"""
       ${childCode.code}
-      boolean ${ev.isNull} = ${childCode.isNull};
+      ${pathCode.code}
+      boolean ${ev.isNull} = ${childCode.isNull} || ${pathCode.isNull};
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
       if (!${ev.isNull}) {
         Object $tmp = org.apache.spark.sql.catalyst.expressions.variant.VariantGet.variantGet(
-          ${childCode.value}, $parsedPathArg, $dataTypeArg, $failOnError, $zoneStrArg, $zoneIdArg);
+          ${childCode.value}, $parsedPathArg, $dataTypeArg,
+          $castArgsArg${if (parsedPath.isEmpty) s""", "$prettyName"""" else ""});
         if ($tmp == null) {
           ${ev.isNull} = true;
         } else {
@@ -322,6 +336,12 @@ case class VariantGet(
   override def withTimeZone(timeZoneId: String): VariantGet = copy(timeZoneId = Option(timeZoneId))
 }
 
+// Several parameters used by `VariantGet.cast`. Packed together to simplify parameter passing.
+case class VariantCastArgs(
+    failOnError: Boolean,
+    zoneStr: Option[String],
+    zoneId: ZoneId)
+
 case object VariantGet {
   /**
    * Returns whether a data type can be cast into/from variant. For scalar types, we allow a subset
@@ -329,6 +349,7 @@ case object VariantGet {
    */
   def checkDataType(dataType: DataType, allowStructsAndMaps: Boolean = true): Boolean =
     dataType match {
+    case CharType(_) | VarcharType(_) => false
     case _: NumericType | BooleanType | _: StringType | BinaryType | _: DatetimeType |
         VariantType =>
       true
@@ -340,38 +361,54 @@ case object VariantGet {
     case _ => false
   }
 
+  /**
+   * Get parsed Array[VariantPathSegment] from string representing path
+   */
+  def getParsedPath(pathValue: String, prettyName: String): Array[VariantPathSegment] = {
+    VariantPathParser.parse(pathValue).getOrElse {
+      throw QueryExecutionErrors.invalidVariantGetPath(pathValue, prettyName)
+    }
+  }
+
   /** The actual implementation of the `VariantGet` expression. */
   def variantGet(
       input: VariantVal,
-      parsedPath: Array[VariantPathParser.PathSegment],
+      parsedPath: Array[VariantPathSegment],
       dataType: DataType,
-      failOnError: Boolean,
-      zoneStr: Option[String],
-      zoneId: ZoneId): Any = {
+      castArgs: VariantCastArgs): Any = {
     var v = new Variant(input.getValue, input.getMetadata)
     for (path <- parsedPath) {
       v = path match {
-        case scala.util.Left(key) if v.getType == Type.OBJECT => v.getFieldByKey(key)
-        case scala.util.Right(index) if v.getType == Type.ARRAY => v.getElementAtIndex(index)
+        case ObjectExtraction(key) if v.getType == Type.OBJECT => v.getFieldByKey(key)
+        case ArrayExtraction(index) if v.getType == Type.ARRAY => v.getElementAtIndex(index)
         case _ => null
       }
       if (v == null) return null
     }
-    VariantGet.cast(v, dataType, failOnError, zoneStr, zoneId)
+    VariantGet.cast(v, dataType, castArgs)
+  }
+
+  /**
+   * Implementation of the `VariantGet` expression where the path is provided as a UTF8String
+   */
+  def variantGet(
+      input: VariantVal,
+      path: UTF8String,
+      dataType: DataType,
+      castArgs: VariantCastArgs,
+      prettyName: String): Any = {
+    val pathValue = path.toString
+    val parsedPath = VariantGet.getParsedPath(pathValue, prettyName)
+    variantGet(input, parsedPath, dataType, castArgs)
   }
 
   /**
    * A simple wrapper of the `cast` function that takes `Variant` rather than `VariantVal`. The
    * `Cast` expression uses it and makes the implementation simpler.
    */
-  def cast(
-      input: VariantVal,
-      dataType: DataType,
-      failOnError: Boolean,
-      zoneStr: Option[String],
-      zoneId: ZoneId): Any = {
+  def cast(input: VariantVal, dataType: DataType, castArgs: VariantCastArgs): Any = {
     val v = new Variant(input.getValue, input.getMetadata)
-    VariantGet.cast(v, dataType, failOnError, zoneStr, zoneId)
+    VariantGet.cast(v, dataType, castArgs)
   }
 
   /**
@@ -381,15 +418,10 @@ case object VariantGet {
    * "hello" to int). If the cast fails, throw an exception when `failOnError` is true, or return a
    * SQL NULL when it is false.
    */
-  def cast(
-      v: Variant,
-      dataType: DataType,
-      failOnError: Boolean,
-      zoneStr: Option[String],
-      zoneId: ZoneId): Any = {
+  def cast(v: Variant, dataType: DataType, castArgs: VariantCastArgs): Any = {
     def invalidCast(): Any = {
-      if (failOnError) {
-        throw QueryExecutionErrors.invalidVariantCast(v.toJson(zoneId), dataType)
+      if (castArgs.failOnError) {
+        throw QueryExecutionErrors.invalidVariantCast(v.toJson(castArgs.zoneId), dataType)
       } else {
         null
       }
@@ -404,19 +436,27 @@ case object VariantGet {
     }
     val variantType = v.getType
     if (variantType == Type.NULL) return null
+    if (variantType == Type.UUID) {
+      // There's no UUID type in Spark. We only allow it to be cast to string.
+      if (dataType == StringType) {
+        return UTF8String.fromString(v.getUuid.toString)
+      } else {
+        return invalidCast()
+      }
+    }
     dataType match {
       case _: AtomicType =>
         val input = variantType match {
           case Type.OBJECT | Type.ARRAY =>
             return if (dataType.isInstanceOf[StringType]) {
-              UTF8String.fromString(v.toJson(zoneId))
+              UTF8String.fromString(v.toJson(castArgs.zoneId))
             } else {
               invalidCast()
             }
           case Type.BOOLEAN => Literal(v.getBoolean, BooleanType)
           case Type.LONG => Literal(v.getLong, LongType)
           case Type.STRING => Literal(UTF8String.fromString(v.getString),
-            SQLConf.get.defaultStringType)
+            StringType)
           case Type.DOUBLE => Literal(v.getDouble, DoubleType)
           case Type.DECIMAL =>
             val d = Decimal(v.getDecimal)
@@ -433,29 +473,20 @@ case object VariantGet {
             messageParameters = Map("id" -> v.getTypeInfo.toString)
           )
         }
-        // We mostly use the `Cast` expression to implement the cast. However, `Cast` silently
-        // ignores the overflow in the long/decimal -> timestamp cast, and we want to enforce
-        // strict overflow checks.
         input.dataType match {
           case LongType if dataType == TimestampType =>
-            try Math.multiplyExact(input.value.asInstanceOf[Long], MICROS_PER_SECOND)
+            try castLongToTimestamp(input.value.asInstanceOf[Long])
             catch {
               case _: ArithmeticException => invalidCast()
             }
           case _: DecimalType if dataType == TimestampType =>
-            try {
-              input.value
-                .asInstanceOf[Decimal]
-                .toJavaBigDecimal
-                .multiply(new java.math.BigDecimal(MICROS_PER_SECOND))
-                .toBigInteger
-                .longValueExact()
-            } catch {
+            try castDecimalToTimestamp(input.value.asInstanceOf[Decimal])
+            catch {
               case _: ArithmeticException => invalidCast()
             }
           case _ =>
             if (Cast.canAnsiCast(input.dataType, dataType)) {
-              val result = Cast(input, dataType, zoneStr, EvalMode.TRY).eval()
+              val result = Cast(input, dataType, castArgs.zoneStr, EvalMode.TRY).eval()
               if (result == null) invalidCast() else result
             } else {
               invalidCast()
@@ -466,7 +497,7 @@ case object VariantGet {
           val size = v.arraySize()
           val array = new Array[Any](size)
           for (i <- 0 until size) {
-            array(i) = cast(v.getElementAtIndex(i), elementType, failOnError, zoneStr, zoneId)
+            array(i) = cast(v.getElementAtIndex(i), elementType, castArgs)
           }
           new GenericArrayData(array)
         } else {
@@ -480,7 +511,7 @@ case object VariantGet {
           for (i <- 0 until size) {
             val field = v.getFieldAtIndex(i)
             keyArray(i) = UTF8String.fromString(field.key)
-            valueArray(i) = cast(field.value, valueType, failOnError, zoneStr, zoneId)
+            valueArray(i) = cast(field.value, valueType, castArgs)
           }
           ArrayBasedMapData(keyArray, valueArray)
         } else {
@@ -493,8 +524,7 @@ case object VariantGet {
             val field = v.getFieldAtIndex(i)
             st.getFieldIndex(field.key) match {
               case Some(idx) =>
-                row.update(idx,
-                  cast(field.value, fields(idx).dataType, failOnError, zoneStr, zoneId))
+                row.update(idx, cast(field.value, fields(idx).dataType, castArgs))
               case _ =>
             }
           }
@@ -504,6 +534,27 @@ case object VariantGet {
         }
     }
   }
+
+  // We mostly use the `Cast` expression to implement the cast, but we need some custom logic for
+  // certain type combinations.
+  //
+  // `castLongToTimestamp/castDecimalToTimestamp`: `Cast` silently ignores the overflow in the
+  // long/decimal -> timestamp cast, and we want to enforce strict overflow checks. They both throw
+  // an `ArithmeticException` when overflow happens.
+  def castLongToTimestamp(input: Long): Long =
+    Math.multiplyExact(input, MICROS_PER_SECOND)
+
+  def castDecimalToTimestamp(input: Decimal): Long = {
+    val multiplier = new java.math.BigDecimal(MICROS_PER_SECOND)
+    input.toJavaBigDecimal.multiply(multiplier).toBigInteger.longValueExact()
+  }
+
+  // Cast decimal to string, but strip any trailing zeros. We don't have to call it if the decimal
+  // is returned by `Variant.getDecimal`, which already strips any trailing zeros. But we need it
+  // if the decimal is produced by Spark internally, e.g., on a shredded decimal produced by the
+  // Spark Parquet reader.
+  def castDecimalToString(input: Decimal): UTF8String =
+    UTF8String.fromString(input.toJavaBigDecimal.stripTrailingZeros.toPlainString)
 }
 
 abstract class ParseJsonExpressionBuilderBase(failOnError: Boolean) extends ExpressionBuilder {
@@ -638,7 +689,7 @@ case class VariantExplode(child: Expression) extends UnaryExpression with Genera
   override def elementSchema: StructType = {
     new StructType()
       .add("pos", IntegerType, nullable = false)
-      .add("key", SQLConf.get.defaultStringType, nullable = true)
+      .add("key", StringType, nullable = true)
       .add("value", VariantType, nullable = false)
   }
 }
@@ -739,18 +790,17 @@ object VariantExplode {
 case class SchemaOfVariant(child: Expression)
   extends UnaryExpression
     with RuntimeReplaceable
+    with DefaultStringProducingExpression
     with ExpectsInputTypes {
   override lazy val replacement: Expression = StaticInvoke(
     SchemaOfVariant.getClass,
-    SQLConf.get.defaultStringType,
+    dataType,
     "schemaOfVariant",
     Seq(child),
     inputTypes,
     returnNullable = false)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
-
-  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def prettyName: String = "schema_of_variant"
 
@@ -782,6 +832,14 @@ object SchemaOfVariant {
     case _ => dataType.sql
   }
 
+  // Dummy class to use for UUID, which doesn't currently exist in Spark.
+  private class UuidType extends DataType {
+    override def defaultSize: Int = 16
+    override def typeName: String = "uuid"
+    private[spark] override def asNullable: UuidType = this
+  }
+  private case object UuidType extends UuidType
+
   /**
    * Return the schema of a variant. Struct fields are guaranteed to be sorted alphabetically.
    */
@@ -810,7 +868,7 @@ object SchemaOfVariant {
     case Type.NULL => NullType
     case Type.BOOLEAN => BooleanType
     case Type.LONG => LongType
-    case Type.STRING => SQLConf.get.defaultStringType
+    case Type.STRING => StringType
     case Type.DOUBLE => DoubleType
     case Type.DECIMAL =>
       val d = Decimal(v.getDecimal)
@@ -820,6 +878,7 @@ object SchemaOfVariant {
     case Type.TIMESTAMP_NTZ => TimestampNTZType
     case Type.FLOAT => FloatType
     case Type.BINARY => BinaryType
+    case Type.UUID => UuidType
   }
 
   /**
@@ -850,12 +909,11 @@ case class SchemaOfVariantAgg(
     extends TypedImperativeAggregate[DataType]
     with ExpectsInputTypes
     with QueryErrorsBase
+    with DefaultStringProducingExpression
     with UnaryLike[Expression] {
   def this(child: Expression) = this(child, 0, 0)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
-
-  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def nullable: Boolean = false
 

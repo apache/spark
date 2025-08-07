@@ -416,6 +416,18 @@ import org.apache.spark.sql.internal.connector.ExpressionWithToString;
  *    <li>Since version: 3.4.0</li>
  *   </ul>
  *  </li>
+ *  <li>Name: <code>LPAD</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>LPAD(str, len[, pad])</code></li>
+ *    <li>Since version: 4.0.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>RPAD</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>RPAD(str, len[, pad])</code></li>
+ *    <li>Since version: 4.0.0</li>
+ *   </ul>
+ *  </li>
  * </ol>
  * Note: SQL semantic conforms ANSI standard, so some expressions are not supported when ANSI off,
  * including: add, subtract, multiply, divide, remainder, pmod.

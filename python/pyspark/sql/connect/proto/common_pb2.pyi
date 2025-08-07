@@ -301,28 +301,32 @@ class Origin(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     PYTHON_ORIGIN_FIELD_NUMBER: builtins.int
+    JVM_ORIGIN_FIELD_NUMBER: builtins.int
     @property
     def python_origin(self) -> global___PythonOrigin: ...
+    @property
+    def jvm_origin(self) -> global___JvmOrigin: ...
     def __init__(
         self,
         *,
         python_origin: global___PythonOrigin | None = ...,
+        jvm_origin: global___JvmOrigin | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "function", b"function", "python_origin", b"python_origin"
+            "function", b"function", "jvm_origin", b"jvm_origin", "python_origin", b"python_origin"
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "function", b"function", "python_origin", b"python_origin"
+            "function", b"function", "jvm_origin", b"jvm_origin", "python_origin", b"python_origin"
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["function", b"function"]
-    ) -> typing_extensions.Literal["python_origin"] | None: ...
+    ) -> typing_extensions.Literal["python_origin", "jvm_origin"] | None: ...
 
 global___Origin = Origin
 
@@ -347,3 +351,352 @@ class PythonOrigin(google.protobuf.message.Message):
     ) -> None: ...
 
 global___PythonOrigin = PythonOrigin
+
+class JvmOrigin(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    LINE_FIELD_NUMBER: builtins.int
+    START_POSITION_FIELD_NUMBER: builtins.int
+    START_INDEX_FIELD_NUMBER: builtins.int
+    STOP_INDEX_FIELD_NUMBER: builtins.int
+    SQL_TEXT_FIELD_NUMBER: builtins.int
+    OBJECT_TYPE_FIELD_NUMBER: builtins.int
+    OBJECT_NAME_FIELD_NUMBER: builtins.int
+    STACK_TRACE_FIELD_NUMBER: builtins.int
+    line: builtins.int
+    """(Optional) Line number in the source file."""
+    start_position: builtins.int
+    """(Optional) Start position in the source file."""
+    start_index: builtins.int
+    """(Optional) Start index in the source file."""
+    stop_index: builtins.int
+    """(Optional) Stop index in the source file."""
+    sql_text: builtins.str
+    """(Optional) SQL text."""
+    object_type: builtins.str
+    """(Optional) Object type."""
+    object_name: builtins.str
+    """(Optional) Object name."""
+    @property
+    def stack_trace(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___StackTraceElement
+    ]:
+        """(Optional) Stack trace."""
+    def __init__(
+        self,
+        *,
+        line: builtins.int | None = ...,
+        start_position: builtins.int | None = ...,
+        start_index: builtins.int | None = ...,
+        stop_index: builtins.int | None = ...,
+        sql_text: builtins.str | None = ...,
+        object_type: builtins.str | None = ...,
+        object_name: builtins.str | None = ...,
+        stack_trace: collections.abc.Iterable[global___StackTraceElement] | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_line",
+            b"_line",
+            "_object_name",
+            b"_object_name",
+            "_object_type",
+            b"_object_type",
+            "_sql_text",
+            b"_sql_text",
+            "_start_index",
+            b"_start_index",
+            "_start_position",
+            b"_start_position",
+            "_stop_index",
+            b"_stop_index",
+            "line",
+            b"line",
+            "object_name",
+            b"object_name",
+            "object_type",
+            b"object_type",
+            "sql_text",
+            b"sql_text",
+            "start_index",
+            b"start_index",
+            "start_position",
+            b"start_position",
+            "stop_index",
+            b"stop_index",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_line",
+            b"_line",
+            "_object_name",
+            b"_object_name",
+            "_object_type",
+            b"_object_type",
+            "_sql_text",
+            b"_sql_text",
+            "_start_index",
+            b"_start_index",
+            "_start_position",
+            b"_start_position",
+            "_stop_index",
+            b"_stop_index",
+            "line",
+            b"line",
+            "object_name",
+            b"object_name",
+            "object_type",
+            b"object_type",
+            "sql_text",
+            b"sql_text",
+            "stack_trace",
+            b"stack_trace",
+            "start_index",
+            b"start_index",
+            "start_position",
+            b"start_position",
+            "stop_index",
+            b"stop_index",
+        ],
+    ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_line", b"_line"]
+    ) -> typing_extensions.Literal["line"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_object_name", b"_object_name"]
+    ) -> typing_extensions.Literal["object_name"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_object_type", b"_object_type"]
+    ) -> typing_extensions.Literal["object_type"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_sql_text", b"_sql_text"]
+    ) -> typing_extensions.Literal["sql_text"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_start_index", b"_start_index"]
+    ) -> typing_extensions.Literal["start_index"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_start_position", b"_start_position"]
+    ) -> typing_extensions.Literal["start_position"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_stop_index", b"_stop_index"]
+    ) -> typing_extensions.Literal["stop_index"] | None: ...
+
+global___JvmOrigin = JvmOrigin
+
+class StackTraceElement(google.protobuf.message.Message):
+    """A message to hold a [[java.lang.StackTraceElement]]."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CLASS_LOADER_NAME_FIELD_NUMBER: builtins.int
+    MODULE_NAME_FIELD_NUMBER: builtins.int
+    MODULE_VERSION_FIELD_NUMBER: builtins.int
+    DECLARING_CLASS_FIELD_NUMBER: builtins.int
+    METHOD_NAME_FIELD_NUMBER: builtins.int
+    FILE_NAME_FIELD_NUMBER: builtins.int
+    LINE_NUMBER_FIELD_NUMBER: builtins.int
+    class_loader_name: builtins.str
+    """(Optional) Class loader name"""
+    module_name: builtins.str
+    """(Optional) Module name"""
+    module_version: builtins.str
+    """(Optional) Module version"""
+    declaring_class: builtins.str
+    """(Required) Declaring class"""
+    method_name: builtins.str
+    """(Required) Method name"""
+    file_name: builtins.str
+    """(Optional) File name"""
+    line_number: builtins.int
+    """(Required) Line number"""
+    def __init__(
+        self,
+        *,
+        class_loader_name: builtins.str | None = ...,
+        module_name: builtins.str | None = ...,
+        module_version: builtins.str | None = ...,
+        declaring_class: builtins.str = ...,
+        method_name: builtins.str = ...,
+        file_name: builtins.str | None = ...,
+        line_number: builtins.int = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_class_loader_name",
+            b"_class_loader_name",
+            "_file_name",
+            b"_file_name",
+            "_module_name",
+            b"_module_name",
+            "_module_version",
+            b"_module_version",
+            "class_loader_name",
+            b"class_loader_name",
+            "file_name",
+            b"file_name",
+            "module_name",
+            b"module_name",
+            "module_version",
+            b"module_version",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_class_loader_name",
+            b"_class_loader_name",
+            "_file_name",
+            b"_file_name",
+            "_module_name",
+            b"_module_name",
+            "_module_version",
+            b"_module_version",
+            "class_loader_name",
+            b"class_loader_name",
+            "declaring_class",
+            b"declaring_class",
+            "file_name",
+            b"file_name",
+            "line_number",
+            b"line_number",
+            "method_name",
+            b"method_name",
+            "module_name",
+            b"module_name",
+            "module_version",
+            b"module_version",
+        ],
+    ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_class_loader_name", b"_class_loader_name"]
+    ) -> typing_extensions.Literal["class_loader_name"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_file_name", b"_file_name"]
+    ) -> typing_extensions.Literal["file_name"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_module_name", b"_module_name"]
+    ) -> typing_extensions.Literal["module_name"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_module_version", b"_module_version"]
+    ) -> typing_extensions.Literal["module_version"] | None: ...
+
+global___StackTraceElement = StackTraceElement
+
+class Bools(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    VALUES_FIELD_NUMBER: builtins.int
+    @property
+    def values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bool]: ...
+    def __init__(
+        self,
+        *,
+        values: collections.abc.Iterable[builtins.bool] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["values", b"values"]) -> None: ...
+
+global___Bools = Bools
+
+class Ints(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    VALUES_FIELD_NUMBER: builtins.int
+    @property
+    def values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+    def __init__(
+        self,
+        *,
+        values: collections.abc.Iterable[builtins.int] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["values", b"values"]) -> None: ...
+
+global___Ints = Ints
+
+class Longs(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    VALUES_FIELD_NUMBER: builtins.int
+    @property
+    def values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+    def __init__(
+        self,
+        *,
+        values: collections.abc.Iterable[builtins.int] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["values", b"values"]) -> None: ...
+
+global___Longs = Longs
+
+class Floats(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    VALUES_FIELD_NUMBER: builtins.int
+    @property
+    def values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.float]: ...
+    def __init__(
+        self,
+        *,
+        values: collections.abc.Iterable[builtins.float] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["values", b"values"]) -> None: ...
+
+global___Floats = Floats
+
+class Doubles(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    VALUES_FIELD_NUMBER: builtins.int
+    @property
+    def values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.float]: ...
+    def __init__(
+        self,
+        *,
+        values: collections.abc.Iterable[builtins.float] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["values", b"values"]) -> None: ...
+
+global___Doubles = Doubles
+
+class Strings(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    VALUES_FIELD_NUMBER: builtins.int
+    @property
+    def values(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        values: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["values", b"values"]) -> None: ...
+
+global___Strings = Strings

@@ -25,6 +25,7 @@ from pyspark.sql.types import (
     MapType,
     NullType,
     DateType,
+    TimeType,
     TimestampType,
     TimestampNTZType,
     ByteType,
@@ -40,9 +41,8 @@ from pyspark.sql.types import (
     BooleanType,
 )
 from pyspark.errors import PySparkTypeError, PySparkValueError
-from pyspark.testing.connectutils import should_test_connect
-from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
-
+from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 if should_test_connect:
     import pandas as pd
@@ -63,25 +63,7 @@ if should_test_connect:
     from pyspark.errors.exceptions.connect import SparkConnectException
 
 
-class SparkConnectColumnTests(SparkConnectSQLTestCase):
-    def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
-        from pyspark.sql.classic.dataframe import DataFrame as SDF
-        from pyspark.sql.connect.dataframe import DataFrame as CDF
-
-        assert isinstance(df1, (SDF, CDF))
-        if isinstance(df1, SDF):
-            str1 = df1._jdf.showString(n, truncate, False)
-        else:
-            str1 = df1._show_string(n, truncate, False)
-
-        assert isinstance(df2, (SDF, CDF))
-        if isinstance(df2, SDF):
-            str2 = df2._jdf.showString(n, truncate, False)
-        else:
-            str2 = df2._show_string(n, truncate, False)
-
-        self.assertEqual(str1, str2)
-
+class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
     def test_column_operator(self):
         # SPARK-41351: Column needs to support !=
         df = self.connect.range(10)
@@ -89,8 +71,9 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
 
     def test_columns(self):
         # SPARK-41036: test `columns` API for python client.
-        df = self.connect.read.table(self.tbl_name)
-        df2 = self.spark.read.table(self.tbl_name)
+        query = "SELECT id, CAST(id AS STRING) AS name FROM RANGE(100)"
+        df = self.connect.sql(query)
+        df2 = self.spark.sql(query)
         self.assertEqual(["id", "name"], df.columns)
 
         self.assert_eq(
@@ -372,7 +355,8 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
 
     def test_simple_binary_expressions(self):
         """Test complex expression"""
-        cdf = self.connect.read.table(self.tbl_name)
+        query = "SELECT id, CAST(id AS STRING) AS name FROM RANGE(100)"
+        cdf = self.connect.sql(query)
         pdf = (
             cdf.select(cdf.id).where(cdf.id % CF.lit(30) == CF.lit(0)).sort(cdf.id.asc()).toPandas()
         )
@@ -413,6 +397,7 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
             ("sss", StringType()),
             (datetime.date(2022, 12, 13), DateType()),
             (datetime.datetime.now(), DateType()),
+            (datetime.time(1, 0, 0), TimeType()),
             (datetime.datetime.now(), TimestampType()),
             (datetime.datetime.now(), TimestampNTZType()),
             (datetime.timedelta(1, 2, 3), DayTimeIntervalType()),
@@ -458,6 +443,7 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
             DoubleType(),
             DecimalType(),
             DateType(),
+            TimeType(),
             TimestampType(),
             TimestampNTZType(),
             DayTimeIntervalType(),
@@ -534,8 +520,9 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
 
     def test_cast(self):
         # SPARK-41412: test basic Column.cast
-        df = self.connect.read.table(self.tbl_name)
-        df2 = self.spark.read.table(self.tbl_name)
+        query = "SELECT id, CAST(id AS STRING) AS name FROM RANGE(100)"
+        df = self.connect.sql(query)
+        df2 = self.spark.sql(query)
 
         self.assert_eq(
             df.select(df.id.cast("string")).toPandas(), df2.select(df2.id.cast("string")).toPandas()

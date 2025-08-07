@@ -26,8 +26,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.{AccumulatorSuite, SPARK_DOC_ROOT, SparkArithmeticException, SparkDateTimeException, SparkException, SparkNumberFormatException, SparkRuntimeException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -38,7 +36,7 @@ import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedCo
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.execution.{CommandResultExec, UnionExec}
+import org.apache.spark.sql.execution.{CommandResultExec, OneRowRelationExec, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate._
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -57,7 +55,7 @@ import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.util.ResetSystemProperties
+import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 @ExtendedSQLTest
 class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper
@@ -111,7 +109,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-34678: describe functions for table-valued functions") {
-    sql("describe function range").show(false)
     checkKeywordsExist(sql("describe function range"),
       "Function: range",
       "Class: org.apache.spark.sql.catalyst.plans.logical.Range",
@@ -821,11 +818,11 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       case cp: CartesianProductExec => cp
     }
     assert(cp.isEmpty, "should not use CartesianProduct for null-safe join")
-    val smj = df.queryExecution.sparkPlan.collect {
+    val smj = df.queryExecution.sparkPlan.collectFirst {
       case smj: SortMergeJoinExec => smj
       case j: BroadcastHashJoinExec => j
     }
-    assert(smj.size > 0, "should use SortMergeJoin or BroadcastHashJoin")
+    assert(smj.nonEmpty, "should use SortMergeJoin or BroadcastHashJoin")
     checkAnswer(df, Row(100) :: Nil)
   }
 
@@ -2755,28 +2752,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           start = 0,
           stop = 45)
       )
-
-      withTable("t", "S") {
-        sql("CREATE TABLE t(c struct<f:int>) USING parquet")
-        sql("CREATE TABLE S(C struct<F:int>) USING parquet")
-        checkAnswer(sql("SELECT * FROM t, S WHERE t.c.f = S.C.F"), Seq.empty)
-        val query = "SELECT * FROM t, S WHERE c = C"
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql(query)
-          },
-          condition = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
-          sqlState = None,
-          parameters = Map(
-            "sqlExpr" -> "\"(c = C)\"",
-            "left" -> "\"STRUCT<f: INT>\"",
-            "right" -> "\"STRUCT<F: INT>\""),
-          context = ExpectedContext(
-            fragment = "c = C",
-            start = 25,
-            stop = 29
-          ))
-      }
     }
   }
 
@@ -3815,7 +3790,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq(1, "1, 2", null, "version()").foreach { expr =>
         val plan = sql(s"select * from values (1), (2), (3) t(a) distribute by $expr")
           .queryExecution.optimizedPlan
-        val res = plan.collect {
+        val res = plan.collectFirst {
           case r: RepartitionByExpression if r.numPartitions == 1 => true
         }
         assert(res.nonEmpty)
@@ -3827,7 +3802,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "5")) {
       val df = spark.range(1).hint("REPARTITION_BY_RANGE")
       val plan = df.queryExecution.optimizedPlan
-      val res = plan.collect {
+      val res = plan.collectFirst {
         case r: RepartitionByExpression if r.numPartitions == 5 => true
       }
       assert(res.nonEmpty)
@@ -3839,7 +3814,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq(1, "1, 2", null, "version()").foreach { expr =>
         val plan = sql(s"select * from values (1), (2), (3) t(a) distribute by $expr")
           .queryExecution.analyzed
-        val res = plan.collect {
+        val res = plan.collectFirst {
           case r: RepartitionByExpression if r.numPartitions == 2 => true
         }
         assert(res.nonEmpty)
@@ -3885,17 +3860,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-33084: Add jar support Ivy URI in SQL -- jar contains udf class") {
+    val jarPath = Thread.currentThread().getContextClassLoader
+      .getResource("SPARK-33084.jar")
+    assume(jarPath != null)
     val sumFuncClass = "org.apache.spark.examples.sql.Spark33084"
     val functionName = "test_udf"
     withTempDir { dir =>
       System.setProperty("ivy.home", dir.getAbsolutePath)
-      val sourceJar = new File(Thread.currentThread().getContextClassLoader
-        .getResource("SPARK-33084.jar").getFile)
+      val sourceJar = new File(jarPath.getFile)
       val targetCacheJarDir = new File(dir.getAbsolutePath +
         "/local/org.apache.spark/SPARK-33084/1.0/jars/")
       targetCacheJarDir.mkdir()
       // copy jar to local cache
-      FileUtils.copyFileToDirectory(sourceJar, targetCacheJarDir)
+      Utils.copyFileToDirectory(sourceJar, targetCacheJarDir)
       withTempView("v1") {
         withUserDefinedFunction(
           s"default.$functionName" -> false,
@@ -4940,6 +4917,161 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     val expectedAnswer = Seq(
       Row(Array(0), Array(0)), Row(Array(1), Array(1)), Row(Array(2), Array(2)))
     checkAnswer(df, expectedAnswer)
+  }
+
+  test("SPARK-51614: Having operator is properly resolved when there's generator in condition") {
+    val df = sql(
+      """select
+        |  explode(packages) as package
+        |from
+        |  values(array('a')) t(packages)
+        |group by all
+        |having package in ('a')""".stripMargin
+    )
+
+    checkAnswer(df, Row("a"))
+  }
+
+  test("SPARK-51901: Disallow generator functions in grouping sets") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select * group by grouping sets (inline(array(struct('col'))))")
+      },
+      condition = "UNSUPPORTED_GENERATOR.OUTSIDE_SELECT",
+      parameters = Map(
+        "plan" -> "'Aggregate [groupingsets(Vector(0), inline(array(struct(col1, col))))]"
+      )
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select * group by grouping sets (explode(array('col')))")
+      },
+      condition = "UNSUPPORTED_GENERATOR.OUTSIDE_SELECT",
+      parameters = Map("plan" -> "'Aggregate [groupingsets(Vector(0), explode(array(col)))]")
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select * group by grouping sets (posexplode(array('col')))")
+      },
+      condition = "UNSUPPORTED_GENERATOR.OUTSIDE_SELECT",
+      parameters = Map("plan" -> "'Aggregate [groupingsets(Vector(0), posexplode(array(col)))]")
+    )
+  }
+
+  test("SPARK-52956: Preserve alias metadata when collapsing projects") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(col1 TIMESTAMP);")
+
+      val query = """WITH cte AS (
+                    |      SELECT col1, col1 FROM t1
+                    |    UNION ALL
+                    |      SELECT col1, col1 FROM t1
+                    |    )
+                    |    SELECT * FROM cte;""".stripMargin
+
+      withSQLConf(
+        SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true",
+        SQLConf.PRESERVE_ALIAS_METADATA_WHEN_COLLAPSING_PROJECTS.key -> "true"
+      ) {
+        val basePlan = sql(query)
+        val finalPlan =
+          basePlan.toDF("col_0", "col_1").select("col_0", "col_1").toDF("col1", "col1")
+        finalPlan.queryExecution.assertOptimized()
+      }
+
+      withSQLConf(
+        SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true",
+        SQLConf.PRESERVE_ALIAS_METADATA_WHEN_COLLAPSING_PROJECTS.key -> "false"
+      ) {
+        // With the flag set to false, __is_duplicate metadata will not be preserved in Project
+        // nodes under Union. This will cause RemoveRedundantAliases to remove aliases of duplicate
+        // columns and leave Union unresolved.
+        val e = intercept[SparkException] {
+          val basePlan = sql(query)
+          val finalPlan =
+            basePlan.toDF("col_0", "col_1").select("col_0", "col_1").toDF("col1", "col1")
+          finalPlan.queryExecution.assertOptimized()
+        }
+        assert(e.getCondition.contains("PLAN_VALIDATION_FAILED_RULE_IN_BATCH"))
+        assert(
+          e.getMessage.contains(
+            "org.apache.spark.sql.catalyst.optimizer.RemoveRedundantAliases"
+          )
+        )
+      }
+    }
+  }
+
+  test("SPARK-52686: Union should be resolved only if there are no duplicates") {
+    // Different implementations of `WidenSetOperationTypes` cause an additional Project with ANSI
+    // off.
+    val expectedResult = if (conf.ansiEnabled) { 7 } else { 8 }
+    withTable("t1", "t2", "t3") {
+      sql("CREATE TABLE t1 (col1 STRING, col2 STRING, col3 STRING)")
+      sql("CREATE TABLE t2 (col1 STRING, col2 DOUBLE, col3 STRING)")
+      sql("CREATE TABLE t3 (col1 STRING, col2 DOUBLE, a STRING, col3 STRING)")
+
+      for (confValue <- Seq(false, true)) {
+        withSQLConf(
+          SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> confValue.toString
+        ) {
+          val analyzedPlan = sql(
+            """SELECT
+              |    *
+              |FROM (
+              |    SELECT col1, col2, NULL AS a, col1 FROM t1
+              |    UNION
+              |    SELECT col1, col2, NULL AS a, col3 FROM t2
+              |    UNION
+              |    SELECT * FROM t3
+              |)""".stripMargin
+          ).queryExecution.analyzed
+
+          val projectCount = analyzedPlan.collect {
+            case project: Project => project
+          }.size
+
+          // When UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED is disabled, we resolve
+          // outer Union before deduplicating ExprIds in inner union. Because of this we get an
+          // additional unnecessary Project (see SPARK-52686).
+          if (confValue) {
+            assert(projectCount == expectedResult)
+          } else {
+            assert(projectCount == expectedResult + 1)
+          }
+        }
+      }
+    }
+  }
+
+  Seq(true, false).foreach { codegenEnabled =>
+    test(s"SPARK-52060: one row relation with codegen enabled - $codegenEnabled") {
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString) {
+        val df = spark.sql("select 'test' stringCol")
+        checkAnswer(df, Row("test"))
+        val plan = df.queryExecution.executedPlan
+        val oneRowRelationExists = plan.find(_.isInstanceOf[OneRowRelationExec]).isDefined
+        assert(oneRowRelationExists)
+      }
+    }
+  }
+
+  test("SPARK-53094: Fix cube-related data quality problem") {
+    val df = sql(
+      """SELECT product, region, sum(amount) AS s
+        |FROM VALUES
+        |  ('a', 'east', 100),
+        |  ('b', 'east', 200),
+        |  ('a', 'west', 150),
+        |  ('b', 'west', 250),
+        |  ('a', 'east', 120) AS t(product, region, amount)
+        |GROUP BY product, region WITH CUBE
+        |HAVING count(product) > 2
+        |ORDER BY s DESC""".stripMargin)
+
+    checkAnswer(df, Seq(Row(null, null, 820), Row(null, "east", 420), Row("a", null, 370)))
   }
 }
 
