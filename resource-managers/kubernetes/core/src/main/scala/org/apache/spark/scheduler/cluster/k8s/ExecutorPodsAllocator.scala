@@ -71,6 +71,8 @@ class ExecutorPodsAllocator(
 
   protected val maxPendingPods = conf.get(KUBERNETES_MAX_PENDING_PODS)
 
+  protected val maxPendingPodsPerRpid = conf.get(KUBERNETES_MAX_PENDING_PODS_PER_RPID)
+
   protected val podCreationTimeout = math.max(
     podAllocationDelay * 5,
     conf.get(KUBERNETES_ALLOCATION_EXECUTOR_TIMEOUT))
@@ -348,10 +350,18 @@ class ExecutorPodsAllocator(
           }
         }
       }
-      if (newlyCreatedExecutorsForRpId.isEmpty && podCountForRpId < targetNum) {
-        Some(rpId, podCountForRpId, targetNum)
+      // Check if we can allocate more pods for this rpid based on per-rpid limit
+      val pendingPodsForRpId = notRunningPodCountForRpId
+      val canAllocateMoreForRpId = pendingPodsForRpId < maxPendingPodsPerRpid
+      
+      if (newlyCreatedExecutorsForRpId.isEmpty && podCountForRpId < targetNum && canAllocateMoreForRpId) {
+        Some(rpId, podCountForRpId, targetNum, pendingPodsForRpId)
       } else {
         // for this resource profile we do not request more PODs
+        if (!canAllocateMoreForRpId && log.isDebugEnabled) {
+          logDebug(s"ResourceProfile Id $rpId has reached max pending pods limit " +
+            s"($pendingPodsForRpId >= $maxPendingPodsPerRpid). Not requesting more pods.")
+        }
         None
       }
     }
@@ -362,17 +372,38 @@ class ExecutorPodsAllocator(
     val remainingSlotFromPendingPods = maxPendingPods - totalNotRunningPodCount
     if (remainingSlotFromPendingPods > 0 && podsToAllocateWithRpId.size > 0 &&
         !(snapshots.isEmpty && podAllocOnPVC && maxPVCs <= PVC_COUNTER.get())) {
-      ExecutorPodsAllocator.splitSlots(podsToAllocateWithRpId, remainingSlotFromPendingPods)
+      
+      // Convert the tuple structure for splitSlots (remove pendingPodsForRpId for compatibility)
+      val podsToAllocateForSplitSlots = podsToAllocateWithRpId.map {
+        case (rpId, podCountForRpId, targetNum, _) => (rpId, podCountForRpId, targetNum)
+      }
+      
+      ExecutorPodsAllocator.splitSlots(podsToAllocateForSplitSlots, remainingSlotFromPendingPods)
         .foreach { case ((rpId, podCountForRpId, targetNum), sharedSlotFromPendingPods) =>
+        
+        // Find the corresponding pendingPodsForRpId from our original data
+        val pendingPodsForRpId = podsToAllocateWithRpId.find(_._1 == rpId).map(_._4).getOrElse(0)
+        
+        // Apply per-rpid limit in addition to global limit
+        val remainingSlotForRpId = maxPendingPodsPerRpid - pendingPodsForRpId
+        val effectiveSharedSlot = math.min(sharedSlotFromPendingPods, remainingSlotForRpId)
+        
         val numMissingPodsForRpId = targetNum - podCountForRpId
         val numExecutorsToAllocate =
-          math.min(math.min(numMissingPodsForRpId, podAllocationSize), sharedSlotFromPendingPods)
-        logInfo(log"Going to request ${MDC(LogKeys.COUNT, numExecutorsToAllocate)} executors from" +
-          log" Kubernetes for ResourceProfile Id: ${MDC(LogKeys.RESOURCE_PROFILE_ID, rpId)}, " +
-          log"target: ${MDC(LogKeys.NUM_POD_TARGET, targetNum)}, " +
-          log"known: ${MDC(LogKeys.NUM_POD, podCountForRpId)}, sharedSlotFromPendingPods: " +
-          log"${MDC(LogKeys.NUM_POD_SHARED_SLOT, sharedSlotFromPendingPods)}.")
-        requestNewExecutors(numExecutorsToAllocate, applicationId, rpId, k8sKnownPVCNames)
+          math.min(math.min(numMissingPodsForRpId, podAllocationSize), effectiveSharedSlot)
+          
+        if (numExecutorsToAllocate > 0) {
+          logInfo(log"Going to request ${MDC(LogKeys.COUNT, numExecutorsToAllocate)} executors from" +
+            log" Kubernetes for ResourceProfile Id: ${MDC(LogKeys.RESOURCE_PROFILE_ID, rpId)}, " +
+            log"target: ${MDC(LogKeys.NUM_POD_TARGET, targetNum)}, " +
+            log"known: ${MDC(LogKeys.NUM_POD, podCountForRpId)}, sharedSlotFromPendingPods: " +
+            log"${MDC(LogKeys.NUM_POD_SHARED_SLOT, sharedSlotFromPendingPods)}, " +
+            s"remainingSlotForRpId: $remainingSlotForRpId.")
+          requestNewExecutors(numExecutorsToAllocate, applicationId, rpId, k8sKnownPVCNames)
+        } else if (remainingSlotForRpId <= 0) {
+          logDebug(s"ResourceProfile Id $rpId cannot allocate more pods due to per-rpid limit " +
+            s"(pending: $pendingPodsForRpId, limit: $maxPendingPodsPerRpid)")
+        }
       }
     }
     deletedExecutorIds = _deletedExecutorIds
