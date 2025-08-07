@@ -3879,6 +3879,7 @@ def _test() -> None:
     from pyspark.sql import SparkSession
     import pyspark.pandas.namespace
     from pandas.util.version import Version
+    from pyspark.testing.utils import is_ansi_mode_test
 
     os.chdir(os.environ["SPARK_HOME"])
 
