@@ -26,7 +26,6 @@ import java.util.zip.{ZipInputStream, ZipOutputStream}
 
 import scala.concurrent.duration._
 
-import com.google.common.io.ByteStreams
 import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataInputStream, Path}
 import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
@@ -707,9 +706,8 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       var entry = inputStream.getNextEntry
       entry should not be null
       while (entry != null) {
-        val actual = new String(ByteStreams.toByteArray(inputStream), StandardCharsets.UTF_8)
         val expected = Files.readString(logs.find(_.getName == entry.getName).get.toPath)
-        actual should be (expected)
+        Utils.toString(inputStream) should be (expected)
         totalEntries += 1
         entry = inputStream.getNextEntry
       }
