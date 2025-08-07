@@ -12728,10 +12728,9 @@ def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> import datetime
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame(
-    ...     ["HOUR", "13:08:15")],
+    ...     [("HOUR", "13:08:15")],
     ...     ['unit', 'time']).withColumn("time", sf.col("time").cast("time"))
     >>> df.select('*', sf.time_trunc('unit', 'time')).show()
     +----+--------+----------------------+

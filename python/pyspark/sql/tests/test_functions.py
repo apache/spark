@@ -403,8 +403,7 @@ class FunctionsTestsMixin:
     def test_time_trunc(self):
         # SPARK-53110: test the time_trunc function.
         df = self.spark.range(1).select(
-            F.lit("minute").alias("unit"),
-            F.lit(datetime.time(1, 2, 3)).alias("time")
+            F.lit("minute").alias("unit"), F.lit(datetime.time(1, 2, 3)).alias("time")
         )
         result = datetime.time(1, 2, 0)
         row_from_col = df.select(F.time_trunc(df.unit, df.time)).first()
