@@ -130,7 +130,7 @@
     <protobuf.version>4.29.3</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
     <zookeeper.version>3.9.3</zookeeper.version>
-    <curator.version>5.7.1</curator.version>
+    <curator.version>5.9.0</curator.version>
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
