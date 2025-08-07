@@ -90,7 +90,7 @@ trait VariableManager {
   protected def getVariableNameForError(variableName: String): String
 
   /**
-   * Create a variable.
+   * Create variables.
    * @param variables Variables to be created,
    *                  a list of tuples of nameParts and varDef for each variable
    * @param overrideIfExists If true, the new variable will replace an existing one
