@@ -1588,7 +1588,7 @@ private[spark] object Utils
     }
 
     try {
-      ByteStreams.skipFully(stream, effectiveStart)
+      stream.skipNBytes(effectiveStart)
       ByteStreams.readFully(stream, buff)
     } finally {
       stream.close()

@@ -727,6 +727,11 @@ This file is divided into 3 sections:
     <customMessage>Use Java `write` instead.</customMessage>
   </check>
 
+  <check customId="skipFully" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bByteStreams\.skipFully\b</parameter></parameters>
+    <customMessage>Use Java `skipNBytes` instead.</customMessage>
+  </check>
+
   <check customId="maputils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.collections4\.MapUtils\b</parameter></parameters>
     <customMessage>Use org.apache.spark.util.collection.Utils instead.</customMessage>
