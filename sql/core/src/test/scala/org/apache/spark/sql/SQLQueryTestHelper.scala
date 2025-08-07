@@ -27,6 +27,7 @@ import org.apache.spark.ErrorMessageFormat.MINIMAL
 import org.apache.spark.SparkThrowableHelper.getMessage
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.IntegratedUDFTestUtils.{TestUDF, TestUDTFSet}
+import org.apache.spark.sql.catalyst.CurrentUserContext
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTime, CurrentTimestampLike, CurrentUser, Literal}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -40,6 +41,8 @@ import org.apache.spark.sql.types.{DateType, StructType, TimestampType}
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
 trait SQLQueryTestHelper extends SQLConfHelper with Logging {
+
+  CurrentUserContext.CURRENT_USER.set("test_user")
 
   private val notIncludedMsg = "[not included in comparison]"
   private val clsName = this.getClass.getCanonicalName
@@ -57,7 +60,7 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
       .replaceAll("Created By.*", s"Created By $notIncludedMsg")
       .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
       .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
-      .replaceAll("Owner\t.*", s"Owner\t$notIncludedMsg")
+      .replaceAll("Owner.*", s"Owner $notIncludedMsg")
       .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")
       .replaceAll("CTERelationDef \\d+,", s"CTERelationDef xxxx,")
       .replaceAll("CTERelationRef \\d+,", s"CTERelationRef xxxx,")
