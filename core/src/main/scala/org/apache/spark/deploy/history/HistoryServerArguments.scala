@@ -83,7 +83,7 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
       configs.sortBy(_.key).foreach { conf =>
         sb.append("  ").append(conf.key.padTo(maxConfigLength, ' '))
         var currentDocLen = 0
-        val intention = "\n" + " " * (maxConfigLength + 2)
+        val intention = "\n" + " ".repeat(maxConfigLength + 2)
         conf.doc.split("\\s+").foreach { word =>
           if (currentDocLen + word.length > 60) {
             sb.append(intention).append(" ").append(word)

@@ -349,6 +349,18 @@ class jsonProtocolSuite extends SparkFunSuite {
     assert(newMetrics.shuffleWriteMetrics.recordsWritten == 0)
   }
 
+  test("SPARK-43100: Push Based Shuffle metrics should be read correctly") {
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0,
+      hasHadoopInput = false, hasOutput = true, hasRecords = false)
+    val expectedTaskMetricsJson =
+      jsonProtocol.toJsonString(jsonProtocol.taskMetricsToJson(metrics, _))
+    val foundTaskMetrics = jsonProtocol.taskMetricsFromJson(parse(expectedTaskMetricsJson))
+    val foundTaskMetricsJson = jsonProtocol.toJsonString(
+      jsonProtocol.taskMetricsToJson(foundTaskMetrics, _))
+    assert(expectedTaskMetricsJson.equals(foundTaskMetricsJson),
+      s"Expected: $expectedTaskMetricsJson, Found: $foundTaskMetricsJson")
+  }
+
   test("OutputMetrics backward compatibility") {
     // OutputMetrics were added after 1.1
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0, hasHadoopInput = false, hasOutput = true)

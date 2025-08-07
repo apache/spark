@@ -50,6 +50,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import (
     DayTimeIntervalType,
     IntegralType,
+    StringType,
     TimestampType,
     TimestampNTZType,
 )
@@ -62,6 +63,7 @@ from pyspark.pandas.missing.indexes import MissingPandasLikeIndex
 from pyspark.pandas.series import Series, first_series
 from pyspark.pandas.spark.accessors import SparkIndexMethods
 from pyspark.pandas.utils import (
+    is_ansi_mode_enabled,
     is_name_like_tuple,
     is_name_like_value,
     name_like_string,
@@ -926,7 +928,15 @@ class Index(IndexOpsMixin):
                 field_names = result._internal.spark_type_for(
                     scol
                 ).fieldNames()  # type: ignore[attr-defined]
-                return F.array([scol[field] for field in field_names])
+                field_types = [
+                    result._internal.spark_type_for(scol[field]) for field in field_names
+                ]
+
+                has_str = any(isinstance(t, StringType) for t in field_types)
+                if has_str and is_ansi_mode_enabled(self._internal.spark_frame.sparkSession):
+                    return F.array([scol[field].cast(StringType()) for field in field_names])
+                else:
+                    return F.array([scol[field] for field in field_names])
 
             return result.spark.transform(struct_to_array)
 

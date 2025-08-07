@@ -45,6 +45,7 @@ case class DescribeTableExec(
       addMetadataColumns(rows)
       addTableDetails(rows)
       addTableStats(rows)
+      addTableConstraints(rows)
     }
     rows.toSeq
   }
@@ -85,6 +86,16 @@ case class DescribeTableExec(
     rows ++= table.columns().map{ column =>
       toCatalystRow(
         column.name, column.dataType.simpleString, column.comment)
+    }
+  }
+
+  private def addTableConstraints(rows: ArrayBuffer[InternalRow]): Unit = {
+    if (table.constraints.nonEmpty) {
+      rows += emptyRow()
+      rows += toCatalystRow("# Constraints", "", "")
+      rows ++= table.constraints().map{ constraint =>
+        toCatalystRow(constraint.name(), constraint.toDescription, "")
+      }
     }
   }
 

@@ -29,6 +29,7 @@ from pyspark.sql.types import (
     IntegerType,
     FloatType,
     DateType,
+    TimeType,
     TimestampType,
     TimestampNTZType,
     DayTimeIntervalType,
@@ -151,6 +152,8 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
         ret.decimal.precision = data_type.precision
     elif isinstance(data_type, DateType):
         ret.date.CopyFrom(pb2.DataType.Date())
+    elif isinstance(data_type, TimeType):
+        ret.time.precision = data_type.precision
     elif isinstance(data_type, TimestampType):
         ret.timestamp.CopyFrom(pb2.DataType.Timestamp())
     elif isinstance(data_type, TimestampNTZType):
@@ -237,6 +240,8 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         return VarcharType(schema.var_char.length)
     elif schema.HasField("date"):
         return DateType()
+    elif schema.HasField("time"):
+        return TimeType(schema.time.precision) if schema.time.HasField("precision") else TimeType()
     elif schema.HasField("timestamp"):
         return TimestampType()
     elif schema.HasField("timestamp_ntz"):

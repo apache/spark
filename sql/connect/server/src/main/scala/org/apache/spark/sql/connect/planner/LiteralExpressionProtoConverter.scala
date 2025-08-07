@@ -117,8 +117,9 @@ object LiteralExpressionProtoConverter {
             DataTypeProtoConverter.toCatalystType(lit.getMap.getValueType)))
 
       case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
-        val dataType = DataTypeProtoConverter.toCatalystType(lit.getStruct.getStructType)
-        val structData = LiteralValueProtoConverter.toCatalystStruct(lit.getStruct)
+        val (structData, structType) = LiteralValueProtoConverter.toCatalystStruct(lit.getStruct)
+        val dataType = DataTypeProtoConverter.toCatalystType(
+          proto.DataType.newBuilder.setStruct(structType).build())
         val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
         expressions.Literal(convert(structData), dataType)
 

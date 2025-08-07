@@ -23,9 +23,19 @@ private[spark] trait SparkSystemUtils {
   val osName = System.getProperty("os.name")
 
   /**
+   * The `os.version` system property.
+   */
+  val osVersion = System.getProperty("os.version")
+
+  /**
    * The `os.arch` system property.
    */
   val osArch = System.getProperty("os.arch")
+
+  /**
+   * The `java.version` system property.
+   */
+  val javaVersion = Runtime.version.toString
 
   /**
    * Whether the underlying operating system is Windows.

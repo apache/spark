@@ -343,3 +343,19 @@ HAVING (
 struct<alias:map<string,int>>
 -- !query output
 
+
+
+-- !query
+SELECT col1 FROM VALUES(1,2) GROUP BY col1, col2 HAVING col2 = col2
+-- !query schema
+struct<col1:int>
+-- !query output
+1
+
+
+-- !query
+SELECT col1 AS a, a AS b FROM VALUES(1,2) GROUP BY col1, col2 HAVING col2 = col2
+-- !query schema
+struct<a:int,b:int>
+-- !query output
+1	1

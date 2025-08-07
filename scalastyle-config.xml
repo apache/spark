@@ -46,7 +46,7 @@ This file is divided into 3 sections:
 
   <check level="error" class="org.scalastyle.file.FileTabChecker" enabled="true"></check>
 
-  <check level="error" class="org.scalastyle.file.HeaderMatchesChecker" enabled="true">
+  <check customId="license" level="error" class="org.scalastyle.file.HeaderMatchesChecker" enabled="true">
     <parameters>
        <parameter name="header"><![CDATA[/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
@@ -282,10 +282,140 @@ This file is divided into 3 sections:
       scala.jdk.CollectionConverters._ and use .asScala / .asJava methods</customMessage>
   </check>
 
+  <check customId="getTempDirectory" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.getTempDirectory\b</parameter></parameters>
+    <customMessage>Use System.getProperty instead.</customMessage>
+  </check>
+
+  <check customId="readLines" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.readLines\b</parameter></parameters>
+    <customMessage>Use Files.readAllLines instead.</customMessage>
+  </check>
+
+  <check customId="filesreadLines" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFiles\.readLines\b</parameter></parameters>
+    <customMessage>Use Files.readAllLines instead.</customMessage>
+  </check>
+
+  <check customId="readFileToString" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.readFileToString\b</parameter></parameters>
+    <customMessage>Use Files.readString instead.</customMessage>
+  </check>
+
+  <check customId="asCharSource" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFiles\.asCharSource\b</parameter></parameters>
+    <customMessage>Use Files.readString instead.</customMessage>
+  </check>
+
+  <check customId="write" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.write\b</parameter></parameters>
+    <customMessage>Use Files.writeString instead.</customMessage>
+  </check>
+
+  <check customId="asCharSink" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFiles\.asCharSink\b</parameter></parameters>
+    <customMessage>Use Files.writeString instead.</customMessage>
+  </check>
+
+  <check customId="writeLines" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.writeLines\b</parameter></parameters>
+    <customMessage>Use Files.write instead.</customMessage>
+  </check>
+
+  <check customId="cleanDirectory" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.cleanDirectory\b</parameter></parameters>
+    <customMessage>Use cleanDirectory of JavaUtils/SparkFileUtils/Utils</customMessage>
+  </check>
+
+  <check customId="deleteRecursively" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.deleteDirectory\b</parameter></parameters>
+    <customMessage>Use deleteRecursively of JavaUtils/SparkFileUtils/Utils</customMessage>
+  </check>
+
+  <check customId="forceDelete" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.forceDelete\b</parameter></parameters>
+    <customMessage>Use deleteRecursively of JavaUtils/SparkFileUtils/Utils</customMessage>
+  </check>
+
+  <check customId="forceDeleteOnExit" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.forceDeleteOnExit\b</parameter></parameters>
+    <customMessage>Use forceDeleteOnExit of JavaUtils/SparkFileUtils/Utils instead.</customMessage>
+  </check>
+
+  <check customId="deleteQuietly" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.deleteQuietly\b</parameter></parameters>
+    <customMessage>Use deleteQuietly of JavaUtils/SparkFileUtils/Utils</customMessage>
+  </check>
+
+  <check customId="readFileToByteArray" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.readFileToByteArray\b</parameter></parameters>
+    <customMessage>Use java.nio.file.Files.readAllBytes</customMessage>
+  </check>
+
+  <check customId="sizeOf" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.sizeOf(Directory)?\b</parameter></parameters>
+    <customMessage>Use sizeOf of JavaUtils or Utils instead.</customMessage>
+  </check>
+
+  <check customId="moveFile" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.moveFile\b</parameter></parameters>
+    <customMessage>Use copyFile of JavaUtils/SparkFileUtils/Utils instead.</customMessage>
+  </check>
+
+  <check customId="copyURLToFile" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.copyURLToFile\b</parameter></parameters>
+    <customMessage>Use copyURLToFile of JavaUtils instead.</customMessage>
+  </check>
+
+  <check customId="copyFile" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.copyFile\b</parameter></parameters>
+    <customMessage>Use copyFile of SparkFileUtils or Utils instead.</customMessage>
+  </check>
+
+  <check customId="copyFileToDirectory" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.copyFileToDirectory\b</parameter></parameters>
+    <customMessage>Use copyFileToDirectory of SparkFileUtils or Utils instead.</customMessage>
+  </check>
+
+  <check customId="copyDirectory" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.copyDirectory\b</parameter></parameters>
+    <customMessage>Use copyDirectory of JavaUtils/SparkFileUtils/Utils instead.</customMessage>
+  </check>
+
+  <check customId="moveDirectory" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.moveDirectory\b</parameter></parameters>
+    <customMessage>Use copyDirectory of SparkFileUtils or Utils instead.</customMessage>
+  </check>
+
+  <check customId="contentEquals" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.contentEquals\b</parameter></parameters>
+    <customMessage>Use contentEquals of SparkFileUtils or Utils instead.</customMessage>
+  </check>
+
   <check customId="commonslang2" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.lang\.</parameter></parameters>
     <customMessage>Use Commons Lang 3 classes (package org.apache.commons.lang3.*) instead
     of Commons Lang 2 (package org.apache.commons.lang.*)</customMessage>
+  </check>
+
+  <check customId="getFile" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.getFile\b</parameter></parameters>
+    <customMessage>Use getFile of SparkFileUtil or Utils instead.</customMessage>
+  </check>
+
+  <check customId="touch" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.touch\b</parameter></parameters>
+    <customMessage>Use touch of SparkFileUtil or Utils instead.</customMessage>
+  </check>
+
+  <check customId="writeStringToFile" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.writeStringToFile\b</parameter></parameters>
+    <customMessage>Use java.nio.file.Files.writeString instead.</customMessage>
+  </check>
+
+  <check customId="listFiles" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFileUtils\.listFiles\b</parameter></parameters>
+    <customMessage>Use listFiles of SparkFileUtil or Utils instead.</customMessage>
   </check>
 
   <check customId="commonslang3javaversion" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
@@ -299,8 +429,78 @@ This file is divided into 3 sections:
     <customMessage>Use org.apache.spark.util.Pair instead</customMessage>
   </check>
 
+  <check customId="commonslang3tostringbuilder" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.commons\.lang3\.builder\.ToStringBuilder</parameter></parameters>
+    <customMessage>Use String concatenation instead</customMessage>
+  </check>
+
+  <check customId="commonslang3pad" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bStringUtils\.(left|right)Pad\b</parameter></parameters>
+    <customMessage>Use (left|right)Pad of SparkStringUtils or Utils instead</customMessage>
+  </check>
+
+  <check customId="commonslang3split" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bStringUtils\.split\b</parameter></parameters>
+    <customMessage>Use Utils.stringToSeq instead</customMessage>
+  </check>
+
+  <check customId="commonslang3isblankorempty" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bStringUtils\.is(Not)?(Blank|Empty)\b</parameter></parameters>
+    <customMessage>Use Utils.is(Not)?(Blank|Empty) instead</customMessage>
+  </check>
+
+  <check customId="commonslang3getrootcause" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bExceptionUtils\.getRootCause\b</parameter></parameters>
+    <customMessage>Use getRootCause of SparkErrorUtils or Utils instead</customMessage>
+  </check>
+
+  <check customId="commonslang3getstacktrace" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bExceptionUtils\.getStackTrace\b</parameter></parameters>
+    <customMessage>Use stackTraceToString of SparkErrorUtils or Utils instead</customMessage>
+  </check>
+
+  <check customId="commonslang3strings" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.commons\.lang3\.Strings\b</parameter></parameters>
+    <customMessage>Use Java String methods instead</customMessage>
+  </check>
+
+  <check customId="commonslang3strip" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bStringUtils\.strip\b</parameter></parameters>
+    <customMessage>Use Utils.strip method instead</customMessage>
+  </check>
+
+  <check customId="commonsiofileutils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.commons\.io\.FileUtils\b</parameter></parameters>
+    <customMessage>Use Java API or Spark's JavaUtils/SparkSystemUtils/Utils instead</customMessage>
+  </check>
+
+  <check customId="commonslang3stringutils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.commons\.lang3\.StringUtils\b</parameter></parameters>
+    <customMessage>Use Java String or Spark's Utils/JavaUtils methods instead</customMessage>
+  </check>
+
+  <check customId="commonslang3systemutils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.commons\.lang3\.SystemUtils\b</parameter></parameters>
+    <customMessage>Use SparkSystemUtils or Utils instead</customMessage>
+  </check>
+
+  <check customId="commonstextstringsubstitutor" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.commons\.text\.StringSubstitutor\b</parameter></parameters>
+    <customMessage>Use org.apache.spark.StringSubstitutor instead</customMessage>
+  </check>
+
+  <check customId="commonslang3abbreviate" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bStringUtils\.abbreviate\b</parameter></parameters>
+    <customMessage>Use Utils.abbreviate method instead</customMessage>
+  </check>
+
+  <check customId="commonslang3substring" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bStringUtils\.substring\b</parameter></parameters>
+    <customMessage>Use Java String.substring instead.</customMessage>
+  </check>
+
   <check customId="uribuilder" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
-    <parameters><parameter name="regex">UriBuilder\.fromUri</parameter></parameters>
+    <parameters><parameter name="regex">\bUriBuilder\.fromUri\b</parameter></parameters>
     <customMessage>Use Utils.getUriBuilder instead.</customMessage>
   </check>
 
@@ -311,7 +511,7 @@ This file is divided into 3 sections:
   </check>
 
   <check customId="FileSystemGet" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
-    <parameters><parameter name="regex">FileSystem.get\([a-zA-Z_$][a-zA-Z_$0-9]*\)</parameter></parameters>
+    <parameters><parameter name="regex">\bFileSystem\.get\([a-zA-Z_$][a-zA-Z_$0-9]*\)</parameter></parameters>
     <customMessage><![CDATA[
       Are you sure that you want to use "FileSystem.get(Configuration conf)"? If the input
       configuration is not set properly, a default FileSystem instance will be returned. It can
@@ -460,7 +660,7 @@ This file is divided into 3 sections:
   </check>
 
   <check customId="byteCountToDisplaySize" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
-    <parameters><parameter name="regex">byteCountToDisplaySize</parameter></parameters>
+    <parameters><parameter name="regex">\bbyteCountToDisplaySize\b</parameter></parameters>
     <customMessage>Use Utils.bytesToString instead of byteCountToDisplaySize for consistency.</customMessage>
   </check>
 
@@ -480,5 +680,50 @@ This file is divided into 3 sections:
   <check customId="configName" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">buildConf\("spark.databricks.</parameter></parameters>
     <customMessage>Use Apache Spark config namespace.</customMessage>
+  </check>
+
+  <check customId="googleStrings" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">com\.google\.common\.base\.Strings\b</parameter></parameters>
+    <customMessage>Use Java built-in methods or SparkStringUtils instead</customMessage>
+  </check>
+
+  <check customId="hadoopioutils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.hadoop\.io\.IOUtils\b</parameter></parameters>
+    <customMessage>Use org.apache.spark.util.Utils instead.</customMessage>
+  </check>
+
+  <check customId="defaultCharset" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">Charset\.defaultCharset</parameter></parameters>
+    <customMessage>Use StandardCharsets.UTF_8 instead.</customMessage>
+  </check>
+
+  <check customId="ioutilstobytearray" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bIOUtils\.toByteArray\b</parameter></parameters>
+    <customMessage>Use Java readAllBytes instead.</customMessage>
+  </check>
+
+  <check customId="ioutilsclosequietly" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bIOUtils\.closeQuietly\b</parameter></parameters>
+    <customMessage>Use closeQuietly of SparkErrorUtils or Utils instead.</customMessage>
+  </check>
+
+  <check customId="ioutilscopy" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bIOUtils\.copy\b</parameter></parameters>
+    <customMessage>Use Java transferTo instead.</customMessage>
+  </check>
+
+  <check customId="ioutilstostring" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bIOUtils\.toString\b</parameter></parameters>
+    <customMessage>Use toString of SparkStreamUtils or Utils instead.</customMessage>
+  </check>
+
+  <check customId="ioutilswrite" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bIOUtils\.write\b</parameter></parameters>
+    <customMessage>Use Java `write` instead.</customMessage>
+  </check>
+
+  <check customId="maputils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.commons\.collections4\.MapUtils\b</parameter></parameters>
+    <customMessage>Use org.apache.spark.util.collection.Utils instead.</customMessage>
   </check>
 </scalastyle>

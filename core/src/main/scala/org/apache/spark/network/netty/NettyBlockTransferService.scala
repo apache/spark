@@ -30,7 +30,7 @@ import com.codahale.metrics.{Metric, MetricSet}
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.ExecutorDeadException
-import org.apache.spark.internal.{config, LogKeys, MDC}
+import org.apache.spark.internal.{config, Logging, LogKeys}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClientBootstrap}
@@ -57,7 +57,7 @@ private[spark] class NettyBlockTransferService(
     _port: Int,
     numCores: Int,
     driverEndPointRef: RpcEndpointRef = null)
-  extends BlockTransferService {
+  extends BlockTransferService with Logging {
 
   // TODO: Don't use Java serialization, use a more cross-version compatible serialization format.
   private val serializer = serializerManager.getSerializer(scala.reflect.classTag[Any], false)
@@ -196,9 +196,9 @@ private[spark] class NettyBlockTransferService(
 
       override def onFailure(e: Throwable): Unit = {
         if (asStream) {
-          logger.error(s"Error while uploading {} as stream", e, MDC.of(LogKeys.BLOCK_ID, blockId))
+          logger.error(s"Error while uploading {} as stream", e, MDC(LogKeys.BLOCK_ID, blockId))
         } else {
-          logger.error(s"Error while uploading {}", e, MDC.of(LogKeys.BLOCK_ID, blockId))
+          logger.error(s"Error while uploading {}", e, MDC(LogKeys.BLOCK_ID, blockId))
         }
         result.failure(e)
       }

@@ -26,7 +26,6 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
@@ -46,7 +45,7 @@ import org.apache.spark.sql.connect.test.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.SparkThreadUtils
+import org.apache.spark.util.{SparkFileUtils, SparkSystemUtils, SparkThreadUtils}
 
 class ClientE2ETestSuite
     extends QueryTest
@@ -120,7 +119,7 @@ class ClientE2ETestSuite
       import session.implicits._
 
       val throwException =
-        udf((_: String) => throw new SparkException("test" * 10000))
+        udf((_: String) => throw new SparkException("test".repeat(10000)))
 
       val ex = intercept[SparkException] {
         Seq("1").toDS().withColumn("udf_val", throwException($"value")).collect()
@@ -133,7 +132,7 @@ class ClientE2ETestSuite
       val cause = ex.getCause.asInstanceOf[SparkException]
       assert(cause.getCondition == null)
       assert(cause.getMessageParameters.isEmpty)
-      assert(cause.getMessage.contains("test" * 10000))
+      assert(cause.getMessage.contains("test".repeat(10000)))
     }
   }
 
@@ -228,7 +227,7 @@ class ClientE2ETestSuite
   }
 
   test("spark deep recursion") {
-    var recursionDepth = if (System.getProperty("os.arch") == "s390x") 400 else 500
+    var recursionDepth = if (SparkSystemUtils.osArch == "s390x") 400 else 500
     var df = spark.range(1)
     for (a <- 1 to recursionDepth) {
       df = df.union(spark.range(a, a + 1))
@@ -346,7 +345,7 @@ class ClientE2ETestSuite
       .listFiles()
       .filter(file => file.getPath.endsWith(".csv"))(0)
 
-    assert(FileUtils.contentEquals(testDataPath.toFile, outputFile))
+    assert(SparkFileUtils.contentEquals(testDataPath.toFile, outputFile))
   }
 
   test("read path collision") {
@@ -1675,6 +1674,18 @@ class ClientE2ETestSuite
     val df = spark.sql("SELECT TIME '12:13:14'")
 
     checkAnswer(df, Row(LocalTime.of(12, 13, 14)))
+  }
+
+  test("SPARK-53054: DataFrameReader defaults to spark.sql.sources.default") {
+    withTempPath { file =>
+      val path = file.getAbsoluteFile.toURI.toString
+      spark.range(100).write.parquet(file.toPath.toAbsolutePath.toString)
+
+      spark.conf.set("spark.sql.sources.default", "parquet")
+
+      val df = spark.read.load(path)
+      assert(df.count() == 100)
+    }
   }
 }
 

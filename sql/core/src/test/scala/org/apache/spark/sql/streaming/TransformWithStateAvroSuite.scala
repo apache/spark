@@ -33,7 +33,9 @@ import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataV2, 
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.SlowSQLTest
 
+@SlowSQLTest
 class TransformWithStateAvroSuite extends TransformWithStateSuite {
 
   import testImplicits._

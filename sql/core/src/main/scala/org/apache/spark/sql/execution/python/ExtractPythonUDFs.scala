@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.REASON
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -406,6 +406,10 @@ object ExtractPythonUDTFs extends Rule[LogicalPlan] {
           BatchEvalPythonUDTF(func, g.requiredChildOutput, g.generatorOutput, child)
         case PythonEvalType.SQL_ARROW_TABLE_UDF =>
           ArrowEvalPythonUDTF(func, g.requiredChildOutput, g.generatorOutput, child, func.evalType)
+        case PythonEvalType.SQL_ARROW_UDTF =>
+          ArrowEvalPythonUDTF(func, g.requiredChildOutput, g.generatorOutput, child, func.evalType)
+        case _ =>
+          throw SparkException.internalError(s"Unsupported UDTF eval type: ${func.evalType}")
       }
     }
   }

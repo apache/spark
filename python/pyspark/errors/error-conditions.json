@@ -384,6 +384,11 @@
       "The return type of the arrow-optimized Python UDTF should be of type 'pandas.DataFrame', but the '<func>' method returned a value of type <return_type> with value: <value>."
     ]
   },
+  "INVALID_ARROW_UDTF_WITH_ANALYZE": {
+    "message": [
+      "The arrow UDTF '<name>' is invalid. Arrow UDTFs do not support the 'analyze' method. Please remove the 'analyze' method from '<name>' and specify a returnType instead."
+    ]
+  },
   "INVALID_BROADCAST_OPERATION": {
     "message": [
       "Broadcast can only be <operation> in driver."
@@ -992,6 +997,11 @@
       "An Observation can be used with a DataFrame only once."
     ]
   },
+  "SCHEMA_MISMATCH_FOR_ARROW_PYTHON_UDF": {
+    "message": [
+      "Result vector from <udf_type> was not the required length: expected <expected>, got <actual>."
+    ]
+  },
   "SCHEMA_MISMATCH_FOR_PANDAS_UDF": {
     "message": [
       "Result vector from <udf_type> was not the required length: expected <expected>, got <actual>."
@@ -1001,6 +1011,73 @@
     "message": [
       "Cannot start a remote Spark session because there is a regular Spark session already running."
     ]
+  },
+  "SESSION_MUTATION_IN_DECLARATIVE_PIPELINE": {
+    "message": [
+      "Session mutation <method> is not allowed in declarative pipelines."
+    ],
+    "sub_class": {
+      "SET_RUNTIME_CONF": {
+        "message": [
+          "Instead set configuration via the pipeline spec or use the 'spark_conf' argument in various decorators."
+        ]
+      },
+      "SET_CURRENT_CATALOG": {
+        "message": [
+          "Instead set catalog via the pipeline spec or the 'name' argument on the dataset decorators."
+        ]
+      },
+      "SET_CURRENT_DATABASE": {
+        "message": [
+          "Instead set database via the pipeline spec or the 'name' argument on the dataset decorators."
+        ]
+      },
+      "DROP_TEMP_VIEW": {
+        "message": [
+          "Instead remove the temporary view definition directly."
+        ]
+      },
+      "DROP_GLOBAL_TEMP_VIEW": {
+        "message": [
+          "Instead remove the temporary view definition directly."
+        ]
+      },
+      "CREATE_TEMP_VIEW": {
+        "message": [
+          "Instead use the @temporary_view decorator to define temporary views."
+        ]
+      },
+      "CREATE_OR_REPLACE_TEMP_VIEW": {
+        "message": [
+          "Instead use the @temporary_view decorator to define temporary views."
+        ]
+      },
+      "CREATE_GLOBAL_TEMP_VIEW": {
+        "message": [
+          "Instead use the @temporary_view decorator to define temporary views."
+        ]
+      },
+      "CREATE_OR_REPLACE_GLOBAL_TEMP_VIEW": {
+        "message": [
+          "Instead use the @temporary_view decorator to define temporary views."
+        ]
+      },
+      "REGISTER_UDF": {
+        "message": [
+          ""
+        ]
+      },
+      "REGISTER_JAVA_UDF": {
+        "message": [
+          ""
+        ]
+      },
+      "REGISTER_JAVA_UDAF": {
+        "message": [
+          ""
+        ]
+      }
+    }
   },
   "SESSION_NEED_CONN_STR_OR_BUILDER": {
     "message": [

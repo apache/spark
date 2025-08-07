@@ -30,20 +30,19 @@ import com.google.rpc.{Code => RPCCode, ErrorInfo, Status => RPCStatus}
 import io.grpc.Status
 import io.grpc.protobuf.StatusProto
 import io.grpc.stub.StreamObserver
-import org.apache.commons.lang3.StringUtils
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{QueryContextType, SparkEnv, SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto.FetchErrorDetailsResponse
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{OP_TYPE, SESSION_ID, USER_ID}
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.{ExecuteEventsManager, SessionHolder, SessionKey, SparkConnectService}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 private[connect] object ErrorUtils extends Logging {
 
@@ -217,7 +216,7 @@ private[connect] object ErrorUtils extends Logging {
         .put(errorId, st)
     }
 
-    lazy val stackTrace = Option(ExceptionUtils.getStackTrace(st))
+    lazy val stackTrace = Option(Utils.stackTraceToString(st))
     val stackTraceEnabled = sessionHolderOpt.exists(
       _.session.sessionState.conf.getConf(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED))
     val withStackTrace =
@@ -225,7 +224,7 @@ private[connect] object ErrorUtils extends Logging {
         val maxSize = Math.min(
           SparkEnv.get.conf.get(Connect.CONNECT_JVM_STACK_TRACE_MAX_SIZE),
           maxMetadataSize)
-        errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace.get, maxSize.toInt))
+        errorInfo.putMetadata("stackTrace", Utils.abbreviate(stackTrace.get, maxSize.toInt))
       } else {
         errorInfo
       }
@@ -297,7 +296,7 @@ private[connect] object ErrorUtils extends Logging {
           e,
           Status.UNKNOWN
             .withCause(e)
-            .withDescription(StringUtils.abbreviate(e.getMessage, 2048))
+            .withDescription(Utils.abbreviate(e.getMessage, 2048))
             .asRuntimeException())
     }
     partial

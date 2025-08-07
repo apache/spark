@@ -343,6 +343,54 @@ class PandasUDFTestsMixin:
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
             df.withColumn("udf", udf("id")).collect()
 
+    def test_pandas_udf_int_to_decimal_coercion(self):
+        import pandas as pd
+        from decimal import Decimal
+
+        df = self.spark.range(0, 3)
+
+        @pandas_udf(returnType="decimal(10,2)")
+        def int_to_decimal_udf(column):
+            values = [123, 456, 789]
+            return pd.Series([values[int(val) % len(values)] for val in column])
+
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": True}
+        ):
+            result = df.withColumn("decimal_val", int_to_decimal_udf("id")).collect()
+            self.assertEqual(result[0]["decimal_val"], 123.00)
+            self.assertEqual(result[1]["decimal_val"], 456.00)
+            self.assertEqual(result[2]["decimal_val"], 789.00)
+
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
+        ):
+            self.assertRaisesRegex(
+                PythonException,
+                "Exception thrown when converting pandas.Series",
+                df.withColumn("decimal_val", int_to_decimal_udf("id")).collect,
+            )
+
+        @pandas_udf(returnType="decimal(25,1)")
+        def high_precision_udf(column):
+            values = [1, 2, 3]
+            return pd.Series([values[int(val) % len(values)] for val in column])
+
+        for intToDecimalCoercionEnabled in [True, False]:
+            # arrow_cast is enabled by default for SQL_SCALAR_PANDAS_UDF and
+            # and SQL_SCALAR_PANDAS_ITER_UDF, arrow can do this cast safely.
+            # intToDecimalCoercionEnabled is not required for this case
+            with self.sql_conf(
+                {
+                    "spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": intToDecimalCoercionEnabled  # noqa: E501
+                }
+            ):
+                result = df.withColumn("decimal_val", high_precision_udf("id")).collect()
+                self.assertEqual(len(result), 3)
+                self.assertEqual(result[0]["decimal_val"], Decimal("1.0"))
+                self.assertEqual(result[1]["decimal_val"], Decimal("2.0"))
+                self.assertEqual(result[2]["decimal_val"], Decimal("3.0"))
+
     def test_pandas_udf_timestamp_ntz(self):
         # SPARK-36626: Test TimestampNTZ in pandas UDF
         @pandas_udf(returnType="timestamp_ntz")

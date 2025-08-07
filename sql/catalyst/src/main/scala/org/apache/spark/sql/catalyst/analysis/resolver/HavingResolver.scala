@@ -74,8 +74,10 @@ class HavingResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
     val (resolvedConditionWithAliasReplacement, filteredMissingExpressions) =
       tryReplaceSortOrderOrHavingConditionWithAlias(resolvedCondition, scopes, missingExpressions)
 
+    val deduplicatedMissingExpressions = deduplicateMissingExpressions(filteredMissingExpressions)
+
     val resolvedChildWithMissingAttributes =
-      insertMissingExpressions(resolvedChild, filteredMissingExpressions)
+      insertMissingExpressions(resolvedChild, deduplicatedMissingExpressions)
 
     val isChildChangedByMissingExpressions = !resolvedChildWithMissingAttributes.eq(resolvedChild)
 

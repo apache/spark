@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.util
-import java.util.Locale
+import java.util.{LinkedHashMap, Locale}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -792,6 +792,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       } else {
         colResolved.havingCondition
       }
+      // `cond` might contain unresolved aggregate functions so defer its resolution to
+      // `ResolveAggregateFunctions` rule if needed.
+      if (!cond.resolved) return colResolved
+
       // Try resolving the condition of the filter as though it is in the aggregate clause
       val (extraAggExprs, Seq(resolvedHavingCond)) =
         ResolveAggregateFunctions.resolveExprsWithAggregate(Seq(cond), aggForResolving)
@@ -2541,9 +2545,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             // Extract the function input project list from the SQL function plan and
             // inline the SQL function expression.
             plan match {
-              case Project(body :: Nil, Project(aliases, _: LocalRelation)) =>
-                projectList ++= aliases
-                SQLScalarFunction(f.function, aliases.map(_.toAttribute), body)
+              case Project(body :: Nil, Project(aliases, _: OneRowRelation)) =>
+                val inputs = aliases.map(stripOuterReference)
+                projectList ++= inputs
+                SQLScalarFunction(f.function, inputs.map(_.toAttribute), body)
               case o =>
                 throw new AnalysisException(
                   errorClass = "INVALID_SQL_FUNCTION_PLAN_STRUCTURE",
@@ -2919,7 +2924,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def resolveExprsWithAggregate(
         exprs: Seq[Expression],
         agg: Aggregate): (Seq[NamedExpression], Seq[Expression]) = {
-      val extraAggExprs = ArrayBuffer.empty[NamedExpression]
+      val extraAggExprs = new LinkedHashMap[Expression, NamedExpression]
       val transformed = exprs.map { e =>
         if (!e.resolved) {
           e
@@ -2927,13 +2932,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           buildAggExprList(e, agg, extraAggExprs)
         }
       }
-      (extraAggExprs.toSeq, transformed)
+      (extraAggExprs.values().asScala.toSeq, transformed)
     }
 
     private def buildAggExprList(
         expr: Expression,
         agg: Aggregate,
-        aggExprList: ArrayBuffer[NamedExpression]): Expression = {
+        aggExprMap: LinkedHashMap[Expression, NamedExpression]): Expression = {
       // Avoid adding an extra aggregate expression if it's already present in
       // `agg.aggregateExpressions`. Trim inner aliases from aggregate expressions because of
       // expressions like `spark_grouping_id` that can have inner aliases.
@@ -2949,20 +2954,22 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         expr match {
           case ae: AggregateExpression =>
             val cleaned = trimTempResolvedColumn(ae)
-            val alias =
-              Alias(cleaned, toPrettySQL(e = cleaned, shouldTrimTempResolvedColumn = true))()
-            aggExprList += alias
-            alias.toAttribute
+            val resultAlias = aggExprMap.computeIfAbsent(
+              cleaned.canonicalized,
+              _ => Alias(cleaned, toPrettySQL(e = cleaned, shouldTrimTempResolvedColumn = true))()
+            )
+            resultAlias.toAttribute
           case grouping: Expression if agg.groupingExpressions.exists(grouping.semanticEquals) =>
             trimTempResolvedColumn(grouping) match {
               case ne: NamedExpression =>
-                aggExprList += ne
-                ne.toAttribute
+                val resultAttribute = aggExprMap.computeIfAbsent(ne.canonicalized, _ => ne)
+                resultAttribute.toAttribute
               case other =>
-                val alias =
-                  Alias(other, toPrettySQL(e = other, shouldTrimTempResolvedColumn = true))()
-                aggExprList += alias
-                alias.toAttribute
+                val resultAlias = aggExprMap.computeIfAbsent(
+                  other.canonicalized,
+                  _ => Alias(other, toPrettySQL(e = other, shouldTrimTempResolvedColumn = true))()
+                )
+                resultAlias.toAttribute
             }
           case t: TempResolvedColumn =>
             if (t.child.isInstanceOf[Attribute]) {
@@ -2977,7 +2984,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               val childWithTempCol = t.child.transformUp {
                 case a: Attribute => TempResolvedColumn(a, Seq(a.name))
               }
-              val newChild = buildAggExprList(childWithTempCol, agg, aggExprList)
+              val newChild = buildAggExprList(childWithTempCol, agg, aggExprMap)
               if (newChild.containsPattern(TEMP_RESOLVED_COLUMN)) {
                 withOrigin(t.origin)(t.copy(hasTried = true))
               } else {
@@ -2985,7 +2992,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               }
             }
           case other =>
-            other.withNewChildren(other.children.map(buildAggExprList(_, agg, aggExprList)))
+            other.withNewChildren(other.children.map(buildAggExprList(_, agg, aggExprMap)))
         }
       }
     }
@@ -3630,7 +3637,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   object ResolveWindowFrame extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
       _.containsPattern(WINDOW_EXPRESSION), ruleId) {
-      case we => WindowResolution.resolveFrame(we)
+      case we: WindowExpression => WindowResolution.resolveFrame(we)
     }
   }
 
@@ -3640,7 +3647,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   object ResolveWindowOrder extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
       _.containsPattern(WINDOW_EXPRESSION), ruleId) {
-      case we => WindowResolution.resolveOrder(we)
+      case we: WindowExpression => WindowResolution.resolveOrder(we)
     }
   }
 

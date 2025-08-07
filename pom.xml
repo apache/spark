@@ -140,7 +140,7 @@
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.15.2</parquet.version>
-    <orc.version>2.1.3</orc.version>
+    <orc.version>2.2.0</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.25</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
@@ -182,14 +182,14 @@
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
-    <fasterxml.jackson.version>2.19.0</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.19.0</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.19.2</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.19.2</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
-    <snappy.version>1.1.10.7</snappy.version>
+    <snappy.version>1.1.10.8</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.18.0</commons-codec.version>
     <commons-compress.version>1.27.1</commons-compress.version>
-    <commons-io.version>2.19.0</commons-io.version>
+    <commons-io.version>2.20.0</commons-io.version>
     <!-- To support Hive UDF jars built by Hive 2.0.0 ~ 2.3.9 and 3.0.0 ~ 3.1.3. -->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
@@ -202,7 +202,6 @@
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.0.17</jersey.version>
     <joda.version>2.13.0</joda.version>
-    <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <jaxb.version>2.2.11</jaxb.version>
     <libthrift.version>0.16.0</libthrift.version>
@@ -212,11 +211,11 @@
     <htmlunit3-driver.version>4.21.0</htmlunit3-driver.version>
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
-    <commons-cli.version>1.9.0</commons-cli.version>
+    <commons-cli.version>1.10.0</commons-cli.version>
     <bouncycastle.version>1.80</bouncycastle.version>
     <tink.version>1.16.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.1.122.Final</netty.version>
+    <netty.version>4.1.123.Final</netty.version>
     <netty-tcnative.version>2.0.72.Final</netty-tcnative.version>
     <icu4j.version>77.1</icu4j.version>
     <junit-jupiter.version>5.13.1</junit-jupiter.version>
@@ -232,7 +231,7 @@
     ./python/packaging/client/setup.py, and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>18.3.0</arrow.version>
-    <ammonite.version>3.0.1</ammonite.version>
+    <ammonite.version>3.0.2</ammonite.version>
     <jjwt.version>0.12.6</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
@@ -517,12 +516,12 @@
       </dependency>
       <!--
         SPARK-51806: Kryo 4.0.x depends on objenesis 2.5.1, while Spark currently
-        depends on objenesis 3.3. Here, it is uniformly defined as version 3.3.
+        depends on objenesis 3.4. Here, it is uniformly defined as version 3.4.
         -->
       <dependency>
         <groupId>org.objenesis</groupId>
         <artifactId>objenesis</artifactId>
-        <version>3.3</version>
+        <version>3.4</version>
       </dependency>
       <dependency>
         <groupId>com.github.jnr</groupId>
@@ -763,7 +762,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>10.2.1</version>
+        <version>9.8.4</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -1151,6 +1150,10 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-math3</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.scala-lang.modules</groupId>
+            <artifactId>scala-collection-compat_${scala.binary.version}</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1239,13 +1242,13 @@
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy</artifactId>
-        <version>1.17.0</version>
+        <version>1.17.6</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy-agent</artifactId>
-        <version>1.17.0</version>
+        <version>1.17.6</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2450,11 +2453,6 @@
         <version>${joda.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.jodd</groupId>
-        <artifactId>jodd-core</artifactId>
-        <version>${jodd.version}</version>
-      </dependency>
-      <dependency>
         <groupId>org.datanucleus</groupId>
         <artifactId>datanucleus-core</artifactId>
         <version>${datanucleus-core.version}</version>
@@ -2630,8 +2628,7 @@
                     <version>${maven.version}</version>
                   </requireMavenVersion>
                   <requireJavaVersion>
-                    <version>[${java.minimum.version},)</version>
-                    <message>The Java version used to build the project is outdated. Please use ${java.minimum.version} or later.</message>
+                    <version>${java.version}</version>
                   </requireJavaVersion>
                   <bannedDependencies>
                     <excludes>

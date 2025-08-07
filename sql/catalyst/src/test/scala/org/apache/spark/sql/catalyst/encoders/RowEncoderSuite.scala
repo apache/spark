@@ -199,8 +199,8 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
 
   test("SPARK-23179: RowEncoder should respect nullOnOverflow for decimals") {
     val schema = new StructType().add("decimal", DecimalType.SYSTEM_DEFAULT)
-    testDecimalOverflow(schema, Row(BigDecimal("9" * 100)))
-    testDecimalOverflow(schema, Row(new java.math.BigDecimal("9" * 100)))
+    testDecimalOverflow(schema, Row(BigDecimal("9".repeat(100))))
+    testDecimalOverflow(schema, Row(new java.math.BigDecimal("9".repeat(100))))
   }
 
   private def testDecimalOverflow(schema: StructType, row: Row): Unit = {

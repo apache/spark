@@ -22,10 +22,15 @@ Upgrading PySpark
 Upgrading from PySpark 4.0 to 4.1
 ---------------------------------
 
+* In Spark 4.1, Python 3.9 support was dropped in PySpark.
+* In Spark 4.1, the minimum supported version for PyArrow has been raised from 11.0.0 to 15.0.0 in PySpark.
+* In Spark 4.1, the minimum supported version for Pandas has been raised from 2.0.0 to 2.2.0 in PySpark.
+* In Spark 4.1, ``DataFrame['name']`` on Spark Connect Python Client no longer eagerly validate the column name. To restore the legacy behavior, set ``PYSPARK_VALIDATE_COLUMN_NAME_LEGACY`` environment variable to ``1``.
 * In Spark 4.1, Arrow-optimized Python UDF supports UDT input / output instead of falling back to the regular UDF. To restore the legacy behavior, set ``spark.sql.execution.pythonUDF.arrow.legacy.fallbackOnUDT`` to ``true``.
-
+* In Spark 4.1, unnecessary conversion to pandas instances is removed when ``spark.sql.execution.pythonUDF.arrow.enabled`` is enabled. As a result, the type coercion changes when the produced output has a schema different from the specified schema. To restore the previous behavior, enable ``spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled``.
 * In Spark 4.1, unnecessary conversion to pandas instances is removed when ``spark.sql.execution.pythonUDTF.arrow.enabled`` is enabled. As a result, the type coercion changes when the produced output has a schema different from the specified schema. To restore the previous behavior, enable ``spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled``.
 
+* In Spark 4.1, the ``spark.sql.execution.pandas.convertToArrowArraySafely`` configuration is enabled by default. When this setting is enabled, PyArrow raises errors for unsafe conversions such as integer overflows, floating point truncation, and loss of precision. This change affects the return data serialization of arrow-enabled UDFs/pandas_udfs, and the creation of PySpark DataFrames. To restore the previous behavior, set the configuration to ``false``.
 
 Upgrading from PySpark 3.5 to 4.0
 ---------------------------------

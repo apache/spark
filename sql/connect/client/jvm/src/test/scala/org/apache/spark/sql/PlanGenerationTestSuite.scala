@@ -2369,6 +2369,14 @@ class PlanGenerationTestSuite
     fn.to_date(fn.col("s"), "yyyy-MM-dd")
   }
 
+  temporalFunctionTest("try_to_date") {
+    fn.try_to_date(fn.col("s"))
+  }
+
+  temporalFunctionTest("try_to_date with format") {
+    fn.try_to_date(fn.col("s"), "yyyy-MM-dd")
+  }
+
   temporalFunctionTest("xpath") {
     fn.xpath(fn.col("s"), lit("a/b/text()"))
   }

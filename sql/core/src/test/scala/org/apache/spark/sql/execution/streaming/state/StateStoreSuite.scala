@@ -28,7 +28,6 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.json4s.DefaultFormats
@@ -590,31 +589,35 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
       minDeltasForSnapshot = 5)) { provider =>
       val store = provider.getStore(0)
-      val keyRow = dataToKeyRow("a", 0)
-      val valueRow = dataToValueRow(1)
-      val colFamilyName = "test"
-      verifyStoreOperationUnsupported("put") {
-        store.put(keyRow, valueRow, colFamilyName)
-      }
+      try {
+        val keyRow = dataToKeyRow("a", 0)
+        val valueRow = dataToValueRow(1)
+        val colFamilyName = "test"
+        verifyStoreOperationUnsupported("put") {
+          store.put(keyRow, valueRow, colFamilyName)
+        }
 
-      verifyStoreOperationUnsupported("remove") {
-        store.remove(keyRow, colFamilyName)
-      }
+        verifyStoreOperationUnsupported("remove") {
+          store.remove(keyRow, colFamilyName)
+        }
 
-      verifyStoreOperationUnsupported("get") {
-        store.get(keyRow, colFamilyName)
-      }
+        verifyStoreOperationUnsupported("get") {
+          store.get(keyRow, colFamilyName)
+        }
 
-      verifyStoreOperationUnsupported("merge") {
-        store.merge(keyRow, valueRow, colFamilyName)
-      }
+        verifyStoreOperationUnsupported("merge") {
+          store.merge(keyRow, valueRow, colFamilyName)
+        }
 
-      verifyStoreOperationUnsupported("iterator") {
-        store.iterator(colFamilyName)
-      }
+        verifyStoreOperationUnsupported("iterator") {
+          store.iterator(colFamilyName)
+        }
 
-      verifyStoreOperationUnsupported("prefixScan") {
-        store.prefixScan(keyRow, colFamilyName)
+        verifyStoreOperationUnsupported("prefixScan") {
+          store.prefixScan(keyRow, colFamilyName)
+        }
+      } finally {
+        if (!store.hasCommitted) store.abort()
       }
     }
   }
@@ -733,8 +736,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       provider.getStore(0).commit()
 
       // Verify we don't leak temp files
-      val tempFiles = FileUtils.listFiles(new File(provider.stateStoreId.checkpointRootLocation),
-        null, true).asScala.filter(_.getName.startsWith("temp-"))
+      val tempFiles = Utils.listFiles(new File(provider.stateStoreId.checkpointRootLocation))
+        .asScala.filter(_.getName.startsWith("temp-"))
       assert(tempFiles.isEmpty)
     }
   }
@@ -1457,7 +1460,12 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       if (version < 0) {
         reloadedProvider.latestIterator().map(rowPairToDataPair).toSet
       } else {
-        reloadedProvider.getStore(version).iterator().map(rowPairToDataPair).toSet
+        val store = reloadedProvider.getStore(version)
+        try {
+          store.iterator().map(rowPairToDataPair).toSet
+        } finally {
+          if (!store.hasCommitted) store.abort()
+        }
       }
     }
   }
@@ -1562,7 +1570,6 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       assert(!store.hasCommitted)
       assert(get(store, "a", 0) === None)
       assert(store.iterator().isEmpty)
-      assert(store.metrics.numKeys === 0)
 
       // Verify state after updating
       put(store, "a", 0, 1)
@@ -1578,9 +1585,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       assert(store.commit() === 1)
 
       assert(store.hasCommitted)
-      assert(rowPairsToDataSet(store.iterator()) === Set(("b", 0) -> 2))
-      assert(getLatestData(provider,
-        useColumnFamilies = colFamiliesEnabled) === Set(("b", 0) -> 2))
+      val store1 = provider.getStore(1)
+      assert(rowPairsToDataSet(store1.iterator()) === Set(("b", 0) -> 2))
+      store1.abort()
 
       // Trying to get newer versions should fail
       var e = intercept[SparkException] {
@@ -1598,11 +1605,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
         val reloadedStore = reloadedProvider.getStore(1)
         put(reloadedStore, "c", 0, 4)
         assert(reloadedStore.commit() === 2)
-        assert(rowPairsToDataSet(reloadedStore.iterator()) === Set(("b", 0) -> 2, ("c", 0) -> 4))
-        assert(getLatestData(provider, useColumnFamilies = colFamiliesEnabled)
-          === Set(("b", 0) -> 2, ("c", 0) -> 4))
-        assert(getData(provider, version = 1, useColumnFamilies = colFamiliesEnabled)
-          === Set(("b", 0) -> 2))
+        val reloadedStore1 = reloadedProvider.getStore(2)
+        assert(rowPairsToDataSet(reloadedStore1.iterator()) === Set(("b", 0) -> 2, ("c", 0) -> 4))
+        reloadedStore1.commit()
       }
     }
   }
@@ -1664,6 +1669,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       // prefix scan should not reflect the uncommitted changes
       verifyScan(key1AtVersion0, key2AtVersion0)
       verifyScan(Seq("d"), Seq.empty)
+      store.abort()
     }
   }
 
@@ -1680,16 +1686,19 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       put(store, "e", 0, 5)
       assert(store.commit() === 1)
       assert(store.metrics.numKeys === 5)
-      assert(rowPairsToDataSet(store.iterator()) ===
+      val store1 = provider.getStore(1)
+      assert(rowPairsToDataSet(store1.iterator()) ===
         Set(("a", 0) -> 1, ("b", 0) -> 2, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
+      store1.abort()
 
-      val reloadedProvider = newStoreProvider(store.id, colFamiliesEnabled)
-      val reloadedStore = reloadedProvider.getStore(1)
-      remove(reloadedStore, _._1 == "b")
-      assert(reloadedStore.commit() === 2)
-      assert(reloadedStore.metrics.numKeys === 4)
-      assert(rowPairsToDataSet(reloadedStore.iterator()) ===
-        Set(("a", 0) -> 1, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
+      tryWithProviderResource(newStoreProvider(store.id, colFamiliesEnabled)) { reloadedProvider =>
+        val reloadedStore = reloadedProvider.getStore(1)
+        remove(reloadedStore, _._1 == "b")
+        assert(rowPairsToDataSet(reloadedStore.iterator()) ===
+          Set(("a", 0) -> 1, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
+        assert(reloadedStore.commit() === 2)
+        assert(reloadedStore.metrics.numKeys === 4)
+      }
     }
   }
 
@@ -1698,20 +1707,24 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       // Verify state before starting a new set of updates
       assert(getLatestData(provider, useColumnFamilies = colFamiliesEnabled).isEmpty)
       val store = provider.getStore(0)
-      put(store, "a", 0, 1)
-      put(store, "b", 0, 2)
+      try {
+        put(store, "a", 0, 1)
+        put(store, "b", 0, 2)
 
-      // Updates should work while iterating of filtered entries
-      val filtered = store.iterator().filter { tuple => keyRowToData(tuple.key) == ("a", 0) }
-      filtered.foreach { tuple =>
-        store.put(tuple.key, dataToValueRow(valueRowToData(tuple.value) + 1))
+        // Updates should work while iterating of filtered entries
+        val filtered = store.iterator().filter { tuple => keyRowToData(tuple.key) == ("a", 0) }
+        filtered.foreach { tuple =>
+          store.put(tuple.key, dataToValueRow(valueRowToData(tuple.value) + 1))
+        }
+        assert(get(store, "a", 0) === Some(2))
+
+        // Removes should work while iterating of filtered entries
+        val filtered2 = store.iterator().filter { tuple => keyRowToData(tuple.key) == ("b", 0) }
+        filtered2.foreach { tuple => store.remove(tuple.key) }
+        assert(get(store, "b", 0) === None)
+      } finally {
+        if (!store.hasCommitted) store.abort()
       }
-      assert(get(store, "a", 0) === Some(2))
-
-      // Removes should work while iterating of filtered entries
-      val filtered2 = store.iterator().filter { tuple => keyRowToData(tuple.key) == ("b", 0) }
-      filtered2.foreach { tuple => store.remove(tuple.key) }
-      assert(get(store, "b", 0) === None)
     }
   }
 
@@ -1719,8 +1732,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
       put(store, "a", 0, 1)
-      store.commit()
       assert(rowPairsToDataSet(store.iterator()) === Set(("a", 0) -> 1))
+      store.commit()
 
       // cancelUpdates should not change the data in the files
       val store1 = provider.getStore(1)
@@ -1765,11 +1778,12 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
       val store = provider.getStore(0)
       put(store, "a", 0, 1)
-      assert(store.commit() === 1)
       assert(rowPairsToDataSet(store.iterator()) === Set(("a", 0) -> 1))
+      assert(store.commit() === 1)
 
       val store1_ = provider.getStore(1)
       assert(rowPairsToDataSet(store1_.iterator()) === Set(("a", 0) -> 1))
+      store1_.abort()
 
       checkInvalidVersion(-1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
       checkInvalidVersion(2, provider.isInstanceOf[HDFSBackedStateStoreProvider])
@@ -1778,8 +1792,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       val store1 = provider.getStore(1)
       assert(rowPairsToDataSet(store1.iterator()) === Set(("a", 0) -> 1))
       put(store1, "b", 0, 1)
-      assert(store1.commit() === 2)
       assert(rowPairsToDataSet(store1.iterator()) === Set(("a", 0) -> 1, ("b", 0) -> 1))
+      assert(store1.commit() === 2)
 
       checkInvalidVersion(-1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
       checkInvalidVersion(3, provider.isInstanceOf[HDFSBackedStateStoreProvider])
@@ -1804,13 +1818,15 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
       put(store, key1, key2, 1)
       store.commit()
-      assert(rowPairsToDataSet(store.iterator()) === Set((key1, key2) -> 1))
+      val store1 = provider0.getStore(1)
+      assert(rowPairsToDataSet(store1.iterator()) === Set((key1, key2) -> 1))
+      store1.abort()
     }
 
     // two state stores
     tryWithProviderResource(newStoreProvider(storeId, colFamiliesEnabled)) { provider1 =>
       val restoreStore = provider1.getReadStore(1)
-      val saveStore = provider1.getStore(1)
+      val saveStore = provider1.upgradeReadStoreToWriteStore(restoreStore, 1)
 
       put(saveStore, key1, key2, get(restoreStore, key1, key2).get + 1)
       saveStore.commit()
@@ -1820,6 +1836,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     tryWithProviderResource(newStoreProvider(storeId, colFamiliesEnabled)) { provider2 =>
       val finalStore = provider2.getStore(2)
       assert(rowPairsToDataSet(finalStore.iterator()) === Set((key1, key2) -> 2))
+      finalStore.abort()
     }
   }
 
@@ -1834,19 +1851,25 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     val storeId = StateStoreId(dir, operatorId = 0, partitionId = 0)
     tryWithProviderResource(newStoreProvider(storeId, conf)) { provider =>
       val store = provider.getStore(0)
-      put(store, "a", 0, 0)
-      val e = intercept[SparkException](quietly { store.commit() } )
+      try {
+        put(store, "a", 0, 0)
+        val e = intercept[SparkException](quietly {
+          store.commit()
+        })
 
-      assert(e.getCondition == "CANNOT_WRITE_STATE_STORE.CANNOT_COMMIT")
-      if (store.getClass.getName contains ROCKSDB_STATE_STORE) {
-        assert(e.getMessage contains "RocksDBStateStore")
-      } else {
-        assert(e.getMessage contains "HDFSStateStore")
+        assert(e.getCondition == "CANNOT_WRITE_STATE_STORE.CANNOT_COMMIT")
+        if (store.getClass.getName contains ROCKSDB_STATE_STORE) {
+          assert(e.getMessage contains "RocksDBStateStore")
+        } else {
+          assert(e.getMessage contains "HDFSStateStore")
+        }
+        assert(e.getMessage contains "operatorId=0")
+        assert(e.getMessage contains "partitionId=0")
+        assert(e.getMessage contains "Error writing state store files")
+        assert(e.getCause.getMessage.contains("Failed to rename"))
+      } finally {
+        if (!store.hasCommitted) store.abort()
       }
-      assert(e.getMessage contains "operatorId=0")
-      assert(e.getMessage contains "partitionId=0")
-      assert(e.getMessage contains "Error writing state store files")
-      assert(e.getCause.getMessage.contains("Failed to rename"))
     }
   }
 
@@ -2121,10 +2144,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     tryWithProviderResource(newStoreProvider(minDeltasForSnapshot = 1,
       numOfVersToRetainInMemory = 1)) { provider =>
       val store = provider.getStore(0)
-      val noDataMemoryUsed = store.metrics.memoryUsedBytes
       put(store, "a", 0, 1)
       store.commit()
-      assert(store.metrics.memoryUsedBytes > noDataMemoryUsed)
+      assert(store.metrics.memoryUsedBytes > 0)
     }
   }
 
@@ -2150,16 +2172,60 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     assert(combinedMetrics.customMetrics(customTimingMetric) == 400L)
   }
 
+  test("StateStoreIterator onClose method is called only when close() is called") {
+    // Test that the iterator functions as normal without closing
+    {
+      var closed = false
+
+      val iterator = new StateStoreIterator(Iterator(1, 2, 3, 4), () => {
+        closed = true
+      })
+
+      // next() should work as expected
+      for (i <- 1 to 4) {
+        assert(iterator.next() == i)
+      }
+
+      // close() is never called, so closed should remain false
+      assert(!closed)
+    }
+    // Test that the onClose method is called when close() is called
+    {
+      var closed = false
+
+      val iterator = new StateStoreIterator(Iterator(1, 2, 3, 4), () => {
+        closed = true
+      })
+
+      // next() should work as expected
+      assert(iterator.next() == 1)
+      assert(iterator.next() == 2)
+
+      // close() should call the onClose function which sets closed to true
+      assert(!closed)
+      iterator.close()
+      assert(closed)
+
+      // Calling close() again should not cause any issue
+      iterator.close()
+      assert(closed)
+    }
+  }
+
   test("SPARK-35659: StateStore.put cannot put null value") {
     tryWithProviderResource(newStoreProvider()) { provider =>
       // Verify state before starting a new set of updates
       assert(getLatestData(provider, useColumnFamilies = false).isEmpty)
 
       val store = provider.getStore(0)
-      val err = intercept[IllegalArgumentException] {
-        store.put(dataToKeyRow("key", 0), null)
+      try {
+        val err = intercept[IllegalArgumentException] {
+          store.put(dataToKeyRow("key", 0), null)
+        }
+        assert(err.getMessage.contains("Cannot put a null value"))
+      } finally {
+        if (!store.hasCommitted) store.abort()
       }
-      assert(err.getMessage.contains("Cannot put a null value"))
     }
   }
 

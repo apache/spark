@@ -32,6 +32,7 @@ from typing import Any, Generator, List, Mapping, Optional, Sequence
 
 from pyspark.errors import PySparkException, PySparkTypeError
 from pyspark.sql import SparkSession
+from pyspark.pipelines.block_session_mutations import block_session_mutations
 from pyspark.pipelines.graph_element_registry import (
     graph_element_registration_context,
     GraphElementRegistry,
@@ -192,7 +193,8 @@ def register_definitions(
                         assert (
                             module_spec.loader is not None
                         ), f"Module spec has no loader for {file}"
-                        module_spec.loader.exec_module(module)
+                        with block_session_mutations():
+                            module_spec.loader.exec_module(module)
                     elif file.suffix == ".sql":
                         log_with_curr_timestamp(f"Registering SQL file {file}...")
                         with file.open("r") as f:

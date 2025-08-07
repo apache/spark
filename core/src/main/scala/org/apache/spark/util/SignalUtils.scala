@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 import org.slf4j.Logger
 import sun.misc.{Signal, SignalHandler}
 
-import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 
 /**

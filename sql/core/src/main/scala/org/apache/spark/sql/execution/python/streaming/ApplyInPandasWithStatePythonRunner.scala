@@ -28,7 +28,6 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.api.python._
 import org.apache.spark.internal.LogKeys.CONFIG
-import org.apache.spark.internal.MDC
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.InternalRow

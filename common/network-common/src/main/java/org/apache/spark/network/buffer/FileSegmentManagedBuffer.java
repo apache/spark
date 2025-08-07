@@ -29,8 +29,6 @@ import java.nio.file.StandardOpenOption;
 import com.google.common.io.ByteStreams;
 import io.netty.channel.DefaultFileRegion;
 import io.netty.handler.stream.ChunkedStream;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.LimitedInputStream;
@@ -152,10 +150,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("file", file)
-      .append("offset", offset)
-      .append("length", length)
-      .toString();
+    return "FileSegmentManagedBuffer[file=" + file + ",offset=" + offset +
+        ",length=" + length + "]";
   }
 }

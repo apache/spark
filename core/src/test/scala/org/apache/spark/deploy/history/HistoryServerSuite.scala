@@ -19,15 +19,15 @@ package org.apache.spark.deploy.history
 import java.io.{File, FileInputStream, FileWriter, InputStream, IOException}
 import java.net.{HttpURLConnection, URI, URL}
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.zip.ZipInputStream
 
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.{ByteStreams, Files}
+import com.google.common.io.ByteStreams
 import jakarta.servlet._
 import jakarta.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
-import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods
@@ -219,7 +219,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
   )
 
   if (regenerateGoldenFiles) {
-    FileUtils.deleteDirectory(expRoot)
+    Utils.deleteRecursively(expRoot)
     Utils.createDirectory(expRoot)
   }
 
@@ -246,7 +246,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
         }
       }
 
-      val exp = IOUtils.toString(new FileInputStream(goldenFile), StandardCharsets.UTF_8)
+      val exp = Utils.toString(new FileInputStream(goldenFile))
       // compare the ASTs so formatting differences don't cause failures
       val expAst = parse(exp)
       assertValidDataInJson(jsonAst, expAst)
@@ -309,7 +309,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
         val expectedFile = {
           new File(logDir, entry.getName)
         }
-        val expected = Files.asCharSource(expectedFile, StandardCharsets.UTF_8).read()
+        val expected = Files.readString(expectedFile.toPath)
         val actual = new String(ByteStreams.toByteArray(zipStream), StandardCharsets.UTF_8)
         actual should be (expected)
         filesCompared += 1
@@ -750,7 +750,7 @@ object HistoryServerSuite {
 
   def getContentAndCode(url: URL): (Int, Option[String], Option[String]) = {
     val (code, in, errString) = connectAndGetInputStream(url)
-    val inString = in.map(IOUtils.toString(_, StandardCharsets.UTF_8))
+    val inString = in.map(Utils.toString)
     (code, inString, errString)
   }
 
@@ -766,7 +766,7 @@ object HistoryServerSuite {
     }
     val errString = try {
       val err = Option(connection.getErrorStream())
-      err.map(IOUtils.toString(_, StandardCharsets.UTF_8))
+      err.map(Utils.toString)
     } catch {
       case io: IOException => None
     }

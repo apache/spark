@@ -20,8 +20,6 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.classic.SparkSession
@@ -56,7 +54,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
     assume(artifactPath.resolve("smallClassFile.class").toFile.exists)
 
     val copyDir = Utils.createTempDir().toPath
-    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+    Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
     val stagingPath = copyDir.resolve("smallClassFile.class")
     assert(stagingPath.toFile.exists())
     val remotePath = Paths.get("classes/smallClassFile.class")
@@ -72,7 +70,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
     assume(artifactPath.resolve("Hello.class").toFile.exists)
 
     val copyDir = Utils.createTempDir().toPath
-    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+    Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
     val stagingPath = copyDir.resolve("Hello.class")
     assert(stagingPath.toFile.exists())
     val remotePath = Paths.get("classes/Hello.class")
@@ -98,7 +96,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
     assume(artifactPath.resolve("Hello.class").toFile.exists)
 
     val copyDir = Utils.createTempDir().toPath
-    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+    Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
     val stagingPath = copyDir.resolve("Hello.class")
     assert(stagingPath.toFile.exists())
     val remotePath = Paths.get("classes/Hello.class")
@@ -180,7 +178,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
 
     val copyDir = Utils.createTempDir().toPath
     val destFSDir = Utils.createTempDir().toPath
-    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+    Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
     val stagingPath = copyDir.resolve("smallClassFile.class")
     val remotePath = Paths.get("forward_to_fs", destFSDir.toString, "smallClassFileCopied.class")
     assert(stagingPath.toFile.exists())
@@ -203,7 +201,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
       val blockId = CacheId(spark.sessionUUID, "abc")
       // Setup artifact dir
       val copyDir = Utils.createTempDir().toPath
-      FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+      Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
       try {
         artifactManager.addArtifact(remotePath, stagingPath, None)
         val stagingPathFile = copyDir.resolve("smallClassFile.class")
@@ -230,7 +228,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
           case _: SparkException =>
           case throwable: Throwable => throw throwable
         } finally {
-          FileUtils.deleteDirectory(copyDir.toFile)
+          Utils.deleteRecursively(copyDir.toFile)
           blockManager.removeCache(spark.sessionUUID)
         }
       }
@@ -246,7 +244,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
 
     def addHelloClass(session: SparkSession): Unit = {
       val copyDir = Utils.createTempDir().toPath
-      FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+      Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
       val stagingPath = copyDir.resolve("Hello.class")
       val remotePath = Paths.get("classes/Hello.class")
       assert(stagingPath.toFile.exists())
@@ -299,7 +297,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
     assume(artifactPath.resolve("Hello.class").toFile.exists)
 
     val copyDir = Utils.createTempDir().toPath
-    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+    Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
     val stagingPath = copyDir.resolve("Hello.class")
     val remotePath = Paths.get("classes/Hello.class")
 
@@ -368,7 +366,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
     val copyDir = Utils.createTempDir().toPath
     assume(artifactPath.resolve(classFileToUse).toFile.exists)
 
-    FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+    Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
     val classPath = copyDir.resolve(classFileToUse)
     assert(classPath.toFile.exists())
 
@@ -407,7 +405,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
     withTempPath { dir =>
       val path = dir.toPath
       // Setup artifact dir
-      FileUtils.copyDirectory(artifactPath.toFile, dir)
+      Utils.copyDirectory(artifactPath.toFile, dir)
       val randomFilePath = path.resolve("random_file")
       val testBytes = "test".getBytes(StandardCharsets.UTF_8)
       Files.write(randomFilePath, testBytes)
@@ -425,7 +423,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
         jarPath, path.resolve("udf_noA.jar"), None)
       artifactManager.addArtifact( // Cached
         Paths.get("cache/test"), randomFilePath, None)
-      assert(FileUtils.listFiles(artifactManager.artifactPath.toFile, null, true).size() === 3)
+      assert(Utils.listPaths(artifactManager.artifactPath.toFile).size() === 3)
 
       // Clone the artifact manager
       val newSession = spark.cloneSession()
@@ -444,7 +442,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
         }
       }
 
-      val allFiles = FileUtils.listFiles(newArtifactManager.artifactPath.toFile, null, true)
+      val allFiles = Utils.listFiles(newArtifactManager.artifactPath.toFile)
       assert(allFiles.size() === 3)
       allFiles.forEach { file =>
         assert(!file.getCanonicalPath.contains(spark.sessionUUID))

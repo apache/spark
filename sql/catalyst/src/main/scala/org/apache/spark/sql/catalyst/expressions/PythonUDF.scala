@@ -46,7 +46,8 @@ object PythonUDF {
   }
 
   def isWindowPandasUDF(e: PythonFuncExpression): Boolean = {
-    // This is currently only `PythonUDAF` (which means SQL_GROUPED_AGG_PANDAS_UDF), but we might
+    // This is currently only `PythonUDAF` (which means SQL_GROUPED_AGG_PANDAS_UDF or
+    // SQL_GROUPED_AGG_ARROW_UDF), but we might
     // support new types in the future, e.g, N -> N transform.
     e.isInstanceOf[PythonUDAF]
   }

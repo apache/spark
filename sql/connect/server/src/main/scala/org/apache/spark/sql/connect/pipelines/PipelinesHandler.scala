@@ -28,7 +28,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.pipelines.Language.Python
@@ -68,7 +67,7 @@ private[connect] object PipelinesHandler extends Logging {
     cmd.getCommandTypeCase match {
       case proto.PipelineCommand.CommandTypeCase.CREATE_DATAFLOW_GRAPH =>
         val createdGraphId =
-          createDataflowGraph(cmd.getCreateDataflowGraph, sessionHolder.session)
+          createDataflowGraph(cmd.getCreateDataflowGraph, sessionHolder)
         PipelineCommandResult
           .newBuilder()
           .setCreateDataflowGraphResult(
@@ -78,15 +77,16 @@ private[connect] object PipelinesHandler extends Logging {
           .build()
       case proto.PipelineCommand.CommandTypeCase.DROP_DATAFLOW_GRAPH =>
         logInfo(s"Drop pipeline cmd received: $cmd")
-        DataflowGraphRegistry.dropDataflowGraph(cmd.getDropDataflowGraph.getDataflowGraphId)
+        sessionHolder.dataflowGraphRegistry
+          .dropDataflowGraph(cmd.getDropDataflowGraph.getDataflowGraphId)
         defaultResponse
       case proto.PipelineCommand.CommandTypeCase.DEFINE_DATASET =>
         logInfo(s"Define pipelines dataset cmd received: $cmd")
-        defineDataset(cmd.getDefineDataset, sessionHolder.session)
+        defineDataset(cmd.getDefineDataset, sessionHolder)
         defaultResponse
       case proto.PipelineCommand.CommandTypeCase.DEFINE_FLOW =>
         logInfo(s"Define pipelines flow cmd received: $cmd")
-        defineFlow(cmd.getDefineFlow, transformRelationFunc, sessionHolder.session)
+        defineFlow(cmd.getDefineFlow, transformRelationFunc, sessionHolder)
         defaultResponse
       case proto.PipelineCommand.CommandTypeCase.START_RUN =>
         logInfo(s"Start pipeline cmd received: $cmd")
@@ -94,7 +94,7 @@ private[connect] object PipelinesHandler extends Logging {
         defaultResponse
       case proto.PipelineCommand.CommandTypeCase.DEFINE_SQL_GRAPH_ELEMENTS =>
         logInfo(s"Register sql datasets cmd received: $cmd")
-        defineSqlGraphElements(cmd.getDefineSqlGraphElements, sessionHolder.session)
+        defineSqlGraphElements(cmd.getDefineSqlGraphElements, sessionHolder)
         defaultResponse
       case other => throw new UnsupportedOperationException(s"$other not supported")
     }
@@ -102,24 +102,24 @@ private[connect] object PipelinesHandler extends Logging {
 
   private def createDataflowGraph(
       cmd: proto.PipelineCommand.CreateDataflowGraph,
-      spark: SparkSession): String = {
+      sessionHolder: SessionHolder): String = {
     val defaultCatalog = Option
       .when(cmd.hasDefaultCatalog)(cmd.getDefaultCatalog)
       .getOrElse {
         logInfo(s"No default catalog was supplied. Falling back to the current catalog.")
-        spark.catalog.currentCatalog()
+        sessionHolder.session.catalog.currentCatalog()
       }
 
     val defaultDatabase = Option
       .when(cmd.hasDefaultDatabase)(cmd.getDefaultDatabase)
       .getOrElse {
         logInfo(s"No default database was supplied. Falling back to the current database.")
-        spark.catalog.currentDatabase
+        sessionHolder.session.catalog.currentDatabase
       }
 
     val defaultSqlConf = cmd.getSqlConfMap.asScala.toMap
 
-    DataflowGraphRegistry.createDataflowGraph(
+    sessionHolder.dataflowGraphRegistry.createDataflowGraph(
       defaultCatalog = defaultCatalog,
       defaultDatabase = defaultDatabase,
       defaultSqlConf = defaultSqlConf)
@@ -127,24 +127,31 @@ private[connect] object PipelinesHandler extends Logging {
 
   private def defineSqlGraphElements(
       cmd: proto.PipelineCommand.DefineSqlGraphElements,
-      session: SparkSession): Unit = {
+      sessionHolder: SessionHolder): Unit = {
     val dataflowGraphId = cmd.getDataflowGraphId
 
-    val graphElementRegistry = DataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
+    val graphElementRegistry =
+      sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
     val sqlGraphElementRegistrationContext = new SqlGraphRegistrationContext(graphElementRegistry)
-    sqlGraphElementRegistrationContext.processSqlFile(cmd.getSqlText, cmd.getSqlFilePath, session)
+    sqlGraphElementRegistrationContext.processSqlFile(
+      cmd.getSqlText,
+      cmd.getSqlFilePath,
+      sessionHolder.session)
   }
 
   private def defineDataset(
       dataset: proto.PipelineCommand.DefineDataset,
-      sparkSession: SparkSession): Unit = {
+      sessionHolder: SessionHolder): Unit = {
     val dataflowGraphId = dataset.getDataflowGraphId
-    val graphElementRegistry = DataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
+    val graphElementRegistry =
+      sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
 
     dataset.getDatasetType match {
       case proto.DatasetType.MATERIALIZED_VIEW | proto.DatasetType.TABLE =>
         val tableIdentifier =
-          GraphIdentifierManager.parseTableIdentifier(dataset.getDatasetName, sparkSession)
+          GraphIdentifierManager.parseTableIdentifier(
+            dataset.getDatasetName,
+            sessionHolder.session)
         graphElementRegistry.registerTable(
           Table(
             identifier = tableIdentifier,
@@ -165,7 +172,9 @@ private[connect] object PipelinesHandler extends Logging {
             isStreamingTable = dataset.getDatasetType == proto.DatasetType.TABLE))
       case proto.DatasetType.TEMPORARY_VIEW =>
         val viewIdentifier =
-          GraphIdentifierManager.parseTableIdentifier(dataset.getDatasetName, sparkSession)
+          GraphIdentifierManager.parseTableIdentifier(
+            dataset.getDatasetName,
+            sessionHolder.session)
 
         graphElementRegistry.registerView(
           TemporaryView(
@@ -184,14 +193,15 @@ private[connect] object PipelinesHandler extends Logging {
   private def defineFlow(
       flow: proto.PipelineCommand.DefineFlow,
       transformRelationFunc: Relation => LogicalPlan,
-      sparkSession: SparkSession): Unit = {
+      sessionHolder: SessionHolder): Unit = {
     val dataflowGraphId = flow.getDataflowGraphId
-    val graphElementRegistry = DataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
+    val graphElementRegistry =
+      sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
 
     val isImplicitFlow = flow.getFlowName == flow.getTargetDatasetName
 
     val flowIdentifier = GraphIdentifierManager
-      .parseTableIdentifier(name = flow.getFlowName, spark = sparkSession)
+      .parseTableIdentifier(name = flow.getFlowName, spark = sessionHolder.session)
 
     // If the flow is not an implicit flow (i.e. one defined as part of dataset creation), then
     // it must be a single-part identifier.
@@ -205,11 +215,11 @@ private[connect] object PipelinesHandler extends Logging {
       new UnresolvedFlow(
         identifier = flowIdentifier,
         destinationIdentifier = GraphIdentifierManager
-          .parseTableIdentifier(name = flow.getTargetDatasetName, spark = sparkSession),
+          .parseTableIdentifier(name = flow.getTargetDatasetName, spark = sessionHolder.session),
         func =
           FlowAnalysis.createFlowFunctionFromLogicalPlan(transformRelationFunc(flow.getRelation)),
         sqlConf = flow.getSqlConfMap.asScala.toMap,
-        once = flow.getOnce,
+        once = false,
         queryContext = QueryContext(
           Option(graphElementRegistry.defaultCatalog),
           Option(graphElementRegistry.defaultDatabase)),
@@ -224,7 +234,8 @@ private[connect] object PipelinesHandler extends Logging {
       responseObserver: StreamObserver[ExecutePlanResponse],
       sessionHolder: SessionHolder): Unit = {
     val dataflowGraphId = cmd.getDataflowGraphId
-    val graphElementRegistry = DataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
+    val graphElementRegistry =
+      sessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(dataflowGraphId)
     val tableFiltersResult = createTableFilters(cmd, graphElementRegistry, sessionHolder)
 
     // We will use this variable to store the run failure event if it occurs. This will be set

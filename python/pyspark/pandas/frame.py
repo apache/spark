@@ -25,7 +25,7 @@ import warnings
 import inspect
 import json
 import types
-from functools import partial, reduce
+from functools import partial, reduce, wraps
 import sys
 from itertools import zip_longest, chain
 from types import TracebackType
@@ -42,6 +42,7 @@ from typing import (
     Sequence,
     Tuple,
     Type,
+    TypeVar,
     Union,
     cast,
     no_type_check,
@@ -109,6 +110,7 @@ from pyspark.pandas.correlation import (
 from pyspark.pandas.spark.accessors import SparkFrameMethods, CachedSparkFrameMethods
 from pyspark.pandas.utils import (
     align_diff_frames,
+    ansi_mode_context,
     column_labels_level,
     combine_frames,
     default_session,
@@ -167,6 +169,18 @@ REPR_PATTERN = re.compile(r"\n\n\[(?P<rows>[0-9]+) rows x (?P<columns>[0-9]+) co
 REPR_HTML_PATTERN = re.compile(
     r"\n\<p\>(?P<rows>[0-9]+) rows × (?P<columns>[0-9]+) columns\<\/p\>\n\<\/div\>$"
 )
+
+
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
+
+
+def with_ansi_mode_context(f: FuncT) -> FuncT:
+    @wraps(f)
+    def _with_ansi_mode_context(self: "DataFrame", *args: Any, **kwargs: Any) -> Any:
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return f(self, *args, **kwargs)
+
+    return cast(FuncT, _with_ansi_mode_context)
 
 
 _flex_doc_FRAME = """
@@ -740,6 +754,7 @@ class DataFrame(Frame, Generic[T]):
         """
         return [self.index, self.columns]
 
+    @with_ansi_mode_context
     def _reduce_for_stat_function(
         self,
         sfun: Callable[["Series"], PySparkColumn],
@@ -870,6 +885,7 @@ class DataFrame(Frame, Generic[T]):
         """
         return self._pssers[label]
 
+    @with_ansi_mode_context
     def _apply_series_op(
         self,
         op: Callable[["Series"], Union["Series", PySparkColumn]],
@@ -884,6 +900,7 @@ class DataFrame(Frame, Generic[T]):
         return DataFrame(internal)
 
     # Arithmetic Operators
+    @with_ansi_mode_context
     def _map_series_op(self, op: str, other: Any) -> "DataFrame":
         from pyspark.pandas.base import IndexOpsMixin
 
@@ -1507,6 +1524,7 @@ class DataFrame(Frame, Generic[T]):
 
     agg = aggregate
 
+    @with_ansi_mode_context
     def corr(self, method: str = "pearson", min_periods: Optional[int] = None) -> "DataFrame":
         """
         Compute pairwise correlation of columns, excluding NA/null values.
@@ -1726,6 +1744,7 @@ class DataFrame(Frame, Generic[T]):
             )
         )
 
+    @with_ansi_mode_context
     def corrwith(
         self, other: DataFrameOrSeries, axis: Axis = 0, drop: bool = False, method: str = "pearson"
     ) -> "Series":
@@ -8384,6 +8403,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         by_scols = self._prepare_sort_by_scols(columns)
         return self._sort(by=by_scols, ascending=True, na_position="last", keep=keep).head(n=n)
 
+    @with_ansi_mode_context
     def isin(self, values: Union[List, Dict]) -> "DataFrame":
         """
         Whether each element in the DataFrame is contained in values.
@@ -10432,6 +10452,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             raise TypeError("other must be a pandas-on-Spark DataFrame")
 
+    @with_ansi_mode_context
     def melt(
         self,
         id_vars: Optional[Union[Name, List[Name]]] = None,
@@ -10617,12 +10638,30 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             var_name = [var_name]  # type: ignore[list-item]
 
+        value_col_types = [
+            self._internal.spark_column_for(label).expr.dataType for label in value_vars
+        ]
+        # If any value column is of StringType, cast all value columns to StringType to avoid
+        # ANSI mode errors during explode - mixing strings and integers.
+        string_cast_required_type = (
+            StringType() if any(isinstance(t, StringType) for t in value_col_types) else None
+        )
+        use_cast = is_ansi_mode_enabled(self._internal.spark_frame.sparkSession)
+
         pairs = F.explode(
             F.array(
                 *[
                     F.struct(
                         *[F.lit(c).alias(name) for c, name in zip(label, var_name)],
-                        *[self._internal.spark_column_for(label).alias(value_name)],
+                        *[
+                            (
+                                self._internal.spark_column_for(label).cast(
+                                    string_cast_required_type
+                                )
+                                if use_cast and string_cast_required_type is not None
+                                else self._internal.spark_column_for(label)
+                            ).alias(value_name)
+                        ],
                     )
                     for label in column_labels
                     if label in value_vars

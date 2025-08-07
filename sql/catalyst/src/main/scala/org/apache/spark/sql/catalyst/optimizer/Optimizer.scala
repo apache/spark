@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import java.util.HashSet
-
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.{LogKeys, MDC}
+import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -599,7 +597,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
     // If the alias name is different from attribute name, we can't strip it either, or we
     // may accidentally change the output schema name of the root plan.
     case a @ Alias(attr: Attribute, name)
-      if (a.metadata == Metadata.empty || a.metadata == attr.metadata) &&
+      if (a.metadata == attr.metadata) &&
         name == attr.name &&
         !excludeList.contains(attr) &&
         !excludeList.contains(a) =>
@@ -898,24 +896,6 @@ object LimitPushDown extends Rule[LogicalPlan] {
 object PushProjectionThroughUnion extends Rule[LogicalPlan] {
 
   /**
-   * When pushing a [[Project]] through [[Union]] we need to maintain the invariant that [[Union]]
-   * children must have unique [[ExprId]]s per branch. We can safely deduplicate [[ExprId]]s
-   * without updating any references because those [[ExprId]]s will simply remain unused.
-   * For example, in a `Project(col1#1, col#1)` we will alias the second `col1` and get
-   * `Project(col1#1, col1 as col1#2)`. We don't need to update any references to `col1#1` we
-   * aliased because `col1#1` still exists in [[Project]] output.
-   */
-  private def deduplicateProjectList(projectList: Seq[NamedExpression]) = {
-    val existingExprIds = new HashSet[ExprId]
-    projectList.map(attr => if (existingExprIds.contains(attr.exprId)) {
-      Alias(attr, attr.name)()
-    } else {
-      existingExprIds.add(attr.exprId)
-      attr
-    })
-  }
-
-  /**
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
    */
   private def buildRewrites(left: LogicalPlan, right: LogicalPlan): AttributeMap[Attribute] = {
@@ -942,16 +922,20 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
     result.asInstanceOf[A]
   }
 
+  /**
+   * If [[SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED]] is true, [[Project]] can
+   * only be pushed down if there are no duplicate [[ExprId]]s in the project list.
+   */
+  def canPushProjectionThroughUnion(project: Project): Boolean = {
+    !conf.unionIsResolvedWhenDuplicatesPerChildResolved ||
+    project.outputSet.size == project.projectList.size
+  }
+
   def pushProjectionThroughUnion(projectList: Seq[NamedExpression], u: Union): Seq[LogicalPlan] = {
-    val deduplicatedProjectList = if (conf.unionIsResolvedWhenDuplicatesPerChildResolved) {
-      deduplicateProjectList(projectList)
-    } else {
-      projectList
-    }
-    val newFirstChild = Project(deduplicatedProjectList, u.children.head)
+    val newFirstChild = Project(projectList, u.children.head)
     val newOtherChildren = u.children.tail.map { child =>
       val rewrites = buildRewrites(u.children.head, child)
-      Project(deduplicatedProjectList.map(pushToRight(_, rewrites)), child)
+      Project(projectList.map(pushToRight(_, rewrites)), child)
     }
     newFirstChild +: newOtherChildren
   }
@@ -960,8 +944,9 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
     _.containsAllPatterns(UNION, PROJECT)) {
 
     // Push down deterministic projection through UNION ALL
-    case Project(projectList, u: Union)
-        if projectList.forall(_.deterministic) && u.children.nonEmpty =>
+    case project @ Project(projectList, u: Union)
+      if projectList.forall(_.deterministic) && u.children.nonEmpty &&
+        canPushProjectionThroughUnion(project) =>
       u.copy(children = pushProjectionThroughUnion(projectList, u))
   }
 }
@@ -1290,8 +1275,22 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
   def buildCleanedProjectList(
       upper: Seq[NamedExpression],
       lower: Seq[NamedExpression]): Seq[NamedExpression] = {
+    val explicitlyPreserveAliasMetadata =
+      conf.getConf(SQLConf.PRESERVE_ALIAS_METADATA_WHEN_COLLAPSING_PROJECTS)
     val aliases = getAliasMap(lower)
-    upper.map(replaceAliasButKeepName(_, aliases))
+    upper.map {
+      case alias: Alias if !alias.metadata.isEmpty && explicitlyPreserveAliasMetadata =>
+        replaceAliasButKeepName(alias, aliases) match {
+          case newAlias: Alias => Alias(child = newAlias.child, name = newAlias.name)(
+            exprId = newAlias.exprId,
+            qualifier = newAlias.qualifier,
+            explicitMetadata = Some(alias.metadata),
+            nonInheritableMetadataKeys = newAlias.nonInheritableMetadataKeys
+          )
+          case other => other
+        }
+      case other => replaceAliasButKeepName(other, aliases)
+    }
   }
 
   /**
@@ -1586,7 +1585,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
  */
 object CombineUnions extends Rule[LogicalPlan] {
   import CollapseProject.{buildCleanedProjectList, canCollapseExpressions}
-  import PushProjectionThroughUnion.pushProjectionThroughUnion
+  import PushProjectionThroughUnion.{canPushProjectionThroughUnion, pushProjectionThroughUnion}
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
     _.containsAnyPattern(UNION, DISTINCT_LIKE), ruleId) {
@@ -1631,17 +1630,19 @@ object CombineUnions extends Rule[LogicalPlan] {
           stack.pushAll(children.reverse)
         // Push down projection through Union and then push pushed plan to Stack if
         // there is a Project.
-        case Project(projectList, Distinct(u @ Union(children, byName, allowMissingCol)))
+        case project @ Project(projectList, Distinct(u @ Union(children, byName, allowMissingCol)))
             if projectList.forall(_.deterministic) && children.nonEmpty &&
-              flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol =>
+              flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol &&
+              canPushProjectionThroughUnion(project) =>
           stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
-        case Project(projectList, Deduplicate(keys: Seq[Attribute], u: Union))
+        case project @ Project(projectList, Deduplicate(keys: Seq[Attribute], u: Union))
             if projectList.forall(_.deterministic) && flattenDistinct && u.byName == topByName &&
-              u.allowMissingCol == topAllowMissingCol && AttributeSet(keys) == u.outputSet =>
+              u.allowMissingCol == topAllowMissingCol && AttributeSet(keys) == u.outputSet &&
+              canPushProjectionThroughUnion(project) =>
           stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
-        case Project(projectList, u @ Union(children, byName, allowMissingCol))
-            if projectList.forall(_.deterministic) && children.nonEmpty &&
-              byName == topByName && allowMissingCol == topAllowMissingCol =>
+        case project @ Project(projectList, u @ Union(children, byName, allowMissingCol))
+            if projectList.forall(_.deterministic) && children.nonEmpty && byName == topByName &&
+              allowMissingCol == topAllowMissingCol && canPushProjectionThroughUnion(project) =>
           stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
         case child =>
           flattened += child

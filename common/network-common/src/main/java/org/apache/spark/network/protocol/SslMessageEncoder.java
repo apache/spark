@@ -71,8 +71,8 @@ public final class SslMessageEncoder extends MessageToMessageEncoder<Message> {
           // Re-encode this message as a failure response.
           String error = e.getMessage() != null ? e.getMessage() : "null";
           logger.error("Error processing {} for client {}", e,
-            MDC.of(LogKeys.MESSAGE$.MODULE$, in),
-            MDC.of(LogKeys.HOST_PORT$.MODULE$, ctx.channel().remoteAddress()));
+            MDC.of(LogKeys.MESSAGE, in),
+            MDC.of(LogKeys.HOST_PORT, ctx.channel().remoteAddress()));
           encode(ctx, resp.createFailureResponse(error), out);
         } else {
           throw e;

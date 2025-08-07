@@ -27,12 +27,11 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.common.io.ByteStreams
-import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException, TaskContext}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -83,8 +82,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = map.get(key)
 
-    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
-      map.iterator()
+    override def iterator(colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      val iter = map.iterator()
+      new StateStoreIterator(iter)
     }
 
     override def abort(): Unit = {}
@@ -95,9 +95,11 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       s"HDFSReadStateStore[stateStoreId=$stateStoreId_, version=$version]"
     }
 
-    override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
-      Iterator[UnsafeRowPair] = {
-      map.prefixScan(prefixKey)
+    override def prefixScan(
+        prefixKey: UnsafeRow,
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      val iter = map.prefixScan(prefixKey)
+      new StateStoreIterator(iter)
     }
 
     override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
@@ -184,6 +186,12 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         logInfo(log"Committed version ${MDC(LogKeys.COMMITTED_VERSION, newVersion)} " +
           log"for ${MDC(LogKeys.STATE_STORE_PROVIDER, this)} to file " +
           log"${MDC(LogKeys.FILE_NAME, finalDeltaFile)}")
+
+        // Report the commit to StateStoreCoordinator for tracking
+        if (storeConf.commitValidationEnabled) {
+          StateStore.reportCommitToCoordinator(newVersion, stateStoreId, hadoopConf)
+        }
+
         newVersion
       } catch {
         case e: Throwable =>
@@ -209,15 +217,18 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
      * Get an iterator of all the store data.
      * This can be called only after committing all the updates made in the current thread.
      */
-    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
+    override def iterator(colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       assertUseOfDefaultColFamily(colFamilyName)
-      mapToUpdate.iterator()
+      val iter = mapToUpdate.iterator()
+      new StateStoreIterator(iter)
     }
 
-    override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
-      Iterator[UnsafeRowPair] = {
+    override def prefixScan(
+        prefixKey: UnsafeRow,
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       assertUseOfDefaultColFamily(colFamilyName)
-      mapToUpdate.prefixScan(prefixKey)
+      val iter = mapToUpdate.prefixScan(prefixKey)
+      new StateStoreIterator(iter)
     }
 
     override def metrics: StateStoreMetrics = {
@@ -731,7 +742,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       rawStream: CancellableFSDataOutputStream): Unit = {
     try {
       if (rawStream != null) rawStream.cancel()
-      IOUtils.closeQuietly(compressedStream)
+      Utils.closeQuietly(compressedStream)
     } catch {
       // Closing the compressedStream causes the stream to write/flush flush data into the
       // rawStream. Since the rawStream is already closed, there may be errors.

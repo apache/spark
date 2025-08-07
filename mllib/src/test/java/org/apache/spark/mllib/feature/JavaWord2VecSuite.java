@@ -20,8 +20,6 @@ package org.apache.spark.mllib.feature;
 import java.util.Arrays;
 import java.util.List;
 
-import com.google.common.base.Strings;
-
 import scala.Tuple2;
 
 import org.junit.jupiter.api.Assertions;
@@ -35,7 +33,7 @@ public class JavaWord2VecSuite extends SharedSparkSession {
   @Test
   public void word2Vec() {
     // The tests are to check Java compatibility.
-    String sentence = Strings.repeat("a b ", 100) + Strings.repeat("a c ", 10);
+    String sentence = "a b ".repeat(100) + "a c ".repeat(10);
     List<String> words = Arrays.asList(sentence.split(" "));
     List<List<String>> localDoc = Arrays.asList(words, words);
     JavaRDD<List<String>> doc = jsc.parallelize(localDoc);

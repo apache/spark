@@ -132,7 +132,11 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       case (valueType, colType) if DataType.equalsIgnoreCompatibleNullability(valueType, colType) =>
         val canWriteExpr = canWrite(
           tableName, valueType, colType, byName = true, conf, addError, colPath)
-        if (canWriteExpr) checkNullability(value, col, conf, colPath) else value
+        if (canWriteExpr) {
+          applyColumnMetadata(checkNullability(value, col, conf, colPath), col)
+        } else {
+          value
+        }
       case (valueType: StructType, colType: StructType) =>
         val resolvedValue = resolveStructType(
           tableName, value, valueType, col, colType,
@@ -180,11 +184,66 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       } else {
         CharVarcharUtils.stringLengthCheck(casted, attr.dataType)
       }
-      Alias(exprWithStrLenCheck, attr.name)(explicitMetadata = Some(attr.metadata))
+      applyColumnMetadata(exprWithStrLenCheck, attr)
     } else {
       value
     }
   }
+
+
+  /**
+   * Add an [[Alias]] with the name and metadata from the given target table attribute.
+   *
+   * The metadata may be used by writers to get certain table properties.
+   * For example [[org.apache.spark.sql.catalyst.json.JacksonGenerator]]
+   * looks for default value metadata to control some behavior.
+   * This is not the best design, but it is the way at this time.
+   * We should change all the writers to pick up table configuration
+   * from the table directly. However, there are many third-party
+   * connectors that may rely on this behavior.
+   *
+   * We also must remove any [[CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY]]
+   * metadata from flowing out the top of the query.
+   * If we don't do this, the write operation will remain unresolved, or worse
+   * it may flip from resolved to unresolved.  We assume that the read-side
+   * handling is performed lower in the query.
+   *
+   * Moreover, we cannot propagate other source metadata, like source table
+   * default value definitions without confusing writers with reader metadata.
+   * So we need to be sure we block the source metadata from propagating.
+   *
+   * See SPARK-52772 for a discussion on rewrites that caused trouble with
+   * going from resolved to unresolved.
+   */
+  private def applyColumnMetadata(expr: Expression, column: Attribute): NamedExpression = {
+    // We have dealt with the required write-side char/varchar processing.
+    // We do not want to transfer that information to the read-side.
+    // If we do, the write operation will fail to resolve.
+    val requiredMetadata = CharVarcharUtils.cleanMetadata(column.metadata)
+
+    // Make sure that the result has the requiredMetadata and only that.
+    // If the expr is an Attribute or NamedLambdaVariable with the proper name and metadata,
+    // it should remain stable, but we do not trust that other NamedAttributes will
+    // remain stable (namely Alias).
+    expr match {
+      case a: Attribute if a.name == column.name && a.metadata == requiredMetadata =>
+        a
+      case v: NamedLambdaVariable if v.name == column.name && v.metadata == requiredMetadata =>
+        v
+      case _ =>
+        // We cannot keep an Alias with the correct name and metadata because the
+        // metadata might be derived, and derived metadata is not stable upon rewrites.
+        // eg:
+        //   Alias(cast(attr, attr.dataType), n).metadata is empty =>
+        //   Alias(attr, n).metadata == attr.metadata.
+        val stripAlias = expr match {
+          case a: Alias => a.child
+          case _ => expr
+        }
+        Alias(stripAlias, column.name)(explicitMetadata = Some(requiredMetadata))
+    }
+  }
+
 
   private def canWrite(
       tableName: String,
@@ -227,20 +286,14 @@ object TableOutputResolver extends SQLConfHelper with Logging {
             tableName, newColPath.quoted
           )
         }
-        defaultExpr
+        Some(applyColumnMetadata(defaultExpr.get, expectedCol))
       } else if (matched.length > 1) {
         throw QueryCompilationErrors.incompatibleDataToTableAmbiguousColumnNameError(
           tableName, newColPath.quoted
         )
       } else {
         matchedCols += matched.head.name
-        val expectedName = expectedCol.name
-        val matchedCol = matched.head match {
-          // Save an Alias if we can change the name directly.
-          case a: Attribute => a.withName(expectedName)
-          case a: Alias => a.withName(expectedName)
-          case other => other
-        }
+        val matchedCol = matched.head
         val actualExpectedCol = expectedCol.withDataType {
           CharVarcharUtils.getRawType(expectedCol.metadata).getOrElse(expectedCol.dataType)
         }
@@ -386,7 +439,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       } else {
         struct
       }
-      Some(Alias(res, expected.name)())
+      Some(applyColumnMetadata(res, expected))
     } else {
       None
     }
@@ -412,16 +465,15 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       resolveColumnsByPosition(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath)
     }
     if (res.length == 1) {
-      if (res.head == param) {
-        // If the element type is the same, we can reuse the input array directly.
-        Some(
-          Alias(nullCheckedInput, expected.name)(
-            nonInheritableMetadataKeys =
-              Seq(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)))
-      } else {
-        val func = LambdaFunction(res.head, Seq(param))
-        Some(Alias(ArrayTransform(nullCheckedInput, func), expected.name)())
-      }
+      val castedArray =
+        if (res.head == param) {
+          // If the element type is the same, we can reuse the input array directly.
+          nullCheckedInput
+        } else {
+          val func = LambdaFunction(res.head, Seq(param))
+          ArrayTransform(nullCheckedInput, func)
+        }
+      Some(applyColumnMetadata(castedArray, expected))
     } else {
       None
     }
@@ -461,26 +513,25 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     if (resKey.length == 1 && resValue.length == 1) {
       // If the key and value expressions have not changed, we just check original map field.
       // Otherwise, we construct a new map by adding transformations to the keys and values.
-      if (resKey.head == keyParam && resValue.head == valueParam) {
-        Some(
-          Alias(nullCheckedInput, expected.name)(
-            nonInheritableMetadataKeys =
-              Seq(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)))
-      } else {
-        val newKeys = if (resKey.head != keyParam) {
-          val keyFunc = LambdaFunction(resKey.head, Seq(keyParam))
-          ArrayTransform(MapKeys(nullCheckedInput), keyFunc)
+      val casted =
+        if (resKey.head == keyParam && resValue.head == valueParam) {
+          nullCheckedInput
         } else {
-          MapKeys(nullCheckedInput)
+          val newKeys = if (resKey.head != keyParam) {
+            val keyFunc = LambdaFunction(resKey.head, Seq(keyParam))
+            ArrayTransform(MapKeys(nullCheckedInput), keyFunc)
+          } else {
+            MapKeys(nullCheckedInput)
+          }
+          val newValues = if (resValue.head != valueParam) {
+            val valueFunc = LambdaFunction(resValue.head, Seq(valueParam))
+            ArrayTransform(MapValues(nullCheckedInput), valueFunc)
+          } else {
+            MapValues(nullCheckedInput)
+          }
+          MapFromArrays(newKeys, newValues)
         }
-        val newValues = if (resValue.head != valueParam) {
-          val valueFunc = LambdaFunction(resValue.head, Seq(valueParam))
-          ArrayTransform(MapValues(nullCheckedInput), valueFunc)
-        } else {
-          MapValues(nullCheckedInput)
-        }
-        Some(Alias(MapFromArrays(newKeys, newValues), expected.name)())
-      }
+      Some(applyColumnMetadata(casted, expected))
     } else {
       None
     }
@@ -525,12 +576,6 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       !Cast.canUpCast(cast.child.dataType, cast.dataType)
   }
 
-  private def isCompatible(tableAttr: Attribute, queryExpr: NamedExpression): Boolean = {
-    DataTypeUtils.sameType(tableAttr.dataType, queryExpr.dataType) &&
-      tableAttr.name == queryExpr.name &&
-      tableAttr.metadata == queryExpr.metadata
-  }
-
   private def checkField(
       tableName: String,
       tableAttr: Attribute,
@@ -546,33 +591,32 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     } else {
       tableAttr.dataType
     }
-    lazy val outputField = if (isCompatible(tableAttr, queryExpr)) {
-      if (requiresNullChecks(queryExpr, tableAttr, conf)) {
-        val assert = AssertNotNull(queryExpr, colPath)
-        Some(Alias(assert, tableAttr.name)(explicitMetadata = Some(tableAttr.metadata)))
-      } else {
-        Some(queryExpr)
-      }
-    } else {
-      val nullCheckedQueryExpr = checkNullability(queryExpr, tableAttr, conf, colPath)
-      val udtUnwrapped = unwrapUDT(nullCheckedQueryExpr)
-      val casted = cast(udtUnwrapped, attrTypeWithoutCharVarchar, conf, colPath.quoted)
-      val exprWithStrLenCheck = if (conf.charVarcharAsString || !attrTypeHasCharVarchar) {
-        casted
-      } else {
-        CharVarcharUtils.stringLengthCheck(casted, tableAttr.dataType)
-      }
-      // Renaming is needed for handling the following cases like
-      // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
-      // 2) Target tables have column metadata
-      Some(Alias(exprWithStrLenCheck, tableAttr.name)(explicitMetadata = Some(tableAttr.metadata)))
-    }
 
     val canWriteExpr = canWrite(
       tableName, queryExpr.dataType, attrTypeWithoutCharVarchar,
       byName, conf, addError, colPath)
 
-    if (canWriteExpr) outputField else None
+    if (canWriteExpr) {
+      val prepared =
+        if (DataTypeUtils.sameType(tableAttr.dataType, queryExpr.dataType)) {
+          // If the types are an exact match, we can leave UDTs alone,
+          // we obviously do not need a cast, and the constraints of the target
+          // table char/varchar types must be met.
+          queryExpr
+        } else {
+          val udtUnwrapped = unwrapUDT(queryExpr)
+          val casted = cast(udtUnwrapped, attrTypeWithoutCharVarchar, conf, colPath.quoted)
+          if (conf.charVarcharAsString || !attrTypeHasCharVarchar) {
+            casted
+          } else {
+            CharVarcharUtils.stringLengthCheck(casted, tableAttr.dataType)
+          }
+        }
+      val nullChecked = checkNullability(prepared, tableAttr, conf, colPath)
+      Some(applyColumnMetadata(nullChecked, tableAttr))
+    } else {
+      None
+    }
   }
 
   private def unwrapUDT(expr: Expression): Expression = expr.dataType match {

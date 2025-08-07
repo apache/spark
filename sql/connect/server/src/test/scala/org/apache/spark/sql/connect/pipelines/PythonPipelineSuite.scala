@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.pipelines
 import java.io.{BufferedReader, InputStreamReader}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Paths
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuffer
@@ -28,6 +29,7 @@ import scala.util.Try
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.connect.service.SparkConnectService
 import org.apache.spark.sql.pipelines.graph.DataflowGraph
 import org.apache.spark.sql.pipelines.utils.{EventVerificationTestHelpers, TestPipelineUpdateContextMixin}
 
@@ -42,6 +44,8 @@ class PythonPipelineSuite
 
   def buildGraph(pythonText: String): DataflowGraph = {
     val indentedPythonText = pythonText.linesIterator.map("    " + _).mkString("\n")
+    // create a unique identifier to allow identifying the session and dataflow graph
+    val customSessionIdentifier = UUID.randomUUID().toString
     val pythonCode =
       s"""
          |from pyspark.sql import SparkSession
@@ -57,6 +61,7 @@ class PythonPipelineSuite
          |spark = SparkSession.builder \\
          |    .remote("sc://localhost:$serverPort") \\
          |    .config("spark.connect.grpc.channel.timeout", "5s") \\
+         |    .config("spark.custom.identifier", "$customSessionIdentifier") \\
          |    .create()
          |
          |dataflow_graph_id = create_dataflow_graph(
@@ -78,8 +83,17 @@ class PythonPipelineSuite
       throw new RuntimeException(
         s"Python process failed with exit code $exitCode. Output: ${output.mkString("\n")}")
     }
+    val activeSessions = SparkConnectService.sessionManager.listActiveSessions
 
-    val dataflowGraphContexts = DataflowGraphRegistry.getAllDataflowGraphs
+    // get the session holder by finding the session with the custom UUID set in the conf
+    val sessionHolder = activeSessions
+      .map(info => SparkConnectService.sessionManager.getIsolatedSession(info.key, None))
+      .find(_.session.conf.get("spark.custom.identifier") == customSessionIdentifier)
+      .getOrElse(
+        throw new RuntimeException(s"Session with identifier $customSessionIdentifier not found"))
+
+    // get all dataflow graphs from the session holder
+    val dataflowGraphContexts = sessionHolder.dataflowGraphRegistry.getAllDataflowGraphs
     assert(dataflowGraphContexts.size == 1)
 
     dataflowGraphContexts.head.toDataflowGraph
