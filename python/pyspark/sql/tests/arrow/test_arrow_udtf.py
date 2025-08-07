@@ -98,12 +98,15 @@ class ArrowUDTFTests(ReusedSQLTestCase):
                 size = batch_size[0].as_py()
 
                 for batch_id in range(3):
+                    # Create arrays for each column
+                    batch_id_array = pa.array([batch_id] * size, type=pa.int32())
+                    name_array = pa.array([f"batch_{batch_id}"] * size, type=pa.string())
+                    count_array = pa.array(list(range(size)), type=pa.int32())
+
+                    # Create record batch from arrays and names
                     batch = pa.record_batch(
-                        {
-                            "batch_id": pa.array([batch_id] * size, type=pa.int32()),
-                            "name": pa.array([f"batch_{batch_id}"] * size, type=pa.string()),
-                            "count": pa.array(list(range(size)), type=pa.int32()),
-                        }
+                        [batch_id_array, name_array, count_array],
+                        names=["batch_id", "name", "count"],
                     )
                     yield batch
 
