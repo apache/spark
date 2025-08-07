@@ -1734,7 +1734,7 @@ class AdaptiveQueryExecSuite
 
   test("Logging plan changes for AQE") {
     val testAppender = new LogAppender("plan changes")
-    withLogAppender(testAppender) {
+    withLogAppender(testAppender, level = Some(Level.INFO)) {
       withSQLConf(
           SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "INFO",
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
