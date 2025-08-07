@@ -236,6 +236,83 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     verify(labeledPods, times(1)).delete()
   }
 
+  test("pending pod limit per resource profile ID") {
+    when(podOperations
+      .withField("status.phase", "Pending"))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any(classOf[Array[String]]): _*))
+      .thenReturn(podOperations)
+
+    val startTime = Instant.now.toEpochMilli
+    waitForExecutorPodsClock.setTime(startTime)
+
+    // Create two different resource profiles
+    val rpb1 = new ResourceProfileBuilder()
+    val ereq1 = new ExecutorResourceRequests()
+    val treq1 = new TaskResourceRequests()
+    ereq1.cores(2).memory("1g")
+    treq1.cpus(1)
+    rpb1.require(ereq1).require(treq1)
+    val rp1 = rpb1.build()
+
+    val rpb2 = new ResourceProfileBuilder()
+    val ereq2 = new ExecutorResourceRequests()
+    val treq2 = new TaskResourceRequests()
+    ereq2.cores(4).memory("2g")
+    treq2.cpus(2)
+    rpb2.require(ereq2).require(treq2)
+    val rp2 = rpb2.build()
+
+    // Set per-rpid pending pod limit to 2, global limit high enough to not interfere
+    val confWithPerRpidLimit = conf.clone
+      .set(KUBERNETES_MAX_PENDING_PODS.key, "10")
+      .set(KUBERNETES_MAX_PENDING_PODS_PER_RPID.key, "2")
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(confWithPerRpidLimit, secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+
+    // Request 4 executors for rp1 and 3 for rp2
+    // Should only get 2 for each due to per-rpid limit
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(rp1 -> 4, rp2 -> 3))
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 4) // 2 for each rpid
+    
+    // Verify that exactly 2 pods were requested for each resource profile
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(1, rp1.id))
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(2, rp1.id))
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(3, rp2.id))
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(4, rp2.id))
+    verify(podResource, times(4)).create()
+
+    // Mark one pod from rp1 as running to free up a slot for that rpid
+    snapshotsStore.updatePod(runningExecutor(1, rp1.id))
+    snapshotsStore.updatePod(pendingExecutor(2, rp1.id))
+    snapshotsStore.updatePod(pendingExecutor(3, rp2.id))
+    snapshotsStore.updatePod(pendingExecutor(4, rp2.id))
+    snapshotsStore.notifySubscribers()
+    
+    // Now rp1 should be able to request one more pod (up to its limit of 2 pending)
+    // but rp2 should still be at its limit
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 3) // 1 pending for rp1, 2 for rp2
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(5, rp1.id))
+    verify(podResource, times(5)).create()
+    
+    // Mark one pod from rp2 as running to free up a slot for that rpid
+    snapshotsStore.updatePod(runningExecutor(3, rp2.id))
+    snapshotsStore.notifySubscribers()
+    
+    // Now rp2 should be able to request one more pod
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 3) // 2 pending for rp1, 1 for rp2
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(6, rp2.id))
+    verify(podResource, times(6)).create()
+  }
+
   test("Initially request executors in batches. Do not request another batch if the" +
     " first has not finished.") {
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> (podAllocationSize + 1)))

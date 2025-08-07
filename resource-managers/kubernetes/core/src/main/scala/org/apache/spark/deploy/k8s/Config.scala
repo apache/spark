@@ -764,7 +764,7 @@ private[spark] object Config extends Logging {
       .createWithDefault(Int.MaxValue)
 
   val KUBERNETES_MAX_PENDING_PODS_PER_RPID =
-    ConfigBuilder("spark.kubernetes.allocation.maxPendingPodsPerRpid")
+    ConfigBuilder("spark.kubernetes.allocation.maxPendingPodsPerRp")
       .doc("Maximum number of pending PODs allowed per resource profile ID during executor " +
         "allocation. This provides finer-grained control over pending pods by limiting them " +
         "per resource profile rather than globally. When set, this limit is enforced " +
