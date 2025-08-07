@@ -23,7 +23,6 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.testing.utils import is_ansi_mode_test, ansi_mode_not_supported_message
 
 
 # This file contains test cases for 'Missing data handling'
