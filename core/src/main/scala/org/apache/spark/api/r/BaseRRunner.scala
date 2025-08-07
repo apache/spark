@@ -311,6 +311,8 @@ private[r] object BaseRRunner {
     pb.environment().put("SPARKR_SPARKFILES_ROOT_DIR", SparkFiles.getRootDirectory())
     pb.environment().put("SPARKR_IS_RUNNING_ON_WORKER", "TRUE")
     pb.environment().put("SPARKR_WORKER_SECRET", authHelper.secret)
+    // add TMPDIR environment variable with the value of java.io.tmpdir
+    pb.environment().put("TMPDIR", System.getProperty("java.io.tmpdir"))
     pb.redirectErrorStream(true)  // redirect stderr into stdout
     val proc = pb.start()
     val errThread = startStdoutThread(proc)
