@@ -479,7 +479,7 @@ Collation	UNICODE
 Comment	
 Location [not included in comparison]/{warehouse_dir}/test_schema.db
 Namespace Name	test_schema
-Owner	[not included in comparison]
+Owner [not included in comparison]
 Properties
 
 
@@ -501,7 +501,7 @@ Collation	UTF8_LCASE
 Comment	
 Location [not included in comparison]/{warehouse_dir}/test_schema.db
 Namespace Name	test_schema
-Owner	[not included in comparison]
+Owner [not included in comparison]
 Properties
 
 
