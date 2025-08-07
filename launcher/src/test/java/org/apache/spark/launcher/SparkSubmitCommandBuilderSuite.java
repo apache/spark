@@ -56,16 +56,18 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
   @Test
   public void testDriverCmdBuilder() throws Exception {
-    testCmdBuilder(true, null);
-    testCmdBuilder(true, dummyPropsFile);
-    testCmdBuilder(true, connectPropsFile);
+    testCmdBuilder(true, null, false);
+    testCmdBuilder(true, dummyPropsFile, false);
+    testCmdBuilder(true, dummyPropsFile, true);
+    testCmdBuilder(true, connectPropsFile, false);
   }
 
   @Test
   public void testClusterCmdBuilder() throws Exception {
-    testCmdBuilder(false, null);
-    testCmdBuilder(false, dummyPropsFile);
-    testCmdBuilder(false, connectPropsFile);
+    testCmdBuilder(true, null, false);
+    testCmdBuilder(true, dummyPropsFile, false);
+    testCmdBuilder(true, dummyPropsFile, true);
+    testCmdBuilder(true, connectPropsFile, false);
   }
 
   @Test
@@ -317,13 +319,15 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     assertTrue(builder.isClientMode(userProps));
   }
 
-  private void testCmdBuilder(boolean isDriver, File propertiesFile) throws Exception {
+  private void testCmdBuilder(
+      boolean isDriver, File propertiesFile, boolean loadSparkDefaults) throws Exception {
     final String DRIVER_DEFAULT_PARAM = "-Ddriver-default";
     final String DRIVER_EXTRA_PARAM = "-Ddriver-extra";
     String deployMode = isDriver ? "client" : "cluster";
 
     SparkSubmitCommandBuilder launcher =
       newCommandBuilder(Collections.emptyList());
+    launcher.loadSparkDefaults = loadSparkDefaults;
     launcher.childEnv.put(CommandBuilderUtils.ENV_SPARK_HOME,
       System.getProperty("spark.test.home"));
     launcher.master = "yarn";
@@ -334,11 +338,10 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     launcher.appArgs.add("foo");
     launcher.appArgs.add("bar");
     launcher.conf.put("spark.foo", "foo");
-    // either set the property through "--conf" or through default property file
-    if (propertiesFile == null) {
-      launcher.childEnv.put("SPARK_CONF_DIR", System.getProperty("spark.test.home")
-          + "/launcher/src/test/resources");
-    } else {
+    launcher.childEnv.put("SPARK_CONF_DIR", System.getProperty("spark.test.home")
+        + "/launcher/src/test/resources");
+    // either set the property through "--conf" or through properties file(s)
+    if (propertiesFile != null) {
       launcher.setPropertiesFile(propertiesFile.getAbsolutePath());
       launcher.conf.put(SparkLauncher.DRIVER_MEMORY, "1g");
       launcher.conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, "/driver");
@@ -369,8 +372,13 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     String[] cp = findArgValue(cmd, "-cp").split(Pattern.quote(File.pathSeparator));
     if (isDriver) {
       assertTrue(contains("/driver", cp), "Driver classpath should contain provided entry.");
+      if (propertiesFile == null || loadSparkDefaults) {
+        assertTrue(contains("/driver-default", cp),
+          "Driver classpath should contain provided entry.");
+      }
     } else {
       assertFalse(contains("/driver", cp), "Driver classpath should not be in command.");
+      assertFalse(contains("/driver-default", cp), "Driver classpath should not be in command.");
     }
 
     String libPath = env.get(CommandBuilderUtils.getLibPathEnvName());

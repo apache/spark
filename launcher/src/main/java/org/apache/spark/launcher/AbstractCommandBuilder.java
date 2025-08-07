@@ -49,6 +49,7 @@ abstract class AbstractCommandBuilder {
   String master;
   String remote;
   protected String propertiesFile;
+  protected boolean loadSparkDefaults;
   final List<String> appArgs;
   final List<String> jars;
   final List<String> files;
@@ -362,21 +363,35 @@ abstract class AbstractCommandBuilder {
   }
 
   /**
-   * Loads the configuration file for the application, if it exists. This is either the
-   * user-specified properties file, or the spark-defaults.conf file under the Spark configuration
-   * directory.
+   * Load the configuration file(s) for the application - from the user-specified properties
+   * file, and/or the spark-defaults.conf file under the Spark configuration directory, if exists.
+   * Configurations from user-specified properties file take precedence over spark-defaults.conf.
    */
   private Properties loadPropertiesFile() throws IOException {
-    Properties props = new Properties();
-    File propsFile;
-    if (propertiesFile != null) {
-      propsFile = new File(propertiesFile);
-      checkArgument(propsFile.isFile(), "Invalid properties file '%s'.", propertiesFile);
-    } else {
-      propsFile = new File(getConfDir(), DEFAULT_PROPERTIES_FILE);
+    Properties defaultsProps = new Properties();
+    if (propertiesFile == null || loadSparkDefaults) {
+      defaultsProps = loadPropertiesFile(new File(getConfDir(), DEFAULT_PROPERTIES_FILE));
     }
 
-    if (propsFile.isFile()) {
+    Properties props = new Properties();
+    if (propertiesFile != null) {
+      File propsFile = new File(propertiesFile);
+      checkArgument(propsFile.isFile(), "Invalid properties file '%s'.", propertiesFile);
+      props = loadPropertiesFile(propsFile);
+    }
+
+    for (Map.Entry<Object, Object> entry : props.entrySet()) {
+      if (!defaultsProps.containsKey(entry.getKey())) {
+        defaultsProps.put(entry.getKey(), entry.getValue());
+      }
+    }
+
+    return defaultsProps;
+  }
+
+  private Properties loadPropertiesFile(File propsFile) throws IOException {
+    Properties props = new Properties();
+    if (propsFile != null && propsFile.isFile()) {
       try (InputStreamReader isr = new InputStreamReader(
           new FileInputStream(propsFile), StandardCharsets.UTF_8)) {
         props.load(isr);
