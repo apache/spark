@@ -370,7 +370,7 @@ class ExecutorPodsAllocator(
         val numMissingPodsForRpId = targetNum - podCountForRpId
 
         val numExecutorsToAllocate =
-          math.min(math.min(math.min(numMissingPodsForRpId, podAllocationSize), sharedSlotFromPendingPods), remainingSlotForRpId)
+          math.min(math.min(math.min(numMissingPodsForRpId, podAllocationSize), sharedSlotFromPendingPods), remainingSlotsForRpId)
           
         logInfo(log"Going to request ${MDC(LogKeys.COUNT, numExecutorsToAllocate)} executors from" +
           log" Kubernetes for ResourceProfile Id: ${MDC(LogKeys.RESOURCE_PROFILE_ID, rpId)}, " +
