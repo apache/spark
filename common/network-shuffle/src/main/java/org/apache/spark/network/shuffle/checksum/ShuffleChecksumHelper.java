@@ -21,8 +21,6 @@ import java.io.*;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.*;
 
-import com.google.common.io.ByteStreams;
-
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
@@ -88,7 +86,7 @@ public class ShuffleChecksumHelper {
 
   private static long readChecksumByReduceId(File checksumFile, int reduceId) throws IOException {
     try (DataInputStream in = new DataInputStream(new FileInputStream(checksumFile))) {
-      ByteStreams.skipFully(in, reduceId * 8L);
+      in.skipNBytes(reduceId * 8L);
       return in.readLong();
     }
   }

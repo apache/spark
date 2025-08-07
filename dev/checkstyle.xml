@@ -210,6 +210,10 @@
             <property name="message" value="Use java.nio.file.Files.writeString instead." />
         </module>
         <module name="RegexpSinglelineJava">
+            <property name="format" value="ByteStreams\.skipFully"/>
+            <property name="message" value="Use Java skipNBytes instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
             <property name="format" value="FileUtils.writeStringToFile"/>
             <property name="message" value="Use java.nio.file.Files.writeString instead." />
         </module>
