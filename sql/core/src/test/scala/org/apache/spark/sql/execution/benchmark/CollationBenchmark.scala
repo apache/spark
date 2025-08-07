@@ -94,7 +94,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
         sublistStrings.foreach { _ =>
           utf8Strings.foreach { s =>
             (0 to 3).foreach { _ =>
-              Murmur3HashFunction.hash(s, StringType(collationType), 42L, true).toInt
+              Murmur3HashFunction.hash(s, StringType(collationType), 42L, true, false).toInt
             }
           }
         }
