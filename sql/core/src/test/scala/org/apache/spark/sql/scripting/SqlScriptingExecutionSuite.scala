@@ -2773,12 +2773,12 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected)
   }
 
-  test("local variable - same variable declared twice inside on DECLARE statement") {
+  test("local variable - same variable declared twice within same DECLARE statement") {
     val sqlScript =
       """
         |BEGIN
         |  lbl1: BEGIN
-        |    DECLARE var1, var1 = 23;
+        |    DECLARE var1, vAr1 = 23;
         |  END;
         |END
         |""".stripMargin
