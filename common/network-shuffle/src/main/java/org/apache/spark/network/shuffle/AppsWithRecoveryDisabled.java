@@ -18,6 +18,7 @@
 package org.apache.spark.network.shuffle;
 
 import java.util.Collections;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -41,8 +42,7 @@ public final class AppsWithRecoveryDisabled {
    * @param appId application id
    */
   public static void disableRecoveryOfApp(String appId) {
-    Preconditions.checkNotNull(appId);
-    INSTANCE.appsWithRecoveryDisabled.add(appId);
+    INSTANCE.appsWithRecoveryDisabled.add(Objects.requireNonNull(appId));
   }
 
   /**
@@ -51,8 +51,7 @@ public final class AppsWithRecoveryDisabled {
    * @return true if the application is enabled for recovery; false otherwise.
    */
   public static boolean isRecoveryEnabledForApp(String appId) {
-    Preconditions.checkNotNull(appId);
-    return !INSTANCE.appsWithRecoveryDisabled.contains(appId);
+    return !INSTANCE.appsWithRecoveryDisabled.contains(Objects.requireNonNull(appId));
   }
 
   /**
@@ -60,7 +59,6 @@ public final class AppsWithRecoveryDisabled {
    * @param appId application id
    */
   public static void removeApp(String appId) {
-    Preconditions.checkNotNull(appId);
-    INSTANCE.appsWithRecoveryDisabled.remove(appId);
+    INSTANCE.appsWithRecoveryDisabled.remove(Objects.requireNonNull(appId));
   }
 }

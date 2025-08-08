@@ -20,6 +20,7 @@ package org.apache.spark.network.server;
 import java.io.Closeable;
 import java.net.InetSocketAddress;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 import com.codahale.metrics.Counter;
@@ -76,7 +77,7 @@ public class TransportServer implements Closeable {
       this.pooledAllocator = NettyUtils.createPooledByteBufAllocator(
           conf.preferDirectBufs(), true /* allowCache */, conf.serverThreads());
     }
-    this.bootstraps = Lists.newArrayList(Preconditions.checkNotNull(bootstraps));
+    this.bootstraps = Lists.newArrayList(Objects.requireNonNull(bootstraps));
 
     boolean shouldClose = true;
     try {

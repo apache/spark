@@ -21,6 +21,7 @@ package org.apache.spark.network.util;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Objects;
 
 import com.google.common.base.Preconditions;
 
@@ -50,9 +51,8 @@ public final class LimitedInputStream extends FilterInputStream {
    * @param closeWrappedStream whether to close {@code in} when {@link #close} is called
      */
   public LimitedInputStream(InputStream in, long limit, boolean closeWrappedStream) {
-    super(in);
+    super(Objects.requireNonNull(in));
     this.closeWrappedStream = closeWrappedStream;
-    Preconditions.checkNotNull(in);
     Preconditions.checkArgument(limit >= 0, "limit must be non-negative");
     left = limit;
   }

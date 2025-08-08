@@ -245,6 +245,10 @@
             <property name="format" value="CharStreams\.toString"/>
             <property name="message" value="Use toString of SparkStreamUtils or Utils instead." />
         </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="Preconditions\.checkNotNull"/>
+            <property name="message" value="Use requireNonNull of java.util.Objects instead." />
+        </module>
         <!-- support structured logging -->
         <module name="RegexpSinglelineJava">
             <property name="format" value="org\.slf4j\.(Logger|LoggerFactory)" />

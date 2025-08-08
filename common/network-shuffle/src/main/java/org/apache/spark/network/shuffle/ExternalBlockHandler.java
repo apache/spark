@@ -20,10 +20,7 @@ package org.apache.spark.network.shuffle;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
@@ -585,7 +582,7 @@ public class ExternalBlockHandler extends RpcHandler
 
     @Override
     public ManagedBuffer next() {
-      ManagedBuffer block = Preconditions.checkNotNull(mergeManager.getMergedBlockData(
+      ManagedBuffer block = Objects.requireNonNull(mergeManager.getMergedBlockData(
         appId, shuffleId, shuffleMergeId, reduceIds[reduceIdx], chunkIds[reduceIdx][chunkIdx]));
       if (chunkIdx < chunkIds[reduceIdx].length - 1) {
         chunkIdx += 1;
