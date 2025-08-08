@@ -3798,23 +3798,23 @@ abstract class CSVSuite
   test("corrupted ZSTD compressed csv respects ignoreCorruptFiles") {
     withTempDir { dir =>
       val originalFile = new File(testFile(zstCompressedCarsFile))
-      val corruptedFile = new File(dir, "corrupted.csv.zst")
-      Files.copy(originalFile.toPath(), corruptedFile.toPath())
-      val bytes = Files.readAllBytes(corruptedFile.toPath())
-      Files.write(corruptedFile.toPath(), bytes.dropRight(10))
+      val corruptedHeadFile = new File(dir, "corrupted_head.csv.zst")
+      val corruptedTailFile = new File(dir, "corrupted_tail.csv.zst")
+      val bytes = Files.readAllBytes(originalFile.toPath())
+      Files.write(corruptedHeadFile.toPath(), bytes.drop(10))
+      Files.write(corruptedTailFile.toPath(), bytes.dropRight(10))
 
-      // Test ignoreCorruptFiles = true: should read successfully (ignoring corrupt file)
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
         val df = spark.read.format("csv").option("header", "true").load(dir.getAbsolutePath)
-        assert(df.count() == 0) // Only corrupt file exists, so no data
+        assert(df.count() == 0)
       }
 
-      // Test ignoreCorruptFiles = false: should throw exception
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
         val ex = intercept[SparkException] {
           spark.read.format("csv").option("header", "true").load(dir.getAbsolutePath).collect()
         }
-        checkErrorMatchPVals(ex, "FAILED_READ_FILE.NO_HINT", Map("path" -> ".*corrupted\\.csv\\.zst"))
+        checkErrorMatchPVals(ex, "FAILED_READ_FILE.NO_HINT",
+          Map("path" -> ".*corrupted\\.csv\\.zst"))
       }
     }
   }
