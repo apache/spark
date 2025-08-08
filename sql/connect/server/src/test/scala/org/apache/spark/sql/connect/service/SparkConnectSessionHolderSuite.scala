@@ -452,26 +452,26 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     val dataSourceRead = proto.Relation
       .newBuilder()
       .setRead(
-        proto.Read.newBuilder().setDataSource(
-          proto.Read.DataSource
+        proto.Read
+          .newBuilder()
+          .setDataSource(proto.Read.DataSource
             .newBuilder()
-            .setSchema("col int")
-        )
-      )
+            .setSchema("col int")))
       .setCommon(proto.RelationCommon.newBuilder().setPlanId(Random.nextLong()).build())
       .build()
     val dataSourceReadJoin = proto.Relation
       .newBuilder()
       .setJoin(
-        proto.Join.newBuilder()
+        proto.Join
+          .newBuilder()
           .setLeft(dataSourceRead)
           .setRight(dataSourceRead)
-          .setJoinType(proto.Join.JoinType.JOIN_TYPE_CROSS)
-      )
+          .setJoinType(proto.Join.JoinType.JOIN_TYPE_CROSS))
       .setCommon(proto.RelationCommon.newBuilder().setPlanId(Random.nextLong()).build())
       .build()
 
-    sessionHolder.session.conf.set(Connect.CONNECT_ALWAYS_CACHE_DATA_SOURCE_READS_ENABLED, enabled)
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_ALWAYS_CACHE_DATA_SOURCE_READS_ENABLED, enabled)
     planner.transformRelation(dataSourceReadJoin, cachePlan = true)
     val expected = if (enabled) {
       Set(dataSourceReadJoin, dataSourceRead)
