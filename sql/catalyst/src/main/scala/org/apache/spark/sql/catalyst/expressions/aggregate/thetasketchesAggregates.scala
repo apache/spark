@@ -211,7 +211,7 @@ case class ThetaSketchAgg(
    * @param updateBuffer
    *   the UpdateSketch or Union instance used to store the aggregation result
    * @param input
-   *   An input UpdateSketch, UnionAggregationBuffer, or Compact sketch instance
+   *   An input UpdateSketch, Union, or Compact sketch instance
    */
   override def merge(
       updateBuffer: ThetaSketchState,
@@ -600,7 +600,7 @@ case class ThetaIntersectionAgg(
       intersectionBuffer: ThetaSketchState,
       input: ThetaSketchState): ThetaSketchState = {
     (intersectionBuffer, input) match {
-      // Both are unions, merge them directly
+      // Both are intersections, merge them directly
       case (
             IntersectionAggregationBuffer(intersectLeft),
             IntersectionAggregationBuffer(intersectRight)) =>
