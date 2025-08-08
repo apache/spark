@@ -240,11 +240,11 @@ case class ThetaSketchAgg(
         createUnionWith(sketch1.compact, sketch2.compact)
       case (UpdatableSketchBuffer(sketch1), FinalizedSketch(sketch2)) =>
         createUnionWith(sketch1.compact, sketch2)
+      // Should never make it here, but added cases for defensive programming
       case (FinalizedSketch(sketch1), UpdatableSketchBuffer(sketch2)) =>
         createUnionWith(sketch1, sketch2.compact)
       case (FinalizedSketch(sketch1), FinalizedSketch(sketch2)) =>
         createUnionWith(sketch1, sketch2)
-      // Should never make it here
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
   }
@@ -415,7 +415,11 @@ case class ThetaUnionAgg(
       case (UnionAggregationBuffer(unionLeft), UnionAggregationBuffer(unionRight)) =>
         unionLeft.union(unionRight.getResult)
         UnionAggregationBuffer(unionLeft)
-      // One or both are immutable sketches
+      // The input was serialized then deserialized
+      case (UnionAggregationBuffer(union), FinalizedSketch(sketch)) =>
+        union.union(sketch)
+        UnionAggregationBuffer(union)
+      // Should never make it here, but added cases for defensive programming
       case (FinalizedSketch(sketch1), FinalizedSketch(sketch2)) =>
         val union = SetOperation.builder.setLogNominalEntries(lgNomEntries).buildUnion
         union.union(sketch1)
@@ -424,10 +428,6 @@ case class ThetaUnionAgg(
       case (FinalizedSketch(sketch), UnionAggregationBuffer(union)) =>
         union.union(sketch)
         UnionAggregationBuffer(union)
-      case (UnionAggregationBuffer(union), FinalizedSketch(sketch)) =>
-        union.union(sketch)
-        UnionAggregationBuffer(union)
-      // Should never make it here
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
   }
@@ -606,7 +606,11 @@ case class ThetaIntersectionAgg(
             IntersectionAggregationBuffer(intersectRight)) =>
         intersectLeft.intersect(intersectRight.getResult)
         IntersectionAggregationBuffer(intersectLeft)
-      // One or both are immutable sketches
+      // The input was serialized then deserialized
+      case (IntersectionAggregationBuffer(intersection), FinalizedSketch(sketch)) =>
+        intersection.intersect(sketch)
+        IntersectionAggregationBuffer(intersection)
+      // Should never make it here, but added cases for defensive programming
       case (FinalizedSketch(sketch1), FinalizedSketch(sketch2)) =>
         val intersection =
           SetOperation.builder.setLogNominalEntries(lgNomEntries).buildIntersection
@@ -616,10 +620,6 @@ case class ThetaIntersectionAgg(
       case (FinalizedSketch(sketch), IntersectionAggregationBuffer(intersection)) =>
         intersection.intersect(sketch)
         IntersectionAggregationBuffer(intersection)
-      case (IntersectionAggregationBuffer(intersection), FinalizedSketch(sketch)) =>
-        intersection.intersect(sketch)
-        IntersectionAggregationBuffer(intersection)
-      // Should never make it here
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
   }
