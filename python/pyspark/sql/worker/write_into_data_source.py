@@ -222,7 +222,7 @@ def main(infile: IO, outfile: IO) -> None:
             if isinstance(writer, DataSourceArrowWriter):
                 res = writer.write(iterator)
             elif isinstance(writer, DataSourceStreamArrowWriter):
-                res = writer.write(iterator)
+                res = writer.write(iter(iterator))
             else:
                 res = writer.write(batch_to_rows())
 
