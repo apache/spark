@@ -345,7 +345,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case MergeRows(isSourceRowPresent, isTargetRowPresent, matchedInstructions,
         notMatchedInstructions, notMatchedBySourceInstructions, checkCardinality, output,
-        child, _) =>
+        child) =>
       MergeRowsExec(isSourceRowPresent, isTargetRowPresent, matchedInstructions,
         notMatchedInstructions, notMatchedBySourceInstructions, checkCardinality,
         output, planLater(child)) :: Nil

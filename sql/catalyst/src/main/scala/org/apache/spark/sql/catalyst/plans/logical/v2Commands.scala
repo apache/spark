@@ -39,7 +39,8 @@ import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowL
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -889,6 +890,18 @@ case class MergeIntoTable(
     case _ => false
   }
 
+  // schema evolution resolution will set the merged schema in DataSourceV2Relation output
+  def needSchemaEvolution: Boolean = {
+    withSchemaEvolution && {
+      EliminateSubqueryAliases(targetTable) match {
+        case r: DataSourceV2Relation if r.mergeSchemaEvolution() =>
+          DataTypeUtils.fromAttributes(r.output) !=
+            MergeIntoTable.mergeTypes(targetTable.schema, sourceTable.schema)
+        case _ => false
+      }
+    }
+  }
+
   override def left: LogicalPlan = targetTable
   override def right: LogicalPlan = sourceTable
   override protected def withNewChildrenInternal(
@@ -908,6 +921,54 @@ object MergeIntoTable {
       case _: InsertAction | _: InsertStarAction => privileges.add(TableWritePrivilege.INSERT)
     }
     privileges.toSeq
+  }
+
+  def mergeSchema(sourceSchema: StructType, targetSchema: StructType):
+    StructType = mergeTypes(targetSchema, sourceSchema).asInstanceOf[StructType]
+
+  def mergeTypes(current: DataType, newType: DataType): DataType = {
+    (current, newType) match {
+      case (StructType(currentFields), StructType(newFields)) =>
+        val newFieldMap = toFieldMap(newFields)
+
+        // Update existing field types
+        val updatedCurrentFields = currentFields.map { currentField =>
+          newFieldMap.get(currentField.name) match {
+            case Some(newField) if newField.dataType != currentField.dataType =>
+              val newType = mergeTypes(currentField.dataType, newField.dataType)
+              StructField(currentField.name, newType, currentField.nullable,
+                currentField.metadata)
+            case _ => currentField
+          }
+        }
+
+        // Identify the newly added fields and append to the end
+        val currentFieldMap = toFieldMap(currentFields)
+        val remainingNewFields = newFields.filterNot(f => currentFieldMap.contains(f.name))
+        StructType(updatedCurrentFields ++ remainingNewFields)
+
+      case (ArrayType(currentElementType, currentContainsNull), ArrayType(newElementType, _)) =>
+        ArrayType(mergeTypes(currentElementType, newElementType), currentContainsNull)
+
+      case (MapType(currentKeyType, currentElementType, currentContainsNull),
+      MapType(updateKeyType, updateElementType, _)) =>
+        MapType(
+          mergeTypes(currentKeyType, updateKeyType),
+          mergeTypes(currentElementType, updateElementType),
+          currentContainsNull)
+
+      case (_, newType: DataType) =>
+        newType
+    }
+  }
+
+  def toFieldMap(fields: Array[StructField]): Map[String, StructField] = {
+    val fieldMap = fields.map(field => field.name -> field).toMap
+    if (SQLConf.get.caseSensitiveAnalysis) {
+      fieldMap
+    } else {
+      CaseInsensitiveMap(fieldMap)
+    }
   }
 }
 

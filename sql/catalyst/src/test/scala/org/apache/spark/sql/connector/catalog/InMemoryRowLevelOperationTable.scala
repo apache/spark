@@ -24,28 +24,26 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
 import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
 class InMemoryRowLevelOperationTable(
     name: String,
-    val initialSchema: StructType,
+    schema: StructType,
     partitioning: Array[Transform],
     properties: util.Map[String, String],
     constraints: Array[Constraint] = Array.empty)
   extends InMemoryTable(
     name,
-    CatalogV2Util.structTypeToV2Columns(initialSchema),
+    CatalogV2Util.structTypeToV2Columns(schema),
     partitioning,
     properties,
     constraints)
@@ -73,63 +71,6 @@ class InMemoryRowLevelOperationTable(
     }
   }
 
-  override def mergeSchema(sourceTableSchema: StructType): StructType = {
-    mergeTypes(CatalogV2Util.v2ColumnsToStructType(columns()), sourceTableSchema)
-      .asInstanceOf[StructType]
-  }
-
-  private def mergeTypes(current: DataType, newType: DataType): DataType = {
-    (current, newType) match {
-      case (StructType(currentFields), StructType(newFields)) =>
-        val newFieldMap = toFieldMap(newFields)
-
-        // Update existing field types
-        val updatedCurrentFields = currentFields.map { currentField =>
-          newFieldMap.get(currentField.name) match {
-            case Some(newField) if newField.dataType != currentField.dataType =>
-              val newType = mergeTypes(currentField.dataType, newField.dataType)
-              StructField(currentField.name, newType, currentField.nullable,
-                currentField.metadata)
-            case _ => currentField
-          }
-        }
-
-        // Identify the newly added fields and append to the end
-        val currentFieldMap = toFieldMap(currentFields)
-        val remainingNewFields = newFields.filterNot (f => currentFieldMap.contains (f.name) )
-        StructType( updatedCurrentFields ++ remainingNewFields )
-
-      case (ArrayType(currentElementType, currentContainsNull), ArrayType(newElementType, _)) =>
-        ArrayType(mergeTypes(currentElementType, newElementType), currentContainsNull)
-
-      case (MapType(currentKeyType, currentElementType, currentContainsNull),
-      MapType(updateKeyType, updateElementType, _)) =>
-        MapType(
-          mergeTypes(currentKeyType, updateKeyType),
-          mergeTypes(currentElementType, updateElementType),
-          currentContainsNull)
-
-      case (_, newType: DataType) =>
-        // For now support any type change for testing
-        // Data source could implement type widening checks here.
-        newType
-    }
-
-  }
-
-  override def updateSchema(newSchema: StructType): Unit = {
-    tableColumns = CatalogV2Util.structTypeToV2Columns(newSchema)
-  }
-
-  def toFieldMap(fields: Array[StructField]): Map[String, StructField] = {
-    val fieldMap = fields.map(field => field.name -> field).toMap
-    if (SQLConf.get.caseSensitiveAnalysis) {
-      fieldMap
-    } else {
-      CaseInsensitiveMap(fieldMap)
-    }
-  }
-
   case class PartitionBasedOperation(command: Command) extends RowLevelOperation {
     var configuredScan: InMemoryBatchScan = _
 
@@ -138,7 +79,7 @@ class InMemoryRowLevelOperationTable(
     }
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new InMemoryScanBuilder(schema(), options) {
+      new InMemoryScanBuilder(schema, options) {
         override def build: Scan = {
           val scan = super.build()
           configuredScan = scan.asInstanceOf[InMemoryBatchScan]
@@ -210,7 +151,7 @@ class InMemoryRowLevelOperationTable(
     override def rowId(): Array[NamedReference] = Array(PK_COLUMN_REF)
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new InMemoryScanBuilder(schema(), options)
+      new InMemoryScanBuilder(schema, options)
     }
 
     override def newWriteBuilder(info: LogicalWriteInfo): DeltaWriteBuilder = {
@@ -231,9 +172,7 @@ class InMemoryRowLevelOperationTable(
             )
           }
 
-          override def toBatch: DeltaBatchWrite = {
-            TestDeltaBatchWrite
-          }
+          override def toBatch: DeltaBatchWrite = TestDeltaBatchWrite
         }
       }
     }

@@ -23,11 +23,9 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Attri
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, truncatedString, CharVarcharUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, SupportsRowLevelOperations, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
-import org.apache.spark.sql.connector.write.RowLevelOperationTable
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
@@ -129,12 +127,8 @@ case class DataSourceV2Relation(
     }
   }
 
-  def updateSchema(newSchema: StructType): Unit = {
-    table match {
-        case RowLevelOperationTable(r: SupportsRowLevelOperations, _) =>
-           r.updateSchema(newSchema)
-    }
-  }
+  def mergeSchemaEvolution(): Boolean =
+    table.capabilities().contains(TableCapability.MERGE_SCHEMA_EVOLUTION)
 }
 
 /**
