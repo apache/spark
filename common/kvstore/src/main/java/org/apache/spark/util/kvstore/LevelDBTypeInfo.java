@@ -18,9 +18,11 @@
 package org.apache.spark.util.kvstore;
 
 import java.lang.reflect.Array;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.base.Preconditions;
@@ -305,8 +307,8 @@ class LevelDBTypeInfo {
     /** The full key in the index that identifies the given entity. */
     byte[] entityKey(byte[] prefix, Object entity) throws Exception {
       Object indexValue = getValue(entity);
-      Preconditions.checkNotNull(indexValue, "Null index value for %s in type %s.",
-        name, type.getName());
+      Objects.requireNonNull(indexValue, () ->
+        String.format("Null index value for %s in type %s.", Arrays.toString(name), type.getName()));
       byte[] entityKey = start(prefix, indexValue);
       if (!isNatural) {
         entityKey = buildKey(false, entityKey, toKey(naturalIndex().getValue(entity)));
@@ -331,8 +333,8 @@ class LevelDBTypeInfo {
         byte[] naturalKey,
         byte[] prefix) throws Exception {
       Object indexValue = getValue(entity);
-      Preconditions.checkNotNull(indexValue, "Null index value for %s in type %s.",
-        name, type.getName());
+      Objects.requireNonNull(indexValue, () ->
+        String.format("Null index value for %s in type %s.", Arrays.toString(name), type.getName()));
 
       byte[] entityKey = start(prefix, indexValue);
       if (!isNatural) {
