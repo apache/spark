@@ -42,7 +42,7 @@ class InMemoryRowLevelOperationTableCatalog extends InMemoryTableCatalog {
     val table = loadTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
     val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(
-      CatalogV2Util.v2ColumnsToStructType(table.columns()),
+      table.schema,
       changes,
       tableProvider = Some("in-memory"),
       statementType = "ALTER TABLE")
@@ -56,7 +56,7 @@ class InMemoryRowLevelOperationTableCatalog extends InMemoryTableCatalog {
 
     val newTable = new InMemoryRowLevelOperationTable(
       name = table.name,
-      initialSchema = schema,
+      schema = schema,
       partitioning = partitioning,
       properties = properties,
       constraints = constraints)

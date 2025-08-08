@@ -1648,7 +1648,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case u: UpdateTable => resolveReferencesInUpdate(u)
 
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _, _, _)
-        if !m.resolved && targetTable.resolved && sourceTable.resolved =>
+        if !m.resolved && targetTable.resolved && sourceTable.resolved && !m.needSchemaEvolution =>
 
         EliminateSubqueryAliases(targetTable) match {
           case r: NamedRelation if r.skipSchemaResolution =>
@@ -1671,7 +1671,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   // The update value can access columns from both target and source tables.
                   resolveAssignments(assignments, m, MergeResolvePolicy.BOTH))
               case UpdateStarAction(updateCondition) =>
-                val attrs = if (m.withSchemaEvolution) {
+                val attrs = if (m.needSchemaEvolution) {
                   // For UPDATE *, the column must be from source table, even with schema evolution.
                   targetTable.output.filter(targetCol => sourceTable.output.exists(
                     sourceCol => conf.resolver(sourceCol.name, targetCol.name)))
@@ -1697,7 +1697,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   resolvedInsertCondition,
                   resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE))
               case InsertStarAction(insertCondition) =>
-                val attrs = if (m.withSchemaEvolution) {
+                val attrs = if (m.needSchemaEvolution) {
                   // For INSERT *, the column must be from source table, even with schema evolution.
                   targetTable.output.filter(targetCol => sourceTable.output.exists(
                     sourceCol => conf.resolver(sourceCol.name, targetCol.name)))
@@ -3699,19 +3699,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * - Detect plans that are not compatible with the output table and throw AnalysisException
    */
   object ResolveOutputRelation extends Rule[LogicalPlan] {
-
-    def mergeWithSchemaEvolution(query: LogicalPlan): Boolean = {
-      query match {
-        case MergeRows(_, _, _, _, _, _, _, _, Some(_)) => true
-        case _ => false
-      }
-    }
-
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(COMMAND), ruleId) {
       case v2Write: V2WriteCommand
-          if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved
-          && !mergeWithSchemaEvolution(v2Write.query) =>
+          if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved =>
         validateStoreAssignmentPolicy()
         TableOutputResolver.suitableForByNameCheck(v2Write.isByName,
           expected = v2Write.table.output, queryOutput = v2Write.query.output)

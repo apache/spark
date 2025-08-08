@@ -998,7 +998,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
       e.copy(child = prunedChild(child, e.references))
 
     // prune unused columns from child of MergeRows for row-level operations
-    case e @ MergeRows(_, _, _, _, _, _, _, child, _) if !child.outputSet.subsetOf(e.references) =>
+    case e @ MergeRows(_, _, _, _, _, _, _, child) if !child.outputSet.subsetOf(e.references) =>
       e.copy(child = prunedChild(child, e.references))
 
     // prune unrequired references

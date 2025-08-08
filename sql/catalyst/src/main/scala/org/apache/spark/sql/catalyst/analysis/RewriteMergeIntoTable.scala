@@ -24,14 +24,13 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftAnti, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, DeleteAction, Filter, HintInfo, InsertAction, Join, JoinHint, LogicalPlan, MergeAction, MergeIntoTable, MergeRows, NO_BROADCAST_AND_REPLICATION, Project, ReplaceData, UpdateAction, WriteDelta}
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Copy, Delete, Discard, Insert, Instruction, Keep, ROW_ID, Split, Update}
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{OPERATION_COLUMN, WRITE_OPERATION, WRITE_WITH_METADATA_OPERATION}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsRowLevelOperations}
+import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.MERGE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -46,8 +45,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
-        notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned &&
-        matchedActions.isEmpty && notMatchedActions.size == 1 &&
+      notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned &&
+        !m.needSchemaEvolution && matchedActions.isEmpty && notMatchedActions.size == 1 &&
         notMatchedBySourceActions.isEmpty =>
 
       EliminateSubqueryAliases(aliasedTable) match {
@@ -81,7 +80,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
         notMatchedBySourceActions, withSchemaEvolution)
-      if m.resolved && m.rewritable && m.aligned &&
+      if m.resolved && m.rewritable && m.aligned && !m.needSchemaEvolution &&
         matchedActions.isEmpty && notMatchedBySourceActions.isEmpty =>
 
       EliminateSubqueryAliases(aliasedTable) match {
@@ -104,8 +103,6 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
           val outputs = notMatchedInstructions.flatMap(_.outputs)
 
-          val evolvedTargetSchema = getEvolvedTargetSchema(withSchemaEvolution, r)
-
           // merge rows as there are multiple NOT MATCHED actions
           val mergeRows = MergeRows(
             isSourceRowPresent = TrueLiteral,
@@ -115,8 +112,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
             notMatchedBySourceInstructions = Nil,
             checkCardinality = false,
             output = generateExpandOutput(r.output, outputs),
-            joinPlan,
-            evolvedTargetSchema)
+            joinPlan)
 
           AppendData.byPosition(r, mergeRows)
 
@@ -126,23 +122,21 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
         notMatchedBySourceActions, withSchemaEvolution)
-      if m.resolved && m.rewritable && m.aligned =>
+      if m.resolved && m.rewritable && m.aligned && !m.needSchemaEvolution =>
 
       EliminateSubqueryAliases(aliasedTable) match {
         case r @ DataSourceV2Relation(tbl: SupportsRowLevelOperations, _, _, _, _) =>
           validateMergeIntoConditions(m)
           val table = buildOperationTable(tbl, MERGE, CaseInsensitiveStringMap.empty())
-
-          val evolvedTargetSchema = getEvolvedTargetSchema(withSchemaEvolution, r)
           table.operation match {
             case _: SupportsDelta =>
               buildWriteDeltaPlan(
                 r, table, source, cond, matchedActions,
-                notMatchedActions, notMatchedBySourceActions, evolvedTargetSchema)
+                notMatchedActions, notMatchedBySourceActions)
             case _ =>
               buildReplaceDataPlan(
                 r, table, source, cond, matchedActions,
-                notMatchedActions, notMatchedBySourceActions, evolvedTargetSchema)
+                notMatchedActions, notMatchedBySourceActions)
           }
 
         case _ =>
@@ -158,8 +152,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       cond: Expression,
       matchedActions: Seq[MergeAction],
       notMatchedActions: Seq[MergeAction],
-      notMatchedBySourceActions: Seq[MergeAction],
-      evolvedTargetSchema: Option[StructType]): ReplaceData = {
+      notMatchedBySourceActions: Seq[MergeAction]): ReplaceData = {
 
     // resolve all required metadata attrs that may be used for grouping data on write
     // for instance, JDBC data source may cluster data by shard/host before writing
@@ -177,7 +170,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
     val mergeRowsPlan = buildReplaceDataMergeRowsPlan(
       readRelation, joinPlan, matchedActions, notMatchedActions,
-      notMatchedBySourceActions, metadataAttrs, checkCardinality, evolvedTargetSchema)
+      notMatchedBySourceActions, metadataAttrs, checkCardinality)
 
     // predicates of the ON condition can be used to filter the target table (planning & runtime)
     // only if there is no NOT MATCHED BY SOURCE clause
@@ -200,8 +193,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       notMatchedActions: Seq[MergeAction],
       notMatchedBySourceActions: Seq[MergeAction],
       metadataAttrs: Seq[Attribute],
-      checkCardinality: Boolean,
-      evolvedTargetSchema: Option[StructType]): MergeRows = {
+      checkCardinality: Boolean): MergeRows = {
 
     // target records that were read but did not match any MATCHED or NOT MATCHED BY SOURCE actions
     // must be copied over and included in the new state of the table as groups are being replaced
@@ -241,8 +233,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       notMatchedBySourceInstructions = notMatchedBySourceInstructions,
       checkCardinality = checkCardinality,
       output = generateExpandOutput(attrs, outputs),
-      joinPlan,
-      evolvedTargetSchema)
+      joinPlan)
   }
 
   // converts a MERGE condition into an EXISTS subquery for runtime filtering
@@ -269,8 +260,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       cond: Expression,
       matchedActions: Seq[MergeAction],
       notMatchedActions: Seq[MergeAction],
-      notMatchedBySourceActions: Seq[MergeAction],
-      evolvedTargetSchema: Option[StructType]): WriteDelta = {
+      notMatchedBySourceActions: Seq[MergeAction]): WriteDelta = {
 
     val operation = operationTable.operation.asInstanceOf[SupportsDelta]
 
@@ -298,7 +288,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     val mergeRowsPlan = buildWriteDeltaMergeRowsPlan(
       readRelation, joinPlan, matchedActions, notMatchedActions,
       notMatchedBySourceActions, rowIdAttrs, checkCardinality,
-      operation.representUpdateAsDeleteAndInsert, evolvedTargetSchema)
+      operation.representUpdateAsDeleteAndInsert)
 
     // build a plan to write the row delta to the table
     val writeRelation = relation.copy(table = operationTable)
@@ -332,8 +322,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       notMatchedBySourceActions: Seq[MergeAction],
       rowIdAttrs: Seq[Attribute],
       checkCardinality: Boolean,
-      splitUpdates: Boolean,
-      evolvedTargetSchema: Option[StructType]): MergeRows = {
+      splitUpdates: Boolean): MergeRows = {
 
     val (metadataAttrs, rowAttrs) = targetTable.output.partition { attr =>
       MetadataAttribute.isValid(attr.metadata)
@@ -382,8 +371,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       notMatchedBySourceInstructions = notMatchedBySourceInstructions,
       checkCardinality = checkCardinality,
       output = generateExpandOutput(attrs, outputs),
-      joinPlan,
-      evolvedTargetSchema)
+      joinPlan)
   }
 
   private def pushDownTargetPredicates(
@@ -524,20 +512,6 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
     if (cond.exists(_.isInstanceOf[AggregateExpression])) {
       throw QueryCompilationErrors.aggregationNotAllowedInMergeCondition(condName, cond)
-    }
-  }
-
-  // Calculate the target schema for mergeSchema support. ResolveMergeIntoSchemaEvolution has
-  // set the new target schema as the DataSourceV2Relation output
-  private def getEvolvedTargetSchema(
-      withSchemaEvolution: Boolean, v2Relation: DataSourceV2Relation): Option[StructType] = {
-    val evolvedTargetStructType = DataTypeUtils.fromAttributes(v2Relation.output)
-    if (withSchemaEvolution &&
-      (evolvedTargetStructType !=
-        CatalogV2Util.v2ColumnsToStructType(v2Relation.table.columns()))) {
-      Some(evolvedTargetStructType)
-    } else {
-      None
     }
   }
 }
