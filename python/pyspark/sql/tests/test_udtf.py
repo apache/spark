@@ -3100,6 +3100,41 @@ class UDTFArrowTestsMixin(BaseUDTFTestsMixin):
                     udtf(TestUDTF, returnType=ret_type)().collect()
 
 
+def test_udtf_with_collated_string_types(self):
+    @udtf(
+        "out1 string, out2 string collate UTF8_BINARY, out3 string collate UTF8_LCASE,"
+        " out4 string collate UNICODE"
+    )
+    class MyUDTF:
+        def eval(self, v1, v2, v3, v4):
+            yield (v1 + "1", v2 + "2", v3 + "3", v4 + "4")
+
+    schema = StructType(
+        [
+            StructField("col1", StringType(), True),
+            StructField("col2", StringType("UTF8_BINARY"), True),
+            StructField("col3", StringType("UTF8_LCASE"), True),
+            StructField("col4", StringType("UNICODE"), True),
+        ]
+    )
+    df = self.spark.createDataFrame([("hello",) * 4], schema=schema)
+
+    df_out = df.select(MyUDTF(df.col1, df.col2, df.col3, df.col4).alias("out"))
+    result_df = df_out.select("out.*")
+
+    expected_row = ("hello1", "hello2", "hello3", "hello4")
+    self.assertEqual(result_df.collect()[0], expected_row)
+
+    expected_output_types = [
+        StringType(),
+        StringType("UTF8_BINARY"),
+        StringType("UTF8_LCASE"),
+        StringType("UNICODE"),
+    ]
+    for idx, field in enumerate(result_df.schema.fields):
+        self.assertEqual(field.dataType, expected_output_types[idx])
+
+
 class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):

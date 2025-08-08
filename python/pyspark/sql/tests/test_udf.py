@@ -1337,6 +1337,29 @@ class BaseUDFTestsMixin(object):
             with self.subTest(chain=chain):
                 assertDataFrameEqual(actual=actual, expected=expected)
 
+    def test_udf_with_collated_string_types(self):
+        @udf("string collate fr")
+        def my_udf(input_val):
+            return "%s - %s" % (type(input_val), input_val)
+
+        string_types = [
+            StringType(),
+            StringType("UTF8_BINARY"),
+            StringType("UTF8_LCASE"),
+            StringType("UNICODE"),
+        ]
+        data = [("hello",)]
+        expected = "<class 'str'> - hello"
+
+        for string_type in string_types:
+            schema = StructType([StructField("input_col", string_type, True)])
+            df = self.spark.createDataFrame(data, schema=schema)
+            df_result = df.select(my_udf(df.input_col).alias("result"))
+            row = df_result.collect()[0][0]
+            self.assertEqual(row, expected)
+            result_type = df_result.schema["result"].dataType
+            self.assertEqual(result_type, StringType("fr"))
+
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     @classmethod

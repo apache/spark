@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
+import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -125,8 +126,9 @@ class ArrowEvalPythonEvaluatorFactory(
 
     columnarBatchIter.flatMap { batch =>
       val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-      assert(outputTypes == actualDataTypes, "Invalid schema from pandas_udf: " +
-        s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
+      assert(equalsIgnoreCompatibleCollation(outputTypes, actualDataTypes),
+        s"Invalid schema from arrow-enabled Python UDTF: expected ${outputTypes.mkString(", ")}," +
+          s" got ${actualDataTypes.mkString(", ")}")
       batch.rowIterator.asScala
     }
   }
