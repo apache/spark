@@ -46,7 +46,7 @@ import scala.util.matching.Regex
 import _root_.io.netty.channel.unix.Errors.NativeIoException
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.collect.Interners
-import com.google.common.io.{ByteStreams, Files => GFiles}
+import com.google.common.io.{Files => GFiles}
 import com.google.common.net.InetAddresses
 import jakarta.ws.rs.core.UriBuilder
 import org.apache.commons.codec.binary.Hex
@@ -1558,10 +1558,10 @@ private[spark] object Utils
       gzInputStream = new GZIPInputStream(new FileInputStream(file))
       val bufSize = 1024
       val buf = new Array[Byte](bufSize)
-      var numBytes = ByteStreams.read(gzInputStream, buf, 0, bufSize)
+      var numBytes = gzInputStream.readNBytes(buf, 0, bufSize)
       while (numBytes > 0) {
         fileSize += numBytes
-        numBytes = ByteStreams.read(gzInputStream, buf, 0, bufSize)
+        numBytes = gzInputStream.readNBytes(buf, 0, bufSize)
       }
       fileSize
     } catch {
