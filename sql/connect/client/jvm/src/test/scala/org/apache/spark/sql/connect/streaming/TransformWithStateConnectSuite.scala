@@ -39,7 +39,7 @@ case class InputRowForConnectTest(key: String, value: String)
 case class OutputRowForConnectTest(key: String, value: String)
 case class StateRowForConnectTest(count: Long)
 
-case class StateRowForConnectTestWithTwoLongs(count1: Long, count2: Long)
+case class StateRowForConnectTestWithTwoLongs(count: Long, count2: Long)
 
 // A basic stateful processor which will return the occurrences of key
 class BasicCountStatefulProcessor
@@ -90,7 +90,7 @@ class CountStatefulProcessorTwoLongs
       timerValues: TimerValues): Iterator[OutputRowForConnectTest] = {
     val count = inputRows.toSeq.length + {
       if (_countState.exists()) {
-        _countState.get().count1
+        _countState.get().count
       } else {
         0L
       }
@@ -522,7 +522,8 @@ class TransformWithStateConnectSuite
   }
 
   test("transformWithState - schema evolution") {
-    withSQLConf(twsAdditionalSQLConf: _*) {
+    withSQLConf((twsAdditionalSQLConf ++
+      Seq("spark.sql.streaming.stateStore.encodingFormat" -> "avro")): _*) {
       val session: SparkSession = spark
       import session.implicits._
 
@@ -530,6 +531,7 @@ class TransformWithStateConnectSuite
         val path = dir.getCanonicalPath
         val checkpointPath = s"$path/cpt"
         val dataPath = s"$path/data"
+        val targetPath = s"$path/tgt"
 
         testData
           .toDS()
@@ -553,16 +555,16 @@ class TransformWithStateConnectSuite
             TimeMode.None(),
             OutputMode.Update())
           .writeStream
-          .format("memory")
-          .queryName("my_sink")
+          .format("parquet")
           .option("checkpointLocation", checkpointPath)
+          .option("path", targetPath)
           .start()
 
         try {
           q1.processAllAvailable()
           eventually(timeout(30.seconds)) {
             checkDatasetUnorderly(
-              spark.table("my_sink").toDF().as[(String, String)],
+              spark.read.format("parquet").load(targetPath).as[(String, String)],
               ("a", "1"),
               ("a", "2"),
               ("b", "1"))
@@ -591,16 +593,19 @@ class TransformWithStateConnectSuite
             TimeMode.None(),
             OutputMode.Update())
           .writeStream
-          .format("memory")
-          .queryName("my_sink")
+          .format("parquet")
           .option("checkpointLocation", checkpointPath)
+          .option("path", targetPath)
           .start()
 
         try {
           q2.processAllAvailable()
           eventually(timeout(30.seconds)) {
             checkDatasetUnorderly(
-              spark.table("my_sink").toDF().as[(String, String)],
+              spark.read.format("parquet").load(targetPath).as[(String, String)],
+              ("a", "1"),
+              ("a", "2"),
+              ("b", "1"),
               ("a", "3"),
               ("a", "4"),
               ("b", "2"))
