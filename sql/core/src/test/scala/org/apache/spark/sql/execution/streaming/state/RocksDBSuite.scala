@@ -2882,7 +2882,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     withDB(remoteDir, version = 2, conf = conf,
       enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
       versionToUniqueId = versionToUniqueId
-    ) { db => db.close() }
+    ) { db => }
   }
 
   testWithStateStoreCheckpointIdsAndChangelogEnabled("time travel 5 - validate successful " +
@@ -2927,7 +2927,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           // load version 1 again - should succeed
           withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf,
             enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
-            versionToUniqueId = versionToUniqueId) { db => db.close() }
+            versionToUniqueId = versionToUniqueId) { db => }
         }
       }
     }
@@ -3067,7 +3067,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
                 curVer = curVer + inc
               }
             }
-            db2.close()
           }
         }
       }
