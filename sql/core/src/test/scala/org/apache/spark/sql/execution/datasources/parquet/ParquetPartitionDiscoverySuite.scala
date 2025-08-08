@@ -23,7 +23,6 @@ import java.sql.Timestamp
 import java.time.{LocalDateTime, LocalTime, ZoneId, ZoneOffset}
 import java.util.Locale
 
-import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
@@ -823,7 +822,7 @@ abstract class ParquetPartitionDiscoverySuite
         .save(dir.getCanonicalPath)
 
       Utils.touch(new File(s"${dir.getCanonicalPath}/b=1", ".DS_Store"))
-      Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
+      Utils.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
 
       checkAnswer(spark.read.format("parquet").load(dir.getCanonicalPath), df)
     }
@@ -840,7 +839,7 @@ abstract class ParquetPartitionDiscoverySuite
         .save(tablePath.getCanonicalPath)
 
       Utils.touch(new File(s"${tablePath.getCanonicalPath}/", "_SUCCESS"))
-      Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
+      Utils.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
 
       checkAnswer(spark.read.format("parquet").load(tablePath.getCanonicalPath), df)
     }
@@ -857,7 +856,7 @@ abstract class ParquetPartitionDiscoverySuite
         .save(tablePath.getCanonicalPath)
 
       Utils.touch(new File(s"${tablePath.getCanonicalPath}/", "_SUCCESS"))
-      Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
+      Utils.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
 
       checkAnswer(spark.read.format("parquet").load(tablePath.getCanonicalPath), df)
     }
@@ -1062,8 +1061,8 @@ abstract class ParquetPartitionDiscoverySuite
       //
       // The summary files and the dot-file under `p0=0` should not fail partition discovery.
 
-      Files.copy(new File(p1, "_metadata"), new File(p0, "_metadata"))
-      Files.copy(new File(p1, "_common_metadata"), new File(p0, "_common_metadata"))
+      Utils.copyFile(new File(p1, "_metadata"), new File(p0, "_metadata"))
+      Utils.copyFile(new File(p1, "_common_metadata"), new File(p0, "_common_metadata"))
       Utils.touch(new File(p0, ".dummy"))
 
       checkAnswer(spark.read.parquet(s"$path"), Seq(
