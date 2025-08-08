@@ -10638,15 +10638,21 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             var_name = [var_name]  # type: ignore[list-item]
 
-        value_col_types = [
-            self._internal.spark_column_for(label).expr.dataType for label in value_vars
-        ]
-        # If any value column is of StringType, cast all value columns to StringType to avoid
-        # ANSI mode errors during explode - mixing strings and integers.
-        string_cast_required_type = (
-            StringType() if any(isinstance(t, StringType) for t in value_col_types) else None
-        )
         use_cast = is_ansi_mode_enabled(self._internal.spark_frame.sparkSession)
+        string_cast_required_type = None
+        if use_cast:
+            field_by_label = {
+                label: field
+                for label, field in zip(self._internal.column_labels, self._internal.data_fields)
+            }
+
+            value_col_types = [field_by_label[label].spark_type for label in value_vars]
+            print(value_col_types)
+            # If any value column is of StringType, cast all value columns to StringType to avoid
+            # ANSI mode errors during explode - mixing strings and integers.
+            string_cast_required_type = (
+                StringType() if any(isinstance(t, StringType) for t in value_col_types) else None
+            )
 
         pairs = F.explode(
             F.array(
