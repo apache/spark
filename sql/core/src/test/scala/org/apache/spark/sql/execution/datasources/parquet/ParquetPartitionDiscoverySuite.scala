@@ -42,6 +42,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
@@ -821,7 +822,7 @@ abstract class ParquetPartitionDiscoverySuite
         .partitionBy("b", "c", "d")
         .save(dir.getCanonicalPath)
 
-      Files.touch(new File(s"${dir.getCanonicalPath}/b=1", ".DS_Store"))
+      Utils.touch(new File(s"${dir.getCanonicalPath}/b=1", ".DS_Store"))
       Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
 
       checkAnswer(spark.read.format("parquet").load(dir.getCanonicalPath), df)
@@ -838,7 +839,7 @@ abstract class ParquetPartitionDiscoverySuite
         .partitionBy("b", "c", "d")
         .save(tablePath.getCanonicalPath)
 
-      Files.touch(new File(s"${tablePath.getCanonicalPath}/", "_SUCCESS"))
+      Utils.touch(new File(s"${tablePath.getCanonicalPath}/", "_SUCCESS"))
       Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
 
       checkAnswer(spark.read.format("parquet").load(tablePath.getCanonicalPath), df)
@@ -855,7 +856,7 @@ abstract class ParquetPartitionDiscoverySuite
         .partitionBy("b", "c", "d")
         .save(tablePath.getCanonicalPath)
 
-      Files.touch(new File(s"${tablePath.getCanonicalPath}/", "_SUCCESS"))
+      Utils.touch(new File(s"${tablePath.getCanonicalPath}/", "_SUCCESS"))
       Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
 
       checkAnswer(spark.read.format("parquet").load(tablePath.getCanonicalPath), df)
@@ -953,9 +954,9 @@ abstract class ParquetPartitionDiscoverySuite
             .partitionBy("b", "c", "d")
             .save(tablePath.getCanonicalPath)
 
-          Files.touch(new File(s"${tablePath.getCanonicalPath}/b=1", "_SUCCESS"))
-          Files.touch(new File(s"${tablePath.getCanonicalPath}/b=1/c=1", "_SUCCESS"))
-          Files.touch(new File(s"${tablePath.getCanonicalPath}/b=1/c=1/d=1", "_SUCCESS"))
+          Utils.touch(new File(s"${tablePath.getCanonicalPath}/b=1", "_SUCCESS"))
+          Utils.touch(new File(s"${tablePath.getCanonicalPath}/b=1/c=1", "_SUCCESS"))
+          Utils.touch(new File(s"${tablePath.getCanonicalPath}/b=1/c=1/d=1", "_SUCCESS"))
           checkAnswer(spark.read.format("parquet").load(tablePath.getCanonicalPath), df)
         }
       }
@@ -1063,7 +1064,7 @@ abstract class ParquetPartitionDiscoverySuite
 
       Files.copy(new File(p1, "_metadata"), new File(p0, "_metadata"))
       Files.copy(new File(p1, "_common_metadata"), new File(p0, "_common_metadata"))
-      Files.touch(new File(p0, ".dummy"))
+      Utils.touch(new File(p0, ".dummy"))
 
       checkAnswer(spark.read.parquet(s"$path"), Seq(
         Row(0, 0, 0),
