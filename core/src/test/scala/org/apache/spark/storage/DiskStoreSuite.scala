@@ -21,7 +21,6 @@ import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.nio.file.Files
 import java.util.{Arrays, Random}
 
-import com.google.common.io.ByteStreams
 import io.netty.channel.FileRegion
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
@@ -172,7 +171,7 @@ class DiskStoreSuite extends SparkFunSuite {
   private def readViaInputStream(data: BlockData): Array[Byte] = {
     val is = data.toInputStream()
     try {
-      ByteStreams.toByteArray(is)
+      is.readAllBytes()
     } finally {
       is.close()
     }

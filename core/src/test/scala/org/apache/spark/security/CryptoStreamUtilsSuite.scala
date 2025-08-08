@@ -93,7 +93,7 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
 
     val inputStream = new ByteArrayInputStream(encryptedBytes)
     val wrappedInputStream = serializerManager.wrapStream(blockId, inputStream)
-    val decryptedBytes = ByteStreams.toByteArray(wrappedInputStream)
+    val decryptedBytes = wrappedInputStream.readAllBytes()
     val decryptedStr = new String(decryptedBytes, UTF_8)
     assert(decryptedStr === plainStr)
   }
@@ -141,7 +141,7 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
 
     val inStream = createCryptoInputStream(new FileInputStream(file), conf, key)
     try {
-      val inStreamData = ByteStreams.toByteArray(inStream)
+      val inStreamData = inStream.readAllBytes()
       assert(Arrays.equals(inStreamData, testData))
     } finally {
       inStream.close()
@@ -159,7 +159,7 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
 
     val inChannel = createReadableChannel(new FileInputStream(file).getChannel(), conf, key)
     try {
-      val inChannelData = ByteStreams.toByteArray(Channels.newInputStream(inChannel))
+      val inChannelData = Channels.newInputStream(inChannel).readAllBytes()
       assert(Arrays.equals(inChannelData, testData))
     } finally {
       inChannel.close()
