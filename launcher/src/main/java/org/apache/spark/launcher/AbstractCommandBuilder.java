@@ -368,11 +368,6 @@ abstract class AbstractCommandBuilder {
    * Configurations from user-specified properties file take precedence over spark-defaults.conf.
    */
   private Properties loadPropertiesFile() throws IOException {
-    Properties defaultsProps = new Properties();
-    if (propertiesFile == null || loadSparkDefaults) {
-      defaultsProps = loadPropertiesFile(new File(getConfDir(), DEFAULT_PROPERTIES_FILE));
-    }
-
     Properties props = new Properties();
     if (propertiesFile != null) {
       File propsFile = new File(propertiesFile);
@@ -380,13 +375,18 @@ abstract class AbstractCommandBuilder {
       props = loadPropertiesFile(propsFile);
     }
 
-    for (Map.Entry<Object, Object> entry : props.entrySet()) {
-      if (!defaultsProps.containsKey(entry.getKey())) {
-        defaultsProps.put(entry.getKey(), entry.getValue());
+    Properties defaultsProps = new Properties();
+    if (propertiesFile == null || loadSparkDefaults) {
+      defaultsProps = loadPropertiesFile(new File(getConfDir(), DEFAULT_PROPERTIES_FILE));
+    }
+
+    for (Map.Entry<Object, Object> entry : defaultsProps.entrySet()) {
+      if (!props.containsKey(entry.getKey())) {
+        props.put(entry.getKey(), entry.getValue());
       }
     }
 
-    return defaultsProps;
+    return props;
   }
 
   private Properties loadPropertiesFile(File propsFile) throws IOException {
