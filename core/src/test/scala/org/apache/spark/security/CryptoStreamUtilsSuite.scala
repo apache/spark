@@ -134,7 +134,7 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
 
     val outStream = createCryptoOutputStream(new FileOutputStream(file), conf, key)
     try {
-      ByteStreams.copy(new ByteArrayInputStream(testData), outStream)
+      new ByteArrayInputStream(testData).transferTo(outStream)
     } finally {
       outStream.close()
     }
@@ -150,7 +150,9 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
     val outChannel = createWritableChannel(new FileOutputStream(file).getChannel(), conf, key)
     try {
       val inByteChannel = Channels.newChannel(new ByteArrayInputStream(testData))
+      // scalastyle:off bytestreamscopy
       ByteStreams.copy(inByteChannel, outChannel)
+      // scalastyle:on bytestreamscopy
     } finally {
       outChannel.close()
     }

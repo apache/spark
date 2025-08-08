@@ -21,7 +21,6 @@ import java.io.{BufferedInputStream, InputStream}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
-import com.google.common.io.ByteStreams
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.hdfs.DFSInputStream
 
@@ -52,7 +51,7 @@ abstract class EventLogFileReader(
       entryName: String): Unit = {
     Utils.tryWithResource(fileSystem.open(path, 1 * 1024 * 1024)) { inputStream =>
       zipStream.putNextEntry(new ZipEntry(entryName))
-      ByteStreams.copy(inputStream, zipStream)
+      inputStream.transferTo(zipStream)
       zipStream.closeEntry()
     }
   }
