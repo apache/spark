@@ -752,6 +752,11 @@ This file is divided into 3 sections:
     <customMessage>Use readFully of JavaUtils/SparkStreamUtils/Utils instead.</customMessage>
   </check>
 
+  <check customId="nullOutputStream" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bByteStreams\.nullOutputStream\b</parameter></parameters>
+    <customMessage>Use OutputStream.nullOutputStream instead.</customMessage>
+  </check>
+
   <check customId="maputils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.collections4\.MapUtils\b</parameter></parameters>
     <customMessage>Use org.apache.spark.util.collection.Utils instead.</customMessage>
