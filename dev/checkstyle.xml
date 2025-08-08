@@ -218,6 +218,10 @@
             <property name="message" value="Use Java skipNBytes instead." />
         </module>
         <module name="RegexpSinglelineJava">
+            <property name="format" value="Files\.asByteSource"/>
+            <property name="message" value="Use Java Files.newInputStream instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
             <property name="format" value="ByteStreams\.readFully"/>
             <property name="message" value="Use readFully of JavaUtils/SparkStreamUtils/Utils instead." />
         </module>
