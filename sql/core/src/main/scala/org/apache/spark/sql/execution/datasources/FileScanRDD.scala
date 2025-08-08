@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.{Closeable, FileNotFoundException, IOException}
+import java.io.{Closeable, FileNotFoundException}
 import java.net.URI
 
 import org.apache.hadoop.fs.Path
