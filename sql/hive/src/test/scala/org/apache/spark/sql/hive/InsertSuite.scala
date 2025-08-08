@@ -26,6 +26,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, _}
+import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.hive.execution.HiveTempPath
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -823,8 +824,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       withTempDir { dir =>
         val file = new File(dir, "test.hex")
         val hex = "AABBCC"
-        val bs = org.apache.commons.codec.binary.Hex.decodeHex(hex.toCharArray)
-        Files.write(bs, file)
+        Files.write(Hex.unhex(hex), file)
         val path = file.getParent
         sql(s"create table t1 (c string) STORED AS TEXTFILE location '$path'")
         checkAnswer(
