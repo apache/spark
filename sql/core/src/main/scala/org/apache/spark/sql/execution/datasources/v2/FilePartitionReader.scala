@@ -53,7 +53,7 @@ class FilePartitionReader[T](
             currentReader = null
           case e @ (_ : AccessControlException | _ : BlockMissingException) =>
             throw FileDataSourceV2.attachFilePath(file.urlEncodedPath, e)
-          case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+          case e if ignoreCorruptFiles && DataSourceUtils.shouldIgnoreCorruptFileException(e) =>
             logWarning(
               s"Skipped the rest of the content in the corrupted file.", e)
             currentReader = null
@@ -71,7 +71,7 @@ class FilePartitionReader[T](
     } catch {
       case e @ (_ : AccessControlException | _ : BlockMissingException) =>
         throw FileDataSourceV2.attachFilePath(currentReader.file.urlEncodedPath, e)
-      case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+      case e if ignoreCorruptFiles && DataSourceUtils.shouldIgnoreCorruptFileException(e) =>
         logWarning(log"Skipped the rest of the content in the corrupted file: " +
           log"${MDC(PARTITIONED_FILE_READER, currentReader)}", e)
         false
