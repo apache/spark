@@ -63,7 +63,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   public void testGetEffectiveConfig() throws Exception {
     doTestGetEffectiveConfig(null, true, true);
     doTestGetEffectiveConfig(null, true, false);
-    doTestGetEffectiveConfig(null, false, false);
+    doTestGetEffectiveConfig(null, false, true);
     doTestGetEffectiveConfig(null, false, false);
     doTestGetEffectiveConfig(driverMemPropsFile, true, true);
     doTestGetEffectiveConfig(driverMemPropsFile, true, false);
