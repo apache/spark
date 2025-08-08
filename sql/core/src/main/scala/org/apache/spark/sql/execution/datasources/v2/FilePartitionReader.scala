@@ -26,7 +26,7 @@ import org.apache.spark.internal.LogKeys.{CURRENT_FILE, PARTITIONED_FILE_READER}
 import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.connector.read.PartitionReader
-import org.apache.spark.sql.execution.datasources.PartitionedFile
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, PartitionedFile}
 
 class FilePartitionReader[T](
     files: Iterator[PartitionedFile],

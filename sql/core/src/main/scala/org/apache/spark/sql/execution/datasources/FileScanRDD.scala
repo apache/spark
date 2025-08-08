@@ -268,7 +268,7 @@ class FileScanRDD(
                   // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
                   case e: FileNotFoundException if !ignoreMissingFiles => throw e
                   case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
-                  case e if canIgnoreFile && ignoreCorruptFiles &&
+                  case e if ignoreCorruptFiles &&
                       DataSourceUtils.shouldIgnoreCorruptFileException(e) =>
                     logWarning(log"Skipped the rest of the content in the corrupted file: " +
                       log"${MDC(PATH, currentFile)}", e)
