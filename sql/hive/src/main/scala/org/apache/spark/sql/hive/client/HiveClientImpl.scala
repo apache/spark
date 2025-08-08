@@ -893,24 +893,11 @@ private[hive] class HiveClientImpl(
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
       val results: Try[Seq[String]] = Using(shim.getCommandProcessor(tokens(0), conf)) {
         case driver: IDriver =>
+          driver.run(cmd)
+          driver.setMaxRows(maxRows)
+          shim.getDriverResults(driver)
+        case proc =>
           val out = state.getClass.getField("out").get(state)
-          try {
-            driver.run(cmd)
-            driver.setMaxRows(maxRows)
-            shim.getDriverResults(driver)
-          } catch {
-            case e @ (_: QueryExecutionException | _: SparkThrowable) =>
-              throw e
-            case e: Exception =>
-              // Wrap the original hive error with QueryExecutionException and throw it
-              // if there is an error in query processing.
-              // This works for hive 4.x and later versions.
-              throw new QueryExecutionException(Utils.stackTraceToString(e))
-          } finally {
-            driver.close
-          }
-
-        case _ =>
           if (out != null) {
             // scalastyle:off println
             out.asInstanceOf[PrintStream].println(tokens(0) + " " + cmd_1)
@@ -930,7 +917,7 @@ private[hive] class HiveClientImpl(
               // Wrap the original hive error with QueryExecutionException and throw it
               // if there is an error in query processing.
               // This works for hive 4.x and later versions.
-              throw new QueryExecutionException(ExceptionUtils.getStackTrace(e))
+              throw new QueryExecutionException(Utils.stackTraceToString(e))
           }
       }
     } catch {
