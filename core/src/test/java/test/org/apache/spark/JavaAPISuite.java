@@ -21,6 +21,7 @@ import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -49,7 +50,6 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.base.Throwables;
-import com.google.common.io.Files;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
@@ -960,7 +960,7 @@ public class JavaAPISuite implements Serializable {
     rdd.saveAsTextFile(outputDir);
     // Read the plain text file and check it's OK
     File outputFile = new File(outputDir, "part-00000");
-    String content = java.nio.file.Files.readString(outputFile.toPath());
+    String content = Files.readString(outputFile.toPath());
     assertEquals("1\n2\n3\n4\n", content);
     // Also try reading it in as a text file RDD
     List<String> expected = Arrays.asList("1", "2", "3", "4");
@@ -977,8 +977,8 @@ public class JavaAPISuite implements Serializable {
     String path1 = new Path(tempDirName, "part-00000").toUri().getPath();
     String path2 = new Path(tempDirName, "part-00001").toUri().getPath();
 
-    Files.write(content1, new File(path1));
-    Files.write(content2, new File(path2));
+    Files.write(new File(path1).toPath(), content1);
+    Files.write(new File(path2).toPath(), content2);
 
     Map<String, String> container = new HashMap<>();
     container.put(path1, new Text(content1).toString());

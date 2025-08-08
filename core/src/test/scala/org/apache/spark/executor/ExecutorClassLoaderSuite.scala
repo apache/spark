@@ -22,14 +22,13 @@ import java.lang.reflect.InvocationTargetException
 import java.net.{URI, URL, URLClassLoader}
 import java.nio.channels.{FileChannel, ReadableByteChannel}
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Paths, StandardOpenOption}
+import java.nio.file.{Files, Paths, StandardOpenOption}
 import java.util
 import java.util.Collections
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
 import scala.io.Source
 
-import com.google.common.io.Files
 import org.mockito.ArgumentMatchers.{any, anyString}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
@@ -65,7 +64,7 @@ class ExecutorClassLoaderSuite
     urls2 = List(tempDir2.toURI.toURL).toArray
     childClassNames.foreach(TestUtils.createCompiledClass(_, tempDir1, "1"))
     parentResourceNames.foreach { x =>
-      Files.write("resource".getBytes(StandardCharsets.UTF_8), new File(tempDir2, x))
+      Files.writeString(new File(tempDir2, x).toPath, "resource")
     }
     parentClassNames.foreach(TestUtils.createCompiledClass(_, tempDir2, "2"))
   }
