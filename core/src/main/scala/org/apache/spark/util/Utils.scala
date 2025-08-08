@@ -1589,7 +1589,7 @@ private[spark] object Utils
 
     try {
       stream.skipNBytes(effectiveStart)
-      ByteStreams.readFully(stream, buff)
+      readFully(stream, buff, 0, buff.length)
     } finally {
       stream.close()
     }

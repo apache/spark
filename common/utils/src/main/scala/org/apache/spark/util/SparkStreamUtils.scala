@@ -20,6 +20,7 @@ import java.io.{FileInputStream, FileOutputStream, InputStream, OutputStream}
 import java.nio.channels.{FileChannel, WritableByteChannel}
 import java.nio.charset.StandardCharsets
 
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.SparkErrorUtils.tryWithSafeFinally
 
 private[spark] trait SparkStreamUtils {
@@ -108,6 +109,10 @@ private[spark] trait SparkStreamUtils {
 
   def toString(in: InputStream): String = {
     new String(in.readAllBytes(), StandardCharsets.UTF_8)
+  }
+
+  def readFully(in: InputStream, arr: Array[Byte], off: Int, len: Int): Unit = {
+    JavaUtils.readFully(in, arr, off, len)
   }
 }
 
