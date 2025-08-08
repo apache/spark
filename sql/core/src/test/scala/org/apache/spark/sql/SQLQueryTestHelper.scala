@@ -57,7 +57,7 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
       .replaceAll("Created By.*", s"Created By $notIncludedMsg")
       .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
       .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
-      .replaceAll("Owner.*", s"Owner $notIncludedMsg")
+      .replaceAll("Owner[\t ]+(.*)", s"Owner\t$notIncludedMsg")
       .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")
       .replaceAll("CTERelationDef \\d+,", s"CTERelationDef xxxx,")
       .replaceAll("CTERelationRef \\d+,", s"CTERelationRef xxxx,")

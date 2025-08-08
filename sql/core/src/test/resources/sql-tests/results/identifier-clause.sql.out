@@ -534,7 +534,7 @@ Catalog Name	spark_catalog
 Comment	some comment
 Location [not included in comparison]/{warehouse_dir}/someloc
 Namespace Name	ident
-Owner [not included in comparison]
+Owner	[not included in comparison]
 
 
 -- !query
