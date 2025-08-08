@@ -1671,14 +1671,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   // The update value can access columns from both target and source tables.
                   resolveAssignments(assignments, m, MergeResolvePolicy.BOTH))
               case UpdateStarAction(updateCondition) =>
-                val attrs = if (m.needSchemaEvolution) {
-                  // For UPDATE *, the column must be from source table, even with schema evolution.
-                  targetTable.output.filter(targetCol => sourceTable.output.exists(
-                    sourceCol => conf.resolver(sourceCol.name, targetCol.name)))
-                } else {
-                  targetTable.output
-                }
-                val assignments = attrs.map { attr =>
+                val assignments = targetTable.output.map { attr =>
                   Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
                 }
                 UpdateAction(
@@ -1697,16 +1690,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   resolvedInsertCondition,
                   resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE))
               case InsertStarAction(insertCondition) =>
-                val attrs = if (m.needSchemaEvolution) {
-                  // For INSERT *, the column must be from source table, even with schema evolution.
-                  targetTable.output.filter(targetCol => sourceTable.output.exists(
-                    sourceCol => conf.resolver(sourceCol.name, targetCol.name)))
-                } else {
-                  targetTable.output
-                }
+                // The insert action is used when not matched, so its condition and value can only
+                // access columns from the source table.
                 val resolvedInsertCondition = insertCondition.map(
                   resolveExpressionByPlanOutput(_, m.sourceTable))
-                val assignments = attrs.map { attr =>
+                val assignments = targetTable.output.map { attr =>
                   Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
                 }
                 InsertAction(
