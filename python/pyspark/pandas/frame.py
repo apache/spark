@@ -10647,7 +10647,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             }
 
             value_col_types = [field_by_label[label].spark_type for label in value_vars]
-            print(value_col_types)
             # If any value column is of StringType, cast all value columns to StringType to avoid
             # ANSI mode errors during explode - mixing strings and integers.
             string_cast_required_type = (
