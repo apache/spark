@@ -13824,11 +13824,15 @@ def _test() -> None:
     import uuid
     from pyspark.sql import SparkSession
     import pyspark.pandas.frame
+    from pyspark.testing.utils import is_ansi_mode_test
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.frame.__dict__.copy()
     globs["ps"] = pyspark.pandas
+
+    if is_ansi_mode_test:
+        del pyspark.pandas.frame.DataFrame.melt.__doc__
 
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.frame tests").getOrCreate()
