@@ -46,7 +46,6 @@ import scala.util.matching.Regex
 import _root_.io.netty.channel.unix.Errors.NativeIoException
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.collect.Interners
-import com.google.common.io.{Files => GFiles}
 import com.google.common.net.InetAddresses
 import jakarta.ws.rs.core.UriBuilder
 import org.apache.commons.codec.binary.Hex
@@ -593,7 +592,7 @@ private[spark] object Utils
         case (f1, f2) => filesEqualRecursive(f1, f2)
       }
     } else if (file1.isFile && file2.isFile) {
-      GFiles.equal(file1, file2)
+      contentEquals(file1, file2)
     } else {
       false
     }

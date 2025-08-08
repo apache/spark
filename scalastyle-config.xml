@@ -282,6 +282,11 @@ This file is divided into 3 sections:
       scala.jdk.CollectionConverters._ and use .asScala / .asJava methods</customMessage>
   </check>
 
+  <check customId="filesequal" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bFiles\.equal\b</parameter></parameters>
+    <customMessage>Use contentEquals of SparkFileUtils or Utils instead.</customMessage>
+  </check>
+
   <check customId="toByteArray" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bFiles\.toByteArray\b</parameter></parameters>
     <customMessage>Use java.nio.file.Files.readAllBytes instead.</customMessage>

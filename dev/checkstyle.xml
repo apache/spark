@@ -206,6 +206,10 @@
             <property name="message" value="Use String concatenation instead." />
         </module>
         <module name="RegexpSinglelineJava">
+            <property name="format" value="Files\.equal\("/>
+            <property name="message" value="Use contentEquals of SparkFileUtils or Utils instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
             <property name="format" value="Files\.asCharSink"/>
             <property name="message" value="Use java.nio.file.Files.writeString instead." />
         </module>
