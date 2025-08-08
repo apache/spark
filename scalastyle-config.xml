@@ -732,6 +732,11 @@ This file is divided into 3 sections:
     <customMessage>Use Java `write` instead.</customMessage>
   </check>
 
+  <check customId="bytestreamsread" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bByteStreams\.read\b</parameter></parameters>
+    <customMessage>Use Java readNBytes instead.</customMessage>
+  </check>
+
   <check customId="bytestreamscopy" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bByteStreams\.copy\b</parameter></parameters>
     <customMessage>Use Java transferTo instead.</customMessage>
