@@ -19,7 +19,6 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 
-import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
@@ -89,7 +88,6 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       // Creates an arbitrary file.  If this directory gets scanned, ParquetRelation2 will throw
       // since it's not a valid Parquet file.
       val emptyFile = new File(path, "empty")
-      Files.createParentDirs(emptyFile)
       Utils.touch(emptyFile)
 
       // This shouldn't throw anything.
