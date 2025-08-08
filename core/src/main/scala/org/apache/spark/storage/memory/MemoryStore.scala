@@ -923,7 +923,7 @@ private[storage] class PartiallySerializedBlock[T](
     verifyNotConsumedAndNotDiscarded()
     consumed = true
     // `unrolled`'s underlying buffers will be freed once this input stream is fully read:
-    ByteStreams.copy(unrolledBuffer.toInputStream(dispose = true), os)
+    unrolledBuffer.toInputStream(dispose = true).transferTo(os)
     memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
     redirectableOutputStream.setOutputStream(os)
     while (rest.hasNext) {
