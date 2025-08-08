@@ -200,6 +200,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
     """
     Serializer for PyArrow-native UDTFs that work directly with PyArrow RecordBatches and Arrays.
     """
+
     def __init__(self, table_arg_offsets=None):
         super().__init__()
         self.table_arg_offsets = table_arg_offsets
@@ -210,14 +211,16 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
         """
         import pyarrow as pa
 
-        batches = super(ArrowStreamArrowUDTFSerializer, self).load_stream(stream) 
+        batches = super(ArrowStreamArrowUDTFSerializer, self).load_stream(stream)
         for batch in batches:
             result_batches = []
             for i in range(batch.num_columns):
                 if i in self.table_arg_offsets:
                     struct = batch.column(i)
                     # Flatten the struct and create a RecordBatch from it
-                    flattened_batch = pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))
+                    flattened_batch = pa.RecordBatch.from_arrays(
+                        struct.flatten(), schema=pa.schema(struct.type)
+                    )
                     result_batches.append(flattened_batch)
                 else:
                     # Keep the column as it is for non-table columns
