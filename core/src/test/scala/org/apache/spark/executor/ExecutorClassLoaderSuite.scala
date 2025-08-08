@@ -105,7 +105,7 @@ class ExecutorClassLoaderSuite
     assert(result.exists(), "Compiled file not found: " + result.getAbsolutePath)
 
     val out = new File(scalaDir, filename)
-    Files.move(result, out)
+    Utils.moveFile(result, out)
     assert(out.exists(), "Destination file not moved: " + out.getAbsolutePath)
 
     // construct class loader tree
