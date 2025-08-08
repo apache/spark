@@ -232,8 +232,12 @@ temporary objects created during task execution. Some steps which may be useful 
   value of the JVM's `NewRatio` parameter. Many JVMs default this to 2, meaning that the Old generation 
   occupies 2/3 of the heap. It should be large enough such that this fraction exceeds `spark.memory.fraction`.
   
-* Since 4.0.0, Spark uses JDK 17 by default, which also makes the G1GC garbage collector the default. Note that with
-  large executor heap sizes, it may be important to increase the G1 region size with `-XX:G1HeapRegionSize`.
+* Since 4.0.0, Spark uses JDK 17 by default, which also makes the G1GC garbage collector the default,
+  Some applications may encounter out-of-memory (OOM) issues or experience slower performance.
+  To mitigate these problems:
+  - Increase region size with `-XX:G1HeapRegionSize=<size>` when using large executor heap sizes.
+  - Optimize GC locker behavior with `-XX:+UnlockDiagnosticVMOptions -XX:GCLockerRetryAllocationCount=100`.
+  - Consider switching to ParallelGC by specifying `-XX:+UseParallelGC` for better throughput with large workloads.
 
 * As an example, if your task is reading data from HDFS, the amount of memory used by the task can be estimated using
   the size of the data block read from HDFS. Note that the size of a decompressed block is often 2 or 3 times the
@@ -248,6 +252,22 @@ but at a high level, managing how frequently full GC takes place can help in red
 
 GC tuning flags for executors can be specified by setting `spark.executor.defaultJavaOptions` or `spark.executor.extraJavaOptions` in
 a job's configuration.
+
+**Advanced JVM Optimization Parameters**
+
+Beyond garbage collection, these specialized JVM parameters can significantly improve Spark performance in production environments:
+
+* **JIT Compilation Optimizations**:
+  - `-XX:ReservedCodeCacheSize=512m` — Allocates sufficient memory for just-in-time compilation of complex Spark jobs with numerous functions and lambda expressions.
+  - `-XX:PerMethodRecompilationCutoff=10000` — Prevents excessive method recompilation.
+  - `-XX:PerBytecodeRecompilationCutoff=10000` — Stabilizes performance in long-running Spark applications by limiting bytecode recompilation.
+
+* **Memory Utilization**:
+  - `-Xss<size>` — Adjusts thread stack size (e.g., `-Xss4M`) to either prevent `StackOverflowError` or reduce memory consumption when default allocations are excessive.
+
+* **System Stability**:
+  - `-XX:-CreateCoredumpOnCrash` — Disables automatic core dump generation when JVM crashes.
+    Particularly valuable in cluster environments to prevent unexpected large files from consuming limited disk space on executor nodes.
 
 # Other Considerations
 
