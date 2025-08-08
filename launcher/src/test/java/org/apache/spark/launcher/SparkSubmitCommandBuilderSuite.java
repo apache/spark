@@ -71,7 +71,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     doTestGetEffectiveConfig(driverMemPropsFile, false, false);
   }
 
-  public void doTestGetEffectiveConfig(
+  private void doTestGetEffectiveConfig(
       File propertiesFile, boolean loadSparkDefaults, boolean confDriverMemory) throws Exception {
     SparkSubmitCommandBuilder launcher =
         newCommandBuilder(Collections.emptyList());
