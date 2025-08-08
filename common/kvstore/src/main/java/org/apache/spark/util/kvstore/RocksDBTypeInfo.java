@@ -310,7 +310,8 @@ class RocksDBTypeInfo {
     byte[] entityKey(byte[] prefix, Object entity) throws Exception {
       Object indexValue = getValue(entity);
       Objects.requireNonNull(indexValue, () ->
-        String.format("Null index value for %s in type %s.", Arrays.toString(name), type.getName()));
+        String.format(
+          "Null index value for %s in type %s.", Arrays.toString(name), type.getName()));
       byte[] entityKey = start(prefix, indexValue);
       if (!isNatural) {
         entityKey = buildKey(false, entityKey, toKey(naturalIndex().getValue(entity)));
@@ -336,7 +337,8 @@ class RocksDBTypeInfo {
         byte[] prefix) throws Exception {
       Object indexValue = getValue(entity);
       Objects.requireNonNull(indexValue, () ->
-        String.format("Null index value for %s in type %s.", Arrays.toString(name), type.getName()));
+        String.format(
+          "Null index value for %s in type %s.", Arrays.toString(name), type.getName()));
 
       byte[] entityKey = start(prefix, indexValue);
       if (!isNatural) {
