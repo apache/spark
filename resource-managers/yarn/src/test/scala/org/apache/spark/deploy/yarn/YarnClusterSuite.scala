@@ -27,7 +27,6 @@ import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.io.Source
 
-import com.google.common.io.ByteStreams
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.exceptions.TestFailedException
@@ -763,8 +762,7 @@ private object YarnClasspathTest extends Logging {
     var result = "failure"
     try {
       val ccl = Thread.currentThread().getContextClassLoader()
-      val resource = ccl.getResourceAsStream("test.resource")
-      val bytes = ByteStreams.toByteArray(resource)
+      val bytes = ccl.getResourceAsStream("test.resource").readAllBytes()
       result = new String(bytes, 0, bytes.length, StandardCharsets.UTF_8)
     } catch {
       case t: Throwable =>

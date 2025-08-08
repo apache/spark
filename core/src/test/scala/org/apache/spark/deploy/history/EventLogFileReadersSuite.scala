@@ -22,7 +22,6 @@ import java.net.URI
 import java.nio.file.Files
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
-import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfter
@@ -220,7 +219,7 @@ class SingleFileEventLogFileReaderSuite extends EventLogFileReadersSuite {
 
       val entry = is.getNextEntry
       assert(entry != null)
-      val actual = ByteStreams.toByteArray(is)
+      val actual = is.readAllBytes()
       val expected = Files.readAllBytes(new File(logPath.toString).toPath)
       assert(actual === expected)
       assert(is.getNextEntry === null)
@@ -367,7 +366,7 @@ class RollingEventLogFilesReaderSuite extends EventLogFileReadersSuite {
           val fileName = entry.getName.stripPrefix(logPath.getName + "/")
           assert(allFileNames.contains(fileName))
 
-          val actual = ByteStreams.toByteArray(is)
+          val actual = is.readAllBytes()
           val expected = Files.readAllBytes(new File(logPath.toString, fileName).toPath)
           assert(actual === expected)
         }

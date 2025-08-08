@@ -1683,6 +1683,7 @@ object TestSettings {
     (Test / javaOptions) ++= System.getProperties.asScala.filter(_._1.startsWith("spark"))
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     (Test / javaOptions) += "-ea",
+    (Test / javaOptions) += s"-XX:ErrorFile=${baseDirectory.value}/target/hs_err_pid%p.log",
     (Test / javaOptions) ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
       val heapSize = sys.env.get("HEAP_SIZE").getOrElse("4g")

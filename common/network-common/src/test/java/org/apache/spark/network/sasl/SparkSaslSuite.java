@@ -36,7 +36,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import javax.security.sasl.SaslException;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.io.ByteStreams;
 import com.google.common.io.Files;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -282,7 +281,7 @@ public class SparkSaslSuite {
       verify(callback, times(1)).onSuccess(anyInt(), any(ManagedBuffer.class));
       verify(callback, never()).onFailure(anyInt(), any(Throwable.class));
 
-      byte[] received = ByteStreams.toByteArray(response.get().createInputStream());
+      byte[] received = response.get().createInputStream().readAllBytes();
       assertArrayEquals(data, received);
     } finally {
       file.delete();

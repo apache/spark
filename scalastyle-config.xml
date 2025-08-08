@@ -732,6 +732,11 @@ This file is divided into 3 sections:
     <customMessage>Use Java `write` instead.</customMessage>
   </check>
 
+  <check customId="bytestreamsread" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bByteStreams\.read\b</parameter></parameters>
+    <customMessage>Use Java readNBytes instead.</customMessage>
+  </check>
+
   <check customId="bytestreamscopy" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bByteStreams\.copy\b</parameter></parameters>
     <customMessage>Use Java transferTo instead.</customMessage>
@@ -745,6 +750,11 @@ This file is divided into 3 sections:
   <check customId="readFully" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\bByteStreams\.readFully\b</parameter></parameters>
     <customMessage>Use readFully of JavaUtils/SparkStreamUtils/Utils instead.</customMessage>
+  </check>
+
+  <check customId="nullOutputStream" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bByteStreams\.nullOutputStream\b</parameter></parameters>
+    <customMessage>Use OutputStream.nullOutputStream instead.</customMessage>
   </check>
 
   <check customId="maputils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
