@@ -611,6 +611,18 @@ public class JavaUtils {
   }
 
   /**
+   * Read len bytes exactly, otherwise throw exceptions.
+   */
+  public static void readFully(InputStream in, byte[] arr, int off, int len) throws IOException {
+    if (in == null || len < 0 || (off < 0 || off > arr.length - len)) {
+      throw new IllegalArgumentException("Invalid input argument");
+    }
+    if (len != in.readNBytes(arr, off, len)) {
+      throw new EOFException("Fail to read " + len + " bytes.");
+    }
+  }
+
+  /**
    * Copy the content of a URL into a file.
    */
   public static void copyURLToFile(URL url, File file) throws IOException {

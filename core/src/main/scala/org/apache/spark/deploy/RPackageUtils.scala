@@ -24,7 +24,7 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.{ByteStreams, Files}
+import com.google.common.io.Files
 
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.internal.{LogEntry, Logging, MessageWithContext}
@@ -251,7 +251,7 @@ private[deploy] object RPackageUtils extends Logging {
         val fis = new FileInputStream(file)
         val zipEntry = new ZipEntry(relPath)
         zipOutputStream.putNextEntry(zipEntry)
-        ByteStreams.copy(fis, zipOutputStream)
+        fis.transferTo(zipOutputStream)
         zipOutputStream.closeEntry()
         fis.close()
       }

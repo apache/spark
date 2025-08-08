@@ -191,6 +191,7 @@
             <property name="illegalClasses" value="org.apache.commons.lang3.SystemUtils" />
             <property name="illegalClasses" value="org.apache.hadoop.io.IOUtils" />
             <property name="illegalClasses" value="com.google.common.base.Strings" />
+            <property name="illegalClasses" value="com.google.common.io.BaseEncoding" />
         </module>
         <module name="RegexpSinglelineJava">
             <property name="format" value="Charset\.defaultCharset"/>
@@ -207,6 +208,18 @@
         <module name="RegexpSinglelineJava">
             <property name="format" value="Files\.asCharSink"/>
             <property name="message" value="Use java.nio.file.Files.writeString instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="ByteStreams\.copy"/>
+            <property name="message" value="Use Java transferTo instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="ByteStreams\.skipFully"/>
+            <property name="message" value="Use Java skipNBytes instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="ByteStreams\.readFully"/>
+            <property name="message" value="Use readFully of JavaUtils/SparkStreamUtils/Utils instead." />
         </module>
         <module name="RegexpSinglelineJava">
             <property name="format" value="FileUtils.writeStringToFile"/>
@@ -227,6 +240,10 @@
         <module name="RegexpSinglelineJava">
             <property name="format" value="FileUtils\.deleteQuietly"/>
             <property name="message" value="Use deleteQuietly of JavaUtils/SparkFileUtils/Utils instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="CharStreams\.toString"/>
+            <property name="message" value="Use toString of SparkStreamUtils or Utils instead." />
         </module>
         <!-- support structured logging -->
         <module name="RegexpSinglelineJava">

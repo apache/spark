@@ -29,7 +29,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 // scalastyle:on executioncontextglobal
 import scala.concurrent.Future
 
-import com.google.common.io.ByteStreams
 import io.netty.util.internal.OutOfDirectMemoryError
 import org.apache.logging.log4j.Level
 import org.mockito.ArgumentMatchers.{any, eq => meq}
@@ -289,7 +288,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
       intercept[FetchFailedException] {
         val inputStream = iterator.next()._2
         // Consume the data to trigger the corruption
-        ByteStreams.readFully(inputStream, new Array[Byte](100))
+        Utils.readFully(inputStream, new Array[Byte](100), 0, 100)
       }
       // The block will be fetched only once because corruption can't be detected in
       // maxBytesInFlight/3 of the data size

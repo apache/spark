@@ -30,6 +30,7 @@ import org.apache.spark.network.util.CryptoUtils
 import org.apache.spark.security.CryptoStreamUtils._
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.storage.TempShuffleBlockId
+import org.apache.spark.util.Utils
 
 class CryptoStreamUtilsSuite extends SparkFunSuite {
 
@@ -116,8 +117,7 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
 
       val in = CryptoStreamUtils.createCryptoInputStream(new ByteArrayInputStream(encrypted),
         sc.conf, SparkEnv.get.securityManager.getIOEncryptionKey().get)
-      val decrypted = new String(ByteStreams.toByteArray(in), UTF_8)
-      assert(content === decrypted)
+      assert(content === Utils.toString(in))
     } finally {
       sc.stop()
     }
@@ -134,7 +134,7 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
 
     val outStream = createCryptoOutputStream(new FileOutputStream(file), conf, key)
     try {
-      ByteStreams.copy(new ByteArrayInputStream(testData), outStream)
+      new ByteArrayInputStream(testData).transferTo(outStream)
     } finally {
       outStream.close()
     }
@@ -150,7 +150,9 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
     val outChannel = createWritableChannel(new FileOutputStream(file).getChannel(), conf, key)
     try {
       val inByteChannel = Channels.newChannel(new ByteArrayInputStream(testData))
+      // scalastyle:off bytestreamscopy
       ByteStreams.copy(inByteChannel, outChannel)
+      // scalastyle:on bytestreamscopy
     } finally {
       outChannel.close()
     }
