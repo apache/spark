@@ -290,6 +290,12 @@ object SparkBuild extends PomBuild {
                             sparkGenjavadocSettings ++
                             compilerWarningSettings ++
       (if (noLintOnCompile) Nil else enableScalaStyle) ++ Seq(
+    (Compile / dependencyClasspath) := (Compile / dependencyClasspath).value
+      .filterNot(file => {
+        val name = file.toString
+        (name.contains("orc-core") || name.contains("orc-format")) &&
+          !name.contains("shaded-protobuf")
+      }),
     (Compile / exportJars) := true,
     (Test / exportJars) := false,
     javaHome := sys.env.get("JAVA_HOME")
