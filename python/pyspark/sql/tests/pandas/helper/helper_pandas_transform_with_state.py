@@ -1655,6 +1655,7 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
         self.map_state = handle.getMapState("map_state", "name string", map_value_schema)
 
     def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        key = key[0]
         total_temperature = 0
 
         # Fixed tags and metadata to use for state
@@ -1713,10 +1714,12 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
         flattened_ids = [id_val for obj in updated_list for id_val in obj[0]]
 
         # Prepare data matching the map_state schema
+        attributes_map = {"key1": [1], "key2": [10]}
+        confs_map = {"e1": {"e2": 5, "e3": 10}}
         map_data = (
             0,  # id (dummy)
-            {"key1": [1], "key2": [10]},  # attributes map
-            {"e1": {"e2": 5, "e3": 10}}   # nested confs map
+            attributes_map,  # attributes map
+            confs_map   # nested confs map
         )
 
         # Update map_state keyed by 'key'
@@ -1737,8 +1740,8 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
             self.map_state.updateValue(key, new_map_value)
 
         # Serialize attributes map for output
-        attributes_str = str(self.map_state.getValue(key)[1])
-        confs_str = str(self.map_state.getValue(key)[2])
+        attributes_str = str(attributes_map)
+        confs_str = str(confs_map)
 
         # Yield a DataFrame summarizing the current state
         yield pd.DataFrame({
@@ -1783,6 +1786,7 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
         self.map_state = handle.getMapState("map_state", "name string", map_value_schema)
 
     def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
+        key = key[0]
         total_temperature = 0
 
         # Fixed tags and metadata to use for state
@@ -1840,10 +1844,12 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
         flattened_ids = [id_val for obj in updated_list for id_val in obj[0]]
 
         # Prepare data matching the map_state schema
+        attributes_map = {"key1": [1], "key2": [10]}
+        confs_map = {"e1": {"e2": 5, "e3": 10}}
         map_data = (
             0,  # id (dummy)
-            {"key1": [1], "key2": [10]},  # attributes map
-            {"e1": {"e2": 5, "e3": 10}}  # nested confs map
+            attributes_map,  # attributes map
+            confs_map   # nested confs map
         )
 
         # Update map_state keyed by 'key'
@@ -1864,8 +1870,8 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
             self.map_state.updateValue(key, new_map_value)
 
         # Serialize attributes map for output
-        attributes_str = str(self.map_state.getValue(key)[1])
-        confs_str = str(self.map_state.getValue(key)[2])
+        attributes_str = str(attributes_map)
+        confs_str = str(confs_map)
 
         # Yield a DataFrame summarizing the current state
         yield Row(

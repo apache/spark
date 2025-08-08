@@ -1517,39 +1517,42 @@ class TransformWithStateTestsMixin:
         def check_results(batch_df, batch_id):
             if batch_id == 0:
                 map_val = {'key1': [1], 'key2': [10]}
+                nested_map_val = {'e1': {'e2': 5, 'e3': 10}}
                 assert set(batch_df.sort("id").collect()) == {
                     Row(
                         id="0",
                         value_arr="0",
                         list_state_arr="0",
                         map_state_arr=str(map_val),
-                        nested_map_state_arr=str(map_val)
+                        nested_map_state_arr=str(nested_map_val)
                     ),
                     Row(
                         id="1",
                         value_arr="0",
                         list_state_arr="0",
                         map_state_arr=str(map_val),
-                        nested_map_state_arr=str(map_val)
+                        nested_map_state_arr=str(nested_map_val)
                     ),
                 }, f"batch id: {batch_id}, real df is: {batch_df.collect()}"
             else:
                 map_val_0 = {'key1': [1], 'key2': [10], '0': [669]}
                 map_val_1 = {'key1': [1], 'key2': [10], '1': [252]}
+                nested_map_val_0 = {'e1': {'e2': 5, 'e3': 10}}
+                nested_map_val_1 = {'e1': {'e2': 5, 'e3': 10}}
                 assert set(batch_df.sort("id").collect()) == {
                     Row(
                         id="0",
                         countAsString="669",
                         list_state_arr="0,669",
                         map_state_arr=str(map_val_0),
-                        nested_map_state_arr=str(map_val_0)
+                        nested_map_state_arr=str(nested_map_val_0)
                     ),
                     Row(
                         id="1",
                         countAsString="252",
                         list_state_arr="0,252",
                         map_state_arr=str(map_val_1),
-                        nested_map_state_arr=str(map_val_1)
+                        nested_map_state_arr=str(nested_map_val_1)
                     ),
                 }, f"batch id: {batch_id}, real df is: {batch_df.collect()}"
 
@@ -1558,6 +1561,7 @@ class TransformWithStateTestsMixin:
             StructField("value_arr", StringType(), True),
             StructField("list_state_arr", StringType(), True),
             StructField("map_state_arr", StringType(), True),
+            StructField("nested_map_state_arr", StringType(), True),
         ])
 
         self._test_transform_with_state_basic(StatefulProcessorCompositeTypeFactory(), check_results,
