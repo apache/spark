@@ -59,6 +59,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       table: RowLevelOperationTable,
       metadataAttrs: Seq[AttributeReference],
       rowIdAttrs: Seq[AttributeReference] = Nil): DataSourceV2Relation = {
+
     val attrs = dedupAttrs(relation.output ++ rowIdAttrs ++ metadataAttrs)
     relation.copy(table = table, output = attrs)
   }
