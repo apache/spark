@@ -348,7 +348,7 @@ jobs:
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v4
       with:
-        distribution: zulu
+        distribution: temurin
         java-version: ${{ matrix.java }}
     - name: Install Python 3.11
       uses: actions/setup-python@v5
@@ -598,7 +598,7 @@ jobs:
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v4
       with:
-        distribution: zulu
+        distribution: temurin
         java-version: ${{ matrix.java }}
     - name: List Python packages (${{ env.PYTHON_TO_TEST }})
       if: ${{ env.PYTHON_TO_TEST != '' }}
@@ -714,7 +714,7 @@ jobs:
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v4
       with:
-        distribution: zulu
+        distribution: temurin
         java-version: ${{ inputs.java }}
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -839,7 +839,7 @@ jobs:
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v4
       with:
-        distribution: zulu
+        distribution: temurin
         java-version: ${{ inputs.java }}
     - name: License test
       run: ./dev/check-license
@@ -931,7 +931,7 @@ jobs:
     - uses: actions/checkout@v4
     - uses: actions/setup-java@v4
       with:
-        distribution: zulu
+        distribution: temurin
         java-version: 17
     - name: Build with Maven
       run: |
@@ -949,7 +949,7 @@ jobs:
     - uses: actions/checkout@v4
     - uses: actions/setup-java@v4
       with:
-        distribution: zulu
+        distribution: temurin
         java-version: 25-ea
     - name: Build with Maven
       run: |
@@ -1021,7 +1021,7 @@ jobs:
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v4
       with:
-        distribution: zulu
+        distribution: temurin
         java-version: ${{ inputs.java }}
     - name: Install dependencies for documentation generation for branch-3.5
       if: inputs.branch == 'branch-3.5'
@@ -1151,7 +1151,7 @@ jobs:
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v4
       with:
-        distribution: zulu
+        distribution: temurin
         java-version: ${{ inputs.java }}
     - name: Cache TPC-DS generated data
       id: cache-tpcds-sf-1
@@ -1260,7 +1260,7 @@ jobs:
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v4
       with:
-        distribution: zulu
+        distribution: temurin
         java-version: ${{ inputs.java }}
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -1319,7 +1319,7 @@ jobs:
       - name: Install Java ${{ inputs.java }}
         uses: actions/setup-java@v4
         with:
-          distribution: zulu
+          distribution: temurin
           java-version: ${{ inputs.java }}
       - name: Install R
         run: |
