@@ -494,6 +494,11 @@ This file is divided into 3 sections:
     <customMessage>Use Utils.strip method instead</customMessage>
   </check>
 
+  <check customId="encodeHexString" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bHex\.encodeHexString\b</parameter></parameters>
+    <customMessage>Use java.util.HexFormat instead</customMessage>
+  </check>
+
   <check customId="commonsiofileutils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.io\.FileUtils\b</parameter></parameters>
     <customMessage>Use Java API or Spark's JavaUtils/SparkSystemUtils/Utils instead</customMessage>
