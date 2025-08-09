@@ -53,7 +53,7 @@ import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.launcher.JavaModuleOptions
+import org.apache.spark.launcher.{JavaModuleOptions, SparkLauncher}
 import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
@@ -3413,27 +3413,21 @@ object SparkContext extends Logging {
    * `spark.driver.extraJavaOptions` and `spark.executor.extraJavaOptions`.
    */
   private def supplementJavaModuleOptions(conf: SparkConf): Unit = {
-    def supplement(key: OptionalConfigEntry[String]): Unit = {
-      val v = conf.get(key) match {
-        case Some(opts) => s"${JavaModuleOptions.defaultModuleOptions()} $opts"
-        case None => JavaModuleOptions.defaultModuleOptions()
-      }
-      conf.set(key.key, v)
+    def supplement(key: String): Unit = {
+      val v = s"${JavaModuleOptions.defaultModuleOptions()} ${conf.get(key, "")}".trim()
+      conf.set(key, v)
     }
-    supplement(DRIVER_JAVA_OPTIONS)
-    supplement(EXECUTOR_JAVA_OPTIONS)
+    supplement(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS)
+    supplement(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS)
   }
 
   private def supplementJavaIPv6Options(conf: SparkConf): Unit = {
-    def supplement(key: OptionalConfigEntry[String]): Unit = {
-      val v = conf.get(key) match {
-        case Some(opts) => s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6} $opts"
-        case None => s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}"
-      }
-      conf.set(key.key, v)
+    def supplement(key: String): Unit = {
+      val v = s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6} ${conf.get(key, "")}".trim()
+      conf.set(key, v)
     }
-    supplement(DRIVER_JAVA_OPTIONS)
-    supplement(EXECUTOR_JAVA_OPTIONS)
+    supplement(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS)
+    supplement(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS)
   }
 }
 
