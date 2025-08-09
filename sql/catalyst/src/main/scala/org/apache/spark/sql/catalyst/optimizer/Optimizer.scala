@@ -2585,6 +2585,28 @@ object GenerateOptimization extends Rule[LogicalPlan] {
             p.withNewChildren(Seq(updatedGenerate))
           case _ => p
         }
+
+      case p @ Project(_, g: Generate) if g.generator.isInstanceOf[JsonTuple] =>
+        val generatorOutput = g.generatorOutput
+        val usedOutputs =
+          AttributeSet(generatorOutput).intersect(AttributeSet(p.projectList.flatMap(_.references)))
+
+        usedOutputs.size match {
+          case 0 =>
+            p.withNewChildren(g.children)
+          case n if n < generatorOutput.size =>
+            val originJsonTuple = g.generator.asInstanceOf[JsonTuple]
+            val (newJsonExpressions, newGeneratorOutput) =
+              generatorOutput.zipWithIndex.collect {
+                case (attr, i) if usedOutputs.contains(attr) =>
+                  (originJsonTuple.children(i + 1), attr)
+              }.unzip
+            p.withNewChildren(Seq(g.copy(
+              generator = JsonTuple(originJsonTuple.children.head +: newJsonExpressions),
+              generatorOutput = newGeneratorOutput)))
+          case _ =>
+            p
+        }
     }
 }
 
