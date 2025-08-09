@@ -30,6 +30,7 @@ import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PRE
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
@@ -178,8 +179,11 @@ object SQLExecution extends Logging {
                 val shuffleIds = queryExecution.executedPlan match {
                   case ae: AdaptiveSparkPlanExec =>
                     ae.context.shuffleIds.asScala.keys
-                  case _ =>
-                    Iterable.empty
+                  case nonAdaptivePlan =>
+                    nonAdaptivePlan.collect {
+                      case exec: ShuffleExchangeLike =>
+                        exec.shuffleId
+                    }
                 }
                 shuffleIds.foreach { shuffleId =>
                   queryExecution.shuffleCleanupMode match {
