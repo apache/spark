@@ -83,6 +83,13 @@ object MimaExcludes {
     // SPARK-51267: Match local Spark Connect server logic between Python and Scala
     ProblemFilters.exclude[MissingFieldProblem]("org.apache.spark.launcher.SparkLauncher.SPARK_LOCAL_REMOTE"),
 
+    // SPARK-53138: Split common/utils Java code into a new module common/utils-java
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.QueryContext"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.QueryContextType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.java.function.*"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.network.util.ByteUnit"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.network.util.JavaUtils"),
+
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
           !cls.fullName.startsWith("org.sparkproject.dmg.pmml")
