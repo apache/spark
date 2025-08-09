@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParame
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.SparkSession.applyAndLoadExtensions
@@ -430,6 +430,39 @@ class SparkSession private(
    |  Everything else  |
    * ----------------- */
 
+  private[sql] def sqlParsedPlan(
+    sqlText: String,
+    args: Array[_],
+    tracker: QueryPlanningTracker): LogicalPlan = {
+    tracker.measurePhase(QueryPlanningTracker.PARSING) {
+      val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
+      if (args.nonEmpty) {
+        if (parsedPlan.isInstanceOf[CompoundBody]) {
+          // Positional parameters are not supported for SQL scripting.
+          throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+        }
+        PosParameterizedQuery(parsedPlan, args.map(lit(_).expr).toImmutableArraySeq)
+      } else {
+        parsedPlan
+      }
+    }
+  }
+
+  private[sql] def sqlParsedPlan(
+    sqlText: String,
+    args: Map[String, Any],
+    tracker: QueryPlanningTracker): LogicalPlan = {
+    tracker.measurePhase(QueryPlanningTracker.PARSING) {
+      val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
+      if (args.nonEmpty) {
+        NameParameterizedQuery(parsedPlan, args.transform((_, v) => lit(v).expr))
+      } else {
+        parsedPlan
+      }
+    }
+  }
+
+
   /**
    * Executes a SQL query substituting positional parameters by the given arguments,
    * returning the result as a `DataFrame`.
@@ -445,22 +478,15 @@ class SparkSession private(
    *             such as `map()`, `array()`, `struct()`, in that case it is taken as is.
    * @param tracker A tracker that can notify when query is ready for execution
    */
-  private[sql] def sql(sqlText: String, args: Array[_], tracker: QueryPlanningTracker): DataFrame =
+  private[sql] def sql(
+    sqlText: String,
+    args: Array[_],
+    tracker: QueryPlanningTracker): DataFrame = {
     withActive {
-      val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-        val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-        if (args.nonEmpty) {
-          if (parsedPlan.isInstanceOf[CompoundBody]) {
-            // Positional parameters are not supported for SQL scripting.
-            throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
-          }
-          PosParameterizedQuery(parsedPlan, args.map(lit(_).expr).toImmutableArraySeq)
-        } else {
-          parsedPlan
-        }
-      }
+      val plan = sqlParsedPlan(sqlText, args, tracker)
       Dataset.ofRows(self, plan, tracker)
     }
+  }
 
   /** @inheritdoc */
   def sql(sqlText: String, args: Array[_]): DataFrame = {
@@ -488,14 +514,7 @@ class SparkSession private(
       args: Map[String, Any],
       tracker: QueryPlanningTracker): DataFrame =
     withActive {
-      val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-        val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-        if (args.nonEmpty) {
-          NameParameterizedQuery(parsedPlan, args.transform((_, v) => lit(v).expr))
-        } else {
-          parsedPlan
-        }
-      }
+      val plan = sqlParsedPlan(sqlText, args, tracker)
       Dataset.ofRows(self, plan, tracker)
     }
 

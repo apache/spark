@@ -35,7 +35,7 @@ import org.apache.spark.{SparkClassNotFoundException, SparkEnv, SparkException, 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{CheckpointCommand, CreateResourceProfileCommand, ExecutePlanResponse, SqlCommand, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
+import org.apache.spark.connect.proto.{CheckpointCommand, CreateResourceProfileCommand, ExecutePlanResponse, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
@@ -69,7 +69,7 @@ import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectService}
 import org.apache.spark.sql.connect.utils.MetricGenerator
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{QueryExecution, ShuffleCleanupMode}
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, TypedAggregateExpression}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.{CreateViewCommand, ExternalCommandExecutor}
@@ -341,13 +341,6 @@ class SparkConnectPlanner(
     } else {
       parsedPlan
     }
-  }
-
-  private def transformSqlWithRefs(query: proto.WithRelations): LogicalPlan = {
-    if (!isValidSQLWithRefs(query)) {
-      throw InvalidInputErrors.invalidSQLWithReferences(query)
-    }
-    executeSQLWithRefs(query).logicalPlan
   }
 
   private def transformSubqueryAlias(alias: proto.SubqueryAlias): LogicalPlan = {
@@ -2651,6 +2644,8 @@ class SparkConnectPlanner(
         Some(transformWriteOperation(command.getWriteOperation))
       case proto.Command.CommandTypeCase.WRITE_OPERATION_V2 =>
         Some(transformWriteOperationV2(command.getWriteOperationV2))
+      case proto.Command.CommandTypeCase.SQL_COMMAND =>
+        Some(transformSqlCommand(command.getSqlCommand))
       case _ =>
         None
     }
@@ -2661,7 +2656,8 @@ class SparkConnectPlanner(
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val transformerOpt = transformCommand(command)
     if (transformerOpt.isDefined) {
-      transformAndRunCommand(transformerOpt.get)
+      val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
+      runCommand(transformerOpt.get(tracker), tracker, responseObserver, command)
       return
     }
     command.getCommandTypeCase match {
@@ -2675,8 +2671,6 @@ class SparkConnectPlanner(
         handleCreateViewCommand(command.getCreateDataframeView)
       case proto.Command.CommandTypeCase.EXTENSION =>
         handleCommandPlugin(command.getExtension)
-      case proto.Command.CommandTypeCase.SQL_COMMAND =>
-        handleSqlCommand(command.getSqlCommand, responseObserver)
       case proto.Command.CommandTypeCase.WRITE_STREAM_OPERATION_START =>
         handleWriteStreamOperationStart(command.getWriteStreamOperationStart, responseObserver)
       case proto.Command.CommandTypeCase.STREAMING_QUERY_COMMAND =>
@@ -2781,12 +2775,8 @@ class SparkConnectPlanner(
         .build())
   }
 
-  private def handleSqlCommand(
-      command: SqlCommand,
-      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
-
-    val relation = if (command.hasInput) {
+  private def getRelationFromSQLCommand(command: proto.SqlCommand): proto.Relation = {
+    if (command.hasInput) {
       command.getInput
     } else {
       // for backward compatibility
@@ -2803,14 +2793,32 @@ class SparkConnectPlanner(
             .build())
         .build()
     }
+  }
 
-    val df = relation.getRelTypeCase match {
+  private def transformSqlCommand(command: proto.SqlCommand)(
+      tracker: QueryPlanningTracker): LogicalPlan = {
+    val relation = getRelationFromSQLCommand(command)
+
+    relation.getRelTypeCase match {
       case proto.Relation.RelTypeCase.SQL =>
-        executeSQL(relation.getSql, tracker)
+        transformSQL(relation.getSql, tracker)
       case proto.Relation.RelTypeCase.WITH_RELATIONS =>
-        executeSQLWithRefs(relation.getWithRelations, tracker)
+        transformSQLWithRefs(relation.getWithRelations, tracker)
       case other =>
         throw InvalidInputErrors.sqlCommandExpectsSqlOrWithRelations(other)
+    }
+  }
+
+  private def runSQLCommand(
+      command: LogicalPlan,
+      tracker: QueryPlanningTracker,
+      responseObserver: StreamObserver[ExecutePlanResponse],
+      protoCommand: proto.Command,
+      shuffleCleanupMode: Option[ShuffleCleanupMode]): Unit = {
+    val df = if (shuffleCleanupMode.isDefined) {
+      Dataset.ofRows(session, command, tracker, shuffleCleanupMode.get)
+    } else {
+      Dataset.ofRows(session, command, tracker)
     }
 
     // Check if command or SQL Script has been executed.
@@ -2867,7 +2875,7 @@ class SparkConnectPlanner(
     } else {
       // No execution triggered for relations. Manually set ready
       tracker.setReadyForExecution()
-      result.setRelation(relation)
+      result.setRelation(getRelationFromSQLCommand(protoCommand.getSqlCommand))
     }
     executeHolder.eventsManager.postFinished(Some(rows.size))
     // Exactly one SQL Command Result Batch
@@ -2909,9 +2917,9 @@ class SparkConnectPlanner(
     true
   }
 
-  private def executeSQLWithRefs(
+  private def transformSQLWithRefs(
       query: proto.WithRelations,
-      tracker: QueryPlanningTracker = new QueryPlanningTracker) = {
+      tracker: QueryPlanningTracker): LogicalPlan = {
     if (!isValidSQLWithRefs(query)) {
       throw InvalidInputErrors.invalidSQLWithReferences(query)
     }
@@ -2925,7 +2933,7 @@ class SparkConnectPlanner(
             .ofRows(session, transformRelation(ref.getSubqueryAlias.getInput))
             .createOrReplaceTempView(ref.getSubqueryAlias.getAlias)
         }
-        executeSQL(sql, tracker)
+        transformSQL(sql, tracker)
       } finally {
         // drop all temporary views
         query.getReferencesList.asScala.foreach { ref =>
@@ -2935,34 +2943,44 @@ class SparkConnectPlanner(
     }
   }
 
-  private def executeSQL(
-      sql: proto.SQL,
+  private def executeSQLWithRefs(
+      query: proto.WithRelations,
       tracker: QueryPlanningTracker = new QueryPlanningTracker) = {
+    Dataset.ofRows(session, transformSQLWithRefs(query, tracker), tracker)
+  }
+
+  private def transformSQL(sql: proto.SQL, tracker: QueryPlanningTracker): LogicalPlan = {
     // Eagerly execute commands of the provided SQL string.
     val args = sql.getArgsMap
     val namedArguments = sql.getNamedArgumentsMap
     val posArgs = sql.getPosArgsList
     val posArguments = sql.getPosArgumentsList
     if (!namedArguments.isEmpty) {
-      session.sql(
+      session.sqlParsedPlan(
         sql.getQuery,
         namedArguments.asScala.toMap.transform((_, e) => Column(transformExpression(e))),
         tracker)
     } else if (!posArguments.isEmpty) {
-      session.sql(
+      session.sqlParsedPlan(
         sql.getQuery,
         posArguments.asScala.map(e => Column(transformExpression(e))).toArray,
         tracker)
     } else if (!args.isEmpty) {
-      session.sql(
+      session.sqlParsedPlan(
         sql.getQuery,
         args.asScala.toMap.transform((_, v) => transformLiteral(v)),
         tracker)
     } else if (!posArgs.isEmpty) {
-      session.sql(sql.getQuery, posArgs.asScala.map(transformLiteral).toArray, tracker)
+      session.sqlParsedPlan(sql.getQuery, posArgs.asScala.map(transformLiteral).toArray, tracker)
     } else {
-      session.sql(sql.getQuery, Map.empty[String, Any], tracker)
+      session.sqlParsedPlan(sql.getQuery, Map.empty[String, Any], tracker)
     }
+  }
+
+  private def executeSQL(
+      sql: proto.SQL,
+      tracker: QueryPlanningTracker = new QueryPlanningTracker) = {
+    Dataset.ofRows(session, transformSQL(sql, tracker), tracker)
   }
 
   private def handleRegisterUserDefinedFunction(
@@ -3157,11 +3175,27 @@ class SparkConnectPlanner(
     }
   }
 
-  private def transformAndRunCommand(transformer: QueryPlanningTracker => LogicalPlan): Unit = {
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
-    val qe = new QueryExecution(session, transformer(tracker), tracker)
-    qe.assertCommandExecuted()
-    executeHolder.eventsManager.postFinished()
+  private[connect] def runCommand(
+      command: LogicalPlan,
+      tracker: QueryPlanningTracker,
+      responseObserver: StreamObserver[ExecutePlanResponse],
+      protoCommand: proto.Command,
+      shuffleCleanupMode: Option[ShuffleCleanupMode] = None): Unit = {
+    if (protoCommand.getCommandTypeCase == proto.Command.CommandTypeCase.SQL_COMMAND) {
+      runSQLCommand(command, tracker, responseObserver, protoCommand, shuffleCleanupMode)
+    } else {
+      val qe = if (shuffleCleanupMode.isDefined) {
+        new QueryExecution(
+          session,
+          command,
+          tracker = tracker,
+          shuffleCleanupMode = shuffleCleanupMode.get)
+      } else {
+        new QueryExecution(session, command, tracker = tracker)
+      }
+      qe.assertCommandExecuted()
+      executeHolder.eventsManager.postFinished()
+    }
   }
 
   /**
@@ -4105,7 +4139,7 @@ class SparkConnectPlanner(
 
   private def transformWithRelations(getWithRelations: proto.WithRelations): LogicalPlan = {
     if (isValidSQLWithRefs(getWithRelations)) {
-      transformSqlWithRefs(getWithRelations)
+      executeSQLWithRefs(getWithRelations).logicalPlan
     } else {
       // Wrap the plan to keep the original planId.
       val plan = Project(Seq(UnresolvedStar(None)), transformRelation(getWithRelations.getRoot))
