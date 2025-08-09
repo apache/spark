@@ -21,7 +21,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
 
 object LiteralExpressionProtoConverter {
 
@@ -74,6 +74,27 @@ object LiteralExpressionProtoConverter {
 
       case proto.Expression.Literal.LiteralTypeCase.STRING =>
         expressions.Literal(UTF8String.fromString(lit.getString), StringType)
+
+      case proto.Expression.Literal.LiteralTypeCase.CHAR =>
+        var length = lit.getChar.getValue.length
+        if (lit.getChar.hasLength) {
+          length = lit.getChar.getLength
+        }
+        expressions.Literal(UTF8String.fromString(lit.getChar.getValue), CharType(length))
+
+      case proto.Expression.Literal.LiteralTypeCase.VARCHAR =>
+        var length = lit.getVarchar.getValue.length
+        if (lit.getVarchar.hasLength) {
+          length = lit.getVarchar.getLength
+        }
+        expressions.Literal(UTF8String.fromString(lit.getVarchar.getValue), VarcharType(length))
+
+      case proto.Expression.Literal.LiteralTypeCase.VARIANT =>
+        expressions.Literal(
+          new VariantVal(
+            lit.getVariant.getValue.toByteArray,
+            lit.getVariant.getMetadata.toByteArray),
+          VariantType)
 
       case proto.Expression.Literal.LiteralTypeCase.DATE =>
         expressions.Literal(lit.getDate, DateType)
