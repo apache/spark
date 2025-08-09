@@ -3798,15 +3798,18 @@ abstract class CSVSuite
 
   test("corrupted ZSTD compressed csv respects ignoreCorruptFiles") {
     withTempDir { dir =>
+      val originalFile = new File(dir, "original.csv.zst")
       val corruptedHeadFile = new File(dir, "corrupted_head.csv.zst")
       val corruptedTailFile = new File(dir, "corrupted_tail.csv.zst")
       val bytes = Files.readAllBytes(Paths.get(new URI(testFile(zstCompressedCarsFile))))
+      Files.write(originalFile.toPath(), bytes)
       Files.write(corruptedHeadFile.toPath(), bytes.drop(10))
       Files.write(corruptedTailFile.toPath(), bytes.dropRight(10))
 
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
         val df = spark.read.format("csv").option("header", "true").load(dir.getAbsolutePath)
-        assert(df.count() == 0)
+        // check that the entries from originalFile are still read
+        assert(df.count() == 3)
       }
 
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
