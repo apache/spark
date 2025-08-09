@@ -782,7 +782,12 @@ This file is divided into 3 sections:
     <customMessage>Use org.apache.spark.util.collection.Utils instead.</customMessage>
   </check>
 
-  <check customId="maputils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+  <check customId="googleFiles" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">com\.google\.common\.io\.Files\b</parameter></parameters>
+    <customMessage>Use Java API or Spark's JavaUtils/SparkFileUtils/Utils instead.</customMessage>
+  </check>
+
+  <check customId="googleBaseEncoding" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">com\.google\.common\.io\.BaseEncoding\b</parameter></parameters>
     <customMessage>Use Java APIs (like java.util.Base64) instead.</customMessage>
   </check>

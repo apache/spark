@@ -192,6 +192,7 @@
             <property name="illegalClasses" value="org.apache.hadoop.io.IOUtils" />
             <property name="illegalClasses" value="com.google.common.base.Strings" />
             <property name="illegalClasses" value="com.google.common.io.BaseEncoding" />
+            <property name="illegalClasses" value="com.google.common.io.Files" />
         </module>
         <module name="RegexpSinglelineJava">
             <property name="format" value="Charset\.defaultCharset"/>
