@@ -13,6 +13,44 @@ CreateVariable defaultvalueexpression(null, null), false
 
 
 -- !query
+DECLARE VARIABLE var1, var2, var3 INT
+-- !query analysis
+CreateVariable defaultvalueexpression(null, null), false
+:- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
+:- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var2
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var3
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE var1, var2 DOUBLE
+-- !query analysis
+CreateVariable defaultvalueexpression(null, null), true
+:- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var2
+
+
+-- !query
+DROP TEMPORARY VARIABLE var1
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
+
+
+-- !query
+DROP TEMPORARY VARIABLE var2
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var2
+
+
+-- !query
+DROP TEMPORARY VARIABLE var3
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var3
+
+
+-- !query
 SET VARIABLE title = '-- Basic sanity --'
 -- !query analysis
 SetVariable [variablereference(system.session.title=CAST(NULL AS STRING))]
@@ -1244,6 +1282,19 @@ DROP TEMPORARY VARIABLE var3
 -- !query analysis
 DropVariable false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var3
+
+
+-- !query
+DECLARE VARIABLE var1, var2, vAr1 INT
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "VARIABLE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "variableName" : "`system`.`session`.`var1`"
+  }
+}
 
 
 -- !query
