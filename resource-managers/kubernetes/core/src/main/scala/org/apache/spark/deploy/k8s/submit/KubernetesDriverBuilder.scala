@@ -83,7 +83,8 @@ class KubernetesDriverBuilder {
       new HadoopConfDriverFeatureStep(conf),
       new KerberosConfDriverFeatureStep(conf),
       new PodTemplateConfigMapStep(conf),
-      new LocalDirsFeatureStep(conf)) ++ userFeatures
+      new LocalDirsFeatureStep(conf),
+      new PriorityClassFeatureStep(conf)) ++ userFeatures
 
     val features = allFeatures.filterNot(f =>
       conf.get(Config.KUBERNETES_DRIVER_POD_EXCLUDED_FEATURE_STEPS).contains(f.getClass.getName))
