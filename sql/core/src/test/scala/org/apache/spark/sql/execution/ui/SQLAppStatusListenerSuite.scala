@@ -46,7 +46,7 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, Write, WriteBuilder}
-import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
+import org.apache.spark.sql.execution.{DoNotCleanup, LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -573,7 +573,8 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val expectedAccumValue = 12345L
     val expectedAccumValue2 = 54321L
     val physicalPlan = MyPlan(sqlContext.sparkContext, expectedAccumValue, expectedAccumValue2)
-    val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
+    val dummyQueryExecution = new QueryExecution(spark, LocalRelation(),
+      shuffleCleanupMode = DoNotCleanup) {
       override lazy val sparkPlan = physicalPlan
       override lazy val executedPlan = physicalPlan
     }
@@ -848,7 +849,8 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val schema = new StructType().add("i", "int").add("j", "int")
     val physicalPlan = BatchScanExec(toAttributes(schema), new CustomMetricScanBuilder(), Seq.empty,
       table = new TestLocalScanTable("fake"))
-    val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
+    val dummyQueryExecution = new QueryExecution(spark, LocalRelation(),
+      shuffleCleanupMode = DoNotCleanup) {
       override lazy val sparkPlan = physicalPlan
       override lazy val executedPlan = physicalPlan
     }
@@ -887,7 +889,8 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val schema = new StructType().add("i", "int").add("j", "int")
     val physicalPlan = BatchScanExec(toAttributes(schema), new CustomDriverMetricScanBuilder(),
       Seq.empty, table = new TestLocalScanTable("fake"))
-    val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
+    val dummyQueryExecution = new QueryExecution(spark, LocalRelation(),
+      shuffleCleanupMode = DoNotCleanup) {
       override lazy val sparkPlan = physicalPlan
       override lazy val executedPlan = physicalPlan
     }

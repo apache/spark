@@ -68,7 +68,7 @@ import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectService}
 import org.apache.spark.sql.connect.utils.MetricGenerator
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{DoNotCleanup, QueryExecution}
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, TypedAggregateExpression}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.{CreateViewCommand, ExternalCommandExecutor}
@@ -1378,7 +1378,10 @@ class SparkConnectPlanner(
     if (!rel.getAllColumnsAsKeys && rel.getColumnNamesCount == 0) {
       throw InvalidInputErrors.deduplicateRequiresColumnsOrAll()
     }
-    val queryExecution = new QueryExecution(session, transformRelation(rel.getInput))
+    val queryExecution = new QueryExecution(
+      session,
+      transformRelation(rel.getInput),
+      shuffleCleanupMode = DoNotCleanup)
     val resolver = session.sessionState.analyzer.resolver
     val allColumns = queryExecution.analyzed.output
     if (rel.getAllColumnsAsKeys) {
@@ -3158,7 +3161,11 @@ class SparkConnectPlanner(
 
   private def transformAndRunCommand(transformer: QueryPlanningTracker => LogicalPlan): Unit = {
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
-    val qe = new QueryExecution(session, transformer(tracker), tracker)
+    val qe = new QueryExecution(
+      session,
+      transformer(tracker),
+      tracker,
+      shuffleCleanupMode = DoNotCleanup)
     qe.assertCommandExecuted()
     executeHolder.eventsManager.postFinished()
   }

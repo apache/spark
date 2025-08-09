@@ -39,7 +39,6 @@ import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.execution.QueryExecution.determineShuffleCleanupMode
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
@@ -65,7 +64,7 @@ class QueryExecution(
     val logical: LogicalPlan,
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
     val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
-    val specifiedShuffleCleanupMode: Option[ShuffleCleanupMode] = None) extends Logging {
+    val shuffleCleanupMode: ShuffleCleanupMode) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
 
@@ -76,9 +75,6 @@ class QueryExecution(
     // Only check the main query as subquery expression can be resolved now with the main query.
     logical.exists(_.expressions.exists(_.exists(_.isInstanceOf[LazyExpression])))
   }
-
-  def shuffleCleanupMode: ShuffleCleanupMode = specifiedShuffleCleanupMode.getOrElse(
-    determineShuffleCleanupMode(sparkSession.sessionState.conf))
 
   def assertAnalyzed(): Unit = {
     try {
