@@ -576,7 +576,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
    * user-registered callback functions.
    */
   private def runCommand(session: SparkSession)(command: LogicalPlan): Unit = {
-    val qe = new QueryExecution(session, command, df.queryExecution.tracker)
+    val qe = new QueryExecution(session, command, df.queryExecution.tracker,
+      shuffleCleanupMode = QueryExecution.determineShuffleCleanupMode(session.sessionState.conf))
     qe.assertCommandExecuted()
   }
 

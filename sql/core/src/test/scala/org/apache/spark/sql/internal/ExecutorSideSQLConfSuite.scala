@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
-import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlan}
+import org.apache.spark.sql.execution.{DoNotCleanup, LeafExecNode, QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.debug.codegenStringSeq
 import org.apache.spark.sql.functions.col
@@ -209,7 +209,7 @@ case class SQLConfAssertPlan(confToCheck: Seq[(String, String)]) extends LeafExe
 }
 
 case class FakeQueryExecution(spark: SparkSession, physicalPlan: SparkPlan)
-    extends QueryExecution(spark, LocalRelation()) {
+    extends QueryExecution(spark, LocalRelation(), shuffleCleanupMode = DoNotCleanup) {
   override lazy val sparkPlan: SparkPlan = physicalPlan
   override lazy val executedPlan: SparkPlan = physicalPlan
 }

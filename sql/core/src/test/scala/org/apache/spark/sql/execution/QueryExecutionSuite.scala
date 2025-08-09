@@ -160,7 +160,8 @@ class QueryExecutionSuite extends SharedSparkSession {
   test("toString() exception/error handling") {
     spark.experimental.extraStrategies = Seq[SparkStrategy]((_: LogicalPlan) => Nil)
 
-    def qe: QueryExecution = new QueryExecution(spark, OneRowRelation())
+    def qe: QueryExecution = new QueryExecution(spark, OneRowRelation(),
+      shuffleCleanupMode = DoNotCleanup)
 
     // Nothing!
     assert(qe.toString.contains("OneRowRelation"))
@@ -258,7 +259,8 @@ class QueryExecutionSuite extends SharedSparkSession {
     val mockCallback1 = MockCallbackEagerCommand()
     val mockCallback2 = MockCallbackEagerCommand()
     def qe(logicalPlan: LogicalPlan, callback: QueryPlanningTrackerCallback): QueryExecution =
-      new QueryExecution(spark, logicalPlan, new QueryPlanningTracker(Some(callback)))
+      new QueryExecution(spark, logicalPlan, new QueryPlanningTracker(Some(callback)),
+        shuffleCleanupMode = DoNotCleanup)
 
     val showTables = ShowTables(CurrentNamespace, None)
     val showTablesQe = qe(showTables, mockCallback1)
@@ -293,7 +295,7 @@ class QueryExecutionSuite extends SharedSparkSession {
       spark,
       showTables,
       new QueryPlanningTracker(Some(mockCallback)),
-      CommandExecutionMode.SKIP)
+      CommandExecutionMode.SKIP, shuffleCleanupMode = DoNotCleanup)
     showTablesQe.assertAnalyzed()
     mockCallback.assertAnalyzed()
     showTablesQe.assertOptimized()
@@ -439,6 +441,26 @@ class QueryExecutionSuite extends SharedSparkSession {
         )
       }
     }
+  }
+
+  test("determineShuffleCleanupMode should return correct mode based on SQL configuration") {
+    val conf = new SQLConf()
+    def checkMode(classicShuffleEnabled: Boolean,
+                  skipMigrationEnabled: Boolean, cleanupMode: ShuffleCleanupMode): Unit = {
+      conf.setConf(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, classicShuffleEnabled)
+      conf.setConf(SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED, skipMigrationEnabled)
+      assert(QueryExecution.determineShuffleCleanupMode(conf) === cleanupMode)
+    }
+    // Defaults to doNotCleanup
+    checkMode(classicShuffleEnabled = false, skipMigrationEnabled = false, DoNotCleanup)
+
+    // Test RemoveShuffleFiles
+    checkMode(classicShuffleEnabled = true, skipMigrationEnabled = false, RemoveShuffleFiles)
+
+    // Test SkipMigration
+    checkMode(classicShuffleEnabled = false, skipMigrationEnabled = true, SkipMigration)
+
+    // TODO: when both enabled, RemoveShuffle tasks Precedence, log a warning, ?
   }
 
   case class MockCallbackEagerCommand(
