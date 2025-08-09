@@ -1209,6 +1209,27 @@ package object config {
     .checkValue(v => v >= 0, "The value should be a non-negative time value.")
     .createWithDefaultString("0min")
 
+  private[spark] val DRIVER_SPARK_CONTEXT_LIVENESS_CHECK_INTERVAL =
+    ConfigBuilder("spark.driver.liveness.sparkContext.checkInterval")
+      .doc("If set a positive time value, spark driver periodically checks whether " +
+        "the SparkContext is live. Once the SparkContext is detected to be stopped, " +
+        "terminate the driver with the exit code 69 after a delay. " +
+        "To use, set `spark.plugins=org.apache.spark.deploy.SparkLivenessPlugin`.")
+      .version("4.1.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(v => v >= 0, "The value should be a non-negative time value.")
+      .createWithDefaultString("10s")
+
+  private[spark] val DRIVER_SPARK_CONTEXT_LIVENESS_TERMINATE_DELAY =
+    ConfigBuilder("spark.driver.liveness.sparkContext.terminateDelay")
+      .doc("Self-terminate waiting duration after detecting SparkContext is stopped. " +
+        s"This config takes effect only when " +
+        s"${DRIVER_SPARK_CONTEXT_LIVENESS_CHECK_INTERVAL.key} effective.")
+      .version("4.1.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(v => v >= 0, "The value should be a non-negative time value.")
+      .createWithDefaultString("120s")
+
   private[spark] val DRIVER_BIND_ADDRESS = ConfigBuilder("spark.driver.bindAddress")
     .doc("Address where to bind network listen sockets on the driver.")
     .version("2.1.0")
