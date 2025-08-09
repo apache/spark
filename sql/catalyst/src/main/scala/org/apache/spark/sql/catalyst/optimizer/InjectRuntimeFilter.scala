@@ -22,6 +22,7 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
@@ -189,14 +190,30 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   private def isProbablyShuffleJoin(left: LogicalPlan,
-      right: LogicalPlan, hint: JoinHint): Boolean = {
-    !hintToBroadcastLeft(hint) && !hintToBroadcastRight(hint) &&
-      !canBroadcastBySize(left, conf) && !canBroadcastBySize(right, conf)
+      right: LogicalPlan, hint: JoinHint, joinType: JoinType): Boolean = {
+
+    def isForcedShuffleByHint: Boolean = {
+      val leftStrategy = hint.leftHint.flatMap(_.strategy)
+      val rightStrategy = hint.rightHint.flatMap(_.strategy)
+      !leftStrategy.contains(BROADCAST) && !rightStrategy.contains(BROADCAST) &&
+        (leftStrategy.nonEmpty || rightStrategy.nonEmpty)
+    }
+
+
+    lazy val isLeftBroadcast = canBuildBroadcastLeft(joinType)  &&
+      (hintToBroadcastLeft(hint) || canBroadcastBySize(left, conf))
+
+    lazy val isRightBroadcast = canBuildBroadcastRight(joinType) &&
+      (hintToBroadcastRight(hint) || canBroadcastBySize(right, conf))
+
+    isForcedShuffleByHint || (!isRightBroadcast && !isLeftBroadcast)
   }
+
+
 
   private def probablyHasShuffle(plan: LogicalPlan): Boolean = {
     plan.exists {
-      case Join(left, right, _, _, hint) => isProbablyShuffleJoin(left, right, hint)
+      case Join(left, right, jt, _, hint) => isProbablyShuffleJoin(left, right, hint, jt)
       case _: Aggregate => true
       case _: Window => true
       case _ => false
@@ -299,7 +316,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             // 2. The current join is a shuffle join or a broadcast join that
             //    has a shuffle below it
             // 3. There is no bloom filter on the left key yet
-            val hasShuffle = isProbablyShuffleJoin(left, right, hint)
+            val hasShuffle = isProbablyShuffleJoin(left, right, hint, joinType)
             if (canPruneLeft(joinType) && (hasShuffle || probablyHasShuffle(left)) &&
               !hasBloomFilter(newLeft, l)) {
               extractBeneficialFilterCreatePlan(left, right, l, r).foreach {
