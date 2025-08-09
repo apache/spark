@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
+
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.parser.SqlScriptingParsingContext
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.SparkCharVarcharUtils.replaceCharVarcharWithString
@@ -54,6 +57,13 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         if (nameParts.length != 1) {
           throw new AnalysisException(
             "INVALID_VARIABLE_DECLARATION.QUALIFIED_LOCAL_VARIABLE",
+            Map("varName" -> toSQLId(nameParts)))
+        }
+
+        if (SqlScriptingParsingContext
+            .isForbiddenLabelOrVariableName(nameParts.head.toLowerCase(Locale.ROOT))) {
+          throw new AnalysisException(
+            "INVALID_VARIABLE_DECLARATION.LOCAL_VARIABLE_NAME_FORBIDDEN",
             Map("varName" -> toSQLId(nameParts)))
         }
 

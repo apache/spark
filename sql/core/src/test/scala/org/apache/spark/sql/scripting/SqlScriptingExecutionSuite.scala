@@ -2203,6 +2203,106 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("local variable - declare - system name not forbidden outside sql scripts") {
+    withSessionVariable("system") {
+      val sqlQuery =
+        "DECLARE system INT"
+
+      sql(sqlQuery)
+    }
+  }
+
+  test("local variable - declare - session name not forbidden outside sql scripts") {
+   withSessionVariable("session") {
+     val sqlQuery =
+       "DECLARE session INT"
+
+     sql(sqlQuery)
+   }
+  }
+
+  test("local variable - declare - system name forbidden in sql scripts") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE system INT;
+        |END
+        |""".stripMargin
+
+    val e = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+    }
+
+    checkError(
+      exception = e,
+      condition = "INVALID_VARIABLE_DECLARATION.LOCAL_VARIABLE_NAME_FORBIDDEN",
+      sqlState = "42K0M",
+      parameters = Map("varName" -> toSQLId("system"))
+    )
+  }
+
+  test("local variable - declare - session name forbidden in sql scripts") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE session INT;
+        |END
+        |""".stripMargin
+
+    val e = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+    }
+
+    checkError(
+      exception = e,
+      condition = "INVALID_VARIABLE_DECLARATION.LOCAL_VARIABLE_NAME_FORBIDDEN",
+      sqlState = "42K0M",
+      parameters = Map("varName" -> toSQLId("session"))
+    )
+  }
+
+  test("local variable - declare - system name forbidden in sql scripts via declare proxy") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE proxy = "system";
+        |  DECLARE IDENTIFIER(proxy) = 1;
+        |END
+        |""".stripMargin
+
+    val e = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+    }
+
+    checkError(
+      exception = e,
+      condition = "INVALID_VARIABLE_DECLARATION.LOCAL_VARIABLE_NAME_FORBIDDEN",
+      sqlState = "42K0M",
+      parameters = Map("varName" -> toSQLId("system"))
+    )
+  }
+
+  test("local variable - declare - session name forbidden in sql scripts via declare proxy") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE proxy = "session";
+        |  DECLARE IDENTIFIER(proxy) = 1;
+        |END
+        |""".stripMargin
+
+    val e = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+    }
+
+    checkError(
+      exception = e,
+      condition = "INVALID_VARIABLE_DECLARATION.LOCAL_VARIABLE_NAME_FORBIDDEN",
+      sqlState = "42K0M",
+      parameters = Map("varName" -> toSQLId("session"))
+    )
+  }
+
   test("local variable - declare - declare or replace") {
       val sqlScript =
         """

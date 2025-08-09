@@ -3891,6 +3891,11 @@
       "Invalid variable declaration."
     ],
     "subClass" : {
+      "LOCAL_VARIABLE_NAME_FORBIDDEN" : {
+        "message" : [
+          "Local variable name <varName> is forbidden."
+        ]
+      },
       "NOT_ALLOWED_IN_SCOPE" : {
         "message" : [
           "Declaration of the variable <varName> is not allowed in this scope."
