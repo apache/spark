@@ -151,9 +151,12 @@ private[yarn] class ExecutorRunnable(
     }
   }
 
-  private def prepareCommand(): List[String] = {
+  private[yarn] def prepareCommand(): List[String] = {
     // Extra options for the JVM
     val javaOpts = ListBuffer[String]()
+
+    // Set Active Processor Count
+    javaOpts += s"-XX:ActiveProcessorCount=${executorCores}"
 
     // Set the JVM memory
     val executorMemoryString = s"${executorMemory}m"
@@ -188,7 +191,6 @@ private[yarn] class ExecutorRunnable(
     YarnSparkHadoopUtil.addOutOfMemoryErrorArgument(javaOpts)
     val commands = prefixEnv ++
       Seq(Environment.JAVA_HOME.$$() + "/bin/java", "-server") ++
-      ("-XX:ActiveProcessorCount=" + executorCores.toString) ++
       javaOpts ++
       Seq("org.apache.spark.executor.YarnCoarseGrainedExecutorBackend",
         "--driver-url", masterAddress,
