@@ -18,9 +18,9 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.nio.file.Files
 import java.util.Locale
 
-import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfter
 
@@ -824,7 +824,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       withTempDir { dir =>
         val file = new File(dir, "test.hex")
         val hex = "AABBCC"
-        Files.write(Hex.unhex(hex), file)
+        Files.write(file.toPath, Hex.unhex(hex))
         val path = file.getParent
         sql(s"create table t1 (c string) STORED AS TEXTFILE location '$path'")
         checkAnswer(
