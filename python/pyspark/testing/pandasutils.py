@@ -21,7 +21,7 @@ import tempfile
 import warnings
 from contextlib import contextmanager
 import decimal
-from typing import Any, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 
 try:
@@ -468,6 +468,340 @@ class PandasOnSparkTestUtils:
             return obj.to_pandas()
         else:
             return obj
+
+    def assert_column_unique(
+        self,
+        df: Union[pd.DataFrame, ps.DataFrame],
+        columns: Union[str, List[str]],
+        message: Optional[str] = None,
+    ) -> None:
+        """
+        Assert that the specified column(s) in a pandas or pandas-on-Spark DataFrame
+        contain unique values.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame or pyspark.pandas.DataFrame
+            The DataFrame to check for uniqueness.
+        columns : str or list of str
+            The column name(s) to check for uniqueness. Can be a single column name or a list
+            of column names. If a list is provided, the combination of values across these
+            columns is checked for uniqueness.
+        message : str, optional
+            Custom error message to include if the assertion fails.
+
+        Raises
+        ------
+        AssertionError
+            If the specified column(s) contain duplicate values.
+        """
+        # Convert to pandas if it's a pandas-on-Spark DataFrame
+        if not isinstance(df, pd.DataFrame):
+            df = self._to_pandas(df)
+
+        # Validate columns parameter
+        if isinstance(columns, str):
+            columns = [columns]
+
+        # Check if all columns exist in the DataFrame
+        missing_columns = [col for col in columns if col not in df.columns]
+        if missing_columns:
+            raise ValueError(
+                f"The following columns do not exist in the DataFrame: {missing_columns}"
+            )
+
+        # Check for duplicates
+        if len(columns) == 1:
+            # For a single column, use duplicated() method
+            duplicates = df[df[columns[0]].duplicated(keep=False)]
+            if not duplicates.empty:
+                # Get examples of duplicates
+                duplicate_examples = duplicates.head(5)
+                examples_str = "\n".join([str(row) for _, row in duplicate_examples.iterrows()])
+
+                # Create error message
+                error_msg = f"Column '{columns[0]}' contains duplicate values.\n"
+                error_msg += f"Examples of duplicates:\n{examples_str}"
+
+                if message:
+                    error_msg += f"\n{message}"
+
+                raise AssertionError(error_msg)
+        else:
+            # For multiple columns, use duplicated() with subset parameter
+            duplicates = df[df.duplicated(subset=columns, keep=False)]
+            if not duplicates.empty:
+                # Get examples of duplicates
+                duplicate_examples = duplicates.head(5)
+                examples_str = "\n".join([str(row) for _, row in duplicate_examples.iterrows()])
+
+                # Create error message
+                error_msg = f"Columns {columns} contain duplicate values.\n"
+                error_msg += f"Examples of duplicates:\n{examples_str}"
+
+                if message:
+                    error_msg += f"\n{message}"
+
+                raise AssertionError(error_msg)
+
+    def assert_column_non_null(
+        self,
+        df: Union[pd.DataFrame, ps.DataFrame],
+        columns: Union[str, List[str]],
+        message: Optional[str] = None,
+    ) -> None:
+        """
+        Assert that the specified column(s) in a pandas or pandas-on-Spark DataFrame
+        do not contain any null values.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame or pyspark.pandas.DataFrame
+            The DataFrame to check for null values.
+        columns : str or list of str
+            The column name(s) to check for null values. Can be a single column name or a list
+            of column names.
+        message : str, optional
+            Custom error message to include if the assertion fails.
+
+        Raises
+        ------
+        AssertionError
+            If any of the specified columns contain null values.
+        """
+        # Convert to pandas if it's a pandas-on-Spark DataFrame
+        if not isinstance(df, pd.DataFrame):
+            df = self._to_pandas(df)
+
+        # Validate columns parameter
+        if isinstance(columns, str):
+            columns = [columns]
+
+        # Check if all columns exist in the DataFrame
+        missing_columns = [col for col in columns if col not in df.columns]
+        if missing_columns:
+            raise ValueError(
+                f"The following columns do not exist in the DataFrame: {missing_columns}"
+            )
+
+        # Check for null values
+        null_counts = {}
+        for column in columns:
+            # Count null values in the column
+            null_count = df[column].isna().sum()
+            if null_count > 0:
+                null_counts[column] = null_count
+
+        if null_counts:
+            # Create error message
+            column_desc = f"Column '{columns[0]}'" if len(columns) == 1 else f"Columns {columns}"
+
+            plural = "s" if len(columns) == 1 else ""
+            error_msg = f"{column_desc} contain{plural} null values.\n"
+            error_msg += "Null counts by column:\n"
+            for col_name, count in null_counts.items():
+                error_msg += f"- {col_name}: {count} null value{'s' if count != 1 else ''}\n"
+
+            if message:
+                error_msg += f"\n{message}"
+
+            raise AssertionError(error_msg)
+
+    def assert_column_values_in_set(
+        self,
+        df: Union[pd.DataFrame, ps.DataFrame],
+        columns: Union[str, List[str]],
+        accepted_values: Union[Set[Any], List[Any], Dict[str, Set[Any]]],
+        message: Optional[str] = None,
+    ) -> None:
+        """
+        Assert that all values in the specified column(s) of a pandas or pandas-on-Spark DataFrame
+        are within a given set of accepted values.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame or pyspark.pandas.DataFrame
+            The DataFrame to check.
+        columns : str or list of str
+            The column name(s) to check for values.
+        accepted_values : set or list or tuple or dict
+            The set of accepted values for the column(s). If columns is a list and accepted_values
+            is a dict, the keys in the dict should correspond to the column names, and the values
+            should be the sets of accepted values for each column. If columns is a list and
+            accepted_values is not a dict, the same set of accepted values will be used for all
+            columns.
+        message : str, optional
+            Custom error message to include if the assertion fails.
+
+        Raises
+        ------
+        AssertionError
+            If any of the specified columns contain values not in the accepted set.
+        """
+        # Convert to pandas if it's a pandas-on-Spark DataFrame
+        if not isinstance(df, pd.DataFrame):
+            df = self._to_pandas(df)
+
+        # Validate columns parameter
+        if isinstance(columns, str):
+            columns = [columns]
+
+        # Check if all columns exist in the DataFrame
+        missing_columns = [col for col in columns if col not in df.columns]
+        if missing_columns:
+            raise ValueError(
+                f"The following columns do not exist in the DataFrame: {missing_columns}"
+            )
+
+        # Normalize accepted_values to a dictionary mapping column names to sets of accepted values
+        if not isinstance(accepted_values, dict):
+            # Convert to set if it's not already
+            if not isinstance(accepted_values, set):
+                accepted_values = set(accepted_values)
+            # Use the same set of accepted values for all columns
+            accepted_values = {col: accepted_values for col in columns}
+        else:
+            # Verify that all columns have corresponding accepted values
+            missing_columns = [col for col in columns if col not in accepted_values]
+            if missing_columns:
+                raise ValueError(
+                    "The following columns do not have accepted"
+                    f"values specified: {missing_columns}"
+                )
+
+            # Convert values to sets if they're not already
+            for col, values in accepted_values.items():
+                if not isinstance(values, set):
+                    accepted_values[col] = set(values)
+
+        # Check each column for invalid values
+        invalid_columns = {}
+
+        for column in columns:
+            # Get the set of accepted values for this column
+            column_accepted_values = accepted_values[column]
+
+            # Find values that are not in the accepted set (excluding nulls)
+            invalid_mask = ~df[column].isin(list(column_accepted_values)) & ~df[column].isna()
+            invalid_values = df.loc[invalid_mask, column]
+
+            if not invalid_values.empty:
+                # Get examples of invalid values (limit to 10 for readability)
+                invalid_examples = invalid_values.drop_duplicates().head(10).tolist()
+                invalid_count = len(invalid_values)
+
+                invalid_columns[column] = {
+                    "count": invalid_count,
+                    "examples": invalid_examples,
+                    "accepted": column_accepted_values,
+                }
+
+        if invalid_columns:
+            # Create error message
+            column_desc = f"Column '{columns[0]}'" if len(columns) == 1 else f"Columns {columns}"
+            plural = "s" if len(columns) == 1 else ""
+            error_msg = f"{column_desc} contain{plural} values not in the accepted set.\n"
+
+            for column, details in invalid_columns.items():
+                error_msg += f"\nColumn '{column}':\n"
+                error_msg += f"  Accepted values: {details['accepted']}\n"
+                error_msg += f"  Invalid values found: {details['examples']}\n"
+                error_msg += f"  Total invalid values: {details['count']}\n"
+
+            if message:
+                error_msg += f"\n{message}"
+
+            raise AssertionError(error_msg)
+
+    def assert_referential_integrity(
+        self,
+        source_df: Union[pd.DataFrame, ps.DataFrame],
+        source_column: str,
+        target_df: Union[pd.DataFrame, ps.DataFrame],
+        target_column: str,
+        message: Optional[str] = None,
+    ) -> None:
+        """
+        Assert that all non-null values in a column of one DataFrame exist in a column of
+        another DataFrame.
+
+        This function checks referential integrity between two DataFrames, similar to a foreign
+        key constraint in a relational database. It verifies that all non-null values in the
+        source column exist in the target column.
+
+        Parameters
+        ----------
+        source_df : pandas.DataFrame or pyspark.pandas.DataFrame
+            The DataFrame containing the foreign key column to check.
+        source_column : str
+            The name of the column in source_df to check (foreign key).
+        target_df : pandas.DataFrame or pyspark.pandas.DataFrame
+            The DataFrame containing the primary key column to check against.
+        target_column : str
+            The name of the column in target_df to check against (primary key).
+        message : str, optional
+            Custom error message to include if the assertion fails.
+
+        Raises
+        ------
+        AssertionError
+            If any non-null values in the source column do not exist in the target column.
+        ValueError
+            If the column parameters are invalid or if specified columns don't exist in the
+            DataFrames.
+        """
+        # Convert to pandas if they're pandas-on-Spark DataFrames
+        if not isinstance(source_df, pd.DataFrame):
+            source_df = self._to_pandas(source_df)
+
+        if not isinstance(target_df, pd.DataFrame):
+            target_df = self._to_pandas(target_df)
+
+        # Validate source_column
+        if not source_column or not isinstance(source_column, str):
+            raise ValueError("The 'source_column' parameter must be a non-empty string.")
+
+        # Validate target_column
+        if not target_column or not isinstance(target_column, str):
+            raise ValueError("The 'target_column' parameter must be a non-empty string.")
+
+        # Check if source_column exists in source_df
+        if source_column not in source_df.columns:
+            raise ValueError(f"Column '{source_column}' does not exist in the source DataFrame.")
+
+        # Check if target_column exists in target_df
+        if target_column not in target_df.columns:
+            raise ValueError(f"Column '{target_column}' does not exist in the target DataFrame.")
+
+        # Get all non-null values from the source column
+        source_values = source_df[source_column].dropna()
+
+        # Get all values from the target column
+        target_values = set(target_df[target_column].dropna())
+
+        # Find values in source that are not in target
+        missing_mask = ~source_values.isin(target_values)
+        missing_values = source_values[missing_mask]
+
+        if not missing_values.empty:
+            # Get examples of missing values (limit to 10 for readability)
+            missing_examples = missing_values.drop_duplicates().head(10).tolist()
+            missing_count = len(missing_values)
+
+            # Create error message
+            error_msg = (
+                f"Column '{source_column}' contains values not found in "
+                f"target column '{target_column}'.\n"
+            )
+            error_msg += f"Missing values: {missing_examples}" + (
+                " (showing first 10 only)" if len(missing_examples) >= 10 else ""
+            )
+            error_msg += f"\nTotal missing values: {missing_count}"
+
+            if message:
+                error_msg += f"\n{message}"
+
+            raise AssertionError(error_msg)
 
 
 class PandasOnSparkTestCase(ReusedSQLTestCase, PandasOnSparkTestUtils):
