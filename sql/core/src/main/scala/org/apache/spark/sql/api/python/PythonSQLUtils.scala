@@ -115,17 +115,10 @@ private[sql] object PythonSQLUtils extends Logging {
   }
 
   def toPyRow(row: Row): Array[Byte] = {
-
-    println("@@@ pyRow: " + row)
-    println("@@@ pyRow schema: " + row.schema)
-
     assert(row.isInstanceOf[GenericRowWithSchema])
 
     val javaRow = EvaluatePython.toJava(
       CatalystTypeConverters.convertToCatalyst(row), row.schema)
-
-    println("@@@ java row: " + javaRow)
-    println("@@@ java row class: " + javaRow.getClass)
 
     withInternalRowPickler(_.dumps(javaRow))
   }

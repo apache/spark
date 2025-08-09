@@ -452,10 +452,6 @@ class TransformWithStateInPySparkStateServer(
           valueStateInfo.deserializer)
 
         println("@@@ valueRow: " + valueRow)
-        if (valueRow != null) {
-          println("@@@ valueRow class: " + valueRow.getClass)
-          println("@@@ valueRow schema: " + valueRow.schema)
-        }
 
         valueStateInfo.valueState.update(valueRow)
         sendResponse(0)

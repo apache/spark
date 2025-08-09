@@ -314,10 +314,6 @@ object EvaluatePython {
         out.write(Opcodes.MARK)
         var i = 0
         while (i < row.values.length) {
-
-          println("@@@ value inside pickle: " +
-            row.values(i) + "; " + row.values(i).getClass.getName)
-
           pickler.save(row.values(i))
           i += 1
         }
