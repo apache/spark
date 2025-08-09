@@ -365,6 +365,73 @@ object ShufflePartitionsUtil extends Logging {
   }
 
   /**
+   * Given a array, return an array of indices to split the list into multiple partitions,
+   * so that the sum of each partition is close to the target. Each index indicates the
+   * start of a partition.
+   */
+  // Visible for testing
+  private[sql] def splitSizeListByTargetSizeAndRowCount(
+        sizes: Array[Long],
+        records: Array[Long],
+        targetSize: Long,
+        targetRowCount: Long,
+        smallPartitionFactor: Double):
+  Array[Int] = {
+    val partitionStartIndices = ArrayBuffer[Int]()
+    partitionStartIndices += 0
+    var i = 0
+    var currentPartitionSize = 0L
+    var currentPartitionRowCount = 0L
+    var lastPartitionSize = -1L
+    var lastPartitionRowCount = -1L
+
+    def tryMergePartitions() = {
+      // When we are going to start a new partition, it's possible that the current partition or
+      // the previous partition is very small and it's better to merge the current partition into
+      // the previous partition.
+      val shouldMergeSizePartitions = lastPartitionSize > -1 &&
+        ((currentPartitionSize + lastPartitionSize) < targetSize * MERGED_PARTITION_FACTOR ||
+          (currentPartitionSize < targetSize * smallPartitionFactor ||
+            lastPartitionSize < targetSize * smallPartitionFactor))
+
+      val shouldMergeRowCountPartitions = lastPartitionRowCount > -1 &&
+        ((currentPartitionRowCount + lastPartitionRowCount) <
+          targetRowCount * MERGED_PARTITION_FACTOR ||
+          (currentPartitionRowCount < targetRowCount * smallPartitionFactor ||
+            lastPartitionRowCount < targetRowCount * smallPartitionFactor))
+
+      if (shouldMergeSizePartitions && shouldMergeRowCountPartitions) {
+        // We decide to merge the current partition into the previous one, so the start index of
+        // the current partition should be removed.
+        partitionStartIndices.remove(partitionStartIndices.length - 1)
+        lastPartitionSize += currentPartitionSize
+        lastPartitionRowCount += currentPartitionRowCount
+      } else {
+        lastPartitionSize = currentPartitionSize
+        lastPartitionRowCount = currentPartitionRowCount
+      }
+    }
+
+    while (i < sizes.length) {
+      // If including the next size in the current partition exceeds the target size, package the
+      // current partition and start a new partition.
+      if (i > 0 && (currentPartitionSize + sizes(i) > targetSize ||
+        currentPartitionRowCount + records(i) > targetRowCount)) {
+        tryMergePartitions()
+        partitionStartIndices += i
+        currentPartitionSize = sizes(i)
+        currentPartitionRowCount = records(i)
+      } else {
+        currentPartitionSize += sizes(i)
+        currentPartitionRowCount += records(i)
+      }
+      i += 1
+    }
+    tryMergePartitions()
+    partitionStartIndices.toArray
+  }
+
+  /**
    * Get the map size of the specific shuffle and reduce ID. Note that, some map outputs can be
    * missing due to issues like executor lost. The size will be -1 for missing map outputs and the
    * caller side should take care of it.
@@ -376,6 +443,25 @@ object ShufflePartitionsUtil extends Logging {
     })
   }
 
+  private def getRowCountForReduceId(shuffleId: Int, partitionId: Int): Array[Long] = {
+    val mapOutputTracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+    mapOutputTracker.shuffleStatuses(shuffleId).withMapStatuses(_.map { stat =>
+      if (stat == null) -1 else stat.getRecordForBlock(partitionId)
+    })
+  }
+
+  def removeJoinMapStatusRowCount(leftShuffleId: Int, rightShuffleId: Int): Unit = {
+    removeMapStatusRowCount(leftShuffleId)
+    removeMapStatusRowCount(rightShuffleId)
+  }
+
+  def removeMapStatusRowCount(shuffleId: Int): Unit = {
+    val mapOutputTracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+    mapOutputTracker.shuffleStatuses(shuffleId).withMapStatuses(_.map { stat =>
+      if (stat != null) stat.updateRecordsArray(null)
+    })
+  }
+
   /**
    * Splits the skewed partition based on the map size and the target partition size
    * after split, and create a list of `PartialReducerPartitionSpec`. Returns None if can't split.
@@ -384,12 +470,21 @@ object ShufflePartitionsUtil extends Logging {
       shuffleId: Int,
       reducerId: Int,
       targetSize: Long,
+      targetRowCount : Long = -1,
       smallPartitionFactor: Double = SMALL_PARTITION_FACTOR)
   : Option[Seq[PartialReducerPartitionSpec]] = {
     val mapPartitionSizes = getMapSizesForReduceId(shuffleId, reducerId)
     if (mapPartitionSizes.exists(_ < 0)) return None
-    val mapStartIndices = splitSizeListByTargetSize(
-      mapPartitionSizes, targetSize, smallPartitionFactor)
+    var mapStartIndices: Array[Int] = null
+    if (targetRowCount != -1) {
+      val mapPartitionRecords = getRowCountForReduceId(shuffleId, reducerId)
+      if (mapPartitionRecords.exists(_ < 0)) return None
+      mapStartIndices = splitSizeListByTargetSizeAndRowCount(
+        mapPartitionSizes, mapPartitionRecords, targetSize, targetRowCount, smallPartitionFactor)
+    } else {
+      mapStartIndices = splitSizeListByTargetSize(
+        mapPartitionSizes, targetSize, smallPartitionFactor)
+    }
     if (mapStartIndices.length > 1) {
       Some(mapStartIndices.indices.map { i =>
         val startMapIndex = mapStartIndices(i)
