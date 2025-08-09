@@ -19,11 +19,12 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.expressions.{
   Cast,
+  CurrentDate,
   DefaultStringProducingExpression,
   Expression,
-  TimeZoneAwareExpression
-}
-import org.apache.spark.sql.types.StringType
+  MakeTimestampNTZ,
+  TimeZoneAwareExpression}
+import org.apache.spark.sql.types.{StringType, TimestampNTZType, TimeType}
 
 /**
  * Resolves [[TimeZoneAwareExpressions]] by applying the session's local timezone.
@@ -58,12 +59,14 @@ class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
       expressionWithResolvedChildren,
       traversals.current.sessionLocalTimeZone
     )
+
     coerceExpressionTypes(
       expression = expressionWithResolvedChildrenAndTimeZone,
-      expressionTreeTraversal = traversals.current
-    ) match {
+      expressionTreeTraversal = traversals.current) match {
       case cast: Cast if traversals.current.defaultCollation.isDefined =>
         tryCollapseCast(cast, traversals.current.defaultCollation.get)
+      case Cast(child, TimestampNTZType, _, _) if child.dataType.isInstanceOf[TimeType] =>
+        MakeTimestampNTZ(CurrentDate(), child)
       case other =>
         other
     }
