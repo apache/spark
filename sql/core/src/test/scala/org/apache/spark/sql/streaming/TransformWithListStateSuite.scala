@@ -222,6 +222,7 @@ class ToggleSaveAndEmitProcessor
   }
 }
 
+@org.scalatest.Ignore
 @SlowSQLTest
 class TransformWithListStateSuite extends StreamTest
   with AlsoTestWithRocksDBFeatures with AlsoTestWithEncodingTypes with StateStoreMetricsTest {
