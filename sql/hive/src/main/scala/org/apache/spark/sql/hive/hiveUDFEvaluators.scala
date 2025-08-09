@@ -119,7 +119,7 @@ class HiveGenericUDFEvaluator(
   private lazy val argumentInspectors = children.map(toInspector).toArray
 
   @transient
-  lazy val returnInspector = {
+  lazy val returnInspector = funcWrapper.getReturnInspector {
     // Inline o.a.h.hive.ql.udf.generic.GenericUDF#initializeAndFoldConstants, but
     // eliminate calls o.a.h.hive.ql.exec.FunctionRegistry to avoid initializing Hive
     // built-in UDFs.
