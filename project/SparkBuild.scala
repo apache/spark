@@ -327,7 +327,7 @@ object SparkBuild extends PomBuild {
 
     javaOptions ++= {
       // for `dev.ludovic.netlib.blas` which implements such hardware-accelerated BLAS operations
-      Seq("--add-modules=jdk.incubator.vector")
+      Seq("--add-modules=jdk.incubator.foreign", "--add-modules=jdk.incubator.vector")
     },
 
     (Compile / doc / javacOptions) ++= {

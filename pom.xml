@@ -214,7 +214,8 @@
     <commons-cli.version>1.10.0</commons-cli.version>
     <bouncycastle.version>1.81</bouncycastle.version>
     <tink.version>1.16.0</tink.version>
-    <datasketches.version>6.2.0</datasketches.version>
+    <!-- DataSketches 8.0.0 requires Java 21 -->
+    <datasketches.version>7.0.1</datasketches.version>
     <netty.version>4.1.123.Final</netty.version>
     <netty-tcnative.version>2.0.72.Final</netty-tcnative.version>
     <icu4j.version>77.1</icu4j.version>
@@ -317,6 +318,7 @@
     <!-- SPARK-36796 for JDK-17 test-->
     <extraJavaTestArgs>
       -XX:+IgnoreUnrecognizedVMOptions
+      --add-modules=jdk.incubator.foreign
       --add-modules=jdk.incubator.vector
       --add-opens=java.base/java.lang=ALL-UNNAMED
       --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
