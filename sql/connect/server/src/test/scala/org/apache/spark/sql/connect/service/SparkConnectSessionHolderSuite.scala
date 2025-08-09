@@ -401,19 +401,23 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   test("Test session plan cache - disabled") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     // Disable plan cache of the session
-    sessionHolder.session.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED.key, false)
-    val planner = new SparkConnectPlanner(sessionHolder)
+    try {
+      sessionHolder.session.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED.key, false)
+      val planner = new SparkConnectPlanner(sessionHolder)
 
-    val query = buildRelation("select 1")
+      val query = buildRelation("select 1")
 
-    // If cachePlan is false, the cache is still empty.
-    // Although the cache is created as cache size is greater than zero, it won't be used.
-    planner.transformRelation(query, cachePlan = false)
-    assertPlanCache(sessionHolder, Some(Set()))
+      // If cachePlan is false, the cache is still empty.
+      // Although the cache is created as cache size is greater than zero, it won't be used.
+      planner.transformRelation(query, cachePlan = false)
+      assertPlanCache(sessionHolder, Some(Set()))
 
-    // Even if we specify "cachePlan = true", the cache is still empty.
-    planner.transformRelation(query, cachePlan = true)
-    assertPlanCache(sessionHolder, Some(Set()))
+      // Even if we specify "cachePlan = true", the cache is still empty.
+      planner.transformRelation(query, cachePlan = true)
+      assertPlanCache(sessionHolder, Some(Set()))
+    } finally {
+      sessionHolder.session.conf.set(Connect.CONNECT_SESSION_PLAN_CACHE_ENABLED, true)
+    }
   }
 
   test("Test duplicate operation IDs") {
@@ -439,5 +443,41 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     assert(
       sessionHolder.getPipelineExecution(graphId).isEmpty,
       "pipeline execution was not removed")
+  }
+
+  gridTest("Actively cache data source reads")(Seq(true, false)) { enabled =>
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val planner = new SparkConnectPlanner(sessionHolder)
+
+    val dataSourceRead = proto.Relation
+      .newBuilder()
+      .setRead(
+        proto.Read
+          .newBuilder()
+          .setDataSource(proto.Read.DataSource
+            .newBuilder()
+            .setSchema("col int")))
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(Random.nextLong()).build())
+      .build()
+    val dataSourceReadJoin = proto.Relation
+      .newBuilder()
+      .setJoin(
+        proto.Join
+          .newBuilder()
+          .setLeft(dataSourceRead)
+          .setRight(dataSourceRead)
+          .setJoinType(proto.Join.JoinType.JOIN_TYPE_CROSS))
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(Random.nextLong()).build())
+      .build()
+
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_ALWAYS_CACHE_DATA_SOURCE_READS_ENABLED, enabled)
+    planner.transformRelation(dataSourceReadJoin, cachePlan = true)
+    val expected = if (enabled) {
+      Set(dataSourceReadJoin, dataSourceRead)
+    } else {
+      Set(dataSourceReadJoin)
+    }
+    assertPlanCache(sessionHolder, Some(expected))
   }
 }
