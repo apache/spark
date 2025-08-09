@@ -50,7 +50,7 @@ import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BoxedLongEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.toLiteral
 import org.apache.spark.sql.connect.ConnectConversions._
-import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, SparkConnectClient, SparkResult}
+import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, PlanOptimizer, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.internal.{SessionState, SharedState, SqlApiConf, SubqueryExpression}
@@ -85,6 +85,7 @@ class SparkSession private[sql] (
 
   private[this] val allocator = new RootAllocator()
   private[sql] lazy val cleaner = new SessionCleaner(this)
+  private[sql] val optimizer = new PlanOptimizer(planIdGenerator)
 
   // a unique session ID for this session from client.
   private[sql] def sessionId: String = client.sessionId
