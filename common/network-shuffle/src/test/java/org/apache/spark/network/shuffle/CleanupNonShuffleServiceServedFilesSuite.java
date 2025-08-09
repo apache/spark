@@ -28,7 +28,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import org.junit.jupiter.api.Test;
 
@@ -54,7 +53,7 @@ public class CleanupNonShuffleServiceServedFilesSuite {
   private TransportConf getConf(boolean isFetchRddEnabled) {
     return new TransportConf(
       "shuffle",
-      new MapConfigProvider(ImmutableMap.of(
+      new MapConfigProvider(Map.of(
         Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED,
         Boolean.toString(isFetchRddEnabled))));
   }
