@@ -294,6 +294,32 @@ DropTempViewCommand ZeroAndOne
 
 
 -- !query
+WITH RECURSIVE t(n) MAX RECURSION LEVEL 100 AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM t WHERE n < 60
+    )
+SELECT * FROM t LIMIT ALL
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false, 100
+:  +- SubqueryAlias t
+:     +- Project [1#x AS n#x]
+:        +- UnionLoop xxxx, 100
+:           :- Project [1 AS 1#x]
+:           :  +- OneRowRelation
+:           +- Project [(n#x + 1) AS (n + 1)#x]
+:              +- Filter (n#x < 60)
+:                 +- SubqueryAlias t
+:                    +- Project [1#x AS n#x]
+:                       +- UnionLoopRef xxxx, [1#x], false
++- LimitAll
+   +- Project [n#x]
+      +- SubqueryAlias t
+         +- CTERelationRef xxxx, true, [n#x], false, false
+
+
+-- !query
 WITH RECURSIVE r(level) AS (
   VALUES 0
   UNION ALL
