@@ -16,10 +16,10 @@
  */
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
-import com.google.common.collect.Maps;
 import org.apache.spark.sql.connector.catalog.constraints.Constraint;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
@@ -62,7 +62,7 @@ public class TableInfo {
 
   public static class Builder {
     private Column[] columns;
-    private Map<String, String> properties = Maps.newHashMap();
+    private Map<String, String> properties = new HashMap<>();
     private Transform[] partitions = new Transform[0];
     private Constraint[] constraints = new Constraint[0];
 
