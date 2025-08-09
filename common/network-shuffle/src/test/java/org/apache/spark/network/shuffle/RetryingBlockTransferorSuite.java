@@ -29,7 +29,6 @@ import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Sets;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.stubbing.Answer;
@@ -425,7 +424,7 @@ public class RetryingBlockTransferorSuite {
     Stubber stub = null;
 
     // Contains all blockIds that are referenced across all interactions.
-    LinkedHashSet<String> blockIds = Sets.newLinkedHashSet();
+    LinkedHashSet<String> blockIds = new LinkedHashSet<>();
 
     for (Map<String, Object> interaction : interactions) {
       blockIds.addAll(interaction.keySet());
