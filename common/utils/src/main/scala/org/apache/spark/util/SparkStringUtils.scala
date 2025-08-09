@@ -38,6 +38,14 @@ private[spark] trait SparkStringUtils {
     SPACE_DELIMITED_UPPERCASE_HEX.parseHex(hex.stripPrefix("[").stripSuffix("]"))
   }
 
+  def isEmpty(str: String): Boolean = str == null || str.length() == 0
+
+  def isNotEmpty(str: String): Boolean = !isEmpty(str)
+
+  def isBlank(str: String): Boolean = str == null || str.isBlank
+
+  def isNotBlank(str: String): Boolean = !isBlank(str)
+
   def abbreviate(str: String, abbrevMarker: String, len: Int): String = {
     if (str == null || abbrevMarker == null) {
       null
@@ -135,12 +143,4 @@ private[spark] object SparkStringUtils extends SparkStringUtils with Logging {
   def truncatedString[T](seq: Seq[T], sep: String, maxFields: Int): String = {
     truncatedString(seq, "", sep, "", maxFields)
   }
-
-  def isEmpty(str: String): Boolean = str == null || str.length() == 0
-
-  def isNotEmpty(str: String): Boolean = !isEmpty(str)
-
-  def isBlank(str: String): Boolean = str == null || str.isBlank
-
-  def isNotBlank(str: String): Boolean = !isBlank(str)
 }

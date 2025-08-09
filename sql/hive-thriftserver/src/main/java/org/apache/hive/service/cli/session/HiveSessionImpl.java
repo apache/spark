@@ -75,7 +75,6 @@ import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.util.Utils;
-import org.apache.spark.util.SparkStringUtils;
 
 import static org.apache.hadoop.hive.conf.SystemVariables.ENV_PREFIX;
 import static org.apache.hadoop.hive.conf.SystemVariables.HIVECONF_PREFIX;
@@ -610,7 +609,7 @@ public class HiveSessionImpl implements HiveSession {
       String tableName, String columnName)  throws HiveSQLException {
     acquire(true);
     String addedJars = Utilities.getResourceFiles(hiveConf, SessionState.ResourceType.JAR);
-    if (SparkStringUtils.isNotBlank(addedJars)) {
+    if (Utils.isNotBlank(addedJars)) {
        IMetaStoreClient metastoreClient = getSession().getMetaStoreClient();
        metastoreClient.setHiveAddedJars(addedJars);
     }
