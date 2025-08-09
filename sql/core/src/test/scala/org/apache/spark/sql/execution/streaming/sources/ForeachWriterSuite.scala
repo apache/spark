@@ -308,9 +308,10 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       assert(allEvents(0)(0) === ForeachWriterSuite.Open(partition = 0, version = 0))
       // `close` should be called with the error
       val errorEvent = allEvents(0)(1).asInstanceOf[ForeachWriterSuite.Close]
+      // when the error is not caused by ForeachWriter
       checkError(
         exception = errorEvent.error.get.asInstanceOf[SparkException],
-        condition = "_LEGACY_ERROR_TEMP_2256",
+        condition = "FOREACH_WRITER_ABORTED",
         parameters = Map.empty
       )
     }
