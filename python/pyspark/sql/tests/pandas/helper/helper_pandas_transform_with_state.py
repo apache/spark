@@ -1687,8 +1687,6 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
             metadata
         )
 
-        print("@@@ updated_obj: " + str(updated_obj))
-
         self.obj_state.update(updated_obj)
 
         # Update list_state by appending total_temperature to each id array in the list
