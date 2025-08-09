@@ -49,7 +49,7 @@ class PythonPipelineSuite
     val pythonCode =
       s"""
          |from pyspark.sql import SparkSession
-         |from pyspark import pipelines as sdp
+         |from pyspark import pipelines as dp
          |from pyspark.pipelines.spark_connect_graph_element_registry import (
          |    SparkConnectGraphElementRegistry,
          |)
@@ -105,7 +105,7 @@ class PythonPipelineSuite
 
   test("basic") {
     val graph = buildGraph("""
-        |@sdp.table
+        |@dp.table
         |def table1():
         |    return spark.readStream.format("rate").load()
         |""".stripMargin)
@@ -118,19 +118,19 @@ class PythonPipelineSuite
   test("basic with inverted topological order") {
     // This graph is purposefully in the wrong topological order to test the topological sort
     val graph = buildGraph("""
-        |@sdp.table()
+        |@dp.table()
         |def b():
         |  return spark.readStream.table("a")
         |
-        |@sdp.table()
+        |@dp.table()
         |def c():
         |  return spark.readStream.table("a")
         |
-        |@sdp.materialized_view()
+        |@dp.materialized_view()
         |def d():
         |  return spark.read.table("a")
         |
-        |@sdp.materialized_view()
+        |@dp.materialized_view()
         |def a():
         |  return spark.range(5)
         |""".stripMargin)
@@ -141,11 +141,11 @@ class PythonPipelineSuite
 
   test("flows") {
     val graph = buildGraph("""
-      |@sdp.table()
+      |@dp.table()
       |def a():
       |  return spark.readStream.format("rate").load()
       |
-      |@sdp.append_flow(target = "a")
+      |@dp.append_flow(target = "a")
       |def supplement():
       |  return spark.readStream.format("rate").load()
       |""".stripMargin).resolve().validate()
@@ -160,15 +160,15 @@ class PythonPipelineSuite
 
   test("referencing internal datasets") {
     val graph = buildGraph("""
-      |@sdp.materialized_view
+      |@dp.materialized_view
       |def src():
       |  return spark.range(5)
       |
-      |@sdp.materialized_view
+      |@dp.materialized_view
       |def a():
       |  return spark.read.table("src")
       |
-      |@sdp.table
+      |@dp.table
       |def b():
       |  return spark.readStream.table("src")
       |""".stripMargin).resolve().validate()
@@ -191,15 +191,15 @@ class PythonPipelineSuite
   test("referencing external datasets") {
     sql("CREATE TABLE spark_catalog.default.src AS SELECT * FROM RANGE(5)")
     val graph = buildGraph("""
-        |@sdp.materialized_view
+        |@dp.materialized_view
         |def a():
         |  return spark.read.table("spark_catalog.default.src")
         |
-        |@sdp.materialized_view
+        |@dp.materialized_view
         |def b():
         |  return spark.table("spark_catalog.default.src")
         |
-        |@sdp.table
+        |@dp.table
         |def c():
         |  return spark.readStream.table("spark_catalog.default.src")
         |""".stripMargin).resolve().validate()
@@ -218,15 +218,15 @@ class PythonPipelineSuite
 
   test("referencing internal datasets failed") {
     val graph = buildGraph("""
-        |@sdp.table
+        |@dp.table
         |def a():
         |  return spark.read.table("src")
         |
-        |@sdp.table
+        |@dp.table
         |def b():
         |  return spark.table("src")
         |
-        |@sdp.table
+        |@dp.table
         |def c():
         |  return spark.readStream.table("src")
         |""".stripMargin).resolve()
@@ -240,15 +240,15 @@ class PythonPipelineSuite
 
   test("referencing external datasets failed") {
     val graph = buildGraph("""
-        |@sdp.table
+        |@dp.table
         |def a():
         |  return spark.read.table("spark_catalog.default.src")
         |
-        |@sdp.materialized_view
+        |@dp.materialized_view
         |def b():
         |  return spark.table("spark_catalog.default.src")
         |
-        |@sdp.materialized_view
+        |@dp.materialized_view
         |def c():
         |  return spark.readStream.table("spark_catalog.default.src")
         |""".stripMargin).resolve()
@@ -260,11 +260,11 @@ class PythonPipelineSuite
   test("create dataset with the same name will fail") {
     val ex = intercept[AnalysisException] {
       buildGraph(s"""
-           |@sdp.materialized_view
+           |@dp.materialized_view
            |def a():
            |  return spark.range(1)
            |
-           |@sdp.materialized_view(name = "a")
+           |@dp.materialized_view(name = "a")
            |def b():
            |  return spark.range(1)
            |""".stripMargin)
@@ -274,19 +274,19 @@ class PythonPipelineSuite
 
   test("create datasets with fully/partially qualified names") {
     val graph = buildGraph(s"""
-         |@sdp.table
+         |@dp.table
          |def mv_1():
          |  return spark.range(5)
          |
-         |@sdp.table(name = "schema_a.mv_2")
+         |@dp.table(name = "schema_a.mv_2")
          |def irrelevant_1():
          |  return spark.range(5)
          |
-         |@sdp.table(name = "st_1")
+         |@dp.table(name = "st_1")
          |def irrelevant_2():
          |  return spark.readStream.format("rate").load()
          |
-         |@sdp.table(name = "schema_b.st_2")
+         |@dp.table(name = "schema_b.st_2")
          |def irrelevant_3():
          |  return spark.readStream.format("rate").load()
          |""".stripMargin).resolve()
@@ -333,11 +333,11 @@ class PythonPipelineSuite
   test("create datasets with three part names") {
     val graphTry = Try {
       buildGraph(s"""
-           |@sdp.table(name = "some_catalog.some_schema.mv")
+           |@dp.table(name = "some_catalog.some_schema.mv")
            |def irrelevant_1():
            |  return spark.range(5)
            |
-           |@sdp.table(name = "some_catalog.some_schema.st")
+           |@dp.table(name = "some_catalog.some_schema.st")
            |def irrelevant_2():
            |  return spark.readStream.format("rate").load()
            |""".stripMargin).resolve()
@@ -356,18 +356,18 @@ class PythonPipelineSuite
   test("temporary views works") {
     // A table is defined since pipeline with only temporary views is invalid.
     val graph = buildGraph(s"""
-         |@sdp.table
+         |@dp.table
          |def mv_1():
          |  return spark.range(5)
-         |@sdp.temporary_view
+         |@dp.temporary_view
          |def view_1():
          |  return spark.range(5)
          |
-         |@sdp.temporary_view(name= "view_2")
+         |@dp.temporary_view(name= "view_2")
          |def irrelevant_1():
          |  return spark.read.table("view_1")
          |
-         |@sdp.temporary_view(name= "view_3")
+         |@dp.temporary_view(name= "view_3")
          |def irrelevant_2():
          |  return spark.read.table("view_1")
          |""".stripMargin).resolve()
@@ -385,11 +385,11 @@ class PythonPipelineSuite
   test("create named flow with multipart name will fail") {
     val ex = intercept[RuntimeException] {
       buildGraph(s"""
-           |@sdp.table
+           |@dp.table
            |def src():
            |  return spark.readStream.table("src0")
            |
-           |@sdp.append_flow(name ="some_schema.some_flow", target = "src")
+           |@dp.append_flow(name ="some_schema.some_flow", target = "src")
            |def some_flow():
            |  return spark.readStream.format("rate").load()
            |""".stripMargin)
@@ -399,11 +399,11 @@ class PythonPipelineSuite
 
   test("create flow with multipart target and no explicit name succeeds") {
     val graph = buildGraph("""
-           |@sdp.table()
+           |@dp.table()
            |def a():
            |  return spark.readStream.format("rate").load()
            |
-           |@sdp.append_flow(target = "default.a")
+           |@dp.append_flow(target = "default.a")
            |def supplement():
            |  return spark.readStream.format("rate").load()
            |""".stripMargin).resolve().validate()
@@ -418,11 +418,11 @@ class PythonPipelineSuite
 
   test("create named flow with multipart target succeeds") {
     val graph = buildGraph("""
-           |@sdp.table()
+           |@dp.table()
            |def a():
            |  return spark.readStream.format("rate").load()
            |
-           |@sdp.append_flow(target = "default.a", name = "something")
+           |@dp.append_flow(target = "default.a", name = "something")
            |def supplement():
            |  return spark.readStream.format("rate").load()
            |""".stripMargin)
@@ -449,7 +449,7 @@ class PythonPipelineSuite
     checkError(
       exception = intercept[AnalysisException] {
         buildGraph(s"""
-            |@sdp.temporary_view
+            |@dp.temporary_view
             |def view_1():
             |  return spark.range(5)
             |""".stripMargin)
@@ -462,7 +462,7 @@ class PythonPipelineSuite
     checkError(
       exception = intercept[AnalysisException] {
         buildGraph(s"""
-            |@sdp.append_flow(target = "a")
+            |@dp.append_flow(target = "a")
             |def flow():
             |  return spark.range(5)
             |""".stripMargin)
