@@ -175,6 +175,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     val conf = new SparkConf(false)
       .set("spark.app.id", "testId")
       .set(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
+      .set(STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE, 0L) // migrate to fallback storage only
       .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH,
         Files.createTempDirectory("tmp").toFile.getAbsolutePath + "/")
 
@@ -200,8 +201,6 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
       when(resolver.getDataFile(shuffleId, mapId)).thenReturn(dataFile)
     }
 
-    when(bm.getPeers(mc.any()))
-      .thenReturn(Seq(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID))
     val bmm = new BlockManagerMaster(new NoopRpcEndpointRef(conf), null, conf, false)
     when(bm.master).thenReturn(bmm)
     val blockTransferService = mock(classOf[BlockTransferService])
