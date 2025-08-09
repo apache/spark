@@ -126,6 +126,9 @@ case class DataSourceV2Relation(
       this
     }
   }
+
+  def mergeSchemaEvolution(): Boolean =
+    table.capabilities().contains(TableCapability.MERGE_SCHEMA_EVOLUTION)
 }
 
 /**

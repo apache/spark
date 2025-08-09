@@ -38,8 +38,10 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -889,6 +891,18 @@ case class MergeIntoTable(
     case _ => false
   }
 
+  // schema evolution resolution will set the merged schema in DataSourceV2Relation output
+  def needSchemaEvolution: Boolean = {
+    withSchemaEvolution && {
+      EliminateSubqueryAliases(targetTable) match {
+        case r: DataSourceV2Relation if r.mergeSchemaEvolution() =>
+          DataTypeUtils.fromAttributes(r.output) !=
+            MergeIntoTable.mergeSchema(targetTable.schema, sourceTable.schema)
+        case _ => false
+      }
+    }
+  }
+
   override def left: LogicalPlan = targetTable
   override def right: LogicalPlan = sourceTable
   override protected def withNewChildrenInternal(
@@ -908,6 +922,109 @@ object MergeIntoTable {
       case _: InsertAction | _: InsertStarAction => privileges.add(TableWritePrivilege.INSERT)
     }
     privileges.toSeq
+  }
+
+  def mergeSchema(targetSchema: StructType, sourceSchema: StructType): StructType = {
+    mergeTypes(targetSchema, sourceSchema, targetSchema, sourceSchema).asInstanceOf[StructType]
+  }
+
+  private def mergeTypes(current: DataType, newType: DataType,
+                         originalTarget: StructType, originalSource: StructType): DataType = {
+    (current, newType) match {
+      case (StructType(currentFields), StructType(newFields)) =>
+        val newFieldMap = toFieldMap(newFields)
+
+        // Update existing field types
+        val updatedCurrentFields = currentFields.map { currentField =>
+          newFieldMap.get(currentField.name) match {
+            case Some(newField) if newField.dataType != currentField.dataType =>
+              val newType = mergeTypes(currentField.dataType, newField.dataType,
+                originalTarget, originalSource)
+              StructField(currentField.name, newType, currentField.nullable,
+                currentField.metadata)
+            case _ => currentField
+          }
+        }
+
+        // Identify the newly added fields and append to the end
+        val currentFieldMap = toFieldMap(currentFields)
+        val remainingNewFields = newFields.filterNot(f => currentFieldMap.contains(f.name))
+        StructType(updatedCurrentFields ++ remainingNewFields)
+
+      case (ArrayType(currentElementType, currentContainsNull), ArrayType(newElementType, _)) =>
+        ArrayType(mergeTypes(currentElementType, newElementType, originalTarget, originalSource),
+          currentContainsNull)
+
+      case (MapType(currentKeyType, currentElementType, currentContainsNull),
+      MapType(updateKeyType, updateElementType, _)) =>
+        MapType(
+          mergeTypes(currentKeyType, updateKeyType, originalTarget, originalSource),
+          mergeTypes(currentElementType, updateElementType, originalTarget, originalSource),
+          currentContainsNull)
+
+      case (_, _) =>
+        // For now do not support type widening
+        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
+          originalTarget, originalSource, null)
+    }
+  }
+
+  def schemaChanges(originalTarget: StructType, originalSource: StructType,
+                            fieldPath: Array[String] = Array()): Array[TableChange] = {
+    schemaChanges(originalTarget.asInstanceOf[DataType], originalSource.asInstanceOf[DataType],
+      originalTarget, originalSource, fieldPath)
+  }
+
+  private def schemaChanges(current: DataType,
+                            newType: DataType,
+                            originalTarget: StructType,
+                            originalSource: StructType,
+                            fieldPath: Array[String]): Array[TableChange] = {
+    (current, newType) match {
+      case (StructType(currentFields), StructType(newFields)) =>
+        val newFieldMap = toFieldMap(newFields)
+
+        // Update existing field types
+        val updates = {
+          currentFields collect {
+            case currentField: StructField if newFieldMap.contains(currentField.name) &&
+              newFieldMap.get(currentField.name).exists(_.dataType != currentField.dataType) =>
+              schemaChanges(currentField.dataType, newFieldMap(currentField.name).dataType,
+                originalTarget, originalSource, fieldPath ++ Seq(currentField.name))
+          }}.flatten
+
+        // Identify the newly added fields and append to the end
+        val currentFieldMap = toFieldMap(currentFields)
+        val adds = newFields.filterNot (f => currentFieldMap.contains (f.name))
+          .map(f => TableChange.addColumn(fieldPath ++ Set(f.name), f.dataType))
+
+        updates ++ adds
+
+      case (ArrayType(currentElementType, _), ArrayType(newElementType, _)) =>
+        schemaChanges(currentElementType, newElementType,
+          originalTarget, originalSource, fieldPath ++ Seq("element"))
+
+      case (MapType(currentKeyType, currentElementType, _),
+      MapType(updateKeyType, updateElementType, _)) =>
+        schemaChanges(currentKeyType, updateKeyType, originalTarget, originalSource,
+          fieldPath ++ Seq("key")) ++
+          schemaChanges(currentElementType, updateElementType,
+            originalTarget, originalSource, fieldPath ++ Seq("value"))
+
+      case (_, _) =>
+        // For now do not support type widening
+        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
+          originalTarget, originalSource, null)
+    }
+  }
+
+  def toFieldMap(fields: Array[StructField]): Map[String, StructField] = {
+    val fieldMap = fields.map(field => field.name -> field).toMap
+    if (SQLConf.get.caseSensitiveAnalysis) {
+      fieldMap
+    } else {
+      CaseInsensitiveMap(fieldMap)
+    }
   }
 }
 
