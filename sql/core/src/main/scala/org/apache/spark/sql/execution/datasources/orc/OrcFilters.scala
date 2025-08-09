@@ -202,6 +202,10 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         val rhs = buildSearchArgument(dataTypeMap, right, lhs)
         rhs.end()
 
+      case Not(EqualNullSafe(name, value)) if dataTypeMap.contains(name) =>
+        val orFilter = Or(IsNull(name), Not(EqualTo(name, value)))
+        buildSearchArgument(dataTypeMap, orFilter, builder)
+
       case Not(child) =>
         buildSearchArgument(dataTypeMap, child, builder.startNot()).end()
 
