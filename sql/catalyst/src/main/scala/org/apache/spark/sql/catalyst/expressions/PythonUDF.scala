@@ -176,6 +176,7 @@ abstract class UnevaluableGenerator extends Generator {
  * @param pythonUDTFPartitionColumnIndexes holds the zero-based indexes of the projected results of
  *                                         all PARTITION BY expressions within the TABLE argument of
  *                                         the Python UDTF call, if applicable
+ * @param tableArguments holds whether an input argument is a table argument
  */
 case class PythonUDTF(
     name: String,
@@ -186,7 +187,8 @@ case class PythonUDTF(
     evalType: Int,
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId,
-    pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None)
+    pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None,
+    tableArguments: Option[Seq[Boolean]] = None)
   extends UnevaluableGenerator with PythonFuncExpression {
 
   override lazy val canonicalized: Expression = {
@@ -215,7 +217,8 @@ case class UnresolvedPolymorphicPythonUDTF(
     evalType: Int,
     udfDeterministic: Boolean,
     resolveElementMetadata: (PythonFunction, Seq[Expression]) => PythonUDTFAnalyzeResult,
-    resultId: ExprId = NamedExpression.newExprId)
+    resultId: ExprId = NamedExpression.newExprId,
+    tableArguments: Option[Seq[Boolean]] = None)
   extends UnevaluableGenerator with PythonFuncExpression {
 
   override lazy val resolved = false
