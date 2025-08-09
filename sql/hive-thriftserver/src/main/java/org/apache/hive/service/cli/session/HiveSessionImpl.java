@@ -116,8 +116,7 @@ public class HiveSessionImpl implements HiveSession {
     try {
       // In non-impersonation mode, map scheduler queue to current user
       // if fair scheduler is configured.
-      if (! hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS) &&
-        hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_MAP_FAIR_SCHEDULER_QUEUE)) {
+      if (!hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS)) {
         ShimLoader.getHadoopShims().refreshDefaultQueue(hiveConf, username);
       }
     } catch (IOException e) {
@@ -273,7 +272,7 @@ public class HiveSessionImpl implements HiveSession {
         new VariableSubstitution(() -> SessionState.get().getHiveVariables());
     HiveConf conf = SessionState.get().getConf();
     String value = substitution.substitute(conf, varvalue);
-    if (conf.getBoolVar(HiveConf.ConfVars.HIVECONFVALIDATION)) {
+    if (conf.getBoolVar(HiveConf.ConfVars.HIVE_CONF_VALIDATION)) {
       HiveConf.ConfVars confVars = HiveConf.getConfVars(key);
       if (confVars != null) {
         if (!confVars.isType(value)) {

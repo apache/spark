@@ -21,7 +21,7 @@ import java.util.UUID
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 import org.apache.hive.service.cli._
-import org.apache.hive.service.cli.operation.GetTableTypesOperation
+import org.apache.hive.service.cli.operation.{GetTableTypesOperation, OperationManager}
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
@@ -37,8 +37,9 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTableType
  */
 private[hive] class SparkGetTableTypesOperation(
     val session: SparkSession,
-    parentSession: HiveSession)
-  extends GetTableTypesOperation(parentSession)
+    parentSession: HiveSession,
+    operationManager: OperationManager)
+  extends GetTableTypesOperation(parentSession, operationManager)
   with SparkOperation
   with Logging {
 

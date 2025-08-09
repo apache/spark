@@ -61,9 +61,9 @@ public class GetPrimaryKeysOperation extends MetadataOperation {
 
   private final RowSet rowSet;
 
-  public GetPrimaryKeysOperation(HiveSession parentSession,
+  public GetPrimaryKeysOperation(HiveSession parentSession, OperationManager operationManager,
                                  String catalogName, String schemaName, String tableName) {
-    super(parentSession, OperationType.GET_FUNCTIONS);
+    super(parentSession, operationManager, OperationType.GET_FUNCTIONS);
     this.catalogName = catalogName;
     this.schemaName = schemaName;
     this.tableName = tableName;

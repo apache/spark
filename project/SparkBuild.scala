@@ -290,6 +290,12 @@ object SparkBuild extends PomBuild {
                             sparkGenjavadocSettings ++
                             compilerWarningSettings ++
       (if (noLintOnCompile) Nil else enableScalaStyle) ++ Seq(
+    (Compile / dependencyClasspath) := (Compile / dependencyClasspath).value
+      .filterNot(file => {
+        val name = file.toString
+        (name.contains("orc-core") || name.contains("orc-format")) &&
+          !name.contains("shaded-protobuf")
+      }),
     (Compile / exportJars) := true,
     (Test / exportJars) := false,
     javaHome := sys.env.get("JAVA_HOME")
@@ -1090,10 +1096,15 @@ object KubernetesIntegrationTests {
  */
 object DependencyOverrides {
   lazy val guavaVersion = sys.props.get("guava.version").getOrElse("33.4.0-jre")
+  lazy val log4jVersion = sys.props.get("log4j.version").getOrElse("2.24.3")
+  lazy val derbyVersion = sys.props.get("derby.version").getOrElse("10.16.1.1")
   lazy val settings = Seq(
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
     dependencyOverrides += "jline" % "jline" % "2.14.6",
-    dependencyOverrides += "org.apache.avro" % "avro" % "1.12.0")
+    dependencyOverrides += "org.apache.avro" % "avro" % "1.12.0",
+    dependencyOverrides += "org.apache.logging.log4j" % "log4j-slf4j-impl" % log4jVersion,
+    dependencyOverrides += "org.apache.derby" % "derby" % derbyVersion
+  )
 }
 
 /**
@@ -1105,8 +1116,7 @@ object ExcludedDependencies {
     libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") },
     excludeDependencies ++= Seq(
       ExclusionRule(organization = "ch.qos.logback"),
-      ExclusionRule("org.slf4j", "slf4j-simple"),
-      ExclusionRule("javax.servlet", "javax.servlet-api"))
+      ExclusionRule("org.slf4j", "slf4j-simple"))
   )
 }
 
@@ -1750,6 +1760,7 @@ object TestSettings {
       }.getOrElse(Nil): _*),
     // Show full stack trace and duration in test cases.
     (Test / testOptions) += Tests.Argument("-oDF"),
+    (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest, "-fG", "scalatest.txt"),
     // Slowpoke notifications: receive notifications every 5 minute of tests that have been running
     // longer than two minutes.
     (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest, "-W", "120", "300"),

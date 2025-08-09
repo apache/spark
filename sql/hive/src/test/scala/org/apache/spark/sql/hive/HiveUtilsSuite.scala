@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import java.io.File
 import java.net.URI
 
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hadoop.hive.metastore.conf.MetastoreConf.ConfVars
 
 import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -35,9 +35,9 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
   test("newTemporaryConfiguration overwrites listener configurations") {
     Seq(true, false).foreach { useInMemoryDerby =>
       val conf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby)
-      assert(conf(ConfVars.METASTORE_PRE_EVENT_LISTENERS.varname) === "")
-      assert(conf(ConfVars.METASTORE_EVENT_LISTENERS.varname) === "")
-      assert(conf(ConfVars.METASTORE_END_FUNCTION_LISTENERS.varname) === "")
+      assert(conf(ConfVars.EVENT_LISTENERS.getVarname) === "")
+      assert(conf(ConfVars.EVENT_LISTENERS.getVarname) === "")
+      assert(conf(ConfVars.END_FUNCTION_LISTENERS.getVarname) === "")
     }
   }
 
