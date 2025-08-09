@@ -12703,6 +12703,46 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
+    """
+    Returns `time` truncated to the `unit`.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    unit : :class:`~pyspark.sql.Column` or column name
+        The unit to truncate the time to. Supported units are: "HOUR", "MINUTE", "SECOND",
+        "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
+    time : :class:`~pyspark.sql.Column` or column name
+        A time to truncate.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A time truncated to the specified unit.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.date_trunc`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [("HOUR", "13:08:15")],
+    ...     ['unit', 'time']).withColumn("time", sf.col("time").cast("time"))
+    >>> df.select('*', sf.time_trunc('unit', 'time')).show()
+    +----+--------+----------------------+
+    |unit|    time|time_trunc(unit, time)|
+    +----+--------+----------------------+
+    |HOUR|13:08:15|              13:00:00|
+    +----+--------+----------------------+
+    """
+    return _invoke_function_over_columns("time_trunc", unit, time)
+
+
+@_try_remote_functions
 def timestamp_millis(col: "ColumnOrName") -> Column:
     """
     Creates timestamp from the number of milliseconds since UTC epoch.
