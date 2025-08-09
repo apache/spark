@@ -516,9 +516,6 @@ class StatefulProcessorApiClient:
         field_names = [f.name for f in schema.fields]
         row_value = Row(**dict(zip(field_names, converted)))
 
-        print("@@@ schema: " + str(schema))
-        print("@@@ row_value: " + str(row_value))
-
         return self.pickleSer.dumps(schema.toInternal(row_value))
 
     def _deserialize_from_bytes(self, value: bytes) -> Any:
