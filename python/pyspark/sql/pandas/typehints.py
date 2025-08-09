@@ -31,9 +31,7 @@ if TYPE_CHECKING:
     )
 
 
-def infer_eval_type(
-    sig: Signature, type_hints: Dict[str, Any]
-) -> Union[
+def infer_eval_type(sig: Signature, type_hints: Dict[str, Any]) -> Union[
     "PandasScalarUDFType",
     "PandasScalarIterUDFType",
     "PandasGroupedAggUDFType",
