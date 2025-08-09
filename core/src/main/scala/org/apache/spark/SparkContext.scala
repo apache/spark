@@ -2934,8 +2934,15 @@ class SparkContext(config: SparkConf) extends Logging {
     _driverLogger.foreach(_.startSync(_hadoopConfiguration))
   }
 
-  /** Post the application end event */
+  /** Post the application end event and report the final heartbeat */
   private def postApplicationEnd(exitCode: Int): Unit = {
+    try {
+      _heartbeater.doReportHeartbeat()
+    } catch {
+      case t: Throwable =>
+        logError("Error while reporting heartbeat metrics for the driver " +
+          "during application shutdown.", t);
+    }
     listenerBus.post(SparkListenerApplicationEnd(System.currentTimeMillis, Some(exitCode)))
   }
 
