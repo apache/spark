@@ -21,6 +21,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.io.Closeable;
 import java.security.GeneralSecurityException;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.Properties;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -61,10 +62,8 @@ class AuthEngine implements Closeable {
   private TransportCipher sessionCipher;
 
   AuthEngine(String appId, String preSharedSecret, TransportConf conf) {
-    Preconditions.checkNotNull(appId);
-    Preconditions.checkNotNull(preSharedSecret);
-    this.appId = appId;
-    this.preSharedSecret = preSharedSecret.getBytes(UTF_8);
+    this.appId = Objects.requireNonNull(appId);
+    this.preSharedSecret = Objects.requireNonNull(preSharedSecret).getBytes(UTF_8);
     this.conf = conf;
     this.cryptoConf = conf.cryptoConf();
     // This is for backward compatibility with version 1.0 of this protocol,
