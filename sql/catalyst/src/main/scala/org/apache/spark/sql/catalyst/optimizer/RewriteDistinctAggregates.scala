@@ -258,12 +258,18 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       def patchAggregateFunctionChildren(
           af: AggregateFunction)(
           attrs: Expression => Option[Expression]): AggregateFunction = {
-        val newChildren = af.children.map(c => attrs(c).getOrElse(c))
+        val newChildren = af.children.map {
+          case so: SortOrder =>
+            so.copy(child = attrs(so.child).getOrElse(so.child))
+          case c =>
+            attrs(c).getOrElse(c)
+        }
         af.withNewChildren(newChildren).asInstanceOf[AggregateFunction]
       }
 
       // Setup unique distinct aggregate children.
-      val distinctAggChildren = distinctAggGroups.keySet.flatten.toSeq.distinct
+      val distinctAggChildren = distinctAggGroups.keySet.flatten.toSeq
+          .filter(!_.isInstanceOf[SortOrder]).distinct
       val distinctAggChildAttrMap = distinctAggChildren.map { e =>
         e.canonicalized -> AttributeReference(e.sql, e.dataType, nullable = true)()
       }
