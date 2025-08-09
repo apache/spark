@@ -40,8 +40,6 @@ import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import com.google.common.collect.Sets;
-
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
@@ -442,13 +440,13 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
             new Tuple2<>("new york", "islanders")));
 
 
-    List<HashSet<Tuple2<String, Tuple2<String, String>>>> expected = Arrays.asList(
-        Sets.newHashSet(
+    List<Set<Tuple2<String, Tuple2<String, String>>>> expected = Arrays.asList(
+        Set.of(
             new Tuple2<>("california",
                          new Tuple2<>("dodgers", "giants")),
             new Tuple2<>("new york",
                          new Tuple2<>("yankees", "mets"))),
-        Sets.newHashSet(
+        Set.of(
             new Tuple2<>("california",
                          new Tuple2<>("sharks", "ducks")),
             new Tuple2<>("new york",
@@ -471,7 +469,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     List<List<Tuple2<String, Tuple2<String, String>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
     List<HashSet<Tuple2<String, Tuple2<String, String>>>> unorderedResult = new ArrayList<>();
     for (List<Tuple2<String, Tuple2<String, String>>> res: result) {
-      unorderedResult.add(Sets.newHashSet(res));
+      unorderedResult.add(new HashSet<>(res));
     }
 
     Assertions.assertEquals(expected, unorderedResult);
@@ -1161,15 +1159,15 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         Arrays.asList("hello", "moon"),
         Arrays.asList("hello"));
 
-    List<HashSet<Tuple2<String, Long>>> expected = Arrays.asList(
-        Sets.newHashSet(
+    List<Set<Tuple2<String, Long>>> expected = Arrays.asList(
+        Set.of(
             new Tuple2<>("hello", 1L),
             new Tuple2<>("world", 1L)),
-        Sets.newHashSet(
+        Set.of(
             new Tuple2<>("hello", 2L),
             new Tuple2<>("world", 1L),
             new Tuple2<>("moon", 1L)),
-        Sets.newHashSet(
+        Set.of(
             new Tuple2<>("hello", 2L),
             new Tuple2<>("moon", 1L)));
 
@@ -1181,7 +1179,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     List<List<Tuple2<String, Long>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
     List<Set<Tuple2<String, Long>>> unorderedResult = new ArrayList<>();
     for (List<Tuple2<String, Long>> res: result) {
-      unorderedResult.add(Sets.newHashSet(res));
+      unorderedResult.add(new HashSet<>(res));
     }
 
     Assertions.assertEquals(expected, unorderedResult);

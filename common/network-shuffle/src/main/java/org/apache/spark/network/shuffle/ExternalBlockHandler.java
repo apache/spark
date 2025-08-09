@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
@@ -36,7 +37,6 @@ import com.codahale.metrics.RatioGauge;
 import com.codahale.metrics.Timer;
 import com.codahale.metrics.Counter;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Sets;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
@@ -199,7 +199,7 @@ public class ExternalBlockHandler extends RpcHandler
 
     } else if (msgObj instanceof GetLocalDirsForExecutors msg) {
       checkAuth(client, msg.appId);
-      Set<String> execIdsForBlockResolver = Sets.newHashSet(msg.execIds);
+      Set<String> execIdsForBlockResolver = new HashSet<>(Set.of(msg.execIds));
       boolean fetchMergedBlockDirs = execIdsForBlockResolver.remove(SHUFFLE_MERGER_IDENTIFIER);
       Map<String, String[]> localDirs = blockManager.getLocalDirs(msg.appId,
         execIdsForBlockResolver);
