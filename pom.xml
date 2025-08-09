@@ -199,7 +199,7 @@
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>33.4.0-jre</guava.version>
     <gson.version>2.11.0</gson.version>
-    <janino.version>3.1.9</janino.version>
+    <janino.version>3.1.12</janino.version>
     <jersey.version>3.0.17</jersey.version>
     <joda.version>2.13.0</joda.version>
     <jsr305.version>3.0.0</jsr305.version>
@@ -1949,11 +1949,11 @@
           </exclusion>
           <exclusion>
             <groupId>org.codehaus.janino</groupId>
-            <artifactId>commons-compiler</artifactId>
+            <artifactId>janino</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.codehaus.janino</groupId>
-            <artifactId>janino</artifactId>
+            <artifactId>commons-compiler</artifactId>
           </exclusion>
           <exclusion>
             <groupId>net.hydromatic</groupId>
