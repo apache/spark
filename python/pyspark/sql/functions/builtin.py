@@ -18785,7 +18785,7 @@ def concat(*cols: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def array_position(col: "ColumnOrName", value: Any) -> Column:
+def array_position(col: "ColumnOrName", value: Any, start: Union[Column, int] = None) -> Column:
     """
     Array function: Locates the position of the first occurrence of the given value
     in the given array. Returns null if either of the arguments are null.
@@ -18794,6 +18794,9 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    .. versionchanged:: 4.1.0
+        Supports start index.
 
     Notes
     -----
@@ -18809,6 +18812,8 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
 
         .. versionchanged:: 4.0.0
             `value` now also accepts a Column type.
+    start : :class:`~pyspark.sql.Column` or int, optional
+        the starting index to search from.
 
     Returns
     -------
@@ -18877,7 +18882,7 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     Example 6: Finding the position of a column's value in an array of integers
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([([10, 20, 30], 20)], ['data', 'col'])
+    >>> df = spark.createDataFrame([([10, 20, 20], 20)], ['data', 'col'])
     >>> df.select(sf.array_position(df.data, df.col)).show()
     +-------------------------+
     |array_position(data, col)|
@@ -18885,8 +18890,22 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     |                        2|
     +-------------------------+
 
+    Example 7: Finding the position of a column's value in an array of integers starting from the index 3
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([([10, 20, 20], 20, 3)], ['data', 'col'])
+    >>> df.select(sf.array_position(df.data, df.col)).show()
+    +-------------------------+
+    |array_position(data, col)|
+    +-------------------------+
+    |                        3|
+    +-------------------------+
+
     """
-    return _invoke_function_over_columns("array_position", col, lit(value))
+    if start is None:
+        return _invoke_function_over_columns("array_position", col, lit(value))
+    else:
+        return _invoke_function_over_columns("array_position", col, lit(value), lit(start))
 
 
 @_try_remote_functions
