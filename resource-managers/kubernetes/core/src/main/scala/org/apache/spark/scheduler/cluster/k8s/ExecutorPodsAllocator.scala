@@ -71,6 +71,8 @@ class ExecutorPodsAllocator(
 
   protected val maxPendingPods = conf.get(KUBERNETES_MAX_PENDING_PODS)
 
+  protected val maxPendingPodsPerRpid = conf.get(KUBERNETES_MAX_PENDING_PODS_PER_RPID)
+
   protected val podCreationTimeout = math.max(
     podAllocationDelay * 5,
     conf.get(KUBERNETES_ALLOCATION_EXECUTOR_TIMEOUT))
@@ -349,7 +351,7 @@ class ExecutorPodsAllocator(
         }
       }
       if (newlyCreatedExecutorsForRpId.isEmpty && podCountForRpId < targetNum) {
-        Some(rpId, podCountForRpId, targetNum)
+        Some(rpId, podCountForRpId, targetNum, notRunningPodCountForRpId)
       } else {
         // for this resource profile we do not request more PODs
         None
@@ -363,15 +365,19 @@ class ExecutorPodsAllocator(
     if (remainingSlotFromPendingPods > 0 && podsToAllocateWithRpId.size > 0 &&
         !(snapshots.isEmpty && podAllocOnPVC && maxPVCs <= PVC_COUNTER.get())) {
       ExecutorPodsAllocator.splitSlots(podsToAllocateWithRpId, remainingSlotFromPendingPods)
-        .foreach { case ((rpId, podCountForRpId, targetNum), sharedSlotFromPendingPods) =>
+        .foreach { case ((rpId, podCountForRpId, targetNum, pendingPodCountForRpId), sharedSlotFromPendingPods) =>
+        val remainingSlotsForRpId = maxPendingPodsPerRpid - pendingPodCountForRpId 
         val numMissingPodsForRpId = targetNum - podCountForRpId
+
         val numExecutorsToAllocate =
-          math.min(math.min(numMissingPodsForRpId, podAllocationSize), sharedSlotFromPendingPods)
+          math.min(math.min(math.min(numMissingPodsForRpId, podAllocationSize), sharedSlotFromPendingPods), remainingSlotsForRpId)
+          
         logInfo(log"Going to request ${MDC(LogKeys.COUNT, numExecutorsToAllocate)} executors from" +
           log" Kubernetes for ResourceProfile Id: ${MDC(LogKeys.RESOURCE_PROFILE_ID, rpId)}, " +
           log"target: ${MDC(LogKeys.NUM_POD_TARGET, targetNum)}, " +
           log"known: ${MDC(LogKeys.NUM_POD, podCountForRpId)}, sharedSlotFromPendingPods: " +
-          log"${MDC(LogKeys.NUM_POD_SHARED_SLOT, sharedSlotFromPendingPods)}.")
+          log"${MDC(LogKeys.NUM_POD_SHARED_SLOT, sharedSlotFromPendingPods)}, " +
+          s"remainingSlotsForRpId: $remainingSlotsForRpId.")
         requestNewExecutors(numExecutorsToAllocate, applicationId, rpId, k8sKnownPVCNames)
       }
     }
