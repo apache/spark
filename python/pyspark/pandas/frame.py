@@ -10638,15 +10638,20 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             var_name = [var_name]  # type: ignore[list-item]
 
-        value_col_types = [
-            self._internal.spark_column_for(label).expr.dataType for label in value_vars
-        ]
-        # If any value column is of StringType, cast all value columns to StringType to avoid
-        # ANSI mode errors during explode - mixing strings and integers.
-        string_cast_required_type = (
-            StringType() if any(isinstance(t, StringType) for t in value_col_types) else None
-        )
         use_cast = is_ansi_mode_enabled(self._internal.spark_frame.sparkSession)
+        string_cast_required_type = None
+        if use_cast:
+            field_by_label = {
+                label: field
+                for label, field in zip(self._internal.column_labels, self._internal.data_fields)
+            }
+
+            value_col_types = [field_by_label[label].spark_type for label in value_vars]
+            # If any value column is of StringType, cast all value columns to StringType to avoid
+            # ANSI mode errors during explode - mixing strings and integers.
+            string_cast_required_type = (
+                StringType() if any(isinstance(t, StringType) for t in value_col_types) else None
+            )
 
         pairs = F.explode(
             F.array(
@@ -13824,15 +13829,11 @@ def _test() -> None:
     import uuid
     from pyspark.sql import SparkSession
     import pyspark.pandas.frame
-    from pyspark.testing.utils import is_ansi_mode_test
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.frame.__dict__.copy()
     globs["ps"] = pyspark.pandas
-
-    if is_ansi_mode_test:
-        del pyspark.pandas.frame.DataFrame.melt.__doc__
 
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.frame tests").getOrCreate()

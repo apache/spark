@@ -3879,7 +3879,6 @@ def _test() -> None:
     from pyspark.sql import SparkSession
     import pyspark.pandas.namespace
     from pandas.util.version import Version
-    from pyspark.testing.utils import is_ansi_mode_test
 
     os.chdir(os.environ["SPARK_HOME"])
 
@@ -3892,9 +3891,6 @@ def _test() -> None:
     globs = pyspark.pandas.namespace.__dict__.copy()
     globs["ps"] = pyspark.pandas
     globs["sf"] = F
-
-    if is_ansi_mode_test:
-        del pyspark.pandas.namespace.melt.__doc__
 
     spark = (
         SparkSession.builder.master("local[4]")
