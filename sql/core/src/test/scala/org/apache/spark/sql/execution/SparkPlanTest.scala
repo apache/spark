@@ -238,7 +238,8 @@ object SparkPlanTest {
    * @param spark SqlContext used for execution of the plan
    */
   def executePlan(outputPlan: SparkPlan, spark: SQLContext): Seq[Row] = {
-    val execution = new QueryExecution(spark.sparkSession, LocalRelation(Nil)) {
+    val execution = new QueryExecution(spark.sparkSession, LocalRelation(Nil),
+      shuffleCleanupMode = DoNotCleanup) {
       override lazy val sparkPlan: SparkPlan = outputPlan transform {
         case plan: SparkPlan =>
           val inputMap = plan.children.flatMap(_.output).map(a => (a.name, a)).toMap
