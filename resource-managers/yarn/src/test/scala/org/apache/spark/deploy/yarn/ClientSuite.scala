@@ -755,6 +755,67 @@ class ClientSuite extends SparkFunSuite
     env("SPARK_USER") should be ("overrideuser")
   }
 
+  test("SPARK-31028: ActiveProcessorCount is set to AM cores in client mode") {
+    val sparkConf = new SparkConf()
+      .set("spark.app.name", "test-app")
+      .set(SUBMIT_DEPLOY_MODE, "client")
+      .set(AM_CORES, 3)
+      .set(DRIVER_CORES, 4)  // This should be ignored in client mode
+
+    val client = createClient(sparkConf)
+    val tempDir = Utils.createTempDir()
+    client.setStagingDirPath(new Path(tempDir.getAbsolutePath))
+    val containerLaunchContext = client.createContainerLaunchContext()
+
+    val commands = containerLaunchContext.getCommands.asScala
+    commands should contain ("-XX:ActiveProcessorCount=3")
+  }
+
+  test("SPARK-31028: ActiveProcessorCount is set to driver cores in cluster mode") {
+    val sparkConf = new SparkConf()
+      .set("spark.app.name", "test-app")
+      .set(SUBMIT_DEPLOY_MODE, "cluster")
+      .set(AM_CORES, 3)       // This should be ignored in cluster mode
+      .set(DRIVER_CORES, 4)
+
+    val client = createClient(sparkConf)
+    val tempDir = Utils.createTempDir()
+    client.setStagingDirPath(new Path(tempDir.getAbsolutePath))
+    val containerLaunchContext = client.createContainerLaunchContext()
+
+    val commands = containerLaunchContext.getCommands.asScala
+    commands should contain ("-XX:ActiveProcessorCount=4")
+  }
+
+  test("SPARK-31028: ActiveProcessorCount defaults to 1 in client mode when AM cores not set") {
+    val sparkConf = new SparkConf()
+      .set("spark.app.name", "test-app")
+      .set(SUBMIT_DEPLOY_MODE, "client")
+
+    val client = createClient(sparkConf)
+    val tempDir = Utils.createTempDir()
+    client.setStagingDirPath(new Path(tempDir.getAbsolutePath))
+    val containerLaunchContext = client.createContainerLaunchContext()
+
+    val commands = containerLaunchContext.getCommands.asScala
+    commands should contain ("-XX:ActiveProcessorCount=1")
+  }
+
+  test("SPARK-31028: ActiveProcessorCount defaults to 1 in cluster mode" +
+      " when driver cores not set") {
+    val sparkConf = new SparkConf()
+      .set("spark.app.name", "test-app")
+      .set(SUBMIT_DEPLOY_MODE, "cluster")
+
+    val client = createClient(sparkConf)
+    val tempDir = Utils.createTempDir()
+    client.setStagingDirPath(new Path(tempDir.getAbsolutePath))
+    val containerLaunchContext = client.createContainerLaunchContext()
+
+    val commands = containerLaunchContext.getCommands.asScala
+    commands should contain ("-XX:ActiveProcessorCount=1")
+  }
+
   private val matching = Seq(
     ("files URI match test1", "file:///file1", "file:///file2"),
     ("files URI match test2", "file:///c:file1", "file://c:file2"),

@@ -48,8 +48,8 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.security.AMRMTokenIdentifier
 import org.apache.hadoop.yarn.util.Records
-
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.deploy.{SparkApplication, SparkHadoopUtil}
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
@@ -1026,11 +1026,14 @@ private[spark] class Client(
     env
   }
 
+  // For testing.
+  private[yarn] def setStagingDirPath(stagingDirPath: Path) = this.stagingDirPath = stagingDirPath
+
   /**
    * Set up a ContainerLaunchContext to launch our ApplicationMaster container.
    * This sets up the launch environment, java options, and the command for launching the AM.
    */
-  private def createContainerLaunchContext(): ContainerLaunchContext = {
+  private[yarn] def createContainerLaunchContext(): ContainerLaunchContext = {
     logInfo("Setting up container launch context for our AM")
     val pySparkArchives =
       if (sparkConf.get(IS_PYTHON_APP)) {
@@ -1047,6 +1050,9 @@ private[spark] class Client(
     amContainer.setEnvironment(launchEnv.asJava)
 
     val javaOpts = ListBuffer[String]()
+
+    // Set Active Processor Count
+    javaOpts += s"-XX:ActiveProcessorCount=${amCores}"
 
     javaOpts += s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}"
 
