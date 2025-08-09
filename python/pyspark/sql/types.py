@@ -2979,6 +2979,8 @@ def _make_type_verifier(
 def _create_row_inbound_converter(dataType: DataType) -> Callable:
     return lambda *a: dataType.fromInternal(a)
 
+def _create_arrayseq(*args):
+    return list(args)
 
 def _create_row(
     fields: Union["Row", List[str]], values: Union[Tuple[Any, ...], List[Any]]

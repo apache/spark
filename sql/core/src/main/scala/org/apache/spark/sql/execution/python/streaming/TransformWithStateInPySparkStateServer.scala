@@ -444,9 +444,19 @@ class TransformWithStateInPySparkStateServer(
         }
       case ValueStateCall.MethodCase.VALUESTATEUPDATE =>
         val byteArray = message.getValueStateUpdate.getValue.toByteArray
+
+        println("@@@ valueStateInfo schema: " + valueStateInfo.schema)
+
         // The value row is serialized as a byte array, we need to convert it back to a Row
         val valueRow = PythonSQLUtils.toJVMRow(byteArray, valueStateInfo.schema,
           valueStateInfo.deserializer)
+
+        println("@@@ valueRow: " + valueRow)
+        if (valueRow != null) {
+          println("@@@ valueRow class: " + valueRow.getClass)
+          println("@@@ valueRow schema: " + valueRow.schema)
+        }
+
         valueStateInfo.valueState.update(valueRow)
         sendResponse(0)
       case ValueStateCall.MethodCase.CLEAR =>

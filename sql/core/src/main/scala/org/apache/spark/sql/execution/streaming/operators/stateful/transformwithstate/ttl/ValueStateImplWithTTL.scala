@@ -154,4 +154,3 @@ class ValueStateImplWithTTL[S](
     ttlRowsForGroupingKey.headOption.map(_.expirationMs)
   }
 }
-
