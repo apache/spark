@@ -19,7 +19,11 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, UnresolvedIdentifier, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{
+  ResolvedIdentifier,
+  UnresolvedIdentifier,
+  UnresolvedRelation
+}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -149,6 +153,27 @@ object GraphIdentifierManager {
       throw new AnalysisException(
         "MULTIPART_TEMPORARY_VIEW_NAME_NOT_SUPPORTED",
         Map("viewName" -> rawViewIdentifier.unquotedString)
+      )
+    }
+    internalDatasetIdentifier.identifier
+  }
+
+  /**
+   * Parses and validates the sink identifier from the raw sink identifier.
+   *
+   * @param rawSinkIdentifier the raw view identifier
+   * @return the parsed sink identifier
+   */
+  @throws[AnalysisException]
+  def parseAndValidateSinkIdentifier(rawSinkIdentifier: TableIdentifier): TableIdentifier = {
+    val internalDatasetIdentifier = parseAndValidatePipelineDatasetIdentifier(
+      rawDatasetIdentifier = rawSinkIdentifier
+    )
+    // Sinks are not persisted to the catalog in use, therefore should not be qualified.
+    if (!isSinglePartIdentifier(internalDatasetIdentifier.identifier)) {
+      throw new AnalysisException(
+        "MULTIPART_SINK_NAME_NOT_SUPPORTED",
+        Map("viewName" -> rawSinkIdentifier.unquotedString)
       )
     }
     internalDatasetIdentifier.identifier
