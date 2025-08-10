@@ -253,7 +253,7 @@ case class ThetaSketchAgg(
    * Returns a Compact sketch derived from the input column or expression
    *
    * @param sketchState
-   *   UpdateSketch instance used as an aggregation buffer, or a Compact sketch
+   *   UpdateSketch/Union instance used as an aggregation buffer, or a Compact sketch
    * @return
    *   A Compact binary sketch
    */
@@ -261,7 +261,7 @@ case class ThetaSketchAgg(
     sketchState.eval()
   }
 
-  /** Convert the underlying UpdateSketch into an Compact byte array */
+  /** Convert the underlying UpdateSketch/Union into an Compact byte array */
   override def serialize(sketchState: ThetaSketchState): Array[Byte] = {
     sketchState.serialize()
   }
