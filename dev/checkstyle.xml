@@ -260,6 +260,10 @@
             <property name="message" value="Use requireNonNull of java.util.Objects instead." />
         </module>
         <module name="RegexpSinglelineJava">
+            <property name="format" value="Lists\.newArrayList"/>
+            <property name="message" value="Use ArrayList constructor instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
             <property name="format" value="ImmutableMap\.of"/>
             <property name="message" value="Use Map.of instead." />
         </module>

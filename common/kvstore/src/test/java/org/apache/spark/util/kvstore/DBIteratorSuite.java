@@ -499,7 +499,9 @@ public abstract class DBIteratorSuite {
 
   private List<CustomType1> collect(KVStoreView<CustomType1> view) throws Exception {
     try (KVStoreIterator<CustomType1> iterator = view.closeableIterator()) {
-      return Lists.newArrayList(iterator);
+      List<CustomType1> list = new ArrayList<>();
+      iterator.forEachRemaining(list::add);
+      return list; 
     }
   }
 

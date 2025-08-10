@@ -21,6 +21,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Random;
@@ -30,7 +31,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import com.codahale.metrics.MetricSet;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
-import com.google.common.collect.Lists;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -102,7 +102,7 @@ public class TransportClientFactory implements Closeable {
       List<TransportClientBootstrap> clientBootstraps) {
     this.context = Objects.requireNonNull(context);
     this.conf = context.getConf();
-    this.clientBootstraps = Lists.newArrayList(Objects.requireNonNull(clientBootstraps));
+    this.clientBootstraps = new ArrayList<>(Objects.requireNonNull(clientBootstraps));
     this.connectionPool = new ConcurrentHashMap<>();
     this.numConnectionsPerPeer = conf.numConnectionsPerPeer();
     this.rand = new Random();
