@@ -200,7 +200,7 @@
     <guava.version>33.4.0-jre</guava.version>
     <gson.version>2.11.0</gson.version>
     <janino.version>3.1.9</janino.version>
-    <jersey.version>3.0.17</jersey.version>
+    <jersey.version>3.0.18</jersey.version>
     <joda.version>2.13.0</joda.version>
     <jsr305.version>3.0.0</jsr305.version>
     <jaxb.version>2.2.11</jaxb.version>
