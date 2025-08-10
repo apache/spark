@@ -253,7 +253,7 @@ case class ThetaSketchAgg(
    * Returns a Compact sketch derived from the input column or expression
    *
    * @param sketchState
-   *   UpdateSketch/Union instance used as an aggregation buffer, or a Compact sketch
+   *   Union instance used as an aggregation buffer
    * @return
    *   A Compact binary sketch
    */
@@ -433,10 +433,10 @@ case class ThetaUnionAgg(
   }
 
   /**
-   * Returns an Compact sketch derived from the merged sketches
+   * Returns a Compact sketch derived from the merged sketches
    *
    * @param sketchState
-   *   Union instance used as an aggregation buffer, or a Compact sketch
+   *   Union instance used as an aggregation buffer
    * @return
    *   A Compact binary sketch
    */
@@ -625,10 +625,10 @@ case class ThetaIntersectionAgg(
   }
 
   /**
-   * Returns an Compact sketch derived from the intersected sketches
+   * Returns a Compact sketch derived from the intersected sketches
    *
    * @param sketchState
-   *   Intersection instance used as an aggregation buffer, or a Compact sketch
+   *   Intersection instance used as an aggregation buffer
    * @return
    *   A Compact binary sketch
    */
