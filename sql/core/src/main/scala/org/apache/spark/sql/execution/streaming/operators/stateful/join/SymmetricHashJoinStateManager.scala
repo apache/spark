@@ -529,7 +529,7 @@ abstract class SymmetricHashJoinStateManager(
    * Helper class for representing data returned by [[KeyWithIndexToValueStore]].
    * Designed for object reuse.
    */
-  private[streaming] class KeyAndNumValues(var key: UnsafeRow = null, var numValue: Long = 0) {
+  private[join] class KeyAndNumValues(var key: UnsafeRow = null, var numValue: Long = 0) {
     def withNew(newKey: UnsafeRow, newNumValues: Long): this.type = {
       this.key = newKey
       this.numValue = newNumValues
@@ -596,7 +596,7 @@ abstract class SymmetricHashJoinStateManager(
    * Helper class for representing data returned by [[KeyWithIndexToValueStore]].
    * Designed for object reuse.
    */
-  private[streaming] class KeyWithIndexAndValue(
+  private[join] class KeyWithIndexAndValue(
     var key: UnsafeRow = null,
     var valueIndex: Long = -1,
     var value: UnsafeRow = null,
@@ -1190,17 +1190,17 @@ object SymmetricHashJoinStateManager {
     }
   }
 
-  private[streaming] sealed trait StateStoreType
+  private[join] sealed trait StateStoreType
 
-  private[streaming] case object KeyToNumValuesType extends StateStoreType {
+  private[join] case object KeyToNumValuesType extends StateStoreType {
     override def toString(): String = "keyToNumValues"
   }
 
-  private[streaming] case object KeyWithIndexToValueType extends StateStoreType {
+  private[join] case object KeyWithIndexToValueType extends StateStoreType {
     override def toString(): String = "keyWithIndexToValue"
   }
 
-  private[streaming] def getStateStoreName(
+  private[join] def getStateStoreName(
       joinSide: JoinSide, storeType: StateStoreType): String = {
     s"$joinSide-$storeType"
   }
