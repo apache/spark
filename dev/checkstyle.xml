@@ -190,6 +190,7 @@
             <property name="illegalClasses" value="org.apache.commons.lang3.StringUtils" />
             <property name="illegalClasses" value="org.apache.commons.lang3.SystemUtils" />
             <property name="illegalClasses" value="org.apache.hadoop.io.IOUtils" />
+            <property name="illegalClasses" value="com.google.common.base.Objects" />
             <property name="illegalClasses" value="com.google.common.base.Strings" />
             <property name="illegalClasses" value="com.google.common.collect.Sets" />
             <property name="illegalClasses" value="com.google.common.io.BaseEncoding" />

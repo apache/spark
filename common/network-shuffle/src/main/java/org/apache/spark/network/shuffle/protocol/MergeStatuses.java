@@ -19,7 +19,8 @@ package org.apache.spark.network.shuffle.protocol;
 
 import java.util.Arrays;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
 import org.roaringbitmap.RoaringBitmap;
 
@@ -91,8 +92,8 @@ public class MergeStatuses extends BlockTransferMessage {
   @Override
   public boolean equals(Object other) {
     if (other instanceof MergeStatuses o) {
-      return Objects.equal(shuffleId, o.shuffleId)
-        && Objects.equal(shuffleMergeId, o.shuffleMergeId)
+      return Objects.equals(shuffleId, o.shuffleId)
+        && Objects.equals(shuffleMergeId, o.shuffleMergeId)
         && Arrays.equals(bitmaps, o.bitmaps)
         && Arrays.equals(reduceIds, o.reduceIds)
         && Arrays.equals(sizes, o.sizes);
