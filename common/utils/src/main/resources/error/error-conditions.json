@@ -573,6 +573,12 @@
     },
     "sqlState" : "58030"
   },
+  "CANNOT_WRITE_VIEW" : {
+    "message" : [
+      "Writing into a view is not allowed. View: <identifier>."
+    ],
+    "sqlState" : "0A000"
+  },
   "CAST_INVALID_INPUT" : {
     "message" : [
       "The value <expression> of the type <sourceType> cannot be cast to <targetType> because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead."
@@ -7127,11 +7133,6 @@
   "_LEGACY_ERROR_TEMP_1008" : {
     "message" : [
       "<quoted> is not a temp view of streaming logical plan, please use batch API such as `DataFrameReader.table` to read it."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1011" : {
-    "message" : [
-      "Writing into a view is not allowed. View: <identifier>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1012" : {

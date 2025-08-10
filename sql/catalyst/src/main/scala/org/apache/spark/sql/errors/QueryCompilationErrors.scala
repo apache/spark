@@ -567,18 +567,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = t.origin)
   }
 
-  def insertIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
-    new AnalysisException(
-      errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
-      messageParameters = Map(
-        "viewName" -> toSQLId(identifier.nameParts),
-        "operation" -> "INSERT"),
-      origin = t.origin)
-  }
-
   def writeIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1011",
+      errorClass = "CANNOT_WRITE_VIEW",
       messageParameters = Map("identifier" -> identifier.toString),
       origin = t.origin)
   }
