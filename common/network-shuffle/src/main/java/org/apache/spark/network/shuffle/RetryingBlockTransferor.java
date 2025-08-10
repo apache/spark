@@ -26,7 +26,6 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Uninterruptibles;
 
 import org.apache.spark.internal.SparkLogger;
@@ -131,7 +130,7 @@ public class RetryingBlockTransferor {
     this.listener = listener;
     this.maxRetries = conf.maxIORetries();
     this.retryWaitTime = conf.ioRetryWaitTimeMs();
-    this.outstandingBlocksIds = Sets.newLinkedHashSet();
+    this.outstandingBlocksIds = new LinkedHashSet<>();
     Collections.addAll(outstandingBlocksIds, blockIds);
     this.currentListener = new RetryingBlockTransferListener();
     this.errorHandler = errorHandler;
