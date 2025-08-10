@@ -20,21 +20,18 @@ package org.apache.spark.network.shuffle;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
@@ -54,7 +51,7 @@ public class CleanupNonShuffleServiceServedFilesSuite {
   private TransportConf getConf(boolean isFetchRddEnabled) {
     return new TransportConf(
       "shuffle",
-      new MapConfigProvider(ImmutableMap.of(
+      new MapConfigProvider(Map.of(
         Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED,
         Boolean.toString(isFetchRddEnabled))));
   }
@@ -200,28 +197,13 @@ public class CleanupNonShuffleServiceServedFilesSuite {
     }
   }
 
-  private static Set<String> collectFilenames(File[] files) throws IOException {
-    Set<String> result = new HashSet<>();
-    for (File file : files) {
-      if (file.exists()) {
-        try (Stream<Path> walk = Files.walk(file.toPath())) {
-          result.addAll(walk
-            .filter(Files::isRegularFile)
-            .map(x -> x.toFile().getName())
-            .collect(Collectors.toSet()));
-        }
-      }
-    }
-    return result;
-  }
-
   private static void assertContainedFilenames(
       TestShuffleDataContext dataContext,
       Set<String> expectedFilenames) throws IOException {
     Set<String> collectedFilenames = new HashSet<>();
     for (String localDir : dataContext.localDirs) {
-      File[] dirs = new File[] { new File(localDir) };
-      collectedFilenames.addAll(collectFilenames(dirs));
+      JavaUtils.listFiles(new File(localDir)).stream().map(File::getName)
+        .collect(Collectors.toCollection(() -> collectedFilenames));
     }
     assertEquals(expectedFilenames, collectedFilenames);
   }

@@ -3895,7 +3895,6 @@ def _test() -> None:
 
     if is_ansi_mode_test:
         del pyspark.pandas.namespace.melt.__doc__
-        del pyspark.pandas.namespace.to_numeric.__doc__
 
     spark = (
         SparkSession.builder.master("local[4]")

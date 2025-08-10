@@ -13832,23 +13832,7 @@ def _test() -> None:
     globs["ps"] = pyspark.pandas
 
     if is_ansi_mode_test:
-        del pyspark.pandas.frame.DataFrame.add.__doc__
-        del pyspark.pandas.frame.DataFrame.div.__doc__
-        del pyspark.pandas.frame.DataFrame.floordiv.__doc__
         del pyspark.pandas.frame.DataFrame.melt.__doc__
-        del pyspark.pandas.frame.DataFrame.mod.__doc__
-        del pyspark.pandas.frame.DataFrame.mul.__doc__
-        del pyspark.pandas.frame.DataFrame.pow.__doc__
-        del pyspark.pandas.frame.DataFrame.radd.__doc__
-        del pyspark.pandas.frame.DataFrame.rdiv.__doc__
-        del pyspark.pandas.frame.DataFrame.rfloordiv.__doc__
-        del pyspark.pandas.frame.DataFrame.rmod.__doc__
-        del pyspark.pandas.frame.DataFrame.rmul.__doc__
-        del pyspark.pandas.frame.DataFrame.rpow.__doc__
-        del pyspark.pandas.frame.DataFrame.rsub.__doc__
-        del pyspark.pandas.frame.DataFrame.rtruediv.__doc__
-        del pyspark.pandas.frame.DataFrame.sub.__doc__
-        del pyspark.pandas.frame.DataFrame.truediv.__doc__
 
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.frame tests").getOrCreate()

@@ -134,6 +134,16 @@ private[spark] trait SparkFileUtils extends Logging {
     createDirectory(root, namePrefix)
   }
 
+  def createParentDirs(file: File): Unit = {
+    if (file == null) {
+      throw new IllegalArgumentException("Input should not be null.")
+    }
+    val parent = file.getParentFile()
+    if (parent != null) {
+      Files.createDirectories(parent.toPath())
+    }
+  }
+
   /** Delete recursively while keeping the given directory itself. */
   def cleanDirectory(dir: File): Unit = {
     JavaUtils.cleanDirectory(dir)

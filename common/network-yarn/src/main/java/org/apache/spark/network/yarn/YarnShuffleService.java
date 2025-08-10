@@ -31,7 +31,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -546,7 +545,7 @@ public class YarnShuffleService extends AuxiliaryService {
    * and DB exists in the local dir of NM by old version of shuffle service.
    */
   protected File initRecoveryDb(String dbName) {
-    Preconditions.checkNotNull(_recoveryPath,
+    Objects.requireNonNull(_recoveryPath,
       "recovery path should not be null if NM recovery is enabled");
 
     File recoveryFile = new File(_recoveryPath.toUri().getPath(), dbName);

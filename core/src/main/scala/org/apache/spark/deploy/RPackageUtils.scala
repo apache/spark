@@ -24,8 +24,6 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.Files
-
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.internal.{LogEntry, Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
@@ -157,7 +155,7 @@ private[deploy] object RPackageUtils extends Logging {
         } else {
           val inStream = jar.getInputStream(entry)
           val outPath = new File(tempDir, entryPath)
-          Files.createParentDirs(outPath)
+          Utils.createParentDirs(outPath)
           val outStream = new FileOutputStream(outPath)
           if (verbose) {
             print(log"Extracting ${MDC(JAR_ENTRY, entry)} to ${MDC(PATH, outPath)}", printStream)

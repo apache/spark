@@ -17,6 +17,8 @@
 
 package org.apache.spark.util.kvstore;
 
+import java.util.Objects;
+
 import com.google.common.base.Preconditions;
 
 import org.apache.spark.annotation.Private;
@@ -58,7 +60,7 @@ public abstract class KVStoreView<T> implements Iterable<T> {
    * Iterates according to the given index.
    */
   public KVStoreView<T> index(String name) {
-    this.index = Preconditions.checkNotNull(name);
+    this.index = Objects.requireNonNull(name);
     return this;
   }
 

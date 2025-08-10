@@ -23,6 +23,7 @@ import static org.mockito.Mockito.*;
 import java.io.File;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -36,7 +37,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import javax.security.sasl.SaslException;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.io.Files;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -220,7 +220,7 @@ public class SparkSaslSuite {
 
       byte[] data = new byte[8 * 1024];
       new Random().nextBytes(data);
-      Files.write(data, file);
+      Files.write(file.toPath(), data);
 
       SaslEncryptionBackend backend = mock(SaslEncryptionBackend.class);
       // It doesn't really matter what we return here, as long as it's not null.
@@ -244,7 +244,7 @@ public class SparkSaslSuite {
 
   @Test
   public void testFileRegionEncryption() throws Exception {
-    Map<String, String> testConf = ImmutableMap.of(
+    Map<String, String> testConf = Map.of(
       "spark.network.sasl.maxEncryptedBlockSize", "1k");
 
     AtomicReference<ManagedBuffer> response = new AtomicReference<>();
@@ -261,7 +261,7 @@ public class SparkSaslSuite {
 
       byte[] data = new byte[8 * 1024];
       new Random().nextBytes(data);
-      Files.write(data, file);
+      Files.write(file.toPath(), data);
 
       ctx = new SaslTestCtx(rpcHandler, true, false, testConf);
 
@@ -298,7 +298,7 @@ public class SparkSaslSuite {
   public void testServerAlwaysEncrypt() {
     Exception re = assertThrows(Exception.class,
       () -> new SaslTestCtx(mock(RpcHandler.class), false, false,
-              ImmutableMap.of("spark.network.sasl.serverAlwaysEncrypt", "true")));
+              Map.of("spark.network.sasl.serverAlwaysEncrypt", "true")));
     assertTrue(re.getCause() instanceof SaslException);
   }
 

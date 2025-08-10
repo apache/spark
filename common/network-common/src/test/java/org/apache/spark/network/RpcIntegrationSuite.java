@@ -24,8 +24,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
-import com.google.common.collect.Sets;
-import com.google.common.io.Files;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -40,6 +38,7 @@ import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.util.Pair;
+import org.apache.spark.util.SparkFileUtils$;
 
 public class RpcIntegrationSuite {
   static TransportConf conf;
@@ -247,14 +246,14 @@ public class RpcIntegrationSuite {
   @Test
   public void singleRPC() throws Exception {
     RpcResult res = sendRPC("hello/Aaron");
-    assertEquals(Sets.newHashSet("Hello, Aaron!"), res.successMessages);
+    assertEquals(Set.of("Hello, Aaron!"), res.successMessages);
     assertTrue(res.errorMessages.isEmpty());
   }
 
   @Test
   public void doubleRPC() throws Exception {
     RpcResult res = sendRPC("hello/Aaron", "hello/Reynold");
-    assertEquals(Sets.newHashSet("Hello, Aaron!", "Hello, Reynold!"), res.successMessages);
+    assertEquals(Set.of("Hello, Aaron!", "Hello, Reynold!"), res.successMessages);
     assertTrue(res.errorMessages.isEmpty());
   }
 
@@ -262,28 +261,28 @@ public class RpcIntegrationSuite {
   public void returnErrorRPC() throws Exception {
     RpcResult res = sendRPC("return error/OK");
     assertTrue(res.successMessages.isEmpty());
-    assertErrorsContain(res.errorMessages, Sets.newHashSet("Returned: OK"));
+    assertErrorsContain(res.errorMessages, Set.of("Returned: OK"));
   }
 
   @Test
   public void throwErrorRPC() throws Exception {
     RpcResult res = sendRPC("throw error/uh-oh");
     assertTrue(res.successMessages.isEmpty());
-    assertErrorsContain(res.errorMessages, Sets.newHashSet("Thrown: uh-oh"));
+    assertErrorsContain(res.errorMessages, Set.of("Thrown: uh-oh"));
   }
 
   @Test
   public void doubleTrouble() throws Exception {
     RpcResult res = sendRPC("return error/OK", "throw error/uh-oh");
     assertTrue(res.successMessages.isEmpty());
-    assertErrorsContain(res.errorMessages, Sets.newHashSet("Returned: OK", "Thrown: uh-oh"));
+    assertErrorsContain(res.errorMessages, Set.of("Returned: OK", "Thrown: uh-oh"));
   }
 
   @Test
   public void sendSuccessAndFailure() throws Exception {
     RpcResult res = sendRPC("hello/Bob", "throw error/the", "hello/Builder", "return error/!");
-    assertEquals(Sets.newHashSet("Hello, Bob!", "Hello, Builder!"), res.successMessages);
-    assertErrorsContain(res.errorMessages, Sets.newHashSet("Thrown: the", "Returned: !"));
+    assertEquals(Set.of("Hello, Bob!", "Hello, Builder!"), res.successMessages);
+    assertErrorsContain(res.errorMessages, Set.of("Thrown: the", "Returned: !"));
   }
 
   @Test
@@ -310,7 +309,7 @@ public class RpcIntegrationSuite {
     for (String stream : StreamTestHelper.STREAMS) {
       RpcResult res = sendRpcWithStream(stream);
       assertTrue(res.errorMessages.isEmpty(), "there were error messages!" + res.errorMessages);
-      assertEquals(Sets.newHashSet(stream), res.successMessages);
+      assertEquals(Set.of(stream), res.successMessages);
     }
   }
 
@@ -321,7 +320,7 @@ public class RpcIntegrationSuite {
       streams[i] = StreamTestHelper.STREAMS[i % StreamTestHelper.STREAMS.length];
     }
     RpcResult res = sendRpcWithStream(streams);
-    assertEquals(Sets.newHashSet(StreamTestHelper.STREAMS), res.successMessages);
+    assertEquals(Set.of(StreamTestHelper.STREAMS), res.successMessages);
     assertTrue(res.errorMessages.isEmpty());
   }
 
@@ -341,8 +340,8 @@ public class RpcIntegrationSuite {
     RpcResult exceptionInOnComplete =
         sendRpcWithStream("fail/exception-oncomplete/smallBuffer", "smallBuffer");
     assertErrorsContain(exceptionInOnComplete.errorMessages,
-        Sets.newHashSet("Failure post-processing"));
-    assertEquals(Sets.newHashSet("smallBuffer"), exceptionInOnComplete.successMessages);
+        Set.of("Failure post-processing"));
+    assertEquals(Set.of("smallBuffer"), exceptionInOnComplete.successMessages);
   }
 
   private void assertErrorsContain(Set<String> errors, Set<String> contains) {
@@ -364,14 +363,14 @@ public class RpcIntegrationSuite {
 
     // We expect 1 additional error due to closed connection and here are possible keywords in the
     // error message.
-    Set<String> possibleClosedErrors = Sets.newHashSet(
+    Set<String> possibleClosedErrors = Set.of(
         "closed",
         "Connection reset",
         "java.nio.channels.ClosedChannelException",
         "io.netty.channel.StacklessClosedChannelException",
         "java.io.IOException: Broken pipe"
     );
-    Set<String> containsAndClosed = Sets.newHashSet(expectedError);
+    Set<String> containsAndClosed = new HashSet<>(Set.of(expectedError));
     containsAndClosed.addAll(possibleClosedErrors);
 
     Pair<Set<String>, Set<String>> r = checkErrorsContain(errors, containsAndClosed);
@@ -391,8 +390,8 @@ public class RpcIntegrationSuite {
   private Pair<Set<String>, Set<String>> checkErrorsContain(
       Set<String> errors,
       Set<String> contains) {
-    Set<String> remainingErrors = Sets.newHashSet(errors);
-    Set<String> notFound = Sets.newHashSet();
+    Set<String> remainingErrors = new HashSet<>(errors);
+    Set<String> notFound = new HashSet<>();
     for (String contain : contains) {
       Iterator<String> it = remainingErrors.iterator();
       boolean foundMatch = false;
@@ -430,7 +429,8 @@ public class RpcIntegrationSuite {
 
     void verify() throws IOException {
       if (streamId.equals("file")) {
-        assertTrue(Files.equal(testData.testFile, outFile), "File stream did not match.");
+        assertTrue(SparkFileUtils$.MODULE$.contentEquals(testData.testFile, outFile),
+          "File stream did not match.");
       } else {
         byte[] result = ((ByteArrayOutputStream)out).toByteArray();
         ByteBuffer srcBuffer = testData.srcBuffer(streamId);
