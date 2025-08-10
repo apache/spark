@@ -518,7 +518,8 @@ class ScalarPandasUDFTestsMixin:
 
         f = pandas_udf(scalar_func, returnType=return_type, functionType=PandasUDFType.SCALAR)
         # before fix, exception was: KeyError: 'str'
-        with self.assertRaisesRegex(PythonException,
+        with self.assertRaisesRegex(
+            PythonException,
             "Column names of the returned pandas.DataFrame do not match specified schema. "
             "Missing: str.\n",
         ):
@@ -535,7 +536,8 @@ class ScalarPandasUDFTestsMixin:
         # before fix, silently succeeds
         # now raises an exception.  note that because we truncate fields in returned pd.DataFrame the 'str' column
         # will appear to be missing to validation logic
-        with self.assertRaisesRegex(PythonException,
+        with self.assertRaisesRegex(
+            PythonException,
             "Column names of the returned pandas.DataFrame do not match specified schema. "
             "Missing: str. Unexpected: str2.\n",
         ):
@@ -543,15 +545,22 @@ class ScalarPandasUDFTestsMixin:
 
     def test_vectorized_udf_struct_duplicate_field(self):
         df = self.spark.range(10)
-        return_type = StructType([StructField("id", LongType()), StructField("str", StringType()), StructField("str", StringType())])
+        return_type = StructType(
+            [
+                StructField("id", LongType()),
+                StructField("str", StringType()),
+                StructField("str", StringType()),
+            ]
+        )
 
         def scalar_func(id: int) -> pd.DataFrame:
             return pd.DataFrame({"id": id, "str": id.apply(str)})
 
         f = pandas_udf(scalar_func, returnType=return_type, functionType=PandasUDFType.SCALAR)
         # before fix, was: java.lang.IllegalArgumentException: not all nodes, buffers and variadicBufferCounts were consumed.
-        with self.assertRaisesRegex(PythonException,
-            "The StructType for the Pandas UDF returnType has a duplicate field name: str\n"
+        with self.assertRaisesRegex(
+            PythonException,
+            "The StructType for the Pandas UDF returnType has a duplicate field name: str\n",
         ):
             df.select(f(col("id")).alias("struct")).collect()
 

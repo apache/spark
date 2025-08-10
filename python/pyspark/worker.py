@@ -434,12 +434,12 @@ def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_retu
                         "extra": extra,
                     },
                 )
-            elif (
-                assign_cols_by_name
-                and len(field_names) < len(return_type.fields)  # duplicate name in return type
-            ):
+            elif assign_cols_by_name and len(field_names) < len(
+                return_type.fields
+            ):  # duplicate name in return type
                 dup_column = next(
-                    name for name in field_names
+                    name
+                    for name in field_names
                     if sum(1 for field in return_type.fields if field.name == name) > 1
                 )
                 raise PySparkRuntimeError(
@@ -454,7 +454,9 @@ def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_retu
                     errorClass="RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF",
                     messageParameters={
                         "expected": str(len(return_type)),
-                        "actual": str(len(result_columns)), # if truncated, len(result_columns) <= len(result.columns)
+                        "actual": str(
+                            len(result_columns)
+                        ),  # if truncated, len(result_columns) <= len(result.columns)
                     },
                 )
     else:
