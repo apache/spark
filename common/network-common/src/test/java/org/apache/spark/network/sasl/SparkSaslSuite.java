@@ -244,7 +244,7 @@ public class SparkSaslSuite {
 
   @Test
   public void testFileRegionEncryption() throws Exception {
-    Map<String, String> testConf = ImmutableMap.of(
+    Map<String, String> testConf = Map.of(
       "spark.network.sasl.maxEncryptedBlockSize", "1k");
 
     AtomicReference<ManagedBuffer> response = new AtomicReference<>();
@@ -298,7 +298,7 @@ public class SparkSaslSuite {
   public void testServerAlwaysEncrypt() {
     Exception re = assertThrows(Exception.class,
       () -> new SaslTestCtx(mock(RpcHandler.class), false, false,
-              ImmutableMap.of("spark.network.sasl.serverAlwaysEncrypt", "true")));
+              Map.of("spark.network.sasl.serverAlwaysEncrypt", "true")));
     assertTrue(re.getCause() instanceof SaslException);
   }
 

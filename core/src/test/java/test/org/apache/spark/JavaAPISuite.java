@@ -45,7 +45,6 @@ import scala.Tuple3;
 import scala.Tuple4;
 import scala.jdk.javaapi.CollectionConverters;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
@@ -1263,7 +1262,7 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<Integer, Integer> combinedRDD = originalRDD.keyBy(keyFunction)
       .combineByKey(createCombinerFunction, mergeValueFunction, mergeValueFunction);
     Map<Integer, Integer> results = combinedRDD.collectAsMap();
-    ImmutableMap<Integer, Integer> expected = ImmutableMap.of(0, 9, 1, 5, 2, 7);
+    Map<Integer, Integer> expected = Map.of(0, 9, 1, 5, 2, 7);
     assertEquals(expected, results);
 
     Partitioner defaultPartitioner = Partitioner.defaultPartitioner(
