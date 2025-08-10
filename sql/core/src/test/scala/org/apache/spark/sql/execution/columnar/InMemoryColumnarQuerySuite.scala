@@ -345,8 +345,7 @@ class InMemoryColumnarQuerySuite extends QueryTest
     val columnTypes1 = List.fill(length1)(IntegerType)
     val columnarIterator1 = GenerateColumnAccessor.generate(columnTypes1)
 
-    // SPARK-16664: the limit of janino is 8117
-    val length2 = 8117
+    val length2 = 10000
     val columnTypes2 = List.fill(length2)(IntegerType)
     val columnarIterator2 = GenerateColumnAccessor.generate(columnTypes2)
   }
