@@ -226,13 +226,13 @@ public class LevelDBSuite {
     db.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       "id",
-      Set.of(new String[] { "things" }));
+      Set.<String[]>of(new String[] { "things" }));
     assertEquals(4, db.count(ArrayKeyIndexType.class));
 
     db.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       "id",
-      Set.of(new String[] { "more things" }));
+      Set.<String[]>of(new String[] { "more things" }));
     assertEquals(0, db.count(ArrayKeyIndexType.class));
   }
 

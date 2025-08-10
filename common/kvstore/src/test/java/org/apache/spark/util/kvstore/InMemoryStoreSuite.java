@@ -159,13 +159,13 @@ public class InMemoryStoreSuite {
     assertTrue(store.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       "id",
-      Set.of(new String [] { "things" })));
+      Set.<String[]>of(new String [] { "things" })));
     assertEquals(4, store.count(ArrayKeyIndexType.class));
 
     assertTrue(store.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       "id",
-      Set.of(new String [] { "more things" })));
+      Set.<String[]>of(new String [] { "more things" })));
     assertEquals(0, store.count(ArrayKeyIndexType.class));
   }
 
