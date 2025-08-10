@@ -501,7 +501,7 @@ public abstract class DBIteratorSuite {
     try (KVStoreIterator<CustomType1> iterator = view.closeableIterator()) {
       List<CustomType1> list = new ArrayList<>();
       iterator.forEachRemaining(list::add);
-      return list; 
+      return list;
     }
   }
 
