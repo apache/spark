@@ -3111,7 +3111,8 @@ object SQLConf {
       .version("2.1.0")
       .internal()
       .stringConf
-      .createWithDefault("org.apache.spark.sql.execution.streaming.ManifestFileCommitProtocol")
+      .createWithDefault(
+        "org.apache.spark.sql.execution.streaming.runtime.ManifestFileCommitProtocol")
 
   val STREAMING_MULTIPLE_WATERMARK_POLICY =
     buildConf("spark.sql.streaming.multipleWatermarkPolicy")
