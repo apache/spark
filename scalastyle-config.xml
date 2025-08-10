@@ -792,6 +792,11 @@ This file is divided into 3 sections:
     <customMessage>Use Map.copyOf instead.</customMessage>
   </check>
 
+  <check customId="ImmutableSetof" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bImmutableSet\.of\b</parameter></parameters>
+    <customMessage>Use java.util.Set.of instead.</customMessage>
+  </check>
+
   <check customId="maputils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.collections4\.MapUtils\b</parameter></parameters>
     <customMessage>Use org.apache.spark.util.collection.Utils instead.</customMessage>
