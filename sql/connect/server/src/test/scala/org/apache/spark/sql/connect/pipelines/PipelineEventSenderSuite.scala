@@ -55,13 +55,11 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
       origin = PipelineEventOrigin(
         flowName = Some("test-flow"),
         datasetName = None,
-        sourceCodeLocation = None
-      ),
+        sourceCodeLocation = None),
       level = level,
       message = message,
       details = details,
-      error = None
-    )
+      error = None)
   }
 
   test("PipelineEventSender sends events") {
@@ -79,7 +77,7 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
 
       // Verify that onNext was called on the observer
       val responseCaptor = ArgumentCaptor.forClass(classOf[ExecutePlanResponse])
-       verify(mockObserver, Mockito.timeout(1000)).onNext(responseCaptor.capture())
+      verify(mockObserver, Mockito.timeout(1000)).onNext(responseCaptor.capture())
 
       val response = responseCaptor.getValue
       assert(response.getSessionId == "test-session-id")
@@ -104,23 +102,20 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
         id = s"event-$i",
         message = s"Event $i before shutdown",
         level = EventLevel.INFO,
-        details = FlowProgress(FlowStatus.RUNNING)
-      )
+        details = FlowProgress(FlowStatus.RUNNING))
     }
 
-    events.foreach(
-      event => eventSender.sendEvent(event)
-    )
+    events.foreach(event => eventSender.sendEvent(event))
 
     eventSender.shutdown()
 
     // this event should not be processed because shutdown has been called
-    eventSender.sendEvent(createTestEvent(
-      id = s"event-after-shutdown",
-      message = s"Event after shutdown",
-      level = EventLevel.INFO,
-      details = FlowProgress(FlowStatus.RUNNING)
-    ))
+    eventSender.sendEvent(
+      createTestEvent(
+        id = s"event-after-shutdown",
+        message = s"Event after shutdown",
+        level = EventLevel.INFO,
+        details = FlowProgress(FlowStatus.RUNNING)))
     // Allow some time for the processing to complete
     Thread.sleep(50)
     // Event should have been processed before shutdown completed
@@ -130,16 +125,18 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
     val responses = responseCaptor.getAllValues
     assert(responses.size == 2)
     // Only the first two events should be processed
-    assert(responses.get(0).getPipelineEventResult.getEvent.getMessage == "Event 1 before shutdown")
-    assert(responses.get(1).getPipelineEventResult.getEvent.getMessage == "Event 2 before shutdown")
+    assert(
+      responses.get(0).getPipelineEventResult.getEvent.getMessage == "Event 1 before shutdown")
+    assert(
+      responses.get(1).getPipelineEventResult.getEvent.getMessage == "Event 2 before shutdown")
   }
-
 
   test("pipeline execution is not blocked by slow event delivery") {
     // Create a custom PipelineEventSender that tracks shutdown timing
     class InstrumentedPipelineEventSender(
-       responseObserver: StreamObserver[proto.ExecutePlanResponse],
-       sessionHolder: SessionHolder) extends PipelineEventSender(responseObserver, sessionHolder) {
+        responseObserver: StreamObserver[proto.ExecutePlanResponse],
+        sessionHolder: SessionHolder)
+        extends PipelineEventSender(responseObserver, sessionHolder) {
 
       @volatile var shutdownCalledTime: Option[Long] = None
       @volatile var shutdownReturnedTime: Option[Long] = None
@@ -150,7 +147,6 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
         shutdownReturnedTime = Some(System.currentTimeMillis())
       }
     }
-
 
     val mockSessionHolder = mock[SessionHolder]
     when(mockSessionHolder.sessionId).thenReturn("test-session-id")
@@ -174,7 +170,6 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
     val instrumentedSender = new InstrumentedPipelineEventSender(slowObserver, mockSessionHolder)
     instrumentedSender.start()
 
-
     // Simulate pipeline executed quickly and generated many events
     val pipelineStartTime = System.currentTimeMillis()
 
@@ -183,8 +178,7 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
         id = s"event-$i",
         message = s"Event $i generated during pipeline execution",
         level = EventLevel.INFO,
-        details = FlowProgress(FlowStatus.RUNNING)
-      )
+        details = FlowProgress(FlowStatus.RUNNING))
       instrumentedSender.sendEvent(event)
       Thread.sleep(10) // Some pipeline execution time
     }
@@ -193,7 +187,8 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
     instrumentedSender.shutdown()
 
     // Events still need to be procesed before the sender shuts down
-    assert(eventCountDownLatch.await(10, TimeUnit.SECONDS),
+    assert(
+      eventCountDownLatch.await(10, TimeUnit.SECONDS),
       "Not all events delivered within timeout")
 
     // Key measurements
@@ -201,7 +196,8 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
     val coreLogicTime = shutdownCalledTime - pipelineStartTime
 
     // Core logic should complete quickly (events generated and queued fast)
-    assert(coreLogicTime < 500,
+    assert(
+      coreLogicTime < 500,
       s"Core pipeline logic took ${coreLogicTime}ms, but should be fast since events are " +
         s"just queued asynchronously. This suggests events may be processed synchronously.")
 
