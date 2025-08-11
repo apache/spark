@@ -962,6 +962,11 @@
       "<error_type> on the server but responses were already received from it."
     ]
   },
+  "RESULT_COLUMNS_DUPLICATE_FOR_PANDAS_UDF": {
+    "message": [
+      "The StructType for the Pandas UDF returnType has a duplicate field name: <duplicate>"
+    ]
+  },
   "RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDF": {
     "message": [
       "Column names of the returned pyarrow.Table do not match specified schema.<missing><extra>"
@@ -970,11 +975,6 @@
   "RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF": {
     "message": [
       "Column names of the returned pandas.DataFrame do not match specified schema.<missing><extra>"
-    ]
-  },
-  "RESULT_COLUMNS_DUPLICATE_FOR_PANDAS_UDF": {
-    "message": [
-      "The StructType for the Pandas UDF returnType has a duplicate field name: <duplicate>"
     ]
   },
   "RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF": {
