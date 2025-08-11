@@ -107,7 +107,7 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
 
     events.foreach(event => eventSender.sendEvent(event))
 
-    eventSender.shutdown()
+    eventSender.shutdown() // blocks until all events are processed
 
     // this event should not be processed because shutdown has been called
     eventSender.sendEvent(
@@ -115,9 +115,10 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
         id = s"event-after-shutdown",
         message = s"Event after shutdown",
         level = EventLevel.INFO,
-        details = FlowProgress(FlowStatus.RUNNING)))
-    // Allow some time for the processing to complete
-    Thread.sleep(50)
+        details = FlowProgress(FlowStatus.RUNNING)
+      )
+    )
+
     // Event should have been processed before shutdown completed
     val responseCaptor = ArgumentCaptor.forClass(classOf[ExecutePlanResponse])
     verify(mockObserver, times(2)).onNext(responseCaptor.capture())
