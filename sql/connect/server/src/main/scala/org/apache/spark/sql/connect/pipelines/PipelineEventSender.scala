@@ -99,8 +99,17 @@ class PipelineEventSender(
    */
   def shutdown(): Unit = {
     if (isShutdown.compareAndSet(false, true)) {
-      // Signal shutdown to the processing loop but wait for existing events to be processed
+      // Signal shutdown to the processing loop
       eventQueue.offer(ShutdownMessage)
+      // Request a shutdown of the executor which waits for processEvents to complete
+      executor.shutdown()
+      // Blocks until all tasks have completed execution after a shutdown request,
+      // disregard the timeout since we want all events to be processed
+      if (!executor.awaitTermination(Long.MaxValue, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+        logError(s"Pipeline event sender for session ${sessionHolder.sessionId}" +
+          s"failed to terminate")
+        executor.shutdownNow()
+      }
     }
   }
 
