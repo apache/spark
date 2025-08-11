@@ -107,7 +107,7 @@ class ExecutorRunnableSuite extends SparkFunSuite {
     assert(metadataStorageVal != null && metadataStorageVal.asInstanceOf[Boolean])
   }
 
-  test("SPARK-31028: ActiveProcessorCount should default to 1 when executor cores not configured") {
+  test("SPARK-53209: ActiveProcessorCount should default to 1 when executor cores not configured") {
     val sparkConf = new SparkConf()
     val execRunnable = createExecutorRunnable(sparkConf)
 
@@ -116,7 +116,7 @@ class ExecutorRunnableSuite extends SparkFunSuite {
     commands should contain inOrderElementsOf List("--cores", "1")
   }
 
-  test("SPARK-31028: ActiveProcessorCount should match configured executor cores") {
+  test("SPARK-53209: ActiveProcessorCount should match configured executor cores") {
     val sparkConf = new SparkConf()
       .set(EXECUTOR_CORES, 4)
     val execRunnable = createExecutorRunnable(sparkConf)
@@ -126,7 +126,7 @@ class ExecutorRunnableSuite extends SparkFunSuite {
     commands should contain inOrderElementsOf List("--cores", "4")
   }
 
-  test("SPARK-31028: ActiveProcessorCount should respect custom executor core count") {
+  test("SPARK-53209: ActiveProcessorCount should respect custom executor core count") {
     val sparkConf = new SparkConf()
       .set(EXECUTOR_CORES, 7)
     val execRunnable = createExecutorRunnable(sparkConf)

@@ -755,7 +755,7 @@ class ClientSuite extends SparkFunSuite
     env("SPARK_USER") should be ("overrideuser")
   }
 
-  test("SPARK-31028: ActiveProcessorCount is set to AM cores in client mode") {
+  test("SPARK-53209: ActiveProcessorCount is set to AM cores in client mode") {
     val sparkConf = new SparkConf()
       .set("spark.app.name", "test-app")
       .set(SUBMIT_DEPLOY_MODE, "client")
@@ -771,7 +771,7 @@ class ClientSuite extends SparkFunSuite
     commands should contain ("-XX:ActiveProcessorCount=3")
   }
 
-  test("SPARK-31028: ActiveProcessorCount is set to driver cores in cluster mode") {
+  test("SPARK-53209: ActiveProcessorCount is set to driver cores in cluster mode") {
     val sparkConf = new SparkConf()
       .set("spark.app.name", "test-app")
       .set(SUBMIT_DEPLOY_MODE, "cluster")
@@ -787,7 +787,7 @@ class ClientSuite extends SparkFunSuite
     commands should contain ("-XX:ActiveProcessorCount=4")
   }
 
-  test("SPARK-31028: ActiveProcessorCount defaults to 1 in client mode when AM cores not set") {
+  test("SPARK-53209: ActiveProcessorCount defaults to 1 in client mode when AM cores not set") {
     val sparkConf = new SparkConf()
       .set("spark.app.name", "test-app")
       .set(SUBMIT_DEPLOY_MODE, "client")
@@ -801,7 +801,7 @@ class ClientSuite extends SparkFunSuite
     commands should contain ("-XX:ActiveProcessorCount=1")
   }
 
-  test("SPARK-31028: ActiveProcessorCount defaults to 1 in cluster mode" +
+  test("SPARK-53209: ActiveProcessorCount defaults to 1 in cluster mode" +
       " when driver cores not set") {
     val sparkConf = new SparkConf()
       .set("spark.app.name", "test-app")
