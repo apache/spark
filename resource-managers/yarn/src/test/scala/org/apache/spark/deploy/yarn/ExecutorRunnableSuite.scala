@@ -130,7 +130,7 @@ class ExecutorRunnableSuite extends SparkFunSuite {
     val sparkConf = new SparkConf()
       .set(EXECUTOR_CORES, 7)
     val execRunnable = createExecutorRunnable(sparkConf)
-    
+
     val commands = execRunnable.prepareCommand()
     commands should contain ("-XX:ActiveProcessorCount=7")
     commands should contain inOrderElementsOf List("--cores", "7")
