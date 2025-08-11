@@ -1651,13 +1651,17 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
     copy(child = newChild)
 }
 
-case class LimitAll(child: LogicalPlan) extends OrderPreservingUnaryNode {
-  override def output: Seq[Attribute] = child.output
+object LimitAll {
+  def apply(child: LogicalPlan): UnaryNode = {
+    LocalLimit(LimitAllExpr, child)
+  }
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(LIMIT)
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): LimitAll =
-    copy(child = newChild)
+  def unapply(p: LocalLimit): Option[LogicalPlan] = {
+    p.limitExpr match {
+      case LimitAllExpr => Some(p.child)
+      case _ => None
+    }
+  }
 }
 
 object OffsetAndLimit {

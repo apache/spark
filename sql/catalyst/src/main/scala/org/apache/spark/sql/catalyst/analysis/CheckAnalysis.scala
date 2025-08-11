@@ -98,6 +98,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
   private def checkLimitLikeClause(name: String, limitExpr: Expression): Unit = {
     limitExpr match {
+      case e if e == LimitAllExpr => // Limit all expression is a special case which is allowed.
       case e if !e.foldable => limitExpr.failAnalysis(
         errorClass = "INVALID_LIMIT_LIKE_EXPRESSION.IS_UNFOLDABLE",
         messageParameters = Map(
