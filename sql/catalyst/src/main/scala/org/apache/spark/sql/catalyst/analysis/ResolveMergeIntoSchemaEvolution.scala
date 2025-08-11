@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.connector.catalog.TableCatalog
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 
 
@@ -35,22 +36,29 @@ object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
     case m @ MergeIntoTable(aliasedTable, source, _, _, _, _, _)
       if m.needSchemaEvolution =>
         val newTarget = aliasedTable.transform {
-          case r : DataSourceV2Relation => schemaEvolution(r, source)
+          case r : DataSourceV2Relation => performSchemaEvolution(r, source)
         }
         m.copy(targetTable = newTarget)
   }
 
-  private def schemaEvolution(relation: DataSourceV2Relation, source: LogicalPlan):
+  private def performSchemaEvolution(relation: DataSourceV2Relation, source: LogicalPlan):
     DataSourceV2Relation = {
     (relation.catalog, relation.identifier) match {
       case (Some(c: TableCatalog), Some(i)) =>
         val changes = MergeIntoTable.schemaChanges(relation.schema, source.schema)
         c.alterTable(i, changes: _*)
-        val evolvedSchema = MergeIntoTable.mergeSchema(relation.schema, source.schema)
         val newTable = c.loadTable(i)
-        relation.copy(table = newTable, output = DataTypeUtils.toAttributes(evolvedSchema))
+        // Check if there are any remaining changes not applied.
+        val remainingChanges = MergeIntoTable.schemaChanges(
+          CatalogV2Util.v2ColumnsToStructType(newTable.columns()), source.schema)
+        if (remainingChanges.nonEmpty) {
+          throw QueryCompilationErrors.unsupportedTableChangesInAutoSchemaEvolutionError(
+            remainingChanges, newTable.name)
+        }
+        relation.copy(table = newTable, output = DataTypeUtils.toAttributes(
+          CatalogV2Util.v2ColumnsToStructType(newTable.columns())))
       case _ => logWarning("Schema Evolution enabled but data source does not support it"
-        + s"data source: $relation)")
+        + s"data source: $relation, skipping.")
       relation
     }
   }

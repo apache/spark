@@ -891,13 +891,11 @@ case class MergeIntoTable(
     case _ => false
   }
 
-  // schema evolution resolution will set the merged schema in DataSourceV2Relation output
   def needSchemaEvolution: Boolean = {
     withSchemaEvolution && {
       EliminateSubqueryAliases(targetTable) match {
         case r: DataSourceV2Relation if r.mergeSchemaEvolution() =>
-          DataTypeUtils.fromAttributes(r.output) !=
-            MergeIntoTable.mergeSchema(targetTable.schema, sourceTable.schema)
+          MergeIntoTable.schemaChanges(targetTable.schema, sourceTable.schema).nonEmpty
         case _ => false
       }
     }
@@ -922,51 +920,6 @@ object MergeIntoTable {
       case _: InsertAction | _: InsertStarAction => privileges.add(TableWritePrivilege.INSERT)
     }
     privileges.toSeq
-  }
-
-  def mergeSchema(targetSchema: StructType, sourceSchema: StructType): StructType = {
-    mergeTypes(targetSchema, sourceSchema, targetSchema, sourceSchema).asInstanceOf[StructType]
-  }
-
-  private def mergeTypes(current: DataType, newType: DataType,
-                         originalTarget: StructType, originalSource: StructType): DataType = {
-    (current, newType) match {
-      case (StructType(currentFields), StructType(newFields)) =>
-        val newFieldMap = toFieldMap(newFields)
-
-        // Update existing field types
-        val updatedCurrentFields = currentFields.map { currentField =>
-          newFieldMap.get(currentField.name) match {
-            case Some(newField) if newField.dataType != currentField.dataType =>
-              val newType = mergeTypes(currentField.dataType, newField.dataType,
-                originalTarget, originalSource)
-              StructField(currentField.name, newType, currentField.nullable,
-                currentField.metadata)
-            case _ => currentField
-          }
-        }
-
-        // Identify the newly added fields and append to the end
-        val currentFieldMap = toFieldMap(currentFields)
-        val remainingNewFields = newFields.filterNot(f => currentFieldMap.contains(f.name))
-        StructType(updatedCurrentFields ++ remainingNewFields)
-
-      case (ArrayType(currentElementType, currentContainsNull), ArrayType(newElementType, _)) =>
-        ArrayType(mergeTypes(currentElementType, newElementType, originalTarget, originalSource),
-          currentContainsNull)
-
-      case (MapType(currentKeyType, currentElementType, currentContainsNull),
-      MapType(updateKeyType, updateElementType, _)) =>
-        MapType(
-          mergeTypes(currentKeyType, updateKeyType, originalTarget, originalSource),
-          mergeTypes(currentElementType, updateElementType, originalTarget, originalSource),
-          currentContainsNull)
-
-      case (_, _) =>
-        // For now do not support type widening
-        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
-          originalTarget, originalSource, null)
-    }
   }
 
   def schemaChanges(originalTarget: StructType, originalSource: StructType,
