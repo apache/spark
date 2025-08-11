@@ -200,6 +200,10 @@
             <property name="illegalClasses" value="com.google.common.io.Files" />
         </module>
         <module name="RegexpSinglelineJava">
+            <property name="format" value="Ints\.checkedCast"/>
+            <property name="message" value="Use JavaUtils.checkedCast instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
             <property name="format" value="Charset\.defaultCharset"/>
             <property name="message" value="Use StandardCharsets.UTF_8 instead." />
         </module>
