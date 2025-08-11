@@ -1027,7 +1027,9 @@ private[spark] class Client(
   }
 
   // For testing.
-  private[yarn] def setStagingDirPath(stagingDirPath: Path) = this.stagingDirPath = stagingDirPath
+  private def setStagingDir(stagingDir: String): Unit = {
+    stagingDirPath = new Path(stagingDir)
+  }
 
   /**
    * Set up a ContainerLaunchContext to launch our ApplicationMaster container.

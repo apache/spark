@@ -756,14 +756,14 @@ class ClientSuite extends SparkFunSuite
   }
 
   test("SPARK-53209: ActiveProcessorCount is set to AM cores in client mode") {
-    val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> createJarsDir()))
+    val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> createSparkHome()))
       .set("spark.app.name", "test-app")
       .set(SUBMIT_DEPLOY_MODE, "client")
       .set(AM_CORES, 3)
       .set(DRIVER_CORES, 4)  // This should be ignored in client mode
 
     val client = createClient(sparkConf)
-    client.setStagingDirPath(createStagingDir())
+    client.setStagingDir(createStagingDir())
     val containerLaunchContext = client.createContainerLaunchContext()
 
     val commands = containerLaunchContext.getCommands.asScala
@@ -771,14 +771,14 @@ class ClientSuite extends SparkFunSuite
   }
 
   test("SPARK-53209: ActiveProcessorCount is set to driver cores in cluster mode") {
-    val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> createJarsDir()))
+    val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> createSparkHome()))
       .set("spark.app.name", "test-app")
       .set(SUBMIT_DEPLOY_MODE, "cluster")
       .set(AM_CORES, 3)       // This should be ignored in cluster mode
       .set(DRIVER_CORES, 4)
 
     val client = createClient(sparkConf)
-    client.setStagingDirPath(createStagingDir())
+    client.setStagingDir(createStagingDir())
     val containerLaunchContext = client.createContainerLaunchContext()
 
     val commands = containerLaunchContext.getCommands.asScala
@@ -786,12 +786,12 @@ class ClientSuite extends SparkFunSuite
   }
 
   test("SPARK-53209: ActiveProcessorCount defaults to 1 in client mode when AM cores not set") {
-    val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> createJarsDir()))
+    val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> createSparkHome()))
       .set("spark.app.name", "test-app")
       .set(SUBMIT_DEPLOY_MODE, "client")
 
     val client = createClient(sparkConf)
-    client.setStagingDirPath(createStagingDir())
+    client.setStagingDir(createStagingDir())
     val containerLaunchContext = client.createContainerLaunchContext()
 
     val commands = containerLaunchContext.getCommands.asScala
@@ -800,19 +800,19 @@ class ClientSuite extends SparkFunSuite
 
   test("SPARK-53209: ActiveProcessorCount defaults to 1 in cluster mode" +
       " when driver cores not set") {
-    val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> createJarsDir()))
+    val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> createSparkHome()))
       .set("spark.app.name", "test-app")
       .set(SUBMIT_DEPLOY_MODE, "cluster")
 
     val client = createClient(sparkConf)
-    client.setStagingDirPath(createStagingDir())
+    client.setStagingDir(createStagingDir())
     val containerLaunchContext = client.createContainerLaunchContext()
 
     val commands = containerLaunchContext.getCommands.asScala
     commands should contain ("-XX:ActiveProcessorCount=1")
   }
 
-  private def createJarsDir(): String = {
+  private def createSparkHome(): String = {
     val libs = Utils.createTempDir()
     // Create jars dir and RELEASE file to avoid IllegalStateException.
     val jarsDir = new File(libs, "jars")
@@ -821,9 +821,9 @@ class ClientSuite extends SparkFunSuite
     libs.getAbsolutePath
   }
 
-  private def createStagingDir(): Path = {
+  private def createStagingDir(): String = {
     val stagingDir = Utils.createTempDir()
-    new Path(stagingDir.getAbsolutePath)
+    stagingDir.getAbsolutePath
   }
 
   private val matching = Seq(
