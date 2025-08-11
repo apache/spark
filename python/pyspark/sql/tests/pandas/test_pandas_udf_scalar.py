@@ -557,7 +557,8 @@ class ScalarPandasUDFTestsMixin:
             return pd.DataFrame({"id": id, "str": id.apply(str)})
 
         f = pandas_udf(scalar_func, returnType=return_type, functionType=PandasUDFType.SCALAR)
-        # before fix, was: java.lang.IllegalArgumentException: not all nodes, buffers and variadicBufferCounts were consumed.
+        # before fix, was: java.lang.IllegalArgumentException:
+        # not all nodes, buffers and variadicBufferCounts were consumed.
         with self.assertRaisesRegex(
             PythonException,
             "The StructType for the Pandas UDF returnType has a duplicate field name: str\n",
