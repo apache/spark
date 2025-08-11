@@ -430,8 +430,18 @@ object ViewHelper extends SQLConfHelper with Logging {
     "spark.sql.hive.convertMetastoreCtas",
     SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.key)
 
-  private val configAllowList = Seq(
+  private val configAllowList = Set(
     SQLConf.DISABLE_HINTS.key
+  )
+
+  /**
+   * Set of single-pass resolver confs that shouldn't be stored during view/UDF/proc creation.
+   * This is needed to avoid accidental failures in tentative and dual-run modes when querying the
+   * view.
+   */
+  private val singlePassResolverDenyList = Set(
+    SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key,
+    SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key
   )
 
   /**
@@ -440,8 +450,10 @@ object ViewHelper extends SQLConfHelper with Logging {
    * 2. do not exists in denyList
    */
   private def shouldCaptureConfig(key: String): Boolean = {
-    configAllowList.exists(prefix => key.equals(prefix)) ||
-      !configPrefixDenyList.exists(prefix => key.startsWith(prefix))
+    configAllowList.contains(key) || (
+      !configPrefixDenyList.exists(prefix => key.startsWith(prefix)) &&
+      !singlePassResolverDenyList.contains(key)
+    )
   }
 
   import CatalogTable._
