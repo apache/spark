@@ -20,12 +20,12 @@ import java.nio.ByteBuffer
 import java.util.UUID
 
 import org.apache.hive.service.cli.OperationHandle
-import org.apache.hive.service.cli.operation.GetCatalogsOperation
+import org.apache.hive.service.cli.operation.{GetCatalogsOperation, OperationManager}
 import org.apache.hive.service.cli.session.HiveSession
 import org.apache.hive.service.rpc.thrift.{THandleIdentifier, TOperationHandle, TOperationType}
 
-class GetCatalogsOperationMock(parentSession: HiveSession)
-  extends GetCatalogsOperation(parentSession) {
+class GetCatalogsOperationMock(parentSession: HiveSession, operationManager: OperationManager)
+  extends GetCatalogsOperation(parentSession, operationManager) {
 
   override def runInternal(): Unit = {}
 
