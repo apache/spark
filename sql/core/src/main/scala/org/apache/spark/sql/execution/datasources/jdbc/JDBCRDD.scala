@@ -75,6 +75,7 @@ object JDBCRDD extends Logging {
   def getQueryOutputSchema(
       query: String, options: JDBCOptions, dialect: JdbcDialect): StructType = {
     Using.resource(dialect.createConnectionFactory(options)(-1)) { conn =>
+      logInfo(log"Generated JDBC query to get scan output schema: ${MDC(SQL_TEXT, query)}")
       Using.resource(conn.prepareStatement(query)) { statement =>
         statement.setQueryTimeout(options.queryTimeout)
         Using.resource(statement.executeQuery()) { rs =>
@@ -310,6 +311,7 @@ class JDBCRDD(
     }
 
     val sqlText = generateJdbcQuery(Some(part))
+    logInfo(log"Generated JDBC query to fetch data: ${MDC(SQL_TEXT, sqlText)}")
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)
