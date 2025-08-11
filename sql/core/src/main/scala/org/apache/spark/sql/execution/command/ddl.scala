@@ -463,7 +463,7 @@ case class AlterTableChangeColumnCommand(
   // when altering column. Only changes in collation of data type or its nested types (recursively)
   // are allowed.
   private def canEvolveType(from: StructField, to: StructField): Boolean = {
-    DataType.equalsIgnoreCompatibleCollation(from.dataType, to.dataType)
+    DataType.equalsIgnoreCompatibleCollation(from.dataType, to.dataType, checkComplexTypes = false)
   }
 }
 
