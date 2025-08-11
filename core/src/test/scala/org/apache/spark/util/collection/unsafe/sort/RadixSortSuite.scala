@@ -28,6 +28,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.unsafe.array.LongArray
 import org.apache.spark.unsafe.memory.MemoryBlock
 import org.apache.spark.util.collection.Sorter
+import org.apache.spark.util.collection.Utils.createArray
 import org.apache.spark.util.random.XORShiftRandom
 
 class RadixSortSuite extends SparkFunSuite {
@@ -75,13 +76,13 @@ class RadixSortSuite extends SparkFunSuite {
 
   private def generateTestData(size: Long, rand: => Long): (Array[JLong], LongArray) = {
     val ref = Array.tabulate[Long](Ints.checkedCast(size)) { i => rand }
-    val extended = ref ++ Array.fill[Long](Ints.checkedCast(size))(0)
+    val extended = ref ++ createArray(Ints.checkedCast(size), 0L)
     (ref.map(i => JLong.valueOf(i)), new LongArray(MemoryBlock.fromLongArray(extended)))
   }
 
   private def generateKeyPrefixTestData(size: Long, rand: => Long): (LongArray, LongArray) = {
     val ref = Array.tabulate[Long](Ints.checkedCast(size * 2)) { i => rand }
-    val extended = ref ++ Array.fill[Long](Ints.checkedCast(size * 2))(0)
+    val extended = ref ++ createArray(Ints.checkedCast(size * 2), 0L)
     (new LongArray(MemoryBlock.fromLongArray(ref)),
      new LongArray(MemoryBlock.fromLongArray(extended)))
   }
