@@ -533,9 +533,9 @@ class ScalarPandasUDFTestsMixin:
             return pd.DataFrame({"id": id, "str2": id.apply(str), "str": id.apply(str)})
 
         f = pandas_udf(scalar_func, returnType=return_type, functionType=PandasUDFType.SCALAR)
-        # before fix, silently succeeds
-        # now raises an exception.  note that because we truncate fields in returned pd.DataFrame the 'str' column
-        # will appear to be missing to validation logic
+        # before fix, silently succeeds. Now raises an exception.
+        # note that because we truncate fields in returned pd.DataFrame
+        # the 'str' column will appear to be missing to validation logic
         with self.assertRaisesRegex(
             PythonException,
             "Column names of the returned pandas.DataFrame do not match specified schema. "
