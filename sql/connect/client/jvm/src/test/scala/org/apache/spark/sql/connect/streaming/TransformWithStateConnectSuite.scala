@@ -37,13 +37,9 @@ import org.apache.spark.util.SparkFileUtils
 
 case class InputRowForConnectTest(key: String, value: String)
 case class OutputRowForConnectTest(key: String, value: String)
-
 case class StateRowForConnectTestWithIntType(count: Int)
-
 case class StateRowForConnectTest(count: Long)
-
 case class StateRowForConnectTestWithTwoLongs(count: Long, count2: Long)
-
 case class StateRowForConnectTestWithReorder(count2: Long, count: Long)
 
 // A basic stateful processor which will return the occurrences of key
