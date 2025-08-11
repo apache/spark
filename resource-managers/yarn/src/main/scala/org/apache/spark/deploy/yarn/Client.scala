@@ -1027,7 +1027,7 @@ private[spark] class Client(
   }
 
   // For testing.
-  private def setStagingDir(stagingDir: String): Unit = {
+  private[yarn] def setStagingDir(stagingDir: String): Unit = {
     stagingDirPath = new Path(stagingDir)
   }
 
