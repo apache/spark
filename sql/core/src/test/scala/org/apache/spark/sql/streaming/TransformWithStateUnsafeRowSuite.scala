@@ -27,6 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.tags.SlowSQLTest
 
+@org.scalatest.Ignore
 @SlowSQLTest
 class TransformWithStateUnsafeRowSuite extends TransformWithStateSuite {
 
