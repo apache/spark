@@ -419,7 +419,13 @@ class SessionCatalog(
       if (validateLocation) {
         validateTableLocation(newTableDefinition)
       }
-      externalCatalog.createTable(newTableDefinition, ignoreIfExists)
+      try {
+        externalCatalog.createTable(newTableDefinition, ignoreIfExists)
+      } catch {
+        case e: TableAlreadyExistsException if ignoreIfExists =>
+          logWarning(s"Table ${newTableDefinition.identifier} already exists in database $db. " +
+            "Ignoring creation as ignoreIfNotExists is set to true.")
+      }
     }
   }
 
@@ -1479,7 +1485,13 @@ class SessionCatalog(
     requireDbExists(db)
     val newFuncDefinition = funcDefinition.copy(identifier = qualifiedIdent)
     if (!functionExists(qualifiedIdent)) {
-      externalCatalog.createFunction(db, newFuncDefinition)
+      try {
+        externalCatalog.createFunction(db, newFuncDefinition)
+      } catch {
+        case e: FunctionAlreadyExistsException if ignoreIfExists =>
+          logWarning(s"Function ${qualifiedIdent.funcName} already exists in database $db. " +
+            "Ignoring creation as ignoreIfNotExists is set to true.")
+      }
     } else if (!ignoreIfExists) {
       throw new FunctionAlreadyExistsException(Seq(db, qualifiedIdent.funcName))
     }
