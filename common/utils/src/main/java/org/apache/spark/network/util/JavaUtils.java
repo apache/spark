@@ -656,4 +656,11 @@ public class JavaUtils {
     }
     return out.toString(StandardCharsets.UTF_8);
   }
+
+  public static int checkedCast(long value) {
+    if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
+      throw new IllegalArgumentException("Cannot cast to integer.");
+    }
+    return (int) value;
+  }
 }
