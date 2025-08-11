@@ -304,7 +304,7 @@ object Connect {
       .version("4.0.0")
       .internal()
       .intConf
-      .createWithDefault(16)
+      .createWithDefault(32)
 
   val CONNECT_SESSION_PLAN_CACHE_ENABLED =
     buildConf("spark.connect.session.planCache.enabled")
@@ -313,6 +313,17 @@ object Connect {
         s" When false, the cache is disabled even if '${CONNECT_SESSION_PLAN_CACHE_SIZE.key}' is" +
         " greater than zero. The caching is best-effort and not guaranteed.")
       .version("4.0.0")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
+  val CONNECT_ALWAYS_CACHE_DATA_SOURCE_READS_ENABLED =
+    buildConf("spark.connect.session.planCache.alwaysCacheDataSourceReadsEnabled")
+      .doc("When true, always cache the translation of Read.DataSource plans" +
+        " in the plan cache. This massively improves the performance of queries that reuse the" +
+        " same Read.DataSource within the same session, since these translations/analyses" +
+        " are usually quite costly.")
+      .version("4.1.0")
       .internal()
       .booleanConf
       .createWithDefault(true)

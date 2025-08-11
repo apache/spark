@@ -47,7 +47,6 @@ import scala.jdk.javaapi.CollectionConverters;
 
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
 import com.google.common.base.Throwables;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
@@ -333,7 +332,8 @@ public class JavaAPISuite implements Serializable {
   public void toLocalIterator() {
     List<Integer> correct = Arrays.asList(1, 2, 3, 4);
     JavaRDD<Integer> rdd = sc.parallelize(correct);
-    List<Integer> result = Lists.newArrayList(rdd.toLocalIterator());
+    List<Integer> result = new ArrayList<>();
+    rdd.toLocalIterator().forEachRemaining(result::add);
     assertEquals(correct, result);
   }
 
