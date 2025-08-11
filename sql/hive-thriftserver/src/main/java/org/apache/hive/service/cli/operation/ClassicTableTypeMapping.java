@@ -17,16 +17,12 @@
 
 package org.apache.hive.service.cli.operation;
 
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Multimap;
 import org.apache.hadoop.hive.metastore.TableType;
 
 import org.apache.spark.internal.SparkLogger;
@@ -52,7 +48,7 @@ public class ClassicTableTypeMapping implements TableTypeMapping {
   }
 
   private final Map<String, String> hiveToClientMap = new HashMap<String, String>();
-  private final Multimap<String, String> clientToHiveMap = ArrayListMultimap.create();
+  private final Map<String, List<String>> clientToHiveMap = new HashMap<>();
 
   public ClassicTableTypeMapping() {
     hiveToClientMap.put(TableType.MANAGED_TABLE.name(), ClassicTableTypes.TABLE.name());
@@ -61,22 +57,23 @@ public class ClassicTableTypeMapping implements TableTypeMapping {
     hiveToClientMap.put(TableType.MATERIALIZED_VIEW.toString(),
             ClassicTableTypes.MATERIALIZED_VIEW.toString());
 
-    clientToHiveMap.putAll(ClassicTableTypes.TABLE.name(), Arrays.asList(
-        TableType.MANAGED_TABLE.name(), TableType.EXTERNAL_TABLE.name()));
-    clientToHiveMap.put(ClassicTableTypes.VIEW.name(), TableType.VIRTUAL_VIEW.name());
+    clientToHiveMap.put(ClassicTableTypes.TABLE.name(),
+        List.of(TableType.MANAGED_TABLE.name(), TableType.EXTERNAL_TABLE.name()));
+    clientToHiveMap.put(ClassicTableTypes.VIEW.name(),
+        List.of(TableType.VIRTUAL_VIEW.name()));
     clientToHiveMap.put(ClassicTableTypes.MATERIALIZED_VIEW.toString(),
-            TableType.MATERIALIZED_VIEW.toString());
+        List.of(TableType.MATERIALIZED_VIEW.toString()));
   }
 
   @Override
   public String[] mapToHiveType(String clientTypeName) {
-    Collection<String> hiveTableType = clientToHiveMap.get(clientTypeName.toUpperCase());
+    List<String> hiveTableType = clientToHiveMap.get(clientTypeName.toUpperCase());
     if (hiveTableType == null) {
       LOG.warn("Not supported client table type {}",
         MDC.of(LogKeys.TABLE_TYPE, clientTypeName));
       return new String[] {clientTypeName};
     }
-    return Iterables.toArray(hiveTableType, String.class);
+    return hiveTableType.toArray(new String[0]);
   }
 
   @Override

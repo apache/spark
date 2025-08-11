@@ -193,6 +193,8 @@
             <property name="illegalClasses" value="org.apache.hadoop.io.IOUtils" />
             <property name="illegalClasses" value="com.google.common.base.Objects" />
             <property name="illegalClasses" value="com.google.common.base.Strings" />
+            <property name="illegalClasses" value="com.google.common.collect.ArrayListMultimap" />
+            <property name="illegalClasses" value="com.google.common.collect.Multimap" />
             <property name="illegalClasses" value="com.google.common.collect.Sets" />
             <property name="illegalClasses" value="com.google.common.io.BaseEncoding" />
             <property name="illegalClasses" value="com.google.common.io.Files" />
