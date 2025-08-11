@@ -25,7 +25,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-import com.google.common.collect.ImmutableSet;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -43,10 +42,10 @@ public class CleanupNonShuffleServiceServedFilesSuite {
   private static final String SORT_MANAGER = "org.apache.spark.shuffle.sort.SortShuffleManager";
 
   private static Set<String> expectedShuffleFilesToKeep =
-    ImmutableSet.of("shuffle_782_450_0.index", "shuffle_782_450_0.data");
+    Set.of("shuffle_782_450_0.index", "shuffle_782_450_0.data");
 
   private static Set<String> expectedShuffleAndRddFilesToKeep =
-    ImmutableSet.of("shuffle_782_450_0.index", "shuffle_782_450_0.data", "rdd_12_34");
+    Set.of("shuffle_782_450_0.index", "shuffle_782_450_0.data", "rdd_12_34");
 
   private TransportConf getConf(boolean isFetchRddEnabled) {
     return new TransportConf(

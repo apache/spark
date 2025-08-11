@@ -444,7 +444,7 @@ This file is divided into 3 sections:
   </check>
 
   <check customId="commonscodecbase64" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
-    <parameters><parameter name="regex">\bBase64\.(en|de)codeBase64</parameter></parameters>
+    <parameters><parameter name="regex">org\.apache\.commons\.codec\.binary\.Base64\b</parameter></parameters>
     <customMessage>Use java.util.Base64 instead</customMessage>
   </check>
 
@@ -792,6 +792,11 @@ This file is divided into 3 sections:
     <customMessage>Use Map.copyOf instead.</customMessage>
   </check>
 
+  <check customId="ImmutableSetof" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">\bImmutableSet\.of\b</parameter></parameters>
+    <customMessage>Use java.util.Set.of instead.</customMessage>
+  </check>
+
   <check customId="maputils" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.collections4\.MapUtils\b</parameter></parameters>
     <customMessage>Use org.apache.spark.util.collection.Utils instead.</customMessage>
@@ -800,6 +805,11 @@ This file is divided into 3 sections:
   <check customId="googleFiles" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">com\.google\.common\.io\.Files\b</parameter></parameters>
     <customMessage>Use Java API or Spark's JavaUtils/SparkFileUtils/Utils instead.</customMessage>
+  </check>
+
+  <check customId="googleObjects" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">com\.google\.common\.base\.Objects\b</parameter></parameters>
+    <customMessage>Use Java APIs (like java.util.Objects) instead.</customMessage>
   </check>
 
   <check customId="googleBaseEncoding" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">

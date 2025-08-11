@@ -521,6 +521,11 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     // We only cache plans that have a plan ID.
     val hasPlanId = rel.hasCommon && rel.getCommon.hasPlanId
 
+    // Always cache a `Read.DataSource` to avoid re-analyzing the same `DataSource` twice.
+    lazy val alwaysCacheDataSourceReadsEnabled = Option(session)
+      .forall(_.conf.get(Connect.CONNECT_ALWAYS_CACHE_DATA_SOURCE_READS_ENABLED, true))
+    lazy val isDataSourceRead = rel.hasRead && rel.getRead.hasDataSource
+
     def getPlanCache(rel: proto.Relation): Option[LogicalPlan] =
       planCache match {
         case Some(cache) if planCacheEnabled && hasPlanId =>
@@ -542,7 +547,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     getPlanCache(rel)
       .getOrElse({
         val plan = transform(rel)
-        if (cachePlan) {
+        if (cachePlan || (alwaysCacheDataSourceReadsEnabled && isDataSourceRead)) {
           putPlanCache(rel, plan)
         }
         plan

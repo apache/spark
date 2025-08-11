@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import com.google.common.base.Objects
+import java.util.Objects
 
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
@@ -55,7 +55,7 @@ case class BatchScanExec(
       false
   }
 
-  override def hashCode(): Int = Objects.hashCode(batch, runtimeFilters)
+  override def hashCode(): Int = Objects.hash(batch, runtimeFilters)
 
   @transient override lazy val inputPartitions: Seq[InputPartition] =
     batch.planInputPartitions().toImmutableArraySeq
@@ -303,7 +303,7 @@ case class StoragePartitionJoinParams(
       false
   }
 
-  override def hashCode(): Int = Objects.hashCode(
+  override def hashCode(): Int = Objects.hash(
     joinKeyPositions: Option[Seq[Int]],
     commonPartitionValues: Option[Seq[(InternalRow, Int)]],
     applyPartialClustering: java.lang.Boolean,
