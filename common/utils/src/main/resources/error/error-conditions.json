@@ -6737,6 +6737,12 @@
     ],
     "sqlState" : "42000"
   },
+  "UNSUPPORTED_TABLE_CHANGE_IN_AUTO_SCHEMA_EVOLUTION" : {
+    "message" : [
+      "The table changes <changes> are not supported by the catalog on table <tableName>."
+    ],
+    "sqlState" : "42000"
+  },
   "UNSUPPORTED_TIME_PRECISION" : {
     "message" : [
       "The seconds precision <precision> of the TIME data type is out of the supported range [0, 6]."
