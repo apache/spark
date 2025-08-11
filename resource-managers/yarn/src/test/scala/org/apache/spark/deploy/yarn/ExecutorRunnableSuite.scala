@@ -116,16 +116,6 @@ class ExecutorRunnableSuite extends SparkFunSuite {
     commands should contain inOrderElementsOf List("--cores", "1")
   }
 
-  test("SPARK-53209: ActiveProcessorCount should match configured executor cores") {
-    val sparkConf = new SparkConf()
-      .set(EXECUTOR_CORES, 4)
-    val execRunnable = createExecutorRunnable(sparkConf)
-
-    val commands = execRunnable.prepareCommand()
-    commands should contain ("-XX:ActiveProcessorCount=4")
-    commands should contain inOrderElementsOf List("--cores", "4")
-  }
-
   test("SPARK-53209: ActiveProcessorCount should respect custom executor core count") {
     val sparkConf = new SparkConf()
       .set(EXECUTOR_CORES, 7)
