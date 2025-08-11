@@ -19,7 +19,6 @@ package org.apache.spark.network.server;
 
 import java.net.SocketAddress;
 
-import com.google.common.base.Throwables;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -36,6 +35,7 @@ import org.apache.spark.network.protocol.ChunkFetchFailure;
 import org.apache.spark.network.protocol.ChunkFetchRequest;
 import org.apache.spark.network.protocol.ChunkFetchSuccess;
 import org.apache.spark.network.protocol.Encodable;
+import org.apache.spark.network.util.JavaUtils;
 
 import static org.apache.spark.network.util.NettyUtils.*;
 
@@ -114,7 +114,7 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
         MDC.of(LogKeys.STREAM_CHUNK_ID, msg.streamChunkId),
         MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
       respond(channel, new ChunkFetchFailure(msg.streamChunkId,
-        Throwables.getStackTraceAsString(e)));
+        JavaUtils.stackTraceToString(e)));
       return;
     }
 
