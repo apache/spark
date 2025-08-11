@@ -494,22 +494,30 @@ class StatefulProcessorApiClient:
     def _serialize_to_bytes(self, schema: StructType, data: Tuple) -> bytes:
         from pyspark.testing.utils import have_numpy
 
-        converted = []
-
         if have_numpy:
             import numpy as np
 
-            # In order to convert NumPy types to Python primitive types.
-            for v in data:
+            def normalize_value(v):
+                # Convert NumPy types to Python primitive types.
                 if isinstance(v, np.generic):
-                    converted.append(v.tolist())
+                    return v.tolist()
+                # List / tuple: recursively normalize each element
+                if isinstance(v, (list, tuple)):
+                    return type(v)(normalize_value(e) for e in v)
+                # Dict: normalize both keys and values
+                if isinstance(v, dict):
+                    return {
+                        normalize_value(k): normalize_value(val)
+                        for k, val in v.items()
+                    }
                 # Address a couple of pandas dtypes too.
                 elif hasattr(v, "to_pytimedelta"):
-                    converted.append(v.to_pytimedelta())
+                    return v.to_pytimedelta()
                 elif hasattr(v, "to_pydatetime"):
-                    converted.append(v.to_pydatetime())
+                    return v.to_pydatetime()
                 else:
-                    converted.append(v)
+                    return v
+            converted = [normalize_value(v) for v in data]
         else:
             converted = list(data)
 

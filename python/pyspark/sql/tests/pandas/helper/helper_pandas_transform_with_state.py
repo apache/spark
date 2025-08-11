@@ -1664,7 +1664,8 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
 
         # Sum temperature values from input batch (DataFrames)
         for pdf in rows:
-            total_temperature += pdf["temperature"].astype(int).sum()
+            # Map total_temperature to a python builtin int to simplify testing
+            total_temperature += int(pdf["temperature"].astype(int).sum())
 
         # Update obj_state: id is an array, tags and metadata are fixed
         if self.obj_state.exists():
