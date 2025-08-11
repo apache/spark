@@ -1535,10 +1535,17 @@ class TransformWithStateTestsMixin:
                     ),
                 }, f"batch id: {batch_id}, real df is: {batch_df.collect()}"
             else:
-                map_val_0 = {'key1': [1], 'key2': [10], '0': [669]}
-                map_val_1 = {'key1': [1], 'key2': [10], '1': [252]}
-                nested_map_val_0 = {'e1': {'e2': 5, 'e3': 10, '0': 669}}
-                nested_map_val_1 = {'e1': {'e2': 5, 'e3': 10, '1': 252}}
+                if self.use_pandas():
+                    import numpy as np
+                    map_val_0 = {'key1': [1], 'key2': [10], '0': [np.int64(669)]}
+                    map_val_1 = {'key1': [1], 'key2': [10], '1': [np.int64(252)]}
+                    nested_map_val_0 = {'e1': {'e2': 5, 'e3': 10, '0': np.int64(669)}}
+                    nested_map_val_1 = {'e1': {'e2': 5, 'e3': 10, '1': np.int64(252)}}
+                else:
+                    map_val_0 = {'key1': [1], 'key2': [10], '0': [669]}
+                    map_val_1 = {'key1': [1], 'key2': [10], '1': [252]}
+                    nested_map_val_0 = {'e1': {'e2': 5, 'e3': 10, '0': 669}}
+                    nested_map_val_1 = {'e1': {'e2': 5, 'e3': 10, '1': 252}}
                 assert set(batch_df.sort("id").collect()) == {
                     Row(
                         id="0",
