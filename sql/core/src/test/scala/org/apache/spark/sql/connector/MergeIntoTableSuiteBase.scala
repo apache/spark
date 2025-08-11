@@ -2168,7 +2168,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
           if (!schemaEvolutionEnabled) {
             sql(s"""ALTER TABLE $tableNameAsString SET TBLPROPERTIES
-                   | ('merge-schema-evolution' = 'false')""".stripMargin)
+                   | ('auto-schema-evolution' = 'false')""".stripMargin)
           }
 
           val sourceDF = Seq((4, 150, "dummy", true),
@@ -2227,7 +2227,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
         if (!schemaEvolutionEnabled) {
           sql(s"""ALTER TABLE $tableNameAsString SET TBLPROPERTIES
-                 | ('merge-schema-evolution' = 'false')""".stripMargin)
+                 | ('auto-schema-evolution' = 'false')""".stripMargin)
         }
 
         val sourceDF = Seq((4, 150, "finance", true),
@@ -2288,7 +2288,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
         if (!schemaEvolutionEnabled) {
           sql(s"""ALTER TABLE $tableNameAsString SET TBLPROPERTIES
-                 | ('merge-schema-evolution' = 'false')""".stripMargin)
+                 | ('auto-schema-evolution' = 'false')""".stripMargin)
         }
 
         val sourceDF = Seq((4, 150, true),
@@ -2346,7 +2346,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
         if (!schemaEvolutionEnabled) {
           sql(s"""ALTER TABLE $tableNameAsString SET TBLPROPERTIES
-                 | ('merge-schema-evolution' = 'false')""".stripMargin)
+                 | ('auto-schema-evolution' = 'false')""".stripMargin)
         }
 
         val sourceDF = Seq((4, 150, true),
