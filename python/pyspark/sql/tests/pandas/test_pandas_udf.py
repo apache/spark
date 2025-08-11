@@ -438,7 +438,7 @@ class PandasUDFTestsMixin:
         self.assertRaisesRegex(
             PythonException,
             "Return type of the user-defined function should be pandas.DataFrame, but is Series.",
-            df.select(upper("s")).collect
+            df.select(upper("s")).collect,
         )
 
     def test_pandas_udf_empty_frame(self):
