@@ -661,6 +661,29 @@ public class JavaUtils {
     return (int) value;
   }
 
+  /** Return true if the content of the files are equal or they both don't exist */
+  public static boolean contentEquals(File file1, File file2) throws IOException {
+    if (file1 == null && file2 != null || file1 != null && file2 == null) {
+      return false;
+    } else if (file1 == null && file2 == null || !file1.exists() && !file2.exists()) {
+      return true;
+    } else if (!file1.exists() || !file2.exists()) {
+      return false;
+    } else if (file1.isDirectory() || file2.isDirectory()) {
+      throw new IllegalArgumentException("Input is not a file: %s or %s".formatted(file1, file2));
+    } else if (file1.length() != file2.length()) {
+      return false;
+    } else {
+      Path path1 = file1.toPath();
+      Path path2 = file2.toPath();
+      return Files.isSameFile(path1, path2) || Files.mismatch(path1, path2) == -1L;
+    }
+  }
+
+  public static String toString(InputStream in) throws IOException {
+    return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+  }
+
   /**
    * Indicates whether Spark is currently running unit tests.
    */
