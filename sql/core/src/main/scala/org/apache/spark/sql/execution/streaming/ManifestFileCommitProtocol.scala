@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming.runtime
+package org.apache.spark.sql.execution.streaming
 
 import java.io.IOException
 import java.util.UUID

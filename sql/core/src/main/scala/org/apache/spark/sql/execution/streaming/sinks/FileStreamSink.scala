@@ -31,8 +31,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, FileFormat, FileFormatWriter}
-import org.apache.spark.sql.execution.streaming.Sink
-import org.apache.spark.sql.execution.streaming.runtime.{ManifestFileCommitProtocol, StreamExecution}
+import org.apache.spark.sql.execution.streaming.{ManifestFileCommitProtocol, Sink}
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
