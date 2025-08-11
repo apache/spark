@@ -26,12 +26,13 @@ import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, Encoders, Row}
 import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.streaming.{ListState, MapState, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode, TimerValues, TTLConfig, ValueState}
+import org.apache.spark.sql.streaming.{ListState, MapState, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, StreamingQueryException, TimeMode, TimerValues, TTLConfig, ValueState}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SparkFileUtils
 
@@ -696,6 +697,14 @@ class TransformWithStateConnectSuite
 
   test("transformWithState - upcast fields schema evolution") {
     runSchemaEvolutionTest(new CountStatefulProcessorWithInt, new BasicCountStatefulProcessor)
+  }
+
+  test("transformWithState - downcast fields would fail") {
+    val e = intercept[StreamingQueryException] {
+      runSchemaEvolutionTest(new BasicCountStatefulProcessor, new CountStatefulProcessorWithInt)
+    }
+    assert(e.getCause.asInstanceOf[SparkUnsupportedOperationException]
+      .getCondition == "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION")
   }
 
   /* Utils functions for tests */
