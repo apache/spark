@@ -95,9 +95,9 @@ public enum TableCapability {
 
   /**
    * Signals that table supports Spark altering the schema if necessary
-   * as part of a Merge operation.
+   * as part of an operation.
    */
-  MERGE_SCHEMA_EVOLUTION,
+  AUTOMATIC_SCHEMA_EVOLUTION,
 
   /**
    * Signals that the table supports append writes using the V1 InsertableRelation interface.
