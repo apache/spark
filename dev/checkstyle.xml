@@ -273,6 +273,10 @@
             <property name="format" value="ImmutableSet\.of"/>
             <property name="message" value="Use Set.of instead." />
         </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="Throwables\.getStackTraceAsString"/>
+            <property name="message" value="Use stackTraceToString of JavaUtils/SparkFileUtils/Utils instead." />
+        </module>
         <!-- support structured logging -->
         <module name="RegexpSinglelineJava">
             <property name="format" value="org\.slf4j\.(Logger|LoggerFactory)" />

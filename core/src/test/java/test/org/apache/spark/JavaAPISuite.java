@@ -40,6 +40,7 @@ import org.apache.spark.Partitioner;
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
+import org.apache.spark.network.util.JavaUtils;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
@@ -47,7 +48,6 @@ import scala.jdk.javaapi.CollectionConverters;
 
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
-import com.google.common.base.Throwables;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
@@ -1503,7 +1503,7 @@ public class JavaAPISuite implements Serializable {
     JavaFutureAction<Long> future = rdd.map(new BuggyMapFunction<>()).countAsync();
     ExecutionException ee = assertThrows(ExecutionException.class,
       () -> future.get(2, TimeUnit.SECONDS));
-    assertTrue(Throwables.getStackTraceAsString(ee).contains("Custom exception!"));
+    assertTrue(JavaUtils.stackTraceToString(ee).contains("Custom exception!"));
     assertTrue(future.isDone());
   }
 

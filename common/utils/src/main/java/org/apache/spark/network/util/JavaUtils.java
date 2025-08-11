@@ -643,4 +643,17 @@ public class JavaUtils {
     }
     return joiner.toString();
   }
+
+  public static String stackTraceToString(Throwable t) {
+    if (t == null) {
+      return "";
+    }
+
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    try (PrintWriter writer = new PrintWriter(out)) {
+      t.printStackTrace(writer);
+      writer.flush();
+    }
+    return out.toString(StandardCharsets.UTF_8);
+  }
 }
