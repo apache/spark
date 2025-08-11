@@ -37,9 +37,14 @@ import org.apache.spark.util.SparkFileUtils
 
 case class InputRowForConnectTest(key: String, value: String)
 case class OutputRowForConnectTest(key: String, value: String)
+
+case class StateRowForConnectTestWithIntType(count: Int)
+
 case class StateRowForConnectTest(count: Long)
 
 case class StateRowForConnectTestWithTwoLongs(count: Long, count2: Long)
+
+case class StateRowForConnectTestWithReorder(count2: Long, count: Long)
 
 // A basic stateful processor which will return the occurrences of key
 class BasicCountStatefulProcessor
@@ -70,6 +75,36 @@ class BasicCountStatefulProcessor
   }
 }
 
+// A basic stateful processor which will return the occurrences of key.
+// Count State is a Int type.
+class CountStatefulProcessorWithInt
+  extends StatefulProcessor[String, InputRowForConnectTest, OutputRowForConnectTest]
+    with Logging {
+  @transient protected var _countState: ValueState[StateRowForConnectTestWithIntType] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[StateRowForConnectTestWithIntType](
+      "countState",
+      Encoders.product[StateRowForConnectTestWithIntType],
+      TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[InputRowForConnectTest],
+      timerValues: TimerValues): Iterator[OutputRowForConnectTest] = {
+    val count = inputRows.toSeq.length + {
+      if (_countState.exists()) {
+        _countState.get().count
+      } else {
+        0
+      }
+    }
+    _countState.update(StateRowForConnectTestWithIntType(count))
+    Iterator(OutputRowForConnectTest(key, count.toString))
+  }
+}
+
 // A stateful processor with Two Longs as state
 // which will return the occurrences of key to test TWS schema evolution
 class CountStatefulProcessorTwoLongs
@@ -96,6 +131,37 @@ class CountStatefulProcessorTwoLongs
       }
     }
     _countState.update(StateRowForConnectTestWithTwoLongs(count, count))
+    Iterator(OutputRowForConnectTest(key, count.toString))
+  }
+}
+
+// A stateful processor with Two Longs as state.
+// Reorder the field Sequence inside StateRowForConnectTestWithTwoLongs.
+// which will return the occurrences of key to test TWS schema evolution
+class CountStatefulProcessorWithReorder
+  extends StatefulProcessor[String, InputRowForConnectTest, OutputRowForConnectTest]
+    with Logging {
+  @transient protected var _countState: ValueState[StateRowForConnectTestWithReorder] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[StateRowForConnectTestWithReorder](
+      "countState",
+      Encoders.product[StateRowForConnectTestWithReorder],
+      TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[InputRowForConnectTest],
+      timerValues: TimerValues): Iterator[OutputRowForConnectTest] = {
+    val count = inputRows.toSeq.length + {
+      if (_countState.exists()) {
+        _countState.get().count
+      } else {
+        0L
+      }
+    }
+    _countState.update(StateRowForConnectTestWithReorder(count, count))
     Iterator(OutputRowForConnectTest(key, count.toString))
   }
 }
@@ -521,7 +587,10 @@ class TransformWithStateConnectSuite
     }
   }
 
-  test("transformWithState - schema evolution") {
+  private def runSchemaEvolutionTest(
+      firstProcessor: StatefulProcessor[String, InputRowForConnectTest, OutputRowForConnectTest],
+      secondProcessor: StatefulProcessor[String, InputRowForConnectTest, OutputRowForConnectTest])
+  : Unit = {
     withSQLConf((twsAdditionalSQLConf ++
       Seq("spark.sql.streaming.stateStore.encodingFormat" -> "avro")): _*) {
       val session: SparkSession = spark
@@ -551,7 +620,7 @@ class TransformWithStateConnectSuite
           .as[InputRowForConnectTest]
           .groupByKey(x => x.key)
           .transformWithState[OutputRowForConnectTest](
-            new BasicCountStatefulProcessor(),
+            firstProcessor,
             TimeMode.None(),
             OutputMode.Update())
           .writeStream
@@ -581,7 +650,6 @@ class TransformWithStateConnectSuite
           .mode("append")
           .parquet(dataPath)
 
-        // Do schema evolution on state
         val q2 = spark.readStream
           .schema(testSchema)
           .option("maxFilesPerTrigger", 1)
@@ -589,7 +657,7 @@ class TransformWithStateConnectSuite
           .as[InputRowForConnectTest]
           .groupByKey(x => x.key)
           .transformWithState[OutputRowForConnectTest](
-            new CountStatefulProcessorTwoLongs(),
+            secondProcessor,
             TimeMode.None(),
             OutputMode.Update())
           .writeStream
@@ -615,6 +683,23 @@ class TransformWithStateConnectSuite
         }
       }
     }
+  }
+
+  test("transformWithState - add fields schema evolution") {
+    runSchemaEvolutionTest(new BasicCountStatefulProcessor, new CountStatefulProcessorTwoLongs)
+  }
+
+  test("transformWithState - remove fields schema evolution") {
+    runSchemaEvolutionTest(new CountStatefulProcessorTwoLongs, new BasicCountStatefulProcessor)
+  }
+
+  test("transformWithState - reorder fields schema evolution") {
+    runSchemaEvolutionTest(
+      new CountStatefulProcessorTwoLongs, new CountStatefulProcessorWithReorder)
+  }
+
+  test("transformWithState - upcast fields schema evolution") {
+    runSchemaEvolutionTest(new CountStatefulProcessorWithInt, new BasicCountStatefulProcessor)
   }
 
   /* Utils functions for tests */
