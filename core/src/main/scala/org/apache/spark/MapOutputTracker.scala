@@ -23,7 +23,7 @@ import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolE
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import scala.collection
-import scala.collection.mutable.{HashMap, ListBuffer, Map}
+import scala.collection.mutable.{HashMap, ListBuffer, Map, Set}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
@@ -100,6 +100,11 @@ private class ShuffleStatus(
   val mapStatusesDeleted = new Array[MapStatus](numPartitions)
 
   /**
+   * Keep the indices of the Map tasks whose checksums are different across retries.
+   */
+  private[this] val checksumMismatchIndices : Set[Int] = Set()
+
+  /**
    * MergeStatus for each shuffle partition when push-based shuffle is enabled. The index of the
    * array is the shuffle partition id (reduce id). Each value in the array is the MergeStatus for
    * a shuffle partition, or null if not available. When push-based shuffle is enabled, this array
@@ -168,6 +173,12 @@ private class ShuffleStatus(
       invalidateSerializedMapOutputStatusCache()
     } else {
       mapIdToMapIndex.remove(currentMapStatus.mapId)
+    }
+
+    val preStatus =
+      if (mapStatuses(mapIndex) != null) mapStatuses(mapIndex) else mapStatusesDeleted(mapIndex)
+    if (preStatus != null && preStatus.checksumValue != status.checksumValue) {
+      checksumMismatchIndices.add(mapIndex)
     }
     mapStatuses(mapIndex) = status
     mapIdToMapIndex(status.mapId) = mapIndex
