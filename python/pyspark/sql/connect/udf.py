@@ -162,7 +162,6 @@ class UserDefinedFunction:
     def returnType(self) -> DataType:
         # Make sure this is called after Connect Session is initialized.
         # ``_parse_datatype_string`` accesses to Connect Server for parsing a DDL formatted string.
-        # TODO: PythonEvalType.SQL_BATCHED_UDF
         if self._returnType_placeholder is None:
             if isinstance(self._returnType, DataType):
                 self._returnType_placeholder = self._returnType
