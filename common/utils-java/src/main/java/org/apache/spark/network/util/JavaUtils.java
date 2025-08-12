@@ -737,4 +737,24 @@ public class JavaUtils {
   public static boolean isUnix = Stream.of("AIX", "HP-UX", "Irix", "Linux", "Mac OS X", "Solaris",
     "SunOS", "FreeBSD", "OpenBSD", "NetBSD")
     .anyMatch(prefix -> osName.regionMatches(true, 0, prefix, 0, prefix.length()));
+
+  /**
+   * Throws IllegalArgumentException with the given message if the check is false.
+   * Keep this clone of CommandBuilderUtils.checkArgument synced with the original.
+   */
+  public static void checkArgument(boolean check, String msg, Object... args) {
+    if (!check) {
+      throw new IllegalArgumentException(String.format(msg, args));
+    }
+  }
+
+  /**
+   * Throws IllegalStateException with the given message if the check is false.
+   * Keep this clone of CommandBuilderUtils.checkState synced with the original.
+   */
+  public static void checkState(boolean check, String msg, Object... args) {
+    if (!check) {
+      throw new IllegalStateException(String.format(msg, args));
+    }
+  }
 }
