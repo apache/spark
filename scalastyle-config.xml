@@ -814,7 +814,7 @@ This file is divided into 3 sections:
 
   <check customId="googleJoiner" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">com\.google\.common\.base\.Joiner\b</parameter></parameters>
-    <customMessage>Use Java APIs (like java.util.Objects) instead.</customMessage>
+    <customMessage>Use Java APIs (like String.join/StringJoiner) instead.</customMessage>
   </check>
 
   <check customId="googleBaseEncoding" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
