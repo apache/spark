@@ -497,7 +497,7 @@ class StatefulProcessorApiClient:
         if have_numpy:
             import numpy as np
 
-            def normalize_value(v) -> Any:
+            def normalize_value(v: Any) -> Any:
                 # Convert NumPy types to Python primitive types.
                 if isinstance(v, np.generic):
                     return v.tolist()
