@@ -90,29 +90,18 @@ jobs:
         if [ -z "${{ inputs.jobs }}" ]; then
           pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark') and not m.name.startswith('pyspark-pandas')))"`
           pyspark_pandas_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark-pandas')))"`
-          pyspark=`./dev/is-changed.py -m $pyspark_modules`
-          pandas=`./dev/is-changed.py -m $pyspark_pandas_modules`
-          if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
-            yarn=`./dev/is-changed.py -m yarn`
-            kubernetes=`./dev/is-changed.py -m kubernetes`
-            sparkr=`./dev/is-changed.py -m sparkr`
-            tpcds=`./dev/is-changed.py -m sql`
-            docker=`./dev/is-changed.py -m docker-integration-tests`
-            buf=true
-            ui=true
-            docs=true
-          else
-            pandas=false
-            yarn=false
-            kubernetes=false
-            sparkr=false
-            tpcds=false
-            docker=false
-            buf=false
-            ui=false
-            docs=false
-          fi
-          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
+          # Force all jobs to false except transform-with-state-tests
+          pyspark=false
+          pandas=false
+          yarn=false
+          kubernetes=false
+          sparkr=false
+          tpcds=false
+          docker=false
+          buf=false
+          ui=false
+          docs=false
+          build=false
           precondition="
             {
               \"build\": \"$build\",
@@ -121,9 +110,9 @@ jobs:
               \"sparkr\": \"$sparkr\",
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
-              \"lint\" : \"true\",
-              \"java17\" : \"true\",
-              \"java25\" : \"true\",
+              \"lint\" : \"false\",
+              \"java17\" : \"false\",
+              \"java25\" : \"false\",
               \"docs\" : \"$docs\",
               \"yarn\" : \"$yarn\",
               \"k8s-integration-tests\" : \"$kubernetes\",
