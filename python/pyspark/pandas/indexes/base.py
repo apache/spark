@@ -925,19 +925,11 @@ class Index(IndexOpsMixin):
         else:
             # MultiIndex
             if is_ansi_mode_enabled(self._internal.spark_frame.sparkSession):
-
-                def struct_to_struct(scol: Column) -> Column:
-                    # scol is a struct; keep fields as-is so pandas sees tuples later
-                    field_names = result._internal.spark_type_for(scol).fieldNames()  # type: ignore[attr-defined]
-                    return F.struct(*[(scol[f]).alias(f) for f in field_names])
-
-                return result.spark.transform(struct_to_struct)
+                return result
             else:
 
                 def struct_to_array(scol: Column) -> Column:
-                    field_names = result._internal.spark_type_for(
-                        scol
-                    ).fieldNames()  # type: ignore[attr-defined]
+                    field_names = result._internal.spark_type_for(scol).fieldNames()  # type: ignore[attr-defined]
                     return F.array([scol[field] for field in field_names])
 
                 return result.spark.transform(struct_to_array)
