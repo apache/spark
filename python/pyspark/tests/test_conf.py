@@ -14,12 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+import platform
 import random
 import unittest
 
 from pyspark import SparkContext, SparkConf
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class ConfTests(unittest.TestCase):
     def test_memory_conf(self):
         memoryList = ["1T", "1G", "1M", "1024K"]
