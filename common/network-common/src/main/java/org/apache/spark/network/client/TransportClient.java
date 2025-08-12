@@ -21,13 +21,13 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.SettableFuture;
 import io.netty.channel.Channel;
@@ -41,6 +41,7 @@ import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.protocol.*;
+import org.apache.spark.network.util.JavaUtils;
 
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 
@@ -79,8 +80,8 @@ public class TransportClient implements Closeable {
   private volatile boolean timedOut;
 
   public TransportClient(Channel channel, TransportResponseHandler handler) {
-    this.channel = Preconditions.checkNotNull(channel);
-    this.handler = Preconditions.checkNotNull(handler);
+    this.channel = Objects.requireNonNull(channel);
+    this.handler = Objects.requireNonNull(handler);
     this.timedOut = false;
   }
 
@@ -111,7 +112,7 @@ public class TransportClient implements Closeable {
    * Trying to set a different client ID after it's been set will result in an exception.
    */
   public void setClientId(String id) {
-    Preconditions.checkState(clientId == null, "Client ID has already been set.");
+    JavaUtils.checkState(clientId == null, "Client ID has already been set.");
     this.clientId = id;
   }
 
@@ -364,8 +365,8 @@ public class TransportClient implements Closeable {
         }
       } else {
         logger.error("Failed to send RPC {} to {}", future.cause(),
-            MDC.of(LogKeys.REQUEST_ID$.MODULE$, requestId),
-            MDC.of(LogKeys.HOST_PORT$.MODULE$, getRemoteAddress(channel)));
+            MDC.of(LogKeys.REQUEST_ID, requestId),
+            MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
         channel.close();
         try {
           String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,

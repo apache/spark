@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SecurityManager, ShuffleDependency, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.Since
 import org.apache.spark.executor.{CoarseGrainedExecutorBackend, ExecutorBackend}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher

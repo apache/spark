@@ -20,7 +20,6 @@ package org.apache.spark.network.crypto;
 import java.nio.ByteBuffer;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -36,6 +35,7 @@ import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.sasl.SaslRpcHandler;
 import org.apache.spark.network.server.AbstractAuthRpcHandler;
 import org.apache.spark.network.server.RpcHandler;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -93,7 +93,7 @@ class AuthRpcHandler extends AbstractAuthRpcHandler {
     } catch (RuntimeException e) {
       if (conf.saslFallback()) {
         LOG.warn("Failed to parse new auth challenge, reverting to SASL for client {}.",
-          MDC.of(LogKeys.HOST_PORT$.MODULE$, channel.remoteAddress()));
+          MDC.of(LogKeys.HOST_PORT, channel.remoteAddress()));
         saslHandler = new SaslRpcHandler(conf, channel, null, secretKeyHolder);
         message.position(position);
         message.limit(limit);
@@ -111,7 +111,7 @@ class AuthRpcHandler extends AbstractAuthRpcHandler {
     AuthEngine engine = null;
     try {
       String secret = secretKeyHolder.getSecretKey(challenge.appId());
-      Preconditions.checkState(secret != null,
+      JavaUtils.checkState(secret != null,
         "Trying to authenticate non-registered app %s.", challenge.appId());
       LOG.debug("Authenticating challenge for app {}.", challenge.appId());
       engine = new AuthEngine(challenge.appId(), secret, conf);

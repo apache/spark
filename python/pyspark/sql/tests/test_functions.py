@@ -81,7 +81,10 @@ class FunctionsTestsMixin:
         missing_in_py = jvm_fn_set.difference(py_fn_set)
 
         # Functions that we expect to be missing in python until they are added to pyspark
-        expected_missing_in_py = set()
+        expected_missing_in_py = set(
+            # TODO(SPARK-53107): Implement the time_trunc function in Python
+            ["time_trunc"]
+        )
 
         self.assertEqual(
             expected_missing_in_py, missing_in_py, "Missing functions in pyspark not as expected"

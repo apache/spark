@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.expressions
 
-import org.apache.commons.codec.binary.Hex
+import java.util.HexFormat
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst
@@ -393,7 +393,7 @@ private[sql] final case class LiteralValue[T](value: T, dataType: DataType) exte
     case BinaryType =>
       assert(value.isInstanceOf[Array[Byte]])
       val bytes = value.asInstanceOf[Array[Byte]]
-      "0x" + Hex.encodeHexString(bytes, false)
+      "0x" + HexFormat.of().withUpperCase().formatHex(bytes)
     case _ => s"$value"
   }
 }

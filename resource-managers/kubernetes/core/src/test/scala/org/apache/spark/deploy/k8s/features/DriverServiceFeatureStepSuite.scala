@@ -32,7 +32,7 @@ import org.apache.spark.util.ManualClock
 class DriverServiceFeatureStepSuite extends SparkFunSuite {
 
   private val LONG_RESOURCE_NAME_PREFIX =
-    "a" * (DriverServiceFeatureStep.MAX_SERVICE_NAME_LENGTH -
+    "a".repeat(DriverServiceFeatureStep.MAX_SERVICE_NAME_LENGTH -
       DriverServiceFeatureStep.DRIVER_SVC_POSTFIX.length + 1)
   private val DRIVER_LABELS = Map(
     "label1key" -> "label1value",

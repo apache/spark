@@ -21,8 +21,8 @@ import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{JobArtifactSet, SparkEnv, TaskContext}
-import org.apache.spark.api.python.ChainedPythonFunctions
+import org.apache.spark.{JobArtifactSet, SparkEnv, SparkException, TaskContext}
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -47,8 +47,10 @@ case class ArrowAggregatePythonExec(
     aggExpressions: Seq[AggregateExpression],
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan,
-    evalType: Int)
-  extends UnaryExecNode with PythonSQLMetrics {
+    evalType: Int) extends UnaryExecNode with PythonSQLMetrics {
+  if (!supportedPythonEvalTypes.contains(evalType)) {
+    throw SparkException.internalError(s"Unexpected eval type $evalType")
+  }
 
   override val output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
@@ -217,6 +219,11 @@ case class ArrowAggregatePythonExec(
 
     newIter
   }
+
+  private def supportedPythonEvalTypes: Array[Int] =
+    Array(
+      PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+      PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF)
 }
 
 object ArrowAggregatePythonExec {

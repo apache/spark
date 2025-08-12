@@ -508,7 +508,7 @@ package object config {
         "Setting this to 0 disables unmanaged memory polling.")
       .version("4.1.0")
       .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString("1s")
+      .createWithDefaultString("0s")
 
   private[spark] val STORAGE_UNROLL_MEMORY_THRESHOLD =
     ConfigBuilder("spark.storage.unrollMemoryThreshold")

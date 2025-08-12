@@ -18,15 +18,16 @@
 package org.apache.spark.network.crypto;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import com.google.common.primitives.Longs;
 import com.google.crypto.tink.subtle.*;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.util.ReferenceCounted;
+
 import org.apache.spark.network.util.AbstractFileRegion;
 import org.apache.spark.network.util.ByteBufferWriteableChannel;
+import org.apache.spark.network.util.JavaUtils;
 
 import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
@@ -118,7 +119,7 @@ public class GcmTransportCipher implements TransportCipher {
                             Object plaintextMessage,
                             ByteBuffer plaintextBuffer,
                             ByteBuffer ciphertextBuffer) throws GeneralSecurityException {
-            Preconditions.checkArgument(
+            JavaUtils.checkArgument(
                     plaintextMessage instanceof ByteBuf || plaintextMessage instanceof FileRegion,
                     "Unrecognized message type: %s", plaintextMessage.getClass().getName());
             this.plaintextMessage = plaintextMessage;
@@ -221,10 +222,12 @@ public class GcmTransportCipher implements TransportCipher {
                 int readLimit =
                         (int) Math.min(readableBytes, plaintextBuffer.remaining());
                 if (plaintextMessage instanceof ByteBuf byteBuf) {
-                    Preconditions.checkState(0 == plaintextBuffer.position());
+                    JavaUtils.checkState(0 == plaintextBuffer.position(),
+                      "plaintextBuffer.position is not 0");
                     plaintextBuffer.limit(readLimit);
                     byteBuf.readBytes(plaintextBuffer);
-                    Preconditions.checkState(readLimit == plaintextBuffer.position());
+                    JavaUtils.checkState(readLimit == plaintextBuffer.position(),
+                      "plaintextBuffer.position should be equal to readLimit.");
                 } else if (plaintextMessage instanceof FileRegion fileRegion) {
                     ByteBufferWriteableChannel plaintextChannel =
                             new ByteBufferWriteableChannel(plaintextBuffer);
@@ -347,7 +350,7 @@ public class GcmTransportCipher implements TransportCipher {
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object ciphertextMessage)
                 throws GeneralSecurityException {
-            Preconditions.checkArgument(ciphertextMessage instanceof ByteBuf,
+            JavaUtils.checkArgument(ciphertextMessage instanceof ByteBuf,
                     "Unrecognized message type: %s",
                     ciphertextMessage.getClass().getName());
             ByteBuf ciphertextNettyBuf = (ByteBuf) ciphertextMessage;

@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 import org.rocksdb._
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.memory.{MemoryMode, UnifiedMemoryManager, UnmanagedMemoryConsumer, UnmanagedMemoryConsumerId}
 
@@ -36,7 +36,7 @@ import org.apache.spark.memory.{MemoryMode, UnifiedMemoryManager, UnmanagedMemor
  * UnifiedMemoryManager, allowing Spark to account for RocksDB memory when making
  * memory allocation decisions.
  */
-object RocksDBMemoryManager extends Logging with UnmanagedMemoryConsumer{
+object RocksDBMemoryManager extends Logging with UnmanagedMemoryConsumer {
   private var writeBufferManager: WriteBufferManager = null
   private var cache: Cache = null
 
@@ -95,6 +95,29 @@ object RocksDBMemoryManager extends Logging with UnmanagedMemoryConsumer{
   def unregisterInstance(uniqueId: String): Unit = {
     instanceMemoryMap.remove(uniqueId)
     logDebug(s"Unregistered instance $uniqueId")
+  }
+
+  def getNumRocksDBInstances(boundedMemory: Boolean): Long = {
+    instanceMemoryMap.values().asScala.count(_.isBoundedMemory == boundedMemory)
+  }
+
+  /**
+   * Get the memory usage for a specific instance, accounting for bounded memory sharing.
+   * @param uniqueId The instance's unique identifier
+   * @param totalMemoryUsage The total memory usage of this instance
+   * @return The adjusted memory usage accounting for sharing in bounded memory mode
+   */
+  def getInstanceMemoryUsage(uniqueId: String, totalMemoryUsage: Long): Long = {
+    val instanceInfo = instanceMemoryMap.get(uniqueId)
+    if (instanceInfo.isBoundedMemory) {
+      // In bounded memory mode, divide by the number of bounded instances
+      // since they share the same memory pool
+      val numBoundedInstances = getNumRocksDBInstances(true)
+      totalMemoryUsage / numBoundedInstances
+    } else {
+      // In unbounded memory mode, each instance has its own memory
+      totalMemoryUsage
+    }
   }
 
   def getOrCreateRocksDBMemoryManagerAndCache(conf: RocksDBConf): (WriteBufferManager, Cache)

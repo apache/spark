@@ -15,10 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.runtime
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ELAPSED_TIME, TRIGGER_INTERVAL}
+import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger
 import org.apache.spark.util.{Clock, SystemClock}
 
 trait TriggerExecutor {

@@ -25,16 +25,17 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
 import java.util.Spliterators;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
-import com.google.common.collect.ImmutableSet;
-import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.rocksdb.RocksIterator;
+
+import org.apache.spark.network.util.JavaUtils;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -49,7 +50,7 @@ public class RocksDBSuite {
       db.close();
     }
     if (dbpath != null) {
-      FileUtils.deleteQuietly(dbpath);
+      JavaUtils.deleteQuietly(dbpath);
     }
   }
 
@@ -216,19 +217,19 @@ public class RocksDBSuite {
     db.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       KVIndex.NATURAL_INDEX_NAME,
-      ImmutableSet.of(new int[] {0, 0, 0}, new int[] { 2, 2, 2 }));
+      Set.of(new int[] {0, 0, 0}, new int[] { 2, 2, 2 }));
     assertEquals(7, db.count(ArrayKeyIndexType.class));
 
     db.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       "id",
-      ImmutableSet.of(new String[] { "things" }));
+      Set.<String[]>of(new String[] { "things" }));
     assertEquals(4, db.count(ArrayKeyIndexType.class));
 
     db.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       "id",
-      ImmutableSet.of(new String[] { "more things" }));
+      Set.<String[]>of(new String[] { "more things" }));
     assertEquals(0, db.count(ArrayKeyIndexType.class));
   }
 
@@ -302,7 +303,7 @@ public class RocksDBSuite {
     }
     dbForCloseTest.close();
     assertTrue(dbPathForCloseTest.exists());
-    FileUtils.deleteQuietly(dbPathForCloseTest);
+    JavaUtils.deleteQuietly(dbPathForCloseTest);
     assertTrue(!dbPathForCloseTest.exists());
   }
 
@@ -417,7 +418,7 @@ public class RocksDBSuite {
       assertTrue(resourceCleaner.isCompleted());
     } finally {
       dbForCleanerTest.close();
-      FileUtils.deleteQuietly(dbPathForCleanerTest);
+      JavaUtils.deleteQuietly(dbPathForCleanerTest);
     }
   }
 

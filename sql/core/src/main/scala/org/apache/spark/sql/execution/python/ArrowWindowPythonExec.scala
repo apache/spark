@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.python
 
+import org.apache.spark.SparkException
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -74,8 +76,11 @@ case class ArrowWindowPythonExec(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: SparkPlan,
-    evalType: Int)
-  extends WindowExecBase with PythonSQLMetrics {
+    evalType: Int) extends WindowExecBase with PythonSQLMetrics {
+  if (!supportedPythonEvalTypes.contains(evalType)) {
+    throw SparkException.internalError(s"Unexpected eval type $evalType")
+  }
+
   override lazy val metrics: Map[String, SQLMetric] = pythonMetrics ++ Map(
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size")
   )
@@ -105,6 +110,11 @@ case class ArrowWindowPythonExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): ArrowWindowPythonExec =
     copy(child = newChild)
+
+  private def supportedPythonEvalTypes: Array[Int] =
+    Array(
+      PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
+      PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF)
 }
 
 object ArrowWindowPythonExec {

@@ -26,7 +26,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.StandardOpenOption;
 
-import com.google.common.io.ByteStreams;
 import io.netty.channel.DefaultFileRegion;
 import io.netty.handler.stream.ChunkedStream;
 
@@ -98,7 +97,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
     boolean shouldClose = true;
     try {
       is = new FileInputStream(file);
-      ByteStreams.skipFully(is, offset);
+      is.skipNBytes(offset);
       InputStream r = new LimitedInputStream(is, length);
       shouldClose = false;
       return r;

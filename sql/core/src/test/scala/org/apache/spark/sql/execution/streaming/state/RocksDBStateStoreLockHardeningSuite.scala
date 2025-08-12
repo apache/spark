@@ -17,16 +17,25 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.util.UUID
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Random
 
+import org.apache.hadoop.conf.Configuration
 import org.scalactic.source.Position
-import org.scalatest.Tag
+import org.scalatest.{BeforeAndAfter, PrivateMethodTester, Tag}
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkException, SparkRuntimeException, TaskContext}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException, TaskContext}
+import org.apache.spark.sql.catalyst.plans.PlanTestBase
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.execution.streaming.state.StateStoreTestsHelper._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.ThreadUtils.awaitResult
 
@@ -34,7 +43,101 @@ import org.apache.spark.util.ThreadUtils.awaitResult
  * Comprehensive test cases for RocksDB State Store lock hardening implementation.
  * These tests verify the state machine behavior and prevent problematic concurrent executions.
  */
-class RocksDBStateStoreLockHardeningSuite extends RocksDBStateStoreSuite {
+class RocksDBStateStoreLockHardeningSuite extends SparkFunSuite
+    with PlanTestBase
+    with AlsoTestWithRocksDBFeatures
+    with PrivateMethodTester
+    with SharedSparkSession
+    with BeforeAndAfter
+    with Matchers {
+
+  before {
+    StateStore.stop()
+    require(!StateStore.isMaintenanceRunning)
+    spark.streams.stateStoreCoordinator // initialize the lazy coordinator
+  }
+
+  after {
+    StateStore.stop()
+    require(!StateStore.isMaintenanceRunning)
+  }
+
+  protected def tryWithProviderResource[T](
+      provider: RocksDBStateStoreProvider)(f: RocksDBStateStoreProvider => T): T = {
+    try {
+      f(provider)
+    } finally {
+      provider.close()
+    }
+  }
+
+  def newStoreProvider(): RocksDBStateStoreProvider = {
+    newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0))
+  }
+
+  def newStoreProvider(storeId: StateStoreId): RocksDBStateStoreProvider = {
+    newStoreProvider(storeId, NoPrefixKeyStateEncoderSpec(keySchema))
+  }
+
+  def newStoreProvider(storeId: StateStoreId, useColumnFamilies: Boolean):
+  RocksDBStateStoreProvider = {
+    newStoreProvider(storeId, NoPrefixKeyStateEncoderSpec(keySchema),
+      useColumnFamilies = useColumnFamilies)
+  }
+
+  def newStoreProvider(useColumnFamilies: Boolean): RocksDBStateStoreProvider = {
+    newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0),
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      useColumnFamilies = useColumnFamilies)
+  }
+
+  def newStoreProvider(
+      useColumnFamilies: Boolean,
+      useMultipleValuesPerKey: Boolean): RocksDBStateStoreProvider = {
+    newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0),
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      useColumnFamilies = useColumnFamilies,
+      useMultipleValuesPerKey = useMultipleValuesPerKey
+    )
+  }
+
+  def newStoreProvider(storeId: StateStoreId, conf: Configuration): RocksDBStateStoreProvider = {
+    newStoreProvider(storeId, NoPrefixKeyStateEncoderSpec(keySchema), conf = conf)
+  }
+
+  def newStoreProvider(
+      keySchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      useColumnFamilies: Boolean): RocksDBStateStoreProvider = {
+    newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0),
+      keyStateEncoderSpec = keyStateEncoderSpec,
+      keySchema = keySchema,
+      useColumnFamilies = useColumnFamilies)
+  }
+
+  def newStoreProvider(
+      storeId: StateStoreId,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      keySchema: StructType = keySchema,
+      sqlConf: Option[SQLConf] = None,
+      conf: Configuration = new Configuration,
+      useColumnFamilies: Boolean = false,
+      useMultipleValuesPerKey: Boolean = false): RocksDBStateStoreProvider = {
+    val provider = new RocksDBStateStoreProvider()
+    val testStateSchemaProvider = new TestStateSchemaProvider
+    conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
+    provider.init(
+      storeId,
+      keySchema,
+      valueSchema,
+      keyStateEncoderSpec,
+      useColumnFamilies,
+      new StateStoreConf(sqlConf.getOrElse(SQLConf.get)),
+      conf,
+      useMultipleValuesPerKey,
+      stateSchemaProvider = Some(testStateSchemaProvider))
+    provider
+  }
 
   override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
                              (implicit pos: Position): Unit = {
@@ -518,7 +621,7 @@ class RocksDBStateStoreLockHardeningSuite extends RocksDBStateStoreSuite {
   }
 
   // Helper method to assert current thread has ownership
-  override def assertAcquiredThreadIsCurrentThread(provider: RocksDBStateStoreProvider): Unit = {
+  def assertAcquiredThreadIsCurrentThread(provider: RocksDBStateStoreProvider): Unit = {
     val stateMachine = PrivateMethod[Any](Symbol("stateMachine"))
     val stateMachineObj = provider invokePrivate stateMachine()
     val threadInfo = stateMachineObj.asInstanceOf[RocksDBStateMachine].getAcquiredThreadInfo

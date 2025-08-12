@@ -15,17 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.runtime
 
 import java.util.{Locale, UUID}
 
 import scala.collection.mutable
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.streaming.operators.stateful.EventTimeWatermarkExec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
