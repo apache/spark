@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, KeyGroupedShuffleSpec}
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
-import org.apache.spark.sql.execution.datasources.v2.StoragePartitionJoinParams
+import org.apache.spark.sql.execution.joins.StoragePartitionJoinParams
 
 /** Base trait for a data source scan capable of producing a key-grouped output. */
 trait KeyGroupedPartitionedScan[T] {
@@ -49,7 +49,7 @@ trait KeyGroupedPartitionedScan[T] {
          }
       case None =>
         spjParams.joinKeyPositions match {
-          case Some(projectionPositions) => basePartitioning.partitionValues.map{r =>
+          case Some(projectionPositions) => basePartitioning.partitionValues.map { r =>
             val projectedRow = KeyGroupedPartitioning.project(expressions,
               projectionPositions, r)
             InternalRowComparableWrapper(projectedRow, expressions)

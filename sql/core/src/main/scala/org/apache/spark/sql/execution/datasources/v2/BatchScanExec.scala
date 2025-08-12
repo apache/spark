@@ -27,9 +27,9 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, Partitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.catalog.Table
-import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.execution.KeyGroupedPartitionedScan
+import org.apache.spark.sql.execution.joins.StoragePartitionJoinParams
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -166,28 +166,3 @@ case class BatchScanExec(
     s"BatchScan ${table.name()}".trim
   }
 }
-
-case class StoragePartitionJoinParams(
-    keyGroupedPartitioning: Option[Seq[Expression]] = None,
-    joinKeyPositions: Option[Seq[Int]] = None,
-    commonPartitionValues: Option[Seq[(InternalRow, Int)]] = None,
-    reducers: Option[Seq[Option[Reducer[_, _]]]] = None,
-    applyPartialClustering: Boolean = false,
-    replicatePartitions: Boolean = false) {
-  override def equals(other: Any): Boolean = other match {
-    case other: StoragePartitionJoinParams =>
-      this.commonPartitionValues == other.commonPartitionValues &&
-      this.replicatePartitions == other.replicatePartitions &&
-      this.applyPartialClustering == other.applyPartialClustering &&
-      this.joinKeyPositions == other.joinKeyPositions
-    case _ =>
-      false
-  }
-
-  override def hashCode(): Int = Objects.hash(
-    joinKeyPositions: Option[Seq[Int]],
-    commonPartitionValues: Option[Seq[(InternalRow, Int)]],
-    applyPartialClustering: java.lang.Boolean,
-    replicatePartitions: java.lang.Boolean)
-}
-
