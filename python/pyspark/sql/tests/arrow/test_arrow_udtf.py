@@ -404,6 +404,7 @@ class ArrowUDTFTests(ReusedSQLTestCase):
                     )
                     yield result_table
 
+        # TODO(SPARK-53251): Enable DataFrame API testing with asTable()
         # # Test with DataFrame API using asTable()
         # input_df = self.spark.range(8)
         # result_df = TableArgUDTF(input_df.asTable())
@@ -445,7 +446,7 @@ class ArrowUDTFTests(ReusedSQLTestCase):
                     yield result_table
 
         # # Test with DataFrame API
-        # TODO: support dataframe table api
+        # TODO(SPARK-53251): Enable DataFrame API testing with asTable()
         # input_df = self.spark.range(8)
         # result_df = MixedArgsUDTF(input_df.asTable(), lit(5))
         expected_df = self.spark.createDataFrame([(6,), (7,)], "filtered_id bigint")
@@ -460,6 +461,8 @@ class ArrowUDTFTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
+    from pyspark.sql.tests.arrow.test_arrow_udtf import *  # noqa: F401
+
     try:
         import xmlrunner
 

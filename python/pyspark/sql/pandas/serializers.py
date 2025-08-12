@@ -203,7 +203,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
 
     def __init__(self, table_arg_offsets=None):
         super().__init__()
-        self.table_arg_offsets = table_arg_offsets
+        self.table_arg_offsets = table_arg_offsets if table_arg_offsets else []
 
     def load_stream(self, stream):
         """
@@ -211,7 +211,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
         """
         import pyarrow as pa
 
-        batches = super(ArrowStreamArrowUDTFSerializer, self).load_stream(stream)
+        batches = super().load_stream(stream)
         for batch in batches:
             result_batches = []
             for i in range(batch.num_columns):
