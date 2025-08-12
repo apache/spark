@@ -1463,7 +1463,7 @@ jobs:
         export TERM=vt100
         export SERIAL_SBT_TESTS=1
         # Run all TransformWithState test suites
-        build/sbt "sql/testOnly *TransformWithState*Suite"
+        build/sbt "sql/testOnly *TransformWith*State*Suite"
     - name: Upload test results to report
       if: always()
       uses: actions/upload-artifact@v4
