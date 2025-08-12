@@ -48,7 +48,7 @@ on:
           in this file, e.g., build. See precondition job below.
         required: false
         type: string
-        default: '{"pyspark": "true", "pyspark-pandas": "true"}'
+        default: ''
     secrets:
       codecov_token:
         description: The upload token of codecov.
