@@ -16,7 +16,9 @@
 #
 
 import os
+import platform
 import tempfile
+import unittest
 
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -278,12 +280,14 @@ class StreamingTestsForeachMixin:
         tester.assert_invalid_writer(WriterWithNonCallableClose(), "ATTRIBUTE_NOT_CALLABLE")
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class StreamingTestsForeach(StreamingTestsForeachMixin, ReusedSQLTestCase):
     pass
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.sql.tests.streaming.test_streaming_foreach import *  # noqa: F401
 
     try:
