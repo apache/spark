@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
 import org.apache.spark.sql.connector.catalog.SupportsWrite
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.{DIR_NAME_OFFSETS, DIR_NAME_STATE}
+import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -113,13 +113,17 @@ object ResolveWriteToStream extends Rule[LogicalPlan] {
     val offsetsCheckpointPath = new Path(checkpointLocation, DIR_NAME_OFFSETS)
     if (!fileManager.exists(offsetsCheckpointPath)
       || fileManager.list(offsetsCheckpointPath).isEmpty) {
-      val stateCheckpointPath = new Path(checkpointLocation, DIR_NAME_STATE)
-      if (fileManager.exists(stateCheckpointPath)
-        && !fileManager.list(stateCheckpointPath).isEmpty) {
-        // If state has been created, but offsets have not, that means there could be multiple
-        // writers to the state directory of the query.
-        val loc = stateCheckpointPath.toString
-        throw StateStoreErrors.streamingStateCheckpointLocationNotEmpty(loc)
+
+      val dirNamesThatShouldNotHaveFiles = Array[String](DIR_NAME_STATE, DIR_NAME_COMMITS)
+
+      dirNamesThatShouldNotHaveFiles.foreach { dirName =>
+        val path = new Path(checkpointLocation, dirName)
+        if (fileManager.exists(path) && !fileManager.list(path).isEmpty) {
+          // If state has been created, but offsets have not, that means there could be multiple
+          // writers to the state directory of the query.
+          val loc = path.toString
+          throw StateStoreErrors.streamingStateCheckpointLocationNotEmpty(loc)
+        }
       }
     }
 

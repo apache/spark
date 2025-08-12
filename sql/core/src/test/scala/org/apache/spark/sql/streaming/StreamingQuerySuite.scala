@@ -1506,9 +1506,34 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
             .start()
         },
         condition = "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY",
-        sqlState = "42K06",
+        sqlState = "42K03",
         parameters = Map(
           "checkpointLocation" -> (new Path(checkpointDir.getCanonicalPath, "state")).toString
+        ))
+    }
+
+    withTempDir { checkpointDir =>
+      val hadoopConf = spark.sessionState.newHadoopConf()
+      val fm = CheckpointFileManager.create(new Path(checkpointDir.toString), hadoopConf)
+
+      // Create a non-empty state checkpoint directory to simulate the case that the user has user
+      // a directory that already has commits data.
+      fm.mkdirs(new Path(new Path(checkpointDir.getCanonicalPath, "commits"), "0"))
+
+      checkError(
+        exception = intercept[StateStoreCheckpointLocationNotEmpty] {
+          MemoryStream[Int].toDS().groupBy().count()
+            .writeStream
+            .format("memory")
+            .outputMode("complete")
+            .queryName(s"name${RandomStringUtils.secure.nextAlphabetic(10)}")
+            .option("checkpointLocation", checkpointDir.getCanonicalPath)
+            .start()
+        },
+        condition = "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY",
+        sqlState = "42K03",
+        parameters = Map(
+          "checkpointLocation" -> (new Path(checkpointDir.getCanonicalPath, "commits")).toString
         ))
     }
   }

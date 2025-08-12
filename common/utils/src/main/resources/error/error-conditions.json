@@ -5151,10 +5151,10 @@
   },
   "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY" : {
     "message" : [
-      "The offset log does not exist, but the state checkpoint location <checkpointLocation> is not empty.",
+      "The checkpoint location <checkpointLocation> should be empty on batch 0",
       "Please either use a new checkpoint location, or delete the existing data in the checkpoint location."
     ],
-    "sqlState" : "42K06"
+    "sqlState" : "42K03"
   },
   "STATE_STORE_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE" : {
     "message" : [
