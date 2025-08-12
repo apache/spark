@@ -66,17 +66,17 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
     /* Patterns that are excluded in verbose logging level.
      * Filter out messages coming from log processing classes, or we'll run an infinite loop.
      */
-    private static final Pattern verboseExcludeNamePattern = Pattern.compile(
-      String.join("|", LOG.getName(), OperationLog.class.getName(),
-        OperationManager.class.getName()));
+    private static final Pattern verboseExcludeNamePattern = Pattern.compile(String.join("|",
+      LOG.getName(), OperationLog.class.getName(),
+      OperationManager.class.getName()));
 
     /* Patterns that are included in execution logging level.
      * In execution mode, show only select logger messages.
      */
-    private static final Pattern executionIncludeNamePattern = Pattern.compile(
-      String.join("|", "org.apache.hadoop.mapreduce.JobSubmitter",
-        "org.apache.hadoop.mapreduce.Job", "SessionState", Task.class.getName(),
-        "org.apache.hadoop.hive.ql.exec.spark.status.SparkJobMonitor"));
+    private static final Pattern executionIncludeNamePattern = Pattern.compile(String.join("|",
+      "org.apache.hadoop.mapreduce.JobSubmitter",
+      "org.apache.hadoop.mapreduce.Job", "SessionState", Task.class.getName(),
+      "org.apache.hadoop.hive.ql.exec.spark.status.SparkJobMonitor"));
 
     /* Patterns that are included in performance logging level.
      * In performance mode, show execution and performance logger messages.
