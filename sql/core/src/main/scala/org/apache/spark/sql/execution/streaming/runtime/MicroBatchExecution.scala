@@ -526,7 +526,7 @@ class MicroBatchExecution(
                * because certain sources (e.g., KafkaSource) assume on restart the last
                * batch will be executed before getOffset is called again. */
               execCtx.endOffsets.foreach {
-                  case (source: Source, end: Offset) =>
+                case (source: Source, end: Offset) =>
                   val start = execCtx.startOffsets.get(source).map(_.asInstanceOf[Offset])
                   source.getBatch(start, end)
                 case nonV1Tuple =>

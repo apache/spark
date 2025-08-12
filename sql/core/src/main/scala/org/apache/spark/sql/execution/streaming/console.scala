@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming.sinks
+package org.apache.spark.sql.execution.streaming
 
 import java.util
 
