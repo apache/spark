@@ -236,3 +236,101 @@ jobs:
         with:
           name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
           path: "**/target/unit-tests.log"
+
+  # TransformWithState test suite job
+  transform-with-state-tests:
+    name: "TransformWithState Test Suite using Maven"
+    runs-on: ${{ inputs.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        java:
+          - ${{ inputs.java }}
+        hadoop:
+          - ${{ inputs.hadoop }}
+        hive:
+          - hive2.3
+    env:
+      HADOOP_PROFILE: ${{ matrix.hadoop }}
+      HIVE_PROFILE: ${{ matrix.hive }}
+      SPARK_LOCAL_IP: localhost
+      GITHUB_PREV_SHA: ${{ github.event.before }}
+    steps:
+      - name: Checkout Spark repository
+        uses: actions/checkout@v4
+        # In order to fetch changed files
+        with:
+          fetch-depth: 0
+          repository: apache/spark
+          ref: ${{ inputs.branch }}
+      - name: Sync the current branch with the latest in Apache Spark
+        if: github.repository != 'apache/spark'
+        run: |
+          echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+      # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
+      - name: Cache SBT and Maven
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/apache-maven-*
+            build/*.jar
+            ~/.sbt
+          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          restore-keys: |
+            build-
+      - name: Cache Maven local repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: java${{ matrix.java }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            java${{ matrix.java }}-maven-
+      - name: Install Java ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: ${{ matrix.java }}
+      - name: Install Python 3.11
+        uses: actions/setup-python@v5
+        # SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
+        with:
+          python-version: '3.11'
+          architecture: ${{ inputs.arch }}
+      - name: Install Python packages (Python 3.11)
+        run: |
+          python3.11 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.29.1'
+          python3.11 -m pip list
+      # Run the tests.
+      - name: Run TransformWithState tests
+        env: ${{ fromJSON(inputs.envs) }}
+        run: |
+          export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
+          export MAVEN_CLI_OPTS="--no-transfer-progress"
+          export JAVA_VERSION=${{ matrix.java }}
+          export INPUT_BRANCH=${{ inputs.branch }}
+          # Build first
+          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} clean install
+          
+          # Clean up the assembly module before maven testing
+          ./build/mvn $MAVEN_CLI_OPTS clean -pl assembly
+          
+          # Run TransformWithState test suites
+          ./build/mvn $MAVEN_CLI_OPTS -pl sql/core -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} -Dtest="*TransformWithState*Suite" test -fae
+      - name: Clean up local Maven repository
+        run: |  
+          rm -rf ~/.m2/repository/org/apache/spark
+      - name: Upload test results to report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-transform-with-state-maven-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
+          path: "**/target/test-reports/*.xml"
+      - name: Upload unit tests log files
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-tests-log-transform-with-state-maven-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
+          path: "**/target/unit-tests.log"
