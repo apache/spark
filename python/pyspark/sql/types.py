@@ -2980,7 +2980,7 @@ def _create_row_inbound_converter(dataType: DataType) -> Callable:
     return lambda *a: dataType.fromInternal(a)
 
 
-def _create_arrayseq(*args):
+def _create_arrayseq(*args) -> List[Any]:
     return list(args)
 
 
