@@ -30,7 +30,6 @@ import java.util.stream.Collectors;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import org.fusesource.leveldbjni.JniDBFactory;
 import org.iq80.leveldb.DB;
@@ -39,6 +38,7 @@ import org.iq80.leveldb.Options;
 import org.iq80.leveldb.WriteBatch;
 
 import org.apache.spark.annotation.Private;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * Implementation of KVStore that uses LevelDB as the underlying data store.
@@ -137,20 +137,20 @@ public class LevelDB implements KVStore {
   }
 
   private void put(byte[] key, Object value) throws Exception {
-    Preconditions.checkArgument(value != null, "Null values are not allowed.");
+    JavaUtils.checkArgument(value != null, "Null values are not allowed.");
     db().put(key, serializer.serialize(value));
   }
 
   @Override
   public <T> T read(Class<T> klass, Object naturalKey) throws Exception {
-    Preconditions.checkArgument(naturalKey != null, "Null keys are not allowed.");
+    JavaUtils.checkArgument(naturalKey != null, "Null keys are not allowed.");
     byte[] key = getTypeInfo(klass).naturalIndex().start(null, naturalKey);
     return get(key, klass);
   }
 
   @Override
   public void write(Object value) throws Exception {
-    Preconditions.checkArgument(value != null, "Null values are not allowed.");
+    JavaUtils.checkArgument(value != null, "Null values are not allowed.");
     LevelDBTypeInfo ti = getTypeInfo(value.getClass());
 
     try (WriteBatch batch = db().createWriteBatch()) {
@@ -163,7 +163,7 @@ public class LevelDB implements KVStore {
   }
 
   public void writeAll(List<?> values) throws Exception {
-    Preconditions.checkArgument(values != null && !values.isEmpty(),
+    JavaUtils.checkArgument(values != null && !values.isEmpty(),
       "Non-empty values required.");
 
     // Group by class, in case there are values from different classes in the values
@@ -225,7 +225,7 @@ public class LevelDB implements KVStore {
 
   @Override
   public void delete(Class<?> type, Object naturalKey) throws Exception {
-    Preconditions.checkArgument(naturalKey != null, "Null keys are not allowed.");
+    JavaUtils.checkArgument(naturalKey != null, "Null keys are not allowed.");
     try (WriteBatch batch = db().createWriteBatch()) {
       LevelDBTypeInfo ti = getTypeInfo(type);
       byte[] key = ti.naturalIndex().start(null, naturalKey);

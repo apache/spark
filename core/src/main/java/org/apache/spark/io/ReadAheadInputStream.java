@@ -28,13 +28,13 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.concurrent.GuardedBy;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.util.ThreadUtils;
 
 /**
@@ -105,7 +105,7 @@ public class ReadAheadInputStream extends InputStream {
    */
   public ReadAheadInputStream(
       InputStream inputStream, int bufferSizeInBytes) {
-    Preconditions.checkArgument(bufferSizeInBytes > 0,
+    JavaUtils.checkArgument(bufferSizeInBytes > 0,
         "bufferSizeInBytes should be greater than 0, but the value is " + bufferSizeInBytes);
     activeBuffer = ByteBuffer.allocate(bufferSizeInBytes);
     readAheadBuffer = ByteBuffer.allocate(bufferSizeInBytes);

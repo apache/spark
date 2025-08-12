@@ -28,7 +28,6 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.SettableFuture;
 import io.netty.channel.Channel;
@@ -42,6 +41,7 @@ import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.protocol.*;
+import org.apache.spark.network.util.JavaUtils;
 
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 
@@ -112,7 +112,7 @@ public class TransportClient implements Closeable {
    * Trying to set a different client ID after it's been set will result in an exception.
    */
   public void setClientId(String id) {
-    Preconditions.checkState(clientId == null, "Client ID has already been set.");
+    JavaUtils.checkState(clientId == null, "Client ID has already been set.");
     this.clientId = id;
   }
 

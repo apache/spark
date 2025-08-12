@@ -32,9 +32,8 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.google.common.base.Preconditions;
-
 import org.apache.spark.annotation.Private;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * Implementation of KVStore that keeps data deserialized in memory. This store does not index
@@ -419,7 +418,7 @@ public class InMemoryStore implements KVStore {
           // Go through all the values in `data` and collect all the objects has certain parent
           // value. This can be slow when there is a large number of entries in `data`.
           KVTypeInfo.Accessor parentGetter = ti.getParentAccessor(index);
-          Preconditions.checkArgument(parentGetter != null, "Parent filter for non-child index.");
+          JavaUtils.checkArgument(parentGetter != null, "Parent filter for non-child index.");
           return data.values().stream()
             .filter(e -> compare(e, parentGetter, parentKey) == 0)
             .collect(Collectors.toList());

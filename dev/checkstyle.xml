@@ -193,6 +193,7 @@
             <property name="illegalClasses" value="org.apache.hadoop.io.IOUtils" />
             <property name="illegalClasses" value="org.apache.parquet.Preconditions" />
             <property name="illegalClasses" value="com.google.common.base.Objects" />
+            <property name="illegalClasses" value="com.google.common.base.Preconditions" />
             <property name="illegalClasses" value="com.google.common.base.Strings" />
             <property name="illegalClasses" value="com.google.common.collect.ArrayListMultimap" />
             <property name="illegalClasses" value="com.google.common.collect.Multimap" />
