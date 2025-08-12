@@ -739,16 +739,6 @@ public class JavaUtils {
     .anyMatch(prefix -> osName.regionMatches(true, 0, prefix, 0, prefix.length()));
 
   /**
-   * Throws IllegalArgumentException if the given object is null.
-   * Keep this clone of CommandBuilderUtils.checkNotNull synced with the original.
-   */
-  public static void checkNotNull(Object o, String arg) {
-    if (o == null) {
-      throw new IllegalArgumentException(String.format("'%s' must not be null.", arg));
-    }
-  }
-
-  /**
    * Throws IllegalArgumentException with the given message if the check is false.
    * Keep this clone of CommandBuilderUtils.checkArgument synced with the original.
    */
