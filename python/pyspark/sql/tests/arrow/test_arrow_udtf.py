@@ -29,7 +29,7 @@ if have_pyarrow:
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
-class ArrowUDTFTests(ReusedSQLTestCase):
+class ArrowUDTFTestsMixin:
     def test_arrow_udtf_zero_args(self):
         @arrow_udtf(returnType="id int, value string")
         class TestUDTF:
@@ -384,6 +384,10 @@ class ArrowUDTFTests(ReusedSQLTestCase):
                     )
 
         self.assertIn("INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE", str(cm.exception))
+
+
+class ArrowUDTFTests(ArrowUDTFTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":
