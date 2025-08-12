@@ -43,7 +43,6 @@ import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
-import org.apache.spark.util.SparkSystemUtils$;
 
 /**
  * General utilities available in the network package. Many of these are sourced from Spark's
@@ -265,9 +264,7 @@ public class JavaUtils {
     // On Unix systems, use operating system command to run faster
     // If that does not work out, fallback to the Java IO way
     // We exclude Apple Silicon test environment due to the limited resource issues.
-    if (SparkSystemUtils$.MODULE$.isUnix() && filter == null &&
-        !(SparkSystemUtils$.MODULE$.isMac() && (System.getenv("SPARK_TESTING") != null ||
-        System.getProperty("spark.testing") != null))) {
+    if (isUnix && filter == null && !(isMac && isTesting())) {
       try {
         deleteRecursivelyUsingUnixNative(file);
         return;
@@ -663,4 +660,81 @@ public class JavaUtils {
     }
     return (int) value;
   }
+
+  /** Return true if the content of the files are equal or they both don't exist */
+  public static boolean contentEquals(File file1, File file2) throws IOException {
+    if (file1 == null && file2 != null || file1 != null && file2 == null) {
+      return false;
+    } else if (file1 == null && file2 == null || !file1.exists() && !file2.exists()) {
+      return true;
+    } else if (!file1.exists() || !file2.exists()) {
+      return false;
+    } else if (file1.isDirectory() || file2.isDirectory()) {
+      throw new IllegalArgumentException("Input is not a file: %s or %s".formatted(file1, file2));
+    } else if (file1.length() != file2.length()) {
+      return false;
+    } else {
+      Path path1 = file1.toPath();
+      Path path2 = file2.toPath();
+      return Files.isSameFile(path1, path2) || Files.mismatch(path1, path2) == -1L;
+    }
+  }
+
+  public static String toString(InputStream in) throws IOException {
+    return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+  }
+
+  /**
+   * Indicates whether Spark is currently running unit tests.
+   */
+  public static boolean isTesting() {
+    return System.getenv("SPARK_TESTING") != null || System.getProperty("spark.testing") != null;
+  }
+
+  /**
+   * The `os.name` system property.
+   */
+  public static String osName = System.getProperty("os.name");
+
+  /**
+   * The `os.version` system property.
+   */
+  public static String osVersion = System.getProperty("os.version");
+
+  /**
+   * The `java.version` system property.
+   */
+  public static String javaVersion = Runtime.version().toString();
+
+  /**
+   * The `os.arch` system property.
+   */
+  public static String osArch = System.getProperty("os.arch");
+
+  /**
+   * Whether the underlying operating system is Windows.
+   */
+  public static boolean isWindows = osName.regionMatches(true, 0, "Windows", 0, 7);
+
+  /**
+   * Whether the underlying operating system is Mac OS X.
+   */
+  public static boolean isMac = osName.regionMatches(true, 0, "Mac OS X", 0, 8);
+
+  /**
+   * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.
+   */
+  public static boolean isMacOnAppleSilicon = isMac && osArch.equals("aarch64");
+
+  /**
+   * Whether the underlying operating system is Linux.
+   */
+  public static boolean isLinux = osName.regionMatches(true, 0, "Linux", 0, 5);
+
+  /**
+   * Whether the underlying operating system is UNIX.
+   */
+  public static boolean isUnix = Stream.of("AIX", "HP-UX", "Irix", "Linux", "Mac OS X", "Solaris",
+    "SunOS", "FreeBSD", "OpenBSD", "NetBSD")
+    .anyMatch(prefix -> osName.regionMatches(true, 0, prefix, 0, prefix.length()));
 }
