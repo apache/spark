@@ -29,7 +29,7 @@ if have_pyarrow:
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
-class ArrowUDTFTests(ReusedSQLTestCase):
+class ArrowUDTFTestsMixin:
     def test_arrow_udtf_zero_args(self):
         @arrow_udtf(returnType="id int, value string")
         class TestUDTF:
@@ -459,6 +459,10 @@ class ArrowUDTFTests(ReusedSQLTestCase):
             "SELECT * FROM test_mixed_args_udtf(TABLE(SELECT id FROM range(0, 8)), 5)"
         )
         assertDataFrameEqual(sql_result_df, expected_df)
+
+
+class ArrowUDTFTests(ArrowUDTFTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":
