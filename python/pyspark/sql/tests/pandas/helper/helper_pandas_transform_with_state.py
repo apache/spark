@@ -32,7 +32,7 @@ from pyspark.sql.types import (
     BooleanType,
     FloatType,
     ArrayType,
-    MapType
+    MapType,
 )
 from pyspark.testing.sqlutils import have_pandas
 
@@ -228,11 +228,14 @@ class MinEventTimeStatefulProcessorFactory(StatefulProcessorFactory):
     def row(self):
         return RowMinEventTimeStatefulProcessor()
 
+
 class StatefulProcessorCompositeTypeFactory(StatefulProcessorFactory):
     def pandas(self):
         return PandasStatefulProcessorCompositeType()
+
     def row(self):
         return RowStatefulProcessorCompositeType()
+
 
 # StatefulProcessor implementations
 
@@ -1623,31 +1626,40 @@ class RowMinEventTimeStatefulProcessor(StatefulProcessor):
     def close(self) -> None:
         pass
 
+
 # A stateful processor that contains composite python type inside Value, List and Map state variable
 class PandasStatefulProcessorCompositeType(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         # Schema for a complex object with arrays and nested structures
-        obj_schema = StructType([
-            StructField("id", ArrayType(IntegerType())),  # Array of integers
-            StructField("tags", ArrayType(ArrayType(StringType()))),  # Array of array of strings
-            StructField("metadata", ArrayType(  # Array of key-value structs
-                StructType([
-                    StructField("key", StringType()),
-                    StructField("value", StringType())
-                ])
-            ))
-        ])
+        obj_schema = StructType(
+            [
+                StructField("id", ArrayType(IntegerType())),  # Array of integers
+                StructField(
+                    "tags", ArrayType(ArrayType(StringType()))
+                ),  # Array of array of strings
+                StructField(
+                    "metadata",
+                    ArrayType(  # Array of key-value structs
+                        StructType(
+                            [StructField("key", StringType()), StructField("value", StringType())]
+                        )
+                    ),
+                ),
+            ]
+        )
 
         # Schema for a map with nested maps and arrays
-        map_value_schema = StructType([
-            StructField("id", IntegerType(), True),
-            # Map from String to Array of Integers
-            StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True),
-            # Nested Map: String -> (String -> Integer)
-            StructField("confs", MapType(
-                StringType(),
-                MapType(StringType(), IntegerType()), True), True)
-        ])
+        map_value_schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                # Map from String to Array of Integers
+                StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True),
+                # Nested Map: String -> (String -> Integer)
+                StructField(
+                    "confs", MapType(StringType(), MapType(StringType(), IntegerType()), True), True
+                ),
+            ]
+        )
 
         # Initialize state variables
         self.obj_state = handle.getValueState("obj_state", obj_schema)
@@ -1674,7 +1686,9 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
 
             # Verify tags and metadata remain consistent
             assert current_obj[1] == tags, f"Tag mismatch: got {current_obj[1]}"
-            assert current_obj[2] == expected_metadata_rows, f"Metadata mismatch: got {current_obj[2]}"
+            assert (
+                current_obj[2] == expected_metadata_rows
+            ), f"Metadata mismatch: got {current_obj[2]}"
 
             current_ids = current_obj[0]
             # Add total_temperature to each existing id
@@ -1682,11 +1696,7 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
         else:
             updated_ids = [0]
 
-        updated_obj = (
-            updated_ids,  # id array
-            tags,
-            metadata
-        )
+        updated_obj = (updated_ids, tags, metadata)  # id array
 
         self.obj_state.update(updated_obj)
 
@@ -1700,11 +1710,7 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
             # Append current batch's total_temperature to id list
             current_id_list.append(total_temperature)
 
-            updated_list.append((
-                current_id_list,
-                tags,
-                metadata
-            ))
+            updated_list.append((current_id_list, tags, metadata))
 
         # If list_state is empty, initialize with updated_obj
         if not updated_list:
@@ -1721,7 +1727,7 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
         map_data = (
             0,  # id (dummy)
             attributes_map,  # attributes map
-            confs_map   # nested confs map
+            confs_map,  # nested confs map
         )
 
         # Update map_state keyed by 'key'
@@ -1746,41 +1752,52 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
         confs_str = str(confs_map)
 
         # Yield a DataFrame summarizing the current state
-        yield pd.DataFrame({
-            "id": [key],
-            "value_arr": [','.join(map(str, updated_ids))],
-            "list_state_arr": [','.join(map(str, flattened_ids))],
-            "map_state_arr": [attributes_str],
-            "nested_map_state_arr": [confs_str],
-        })
+        yield pd.DataFrame(
+            {
+                "id": [key],
+                "value_arr": [",".join(map(str, updated_ids))],
+                "list_state_arr": [",".join(map(str, flattened_ids))],
+                "map_state_arr": [attributes_str],
+                "nested_map_state_arr": [confs_str],
+            }
+        )
 
     def close(self) -> None:
         pass
 
+
 class RowStatefulProcessorCompositeType(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         # Schema for a complex object with arrays and nested structures
-        obj_schema = StructType([
-            StructField("id", ArrayType(IntegerType())),  # Array of integers
-            StructField("tags", ArrayType(ArrayType(StringType()))),  # Array of array of strings
-            StructField("metadata", ArrayType(  # Array of key-value structs
-                StructType([
-                    StructField("key", StringType()),
-                    StructField("value", StringType())
-                ])
-            ))
-        ])
+        obj_schema = StructType(
+            [
+                StructField("id", ArrayType(IntegerType())),  # Array of integers
+                StructField(
+                    "tags", ArrayType(ArrayType(StringType()))
+                ),  # Array of array of strings
+                StructField(
+                    "metadata",
+                    ArrayType(  # Array of key-value structs
+                        StructType(
+                            [StructField("key", StringType()), StructField("value", StringType())]
+                        )
+                    ),
+                ),
+            ]
+        )
 
         # Schema for a map with nested maps and arrays
-        map_value_schema = StructType([
-            StructField("id", IntegerType(), True),
-            # Map from String to Array of Integers
-            StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True),
-            # Nested Map: String -> (String -> Integer)
-            StructField("confs", MapType(
-                StringType(),
-                MapType(StringType(), IntegerType()), True), True)
-        ])
+        map_value_schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                # Map from String to Array of Integers
+                StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True),
+                # Nested Map: String -> (String -> Integer)
+                StructField(
+                    "confs", MapType(StringType(), MapType(StringType(), IntegerType()), True), True
+                ),
+            ]
+        )
 
         # Initialize state variables
         self.obj_state = handle.getValueState("obj_state", obj_schema)
@@ -1805,7 +1822,9 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
 
             # Verify tags and metadata remain consistent
             assert current_obj[1] == tags, f"Tag mismatch: got {current_obj[1]}"
-            assert current_obj[2] == expected_metadata_rows, f"Metadata mismatch: got {current_obj[2]}"
+            assert (
+                current_obj[2] == expected_metadata_rows
+            ), f"Metadata mismatch: got {current_obj[2]}"
 
             current_ids = current_obj[0]
             # Add total_temperature to each existing id
@@ -1813,11 +1832,7 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
         else:
             updated_ids = [0]
 
-        updated_obj = (
-            updated_ids,  # id array
-            tags,
-            metadata
-        )
+        updated_obj = (updated_ids, tags, metadata)  # id array
         self.obj_state.update(updated_obj)
 
         # Update list_state by appending total_temperature to each id array in the list
@@ -1830,11 +1845,7 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
             # Append current batch's total_temperature to id list
             current_id_list.append(total_temperature)
 
-            updated_list.append((
-                current_id_list,
-                tags,
-                metadata
-            ))
+            updated_list.append((current_id_list, tags, metadata))
 
         # If list_state is empty, initialize with updated_obj
         if not updated_list:
@@ -1851,7 +1862,7 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
         map_data = (
             0,  # id (dummy)
             attributes_map,  # attributes map
-            confs_map   # nested confs map
+            confs_map,  # nested confs map
         )
 
         # Update map_state keyed by 'key'
@@ -1878,8 +1889,8 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
         # Yield a DataFrame summarizing the current state
         yield Row(
             id=key,
-            value_arr=','.join(map(str, updated_ids)),
-            list_state_arr=','.join(map(str, flattened_ids)),
+            value_arr=",".join(map(str, updated_ids)),
+            list_state_arr=",".join(map(str, flattened_ids)),
             map_state_arr=attributes_str,
             nested_map_state_arr=confs_str,
         )

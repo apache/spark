@@ -506,10 +506,7 @@ class StatefulProcessorApiClient:
                     return type(v)(normalize_value(e) for e in v)
                 # Dict: normalize both keys and values
                 if isinstance(v, dict):
-                    return {
-                        normalize_value(k): normalize_value(val)
-                        for k, val in v.items()
-                    }
+                    return {normalize_value(k): normalize_value(val) for k, val in v.items()}
                 # Address a couple of pandas dtypes too.
                 elif hasattr(v, "to_pytimedelta"):
                     return v.to_pytimedelta()
@@ -517,6 +514,7 @@ class StatefulProcessorApiClient:
                     return v.to_pydatetime()
                 else:
                     return v
+
             converted = [normalize_value(v) for v in data]
         else:
             converted = list(data)
