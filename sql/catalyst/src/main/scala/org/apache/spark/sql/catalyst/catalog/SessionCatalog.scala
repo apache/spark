@@ -419,13 +419,7 @@ class SessionCatalog(
       if (validateLocation) {
         validateTableLocation(newTableDefinition)
       }
-      try {
-        externalCatalog.createTable(newTableDefinition, ignoreIfExists)
-      } catch {
-        case e: TableAlreadyExistsException if ignoreIfExists =>
-          logWarning(s"Table ${newTableDefinition.identifier} already exists in database $db. " +
-            "Ignoring creation as ignoreIfNotExists is set to true.")
-      }
+      externalCatalog.createTable(newTableDefinition, ignoreIfExists)
     }
   }
 
