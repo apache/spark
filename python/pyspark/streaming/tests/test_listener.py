@@ -14,10 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+import platform
+import unittest
+
 from pyspark.streaming import StreamingListener
 from pyspark.testing.streamingutils import PySparkStreamingTestCase
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class StreamingListenerTests(PySparkStreamingTestCase):
     duration = 0.5
 
@@ -147,7 +154,6 @@ class StreamingListenerTests(PySparkStreamingTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.streaming.tests.test_listener import *  # noqa: F401
 
     try:
