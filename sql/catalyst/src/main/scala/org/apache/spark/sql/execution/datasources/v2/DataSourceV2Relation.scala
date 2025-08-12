@@ -127,7 +127,7 @@ case class DataSourceV2Relation(
     }
   }
 
-  def mergeSchemaEvolution(): Boolean =
+  def autoSchemaEvolution(): Boolean =
     table.capabilities().contains(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION)
 }
 

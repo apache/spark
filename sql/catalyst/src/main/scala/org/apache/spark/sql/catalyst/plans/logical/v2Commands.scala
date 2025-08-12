@@ -894,7 +894,7 @@ case class MergeIntoTable(
   def needSchemaEvolution: Boolean = {
     withSchemaEvolution && {
       EliminateSubqueryAliases(targetTable) match {
-        case r: DataSourceV2Relation if r.mergeSchemaEvolution() =>
+        case r: DataSourceV2Relation if r.autoSchemaEvolution() =>
           MergeIntoTable.schemaChanges(targetTable.schema, sourceTable.schema).nonEmpty
         case _ => false
       }
