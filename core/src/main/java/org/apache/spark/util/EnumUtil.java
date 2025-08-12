@@ -16,10 +16,9 @@
  */
 package org.apache.spark.util;
 
-import org.apache.spark.annotation.Private;
+import java.util.StringJoiner;
 
-import java.util.Arrays;
-import java.util.stream.Collectors;
+import org.apache.spark.annotation.Private;
 
 @Private
 public class EnumUtil {
@@ -34,7 +33,15 @@ public class EnumUtil {
       }
     }
     throw new IllegalArgumentException(
-      String.format("Illegal type='%s'. Supported type values: %s", str,
-        Arrays.stream(constants).map(Object::toString).collect(Collectors.joining(", "))));
+      String.format("Illegal type='%s'. Supported type values: %s",
+        str, joinToString(constants)));
+  }
+
+  private static <E extends Enum<E>> String joinToString(E[] enums) {
+    StringJoiner stringJoiner = new StringJoiner(", ");
+    for (E e : enums) {
+      stringJoiner.add(e.name());
+    }
+    return stringJoiner.toString();
   }
 }
