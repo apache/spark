@@ -116,7 +116,15 @@ jobs:
             hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
             included-tags: org.apache.spark.tags.SlowSQLTest
-            comment: "- slow tests"
+            test-split: "part1"
+            comment: "- slow tests (part 1)"
+          - modules: sql#core
+            java: ${{ inputs.java }}
+            hadoop: ${{ inputs.hadoop }}
+            hive: hive2.3
+            included-tags: org.apache.spark.tags.SlowSQLTest
+            test-split: "part2"
+            comment: "- slow tests (part 2)"
           - modules: sql#core
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
@@ -127,6 +135,7 @@ jobs:
       MODULES_TO_TEST: ${{ matrix.modules }}
       EXCLUDED_TAGS: ${{ matrix.excluded-tags }}
       INCLUDED_TAGS: ${{ matrix.included-tags }}
+      TEST_SPLIT: ${{ matrix.test-split }}
       HADOOP_PROFILE: ${{ matrix.hadoop }}
       HIVE_PROFILE: ${{ matrix.hive }}
       SPARK_LOCAL_IP: localhost
@@ -202,7 +211,22 @@ jobs:
           fi
           
           if [[ "$INCLUDED_TAGS" != "" ]]; then
-            ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} -Dtest.include.tags="$INCLUDED_TAGS" test -fae
+            if [[ "$TEST_SPLIT" != "" && "$INCLUDED_TAGS" == *"SlowSQLTest"* ]]; then
+              # Split SlowSQLTest classes alphabetically
+              SLOW_SQL_CLASSES=$(find . -name "*.scala" -exec grep -l "@SlowSQLTest" {} \; | sed 's|.*/||' | sed 's|\.scala||' | sort)
+              TOTAL_CLASSES=$(echo "$SLOW_SQL_CLASSES" | wc -l)
+              HALF=$((TOTAL_CLASSES / 2))
+              
+              if [[ "$TEST_SPLIT" == "part1" ]]; then
+                TEST_CLASSES=$(echo "$SLOW_SQL_CLASSES" | head -n $HALF | tr '\n' ',' | sed 's/,$//')
+              else
+                TEST_CLASSES=$(echo "$SLOW_SQL_CLASSES" | tail -n +$((HALF + 1)) | tr '\n' ',' | sed 's/,$//')
+              fi
+              
+              ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} -Dtest="$TEST_CLASSES" test -fae
+            else
+              ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} -Dtest.include.tags="$INCLUDED_TAGS" test -fae
+            fi
           elif [[ "$MODULES_TO_TEST" == "connect" ]]; then
             ./build/mvn $MAVEN_CLI_OPTS -Dtest.exclude.tags="$EXCLUDED_TAGS" -Djava.version=${JAVA_VERSION/-ea} -pl sql/connect/client/jvm,sql/connect/common,sql/connect/server test -fae
           elif [[ "$EXCLUDED_TAGS" != "" ]]; then

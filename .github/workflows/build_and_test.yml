@@ -283,7 +283,15 @@ jobs:
             hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
             included-tags: org.apache.spark.tags.SlowSQLTest
-            comment: "- slow tests"
+            test-split: "part1"
+            comment: "- slow tests (part 1)"
+          - modules: sql
+            java: ${{ inputs.java }}
+            hadoop: ${{ inputs.hadoop }}
+            hive: hive2.3
+            included-tags: org.apache.spark.tags.SlowSQLTest
+            test-split: "part2"
+            comment: "- slow tests (part 2)"
           - modules: sql
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
@@ -299,6 +307,7 @@ jobs:
       MODULES_TO_TEST: ${{ matrix.modules }}
       EXCLUDED_TAGS: ${{ matrix.excluded-tags }}
       INCLUDED_TAGS: ${{ matrix.included-tags }}
+      TEST_SPLIT: ${{ matrix.test-split }}
       HADOOP_PROFILE: ${{ matrix.hadoop }}
       HIVE_PROFILE: ${{ matrix.hive }}
       GITHUB_PREV_SHA: ${{ github.event.before }}
@@ -378,7 +387,23 @@ jobs:
           MODULES_TO_TEST=${MODULES_TO_TEST//streaming-kinesis-asl, /}
         fi
         export SERIAL_SBT_TESTS=1
-        ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
+        
+        if [[ "$TEST_SPLIT" != "" && "$INCLUDED_TAGS" == *"SlowSQLTest"* ]]; then
+          # Split SlowSQLTest classes alphabetically
+          SLOW_SQL_CLASSES=$(find . -name "*.scala" -exec grep -l "@SlowSQLTest" {} \; | sed 's|.*/||' | sed 's|\.scala||' | sort)
+          TOTAL_CLASSES=$(echo "$SLOW_SQL_CLASSES" | wc -l)
+          HALF=$((TOTAL_CLASSES / 2))
+          
+          if [[ "$TEST_SPLIT" == "part1" ]]; then
+            TEST_CLASSES=$(echo "$SLOW_SQL_CLASSES" | head -n $HALF | tr '\n' ' ')
+          else
+            TEST_CLASSES=$(echo "$SLOW_SQL_CLASSES" | tail -n +$((HALF + 1)) | tr '\n' ' ')
+          fi
+          
+          ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --test-names "$TEST_CLASSES"
+        else
+          ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
+        fi
     - name: Upload test results to report
       if: always()
       uses: actions/upload-artifact@v4
