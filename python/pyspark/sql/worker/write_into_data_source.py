@@ -177,7 +177,7 @@ def main(infile: IO, outfile: IO) -> None:
 
         if is_streaming:
             # Instantiate the streaming data source writer.
-            writer = data_source.streamWriter(schema, overwrite)
+            writer = data_source.streamWriter(schema, overwrite)  # type: ignore[assignment]
             if not isinstance(writer, (DataSourceStreamWriter, DataSourceStreamArrowWriter)):
                 raise PySparkAssertionError(
                     errorClass="DATA_SOURCE_TYPE_MISMATCH",
@@ -222,7 +222,7 @@ def main(infile: IO, outfile: IO) -> None:
             if isinstance(writer, DataSourceArrowWriter):
                 res = writer.write(iterator)
             elif isinstance(writer, DataSourceStreamArrowWriter):
-                res = writer.write(iter(iterator))
+                res = writer.write(iterator)  # type: ignore[arg-type]
             else:
                 res = writer.write(batch_to_rows())
 
