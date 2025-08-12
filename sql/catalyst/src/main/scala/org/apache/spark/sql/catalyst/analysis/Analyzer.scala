@@ -2289,7 +2289,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             }
             PythonUDTF(
               u.name, u.func, analyzeResult.schema, Some(analyzeResult.pickledAnalyzeResult),
-              newChildren, u.evalType, u.udfDeterministic, u.resultId)
+              newChildren, u.evalType, u.udfDeterministic, u.resultId, None, u.tableArguments)
           }
         }
     }
