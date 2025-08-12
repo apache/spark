@@ -75,7 +75,7 @@ class BasicCountStatefulProcessor
 // A basic stateful processor which will return the occurrences of key.
 // Count State is a Int type.
 class CountStatefulProcessorWithInt
-  extends StatefulProcessor[String, InputRowForConnectTest, OutputRowForConnectTest]
+    extends StatefulProcessor[String, InputRowForConnectTest, OutputRowForConnectTest]
     with Logging {
   @transient protected var _countState: ValueState[StateRowForConnectTestWithIntType] = _
 
@@ -105,7 +105,7 @@ class CountStatefulProcessorWithInt
 // A stateful processor with Two Longs as state
 // which will return the occurrences of key to test TWS schema evolution
 class CountStatefulProcessorTwoLongs
-  extends StatefulProcessor[String, InputRowForConnectTest, OutputRowForConnectTest]
+    extends StatefulProcessor[String, InputRowForConnectTest, OutputRowForConnectTest]
     with Logging {
   @transient protected var _countState: ValueState[StateRowForConnectTestWithTwoLongs] = _
 
@@ -136,7 +136,7 @@ class CountStatefulProcessorTwoLongs
 // Reorder the field Sequence inside StateRowForConnectTestWithTwoLongs.
 // which will return the occurrences of key to test TWS schema evolution
 class CountStatefulProcessorWithReorder
-  extends StatefulProcessor[String, InputRowForConnectTest, OutputRowForConnectTest]
+    extends StatefulProcessor[String, InputRowForConnectTest, OutputRowForConnectTest]
     with Logging {
   @transient protected var _countState: ValueState[StateRowForConnectTestWithReorder] = _
 
@@ -587,9 +587,10 @@ class TransformWithStateConnectSuite
   private def runSchemaEvolutionTest(
       firstProcessor: StatefulProcessor[String, InputRowForConnectTest, OutputRowForConnectTest],
       secondProcessor: StatefulProcessor[String, InputRowForConnectTest, OutputRowForConnectTest])
-  : Unit = {
-    withSQLConf((twsAdditionalSQLConf ++
-      Seq("spark.sql.streaming.stateStore.encodingFormat" -> "avro")): _*) {
+      : Unit = {
+    withSQLConf(
+      (twsAdditionalSQLConf ++
+        Seq("spark.sql.streaming.stateStore.encodingFormat" -> "avro")): _*) {
       val session: SparkSession = spark
       import session.implicits._
 
@@ -692,7 +693,8 @@ class TransformWithStateConnectSuite
 
   test("transformWithState - reorder fields schema evolution") {
     runSchemaEvolutionTest(
-      new CountStatefulProcessorTwoLongs, new CountStatefulProcessorWithReorder)
+      new CountStatefulProcessorTwoLongs,
+      new CountStatefulProcessorWithReorder)
   }
 
   test("transformWithState - upcast fields schema evolution") {
@@ -703,8 +705,10 @@ class TransformWithStateConnectSuite
     val e = intercept[StreamingQueryException] {
       runSchemaEvolutionTest(new BasicCountStatefulProcessor, new CountStatefulProcessorWithInt)
     }
-    assert(e.getCause.asInstanceOf[SparkUnsupportedOperationException]
-      .getCondition == "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION")
+    assert(
+      e.getCause
+        .asInstanceOf[SparkUnsupportedOperationException]
+        .getCondition == "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION")
   }
 
   /* Utils functions for tests */
