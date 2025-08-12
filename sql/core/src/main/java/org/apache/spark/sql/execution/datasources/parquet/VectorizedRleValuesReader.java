@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources.parquet;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-import org.apache.parquet.Preconditions;
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.column.values.ValuesReader;
@@ -28,6 +27,7 @@ import org.apache.parquet.column.values.bitpacking.BytePacker;
 import org.apache.parquet.column.values.bitpacking.Packer;
 import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.io.api.Binary;
+import com.google.common.base.Preconditions;
 
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
