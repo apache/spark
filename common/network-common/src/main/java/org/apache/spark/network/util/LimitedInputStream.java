@@ -23,8 +23,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Objects;
 
-import com.google.common.base.Preconditions;
-
 /**
  * Wraps a {@link InputStream}, limiting the number of bytes which can be read.
  *
@@ -53,7 +51,7 @@ public final class LimitedInputStream extends FilterInputStream {
   public LimitedInputStream(InputStream in, long limit, boolean closeWrappedStream) {
     super(Objects.requireNonNull(in));
     this.closeWrappedStream = closeWrappedStream;
-    Preconditions.checkArgument(limit >= 0, "limit must be non-negative");
+    JavaUtils.checkArgument(limit >= 0, "limit must be non-negative");
     left = limit;
   }
   @Override public int available() throws IOException {
