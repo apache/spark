@@ -1671,7 +1671,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   // The update value can access columns from both target and source tables.
                   resolveAssignments(assignments, m, MergeResolvePolicy.BOTH))
               case UpdateStarAction(updateCondition) =>
-                val assignments = targetTable.output.map { attr =>
+                val attrs = if (m.withSchemaEvolution) {
+                  targetTable.output.filter(targetCol => sourceTable.output.exists(
+                    sourceCol => conf.resolver(sourceCol.name, targetCol.name)))
+                } else {
+                  targetTable.output
+                }
+                val assignments = attrs.map { attr =>
                   Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
                 }
                 UpdateAction(
@@ -1694,7 +1700,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 // access columns from the source table.
                 val resolvedInsertCondition = insertCondition.map(
                   resolveExpressionByPlanOutput(_, m.sourceTable))
-                val assignments = targetTable.output.map { attr =>
+                val attrs = if (m.withSchemaEvolution) {
+                  targetTable.output.filter(targetCol => sourceTable.output.exists(
+                    sourceCol => conf.resolver(sourceCol.name, targetCol.name)))
+                } else {
+                  targetTable.output
+                }
+                val assignments = attrs.map { attr =>
                   Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
                 }
                 InsertAction(
