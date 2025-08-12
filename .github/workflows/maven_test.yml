@@ -213,7 +213,8 @@ jobs:
           if [[ "$INCLUDED_TAGS" != "" ]]; then
             if [[ "$TEST_SPLIT" != "" && "$INCLUDED_TAGS" == *"SlowSQLTest"* ]]; then
               # Split SlowSQLTest classes alphabetically
-              SLOW_SQL_CLASSES=$(find . -name "*.scala" -exec grep -l "@SlowSQLTest" {} \; | sed 's|.*/||' | sed 's|\.scala||' | sort)
+              # Get actual class names annotated with @SlowSQLTest
+              SLOW_SQL_CLASSES=$(grep -r "@SlowSQLTest" --include="*.scala" . -A 1 | grep "class " | grep -v "abstract class" | sed 's/.*class \([A-Za-z0-9_]*\).*/\1/' | sort)
               TOTAL_CLASSES=$(echo "$SLOW_SQL_CLASSES" | wc -l)
               HALF=$((TOTAL_CLASSES / 2))
               
@@ -223,6 +224,7 @@ jobs:
                 TEST_CLASSES=$(echo "$SLOW_SQL_CLASSES" | tail -n +$((HALF + 1)) | tr '\n' ',' | sed 's/,$//')
               fi
               
+              echo "Running SlowSQLTest $TEST_SPLIT: $TEST_CLASSES"
               ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} -Dtest="$TEST_CLASSES" test -fae
             else
               ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} -Dtest.include.tags="$INCLUDED_TAGS" test -fae

@@ -390,17 +390,19 @@ jobs:
         
         if [[ "$TEST_SPLIT" != "" && "$INCLUDED_TAGS" == *"SlowSQLTest"* ]]; then
           # Split SlowSQLTest classes alphabetically using SBT testOnly
-          SLOW_SQL_CLASSES=$(find . -name "*.scala" -exec grep -l "@SlowSQLTest" {} \; | sed 's|.*/||' | sed 's|\.scala||' | sort)
+          # Get actual class names annotated with @SlowSQLTest
+          SLOW_SQL_CLASSES=$(grep -r "@SlowSQLTest" --include="*.scala" . -A 1 | grep "class " | grep -v "abstract class" | sed 's/.*class \([A-Za-z0-9_]*\).*/\1/' | sort)
           TOTAL_CLASSES=$(echo "$SLOW_SQL_CLASSES" | wc -l)
           HALF=$((TOTAL_CLASSES / 2))
           
           if [[ "$TEST_SPLIT" == "part1" ]]; then
-            TEST_CLASSES=$(echo "$SLOW_SQL_CLASSES" | head -n $HALF | paste -sd ',' -)
+            TEST_CLASSES=$(echo "$SLOW_SQL_CLASSES" | head -n $HALF | sed 's/^/*/' | paste -sd ',' -)
           else
-            TEST_CLASSES=$(echo "$SLOW_SQL_CLASSES" | tail -n +$((HALF + 1)) | paste -sd ',' -)
+            TEST_CLASSES=$(echo "$SLOW_SQL_CLASSES" | tail -n +$((HALF + 1)) | sed 's/^/*/' | paste -sd ',' -)
           fi
           
           # Use SBT directly to run specific test classes
+          echo "Running SlowSQLTest $TEST_SPLIT: $TEST_CLASSES"
           build/sbt "sql/testOnly $TEST_CLASSES"
         else
           ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
