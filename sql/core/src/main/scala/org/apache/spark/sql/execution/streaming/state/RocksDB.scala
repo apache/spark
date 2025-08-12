@@ -76,6 +76,7 @@ class RocksDB(
     partitionId: Int = 0,
     eventForwarder: Option[RocksDBEventForwarder] = None,
     uniqueId: Option[String] = None) extends Logging {
+  logError(s"### uniqueId: ${uniqueId.get}")
 
   import RocksDB._
 
@@ -199,6 +200,7 @@ class RocksDB(
 
   // Generate a unique ID if not provided to ensure proper memory tracking
   private val instanceUniqueId = uniqueId.getOrElse(UUID.randomUUID().toString)
+  logError(s"### instanceUniqueId: ${instanceUniqueId}")
 
   // Register with RocksDBMemoryManager
   // Initial registration with zero memory usage
@@ -1317,6 +1319,15 @@ class RocksDB(
 
   /** Release all resources */
   def close(): Unit = {
+    // Unregister from RocksDBMemoryManager
+    try {
+      RocksDBMemoryManager.unregisterInstance(instanceUniqueId)
+    } catch {
+      case NonFatal(e) =>
+        logWarning(log"Failed to unregister from RocksDBMemoryManager " +
+          log"${MDC(LogKeys.EXCEPTION, e)}")
+    }
+
     // Acquire DB instance lock and release at the end to allow for synchronized access
     try {
       closeDB()
@@ -1331,15 +1342,6 @@ class RocksDB(
       while (snapshot != null) {
         snapshot.close()
         snapshot = snapshotsToUploadQueue.poll()
-      }
-
-      // Unregister from RocksDBMemoryManager
-      try {
-        RocksDBMemoryManager.unregisterInstance(instanceUniqueId)
-      } catch {
-        case NonFatal(e) =>
-          logWarning(log"Failed to unregister from RocksDBMemoryManager " +
-            log"${MDC(LogKeys.EXCEPTION, e)}")
       }
 
       silentDeleteRecursively(localRootDir, "closing RocksDB")
