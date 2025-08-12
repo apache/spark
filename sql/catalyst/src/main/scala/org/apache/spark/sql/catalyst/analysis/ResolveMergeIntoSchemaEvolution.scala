@@ -57,9 +57,9 @@ object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
         }
         relation.copy(table = newTable, output = DataTypeUtils.toAttributes(
           CatalogV2Util.v2ColumnsToStructType(newTable.columns())))
-      case _ => logWarning("Schema Evolution enabled but data source does not support it"
-        + s"data source: $relation, skipping.")
-      relation
+      case _ => logWarning(s"Schema Evolution enabled but data source $relation " +
+        s"does not support it, skipping.")
+        relation
     }
   }
 }
