@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming.state
+package org.apache.spark.sql.execution.streaming.operators.stateful.join
 
 import java.util.Locale
 
@@ -30,9 +30,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SafeProjection, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
-import org.apache.spark.sql.execution.streaming.StatefulOpStateStoreCheckpointInfo
-import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOpStateStoreCheckpointInfo
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper._
+import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, StateSchemaBroadcast, StateStore, StateStoreCheckpointInfo, StateStoreColFamilySchema, StateStoreConf, StateStoreErrors, StateStoreId, StateStoreMetrics, StateStoreProvider, StateStoreProviderId, SupportsFineGrainedReplay}
 import org.apache.spark.sql.types.{BooleanType, LongType, StructField, StructType}
 import org.apache.spark.util.NextIterator
 
@@ -439,7 +440,7 @@ abstract class SymmetricHashJoinStateManager(
    * NOTE: this function is only intended for use in unit tests
    * to simulate null values.
    */
-  private[state] def updateNumValuesTestOnly(key: UnsafeRow, numValues: Long): Unit = {
+  private[streaming] def updateNumValuesTestOnly(key: UnsafeRow, numValues: Long): Unit = {
     keyToNumValues.put(key, numValues)
   }
 
@@ -528,7 +529,7 @@ abstract class SymmetricHashJoinStateManager(
    * Helper class for representing data returned by [[KeyWithIndexToValueStore]].
    * Designed for object reuse.
    */
-  private[state] class KeyAndNumValues(var key: UnsafeRow = null, var numValue: Long = 0) {
+  private[join] class KeyAndNumValues(var key: UnsafeRow = null, var numValue: Long = 0) {
     def withNew(newKey: UnsafeRow, newNumValues: Long): this.type = {
       this.key = newKey
       this.numValue = newNumValues
@@ -595,7 +596,7 @@ abstract class SymmetricHashJoinStateManager(
    * Helper class for representing data returned by [[KeyWithIndexToValueStore]].
    * Designed for object reuse.
    */
-  private[state] class KeyWithIndexAndValue(
+  private[join] class KeyWithIndexAndValue(
     var key: UnsafeRow = null,
     var valueIndex: Long = -1,
     var value: UnsafeRow = null,
@@ -1189,17 +1190,18 @@ object SymmetricHashJoinStateManager {
     }
   }
 
-  private[state] sealed trait StateStoreType
+  private[join] sealed trait StateStoreType
 
-  private[state] case object KeyToNumValuesType extends StateStoreType {
+  private[join] case object KeyToNumValuesType extends StateStoreType {
     override def toString(): String = "keyToNumValues"
   }
 
-  private[state] case object KeyWithIndexToValueType extends StateStoreType {
+  private[join] case object KeyWithIndexToValueType extends StateStoreType {
     override def toString(): String = "keyWithIndexToValue"
   }
 
-  private[state] def getStateStoreName(joinSide: JoinSide, storeType: StateStoreType): String = {
+  private[join] def getStateStoreName(
+      joinSide: JoinSide, storeType: StateStoreType): String = {
     s"$joinSide-$storeType"
   }
 

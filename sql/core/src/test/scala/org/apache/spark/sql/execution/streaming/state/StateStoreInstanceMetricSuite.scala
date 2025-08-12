@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.MapHasAsScala
 
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._

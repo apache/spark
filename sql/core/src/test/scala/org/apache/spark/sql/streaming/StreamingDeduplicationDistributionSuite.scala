@@ -20,7 +20,8 @@ package org.apache.spark.sql.streaming
 import java.io.File
 
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Update
-import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingDeduplicateExec}
+import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingDeduplicateExec
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StatefulOpClusteredDistributionTestHelper
 import org.apache.spark.util.Utils

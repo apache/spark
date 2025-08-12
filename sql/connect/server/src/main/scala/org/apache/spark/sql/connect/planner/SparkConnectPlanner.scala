@@ -77,8 +77,8 @@ import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDat
 import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.execution.python.streaming.PythonForeachWriter
 import org.apache.spark.sql.execution.stat.StatFunctions
-import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
-import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
+import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl.groupStateTimeoutFromString
+import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._

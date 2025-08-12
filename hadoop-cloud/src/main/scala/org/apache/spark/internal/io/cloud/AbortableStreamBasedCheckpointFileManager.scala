@@ -25,8 +25,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
 import org.apache.spark.internal.{Logging, LogKeys}
-import org.apache.spark.sql.execution.streaming.AbstractFileContextBasedCheckpointFileManager
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
+import org.apache.spark.sql.execution.streaming.checkpointing.AbstractFileContextBasedCheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.CancellableFSDataOutputStream
 
 class AbortableStreamBasedCheckpointFileManager(path: Path, hadoopConf: Configuration)
   extends AbstractFileContextBasedCheckpointFileManager(path, hadoopConf) with Logging {

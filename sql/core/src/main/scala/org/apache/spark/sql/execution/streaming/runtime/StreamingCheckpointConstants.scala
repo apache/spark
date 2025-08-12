@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.runtime
 
 object StreamingCheckpointConstants {
   val DIR_NAME_COMMITS = "commits"

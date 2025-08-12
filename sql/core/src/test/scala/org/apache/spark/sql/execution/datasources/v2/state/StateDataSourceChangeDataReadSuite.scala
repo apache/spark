@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.scalatest.Assertions
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamExecution}
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
