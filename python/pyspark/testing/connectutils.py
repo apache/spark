@@ -30,20 +30,19 @@ from pyspark.testing import (
     have_grpc_status,
     googleapis_common_protos_requirement_message,
     have_googleapis_common_protos,
-    graphviz_requirement_message,
-    have_graphviz,
     connect_requirement_message,
     should_test_connect,
 )
 from pyspark import Row, SparkConf
 from pyspark.util import is_remote_only
-from pyspark.testing.utils import PySparkErrorTestUtils
-from pyspark.testing.sqlutils import (
+from pyspark.testing.utils import (
     have_pandas,
     pandas_requirement_message,
-    pyarrow_requirement_message,
-    SQLTestUtils,
+    have_graphviz,
+    graphviz_requirement_message,
+    PySparkErrorTestUtils,
 )
+from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.sql.session import SparkSession as PySparkSession
 
 
