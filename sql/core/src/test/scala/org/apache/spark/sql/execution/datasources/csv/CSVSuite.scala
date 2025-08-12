@@ -18,8 +18,9 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.{EOFException, File, FileOutputStream}
+import java.net.URI
 import java.nio.charset.{Charset, StandardCharsets}
-import java.nio.file.{Files, StandardOpenOption}
+import java.nio.file.{Files, Paths, StandardOpenOption}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.time._
@@ -3791,6 +3792,32 @@ abstract class CSVSuite
         .load(testFile(file))
 
       verifyCars(cars, withHeader = true, checkTypes = true)
+    }
+  }
+
+  test("corrupted ZSTD compressed csv respects ignoreCorruptFiles") {
+    withTempDir { dir =>
+      val originalFile = new File(dir, "original.csv.zst")
+      val corruptedHeadFile = new File(dir, "corrupted_head.csv.zst")
+      val corruptedTailFile = new File(dir, "corrupted_tail.csv.zst")
+      val bytes = Files.readAllBytes(Paths.get(new URI(testFile(zstCompressedCarsFile))))
+      Files.write(originalFile.toPath(), bytes)
+      Files.write(corruptedHeadFile.toPath(), bytes.drop(10))
+      Files.write(corruptedTailFile.toPath(), bytes.dropRight(10))
+
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+        val df = spark.read.format("csv").option("header", "true").load(dir.getAbsolutePath)
+        // check that the entries from originalFile are still read
+        assert(df.count() == 3)
+      }
+
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+        val ex = intercept[SparkException] {
+          spark.read.format("csv").option("header", "true").load(dir.getAbsolutePath).collect()
+        }
+        checkErrorMatchPVals(ex, "FAILED_READ_FILE.NO_HINT",
+          Map("path" -> ".*corrupted.*\\.csv\\.zst"))
+      }
     }
   }
 }
