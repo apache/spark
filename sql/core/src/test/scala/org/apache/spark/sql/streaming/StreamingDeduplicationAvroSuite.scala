@@ -20,6 +20,7 @@ package org.apache.spark.sql.streaming
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
+import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 
 class StreamingDeduplicationAvroSuite extends StreamingDeduplicationSuite {
@@ -36,7 +37,41 @@ class StreamingDeduplicationAvroSuite extends StreamingDeduplicationSuite {
   }
 
   test("deduplicate with add fields schema evolution") {
+    withTempDir { chkptDir =>
+      val dirPath = chkptDir.getCanonicalPath
+      val inputData = MemoryStream[(String, String, Int)]
+      val result1 = inputData.toDS().dropDuplicates("_1")
+      testStream(result1, OutputMode.Append())(
+        StartStream(checkpointLocation = dirPath),
+        AddData(inputData, ("a", "key1", 1)),
+        CheckLastBatch(("a", "key1", 1)),
+        assertNumStateRows(total = 1, updated = 1),
+        AddData(inputData, ("a", "key2", 1)), // Dropped
+        CheckLastBatch(),
+        assertNumStateRows(total = 1, updated = 0),
+        AddData(inputData, ("a", "key1", 2)), // Dropped
+        CheckLastBatch(),
+        assertNumStateRows(total = 1, updated = 0),
+        StopStream
+      )
 
+      val result2 = inputData.toDS().dropDuplicates("_1", "_2")
+      testStream(result1, OutputMode.Append())(
+        StartStream(checkpointLocation = dirPath),
+        AddData(inputData, ("a", "key3", 1)),
+        CheckLastBatch(("a", "key3", 1)),
+        assertNumStateRows(total = 2, updated = 1),
+        AddData(inputData, ("a", "key4", 1)), // Would not drop
+        CheckLastBatch(("a", "key4", 1)),
+        assertNumStateRows(total = 3, updated = 1),
+        AddData(inputData, ("a", "key4", 2)), // Dropped
+        CheckLastBatch(),
+        assertNumStateRows(total = 3, updated = 0),
+        AddData(inputData, ("a", null, 1)), // Dropped
+        CheckLastBatch(),
+        assertNumStateRows(total = 3, updated = 0),
+      )
+    }
   }
 
   test("deduplicate with remove fields schema evolution") {
