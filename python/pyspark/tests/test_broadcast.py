@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import os
+import platform
 import pickle
 import random
 import time
@@ -29,6 +30,9 @@ from pyspark.serializers import ChunkedStream
 from pyspark.sql import SparkSession, Row
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class BroadcastTest(unittest.TestCase):
     def tearDown(self):
         if getattr(self, "sc", None) is not None:
@@ -141,6 +145,9 @@ class BroadcastTest(unittest.TestCase):
         spark.stop()
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class BroadcastFrameProtocolTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
