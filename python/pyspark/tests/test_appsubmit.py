@@ -16,6 +16,7 @@
 #
 
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -26,6 +27,9 @@ import zipfile
 from pyspark.testing.sqlutils import SPARK_HOME
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class SparkSubmitTests(unittest.TestCase):
     def setUp(self):
         self.programDir = tempfile.mkdtemp()

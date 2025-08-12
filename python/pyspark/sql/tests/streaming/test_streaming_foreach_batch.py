@@ -15,7 +15,10 @@
 # limitations under the License.
 #
 
+import platform
 import time
+import unittest
+
 from pyspark.sql.dataframe import DataFrame
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -226,12 +229,14 @@ class StreamingTestsForeachBatchMixin:
             self.assertEqual(sorted(results), ["hello", "this"])
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class StreamingTestsForeachBatch(StreamingTestsForeachBatchMixin, ReusedSQLTestCase):
     pass
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.sql.tests.streaming.test_streaming_foreach_batch import *  # noqa: F401
 
     try:
