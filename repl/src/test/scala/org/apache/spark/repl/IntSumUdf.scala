@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+package org.apache.spark.repl
+
 import org.apache.spark.sql.api.java.UDF2
 
 class IntSumUdf extends UDF2[Long, Long, Long] {
