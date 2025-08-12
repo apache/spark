@@ -2275,7 +2275,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   }
 
   test("Merge schema evolution replacing column with set all column") {
-    Seq((true, false)).foreach {
+    Seq((true, true), (false, true), (true, false)).foreach {
       case (withSchemaEvolution, schemaEvolutionEnabled) =>
       withTempView("source") {
         createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
@@ -2297,7 +2297,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         sourceDF.createOrReplaceTempView("source")
 
         val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
-        val mergeStmt = s"""MERGE $schemaEvolutionClause
+        sql(s"""MERGE $schemaEvolutionClause
                            |INTO $tableNameAsString t
                            |USING source s
                            |ON t.pk = s.pk
@@ -2305,10 +2305,9 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                            | UPDATE SET *
                            |WHEN NOT MATCHED THEN
                            | INSERT *
-                           |""".stripMargin
+                           |""".stripMargin)
 
         if (withSchemaEvolution && schemaEvolutionEnabled) {
-          sql(mergeStmt)
           checkAnswer(
             sql(s"SELECT * FROM $tableNameAsString"),
             Seq(
@@ -2319,12 +2318,15 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
               Row(5, 250, "executive", true),
               Row(6, 350, null, false)))
         } else {
-          val e = intercept[org.apache.spark.sql.AnalysisException] {
-            sql(mergeStmt)
-          }
-          assert(e.errorClass.get == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
-          assert(e.getMessage.contains("A column, variable, or function parameter with name " +
-            "`dep` cannot be resolved"))
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 100, "hr"),
+              Row(2, 200, "software"),
+              Row(3, 300, "hr"),
+              Row(4, 150, "marketing"),
+              Row(5, 250, "executive"),
+              Row(6, 350, null)))
         }
 
         sql(s"DROP TABLE $tableNameAsString")
