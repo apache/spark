@@ -22,7 +22,7 @@ import java.time.{Duration, Period}
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproxCountDistinctForIntervals
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
-import org.apache.spark.sql.execution.{DoNotCleanup, QueryExecution}
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ApproxCountDistinctForIntervalsQuerySuite extends QueryTest with SharedSparkSession {
@@ -46,8 +46,7 @@ class ApproxCountDistinctForIntervalsQuerySuite extends QueryTest with SharedSpa
       val aggFunc = ApproxCountDistinctForIntervals(attr, CreateArray(endpoints.map(Literal(_))))
       val aggExpr = aggFunc.toAggregateExpression()
       val namedExpr = Alias(aggExpr, aggExpr.toString)()
-      val ndvsRow = new QueryExecution(spark, Aggregate(Nil, Seq(namedExpr), relation),
-        shuffleCleanupMode = DoNotCleanup)
+      val ndvsRow = new QueryExecution(spark, Aggregate(Nil, Seq(namedExpr), relation))
         .executedPlan.executeTake(1).head
       val ndvArray = ndvsRow.getArray(0).toLongArray()
       assert(endpoints.length == ndvArray.length + 1)
