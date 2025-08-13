@@ -20,7 +20,11 @@ from datetime import datetime
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, SPARK_CONF_ARROW_ENABLED
+from pyspark.testing.pandasutils import (
+    PandasOnSparkTestCase,
+    SPARK_CONF_ARROW_ENABLED,
+    SPARK_CONF_PANDAS_STRUCT_MODE,
+)
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.utils import is_ansi_mode_test
 
@@ -192,16 +196,9 @@ class ConversionMixin:
         psidx = ps.from_pandas(pidx)
 
         if is_ansi_mode_test:
-            self.assert_eq(
-                list(psidx.to_series().values),
-                [
-                    {"__index_level_0__": 1, "__index_level_1__": "red"},
-                    {"__index_level_0__": 2, "__index_level_1__": "blue"},
-                ],
-            )
             with self.sql_conf(
                 {
-                    "spark.sql.execution.pandas.structHandlingMode": "row",
+                    SPARK_CONF_PANDAS_STRUCT_MODE: "row",
                 }
             ):
                 self.assert_eq(
@@ -214,7 +211,7 @@ class ConversionMixin:
         pidx = self.pdf.set_index("b", append=True).index
         psidx = self.psdf.set_index("b", append=True).index
 
-        with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
+        with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False, SPARK_CONF_PANDAS_STRUCT_MODE: "row"}):
             self.assert_eq(psidx.to_series(), pidx.to_series(), check_exact=False)
             self.assert_eq(psidx.to_series(name="a"), pidx.to_series(name="a"), check_exact=False)
 

@@ -929,7 +929,9 @@ class Index(IndexOpsMixin):
             else:
 
                 def struct_to_array(scol: Column) -> Column:
-                    field_names = result._internal.spark_type_for(scol).fieldNames()  # type: ignore[attr-defined]
+                    field_names = result._internal.spark_type_for(
+                        scol
+                    ).fieldNames()  # type: ignore[attr-defined]
                     return F.array([scol[field] for field in field_names])
 
                 return result.spark.transform(struct_to_array)
