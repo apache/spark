@@ -54,7 +54,16 @@ class PipelineEventSender(
     Executors.newSingleThreadExecutor(threadFactory)
   }
 
-  // state tracking
+
+  /*
+    * Atomic flags to track the state of the sender
+    * - `isShutdown`: Indicates if the sender has been shut down, if true, no new events
+    *    can be accepted, and the loop will exit after processing all already queued events.
+    *
+    * - `isStarted`: Indicates if the sender has been started, if true, the background
+    *    executor is running and processing events. This prevents multiple starts
+    *    which could lead to resource leaks.
+   */
   private val isShutdown = new AtomicBoolean(false)
   private val isStarted = new AtomicBoolean(false)
 
@@ -65,6 +74,7 @@ class PipelineEventSender(
 
   /**
    * Start the background executor for sending events, only if not already started.
+   * Idempotent operation: calling this multiple times has no effect after the first call.
    */
   def start(): Unit = {
     if (isStarted.compareAndSet(false, true)) {
@@ -83,19 +93,24 @@ class PipelineEventSender(
   }
 
   /**
-   * Send an event asynchronously by adding it to the queue
+   * Send an event asynchronously by adding it to the queue, if the sender is not shut down.
+   * Otherwise, throws an IllegalStateException, to raise awareness of the shutdown state.
    */
   def sendEvent(event: PipelineEvent): Unit = {
     if (!isShutdown.get()) {
-      val offered = eventQueue.offer(EventMessage(event))
-      if (!offered) {
-        logWarning(s"Failed to queue pipeline event for session ${sessionHolder.sessionId}")
-      }
+      eventQueue.add(EventMessage(event))
+    } else {
+      throw new IllegalStateException(
+        s"Cannot send event after shutdown for session ${sessionHolder.sessionId}")
     }
   }
 
   /**
    * Shutdown the event sender, stop taking new events and wait for processing to complete.
+   * Sends a ShutdownMessage serves as a signal to the processing loop to exit gracefully
+   * after processing all currently queued events.
+   * This method blocks until all queued events have been processed.
+   * Idempotent operation: calling this multiple times has no effect after the first call.
    */
   def shutdown(): Unit = {
     if (isShutdown.compareAndSet(false, true)) {
