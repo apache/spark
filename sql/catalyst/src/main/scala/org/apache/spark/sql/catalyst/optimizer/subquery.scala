@@ -901,16 +901,17 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
       case (currentChild, ScalarSubquery(sub, _, _, conditions, subHint, mayHaveCountBug,
       needSingleJoin)) =>
         val query = DecorrelateInnerQuery.rewriteDomainJoins(currentChild, sub, conditions)
-        val origOutput = query.output.head
+        val (joinType, origOutput) = needSingleJoin match {
+          case Some(true) => LeftSingle -> query.output.head
+
+          case _ => LeftOuter -> query.output.head.withNullability(true)
+        }
+
         // The subquery appears on the right side of the join, hence add its hint to the right
         // of a join hint
         val joinHint = JoinHint(None, subHint)
 
         val resultWithZeroTups = evalSubqueryOnZeroTups(query)
-        val joinType = needSingleJoin match {
-          case Some(true) => LeftSingle
-          case _ => LeftOuter
-        }
         lazy val planWithoutCountBug = Project(
           currentChild.output :+ origOutput,
           Join(currentChild, query, joinType, conditions.reduceOption(And), joinHint))

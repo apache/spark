@@ -18,11 +18,12 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.catalyst.analysis.UnresolvedStar
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Cast, IsNull, ListQuery, Not}
-import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Cast, IsNotNull, IsNull, ListQuery, Not, ScalarSubquery}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftOuter, LeftSemi, PlanTest}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.LongType
 
@@ -95,5 +96,34 @@ class RewriteSubquerySuite extends PlanTest {
         Some($"_aggregateexpression" === $"c3"))
       .select($"exists".as("(sum(col2) IN (listquery()))")).analyze
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-53264: incorrect nullability of the attribute from the right side table") {
+    object TestOptimizer extends RuleExecutor[LogicalPlan] {
+      val batches = Batch("Rewrite Subquery", FixedPoint(1),
+            RewriteCorrelatedScalarSubquery) :: Nil
+    }
+    val relation1 = LocalRelation($"id".int.notNull).as("t1")
+    val relation2 = LocalRelation($"id".int.notNull).as("t2")
+    val subPlan = relation2.where($"t1.id" === $"t2.id").select($"t2.id".as("c"))
+    val lp = relation1.where(IsNotNull(ScalarSubquery(subPlan))).select(UnresolvedStar(None)).
+      analyze.transformAllExpressions  {
+      case s: ScalarSubquery => s.copy(mayHaveCountBug = Some(false))
+    }
+
+    val optimized = TestOptimizer.execute(lp)
+    val projAboveJoin = optimized.collectFirst{case p @ Project(_, _ : Join) => p }
+
+    // assert that join type is LeftOuter
+    assert(optimized.collectFirst{case j: Join => j }.get.joinType === LeftOuter)
+    // The attribute from right side of the table for LeftOuterJoin should have nullability as true
+    // even though the underlying table attribute is not null , in relation 2
+    val rightSideAttrib = projAboveJoin.get.output.find(_.name == "c").get
+    assert(rightSideAttrib.nullable)
+
+    // The attribute from left side of the table for LeftOuterJoin should have nullability as false
+    // ( because of the way relation1 is created with not null attribute)
+    val leftSideAttrib = projAboveJoin.get.output.find(_.name == "id").get
+    assert(!leftSideAttrib.nullable)
   }
 }
