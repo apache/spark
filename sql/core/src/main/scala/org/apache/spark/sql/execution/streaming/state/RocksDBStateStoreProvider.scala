@@ -767,7 +767,9 @@ private[sql] class RocksDBStateStoreProvider
   }
 
   override def close(): Unit = {
-    rocksDB.close()
+    if (stateMachine.close()) {
+      rocksDB.close()
+    }
   }
 
   override def supportedCustomMetrics: Seq[StateStoreCustomMetric] = ALL_CUSTOM_METRICS
