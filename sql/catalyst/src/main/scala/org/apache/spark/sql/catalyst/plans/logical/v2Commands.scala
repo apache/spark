@@ -891,6 +891,13 @@ case class MergeIntoTable(
     case _ => false
   }
 
+  def schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
+    EliminateSubqueryAliases(targetTable) match {
+      case r: DataSourceV2Relation if r.autoSchemaEvolution() => true
+      case _ => false
+    }
+  }
+
   def needSchemaEvolution: Boolean = {
     withSchemaEvolution && {
       EliminateSubqueryAliases(targetTable) match {
@@ -922,17 +929,19 @@ object MergeIntoTable {
     privileges.toSeq
   }
 
-  def schemaChanges(originalTarget: StructType, originalSource: StructType,
-                            fieldPath: Array[String] = Array()): Array[TableChange] = {
-    schemaChanges(originalTarget.asInstanceOf[DataType], originalSource.asInstanceOf[DataType],
-      originalTarget, originalSource, fieldPath)
+  def schemaChanges(
+      originalTarget: StructType,
+      originalSource: StructType,
+      fieldPath: Array[String] = Array()): Array[TableChange] = {
+    schemaChanges(originalTarget, originalSource, originalTarget, originalSource, fieldPath)
   }
 
-  private def schemaChanges(current: DataType,
-                            newType: DataType,
-                            originalTarget: StructType,
-                            originalSource: StructType,
-                            fieldPath: Array[String]): Array[TableChange] = {
+  private def schemaChanges(
+      current: DataType,
+      newType: DataType,
+      originalTarget: StructType,
+      originalSource: StructType,
+      fieldPath: Array[String]): Array[TableChange] = {
     (current, newType) match {
       case (StructType(currentFields), StructType(newFields)) =>
         val newFieldMap = toFieldMap(newFields)
@@ -940,8 +949,7 @@ object MergeIntoTable {
         // Update existing field types
         val updates = {
           currentFields collect {
-            case currentField: StructField if newFieldMap.contains(currentField.name) &&
-              newFieldMap.get(currentField.name).exists(_.dataType != currentField.dataType) =>
+            case currentField: StructField if newFieldMap.contains(currentField.name) =>
               schemaChanges(currentField.dataType, newFieldMap(currentField.name).dataType,
                 originalTarget, originalSource, fieldPath ++ Seq(currentField.name))
           }}.flatten
@@ -964,7 +972,11 @@ object MergeIntoTable {
           schemaChanges(currentElementType, updateElementType,
             originalTarget, originalSource, fieldPath ++ Seq("value"))
 
-      case (_, _) =>
+      case (currentType, newType) if currentType == newType =>
+        // No change needed
+        Array.empty[TableChange]
+
+      case _ =>
         // For now do not support type widening
         throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
           originalTarget, originalSource, null)
