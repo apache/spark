@@ -607,7 +607,7 @@ jobs:
       run: |
         for py in $(echo $PYTHON_TO_TEST | tr "," "\n")
         do
-          echo $py
+          $py --version
           $py -m pip list
         done
     - name: Install Conda for pip packaging test
