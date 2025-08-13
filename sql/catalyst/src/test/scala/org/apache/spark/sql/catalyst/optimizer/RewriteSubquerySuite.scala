@@ -127,3 +127,4 @@ class RewriteSubquerySuite extends PlanTest {
     assert(!leftSideAttrib.nullable)
   }
 }
+
