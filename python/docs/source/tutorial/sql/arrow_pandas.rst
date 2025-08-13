@@ -375,6 +375,51 @@ fallback for type mismatches, leading to potential ambiguity and data loss. Addi
 and tuples to strings can yield ambiguous results. Arrow Python UDFs, on the other hand, leverage Arrow's
 capabilities to standardize type coercion and address these issues effectively.
 
+A note on Arrow Python UDF type coercion: In Spark 4.1, unnecessary conversion to pandas instances is removed in the serializer
+when ``spark.sql.execution.pythonUDF.arrow.enabled`` is enabled. As a result, the type coercion changes
+when the produced output has a schema different from the specified schema. To restore the previous behavior,
+enable ``spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled``. The behavior difference is summarized in the tables below.
+
+Legacy type coercion:
+```
+# +-----------------------------+--------------+------------------+--------------------+------+--------------------+-----------------------------+------------+----------------------+------------------+------------------+----------------------------+--------------------+--------------+  # noqa
+    # |SQL Type \ Python Value(Type)|None(NoneType)|        True(bool)|              1(int)|a(str)|    1970-01-01(date)|1970-01-01 00:00:00(datetime)|  1.0(float)|array('i', [1])(array)|         [1](list)|       (1,)(tuple)|bytearray(b'ABC')(bytearray)|          1(Decimal)|{'a': 1}(dict)|  # noqa
+    # +-----------------------------+--------------+------------------+--------------------+------+--------------------+-----------------------------+------------+----------------------+------------------+------------------+----------------------------+--------------------+--------------+  # noqa
+    # |                      boolean|          None|              True|                True|     X|                   X|                            X|        True|                     X|                 X|                 X|                           X|                   X|             X|  # noqa
+    # |                      tinyint|          None|                 1|                   1|     X|                   X|                            X|           1|                     X|                 X|                 X|                           X|                   1|             X|  # noqa
+    # |                     smallint|          None|                 1|                   1|     X|                   X|                            X|           1|                     X|                 X|                 X|                           X|                   1|             X|  # noqa
+    # |                          int|          None|                 1|                   1|     X|                   0|                            X|           1|                     X|                 X|                 X|                           X|                   1|             X|  # noqa
+    # |                       bigint|          None|                 1|                   1|     X|                   X|                            0|           1|                     X|                 X|                 X|                           X|                   1|             X|  # noqa
+    # |                       string|          None|            'True'|                 '1'|   'a'|        '1970-01-01'|         '1970-01-01 00:00...|       '1.0'|     "array('i', [1])"|             '[1]'|            '(1,)'|         "bytearray(b'ABC')"|                 '1'|    "{'a': 1}"|  # noqa
+    # |                         date|          None|                 X|                   X|     X|datetime.date(197...|         datetime.date(197...|           X|                     X|                 X|                 X|                           X|datetime.date(197...|             X|  # noqa
+    # |                    timestamp|          None|                 X|datetime.datetime...|     X|                   X|         datetime.datetime...|           X|                     X|                 X|                 X|                           X|datetime.datetime...|             X|  # noqa
+    # |                        float|          None|               1.0|                 1.0|     X|                   X|                            X|         1.0|                     X|                 X|                 X|                           X|                 1.0|             X|  # noqa
+    # |                       double|          None|               1.0|                 1.0|     X|                   X|                            X|         1.0|                     X|                 X|                 X|                           X|                 1.0|             X|  # noqa
+    # |                       binary|          None|bytearray(b'\x00')|  bytearray(b'\x00')|     X|                   X|                            X|           X|  bytearray(b'\x01\...|bytearray(b'\x01')|bytearray(b'\x01')|           bytearray(b'ABC')|                   X|             X|  # noqa
+    # |                decimal(10,0)|          None|                 X|                   X|     X|                   X|                            X|Decimal('1')|                     X|                 X|                 X|                           X|        Decimal('1')|             X|  # noqa
+    # +-----------------------------+--------------+------------------+--------------------+------+--------------------+-----------------------------+------------+----------------------+------------------+------------------+----------------------------+--------------------+--------------+  # noqa
+```
+
+New type coercion:
+```
+# +-----------------------------+--------------+----------+--------------------+------+--------------------+-----------------------------+--------------------+----------------------+---------+-----------+----------------------------+--------------------+--------------+  # noqa
+    # |SQL Type \ Python Value(Type)|None(NoneType)|True(bool)|              1(int)|a(str)|    1970-01-01(date)|1970-01-01 00:00:00(datetime)|          1.0(float)|array('i', [1])(array)|[1](list)|(1,)(tuple)|bytearray(b'ABC')(bytearray)|          1(Decimal)|{'a': 1}(dict)|  # noqa
+    # +-----------------------------+--------------+----------+--------------------+------+--------------------+-----------------------------+--------------------+----------------------+---------+-----------+----------------------------+--------------------+--------------+  # noqa
+    # |                      boolean|          None|      True|                True|     X|                   X|                            X|                True|                     X|        X|          X|                           X|                   X|             X|  # noqa
+    # |                      tinyint|          None|         X|                   1|     X|                   X|                            X|                   1|                     X|        X|          X|                           X|                   1|             X|  # noqa
+    # |                     smallint|          None|         X|                   1|     X|                   X|                            X|                   1|                     X|        X|          X|                           X|                   1|             X|  # noqa
+    # |                          int|          None|         X|                   1|     X|                   0|                            X|                   1|                     X|        X|          X|                           X|                   1|             X|  # noqa
+    # |                       bigint|          None|         X|                   1|     X|                   X|                            0|                   1|                     X|        X|          X|                           X|                   1|             X|  # noqa
+    # |                       string|          None|    'true'|                 '1'|   'a'|        '1970-01-01'|         '1970-01-01 00:00...|               '1.0'|     "array('i', [1])"|    '[1]'|     '(1,)'|         "bytearray(b'ABC')"|                 '1'|    "{'a': 1}"|  # noqa
+    # |                         date|          None|         X|datetime.date(197...|     X|datetime.date(197...|         datetime.date(197...|datetime.date(197...|                     X|        X|          X|                           X|datetime.date(197...|             X|  # noqa
+    # |                    timestamp|          None|         X|                   X|     X|                   X|         datetime.datetime...|                   X|                     X|        X|          X|                           X|                   X|             X|  # noqa
+    # |                        float|          None|       1.0|                 1.0|     X|                   X|                            X|                 1.0|                     X|        X|          X|                           X|                 1.0|             X|  # noqa
+    # |                       double|          None|       1.0|                 1.0|     X|                   X|                            X|                 1.0|                     X|        X|          X|                           X|                 1.0|             X|  # noqa
+    # |                       binary|          None|         X|                   X|     X|                   X|                            X|                   X|                     X|        X|          X|           bytearray(b'ABC')|                   X|             X|  # noqa
+    # |                decimal(10,0)|          None|         X|                   X|     X|                   X|                            X|                   X|                     X|        X|          X|                           X|        Decimal('1')|             X|  # noqa
+    # +-----------------------------+--------------+----------+--------------------+------+--------------------+-----------------------------+--------------------+----------------------+---------+-----------+----------------------------+--------------------+--------------+  # noqa
+```
+
 Usage Notes
 -----------
 
