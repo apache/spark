@@ -24,7 +24,9 @@ import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GenerateOrdering, LazilyGeneratedOrdering}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -165,5 +167,23 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
     val schema = new StructType().add("field", FloatType, nullable = true)
     GenerateOrdering.genComparisons(ctx, schema)
     assert(ctx.INPUT_ROW == null)
+  }
+
+  test("ordering by stateful expressions") {
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
+      val udfFunc = (s: String) => if (s == null) null else s
+      val stringUdf = ScalaUDF(udfFunc, StringType, BoundReference(1, StringType, true) :: Nil,
+        Option(ExpressionEncoder[String]().resolveAndBind()) :: Nil,
+        Some(ExpressionEncoder[String]().resolveAndBind()))
+      val sortOrder = Seq(SortOrder(BoundReference(0, IntegerType, true), Ascending),
+        SortOrder(stringUdf, Ascending))
+      val rowOrdering = new InterpretedOrdering(sortOrder)
+      val rowType = StructType(StructField("a", IntegerType, nullable = true)
+        :: StructField("b", StringType, nullable = true) :: Nil)
+      val toCatalyst = CatalystTypeConverters.createToCatalystConverter(rowType)
+      val rowB1 = toCatalyst(Row(0, "B")).asInstanceOf[InternalRow]
+      val rowB2 = toCatalyst(Row(0, "A")).asInstanceOf[InternalRow]
+      assert(rowOrdering.compare(rowB1, rowB2) > 0)
+    }
   }
 }
