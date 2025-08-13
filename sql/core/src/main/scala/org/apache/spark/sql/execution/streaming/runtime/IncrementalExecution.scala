@@ -286,6 +286,12 @@ class IncrementalExecution(
                   exec.copy(stateInfo = Some(exec.getStateInfo.copy(
                     stateSchemaMetadata = Some(stateSchemaBroadcast))))
                 // Add other cases if needed for different StateStoreWriter implementations
+                case exec: StreamingDeduplicateExec =>
+                  exec.copy(
+                    stateInfo = Some(
+                      exec.getStateInfo.copy(stateSchemaMetadata = Some(stateSchemaBroadcast))
+                    )
+                  )
                 case _ => ssw
               }
             } else {

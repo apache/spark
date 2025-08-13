@@ -196,13 +196,38 @@ class StateSchemaCompatibilityChecker(
       mostRecentSchema.valueSchema)
     val (keySchema, valueSchema) = (newSchema.keySchema, newSchema.valueSchema)
 
+    println("@@@ key schema: " + keySchema)
+
     if (storedKeySchema.equals(keySchema) &&
       (ignoreValueSchema || storedValueSchema.equals(valueSchema))) {
       // schema is exactly same
       (mostRecentSchema, false)
     } else if (!schemasCompatible(storedKeySchema, keySchema)) {
-      throw StateStoreErrors.stateStoreKeySchemaNotCompatible(storedKeySchema.toString,
-        keySchema.toString)
+      if (schemaEvolutionEnabled) {
+        val oldStateSchemas = oldSchemas.sortBy(_.keySchemaId).reverse.map { oldSchema =>
+          StateSchemaMetadataValue(
+            oldSchema.keySchema, SchemaConverters.toAvroTypeWithDefaults(oldSchema.keySchema))
+        }.asJava
+
+        val newAvroSchema = SchemaConverters.toAvroTypeWithDefaults(keySchema)
+
+        val validator = new SchemaValidatorBuilder().canReadStrategy.validateAll()
+        oldStateSchemas.forEach { oldStateSchema =>
+          try {
+            validator.validate(newAvroSchema, List(oldStateSchema.avroSchema).asJava)
+          } catch {
+            case _: SchemaValidationException =>
+              throw StateStoreErrors.stateStoreKeySchemaNotCompatible(storedKeySchema.toString,
+                keySchema.toString)
+            case e: Throwable => throw e
+          }
+        }
+        // Schema evolved - increment key schema ID
+        (resultSchema.copy(keySchemaId = incrementSchemaId(mostRecentSchema.keySchemaId)), true)
+      } else {
+        throw StateStoreErrors.stateStoreKeySchemaNotCompatible(storedKeySchema.toString,
+          keySchema.toString)
+      }
     } else if (!ignoreValueSchema && schemaEvolutionEnabled) {
       // Check value schema evolution
       // Sort schemas by most recent to least recent
