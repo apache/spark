@@ -76,7 +76,6 @@ class RocksDB(
     partitionId: Int = 0,
     eventForwarder: Option[RocksDBEventForwarder] = None,
     uniqueId: Option[String] = None) extends Logging {
-  logError(s"### uniqueId: ${uniqueId.get}")
 
   import RocksDB._
 
