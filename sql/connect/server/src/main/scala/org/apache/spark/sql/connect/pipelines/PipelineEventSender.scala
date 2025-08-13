@@ -33,11 +33,8 @@ import org.apache.spark.sql.pipelines.logging.PipelineEvent
 import org.apache.spark.util.ThreadUtils
 
 /**
- * Handles sending pipeline events to the client in a background thread using ExecutorService.
- * This prevents pipeline execution from blocking on response observer operations and provides
- * better error isolation between pipeline execution and client communication.
- *
- * Based on the executor pattern used in DataPlaneEventLog for better thread management.
+ * Handles sending pipeline events to the client in a background thread.
+ * This prevents pipeline execution from blocking on streaming events.
  */
 class PipelineEventSender(
     responseObserver: StreamObserver[ExecutePlanResponse],
