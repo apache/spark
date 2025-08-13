@@ -160,8 +160,7 @@ class QueryExecutionSuite extends SharedSparkSession {
   test("toString() exception/error handling") {
     spark.experimental.extraStrategies = Seq[SparkStrategy]((_: LogicalPlan) => Nil)
 
-    def qe: QueryExecution = new QueryExecution(spark, OneRowRelation(),
-      shuffleCleanupMode = DoNotCleanup)
+    def qe: QueryExecution = new QueryExecution(spark, OneRowRelation())
 
     // Nothing!
     assert(qe.toString.contains("OneRowRelation"))
@@ -259,8 +258,7 @@ class QueryExecutionSuite extends SharedSparkSession {
     val mockCallback1 = MockCallbackEagerCommand()
     val mockCallback2 = MockCallbackEagerCommand()
     def qe(logicalPlan: LogicalPlan, callback: QueryPlanningTrackerCallback): QueryExecution =
-      new QueryExecution(spark, logicalPlan, new QueryPlanningTracker(Some(callback)),
-        shuffleCleanupMode = DoNotCleanup)
+      new QueryExecution(spark, logicalPlan, new QueryPlanningTracker(Some(callback)))
 
     val showTables = ShowTables(CurrentNamespace, None)
     val showTablesQe = qe(showTables, mockCallback1)
@@ -295,7 +293,7 @@ class QueryExecutionSuite extends SharedSparkSession {
       spark,
       showTables,
       new QueryPlanningTracker(Some(mockCallback)),
-      CommandExecutionMode.SKIP, shuffleCleanupMode = DoNotCleanup)
+      CommandExecutionMode.SKIP)
     showTablesQe.assertAnalyzed()
     mockCallback.assertAnalyzed()
     showTablesQe.assertOptimized()
@@ -459,16 +457,12 @@ class QueryExecutionSuite extends SharedSparkSession {
   }
 
   test("determineShuffleCleanupMode should return correct mode based on SQL configuration") {
-    val conf = new SQLConf()
-    def checkMode(classicShuffleEnabled: Boolean, cleanupMode: ShuffleCleanupMode): Unit = {
-      conf.setConf(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, classicShuffleEnabled)
-      assert(QueryExecution.determineShuffleCleanupMode(conf) === cleanupMode)
+    withSQLConf((SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, "false")) {
+      assert(QueryExecution.determineShuffleCleanupMode(conf) === DoNotCleanup)
     }
-    // Defaults to doNotCleanup
-    checkMode(classicShuffleEnabled = false, DoNotCleanup)
-
-    // Test RemoveShuffleFiles
-    checkMode(classicShuffleEnabled = true, RemoveShuffleFiles)
+    withSQLConf((SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, "true")) {
+      assert(QueryExecution.determineShuffleCleanupMode(conf) === RemoveShuffleFiles)
+    }
   }
 
   case class MockCallbackEagerCommand(

@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession, SQLContext}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.execution.{CommandExecutionMode, DoNotCleanup, QueryExecution, SQLExecution}
+import org.apache.spark.sql.execution.{CommandExecutionMode, QueryExecution, SQLExecution}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf, WithTestConf}
@@ -517,8 +517,7 @@ private[hive] class TestHiveSparkSession(
       // has already set the execution id.
       if (sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY) == null) {
         // We don't actually have a `QueryExecution` here, use a fake one instead.
-        SQLExecution.withNewExecutionId(new QueryExecution(this, OneRowRelation(),
-          shuffleCleanupMode = DoNotCleanup)) {
+        SQLExecution.withNewExecutionId(new QueryExecution(this, OneRowRelation())) {
           createCmds.foreach(_())
         }
       } else {
@@ -590,8 +589,7 @@ private[hive] class TestHiveQueryExecution(
     sparkSession: TestHiveSparkSession,
     logicalPlan: LogicalPlan,
     mode: CommandExecutionMode.Value = CommandExecutionMode.ALL)
-  extends QueryExecution(sparkSession, logicalPlan, mode = mode,
-    shuffleCleanupMode = DoNotCleanup) with Logging {
+  extends QueryExecution(sparkSession, logicalPlan, mode = mode) with Logging {
 
   def this(sparkSession: TestHiveSparkSession, sql: String) = {
     this(sparkSession, sparkSession.sessionState.sqlParser.parsePlan(sql))
