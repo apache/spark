@@ -19,6 +19,9 @@ package org.apache.spark.sql.execution.command.v2
 
 import java.util.Locale
 
+import scala.collection.mutable
+
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingContextManager}
 import org.apache.spark.sql.catalyst.analysis.{FakeLocalCatalog, ResolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog.VariableDefinition
@@ -57,12 +60,43 @@ case class CreateVariableExec(
     })
 
     // create local variables if we are in a script, otherwise create session variable
-    scriptingVariableManager
+    val variableManager =
+      scriptingVariableManager
       .filter(_ => resolvedIdentifiers.head.catalog == FakeLocalCatalog)
       // If resolvedIdentifier.catalog is FakeLocalCatalog, scriptingVariableManager
       // will always be present.
       .getOrElse(tempVariableManager)
-      .create(variableTuples, replace)
+
+    if (!replace) {
+      val uniqueNames = mutable.Set[String]()
+
+      variableTuples.foreach(variable => {
+        val nameParts: Seq[String] = variable._1
+        val name = nameParts.last
+
+        if (uniqueNames.contains(name)) {
+          throw new AnalysisException(
+            errorClass = "DUPLICATE_DECLARE_VARIABLE",
+            messageParameters = Map(
+              "variableName" -> variableManager.getVariableNameForError(name)))
+        }
+
+        if (variableManager.get(nameParts).isDefined) {
+          throw new AnalysisException(
+            errorClass = "VARIABLE_ALREADY_EXISTS",
+            messageParameters = Map(
+              "variableName" -> variableManager.getVariableNameForError(name)))
+        }
+
+        uniqueNames.add(name)
+      })
+    }
+
+    variableTuples.foreach(variable => {
+      val nameParts: Seq[String] = variable._1
+      val varDef: VariableDefinition = variable._2
+      variableManager.create(nameParts, varDef, replace)
+    })
 
     Nil
   }

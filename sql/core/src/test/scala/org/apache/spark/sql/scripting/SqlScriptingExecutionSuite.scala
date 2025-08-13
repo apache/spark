@@ -2788,7 +2788,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = e,
-      condition = "VARIABLE_ALREADY_EXISTS",
+      condition = "DUPLICATE_DECLARE_VARIABLE",
       parameters = Map("variableName" -> toSQLId("lbl1.var1"))
     )
   }

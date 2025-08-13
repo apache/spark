@@ -87,41 +87,8 @@ trait VariableManager {
    * @param variableName Name of the variable
    * @return variable name formatting for the error
    */
-  protected def getVariableNameForError(variableName: String): String
+  def getVariableNameForError(variableName: String): String
 
-  /**
-   * Create variables.
-   * @param variables Variables to be created,
-   *                  a list of tuples of nameParts and varDef for each variable
-   * @param overrideIfExists If true, the new variable will replace an existing one
-   *                         with the same identifier, if it exists.
-   */
-  final def create(
-      variables: Seq[(Seq[String], VariableDefinition)],
-      overrideIfExists: Boolean): Unit = synchronized {
-    if (!overrideIfExists) {
-      val uniqueNames = mutable.Set[String]()
-
-      variables.foreach(variable => {
-        val nameParts: Seq[String] = variable._1
-        val name = nameParts.last
-        if (get(nameParts).isDefined || uniqueNames.contains(name)) {
-          throw new AnalysisException(
-            errorClass = "VARIABLE_ALREADY_EXISTS",
-            messageParameters = Map(
-              "variableName" -> getVariableNameForError(name)))
-        }
-
-        uniqueNames.add(name)
-      })
-    }
-
-    variables.foreach(variable => {
-      val nameParts: Seq[String] = variable._1
-      val varDef: VariableDefinition = variable._2
-      create(nameParts, varDef, overrideIfExists)
-    })
-  }
 }
 
 /**

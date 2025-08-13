@@ -1289,8 +1289,8 @@ DECLARE VARIABLE var1, var2, vAr1 INT
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "VARIABLE_ALREADY_EXISTS",
-  "sqlState" : "42723",
+  "errorClass" : "DUPLICATE_DECLARE_VARIABLE",
+  "sqlState" : "42734",
   "messageParameters" : {
     "variableName" : "`system`.`session`.`var1`"
   }

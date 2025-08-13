@@ -1428,6 +1428,12 @@
     ],
     "sqlState" : "42734"
   },
+  "DUPLICATE_DECLARE_VARIABLE" : {
+    "message" : [
+      "Found duplicate variable <variableName> in the declare variable list. Please, remove one of them."
+    ],
+    "sqlState" : "42734"
+  },
   "DUPLICATE_EXCEPTION_HANDLER" : {
     "message" : [
       "Found duplicate handlers. Please, remove one of them."
