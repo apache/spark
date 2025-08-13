@@ -240,6 +240,7 @@ def arrow_udf(f=None, returnType=None, functionType=None):
         +---+-----------+
 
         The retun type can also be a complex type such as struct, list, or map.
+
         >>> @arrow_udf("struct<m1: double, m2: double>")
         ... def min_max_udf(v: pa.Array) -> pa.Scalar:
         ...     m1 = pa.compute.min(v)
