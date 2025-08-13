@@ -418,7 +418,7 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
-    override def abort(): Unit = {
+    override def abort(): Unit = synchronized {
       if (validateState(UPDATING, ABORTED) != ABORTED) {
         try {
           validateAndTransitionState(ABORT)
