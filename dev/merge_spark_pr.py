@@ -613,6 +613,11 @@ def main():
 
     pr_num = bold_input("Which pull request would you like to merge? (e.g. 34): ")
     pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
+    # Stop if the PR is closed
+    if pr["state"] == "closed":
+        print("#%s is closed already." % (pr_num))
+        sys.exit(-1)
+
     pr_events = get_json("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
 
     url = pr["url"]
