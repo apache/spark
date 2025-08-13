@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import os
+import platform
 import shutil
 import sys
 import tempfile
@@ -29,6 +30,9 @@ from pyspark.sql.types import StructType, StringType, StructField
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class HiveContextSQLTests(ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
@@ -171,6 +175,9 @@ class HiveContextSQLTests(ReusedSQLTestCase):
         reload(window)
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class SQLContextTests(unittest.TestCase):
     def test_get_or_create(self):
         sc = None
