@@ -99,7 +99,7 @@ def arrow_udf(f=None, returnType=None, functionType=None):
         The output of the function should always be of the same length as the input.
 
         >>> @arrow_udf("string")
-        ... def to_upper(s: pa.Array) -> pa.Array:
+        ... def to_upper(s: pa.Array, ArrowUDFType.SCALAR) -> pa.Array:
         ...     return pa.compute.ascii_upper(s)
         ...
         >>> df = spark.createDataFrame([("John Doe",)], ("name",))
