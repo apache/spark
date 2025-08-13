@@ -19,6 +19,7 @@
 from enum import Enum
 from itertools import chain
 import datetime
+import platform
 import unittest
 
 from pyspark.sql import Column, Row
@@ -449,6 +450,9 @@ class ColumnTestsMixin:
             self.assertEqual(r, e, str(c))
 
 
+@unittest.skipIf(
+    "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+)
 class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):
     pass
 
