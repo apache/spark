@@ -170,6 +170,10 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("ordering by stateful expressions") {
+    // even though we explicitly create an InterpretedOrdering below, we still need
+    // to set CODEGEN_FACTORY_MODE to NO_CODEGEN because the ScalaUDF expression will
+    // indirectly create an UnsafeProjection, and we want that UnsafeProjection to be
+    // an InterpretedUnsafeProjection
     withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
       val udfFunc = (s: String) => if (s == null) null else s
       val stringUdf = ScalaUDF(udfFunc, StringType, BoundReference(1, StringType, true) :: Nil,
