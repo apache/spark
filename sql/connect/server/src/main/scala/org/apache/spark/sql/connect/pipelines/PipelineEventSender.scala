@@ -33,8 +33,8 @@ import org.apache.spark.sql.pipelines.logging.PipelineEvent
 import org.apache.spark.util.ThreadUtils
 
 /**
- * Handles sending pipeline events to the client in a background thread.
- * This prevents pipeline execution from blocking on streaming events.
+ * Handles sending pipeline events to the client in a background thread. This prevents pipeline
+ * execution from blocking on streaming events.
  */
 class PipelineEventSender(
     responseObserver: StreamObserver[ExecutePlanResponse],
@@ -51,15 +51,14 @@ class PipelineEventSender(
     Executors.newSingleThreadExecutor(threadFactory)
   }
 
-
   /*
-    * Atomic flags to track the state of the sender
-    * - `isShutdown`: Indicates if the sender has been shut down, if true, no new events
-    *    can be accepted, and the loop will exit after processing all already queued events.
-    *
-    * - `isStarted`: Indicates if the sender has been started, if true, the background
-    *    executor is running and processing events. This prevents multiple starts
-    *    which could lead to resource leaks.
+   * Atomic flags to track the state of the sender
+   * - `isShutdown`: Indicates if the sender has been shut down, if true, no new events
+   *    can be accepted, and the loop will exit after processing all already queued events.
+   *
+   * - `isStarted`: Indicates if the sender has been started, if true, the background
+   *    executor is running and processing events. This prevents multiple starts
+   *    which could lead to resource leaks.
    */
   private val isShutdown = new AtomicBoolean(false)
   private val isStarted = new AtomicBoolean(false)
@@ -70,8 +69,8 @@ class PipelineEventSender(
   private case object ShutdownMessage extends PipelineEventMessage
 
   /**
-   * Start the background executor for sending events, only if not already started.
-   * Idempotent operation: calling this multiple times has no effect after the first call.
+   * Start the background executor for sending events, only if not already started. Idempotent
+   * operation: calling this multiple times has no effect after the first call.
    */
   def start(): Unit = {
     if (isStarted.compareAndSet(false, true)) {
@@ -103,11 +102,11 @@ class PipelineEventSender(
   }
 
   /**
-   * Shutdown the event sender, stop taking new events and wait for processing to complete.
-   * Sends a ShutdownMessage serves as a signal to the processing loop to exit gracefully
-   * after processing all currently queued events.
-   * This method blocks until all queued events have been processed.
-   * Idempotent operation: calling this multiple times has no effect after the first call.
+   * Shutdown the event sender, stop taking new events and wait for processing to complete. Sends
+   * a ShutdownMessage serves as a signal to the processing loop to exit gracefully after
+   * processing all currently queued events. This method blocks until all queued events have been
+   * processed. Idempotent operation: calling this multiple times has no effect after the first
+   * call.
    */
   def shutdown(): Unit = {
     if (isShutdown.compareAndSet(false, true)) {
@@ -118,8 +117,9 @@ class PipelineEventSender(
       // Blocks until all tasks have completed execution after a shutdown request,
       // disregard the timeout since we want all events to be processed
       if (!executor.awaitTermination(Long.MaxValue, java.util.concurrent.TimeUnit.MILLISECONDS)) {
-        logError(s"Pipeline event sender for session ${sessionHolder.sessionId}" +
-          s"failed to terminate")
+        logError(
+          s"Pipeline event sender for session ${sessionHolder.sessionId}" +
+            s"failed to terminate")
         executor.shutdownNow()
       }
     }
