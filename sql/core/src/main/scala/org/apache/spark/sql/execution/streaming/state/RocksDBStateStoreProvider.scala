@@ -767,6 +767,7 @@ private[sql] class RocksDBStateStoreProvider
   }
 
   override def close(): Unit = {
+    stateMachine.close()
     rocksDB.close()
   }
 
