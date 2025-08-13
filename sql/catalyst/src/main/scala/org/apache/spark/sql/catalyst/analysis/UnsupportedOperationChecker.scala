@@ -154,7 +154,6 @@ object UnsupportedOperationChecker extends Logging {
     case f: FlatMapGroupsWithState if f.isStreaming => Some("flatMapGroupsWithState")
     case f: FlatMapGroupsInPandasWithState if f.isStreaming =>
       Some("applyInPandasWithState")
-    case d: Deduplicate if d.isStreaming => Some("dropDuplicates")
     case d: DeduplicateWithinWatermark if d.isStreaming => Some("dropDuplicatesWithinWatermark")
     case _ => None
   }

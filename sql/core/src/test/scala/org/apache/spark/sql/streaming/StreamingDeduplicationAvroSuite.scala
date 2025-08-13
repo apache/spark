@@ -41,7 +41,7 @@ class StreamingDeduplicationAvroSuite extends StreamingDeduplicationSuite {
       val dirPath = chkptDir.getCanonicalPath
       val inputData = MemoryStream[(String, String, Int)]
       val result1 = inputData.toDS().dropDuplicates("_1")
-      testStream(result1, OutputMode.Append())(
+      testStream(result1, OutputMode.Append)(
         StartStream(checkpointLocation = dirPath),
         AddData(inputData, ("a", "key1", 1)),
         CheckLastBatch(("a", "key1", 1)),
@@ -56,7 +56,7 @@ class StreamingDeduplicationAvroSuite extends StreamingDeduplicationSuite {
       )
 
       val result2 = inputData.toDS().dropDuplicates("_1", "_2")
-      testStream(result1, OutputMode.Append())(
+      testStream(result2, OutputMode.Append)(
         StartStream(checkpointLocation = dirPath),
         AddData(inputData, ("a", "key3", 1)),
         CheckLastBatch(("a", "key3", 1)),
@@ -69,7 +69,7 @@ class StreamingDeduplicationAvroSuite extends StreamingDeduplicationSuite {
         assertNumStateRows(total = 3, updated = 0),
         AddData(inputData, ("a", null, 1)), // Dropped
         CheckLastBatch(),
-        assertNumStateRows(total = 3, updated = 0),
+        assertNumStateRows(total = 3, updated = 0)
       )
     }
   }
