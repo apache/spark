@@ -44,7 +44,7 @@ import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution,
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperator
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, MemoryStreamBase, MemoryStreamTable, MicroBatchExecution, StreamExecution, StreamingExecutionRelation, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
-import org.apache.spark.sql.execution.streaming.state.StateStore
+import org.apache.spark.sql.execution.streaming.state.{RocksDBMemoryManager, StateStore}
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.{Clock, SystemClock, Utils}
@@ -82,6 +82,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
     try {
       super.afterAll()
     } finally {
+      RocksDBMemoryManager.resetWriteBufferManagerAndCache
       StateStore.stop() // stop the state store maintenance thread and unload store providers
     }
   }

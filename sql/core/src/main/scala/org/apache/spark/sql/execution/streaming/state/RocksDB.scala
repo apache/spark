@@ -200,7 +200,6 @@ class RocksDB(
 
   // Generate a unique ID if not provided to ensure proper memory tracking
   private val instanceUniqueId = uniqueId.getOrElse(UUID.randomUUID().toString)
-  logError(s"### instanceUniqueId: ${instanceUniqueId}")
 
   // Register with RocksDBMemoryManager
   // Initial registration with zero memory usage

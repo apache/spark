@@ -87,6 +87,7 @@ private[spark] class UnifiedMemoryManager(
   private val unmanagedMemoryPollingIntervalMs = conf.get(UNMANAGED_MEMORY_POLLING_INTERVAL)
   // Initialize background polling if enabled
   if (unmanagedMemoryPollingIntervalMs > 0) {
+    logError(s"### starting polling")
     UnifiedMemoryManager.startPollingIfNeeded(unmanagedMemoryPollingIntervalMs)
   }
 
