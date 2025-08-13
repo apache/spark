@@ -2667,7 +2667,12 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     tryWithProviderResource(newStoreProvider(provider.stateStoreId,
       useColumnFamilies)) { reloadedProvider =>
       val versionToRead = if (version < 0) reloadedProvider.latestVersion else version
-      reloadedProvider.getStore(versionToRead).iterator().map(rowPairToDataPair).toSet
+      val store = reloadedProvider.getStore(versionToRead)
+      try {
+        store.iterator().map(rowPairToDataPair).toSet
+      } finally {
+        if (!store.hasCommitted) store.abort()
+      }
     }
   }
 
