@@ -1671,10 +1671,18 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   // The update value can access columns from both target and source tables.
                   resolveAssignments(assignments, m, MergeResolvePolicy.BOTH))
               case UpdateStarAction(updateCondition) =>
-                val attrs = targetTable.output.filter(targetCol => sourceTable.output.exists(
-                    sourceCol => conf.resolver(sourceCol.name, targetCol.name)))
-                val assignments = attrs.map { attr =>
-                  Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
+                val assignments = if (m.schemaEvolutionEnabled) {
+                  // For schema evolution case, support source with missing columns
+                  // compared to target.
+                  targetTable.output.flatMap { targetAttr =>
+                    sourceTable.output
+                      .find(sourceAttr => conf.resolver(sourceAttr.name, targetAttr.name))
+                      .map(Assignment(targetAttr, _))
+                  }
+                } else {
+                  targetTable.output.map { attr =>
+                    Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
+                  }
                 }
                 UpdateAction(
                   updateCondition.map(resolveExpressionByPlanChildren(_, m)),
@@ -1696,10 +1704,18 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 // access columns from the source table.
                 val resolvedInsertCondition = insertCondition.map(
                   resolveExpressionByPlanOutput(_, m.sourceTable))
-                val attrs = targetTable.output.filter(targetCol => sourceTable.output.exists(
-                    sourceCol => conf.resolver(sourceCol.name, targetCol.name)))
-                val assignments = attrs.map { attr =>
-                  Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
+                val assignments = if (m.schemaEvolutionEnabled) {
+                  // For schema evolution case, support source with missing columns
+                  // compared to target.
+                  // Missing columns will be checked to have default values or nullable in
+                  // ResolveRowLevelCommandAssignments.
+                  targetTable.output.flatMap(targetAttr => sourceTable.output
+                    .find(sourceCol => conf.resolver(sourceCol.name, targetAttr.name))
+                    .map(Assignment(targetAttr, _)))
+                } else {
+                  targetTable.output.map { attr =>
+                    Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
+                  }
                 }
                 InsertAction(
                   resolvedInsertCondition,

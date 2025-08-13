@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 
@@ -33,16 +34,16 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case m @ MergeIntoTable(aliasedTable, source, _, _, _, _, _)
+    case m @ MergeIntoTable(_, _, _, _, _, _, _)
       if m.needSchemaEvolution =>
-        val newTarget = aliasedTable.transform {
-          case r : DataSourceV2Relation => performSchemaEvolution(r, source)
+        val newTarget = m.targetTable.transform {
+          case r : DataSourceV2Relation => performSchemaEvolution(r, m.sourceTable)
         }
         m.copy(targetTable = newTarget)
   }
 
-  private def performSchemaEvolution(relation: DataSourceV2Relation, source: LogicalPlan):
-    DataSourceV2Relation = {
+  private def performSchemaEvolution(relation: DataSourceV2Relation, source: LogicalPlan)
+    : DataSourceV2Relation = {
     (relation.catalog, relation.identifier) match {
       case (Some(c: TableCatalog), Some(i)) =>
         val changes = MergeIntoTable.schemaChanges(relation.schema, source.schema)
@@ -53,7 +54,7 @@ object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
           CatalogV2Util.v2ColumnsToStructType(newTable.columns()), source.schema)
         if (remainingChanges.nonEmpty) {
           throw QueryCompilationErrors.unsupportedTableChangesInAutoSchemaEvolutionError(
-            remainingChanges, newTable.name)
+            remainingChanges, i.toQualifiedNameParts(c))
         }
         relation.copy(table = newTable, output = DataTypeUtils.toAttributes(
           CatalogV2Util.v2ColumnsToStructType(newTable.columns())))
