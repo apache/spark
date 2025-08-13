@@ -70,10 +70,11 @@ class StreamingDeduplicationAvroSuite extends StreamingDeduplicationSuite {
         assertNumStateRows(total = 3, updated = 1),
         AddData(inputData, ("a", "key4", 2)), // Dropped
         CheckLastBatch(),
-        assertNumStateRows(total = 3, updated = 0)
-//        AddData(inputData, ("a", null, 1)), // Dropped
-//        CheckLastBatch(),
-//        assertNumStateRows(total = 3, updated = 0)
+        assertNumStateRows(total = 3, updated = 0),
+        // Would not dropped since key {a, null} does not equal to {a}
+        AddData(inputData, ("a", null, 1)),
+        CheckLastBatch(("a", null, 1)),
+        assertNumStateRows(total = 4, updated = 1)
       )
     }
   }
