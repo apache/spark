@@ -20,7 +20,6 @@ from datetime import datetime
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.sql import Row
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, SPARK_CONF_ARROW_ENABLED
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.utils import is_ansi_mode_test
@@ -200,6 +199,15 @@ class ConversionMixin:
                     {"__index_level_0__": 2, "__index_level_1__": "blue"},
                 ],
             )
+            with self.sql_conf(
+                {
+                    "spark.sql.execution.pandas.structHandlingMode": "row",
+                }
+            ):
+                self.assert_eq(
+                    list(psidx.to_series().values),
+                    list(pidx.to_series().values),
+                )
         else:
             self.assert_eq(list(psidx.to_series().values), [["1", "red"], ["2", "blue"]])
 
