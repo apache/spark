@@ -23,7 +23,6 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Throwables;
 import org.rocksdb.RocksIterator;
 
 import org.apache.spark.network.util.JavaUtils;
@@ -138,7 +137,7 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
       next = null;
       return ret;
     } catch (Exception e) {
-      Throwables.throwIfUnchecked(e);
+      if (e instanceof RuntimeException re) throw re;
       throw new RuntimeException(e);
     }
   }
