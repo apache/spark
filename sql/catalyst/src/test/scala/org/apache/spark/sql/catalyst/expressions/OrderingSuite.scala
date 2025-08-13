@@ -175,18 +175,16 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
     // indirectly create an UnsafeProjection, and we want that UnsafeProjection to be
     // an InterpretedUnsafeProjection
     withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
-      val udfFunc = (s: String) => if (s == null) null else s
-      val stringUdf = ScalaUDF(udfFunc, StringType, BoundReference(1, StringType, true) :: Nil,
+      val udfFunc = (s: String) => s
+      val stringUdf = ScalaUDF(udfFunc, StringType, BoundReference(0, StringType, true) :: Nil,
         Option(ExpressionEncoder[String]().resolveAndBind()) :: Nil,
         Some(ExpressionEncoder[String]().resolveAndBind()))
-      val sortOrder = Seq(SortOrder(BoundReference(0, IntegerType, true), Ascending),
-        SortOrder(stringUdf, Ascending))
+      val sortOrder = Seq(SortOrder(stringUdf, Ascending))
       val rowOrdering = new InterpretedOrdering(sortOrder)
-      val rowType = StructType(StructField("a", IntegerType, nullable = true)
-        :: StructField("b", StringType, nullable = true) :: Nil)
+      val rowType = StructType(StructField("col1", StringType, nullable = true) :: Nil)
       val toCatalyst = CatalystTypeConverters.createToCatalystConverter(rowType)
-      val rowB1 = toCatalyst(Row(0, "B")).asInstanceOf[InternalRow]
-      val rowB2 = toCatalyst(Row(0, "A")).asInstanceOf[InternalRow]
+      val rowB1 = toCatalyst(Row("B")).asInstanceOf[InternalRow]
+      val rowB2 = toCatalyst(Row("A")).asInstanceOf[InternalRow]
       assert(rowOrdering.compare(rowB1, rowB2) > 0)
     }
   }
