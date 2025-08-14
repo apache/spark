@@ -1428,12 +1428,6 @@
     ],
     "sqlState" : "42734"
   },
-  "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE" : {
-    "message" : [
-      "Found duplicate variable <variableName> in the declare variable list. Please, remove one of them."
-    ],
-    "sqlState" : "42734"
-  },
   "DUPLICATE_EXCEPTION_HANDLER" : {
     "message" : [
       "Found duplicate handlers. Please, remove one of them."
@@ -1493,6 +1487,12 @@
       "Found duplicate column(s) in the RETURNS clause column list of the user-defined routine <routineName>: <columns>."
     ],
     "sqlState" : "42711"
+  },
+  "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE" : {
+    "message" : [
+      "Found duplicate variable <variableName> in the declare variable list. Please, remove one of them."
+    ],
+    "sqlState" : "42734"
   },
   "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED" : {
     "message" : [
