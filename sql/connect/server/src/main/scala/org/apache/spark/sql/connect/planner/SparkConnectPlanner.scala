@@ -62,6 +62,7 @@ import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
+import org.apache.spark.sql.connect.execution.command.{RegisterJavaUDAFCommand, RegisterJavaUDFCommand, RegisterPythonUDFCommand, RegisterScalaUDFCommand}
 import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.pipelines.PipelinesHandler
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
@@ -2645,14 +2646,17 @@ class SparkConnectPlanner(
   }
 
   def transformCommand(command: proto.Command): Option[QueryPlanningTracker => LogicalPlan] = {
-    command.getCommandTypeCase match {
+    val transformer: QueryPlanningTracker => LogicalPlan = command.getCommandTypeCase match {
       case proto.Command.CommandTypeCase.WRITE_OPERATION =>
-        Some(transformWriteOperation(command.getWriteOperation))
+        transformWriteOperation(command.getWriteOperation)
       case proto.Command.CommandTypeCase.WRITE_OPERATION_V2 =>
-        Some(transformWriteOperationV2(command.getWriteOperationV2))
+        transformWriteOperationV2(command.getWriteOperationV2)
+      case proto.Command.CommandTypeCase.REGISTER_FUNCTION =>
+        _ => transformRegisterUserDefinedFunction(command.getRegisterFunction)
       case _ =>
-        None
+        return None
     }
+    Some(transformer)
   }
 
   def process(
@@ -2664,8 +2668,6 @@ class SparkConnectPlanner(
       return
     }
     command.getCommandTypeCase match {
-      case proto.Command.CommandTypeCase.REGISTER_FUNCTION =>
-        handleRegisterUserDefinedFunction(command.getRegisterFunction)
       case proto.Command.CommandTypeCase.REGISTER_TABLE_FUNCTION =>
         handleRegisterUserDefinedTableFunction(command.getRegisterTableFunction)
       case proto.Command.CommandTypeCase.REGISTER_DATA_SOURCE =>
@@ -2964,19 +2966,18 @@ class SparkConnectPlanner(
     }
   }
 
-  private def handleRegisterUserDefinedFunction(
-      fun: proto.CommonInlineUserDefinedFunction): Unit = {
+  private def transformRegisterUserDefinedFunction(
+      fun: proto.CommonInlineUserDefinedFunction): LogicalPlan = {
     fun.getFunctionCase match {
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
-        handleRegisterPythonUDF(fun)
+        transformRegisterPythonUDF(fun)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.JAVA_UDF =>
-        handleRegisterJavaUDF(fun)
+        transformRegisterJavaUDF(fun)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
-        handleRegisterScalaUDF(fun)
+        transformRegisterScalaUDF(fun)
       case other =>
         throw InvalidInputErrors.invalidOneOfField(other, fun.getDescriptorForType)
     }
-    executeHolder.eventsManager.postFinished()
   }
 
   private def handleRegisterUserDefinedTableFunction(
@@ -3024,28 +3025,29 @@ class SparkConnectPlanner(
       udfDeterministic = fun.getDeterministic)
   }
 
-  private def handleRegisterPythonUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
-    val udpf = createUserDefinedPythonFunction(fun)
-    session.udf.registerPython(fun.getFunctionName, udpf)
+  private def transformRegisterPythonUDF(
+      fun: proto.CommonInlineUserDefinedFunction): LogicalPlan = {
+    RegisterPythonUDFCommand(createUserDefinedPythonFunction(fun))
   }
 
-  private def handleRegisterJavaUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
+  private def transformRegisterJavaUDF(
+      fun: proto.CommonInlineUserDefinedFunction): LogicalPlan = {
     val udf = fun.getJavaUdf
-    val dataType = if (udf.hasOutputType) {
-      transformDataType(udf.getOutputType)
-    } else {
-      null
-    }
     if (udf.getAggregate) {
-      session.udf.registerJavaUDAF(fun.getFunctionName, udf.getClassName)
+      RegisterJavaUDAFCommand(fun.getFunctionName, udf.getClassName)
     } else {
-      session.udf.registerJava(fun.getFunctionName, udf.getClassName, dataType)
+      val dataTypeOpt = if (udf.hasOutputType) {
+        Some(transformDataType(udf.getOutputType))
+      } else {
+        None
+      }
+      RegisterJavaUDFCommand(fun.getFunctionName, udf.getClassName, dataTypeOpt)
     }
   }
 
-  private def handleRegisterScalaUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
-    val udf = transformScalaFunction(fun)
-    session.udf.register(fun.getFunctionName, udf)
+  private def transformRegisterScalaUDF(
+      fun: proto.CommonInlineUserDefinedFunction): LogicalPlan = {
+    RegisterScalaUDFCommand(transformScalaFunction(fun))
   }
 
   private def handleCommandPlugin(extension: ProtoAny): Unit = {
