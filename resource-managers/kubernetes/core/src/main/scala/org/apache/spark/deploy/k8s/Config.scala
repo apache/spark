@@ -528,7 +528,7 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_EXECUTOR_LISTER_POLLING_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.listerPollingInterval")
-      .doc("Interval between polls against the Kubernetes informer lister to inspect the " +
+      .doc("Interval between polls against the Kubernetes informer cache to inspect the " +
         "state of executors.")
       .version("3.1.1")
       .timeConf(TimeUnit.MILLISECONDS)
@@ -541,9 +541,9 @@ private[spark] object Config extends Logging {
       .doc("Interval between informer cache resync")
       .version("3.1.1")
       .timeConf(TimeUnit.MILLISECONDS)
-      .checkValue(interval => interval > 0, s"informer resync interval must be a" +
-        " positive time value.")
-      .createWithDefaultString("10m")
+      .checkValue(interval => interval >= 0, s"informer resync interval must not be a negative" +
+        s" time value.")
+      .createWithDefaultString("0s")
 
   val KUBERNETES_EXECUTOR_API_POLLING_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.apiPollingInterval")
