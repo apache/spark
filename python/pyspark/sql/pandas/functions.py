@@ -807,7 +807,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
             type_hints = get_type_hints(f)
         except NameError:
             type_hints = {}
-        evalType = infer_eval_type(signature(f), type_hints)
+        evalType = infer_eval_type(signature(f), type_hints, kind)
         assert evalType is not None
 
     if evalType is None:
