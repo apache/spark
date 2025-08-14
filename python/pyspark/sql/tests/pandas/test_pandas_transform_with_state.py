@@ -1514,7 +1514,6 @@ class TransformWithStateTestsMixin:
         )
 
     def test_transform_with_state_in_pandas_composite_type(self):
-
         def check_results(batch_df, batch_id):
             if batch_id == 0:
                 map_val = {"key1": [1], "key2": [10]}
@@ -1525,14 +1524,14 @@ class TransformWithStateTestsMixin:
                         value_arr="0",
                         list_state_arr="0",
                         map_state_arr=json.dumps(map_val, sort_keys=True),
-                        nested_map_state_arr=json.dumps(nested_map_val, sort_keys=True)
+                        nested_map_state_arr=json.dumps(nested_map_val, sort_keys=True),
                     ),
                     Row(
                         id="1",
                         value_arr="0",
                         list_state_arr="0",
                         map_state_arr=json.dumps(map_val, sort_keys=True),
-                        nested_map_state_arr=json.dumps(nested_map_val, sort_keys=True)
+                        nested_map_state_arr=json.dumps(nested_map_val, sort_keys=True),
                     ),
                 }, f"batch id: {batch_id}, real df is: {batch_df.collect()}"
             else:

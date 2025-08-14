@@ -1635,20 +1635,30 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
     CONFS_MAP = {"e1": {"e2": 5, "e3": 10}}
 
     def init(self, handle: StatefulProcessorHandle) -> None:
-        obj_schema = StructType([
-            StructField("id", ArrayType(IntegerType())),
-            StructField("tags", ArrayType(ArrayType(StringType()))),
-            StructField("metadata", ArrayType(StructType([
-                StructField("key", StringType()),
-                StructField("value", StringType())
-            ]))),
-        ])
+        obj_schema = StructType(
+            [
+                StructField("id", ArrayType(IntegerType())),
+                StructField("tags", ArrayType(ArrayType(StringType()))),
+                StructField(
+                    "metadata",
+                    ArrayType(
+                        StructType(
+                            [StructField("key", StringType()), StructField("value", StringType())]
+                        )
+                    ),
+                ),
+            ]
+        )
 
-        map_value_schema = StructType([
-            StructField("id", IntegerType(), True),
-            StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True),
-            StructField("confs", MapType(StringType(), MapType(StringType(), IntegerType()), True), True),
-        ])
+        map_value_schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True),
+                StructField(
+                    "confs", MapType(StringType(), MapType(StringType(), IntegerType()), True), True
+                ),
+            ]
+        )
 
         self.obj_state = handle.getValueState("obj_state", obj_schema)
         self.list_state = handle.getListState("list_state", obj_schema)
@@ -1691,18 +1701,27 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
         total_temperature = sum(pdf["temperature"].astype(int).sum() for pdf in rows)
 
         updated_ids = self._update_obj_state(total_temperature)
-        flattened_ids = self._update_list_state(total_temperature, (updated_ids, self.TAGS, self.METADATA))
+        flattened_ids = self._update_list_state(
+            total_temperature, (updated_ids, self.TAGS, self.METADATA)
+        )
         attributes_map, confs_map = self._update_map_state(key, total_temperature)
 
         import json
+
         np_int64_to_int = lambda x: int(x) if isinstance(x, np.int64) else x
-        yield pd.DataFrame({
-            "id": [key],
-            "value_arr": [",".join(map(str, updated_ids))],
-            "list_state_arr": [",".join(map(str, flattened_ids))],
-            "map_state_arr": [json.dumps(attributes_map, default=np_int64_to_int, sort_keys=True)],
-            "nested_map_state_arr": [json.dumps(confs_map, default=np_int64_to_int, sort_keys=True)],
-        })
+        yield pd.DataFrame(
+            {
+                "id": [key],
+                "value_arr": [",".join(map(str, updated_ids))],
+                "list_state_arr": [",".join(map(str, flattened_ids))],
+                "map_state_arr": [
+                    json.dumps(attributes_map, default=np_int64_to_int, sort_keys=True)
+                ],
+                "nested_map_state_arr": [
+                    json.dumps(confs_map, default=np_int64_to_int, sort_keys=True)
+                ],
+            }
+        )
 
     def close(self) -> None:
         pass
@@ -1715,20 +1734,30 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
     CONFS_MAP = {"e1": {"e2": 5, "e3": 10}}
 
     def init(self, handle: StatefulProcessorHandle) -> None:
-        obj_schema = StructType([
-            StructField("id", ArrayType(IntegerType())),
-            StructField("tags", ArrayType(ArrayType(StringType()))),
-            StructField("metadata", ArrayType(StructType([
-                StructField("key", StringType()),
-                StructField("value", StringType())
-            ]))),
-        ])
+        obj_schema = StructType(
+            [
+                StructField("id", ArrayType(IntegerType())),
+                StructField("tags", ArrayType(ArrayType(StringType()))),
+                StructField(
+                    "metadata",
+                    ArrayType(
+                        StructType(
+                            [StructField("key", StringType()), StructField("value", StringType())]
+                        )
+                    ),
+                ),
+            ]
+        )
 
-        map_value_schema = StructType([
-            StructField("id", IntegerType(), True),
-            StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True),
-            StructField("confs", MapType(StringType(), MapType(StringType(), IntegerType()), True), True),
-        ])
+        map_value_schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True),
+                StructField(
+                    "confs", MapType(StringType(), MapType(StringType(), IntegerType()), True), True
+                ),
+            ]
+        )
 
         self.obj_state = handle.getValueState("obj_state", obj_schema)
         self.list_state = handle.getListState("list_state", obj_schema)
@@ -1771,10 +1800,13 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
         total_temperature = sum(int(row.temperature) for row in rows)
 
         updated_ids = self._update_obj_state(total_temperature)
-        flattened_ids = self._update_list_state(total_temperature, (updated_ids, self.TAGS, self.METADATA))
+        flattened_ids = self._update_list_state(
+            total_temperature, (updated_ids, self.TAGS, self.METADATA)
+        )
         attributes_map, confs_map = self._update_map_state(key, total_temperature)
 
         import json
+
         yield Row(
             id=key,
             value_arr=",".join(map(str, updated_ids)),
