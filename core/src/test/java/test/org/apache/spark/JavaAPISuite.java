@@ -47,7 +47,6 @@ import scala.jdk.javaapi.CollectionConverters;
 
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
-import com.google.common.base.Throwables;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
@@ -68,6 +67,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.Optional;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.input.PortableDataStream;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.partial.BoundedDouble;
 import org.apache.spark.partial.PartialResult;
 import org.apache.spark.rdd.RDD;
@@ -1503,7 +1503,7 @@ public class JavaAPISuite implements Serializable {
     JavaFutureAction<Long> future = rdd.map(new BuggyMapFunction<>()).countAsync();
     ExecutionException ee = assertThrows(ExecutionException.class,
       () -> future.get(2, TimeUnit.SECONDS));
-    assertTrue(Throwables.getStackTraceAsString(ee).contains("Custom exception!"));
+    assertTrue(JavaUtils.stackTraceToString(ee).contains("Custom exception!"));
     assertTrue(future.isDone());
   }
 

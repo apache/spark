@@ -30,6 +30,7 @@ import org.apache.spark.internal.LogKeys.{BATCH_ID, PATH}
 import org.apache.spark.internal.io.{FileCommitProtocol, FileNameSpec}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.streaming.sinks.{FileStreamSinkLog, SinkFileStatus}
 
 /**
  * A [[FileCommitProtocol]] that tracks the list of valid files in a manifest file, used in

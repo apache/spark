@@ -55,7 +55,6 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.Metric;
 import com.codahale.metrics.MetricSet;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
@@ -211,7 +210,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   protected AppShuffleInfo validateAndGetAppShuffleInfo(String appId) {
     // TODO: [SPARK-33236] Change the message when this service is able to handle NM restart
     AppShuffleInfo appShuffleInfo = appsShuffleInfo.get(appId);
-    Preconditions.checkArgument(appShuffleInfo != null,
+    JavaUtils.checkArgument(appShuffleInfo != null,
       "application " + appId + " is not registered or NM was restarted.");
     return appShuffleInfo;
   }
@@ -1267,12 +1266,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         String streamId,
         AppShufflePartitionInfo partitionInfo,
         int mapIndex) {
-      Preconditions.checkArgument(mergeManager != null);
+      JavaUtils.checkArgument(mergeManager != null, "mergeManager is null");
       this.mergeManager = mergeManager;
-      Preconditions.checkArgument(appShuffleInfo != null);
+      JavaUtils.checkArgument(appShuffleInfo != null, "appShuffleInfo is null");
       this.appShuffleInfo = appShuffleInfo;
       this.streamId = streamId;
-      Preconditions.checkArgument(partitionInfo != null);
+      JavaUtils.checkArgument(partitionInfo != null, "partitionInfo is null");
       this.partitionInfo = partitionInfo;
       this.mapIndex = mapIndex;
       abortIfNecessary();
@@ -1719,7 +1718,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         @JsonProperty("attemptId") int attemptId,
         @JsonProperty("shuffleId") int shuffleId,
         @JsonProperty("shuffleMergeId") int shuffleMergeId) {
-      Preconditions.checkArgument(appId != null, "app id is null");
+      JavaUtils.checkArgument(appId != null, "app id is null");
       this.appId = appId;
       this.attemptId = attemptId;
       this.shuffleId = shuffleId;

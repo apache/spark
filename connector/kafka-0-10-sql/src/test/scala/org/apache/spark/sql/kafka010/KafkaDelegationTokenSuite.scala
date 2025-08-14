@@ -26,7 +26,7 @@ import org.apache.kafka.common.security.auth.SecurityProtocol.SASL_PLAINTEXT
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config.{KEYTAB, PRINCIPAL}
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
 import org.apache.spark.sql.test.SharedSparkSession
 

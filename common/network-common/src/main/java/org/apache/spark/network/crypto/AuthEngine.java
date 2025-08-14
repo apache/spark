@@ -25,7 +25,6 @@ import java.util.Objects;
 import java.util.Properties;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import com.google.common.primitives.Bytes;
 import com.google.crypto.tink.subtle.AesGcmJce;
 import com.google.crypto.tink.subtle.Hkdf;
@@ -34,6 +33,8 @@ import com.google.crypto.tink.subtle.X25519;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import static java.nio.charset.StandardCharsets.UTF_8;
+
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -125,7 +126,7 @@ class AuthEngine implements Closeable {
   private byte[] decryptEphemeralPublicKey(
       AuthMessage encryptedPublicKey,
       byte[] transcript) throws GeneralSecurityException {
-    Preconditions.checkArgument(appId.equals(encryptedPublicKey.appId()));
+    JavaUtils.checkArgument(appId.equals(encryptedPublicKey.appId()), "appID is different.");
     // Mix in the app ID, salt, and transcript into HKDF and use it as AES-GCM AAD
     byte[] aadState = Bytes.concat(appId.getBytes(UTF_8), encryptedPublicKey.salt(), transcript);
     // Use HKDF to derive an AES_GCM key from the pre-shared key, non-secret salt, and AAD state
@@ -161,7 +162,7 @@ class AuthEngine implements Closeable {
    * @return An encrypted server ephemeral public key to be sent to the client.
    */
   AuthMessage response(AuthMessage encryptedClientPublicKey) throws GeneralSecurityException {
-    Preconditions.checkArgument(appId.equals(encryptedClientPublicKey.appId()));
+    JavaUtils.checkArgument(appId.equals(encryptedClientPublicKey.appId()), "appId is different.");
     // Compute a shared secret given the client public key and the server private key
     byte[] clientPublicKey =
         decryptEphemeralPublicKey(encryptedClientPublicKey, EMPTY_TRANSCRIPT);
@@ -189,8 +190,7 @@ class AuthEngine implements Closeable {
    */
   void deriveSessionCipher(AuthMessage encryptedClientPublicKey,
                            AuthMessage encryptedServerPublicKey) throws GeneralSecurityException {
-    Preconditions.checkArgument(appId.equals(encryptedClientPublicKey.appId()));
-    Preconditions.checkArgument(appId.equals(encryptedServerPublicKey.appId()));
+    JavaUtils.checkArgument(appId.equals(encryptedClientPublicKey.appId()), "appId is different.");
     // Compute a shared secret given the server public key and the client private key,
     // mixing in the protocol transcript.
     byte[] serverPublicKey = decryptEphemeralPublicKey(
@@ -251,7 +251,7 @@ class AuthEngine implements Closeable {
   }
 
   TransportCipher sessionCipher() {
-    Preconditions.checkState(sessionCipher != null);
+    JavaUtils.checkState(sessionCipher != null, "sessionCipher is null.");
     return sessionCipher;
   }
 

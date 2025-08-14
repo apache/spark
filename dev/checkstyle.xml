@@ -191,13 +191,20 @@
             <property name="illegalClasses" value="org.apache.commons.lang3.StringUtils" />
             <property name="illegalClasses" value="org.apache.commons.lang3.SystemUtils" />
             <property name="illegalClasses" value="org.apache.hadoop.io.IOUtils" />
+            <property name="illegalClasses" value="org.apache.parquet.Preconditions" />
+            <property name="illegalClasses" value="com.google.common.base.Joiner" />
             <property name="illegalClasses" value="com.google.common.base.Objects" />
+            <property name="illegalClasses" value="com.google.common.base.Preconditions" />
             <property name="illegalClasses" value="com.google.common.base.Strings" />
             <property name="illegalClasses" value="com.google.common.collect.ArrayListMultimap" />
             <property name="illegalClasses" value="com.google.common.collect.Multimap" />
             <property name="illegalClasses" value="com.google.common.collect.Sets" />
             <property name="illegalClasses" value="com.google.common.io.BaseEncoding" />
             <property name="illegalClasses" value="com.google.common.io.Files" />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="Ints\.checkedCast"/>
+            <property name="message" value="Use JavaUtils.checkedCast instead." />
         </module>
         <module name="RegexpSinglelineJava">
             <property name="format" value="Charset\.defaultCharset"/>
@@ -274,6 +281,10 @@
         <module name="RegexpSinglelineJava">
             <property name="format" value="ImmutableSet\.of"/>
             <property name="message" value="Use Set.of instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="Throwables\.getStackTraceAsString"/>
+            <property name="message" value="Use stackTraceToString of JavaUtils/SparkFileUtils/Utils instead." />
         </module>
         <!-- support structured logging -->
         <module name="RegexpSinglelineJava">

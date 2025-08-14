@@ -6,9 +6,9 @@ OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 key-value pairs sort 25000000:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Tuple-sort using Arrays.sort()                    16765          16984         308          1.5         670.6       1.0X
-Tuple-sort using Arrays.parallelSort()            10521          10746         318          2.4         420.8       1.6X
-KV-sort using Sorter                              22863          23017         219          1.1         914.5       0.7X
+Tuple-sort using Arrays.sort()                    17269          17567         421          1.4         690.8       1.0X
+Tuple-sort using Arrays.parallelSort()             8155           9560        1988          3.1         326.2       2.1X
+KV-sort using Sorter                              20713          20875         230          1.2         828.5       0.8X
 
 
 ================================================================================================
@@ -19,11 +19,11 @@ OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 primitive int array sort 25000000:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------
-Java Arrays.sort() on non-primitive int array                  14334          14344          14          1.7         573.3       1.0X
-Java Arrays.parallelSort() on non-primitive int array           6734           7146         582          3.7         269.4       2.1X
-Java Arrays.sort() on primitive int array                       2177           2178           2         11.5          87.1       6.6X
-Java Arrays.parallelSort() on primitive int array               1001           1001           0         25.0          40.0      14.3X
-Sorter without key reuse on primitive int array                 8363           8365           2          3.0         334.5       1.7X
-Sorter with key reuse on primitive int array                   10189          10191           2          2.5         407.6       1.4X
+Java Arrays.sort() on non-primitive int array                  15599          15631          45          1.6         624.0       1.0X
+Java Arrays.parallelSort() on non-primitive int array           8045           8066          30          3.1         321.8       1.9X
+Java Arrays.sort() on primitive int array                       2174           2176           2         11.5          87.0       7.2X
+Java Arrays.parallelSort() on primitive int array                771            782          18         32.4          30.8      20.2X
+Sorter without key reuse on primitive int array                 8380           8397          25          3.0         335.2       1.9X
+Sorter with key reuse on primitive int array                   10176          10183          11          2.5         407.0       1.5X
 
 

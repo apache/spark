@@ -221,9 +221,10 @@ class GroupedApplyInPandasTestsMixin:
             exception=pe.exception,
             errorClass="INVALID_UDF_EVAL_TYPE",
             messageParameters={
-                "eval_type": "SQL_BATCHED_UDF, SQL_ARROW_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF, "
-                "SQL_SCALAR_PANDAS_ITER_UDF, SQL_GROUPED_AGG_PANDAS_UDF or "
-                "SQL_GROUPED_AGG_ARROW_UDF"
+                "eval_type": "SQL_BATCHED_UDF, SQL_ARROW_BATCHED_UDF, "
+                "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_ARROW_UDF, "
+                "SQL_SCALAR_PANDAS_ITER_UDF, SQL_SCALAR_ARROW_ITER_UDF, "
+                "SQL_GROUPED_AGG_PANDAS_UDF or SQL_GROUPED_AGG_ARROW_UDF"
             },
         )
 

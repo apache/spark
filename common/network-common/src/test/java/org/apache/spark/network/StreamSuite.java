@@ -42,9 +42,9 @@ import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
-import org.apache.spark.util.SparkFileUtils$;
 
 public class StreamSuite {
   private static final String[] STREAMS = StreamTestHelper.STREAMS;
@@ -212,7 +212,7 @@ public class StreamSuite {
         callback.waitForCompletion(timeoutMs);
 
         if (srcBuffer == null) {
-          assertTrue(SparkFileUtils$.MODULE$.contentEquals(testData.testFile, outFile),
+          assertTrue(JavaUtils.contentEquals(testData.testFile, outFile),
             "File stream did not match.");
         } else {
           ByteBuffer base;

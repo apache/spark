@@ -38,7 +38,6 @@ import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.util.Pair;
-import org.apache.spark.util.SparkFileUtils$;
 
 public class RpcIntegrationSuite {
   static TransportConf conf;
@@ -429,7 +428,7 @@ public class RpcIntegrationSuite {
 
     void verify() throws IOException {
       if (streamId.equals("file")) {
-        assertTrue(SparkFileUtils$.MODULE$.contentEquals(testData.testFile, outFile),
+        assertTrue(JavaUtils.contentEquals(testData.testFile, outFile),
           "File stream did not match.");
       } else {
         byte[] result = ((ByteArrayOutputStream)out).toByteArray();

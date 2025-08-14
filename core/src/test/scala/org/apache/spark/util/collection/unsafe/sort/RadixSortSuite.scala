@@ -22,12 +22,12 @@ import java.util.{Arrays, Comparator}
 
 import scala.util.Random
 
-import com.google.common.primitives.Ints
-
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.network.util.JavaUtils.checkedCast
 import org.apache.spark.unsafe.array.LongArray
 import org.apache.spark.unsafe.memory.MemoryBlock
 import org.apache.spark.util.collection.Sorter
+import org.apache.spark.util.collection.Utils.createArray
 import org.apache.spark.util.random.XORShiftRandom
 
 class RadixSortSuite extends SparkFunSuite {
@@ -74,21 +74,21 @@ class RadixSortSuite extends SparkFunSuite {
       2, 4, false, false, true))
 
   private def generateTestData(size: Long, rand: => Long): (Array[JLong], LongArray) = {
-    val ref = Array.tabulate[Long](Ints.checkedCast(size)) { i => rand }
-    val extended = ref ++ Array.fill[Long](Ints.checkedCast(size))(0)
+    val ref = Array.tabulate[Long](checkedCast(size)) { i => rand }
+    val extended = ref ++ createArray(checkedCast(size), 0L)
     (ref.map(i => JLong.valueOf(i)), new LongArray(MemoryBlock.fromLongArray(extended)))
   }
 
   private def generateKeyPrefixTestData(size: Long, rand: => Long): (LongArray, LongArray) = {
-    val ref = Array.tabulate[Long](Ints.checkedCast(size * 2)) { i => rand }
-    val extended = ref ++ Array.fill[Long](Ints.checkedCast(size * 2))(0)
+    val ref = Array.tabulate[Long](checkedCast(size * 2)) { i => rand }
+    val extended = ref ++ createArray(checkedCast(size * 2), 0L)
     (new LongArray(MemoryBlock.fromLongArray(ref)),
      new LongArray(MemoryBlock.fromLongArray(extended)))
   }
 
   private def collectToArray(array: LongArray, offset: Int, length: Long): Array[Long] = {
     var i = 0
-    val out = new Array[Long](Ints.checkedCast(length))
+    val out = new Array[Long](checkedCast(length))
     while (i < length) {
       out(i) = array.get(offset + i)
       i += 1
@@ -111,7 +111,7 @@ class RadixSortSuite extends SparkFunSuite {
       refCmp: PrefixComparator): Unit = {
     val sortBuffer = new LongArray(MemoryBlock.fromLongArray(new Array[Long](buf.size().toInt)))
     new Sorter(new UnsafeSortDataFormat(sortBuffer)).sort(
-      buf, Ints.checkedCast(lo), Ints.checkedCast(hi),
+      buf, checkedCast(lo), checkedCast(hi),
       (r1: RecordPointerAndKeyPrefix, r2: RecordPointerAndKeyPrefix) =>
         refCmp.compare(r1.keyPrefix, r2.keyPrefix))
   }
