@@ -1428,7 +1428,7 @@
     ],
     "sqlState" : "42734"
   },
-  "DUPLICATE_DECLARE_VARIABLE" : {
+  "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE" : {
     "message" : [
       "Found duplicate variable <variableName> in the declare variable list. Please, remove one of them."
     ],

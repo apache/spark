@@ -2788,8 +2788,24 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     }
     checkError(
       exception = e,
-      condition = "DUPLICATE_DECLARE_VARIABLE",
+      condition = "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE",
       parameters = Map("variableName" -> toSQLId("lbl1.var1"))
+    )
+  }
+
+  test("local variable - same variable declared twice within same DECLARE OR REPLACE statement") {
+    val sqlScript =
+      """
+        |DECLARE OR REPLACE var1, vAr1 = 23
+        |""".stripMargin
+
+    val e = intercept[AnalysisException] {
+      spark.sql(sqlScript)
+    }
+    checkError(
+      exception = e,
+      condition = "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE",
+      parameters = Map("variableName" -> toSQLId("system.session.var1"))
     )
   }
 

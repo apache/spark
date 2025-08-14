@@ -67,30 +67,31 @@ case class CreateVariableExec(
       // will always be present.
       .getOrElse(tempVariableManager)
 
-    if (!replace) {
-      val uniqueNames = mutable.Set[String]()
+    val uniqueNames = mutable.Set[String]()
 
-      variableTuples.foreach(variable => {
-        val nameParts: Seq[String] = variable._1
-        val name = nameParts.last
+    variableTuples.foreach(variable => {
+      val nameParts: Seq[String] = variable._1
+      val name = nameParts.last
 
-        if (uniqueNames.contains(name)) {
-          throw new AnalysisException(
-            errorClass = "DUPLICATE_DECLARE_VARIABLE",
-            messageParameters = Map(
-              "variableName" -> variableManager.getVariableNameForError(name)))
-        }
+      // Check if the variable name was already declared inside the same DECLARE statement
+      if (uniqueNames.contains(name)) {
+        throw new AnalysisException(
+          errorClass = "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE",
+          messageParameters = Map(
+            "variableName" -> variableManager.getVariableNameForError(name)))
+      }
 
-        if (variableManager.get(nameParts).isDefined) {
-          throw new AnalysisException(
-            errorClass = "VARIABLE_ALREADY_EXISTS",
-            messageParameters = Map(
-              "variableName" -> variableManager.getVariableNameForError(name)))
-        }
+      // If DECLARE statement does not have OR REPLACE part, check if any of the variable names
+      // declared in the DECLARE statement already exists as a name of another variable
+      if (!replace && variableManager.get(nameParts).isDefined) {
+        throw new AnalysisException(
+          errorClass = "VARIABLE_ALREADY_EXISTS",
+          messageParameters = Map(
+            "variableName" -> variableManager.getVariableNameForError(name)))
+      }
 
-        uniqueNames.add(name)
-      })
-    }
+      uniqueNames.add(name)
+    })
 
     variableTuples.foreach(variable => {
       val nameParts: Seq[String] = variable._1
