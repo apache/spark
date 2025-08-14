@@ -1473,7 +1473,6 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc = new SparkContext(conf)
     assert(!sc.conf.get(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS).contains("-Dfoo=bar"))
     assert(!sc.conf.get(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS).contains("-Dfoo=bar"))
-
     sc.stop()
   }
 }
