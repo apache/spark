@@ -221,7 +221,7 @@ def arrow_udf(f=None, returnType=None, functionType=None):
 
         The function takes `pyarrow.Array` and returns a scalar value. The returned scalar
         can be a python primitive type, (e.g., int or float), a numpy data type (e.g.,
-        numpy.int64 or numpy.float64), or a pyarrow.Scalar instance which supports complex
+        numpy.int64 or numpy.float64), or a `pyarrow.Scalar` instance which supports complex
         return types.
         `Any` should ideally be a specific scalar type accordingly.
 
