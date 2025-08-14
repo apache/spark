@@ -27,7 +27,6 @@ if have_pyarrow:
 
 
 class ArrowUDTFParityTests(ArrowUDTFTestsMixin, ReusedConnectTestCase):
-    
     # Override the error tests to use connect.PythonException instead of captured.PythonException
     def test_arrow_udtf_error_not_iterator(self):
         @arrow_udtf(returnType="x int, y string")

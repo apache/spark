@@ -2559,7 +2559,7 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         cf_fn = {name for (name, value) in getmembers(CF, isfunction) if name[0] != "_"}
 
         # Functions in classic PySpark we do not expect to be available in Spark Connect
-        sf_excluded_fn = {}
+        sf_excluded_fn = set()
 
         self.assertEqual(
             sf_fn - cf_fn,
