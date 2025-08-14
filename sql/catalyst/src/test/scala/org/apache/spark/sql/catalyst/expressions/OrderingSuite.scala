@@ -169,7 +169,7 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ctx.INPUT_ROW == null)
   }
 
-  test("ordering by stateful expressions") {
+  test("SPARK-53275: ordering by stateful expressions in interpreted mode") {
     // even though we explicitly create an InterpretedOrdering below, we still need
     // to set CODEGEN_FACTORY_MODE to NO_CODEGEN because the ScalaUDF expression will
     // indirectly create an UnsafeProjection, and we want that UnsafeProjection to be
