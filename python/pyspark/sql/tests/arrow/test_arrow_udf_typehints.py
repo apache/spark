@@ -315,6 +315,14 @@ class ArrowUDFTypeHintsTests(ReusedSQLTestCase):
             infer_eval_type(signature(func), get_type_hints(func)), ArrowUDFType.SCALAR
         )
 
+        # Union[pa.Array, pa.Array] equals to pa.Array
+        def func(col: Union["pa.Array", "pa.Array"], *, col2: "pa.Array") -> "pa.Array":
+            pass
+
+        self.assertEqual(
+            infer_eval_type(signature(func), get_type_hints(func)), ArrowUDFType.SCALAR
+        )
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.arrow.test_arrow_udf_typehints import *  # noqa: #401
