@@ -382,41 +382,41 @@ enable ``spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled``. The b
 
 Legacy type coercion:
 
-.. csv-table::
-   :header: SQL Type, None, True, 1, a, date, datetime, 1.0, array, [1], (1,), bytearray, Decimal, dict
-   :widths: 12, 6, 6, 6, 6, 10, 12, 6, 8, 6, 6, 10, 8, 8
-
-   boolean, None, True, True, X, X, X, True, X, X, X, X, X, X
-   tinyint, None, 1, 1, X, X, X, 1, X, X, X, X, 1, X
-   smallint, None, 1, 1, X, X, X, 1, X, X, X, X, 1, X
-   int, None, 1, 1, X, 0, X, 1, X, X, X, X, 1, X
-   bigint, None, 1, 1, X, X, 0, 1, X, X, X, X, 1, X
-   string, None, 'True', '1', 'a', '1970-01-01', '1970-01-01 00:00...', '1.0', "array('i' [1])", '[1]', '(1)', "bytearray(b'ABC')", '1', "{'a': 1}"
-   date, None, X, X, X, datetime.date(197...), datetime.date(197...), X, X, X, X, X, datetime.date(197...), X
-   timestamp, None, X, datetime.datetime..., X, X, datetime.datetime..., X, X, X, X, X, datetime.datetime..., X
-   float, None, 1.0, 1.0, X, X, X, 1.0, X, X, X, X, 1.0, X
-   double, None, 1.0, 1.0, X, X, X, 1.0, X, X, X, X, 1.0, X
-   binary, None, bytearray(b'\x00'), bytearray(b'\x00'), X, X, X, X, bytearray(b'\x01'...), bytearray(b'\x01'), bytearray(b'\x01'), bytearray(b'ABC'), X, X
-   decimal(10 0), None, X, X, X, X, X, Decimal('1'), X, X, X, X, Decimal('1'), X
+=========== ====== ====== === === ========== ============ ==== ========== ==== ==== ========== ======== ======
+SQL Type    None   True   1   a   date       datetime     1.0  array      [1]  (1,) bytearray  Decimal  dict
+=========== ====== ====== === === ========== ============ ==== ========== ==== ==== ========== ======== ======
+boolean     None   True   T   X   X          X            T    X          X    X    X          X        X
+tinyint     None   1      1   X   X          X            1    X          X    X    X          1        X
+smallint    None   1      1   X   X          X            1    X          X    X    X          1        X
+int         None   1      1   X   0          X            1    X          X    X    X          1        X
+bigint      None   1      1   X   X          0            1    X          X    X    X          1        X
+string      None   'True' '1' 'a' '1970...'  '1970...'    '1'  "array..." '[1]' '(1)' "byte..."   '1'      "{'a'}"
+date        None   X      X   X   date(...)  date(...)    X    X          X    X    X          date(..) X
+timestamp   None   X      dt  X   X          datetime(...)X    X          X    X    X          dt(...)  X
+float       None   1.0    1.0 X   X          X            1.0  X          X    X    X          1.0      X
+double      None   1.0    1.0 X   X          X            1.0  X          X    X    X          1.0      X
+binary      None   b'\x0' b'0'X   X          X            X    b'\x01'... b'1' b'1' b'ABC'     X        X
+decimal     None   X      X   X   X          X            D(1) X          X    X    X          D(1)     X
+=========== ====== ====== === === ========== ============ ==== ========== ==== ==== ========== ======== ======
 
 New type coercion:
 
-.. csv-table::
-   :header: SQL Type, None, True, 1, a, date, datetime, 1.0, array, [1], (1,), bytearray, Decimal, dict
-   :widths: 12, 6, 6, 6, 6, 10, 12, 6, 8, 6, 6, 10, 8, 8
-
-   boolean, None, True, True, X, X, X, True, X, X, X, X, X, X
-   tinyint, None, X, 1, X, X, X, 1, X, X, X, X, 1, X
-   smallint, None, X, 1, X, X, X, 1, X, X, X, X, 1, X
-   int, None, X, 1, X, 0, X, 1, X, X, X, X, 1, X
-   bigint, None, X, 1, X, X, 0, 1, X, X, X, X, 1, X
-   string, None, 'true', '1', 'a', '1970-01-01', '1970-01-01 00:00...', '1.0', "array('i' [1])", '[1]', '(1)', "bytearray(b'ABC')", '1', "{'a': 1}"
-   date, None, X, datetime.date(197...), X, datetime.date(197...), datetime.date(197...), datetime.date(197...), X, X, X, X, datetime.date(197...), X
-   timestamp, None, X, X, X, X, datetime.datetime..., X, X, X, X, X, X, X
-   float, None, 1.0, 1.0, X, X, X, 1.0, X, X, X, X, 1.0, X
-   double, None, 1.0, 1.0, X, X, X, 1.0, X, X, X, X, 1.0, X
-   binary, None, X, X, X, X, X, X, X, X, X, bytearray(b'ABC'), X, X
-   decimal(10 0), None, X, X, X, X, X, X, X, X, X, X, Decimal('1'), X
+=========== ====== ====== === === ========== ============ ==== ========== ==== ==== ========== ======== ======
+SQL Type    None   True   1   a   date       datetime     1.0  array      [1]  (1,) bytearray  Decimal  dict
+=========== ====== ====== === === ========== ============ ==== ========== ==== ==== ========== ======== ======
+boolean     None   True   T   X   X          X            T    X          X    X    X          X        X
+tinyint     None   X      1   X   X          X            1    X          X    X    X          1        X
+smallint    None   X      1   X   X          X            1    X          X    X    X          1        X
+int         None   X      1   X   0          X            1    X          X    X    X          1        X
+bigint      None   X      1   X   X          0            1    X          X    X    X          1        X
+string      None   'true' '1' 'a' '1970...'  '1970...'    '1'  "array..." '[1]' '(1)' "byte..."   '1'      "{'a'}"
+date        None   X      dt  X   date(...)  date(...)    dt   X          X    X    X          dt(..)   X
+timestamp   None   X      X   X   X          datetime(...)X    X          X    X    X          X        X
+float       None   1.0    1.0 X   X          X            1.0  X          X    X    X          1.0      X
+double      None   1.0    1.0 X   X          X            1.0  X          X    X    X          1.0      X
+binary      None   X      X   X   X          X            X    X          X    X    b'ABC'     X        X
+decimal     None   X      X   X   X          X            X    X          X    X    X          D(1)     X
+=========== ====== ====== === === ========== ============ ==== ========== ==== ==== ========== ======== ======
 
 Usage Notes
 -----------
