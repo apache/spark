@@ -279,19 +279,20 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     keySchemaWithSomeUnsupportedTypeCols.fields.zipWithIndex.foreach { case (field, index) =>
       val isAllowed = allowedRangeOrdinals.contains(index)
 
-      val getStore = () => {
+      if (isAllowed) {
         tryWithProviderResource(newStoreProvider(keySchemaWithSomeUnsupportedTypeCols,
             RangeKeyScanStateEncoderSpec(keySchemaWithSomeUnsupportedTypeCols, Seq(index)),
             colFamiliesEnabled)) { provider =>
-            provider.getStore(0)
+          val store = provider.getStore(0)
+          store.abort()
         }
-      }
-
-      if (isAllowed) {
-        getStore()
       } else {
         val ex = intercept[SparkUnsupportedOperationException] {
-          getStore()
+          tryWithProviderResource(newStoreProvider(keySchemaWithSomeUnsupportedTypeCols,
+              RangeKeyScanStateEncoderSpec(keySchemaWithSomeUnsupportedTypeCols, Seq(index)),
+              colFamiliesEnabled)) { provider =>
+            provider.getStore(0)
+          }
         }
         checkError(
           ex,
