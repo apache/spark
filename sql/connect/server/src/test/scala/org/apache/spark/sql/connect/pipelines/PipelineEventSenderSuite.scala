@@ -61,7 +61,6 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
     val (mockObserver, mockSessionHolder) = createMockSetup()
 
     val eventSender = new PipelineEventSender(mockObserver, mockSessionHolder)
-    eventSender.start()
 
     try {
       val testEvent = createTestEvent()
@@ -87,7 +86,6 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
     val (mockObserver, mockSessionHolder) = createMockSetup()
 
     val eventSender = new PipelineEventSender(mockObserver, mockSessionHolder)
-    eventSender.start()
 
     val events = Seq(1, 2).map { i =>
       createTestEvent(
@@ -117,7 +115,6 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
     val (mockObserver, mockSessionHolder) = createMockSetup()
 
     val eventSender = new PipelineEventSender(mockObserver, mockSessionHolder)
-    eventSender.start()
     eventSender.shutdown()
     intercept[IllegalStateException] {
       eventSender.sendEvent(createTestEvent())

@@ -39,7 +39,8 @@ import org.apache.spark.util.ThreadUtils
 class PipelineEventSender(
     responseObserver: StreamObserver[ExecutePlanResponse],
     sessionHolder: SessionHolder)
-    extends Logging {
+    extends Logging
+    with AutoCloseable {
 
   // ExecutorService for background event processing
   private val executor: ThreadPoolExecutor = ThreadUtils
@@ -48,24 +49,9 @@ class PipelineEventSender(
   /*
    * Atomic flags to track the state of the sender
    * - `isShutdown`: Indicates if the sender has been shut down, if true, no new events
-   *    can be accepted, and the executor will be shut down.
-   *
-   * - `isStarted`: Indicates if the sender has been started, if true, the background
-   *    executor is running and processing events. This prevents multiple starts
-   *    which could lead to resource leaks.
+   *    can be accepted, and the executor will be shut down after processing all submitted events.
    */
   private val isShutdown = new AtomicBoolean(false)
-  private val isStarted = new AtomicBoolean(false)
-
-  /**
-   * Start the background executor for sending events, only if not already started. Idempotent
-   * operation: calling this multiple times has no effect after the first call.
-   */
-  def start(): Unit = {
-    if (isStarted.compareAndSet(false, true)) {
-      logInfo(s"Started pipeline event sender for session ${sessionHolder.sessionId}")
-    }
-  }
 
   /**
    * Send an event async by submitting it to the executor, if the sender is not shut down.
@@ -88,6 +74,11 @@ class PipelineEventSender(
         s"Cannot send event after shutdown for session ${sessionHolder.sessionId}")
     }
   }
+
+  // Implementing AutoCloseable to allow for try-with-resources usage
+  // This will ensure that the sender is properly shut down and all resources are released
+  // without requiring explicit shutdown calls in user code.
+  override def close(): Unit = shutdown()
 
   /**
    * Shutdown the event sender, stop taking new events and wait for processing to complete. This
