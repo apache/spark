@@ -18,7 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.{Future, ScheduledExecutorService, TimeUnit}
 
-import scala.collection.JavaConverters.asScalaBufferConverter
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.KubernetesClient
@@ -52,7 +52,6 @@ class ExecutorPodsListerSnapshotSource extends ExecutorPodsInformerCustomSnapsho
     conf = sparkConf
   }
 
-  // for testing
   def init(sparkConf: SparkConf, kubernetesClient: KubernetesClient,
            snapshotStore: ExecutorPodsSnapshotsStore,
            informerManager: InformerManager,
@@ -93,7 +92,7 @@ class ExecutorPodsListerSnapshotSource extends ExecutorPodsInformerCustomSnapsho
 
   private class PollRunnable(lister: Lister[Pod]) extends Runnable {
     override def run(): Unit = Utils.tryLogNonFatalError {
-      store.replaceSnapshot(lister.list().asScala)
+      store.replaceSnapshot(lister.list().asScala.toSeq)
     }
   }
 }
