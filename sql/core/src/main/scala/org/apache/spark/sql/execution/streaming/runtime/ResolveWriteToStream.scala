@@ -109,10 +109,9 @@ object ResolveWriteToStream extends Rule[LogicalPlan] {
       }
     }
 
-    // Check to see if we can use this checkpoint location for state.
+    // Check to see if we can use this checkpoint location for state and commits.
     val offsetsCheckpointPath = new Path(checkpointLocation, DIR_NAME_OFFSETS)
-    if (!fileManager.exists(offsetsCheckpointPath)
-      || fileManager.list(offsetsCheckpointPath).isEmpty) {
+    if (!fileManager.exists(offsetsCheckpointPath)) {
 
       // If state or commits has been created, but offsets have not, that means there could be
       // multiple writers to the state or commits directory of the query.
