@@ -313,7 +313,7 @@ WithCTE
 :                 +- SubqueryAlias t
 :                    +- Project [1#x AS n#x]
 :                       +- UnionLoopRef xxxx, [1#x], false
-+- LimitAll
++- LocalLimit limit_all()
    +- Project [n#x]
       +- SubqueryAlias t
          +- CTERelationRef xxxx, true, [n#x], false, false

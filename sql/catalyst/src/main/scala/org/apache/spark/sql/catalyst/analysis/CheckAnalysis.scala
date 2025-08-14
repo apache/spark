@@ -635,7 +635,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           case LocalLimit(limitExpr, child) =>
             checkLimitLikeClause("limit", limitExpr)
             child match {
-              case Offset(offsetExpr, _) =>
+              case Offset(offsetExpr, _) if limitExpr != LimitAllExpr =>
                 val limit = limitExpr.eval().asInstanceOf[Int]
                 val offset = offsetExpr.eval().asInstanceOf[Int]
                 if (Int.MaxValue - limit < offset) {

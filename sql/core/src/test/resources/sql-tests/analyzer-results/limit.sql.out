@@ -197,7 +197,7 @@ Project [id#xL]
 -- !query
 SELECT * FROM testdata WHERE key < 3 LIMIT ALL
 -- !query analysis
-LimitAll
+LocalLimit limit_all()
 +- Project [key#x, value#x]
    +- Filter (key#x < 3)
       +- SubqueryAlias spark_catalog.default.testdata

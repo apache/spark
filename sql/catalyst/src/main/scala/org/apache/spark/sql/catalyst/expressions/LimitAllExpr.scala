@@ -17,19 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
-case object LimitAllExpr extends LeafExpression {
+case object LimitAllExpr extends LeafExpression with Unevaluable {
   override def nullable: Boolean = false
+
   override def dataType: DataType = IntegerType
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("LimitAllExpr should not be evaluated directly.")
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException("LimitAllExpr should not be codegened.")
 
   override def prettyName: String = "limit_all"
 }
