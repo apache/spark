@@ -48,7 +48,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, MetricsReporter, StreamExecution, StreamingExecutionRelation, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.sources.{MemorySink, TestForeachWriter}
-import org.apache.spark.sql.execution.streaming.state.StateStoreCheckpointLocationNotEmpty
+import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider, StateStoreCheckpointLocationNotEmpty}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.{BlockingSource, MockSourceProvider, StreamManualClock}
@@ -1476,67 +1476,79 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     )
   }
 
-  test("SPARK-53103: non empty state checkpoint directory on first batch") {
-    withTempDir { checkpointDir =>
-      val q = MemoryStream[Int].toDS().groupBy().count()
-        .writeStream
-        .format("memory")
-        .outputMode("complete")
-        .queryName(s"name${RandomStringUtils.secure.nextAlphabetic(10)}")
-        .option("checkpointLocation", checkpointDir.getCanonicalPath)
-        .start()
-      // Verify that the query can start successfully when the checkpoint directory is empty.
-      q.stop()
-    }
+  private val TEST_PROVIDERS = Seq(
+    classOf[HDFSBackedStateStoreProvider].getName,
+    classOf[RocksDBStateStoreProvider].getName
+  )
 
-    withTempDir { checkpointDir =>
-      val hadoopConf = spark.sessionState.newHadoopConf()
-      val fm = CheckpointFileManager.create(new Path(checkpointDir.toString), hadoopConf)
+  TEST_PROVIDERS.foreach { provider =>
+    test("SPARK-53103: non empty state and commits checkpoint directory on first batch"
+      + s"(with $provider)") {
+      withSQLConf(
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> provider) {
 
-      // Create a non-empty state checkpoint directory to simulate the case that the user has user
-      // a directory that already has state data.
-      fm.mkdirs(new Path(new Path(checkpointDir.getCanonicalPath, "state"), "0"))
-
-      checkError(
-        exception = intercept[StateStoreCheckpointLocationNotEmpty] {
-          MemoryStream[Int].toDS().groupBy().count()
+        withTempDir { checkpointDir =>
+          val q = MemoryStream[Int].toDS().groupBy().count()
             .writeStream
             .format("memory")
             .outputMode("complete")
             .queryName(s"name${RandomStringUtils.secure.nextAlphabetic(10)}")
             .option("checkpointLocation", checkpointDir.getCanonicalPath)
             .start()
-        },
-        condition = "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY",
-        sqlState = "42K03",
-        parameters = Map(
-          "checkpointLocation" -> (new Path(checkpointDir.getCanonicalPath, "state")).toString
-        ))
-    }
+          // Verify that the query can start successfully when the checkpoint directory is empty.
+          q.stop()
+        }
 
-    withTempDir { checkpointDir =>
-      val hadoopConf = spark.sessionState.newHadoopConf()
-      val fm = CheckpointFileManager.create(new Path(checkpointDir.toString), hadoopConf)
+        withTempDir { checkpointDir =>
+          val hadoopConf = spark.sessionState.newHadoopConf()
+          val fm = CheckpointFileManager.create(new Path(checkpointDir.toString), hadoopConf)
 
-      // Create a non-empty state checkpoint directory to simulate the case that the user has user
-      // a directory that already has commits data.
-      fm.mkdirs(new Path(new Path(checkpointDir.getCanonicalPath, "commits"), "0"))
+          // Create a non-empty state checkpoint directory to simulate the case that the user
+          // a directory that already has state data.
+          fm.mkdirs(new Path(new Path(checkpointDir.getCanonicalPath, "state"), "0"))
 
-      checkError(
-        exception = intercept[StateStoreCheckpointLocationNotEmpty] {
-          MemoryStream[Int].toDS().groupBy().count()
-            .writeStream
-            .format("memory")
-            .outputMode("complete")
-            .queryName(s"name${RandomStringUtils.secure.nextAlphabetic(10)}")
-            .option("checkpointLocation", checkpointDir.getCanonicalPath)
-            .start()
-        },
-        condition = "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY",
-        sqlState = "42K03",
-        parameters = Map(
-          "checkpointLocation" -> (new Path(checkpointDir.getCanonicalPath, "commits")).toString
-        ))
+          checkError(
+            exception = intercept[StateStoreCheckpointLocationNotEmpty] {
+              MemoryStream[Int].toDS().groupBy().count()
+                .writeStream
+                .format("memory")
+                .outputMode("complete")
+                .queryName(s"name${RandomStringUtils.secure.nextAlphabetic(10)}")
+                .option("checkpointLocation", checkpointDir.getCanonicalPath)
+                .start()
+            },
+            condition = "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY",
+            sqlState = "42K03",
+            parameters = Map(
+              "checkpointLocation" -> (new Path(checkpointDir.getCanonicalPath, "state")).toString
+            ))
+        }
+
+        withTempDir { checkpointDir =>
+          val hadoopConf = spark.sessionState.newHadoopConf()
+          val fm = CheckpointFileManager.create(new Path(checkpointDir.toString), hadoopConf)
+
+          // Create a non-empty state checkpoint directory to simulate the case that the user
+          // a directory that already has commits data.
+          fm.mkdirs(new Path(new Path(checkpointDir.getCanonicalPath, "commits"), "0"))
+
+          checkError(
+            exception = intercept[StateStoreCheckpointLocationNotEmpty] {
+              MemoryStream[Int].toDS().groupBy().count()
+                .writeStream
+                .format("memory")
+                .outputMode("complete")
+                .queryName(s"name${RandomStringUtils.secure.nextAlphabetic(10)}")
+                .option("checkpointLocation", checkpointDir.getCanonicalPath)
+                .start()
+            },
+            condition = "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY",
+            sqlState = "42K03",
+            parameters = Map(
+              "checkpointLocation" -> (new Path(checkpointDir.getCanonicalPath, "commits")).toString
+            ))
+        }
+      }
     }
   }
 

@@ -121,7 +121,6 @@ object ResolveWriteToStream extends Rule[LogicalPlan] {
       dirNamesThatShouldNotHaveFiles.foreach { dirName =>
         val path = new Path(checkpointLocation, dirName)
         if (fileManager.exists(path) && !fileManager.list(path).isEmpty) {
-
           val loc = path.toString
           throw StateStoreErrors.streamingStateCheckpointLocationNotEmpty(loc)
         }
