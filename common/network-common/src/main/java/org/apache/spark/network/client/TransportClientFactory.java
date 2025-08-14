@@ -30,7 +30,6 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.codahale.metrics.MetricSet;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Throwables;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -342,7 +341,7 @@ public class TransportClientFactory implements Closeable {
       logger.error("Exception while bootstrapping client after {} ms", e,
         MDC.of(LogKeys.BOOTSTRAP_TIME, bootstrapTimeMs));
       client.close();
-      Throwables.throwIfUnchecked(e);
+      if (e instanceof RuntimeException re) throw re;
       throw new RuntimeException(e);
     }
     long postBootstrap = System.nanoTime();

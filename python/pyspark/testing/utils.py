@@ -94,6 +94,21 @@ openpyxl_requirement_message = None if have_openpyxl else "No module named 'open
 have_yaml = have_package("yaml")
 yaml_requirement_message = None if have_yaml else "No module named 'yaml'"
 
+have_grpc = have_package("grpc")
+grpc_requirement_message = None if have_yaml else "No module named 'grpc'"
+
+have_grpc_status = have_package("grpc_status")
+grpc_status_requirement_message = None if have_yaml else "No module named 'grpc_status'"
+
+
+googleapis_common_protos_requirement_message = None
+
+try:
+    from google.rpc import error_details_pb2
+except ImportError as e:
+    googleapis_common_protos_requirement_message = str(e)
+have_googleapis_common_protos = googleapis_common_protos_requirement_message is None
+
 pandas_requirement_message = None
 try:
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
@@ -116,6 +131,18 @@ except Exception as e:
     pyarrow_requirement_message = str(e)
 
 have_pyarrow = pyarrow_requirement_message is None
+
+
+connect_requirement_message = (
+    pandas_requirement_message
+    or pyarrow_requirement_message
+    or grpc_requirement_message
+    or googleapis_common_protos_requirement_message
+    or grpc_status_requirement_message
+)
+
+should_test_connect = connect_requirement_message is None
+
 
 is_ansi_mode_test = True
 if os.environ.get("SPARK_ANSI_SQL_MODE") == "false":

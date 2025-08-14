@@ -60,7 +60,17 @@ private[spark] class BatchIterator[T](iter: Iterator[T], batchSize: Int)
 }
 
 /**
- * A physical plan that evaluates a [[PythonUDF]].
+ * A physical plan that evaluates a vectorized UDF.
+ * Following eval types are supported:
+ *
+ * <ul>
+ *   <li> SQL_ARROW_BATCHED_UDF for Arrow Optimized Python UDF
+ *   <li> SQL_SCALAR_ARROW_UDF for Scalar Arrow UDF
+ *   <li> SQL_SCALAR_ARROW_ITER_UDF for Scalar Iterator Arrow UDF
+ *   <li> SQL_SCALAR_PANDAS_UDF for Scalar Pandas UDF
+ *   <li> SQL_SCALAR_PANDAS_ITER_UDF for Scalar Iterator Pandas UDF
+ * </ul>
+ *
  */
 case class ArrowEvalPythonExec(
     udfs: Seq[PythonUDF],

@@ -86,7 +86,7 @@ def arrow_udf(f=None, returnType=None, functionType=None):
 
     >>> from pyspark.sql.functions import ArrowUDFType
     >>> from pyspark.sql.types import IntegerType
-    >>> @arrow_udf(IntegerType())
+    >>> @arrow_udf(IntegerType(), ArrowUDFType.SCALAR)
     ... def slen(v: pa.Array) -> pa.Array:
     ...     return pa.compute.utf8_length(v)
 
