@@ -48,14 +48,16 @@ case class OrcScan(
     pushedAggregate: Option[Aggregation] = None,
     pushedFilters: Array[Filter],
     originPartitionFilters: Seq[Expression] = Seq.empty,
-    dataFilters: Seq[Expression] = Seq.empty) extends FileScan with SupportsRuntimeV2Filtering {
+    dataFilters: Seq[Expression] = Seq.empty)
+    extends FileScan
+    with SupportsRuntimeV2Filtering {
   override def isSplitable(path: Path): Boolean = {
     // If aggregate is pushed down, only the file footer will be read once,
     // so file should not be split across multiple tasks.
     pushedAggregate.isEmpty
   }
 
-  private var dppPartitionFilters: Seq[Expression] = Seq.empty;
+  private var dppPartitionFilters: Seq[Expression] = Seq.empty
 
   override def partitionFilters: Seq[Expression] = {
     originPartitionFilters ++ dppPartitionFilters
@@ -127,8 +129,11 @@ case class OrcScan(
           val values = p.children().drop(1)
           val filterRef = p.children()(0).asInstanceOf[FieldReference].references.head
           val sets = values.map(_.asInstanceOf[LiteralValue[_]].value).toSet[Any]
-          dppPartitionFilters = dppPartitionFilters :+ InSet(AttributeReference(
-            filterRef.toString, values(0).asInstanceOf[LiteralValue[_]].dataType)(), sets)
+          dppPartitionFilters = dppPartitionFilters :+ InSet(
+            AttributeReference(
+              filterRef.toString,
+              values(0).asInstanceOf[LiteralValue[_]].dataType)(),
+            sets)
         }
     }
   }

@@ -93,11 +93,12 @@ trait OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfter
    * temporary table named `tableName`, then call `f`. The temporary table together with the
    * Orc file will be dropped/deleted after `f` returns.
    */
-  protected def withOrcTable[T <: Product: ClassTag: TypeTag]
-      (data: Seq[T], tableName: String, testVectorized: Boolean = true
-       , partitionNames: Seq[String] = Seq.empty)
-      (f: => Unit): Unit = withDataSourceTable(data, tableName, testVectorized
-    , partitionNames)(f)
+  protected def withOrcTable[T <: Product: ClassTag: TypeTag](
+      data: Seq[T],
+      tableName: String,
+      testVectorized: Boolean = true,
+      partitionNames: Seq[String] = Seq.empty)(f: => Unit): Unit =
+    withDataSourceTable(data, tableName, testVectorized, partitionNames)(f)
 
   protected def makeOrcFile[T <: Product: ClassTag: TypeTag](
       data: Seq[T], path: File): Unit = makeDataSourceFile(data, path)
