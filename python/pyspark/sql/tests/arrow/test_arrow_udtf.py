@@ -407,12 +407,11 @@ class ArrowUDTFTests(ReusedSQLTestCase):
                     )
                     yield result_table
 
-        # TODO(SPARK-53251): Enable DataFrame API testing with asTable()
-        # # Test with DataFrame API using asTable()
-        # input_df = self.spark.range(8)
-        # result_df = TableArgUDTF(input_df.asTable())
+        # Test with DataFrame API using asTable()
+        input_df = self.spark.range(8)
+        result_df = TableArgUDTF(input_df.asTable())
         expected_df = self.spark.createDataFrame([(6,), (7,)], "filtered_id bigint")
-        # assertDataFrameEqual(result_df, expected_df)
+        assertDataFrameEqual(result_df, expected_df)
 
         # Test SQL registration and usage with TABLE() syntax
         self.spark.udtf.register("test_table_arg_udtf", TableArgUDTF)
@@ -449,11 +448,10 @@ class ArrowUDTFTests(ReusedSQLTestCase):
                     yield result_table
 
         # # Test with DataFrame API
-        # TODO(SPARK-53251): Enable DataFrame API testing with asTable()
-        # input_df = self.spark.range(8)
-        # result_df = MixedArgsUDTF(input_df.asTable(), lit(5))
+        input_df = self.spark.range(8)
+        result_df = MixedArgsUDTF(input_df.asTable(), lit(5))
         expected_df = self.spark.createDataFrame([(6,), (7,)], "filtered_id bigint")
-        # assertDataFrameEqual(result_df, expected_df)
+        assertDataFrameEqual(result_df, expected_df)
 
         # Test SQL registration and usage
         self.spark.udtf.register("test_mixed_args_udtf", MixedArgsUDTF)
