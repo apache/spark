@@ -154,7 +154,7 @@ class RocksDBStateMachine(
       // Convert from nanoseconds to milliseconds
       TimeUnit.MILLISECONDS.convert(elapsedNanos, TimeUnit.NANOSECONDS)
     }
-    while (state == ACQUIRED && timeWaitedMs < rocksDBConf.lockAcquireTimeoutMs) {
+    while (state == ACQUIRED && timeWaitedMs < 2000) {
       stateMachineLock.wait(10)
       // log every 30 seconds
       if (timeWaitedMs % (30 * 1000) == 0) {

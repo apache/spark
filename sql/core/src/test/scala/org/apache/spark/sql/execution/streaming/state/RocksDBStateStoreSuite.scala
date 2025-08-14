@@ -654,6 +654,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         (key._1, key._2)
       }.toSeq
       assert(result === timerTimestamps.sorted)
+      store.abort()
     }
   }
 
@@ -1489,6 +1490,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           (key._1, key._2)
         }.toSeq
       assert(result.map(_._1) === timerTimestamps.map(_._1).sorted)
+      store.abort()
     }
   }
 
@@ -1534,6 +1536,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         (key._1, key._2)
       }.toSeq
       assert(result === timerTimestamps.sorted)
+      store.abort()
     }
   }
 
@@ -1649,6 +1652,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       assert(valueRowToData(store.get(keyRow2)) === 2)
       store.remove(keyRow2)
       assert(store.get(keyRow2) === null)
+      store.abort()
     }
   }
 
@@ -1757,6 +1761,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         assert(!iterator2.hasNext)
 
         assert(get(store, "a", 0).isEmpty)
+        store.abort()
       }
     }
   }
@@ -1796,6 +1801,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           )
         }
       }
+      store.abort()
     }
   }
 
@@ -1832,6 +1838,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           )
         }
       }
+      store.abort()
     }
   }
 
