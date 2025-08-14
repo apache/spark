@@ -36,10 +36,7 @@ import pyspark.pandas as ps
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.indexes import Index
 from pyspark.pandas.series import Series
-from pyspark.pandas.utils import (
-    SPARK_CONF_ARROW_ENABLED,
-    SPARK_CONF_PANDAS_STRUCT_MODE,  # noqa: F401
-)
+from pyspark.pandas.utils import SPARK_CONF_ARROW_ENABLED
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import is_ansi_mode_test
 from pyspark.errors import PySparkAssertionError
