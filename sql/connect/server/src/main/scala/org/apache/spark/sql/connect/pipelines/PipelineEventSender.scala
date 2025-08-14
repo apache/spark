@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.pipelines
 
-import java.util.concurrent.{BlockingQueue, Executors, ExecutorService, LinkedBlockingQueue}
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.util.control.NonFatal
@@ -41,20 +41,14 @@ class PipelineEventSender(
     sessionHolder: SessionHolder)
     extends Logging {
 
-  // Thread-safe queue for buffering events
-  private val eventQueue: BlockingQueue[PipelineEventMessage] = new LinkedBlockingQueue()
-
   // ExecutorService for background event processing
-  private val executor: ExecutorService = {
-    val threadFactory = ThreadUtils
-      .namedThreadFactory(s"pipeline-event-sender-${sessionHolder.sessionId}")
-    Executors.newSingleThreadExecutor(threadFactory)
-  }
+  private val executor: ThreadPoolExecutor = ThreadUtils
+    .newDaemonSingleThreadExecutor(s"pipeline-event-sender-${sessionHolder.sessionId}")
 
   /*
    * Atomic flags to track the state of the sender
    * - `isShutdown`: Indicates if the sender has been shut down, if true, no new events
-   *    can be accepted, and the loop will exit after processing all already queued events.
+   *    can be accepted, and the executor will be shut down.
    *
    * - `isStarted`: Indicates if the sender has been started, if true, the background
    *    executor is running and processing events. This prevents multiple starts
@@ -63,38 +57,32 @@ class PipelineEventSender(
   private val isShutdown = new AtomicBoolean(false)
   private val isStarted = new AtomicBoolean(false)
 
-  // Sealed trait for different message types
-  private sealed trait PipelineEventMessage
-  private case class EventMessage(event: PipelineEvent) extends PipelineEventMessage
-  private case object ShutdownMessage extends PipelineEventMessage
-
   /**
    * Start the background executor for sending events, only if not already started. Idempotent
    * operation: calling this multiple times has no effect after the first call.
    */
   def start(): Unit = {
     if (isStarted.compareAndSet(false, true)) {
-      executor.submit(new Runnable {
-        override def run(): Unit = {
-          try {
-            processEvents()
-          } catch {
-            case NonFatal(e) =>
-              logError(s"Pipeline event sender failed for session ${sessionHolder.sessionId}", e)
-          }
-        }
-      })
       logInfo(s"Started pipeline event sender for session ${sessionHolder.sessionId}")
     }
   }
 
   /**
-   * Send an event asynchronously by adding it to the queue, if the sender is not shut down.
+   * Send an event async by submitting it to the executor, if the sender is not shut down.
    * Otherwise, throws an IllegalStateException, to raise awareness of the shutdown state.
    */
   def sendEvent(event: PipelineEvent): Unit = {
     if (!isShutdown.get()) {
-      eventQueue.add(EventMessage(event))
+      executor.submit(new Runnable {
+        override def run(): Unit = {
+          try {
+            sendEventToClient(event)
+          } catch {
+            case NonFatal(e) =>
+              logError(s"Failed to send pipeline event to client: ${event.message}", e)
+          }
+        }
+      })
     } else {
       throw new IllegalStateException(
         s"Cannot send event after shutdown for session ${sessionHolder.sessionId}")
@@ -102,17 +90,13 @@ class PipelineEventSender(
   }
 
   /**
-   * Shutdown the event sender, stop taking new events and wait for processing to complete. Sends
-   * a ShutdownMessage serves as a signal to the processing loop to exit gracefully after
-   * processing all currently queued events. This method blocks until all queued events have been
-   * processed. Idempotent operation: calling this multiple times has no effect after the first
-   * call.
+   * Shutdown the event sender, stop taking new events and wait for processing to complete. This
+   * method blocks until all queued events have been processed. Idempotent operation: calling this
+   * multiple times has no effect after the first call.
    */
   def shutdown(): Unit = {
     if (isShutdown.compareAndSet(false, true)) {
-      // Signal shutdown to the processing loop
-      eventQueue.offer(ShutdownMessage)
-      // Request a shutdown of the executor which waits for processEvents to complete
+      // Request a shutdown of the executor which waits for all tasks to complete
       executor.shutdown()
       // Blocks until all tasks have completed execution after a shutdown request,
       // disregard the timeout since we want all events to be processed
@@ -122,39 +106,8 @@ class PipelineEventSender(
             s"failed to terminate")
         executor.shutdownNow()
       }
+      logInfo(s"Pipeline event sender shutdown completed for session ${sessionHolder.sessionId}")
     }
-  }
-
-  /**
-   * Main event processing loop that runs in the background executor
-   */
-  private def processEvents(): Unit = {
-    while (true) {
-      try {
-        val message = eventQueue.take()
-
-        message match {
-          case EventMessage(event) =>
-            sendEventToClient(event)
-          case ShutdownMessage =>
-            logInfo(
-              s"Reached shutdown signal for session ${sessionHolder.sessionId}," +
-                s"all events processed.")
-            return
-        }
-      } catch {
-        case _: InterruptedException =>
-          logInfo(
-            s"Pipeline event sender thread interrupted " +
-              s"for session ${sessionHolder.sessionId}")
-          Thread.currentThread().interrupt()
-          return
-        case NonFatal(e) =>
-          logError("Error processing pipeline event", e)
-        // Continue processing other events
-      }
-    }
-    logInfo(s"Event processing completed for session ${sessionHolder.sessionId}")
   }
 
   /**
