@@ -95,10 +95,10 @@ have_yaml = have_package("yaml")
 yaml_requirement_message = None if have_yaml else "No module named 'yaml'"
 
 have_grpc = have_package("grpc")
-grpc_requirement_message = None if have_yaml else "No module named 'grpc'"
+grpc_requirement_message = None if have_grpc else "No module named 'grpc'"
 
 have_grpc_status = have_package("grpc_status")
-grpc_status_requirement_message = None if have_yaml else "No module named 'grpc_status'"
+grpc_status_requirement_message = None if have_grpc_status else "No module named 'grpc_status'"
 
 
 googleapis_common_protos_requirement_message = None
