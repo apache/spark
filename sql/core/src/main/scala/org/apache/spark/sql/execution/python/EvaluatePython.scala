@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.python
 import java.io.OutputStream
 import java.nio.charset.StandardCharsets
 
-import scala.collection.mutable.ArraySeq
 import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.{IObjectPickler, Opcodes, Pickler}
@@ -227,42 +226,6 @@ object EvaluatePython {
   private val module = "pyspark.sql.types"
 
   /**
-   * Pickler for ArraySeq
-   */
-  private class ArraySeqPickler extends IObjectPickler {
-
-    private val cls = classOf[ArraySeq[_]]
-
-    def register(): Unit = {
-      Pickler.registerCustomPickler(cls, this)
-    }
-
-    override def pickle(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
-      // Send a reference to a Python helper function that knows how to rebuild ArraySeq
-      out.write(Opcodes.GLOBAL)
-      out.write(
-        (module + "\n" + "_create_arrayseq" + "\n").getBytes(StandardCharsets.UTF_8)
-      )
-
-      val arrSeq = obj.asInstanceOf[ArraySeq[_]]
-
-      // Start a MARK to push elements
-      out.write(Opcodes.MARK)
-
-      var i = 0
-      while (i < arrSeq.length) {
-        pickler.save(arrSeq(i))
-        i += 1
-      }
-
-      // Close the tuple
-      out.write(Opcodes.TUPLE)
-      // Apply the Python-side constructor
-      out.write(Opcodes.REDUCE)
-    }
-  }
-
-  /**
    * Pickler for StructType
    */
   private class StructTypePickler extends IObjectPickler {
@@ -335,7 +298,6 @@ object EvaluatePython {
         SerDeUtil.initialize()
         new StructTypePickler().register()
         new RowPickler().register()
-        new ArraySeqPickler().register()
         registered = true
       }
     }
