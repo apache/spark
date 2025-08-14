@@ -620,7 +620,7 @@ class RocksDBStateStoreLockHardeningSuite extends SparkFunSuite
     }
   }
 
-  test("lock hardening: safe provider close during concurrent commit operations") {
+  test("SPARK-53276: safe provider close during concurrent commit operations") {
     // This test simulates the scenario fixed by SPARK-53276:
     // - Multiple partitions are processing, some hit errors while others are committing
     // - StateStore.stop() is called, which tries to close all providers
@@ -711,7 +711,7 @@ class RocksDBStateStoreLockHardeningSuite extends SparkFunSuite
     }
   }
 
-  test("lock hardening: close waits for concurrent operations to complete") {
+  test("SPARK-53276: close waits for concurrent operations to complete") {
     // This test verifies that close() properly waits for ongoing operations
     // to complete before actually closing the RocksDB instance
 
