@@ -1514,7 +1514,6 @@ class TransformWithStateTestsMixin:
         )
 
     def test_transform_with_state_in_pandas_composite_type(self):
-        use_pandas = self.use_pandas()
 
         def check_results(batch_df, batch_id):
             if batch_id == 0:
@@ -1525,44 +1524,36 @@ class TransformWithStateTestsMixin:
                         id="0",
                         value_arr="0",
                         list_state_arr="0",
-                        map_state_arr=str(map_val),
-                        nested_map_state_arr=str(nested_map_val),
+                        map_state_arr=json.dumps(map_val, sort_keys=True),
+                        nested_map_state_arr=json.dumps(nested_map_val, sort_keys=True)
                     ),
                     Row(
                         id="1",
                         value_arr="0",
                         list_state_arr="0",
-                        map_state_arr=str(map_val),
-                        nested_map_state_arr=str(nested_map_val),
+                        map_state_arr=json.dumps(map_val, sort_keys=True),
+                        nested_map_state_arr=json.dumps(nested_map_val, sort_keys=True)
                     ),
                 }, f"batch id: {batch_id}, real df is: {batch_df.collect()}"
             else:
-                if use_pandas:
-                    import numpy as np
-
-                    map_val_0 = {"key1": [1], "key2": [10], "0": [np.int64(669)]}
-                    map_val_1 = {"key1": [1], "key2": [10], "1": [np.int64(252)]}
-                    nested_map_val_0 = {"e1": {"e2": 5, "e3": 10, "0": np.int64(669)}}
-                    nested_map_val_1 = {"e1": {"e2": 5, "e3": 10, "1": np.int64(252)}}
-                else:
-                    map_val_0 = {"key1": [1], "key2": [10], "0": [669]}
-                    map_val_1 = {"key1": [1], "key2": [10], "1": [252]}
-                    nested_map_val_0 = {"e1": {"e2": 5, "e3": 10, "0": 669}}
-                    nested_map_val_1 = {"e1": {"e2": 5, "e3": 10, "1": 252}}
+                map_val_0 = {"key1": [1], "key2": [10], "0": [669]}
+                map_val_1 = {"key1": [1], "key2": [10], "1": [252]}
+                nested_map_val_0 = {"e1": {"e2": 5, "e3": 10, "0": 669}}
+                nested_map_val_1 = {"e1": {"e2": 5, "e3": 10, "1": 252}}
                 assert set(batch_df.sort("id").collect()) == {
                     Row(
                         id="0",
                         countAsString="669",
                         list_state_arr="0,669",
-                        map_state_arr=str(map_val_0),
-                        nested_map_state_arr=str(nested_map_val_0),
+                        map_state_arr=json.dumps(map_val_0, sort_keys=True),
+                        nested_map_state_arr=json.dumps(nested_map_val_0, sort_keys=True),
                     ),
                     Row(
                         id="1",
                         countAsString="252",
                         list_state_arr="0,252",
-                        map_state_arr=str(map_val_1),
-                        nested_map_state_arr=str(nested_map_val_1),
+                        map_state_arr=json.dumps(map_val_1, sort_keys=True),
+                        nested_map_state_arr=json.dumps(nested_map_val_1, sort_keys=True),
                     ),
                 }, f"batch id: {batch_id}, real df is: {batch_df.collect()}"
 

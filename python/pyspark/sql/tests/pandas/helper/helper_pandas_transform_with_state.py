@@ -1629,270 +1629,158 @@ class RowMinEventTimeStatefulProcessor(StatefulProcessor):
 
 # A stateful processor that contains composite python type inside Value, List and Map state variable
 class PandasStatefulProcessorCompositeType(StatefulProcessor):
+    TAGS = [["dummy1", "dummy2"], ["dummy3"]]
+    METADATA = [{"key": "env", "value": "prod"}, {"key": "region", "value": "us-west"}]
+    ATTRIBUTES_MAP = {"key1": [1], "key2": [10]}
+    CONFS_MAP = {"e1": {"e2": 5, "e3": 10}}
+
     def init(self, handle: StatefulProcessorHandle) -> None:
-        # Schema for a complex object with arrays and nested structures
-        obj_schema = StructType(
-            [
-                StructField("id", ArrayType(IntegerType())),  # Array of integers
-                StructField(
-                    "tags", ArrayType(ArrayType(StringType()))
-                ),  # Array of array of strings
-                StructField(
-                    "metadata",
-                    ArrayType(  # Array of key-value structs
-                        StructType(
-                            [StructField("key", StringType()), StructField("value", StringType())]
-                        )
-                    ),
-                ),
-            ]
-        )
+        obj_schema = StructType([
+            StructField("id", ArrayType(IntegerType())),
+            StructField("tags", ArrayType(ArrayType(StringType()))),
+            StructField("metadata", ArrayType(StructType([
+                StructField("key", StringType()),
+                StructField("value", StringType())
+            ]))),
+        ])
 
-        # Schema for a map with nested maps and arrays
-        map_value_schema = StructType(
-            [
-                StructField("id", IntegerType(), True),
-                # Map from String to Array of Integers
-                StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True),
-                # Nested Map: String -> (String -> Integer)
-                StructField(
-                    "confs", MapType(StringType(), MapType(StringType(), IntegerType()), True), True
-                ),
-            ]
-        )
+        map_value_schema = StructType([
+            StructField("id", IntegerType(), True),
+            StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True),
+            StructField("confs", MapType(StringType(), MapType(StringType(), IntegerType()), True), True),
+        ])
 
-        # Initialize state variables
         self.obj_state = handle.getValueState("obj_state", obj_schema)
         self.list_state = handle.getListState("list_state", obj_schema)
         self.map_state = handle.getMapState("map_state", "name string", map_value_schema)
 
-    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
-        key = key[0]
-        total_temperature = 0
-
-        # Fixed tags and metadata to use for state
-        tags = [["dummy1", "dummy2"], ["dummy3"]]
-        metadata = [{"key": "env", "value": "prod"}, {"key": "region", "value": "us-west"}]
-
-        # Sum temperature values from input batch (DataFrames)
-        for pdf in rows:
-            # total_temperature is numpy.int64 type
-            total_temperature += pdf["temperature"].astype(int).sum()
-
-        # Update obj_state: id is an array, tags and metadata are fixed
+    def _update_obj_state(self, total_temperature):
         if self.obj_state.exists():
-            current_obj = self.obj_state.get()
-            expected_metadata_rows = [Row(key=md["key"], value=md["value"]) for md in metadata]
-
-            # Verify tags and metadata remain consistent
-            assert current_obj[1] == tags, f"Tag mismatch: got {current_obj[1]}"
-            assert (
-                current_obj[2] == expected_metadata_rows
-            ), f"Metadata mismatch: got {current_obj[2]}"
-
-            current_ids = current_obj[0]
-            # Add total_temperature to each existing id
-            updated_ids = [int(x + total_temperature) for x in current_ids]
+            ids, tags, metadata = self.obj_state.get()
+            assert tags == self.TAGS, f"Tag mismatch: {tags}"
+            assert metadata == [Row(**m) for m in self.METADATA], f"Metadata mismatch: {metadata}"
+            ids = [int(x + total_temperature) for x in ids]
         else:
-            updated_ids = [0]
+            ids = [0]
+        self.obj_state.update((ids, self.TAGS, self.METADATA))
+        return ids
 
-        updated_obj = (updated_ids, tags, metadata)  # id array
-
-        self.obj_state.update(updated_obj)
-
-        # Update list_state by appending total_temperature to each id array in the list
+    def _update_list_state(self, total_temperature, initial_obj):
         existing_list = self.list_state.get()
         updated_list = []
-
-        for obj in existing_list:
-            current_id_list = obj[0]
-            assert current_id_list is not None
-            # Append current batch's total_temperature to id list
-            current_id_list.append(total_temperature)
-
-            updated_list.append((current_id_list, tags, metadata))
-
-        # If list_state is empty, initialize with updated_obj
+        for ids, tags, metadata in existing_list:
+            ids.append(total_temperature)
+            updated_list.append((ids, tags, [row.asDict() for row in metadata]))
         if not updated_list:
-            updated_list.append(updated_obj)
-
+            updated_list.append(initial_obj)
         self.list_state.put(updated_list)
+        return [id_val for ids, _, _ in updated_list for id_val in ids]
 
-        # Flatten all ids from list_state for output
-        flattened_ids = [id_val for obj in updated_list for id_val in obj[0]]
-
-        # Prepare data matching the map_state schema
-        attributes_map = {"key1": [1], "key2": [10]}
-        confs_map = {"e1": {"e2": 5, "e3": 10}}
-        map_data = (
-            0,  # id (dummy)
-            attributes_map,  # attributes map
-            confs_map,  # nested confs map
-        )
-
-        # Update map_state keyed by 'key'
+    def _update_map_state(self, key, total_temperature):
         if not self.map_state.containsKey(key):
-            self.map_state.updateValue(key, map_data)
+            self.map_state.updateValue(key, (0, self.ATTRIBUTES_MAP, self.CONFS_MAP))
         else:
-            existing_map_value = self.map_state.getValue(key)
-            attributes_map = existing_map_value[1]
-            confs_map = existing_map_value[2]
+            id_val, attributes, confs = self.map_state.getValue(key)
+            attributes[key] = [total_temperature]
+            confs.setdefault("e1", {})[key] = total_temperature
+            self.map_state.updateValue(key, (id_val, attributes, confs))
+        return self.map_state.getValue(key)[1], self.map_state.getValue(key)[2]
 
-            # Update attributes and nested confs with current batch total_temperature
-            attributes_map[key] = [total_temperature]
-            if "e1" not in confs_map:
-                confs_map["e1"] = {}
-            confs_map["e1"][key] = total_temperature
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        key = key[0]
+        total_temperature = sum(pdf["temperature"].astype(int).sum() for pdf in rows)
 
-            new_map_value = (0, attributes_map, confs_map)
-            self.map_state.updateValue(key, new_map_value)
+        updated_ids = self._update_obj_state(total_temperature)
+        flattened_ids = self._update_list_state(total_temperature, (updated_ids, self.TAGS, self.METADATA))
+        attributes_map, confs_map = self._update_map_state(key, total_temperature)
 
-        # Serialize attributes map for output
-        attributes_str = str(attributes_map)
-        confs_str = str(confs_map)
-
-        # Yield a DataFrame summarizing the current state
-        yield pd.DataFrame(
-            {
-                "id": [key],
-                "value_arr": [",".join(map(str, updated_ids))],
-                "list_state_arr": [",".join(map(str, flattened_ids))],
-                "map_state_arr": [attributes_str],
-                "nested_map_state_arr": [confs_str],
-            }
-        )
+        import json
+        np_int64_to_int = lambda x: int(x) if isinstance(x, np.int64) else x
+        yield pd.DataFrame({
+            "id": [key],
+            "value_arr": [",".join(map(str, updated_ids))],
+            "list_state_arr": [",".join(map(str, flattened_ids))],
+            "map_state_arr": [json.dumps(attributes_map, default=np_int64_to_int, sort_keys=True)],
+            "nested_map_state_arr": [json.dumps(confs_map, default=np_int64_to_int, sort_keys=True)],
+        })
 
     def close(self) -> None:
         pass
 
 
 class RowStatefulProcessorCompositeType(StatefulProcessor):
+    TAGS = [["dummy1", "dummy2"], ["dummy3"]]
+    METADATA = [{"key": "env", "value": "prod"}, {"key": "region", "value": "us-west"}]
+    ATTRIBUTES_MAP = {"key1": [1], "key2": [10]}
+    CONFS_MAP = {"e1": {"e2": 5, "e3": 10}}
+
     def init(self, handle: StatefulProcessorHandle) -> None:
-        # Schema for a complex object with arrays and nested structures
-        obj_schema = StructType(
-            [
-                StructField("id", ArrayType(IntegerType())),  # Array of integers
-                StructField(
-                    "tags", ArrayType(ArrayType(StringType()))
-                ),  # Array of array of strings
-                StructField(
-                    "metadata",
-                    ArrayType(  # Array of key-value structs
-                        StructType(
-                            [StructField("key", StringType()), StructField("value", StringType())]
-                        )
-                    ),
-                ),
-            ]
-        )
+        obj_schema = StructType([
+            StructField("id", ArrayType(IntegerType())),
+            StructField("tags", ArrayType(ArrayType(StringType()))),
+            StructField("metadata", ArrayType(StructType([
+                StructField("key", StringType()),
+                StructField("value", StringType())
+            ]))),
+        ])
 
-        # Schema for a map with nested maps and arrays
-        map_value_schema = StructType(
-            [
-                StructField("id", IntegerType(), True),
-                # Map from String to Array of Integers
-                StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True),
-                # Nested Map: String -> (String -> Integer)
-                StructField(
-                    "confs", MapType(StringType(), MapType(StringType(), IntegerType()), True), True
-                ),
-            ]
-        )
+        map_value_schema = StructType([
+            StructField("id", IntegerType(), True),
+            StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True),
+            StructField("confs", MapType(StringType(), MapType(StringType(), IntegerType()), True), True),
+        ])
 
-        # Initialize state variables
         self.obj_state = handle.getValueState("obj_state", obj_schema)
         self.list_state = handle.getListState("list_state", obj_schema)
         self.map_state = handle.getMapState("map_state", "name string", map_value_schema)
 
-    def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
-        key = key[0]
-        total_temperature = 0
-
-        # Fixed tags and metadata to use for state
-        tags = [["dummy1", "dummy2"], ["dummy3"]]
-        metadata = [{"key": "env", "value": "prod"}, {"key": "region", "value": "us-west"}]
-
-        for row in rows:
-            total_temperature += int(row.temperature)
-
-        # Update obj_state: id is an array, tags and metadata are fixed
+    def _update_obj_state(self, total_temperature):
         if self.obj_state.exists():
-            current_obj = self.obj_state.get()
-            expected_metadata_rows = [Row(key=md["key"], value=md["value"]) for md in metadata]
-
-            # Verify tags and metadata remain consistent
-            assert current_obj[1] == tags, f"Tag mismatch: got {current_obj[1]}"
-            assert (
-                current_obj[2] == expected_metadata_rows
-            ), f"Metadata mismatch: got {current_obj[2]}"
-
-            current_ids = current_obj[0]
-            # Add total_temperature to each existing id
-            updated_ids = [int(x + total_temperature) for x in current_ids]
+            ids, tags, metadata = self.obj_state.get()
+            assert tags == self.TAGS, f"Tag mismatch: {tags}"
+            assert metadata == [Row(**m) for m in self.METADATA], f"Metadata mismatch: {metadata}"
+            ids = [int(x + total_temperature) for x in ids]
         else:
-            updated_ids = [0]
+            ids = [0]
+        self.obj_state.update((ids, self.TAGS, self.METADATA))
+        return ids
 
-        updated_obj = (updated_ids, tags, metadata)  # id array
-        self.obj_state.update(updated_obj)
-
-        # Update list_state by appending total_temperature to each id array in the list
+    def _update_list_state(self, total_temperature, initial_obj):
         existing_list = self.list_state.get()
         updated_list = []
-
-        for obj in existing_list:
-            current_id_list = obj[0]
-            assert current_id_list is not None
-            # Append current batch's total_temperature to id list
-            current_id_list.append(total_temperature)
-
-            updated_list.append((current_id_list, tags, metadata))
-
-        # If list_state is empty, initialize with updated_obj
+        for ids, tags, metadata in existing_list:
+            ids.append(total_temperature)
+            updated_list.append((ids, tags, [row.asDict() for row in metadata]))
         if not updated_list:
-            updated_list.append(updated_obj)
-
+            updated_list.append(initial_obj)
         self.list_state.put(updated_list)
+        return [id_val for ids, _, _ in updated_list for id_val in ids]
 
-        # Flatten all ids from list_state for output
-        flattened_ids = [id_val for obj in updated_list for id_val in obj[0]]
-
-        # Prepare data matching the map_state schema
-        attributes_map = {"key1": [1], "key2": [10]}
-        confs_map = {"e1": {"e2": 5, "e3": 10}}
-        map_data = (
-            0,  # id (dummy)
-            attributes_map,  # attributes map
-            confs_map,  # nested confs map
-        )
-
-        # Update map_state keyed by 'key'
+    def _update_map_state(self, key, total_temperature):
         if not self.map_state.containsKey(key):
-            self.map_state.updateValue(key, map_data)
+            self.map_state.updateValue(key, (0, self.ATTRIBUTES_MAP, self.CONFS_MAP))
         else:
-            existing_map_value = self.map_state.getValue(key)
-            attributes_map = existing_map_value[1]
-            confs_map = existing_map_value[2]
+            id_val, attributes, confs = self.map_state.getValue(key)
+            attributes[key] = [total_temperature]
+            confs.setdefault("e1", {})[key] = total_temperature
+            self.map_state.updateValue(key, (id_val, attributes, confs))
+        return self.map_state.getValue(key)[1], self.map_state.getValue(key)[2]
 
-            # Update attributes and nested confs with current batch total_temperature
-            attributes_map[key] = [total_temperature]
-            if "e1" not in confs_map:
-                confs_map["e1"] = {}
-            confs_map["e1"][key] = total_temperature
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
+        key = key[0]
+        total_temperature = sum(int(row.temperature) for row in rows)
 
-            new_map_value = (0, attributes_map, confs_map)
-            self.map_state.updateValue(key, new_map_value)
+        updated_ids = self._update_obj_state(total_temperature)
+        flattened_ids = self._update_list_state(total_temperature, (updated_ids, self.TAGS, self.METADATA))
+        attributes_map, confs_map = self._update_map_state(key, total_temperature)
 
-        # Serialize attributes map for output
-        attributes_str = str(attributes_map)
-        confs_str = str(confs_map)
-
-        # Yield a DataFrame summarizing the current state
+        import json
         yield Row(
             id=key,
             value_arr=",".join(map(str, updated_ids)),
             list_state_arr=",".join(map(str, flattened_ids)),
-            map_state_arr=attributes_str,
-            nested_map_state_arr=confs_str,
+            map_state_arr=json.dumps(attributes_map, sort_keys=True),
+            nested_map_state_arr=json.dumps(confs_map, sort_keys=True),
         )
 
     def close(self) -> None:
