@@ -891,23 +891,22 @@ case class MergeIntoTable(
     case _ => false
   }
 
-  def schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
-    EliminateSubqueryAliases(targetTable) match {
-      case r: DataSourceV2Relation if r.autoSchemaEvolution() => true
-      case _ => false
-    }
-  }
-
-  def needSchemaEvolution: Boolean =
-    schemaEvolutionEnabled &&
-      MergeIntoTable.schemaChanges(targetTable.schema, sourceTable.schema).nonEmpty
-
-
   override def left: LogicalPlan = targetTable
   override def right: LogicalPlan = sourceTable
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): MergeIntoTable =
     copy(targetTable = newLeft, sourceTable = newRight)
+
+  def needSchemaEvolution: Boolean =
+    schemaEvolutionEnabled &&
+      MergeIntoTable.schemaChanges(targetTable.schema, sourceTable.schema).nonEmpty
+
+  private def schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
+    EliminateSubqueryAliases(targetTable) match {
+      case r: DataSourceV2Relation if r.autoSchemaEvolution() => true
+      case _ => false
+    }
+  }
 }
 
 object MergeIntoTable {

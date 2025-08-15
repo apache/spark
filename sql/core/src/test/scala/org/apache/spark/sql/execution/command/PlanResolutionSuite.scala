@@ -2315,11 +2315,24 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
          |USING testcat.tab2
          |ON 1 = 1
          |WHEN MATCHED THEN UPDATE SET *""".stripMargin
-    checkError(
-      exception = intercept[AnalysisException](parseAndResolve(sql2)),
-      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      parameters = Map("objectName" -> "`s`", "proposal" -> "`i`, `x`"),
-      context = ExpectedContext(fragment = sql2, start = 0, stop = 80))
+    val parsed2 = parseAndResolve(sql2)
+    parsed2 match {
+      case MergeIntoTable(
+          AsDataSourceV2Relation(target),
+          AsDataSourceV2Relation(source),
+          EqualTo(IntegerLiteral(1), IntegerLiteral(1)),
+          Seq(UpdateAction(None, updateAssigns)), // Matched actions
+          Seq(), // Not matched actions
+          Seq(), // Not matched by source actions
+          withSchemaEvolution) =>
+        val ti = target.output.find(_.name == "i").get
+        val si = source.output.find(_.name == "i").get
+        assert(updateAssigns.size == 1)
+        assert(updateAssigns.head.key.asInstanceOf[AttributeReference].sameRef(ti))
+        assert(updateAssigns.head.value.asInstanceOf[AttributeReference].sameRef(si))
+        assert(withSchemaEvolution === false)
+      case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
+    }
 
     // INSERT * with incompatible schema between source and target tables.
     val sql3 =
@@ -2327,11 +2340,24 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         |USING testcat.tab2
         |ON 1 = 1
         |WHEN NOT MATCHED THEN INSERT *""".stripMargin
-    checkError(
-      exception = intercept[AnalysisException](parseAndResolve(sql3)),
-      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      parameters = Map("objectName" -> "`s`", "proposal" -> "`i`, `x`"),
-      context = ExpectedContext(fragment = sql3, start = 0, stop = 80))
+    val parsed3 = parseAndResolve(sql3)
+    parsed3 match {
+      case MergeIntoTable(
+          AsDataSourceV2Relation(target),
+          AsDataSourceV2Relation(source),
+          EqualTo(IntegerLiteral(1), IntegerLiteral(1)),
+          Seq(), // Matched action
+          Seq(InsertAction(None, insertAssigns)), // Not matched actions
+          Seq(), // Not matched by source actions
+          withSchemaEvolution) =>
+        val ti = target.output.find(_.name == "i").get
+        val si = source.output.find(_.name == "i").get
+        assert(insertAssigns.size == 1)
+        assert(insertAssigns.head.key.asInstanceOf[AttributeReference].sameRef(ti))
+        assert(insertAssigns.head.value.asInstanceOf[AttributeReference].sameRef(si))
+        assert(withSchemaEvolution === false)
+      case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
+    }
 
     val sql4 =
       """
