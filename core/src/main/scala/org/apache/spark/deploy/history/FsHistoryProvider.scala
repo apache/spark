@@ -52,7 +52,7 @@ import org.apache.spark.status._
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{CallerContext, Clock, JsonProtocol, SystemClock, ThreadUtils, Utils}
+import org.apache.spark.util.{CallerContext, Clock, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkStringUtils.stringToSeq
 import org.apache.spark.util.kvstore._
@@ -827,7 +827,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val shouldHalt = enableOptimizations &&
       ((!appCompleted && fastInProgressParsing) || reparseChunkSize > 0)
 
-    val bus = new ReplayListenerBus(new JsonProtocol(conf))
+    val bus = new ReplayListenerBus()
     val listener = new AppListingListener(reader, clock, shouldHalt)
     bus.addListener(listener)
 
@@ -1144,7 +1144,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // to parse the event logs in the SHS.
     val replayConf = conf.clone().set(ASYNC_TRACKING_ENABLED, false)
     val trackingStore = new ElementTrackingStore(store, replayConf)
-    val replayBus = new ReplayListenerBus(new JsonProtocol(conf))
+    val replayBus = new ReplayListenerBus()
     val listener = new AppStatusListener(trackingStore, replayConf, false,
       lastUpdateTime = Some(lastUpdated))
     replayBus.addListener(listener)

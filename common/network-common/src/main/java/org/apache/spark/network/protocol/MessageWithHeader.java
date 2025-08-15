@@ -22,13 +22,13 @@ import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import javax.annotation.Nullable;
 
-import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.FileRegion;
 import io.netty.util.ReferenceCountUtil;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.util.AbstractFileRegion;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * A wrapper message that holds two separate pieces (a header and a body).
@@ -72,7 +72,7 @@ public class MessageWithHeader extends AbstractFileRegion {
       ByteBuf header,
       Object body,
       long bodyLength) {
-    Preconditions.checkArgument(body instanceof ByteBuf || body instanceof FileRegion,
+    JavaUtils.checkArgument(body instanceof ByteBuf || body instanceof FileRegion,
       "Body must be a ByteBuf or a FileRegion.");
     this.managedBuffer = managedBuffer;
     this.header = header;
@@ -105,7 +105,7 @@ public class MessageWithHeader extends AbstractFileRegion {
    */
   @Override
   public long transferTo(final WritableByteChannel target, final long position) throws IOException {
-    Preconditions.checkArgument(position == totalBytesTransferred, "Invalid position.");
+    JavaUtils.checkArgument(position == totalBytesTransferred, "Invalid position.");
     // Bytes written for header in this call.
     long writtenHeader = 0;
     if (header.readableBytes() > 0) {

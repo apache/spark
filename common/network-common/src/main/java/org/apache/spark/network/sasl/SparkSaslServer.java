@@ -29,8 +29,8 @@ import javax.security.sasl.SaslException;
 import javax.security.sasl.SaslServer;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.Objects;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -182,13 +182,13 @@ public class SparkSaslServer implements SaslEncryptionBackend {
 
   /* Encode a byte[] identifier as a Base64-encoded string. */
   public static String encodeIdentifier(String identifier) {
-    Preconditions.checkNotNull(identifier, "User cannot be null if SASL is enabled");
+    Objects.requireNonNull(identifier, "User cannot be null if SASL is enabled");
     return getBase64EncodedString(identifier);
   }
 
   /** Encode a password as a base64-encoded char[] array. */
   public static char[] encodePassword(String password) {
-    Preconditions.checkNotNull(password, "Password cannot be null if SASL is enabled");
+    Objects.requireNonNull(password, "Password cannot be null if SASL is enabled");
     return getBase64EncodedString(password).toCharArray();
   }
 

@@ -71,6 +71,7 @@ ERROR_MESSAGE_CANNOT_COMBINE = (
 
 
 SPARK_CONF_ARROW_ENABLED = "spark.sql.execution.arrow.pyspark.enabled"
+SPARK_CONF_PANDAS_STRUCT_MODE = "spark.sql.execution.pandas.structHandlingMode"
 
 
 class PandasAPIOnSparkAdviceWarning(Warning):

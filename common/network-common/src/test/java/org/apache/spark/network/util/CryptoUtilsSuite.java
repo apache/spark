@@ -20,7 +20,6 @@ package org.apache.spark.network.util;
 import java.util.Map;
 import java.util.Properties;
 
-import com.google.common.collect.ImmutableMap;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -38,7 +37,7 @@ public class CryptoUtilsSuite {
     String confVal2 = "val2";
     String cryptoKey2 = CryptoUtils.COMMONS_CRYPTO_CONFIG_PREFIX + "A.b.c";
 
-    Map<String, String> conf = ImmutableMap.of(
+    Map<String, String> conf = Map.of(
       confKey1, confVal1,
       confKey2, confVal2);
 

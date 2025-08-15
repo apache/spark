@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.linalg.distributed
 
+import java.util.Objects
+
 import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Matrix => BM}
@@ -90,7 +92,7 @@ private[mllib] class GridPartitioner(
   }
 
   override def hashCode: Int = {
-    com.google.common.base.Objects.hashCode(
+    Objects.hash(
       rows: java.lang.Integer,
       cols: java.lang.Integer,
       rowsPerPart: java.lang.Integer,

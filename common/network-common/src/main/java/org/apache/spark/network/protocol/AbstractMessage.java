@@ -17,7 +17,7 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 
@@ -48,7 +48,7 @@ public abstract class AbstractMessage implements Message {
   }
 
   protected boolean equals(AbstractMessage other) {
-    return isBodyInFrame == other.isBodyInFrame && Objects.equal(body, other.body);
+    return isBodyInFrame == other.isBodyInFrame && Objects.equals(body, other.body);
   }
 
 }

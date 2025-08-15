@@ -23,7 +23,7 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 import org.apache.spark.{SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamExecution}
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.window
 import org.apache.spark.sql.internal.SQLConf

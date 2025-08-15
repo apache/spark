@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.linalg
 
-import java.util.{Arrays, Random}
+import java.util.{Arrays, Objects, Random}
 
 import scala.collection.mutable.{ArrayBuffer, ArrayBuilder => MArrayBuilder, HashSet => MHashSet}
 import scala.language.implicitConversions
@@ -314,7 +314,7 @@ class DenseMatrix @Since("1.3.0") (
   }
 
   override def hashCode: Int = {
-    com.google.common.base.Objects.hashCode(numRows: Integer, numCols: Integer, toArray)
+    Objects.hash(numRows: Integer, numCols: Integer, toArray)
   }
 
   private[mllib] def asBreeze: BM[Double] = {

@@ -24,7 +24,6 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-import com.google.common.collect.ImmutableMap;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UTF8StringBuilder;
 
@@ -495,7 +494,7 @@ public class UTF8StringSuite {
   public void translate() {
     assertEquals(
       fromString("1a2s3ae"),
-      fromString("translate").translate(ImmutableMap.of(
+      fromString("translate").translate(Map.of(
         "r", "1",
         "n", "2",
         "l", "3",
@@ -506,7 +505,7 @@ public class UTF8StringSuite {
       fromString("translate").translate(new HashMap<>()));
     assertEquals(
       fromString("asae"),
-      fromString("translate").translate(ImmutableMap.of(
+      fromString("translate").translate(Map.of(
         "r", "\0",
         "n", "\0",
         "l", "\0",
@@ -514,7 +513,7 @@ public class UTF8StringSuite {
       )));
     assertEquals(
       fromString("aa世b"),
-      fromString("花花世界").translate(ImmutableMap.of(
+      fromString("花花世界").translate(Map.of(
         "花", "a",
         "界", "b"
       )));

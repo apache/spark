@@ -39,7 +39,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.collect.ImmutableMap;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -97,7 +96,7 @@ public class RemoteBlockPushResolverSuite {
   public void before() throws IOException {
     localDirs = createLocalDirs(2);
     MapConfigProvider provider = new MapConfigProvider(
-      ImmutableMap.of("spark.shuffle.push.server.minChunkSizeInMergedShuffleFile", "4"));
+      Map.of("spark.shuffle.push.server.minChunkSizeInMergedShuffleFile", "4"));
     conf = new TransportConf("shuffle", provider);
     pushResolver = new RemoteBlockPushResolver(conf, null);
     registerExecutor(TEST_APP, prepareLocalDirs(localDirs, MERGE_DIRECTORY), MERGE_DIRECTORY_META);

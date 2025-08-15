@@ -37,7 +37,6 @@ import scala.reflect.{classTag, ClassTag}
 import scala.sys.process.Process
 import scala.util.Try
 
-import com.google.common.io.ByteStreams
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.core.LoggerContext
 import org.apache.logging.log4j.core.appender.ConsoleAppender
@@ -96,7 +95,7 @@ private[spark] object TestUtils extends SparkTestUtils {
     files.foreach { case (k, v) =>
       val entry = new JarEntry(k)
       jarStream.putNextEntry(entry)
-      ByteStreams.copy(new ByteArrayInputStream(v.getBytes(StandardCharsets.UTF_8)), jarStream)
+      new ByteArrayInputStream(v.getBytes(StandardCharsets.UTF_8)).transferTo(jarStream)
     }
     jarStream.close()
     jarFile.toURI.toURL
@@ -132,7 +131,7 @@ private[spark] object TestUtils extends SparkTestUtils {
       jarStream.putNextEntry(jarEntry)
 
       val in = new FileInputStream(file)
-      ByteStreams.copy(in, jarStream)
+      in.transferTo(jarStream)
       in.close()
     }
     jarStream.close()

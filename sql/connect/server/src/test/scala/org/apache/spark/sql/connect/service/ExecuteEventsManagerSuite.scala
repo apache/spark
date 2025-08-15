@@ -24,7 +24,7 @@ import scala.util.matching.Regex
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanRequest, Plan, UserContext}
 import org.apache.spark.scheduler.LiveListenerBus
@@ -51,7 +51,6 @@ class ExecuteEventsManagerSuite
   val DEFAULT_SESSION_ID = UUID.randomUUID.toString
   val DEFAULT_QUERY_ID = UUID.randomUUID.toString
   val DEFAULT_CLIENT_TYPE = "clientType"
-  val jsonProtocol = new JsonProtocol(new SparkConf())
 
   test("SPARK-43923: post started") {
     val events = setupEvents(ExecuteStatus.Pending)
@@ -72,8 +71,8 @@ class ExecuteEventsManagerSuite
       .post(expectedEvent)
 
     assert(
-      jsonProtocol
-        .sparkEventFromJson(jsonProtocol.sparkEventToJsonString(expectedEvent))
+      JsonProtocol
+        .sparkEventFromJson(JsonProtocol.sparkEventToJsonString(expectedEvent))
         .isInstanceOf[SparkListenerConnectOperationStarted])
   }
 
@@ -91,8 +90,8 @@ class ExecuteEventsManagerSuite
       .post(expectedEvent)
 
     assert(
-      jsonProtocol
-        .sparkEventFromJson(jsonProtocol.sparkEventToJsonString(expectedEvent))
+      JsonProtocol
+        .sparkEventFromJson(JsonProtocol.sparkEventToJsonString(expectedEvent))
         .isInstanceOf[SparkListenerConnectOperationAnalyzed])
   }
 
@@ -118,8 +117,8 @@ class ExecuteEventsManagerSuite
       .post(expectedEvent)
 
     assert(
-      jsonProtocol
-        .sparkEventFromJson(jsonProtocol.sparkEventToJsonString(expectedEvent))
+      JsonProtocol
+        .sparkEventFromJson(JsonProtocol.sparkEventToJsonString(expectedEvent))
         .isInstanceOf[SparkListenerConnectOperationReadyForExecution])
   }
 
@@ -134,8 +133,8 @@ class ExecuteEventsManagerSuite
       .post(expectedEvent)
 
     assert(
-      jsonProtocol
-        .sparkEventFromJson(jsonProtocol.sparkEventToJsonString(expectedEvent))
+      JsonProtocol
+        .sparkEventFromJson(JsonProtocol.sparkEventToJsonString(expectedEvent))
         .isInstanceOf[SparkListenerConnectOperationCanceled])
   }
 
@@ -152,8 +151,8 @@ class ExecuteEventsManagerSuite
       .post(expectedEvent)
 
     assert(
-      jsonProtocol
-        .sparkEventFromJson(jsonProtocol.sparkEventToJsonString(expectedEvent))
+      JsonProtocol
+        .sparkEventFromJson(JsonProtocol.sparkEventToJsonString(expectedEvent))
         .isInstanceOf[SparkListenerConnectOperationFailed])
   }
 
@@ -168,8 +167,8 @@ class ExecuteEventsManagerSuite
       .post(expectedEvent)
 
     assert(
-      jsonProtocol
-        .sparkEventFromJson(jsonProtocol.sparkEventToJsonString(expectedEvent))
+      JsonProtocol
+        .sparkEventFromJson(JsonProtocol.sparkEventToJsonString(expectedEvent))
         .isInstanceOf[SparkListenerConnectOperationFinished])
   }
 
@@ -209,8 +208,8 @@ class ExecuteEventsManagerSuite
       .post(expectedEvent)
 
     assert(
-      jsonProtocol
-        .sparkEventFromJson(jsonProtocol.sparkEventToJsonString(expectedEvent))
+      JsonProtocol
+        .sparkEventFromJson(JsonProtocol.sparkEventToJsonString(expectedEvent))
         .isInstanceOf[SparkListenerConnectOperationClosed])
   }
 

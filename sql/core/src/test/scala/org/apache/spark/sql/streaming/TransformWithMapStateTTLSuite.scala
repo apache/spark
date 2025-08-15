@@ -20,7 +20,8 @@ package org.apache.spark.sql.streaming
 import java.time.Duration
 
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.execution.streaming.{MapStateImplWithTTL, MemoryStream}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.ttl.MapStateImplWithTTL
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock

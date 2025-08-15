@@ -20,8 +20,6 @@ package org.apache.spark.api.java;
 import java.io.Serializable;
 import java.util.Objects;
 
-import com.google.common.base.Preconditions;
-
 /**
  * <p>Like {@code java.util.Optional} in Java 8, {@code scala.Option} in Scala, and
  * {@code com.google.common.base.Optional} in Google Guava, this class represents a
@@ -71,8 +69,7 @@ public final class Optional<T> implements Serializable {
   }
 
   private Optional(T value) {
-    Preconditions.checkNotNull(value);
-    this.value = value;
+    this.value = Objects.requireNonNull(value);
   }
 
   // java.util.Optional API (subset)
@@ -112,8 +109,7 @@ public final class Optional<T> implements Serializable {
    * @throws NullPointerException if this is empty (contains no value)
    */
   public T get() {
-    Preconditions.checkNotNull(value);
-    return value;
+    return Objects.requireNonNull(value);
   }
 
   /**

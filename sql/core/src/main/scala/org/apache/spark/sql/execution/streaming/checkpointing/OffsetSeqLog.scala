@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.checkpointing
 
 
 import java.io.{InputStream, OutputStream}
@@ -25,6 +25,7 @@ import scala.io.{Source => IOSource}
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
+import org.apache.spark.sql.execution.streaming.runtime.SerializedOffset
 
 /**
  * This class is used to log offsets to persistent files in HDFS.

@@ -20,8 +20,8 @@ package org.apache.spark.sql.streaming
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Dataset, KeyValueGroupedDataset}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Update
-import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.FlatMapGroupsWithStateExecHelper
+import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.FlatMapGroupsWithStateExecHelper
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.FlatMapGroupsWithStateSuite.{assertCanGetProcessingTime, assertCannotGetWatermark}
 import org.apache.spark.sql.streaming.GroupStateTimeout.{EventTimeTimeout, NoTimeout, ProcessingTimeTimeout}

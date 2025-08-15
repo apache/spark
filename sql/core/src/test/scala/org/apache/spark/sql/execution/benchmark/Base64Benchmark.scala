@@ -52,6 +52,7 @@ object Base64Benchmark extends SqlBasedBenchmark {
     }
   }
 
+  // scalastyle:off commonscodecbase64
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     Seq(1, 3, 5, 7).map { len =>
       val benchmark = new Benchmark(s"encode for $len", N, output = output)
@@ -75,4 +76,5 @@ object Base64Benchmark extends SqlBasedBenchmark {
       benchmark
     }.foreach(_.run())
   }
+  // scalastyle:on commonscodecbase64
 }

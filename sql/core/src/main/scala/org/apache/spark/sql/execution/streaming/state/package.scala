@@ -23,6 +23,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 

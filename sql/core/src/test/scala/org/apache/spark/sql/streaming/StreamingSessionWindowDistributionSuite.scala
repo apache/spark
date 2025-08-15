@@ -22,7 +22,8 @@ import java.io.File
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
-import org.apache.spark.sql.execution.streaming.{MemoryStream, SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec}
+import org.apache.spark.sql.execution.streaming.operators.stateful.{SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec}
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.{count, session_window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StatefulOpClusteredDistributionTestHelper

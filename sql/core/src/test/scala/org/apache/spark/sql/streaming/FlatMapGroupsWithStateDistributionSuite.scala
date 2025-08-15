@@ -20,7 +20,8 @@ package org.apache.spark.sql.streaming
 import java.io.File
 
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Update
-import org.apache.spark.sql.execution.streaming.{FlatMapGroupsWithStateExec, MemoryStream}
+import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.FlatMapGroupsWithStateExec
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.GroupStateTimeout.ProcessingTimeTimeout
 import org.apache.spark.sql.streaming.util.{StatefulOpClusteredDistributionTestHelper, StreamManualClock}

@@ -16,14 +16,14 @@
  */
 package org.apache.spark.util
 
-import java.io.{Closeable, IOException, PrintWriter}
-import java.nio.charset.StandardCharsets.UTF_8
+import java.io.{Closeable, IOException}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.network.util.JavaUtils
 
 private[spark] trait SparkErrorUtils extends Logging {
   /**
@@ -103,18 +103,7 @@ private[spark] trait SparkErrorUtils extends Logging {
     }
   }
 
-  def stackTraceToString(t: Throwable): String = {
-    Option(t) match {
-      case None => ""
-      case Some(throwable) =>
-        val out = new java.io.ByteArrayOutputStream
-        SparkErrorUtils.tryWithResource(new PrintWriter(out)) { writer =>
-          throwable.printStackTrace(writer)
-          writer.flush()
-        }
-        new String(out.toByteArray, UTF_8)
-    }
-  }
+  def stackTraceToString(t: Throwable): String = JavaUtils.stackTraceToString(t)
 
   /**
    * Walks the [[Throwable]] to obtain its root cause.

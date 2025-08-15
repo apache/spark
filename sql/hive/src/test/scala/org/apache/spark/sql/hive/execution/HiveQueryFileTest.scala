@@ -18,8 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
-
-import org.apache.spark.sql.catalyst.util._
+import java.nio.file.Files
 
 /**
  * A framework for running the query tests that are listed as a set of text files.
@@ -67,7 +66,7 @@ abstract class HiveQueryFileTest extends HiveComparisonTest {
         realIncludeList.map(_.r.pattern.matcher(testCaseName).matches()).reduceLeft(_||_) ||
         runAll) {
         // Build a test case and submit it to scala test framework...
-        val queriesString = fileToString(testCaseFile)
+        val queriesString = Files.readString(testCaseFile.toPath)
         createQueryTest(testCaseName, queriesString, reset = true, tryWithoutResettingFirst = true)
       } else {
         // Only output warnings for the built in includeList as this clutters the output when the

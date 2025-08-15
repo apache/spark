@@ -36,7 +36,8 @@ import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions, AvroSerializer,
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, JoinedRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StateStoreColumnFamilySchemaUtils}
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.StateStoreColumnFamilySchemaUtils
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider.{SCHEMA_ID_PREFIX_BYTES, STATE_ENCODING_NUM_VERSION_BYTES, STATE_ENCODING_VERSION}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform

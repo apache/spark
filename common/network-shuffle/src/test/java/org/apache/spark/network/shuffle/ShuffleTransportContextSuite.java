@@ -18,11 +18,10 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import com.google.common.collect.Lists;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -74,7 +73,7 @@ public class ShuffleTransportContextSuite {
   }
 
   private ByteBuf getDecodableMessageBuf(Message req) throws Exception {
-    List<Object> out = Lists.newArrayList();
+    List<Object> out = new ArrayList<>();
     ChannelHandlerContext context = mock(ChannelHandlerContext.class);
     when(context.alloc()).thenReturn(ByteBufAllocator.DEFAULT);
     MessageEncoder.INSTANCE.encode(context, req, out);
@@ -118,7 +117,7 @@ public class ShuffleTransportContextSuite {
     try (ShuffleTransportContext shuffleTransportContext = createShuffleTransportContext(true)) {
       ShuffleTransportContext.ShuffleMessageDecoder decoder =
         (ShuffleTransportContext.ShuffleMessageDecoder) shuffleTransportContext.getDecoder();
-      List<Object> out = Lists.newArrayList();
+      List<Object> out = new ArrayList<>();
       decoder.decode(mock(ChannelHandlerContext.class), messageBuf, out);
 
       Assertions.assertEquals(1, out.size());
@@ -137,7 +136,7 @@ public class ShuffleTransportContextSuite {
     try (ShuffleTransportContext shuffleTransportContext = createShuffleTransportContext(true)) {
       ShuffleTransportContext.ShuffleMessageDecoder decoder =
         (ShuffleTransportContext.ShuffleMessageDecoder) shuffleTransportContext.getDecoder();
-      List<Object> out = Lists.newArrayList();
+      List<Object> out = new ArrayList<>();
       decoder.decode(mock(ChannelHandlerContext.class), messageBuf, out);
 
       Assertions.assertEquals(1, out.size());

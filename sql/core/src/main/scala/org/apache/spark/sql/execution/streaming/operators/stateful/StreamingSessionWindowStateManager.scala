@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming.state
+package org.apache.spark.sql.execution.streaming.operators.stateful
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.execution.streaming.state.{ReadStateStore, StateStore, UnsafeRowPair}
 import org.apache.spark.sql.types.{StructType, TimestampType}
 import org.apache.spark.util.NextIterator
 

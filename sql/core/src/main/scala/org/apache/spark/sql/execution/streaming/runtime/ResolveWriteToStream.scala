@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.runtime
 
 import java.util.UUID
 
@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
 import org.apache.spark.sql.connector.catalog.SupportsWrite
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 

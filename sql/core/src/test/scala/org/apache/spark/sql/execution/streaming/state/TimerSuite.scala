@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
-import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, TimerStateImpl}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerStateImpl
 import org.apache.spark.sql.streaming.TimeMode
 
 /**

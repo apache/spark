@@ -33,7 +33,6 @@ import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
 
 import org.apache.spark.*;
@@ -404,7 +403,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
                   partitionInputStream = compressionCodec.compressedInputStream(
                       partitionInputStream);
                 }
-                ByteStreams.copy(partitionInputStream, partitionOutput);
+                partitionInputStream.transferTo(partitionOutput);
                 copySpillThrewException = false;
               } finally {
                 Closeables.close(partitionInputStream, copySpillThrewException);

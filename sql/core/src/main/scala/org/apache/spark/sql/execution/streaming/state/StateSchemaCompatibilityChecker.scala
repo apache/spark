@@ -29,7 +29,8 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.avro.{AvroDeserializer, AvroSerializer, SchemaConverters}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StatefulOperatorStateInfo}
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaReader, SchemaWriter}
 import org.apache.spark.sql.execution.streaming.state.StateSchemaCompatibilityChecker.SCHEMA_FORMAT_V3
 import org.apache.spark.sql.internal.{SessionState, SQLConf}

@@ -17,7 +17,6 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
-import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
@@ -27,6 +26,7 @@ import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.io.NioBufferedFileInputStream;
 import org.apache.spark.io.ReadAheadInputStream;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.unsafe.Platform;
@@ -128,7 +128,7 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       arr = new byte[recordLength];
       baseObject = arr;
     }
-    ByteStreams.readFully(in, arr, 0, recordLength);
+    JavaUtils.readFully(in, arr, 0, recordLength);
     numRecordsRemaining--;
     if (numRecordsRemaining == 0) {
       close();

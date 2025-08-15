@@ -19,8 +19,7 @@ package org.apache.hive.service;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-
-import org.apache.commons.codec.binary.Base64;
+import java.util.Base64;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
@@ -95,7 +94,7 @@ public class CookieSigner {
       md.update(str.getBytes());
       md.update(secretBytes);
       byte[] digest = md.digest();
-      return new Base64(0).encodeToString(digest);
+      return Base64.getEncoder().encodeToString(digest);
     } catch (NoSuchAlgorithmException ex) {
       throw new RuntimeException("Invalid SHA digest String: " + SHA_STRING +
         " " + ex.getMessage(), ex);

@@ -23,9 +23,10 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
-import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{JoinSide, LeftSide, RightSide}
-import org.apache.spark.sql.execution.streaming.state.{JoinStateManagerStoreGenerator, StateStoreConf, SymmetricHashJoinStateManager}
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.{JoinStateManagerStoreGenerator, SymmetricHashJoinStateManager}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinSide, LeftSide, RightSide}
+import org.apache.spark.sql.execution.streaming.state.StateStoreConf
 import org.apache.spark.sql.types.{BooleanType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 

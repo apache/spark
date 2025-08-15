@@ -29,7 +29,8 @@ import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, SupportsRe
 import org.apache.spark.sql.connector.catalog.TableCapability.CONTINUOUS_READ
 import org.apache.spark.sql.connector.read.{streaming, InputPartition, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReaderFactory, ContinuousStream, PartitionOffset}
-import org.apache.spark.sql.execution.streaming.{LongOffset, Offset, Source}
+import org.apache.spark.sql.execution.streaming.{Offset, Source}
+import org.apache.spark.sql.execution.streaming.runtime.LongOffset
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.types.{LongType, StructType}

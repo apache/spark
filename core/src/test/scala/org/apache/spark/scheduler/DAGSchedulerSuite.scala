@@ -50,6 +50,7 @@ import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedExcept
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, Clock, LongAccumulator, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.collection.Utils.createArray
 
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
@@ -679,23 +680,24 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
     submit(reduceRdd, Array(0))
     // map stage1 completes successfully, with one task on each executor
+    val uncompressedSizes = createArray(1, 2L)
     complete(taskSets(0), Seq(
       (Success,
         MapStatus(
-          BlockManagerId("hostA-exec1", "hostA", 12345), Array.fill[Long](1)(2), mapTaskId = 5)),
+          BlockManagerId("hostA-exec1", "hostA", 12345), uncompressedSizes, mapTaskId = 5)),
       (Success,
         MapStatus(
-          BlockManagerId("hostA-exec2", "hostA", 12345), Array.fill[Long](1)(2), mapTaskId = 6)),
+          BlockManagerId("hostA-exec2", "hostA", 12345), uncompressedSizes, mapTaskId = 6)),
       (Success, makeMapStatus("hostB", 1, mapTaskId = 7))
     ))
     // map stage2 completes successfully, with one task on each executor
     complete(taskSets(1), Seq(
       (Success,
         MapStatus(
-          BlockManagerId("hostA-exec1", "hostA", 12345), Array.fill[Long](1)(2), mapTaskId = 8)),
+          BlockManagerId("hostA-exec1", "hostA", 12345), uncompressedSizes, mapTaskId = 8)),
       (Success,
         MapStatus(
-          BlockManagerId("hostA-exec2", "hostA", 12345), Array.fill[Long](1)(2), mapTaskId = 9)),
+          BlockManagerId("hostA-exec2", "hostA", 12345), uncompressedSizes, mapTaskId = 9)),
       (Success, makeMapStatus("hostB", 1, mapTaskId = 10))
     ))
     // make sure our test setup is correct
@@ -4948,6 +4950,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
 
     // stage2`s task0 Fetch failed
+    val uncompressedSizes = createArray(2, 2L)
     runEvent(makeCompletionEvent(
       taskSets(1).tasks(0),
       FetchFailed(makeBlockManagerId("hostA"), shuffleIdA, 0L, 0, 0,
@@ -4957,11 +4960,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // long running task complete
     runEvent(makeCompletionEvent(taskSets(1).tasks(1), Success,
       result = MapStatus(BlockManagerId("hostC-exec1", "hostC", 44399),
-        Array.fill[Long](2)(2), mapTaskId = taskIdCount),
+        uncompressedSizes, mapTaskId = taskIdCount),
       Seq.empty, Array.empty, createTaskInfo(false)))
     runEvent(makeCompletionEvent(taskSets(1).tasks(0), Success,
       result = MapStatus(BlockManagerId("hostD-exec1", "hostD", 44400),
-        Array.fill[Long](2)(2), mapTaskId = taskIdCount),
+        uncompressedSizes, mapTaskId = taskIdCount),
       Seq.empty, Array.empty, createTaskInfo(true)))
 
 
@@ -4984,7 +4987,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(stage0Retry.size === 1)
     runEvent(makeCompletionEvent(stage0Retry.head.tasks(0), Success,
       result = MapStatus(BlockManagerId("hostE-exec1", "hostE", 44401),
-        Array.fill[Long](2)(2), mapTaskId = taskIdCount)))
+        uncompressedSizes, mapTaskId = taskIdCount)))
 
     // wait stage2 resubmit
     sc.listenerBus.waitUntilEmpty()
@@ -5062,15 +5065,16 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         normalTask))
 
       // Make the speculative task succeed after initial task has failed
+      val uncompressedSizes = createArray(2, 2L)
       runEvent(makeCompletionEvent(taskSets(1).tasks(0), Success,
         result = MapStatus(BlockManagerId("hostD-exec1", "hostD", 34512),
-          Array.fill[Long](2)(2), mapTaskId = speculativeTask.taskId),
+          uncompressedSizes, mapTaskId = speculativeTask.taskId),
         taskInfo = speculativeTask))
 
       // The second task, for partition 1 succeeds as well.
       runEvent(makeCompletionEvent(taskSets(1).tasks(1), Success,
         result = MapStatus(BlockManagerId("hostE-exec2", "hostE", 23456),
-          Array.fill[Long](2)(2), mapTaskId = taskIdCount)))
+          createArray(2, 2L), mapTaskId = taskIdCount)))
       taskIdCount += 1
 
       sc.listenerBus.waitUntilEmpty()
@@ -5096,7 +5100,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       // make the original task succeed
       runEvent(makeCompletionEvent(stage0Retry.head.tasks(fetchFailParentPartition), Success,
         result = MapStatus(BlockManagerId("hostF-exec1", "hostF", 12345),
-          Array.fill[Long](2)(2), mapTaskId = taskIdCount)))
+          createArray(2, 2L), mapTaskId = taskIdCount)))
       Thread.sleep(DAGScheduler.RESUBMIT_TIMEOUT * 2)
       dagEventProcessLoopTester.runEvents()
 

@@ -2,437 +2,437 @@
 SQL Single Numeric Column Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 SQL Single BOOLEAN Column Scan:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                           12149          12272         173          1.3         772.4       1.0X
-SQL Json                                           8354           8445         129          1.9         531.1       1.5X
-SQL Json with UnsafeRow                            9377           9393          22          1.7         596.2       1.3X
-SQL Parquet Vectorized: DataPageV1                  101            113           8        155.1           6.4     119.8X
-SQL Parquet Vectorized: DataPageV2                  103            112           7        152.8           6.5     118.0X
-SQL Parquet MR: DataPageV1                         1767           1776          13          8.9         112.3       6.9X
-SQL Parquet MR: DataPageV2                         1721           1730          12          9.1         109.4       7.1X
-SQL ORC Vectorized                                  136            143           5        115.5           8.7      89.2X
-SQL ORC MR                                         1485           1489           6         10.6          94.4       8.2X
+SQL CSV                                           12682          12766         120          1.2         806.3       1.0X
+SQL Json                                           8232           8269          52          1.9         523.4       1.5X
+SQL Json with UnsafeRow                            9077           9103          36          1.7         577.1       1.4X
+SQL Parquet Vectorized: DataPageV1                  103            119           9        152.6           6.6     123.0X
+SQL Parquet Vectorized: DataPageV2                  117            124           5        133.9           7.5     107.9X
+SQL Parquet MR: DataPageV1                         1788           1799          15          8.8         113.7       7.1X
+SQL Parquet MR: DataPageV2                         1730           1738          11          9.1         110.0       7.3X
+SQL ORC Vectorized                                  143            149           4        110.0           9.1      88.7X
+SQL ORC MR                                         1585           1599          19          9.9         100.8       8.0X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Parquet Reader Single BOOLEAN Column Scan:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-ParquetReader Vectorized: DataPageV1                    87             88           1        180.4           5.5       1.0X
-ParquetReader Vectorized: DataPageV2                    94             95           1        166.9           6.0       0.9X
-ParquetReader Vectorized -> Row: DataPageV1             73             74           1        215.3           4.6       1.2X
-ParquetReader Vectorized -> Row: DataPageV2             82             83           2        191.9           5.2       1.1X
+ParquetReader Vectorized: DataPageV1                    95             96           1        165.7           6.0       1.0X
+ParquetReader Vectorized: DataPageV2                   119            120           1        132.7           7.5       0.8X
+ParquetReader Vectorized -> Row: DataPageV1             75             76           1        208.9           4.8       1.3X
+ParquetReader Vectorized -> Row: DataPageV2             99            102           4        158.1           6.3       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 SQL Single TINYINT Column Scan:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                           11552          11570          25          1.4         734.5       1.0X
-SQL Json                                           9556           9560           6          1.6         607.6       1.2X
-SQL Json with UnsafeRow                           10151          10165          20          1.5         645.4       1.1X
-SQL Parquet Vectorized: DataPageV1                   92             99           8        170.9           5.9     125.5X
-SQL Parquet Vectorized: DataPageV2                   91             98           5        172.6           5.8     126.8X
-SQL Parquet MR: DataPageV1                         1972           2005          47          8.0         125.4       5.9X
-SQL Parquet MR: DataPageV2                         1895           1927          45          8.3         120.5       6.1X
-SQL ORC Vectorized                                  130            139          11        121.3           8.2      89.1X
-SQL ORC MR                                         1455           1462          11         10.8          92.5       7.9X
+SQL CSV                                           12590          12760         241          1.2         800.4       1.0X
+SQL Json                                           9103           9139          51          1.7         578.8       1.4X
+SQL Json with UnsafeRow                            9946           9973          37          1.6         632.4       1.3X
+SQL Parquet Vectorized: DataPageV1                   92            101           7        171.2           5.8     137.1X
+SQL Parquet Vectorized: DataPageV2                   91             98           5        173.0           5.8     138.5X
+SQL Parquet MR: DataPageV1                         1855           1864          13          8.5         117.9       6.8X
+SQL Parquet MR: DataPageV2                         1808           1812           5          8.7         115.0       7.0X
+SQL ORC Vectorized                                  115            122           6        136.4           7.3     109.2X
+SQL ORC MR                                         1459           1459           1         10.8          92.7       8.6X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Parquet Reader Single TINYINT Column Scan:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-ParquetReader Vectorized: DataPageV1                    68             70           1        231.1           4.3       1.0X
-ParquetReader Vectorized: DataPageV2                    68             69           1        230.3           4.3       1.0X
-ParquetReader Vectorized -> Row: DataPageV1             48             49           2        329.2           3.0       1.4X
-ParquetReader Vectorized -> Row: DataPageV2             48             49           1        329.1           3.0       1.4X
+ParquetReader Vectorized: DataPageV1                    70             72           2        225.9           4.4       1.0X
+ParquetReader Vectorized: DataPageV2                    70             71           1        224.9           4.4       1.0X
+ParquetReader Vectorized -> Row: DataPageV1             47             48           1        336.8           3.0       1.5X
+ParquetReader Vectorized -> Row: DataPageV2             47             48           1        335.4           3.0       1.5X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 SQL Single SMALLINT Column Scan:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                           11987          11990           4          1.3         762.1       1.0X
-SQL Json                                           9896           9903          10          1.6         629.2       1.2X
-SQL Json with UnsafeRow                           10451          10472          29          1.5         664.5       1.1X
-SQL Parquet Vectorized: DataPageV1                  101            105           4        155.8           6.4     118.7X
-SQL Parquet Vectorized: DataPageV2                  134            138           4        117.2           8.5      89.3X
-SQL Parquet MR: DataPageV1                         2115           2150          50          7.4         134.5       5.7X
-SQL Parquet MR: DataPageV2                         1958           1962           6          8.0         124.5       6.1X
-SQL ORC Vectorized                                  129            132           2        121.7           8.2      92.8X
-SQL ORC MR                                         1597           1610          18          9.8         101.5       7.5X
+SQL CSV                                           13145          13165          28          1.2         835.7       1.0X
+SQL Json                                           9536           9550          20          1.6         606.3       1.4X
+SQL Json with UnsafeRow                           10364          10401          53          1.5         658.9       1.3X
+SQL Parquet Vectorized: DataPageV1                  109            114           3        143.9           6.9     120.3X
+SQL Parquet Vectorized: DataPageV2                  138            141           3        113.7           8.8      95.0X
+SQL Parquet MR: DataPageV1                         2015           2019           5          7.8         128.1       6.5X
+SQL Parquet MR: DataPageV2                         1969           1977          11          8.0         125.2       6.7X
+SQL ORC Vectorized                                  127            131           3        123.8           8.1     103.4X
+SQL ORC MR                                         1673           1677           7          9.4         106.3       7.9X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Parquet Reader Single SMALLINT Column Scan:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-ParquetReader Vectorized: DataPageV1                   139            140           1        113.2           8.8       1.0X
-ParquetReader Vectorized: DataPageV2                   173            174           1         90.9          11.0       0.8X
-ParquetReader Vectorized -> Row: DataPageV1            136            139           2        115.3           8.7       1.0X
-ParquetReader Vectorized -> Row: DataPageV2            170            173           2         92.3          10.8       0.8X
+ParquetReader Vectorized: DataPageV1                   141            142           1        111.9           8.9       1.0X
+ParquetReader Vectorized: DataPageV2                   170            171           1         92.5          10.8       0.8X
+ParquetReader Vectorized -> Row: DataPageV1            139            140           1        113.4           8.8       1.0X
+ParquetReader Vectorized -> Row: DataPageV2            168            169           2         93.9          10.7       0.8X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 SQL Single INT Column Scan:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                           13126          13151          35          1.2         834.5       1.0X
-SQL Json                                          10020          10023           5          1.6         637.0       1.3X
-SQL Json with UnsafeRow                           10792          10812          29          1.5         686.2       1.2X
-SQL Parquet Vectorized: DataPageV1                  100            107          10        156.8           6.4     130.9X
-SQL Parquet Vectorized: DataPageV2                  180            183           5         87.5          11.4      73.0X
-SQL Parquet MR: DataPageV1                         2141           2270         183          7.3         136.1       6.1X
-SQL Parquet MR: DataPageV2                         1978           2002          34          8.0         125.8       6.6X
-SQL ORC Vectorized                                  146            150           4        107.6           9.3      89.8X
-SQL ORC MR                                         1623           1630          10          9.7         103.2       8.1X
+SQL CSV                                           14110          14121          15          1.1         897.1       1.0X
+SQL Json                                           9936           9949          19          1.6         631.7       1.4X
+SQL Json with UnsafeRow                           10717          10718           1          1.5         681.4       1.3X
+SQL Parquet Vectorized: DataPageV1                  108            112           3        145.7           6.9     130.7X
+SQL Parquet Vectorized: DataPageV2                  178            182           4         88.3          11.3      79.3X
+SQL Parquet MR: DataPageV1                         2086           2135          69          7.5         132.6       6.8X
+SQL Parquet MR: DataPageV2                         2059           2070          17          7.6         130.9       6.9X
+SQL ORC Vectorized                                  146            149           3        107.6           9.3      96.5X
+SQL ORC MR                                         1668           1670           3          9.4         106.0       8.5X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Parquet Reader Single INT Column Scan:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-ParquetReader Vectorized: DataPageV1                   142            144           1        110.7           9.0       1.0X
-ParquetReader Vectorized: DataPageV2                   216            218           2         72.8          13.7       0.7X
-ParquetReader Vectorized -> Row: DataPageV1            139            142           2        112.9           8.9       1.0X
-ParquetReader Vectorized -> Row: DataPageV2            214            215           2         73.5          13.6       0.7X
+ParquetReader Vectorized: DataPageV1                   142            144           1        110.6           9.0       1.0X
+ParquetReader Vectorized: DataPageV2                   212            214           1         74.2          13.5       0.7X
+ParquetReader Vectorized -> Row: DataPageV1            140            144           5        112.3           8.9       1.0X
+ParquetReader Vectorized -> Row: DataPageV2            210            212           1         74.8          13.4       0.7X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 SQL Single BIGINT Column Scan:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                           12940          12949          13          1.2         822.7       1.0X
-SQL Json                                          10064          10080          22          1.6         639.9       1.3X
-SQL Json with UnsafeRow                           10745          10775          43          1.5         683.1       1.2X
-SQL Parquet Vectorized: DataPageV1                  286            289           3         55.0          18.2      45.2X
-SQL Parquet Vectorized: DataPageV2                  175            178           3         90.0          11.1      74.0X
-SQL Parquet MR: DataPageV1                         2462           2484          31          6.4         156.5       5.3X
-SQL Parquet MR: DataPageV2                         1998           2017          27          7.9         127.0       6.5X
-SQL ORC Vectorized                                  132            137           4        118.8           8.4      97.8X
-SQL ORC MR                                         1673           1677           7          9.4         106.3       7.7X
+SQL CSV                                           13768          13773           7          1.1         875.4       1.0X
+SQL Json                                           9915           9933          24          1.6         630.4       1.4X
+SQL Json with UnsafeRow                           10669          10685          22          1.5         678.3       1.3X
+SQL Parquet Vectorized: DataPageV1                  284            296           8         55.4          18.1      48.5X
+SQL Parquet Vectorized: DataPageV2                  200            203           3         78.6          12.7      68.8X
+SQL Parquet MR: DataPageV1                         2647           2676          41          5.9         168.3       5.2X
+SQL Parquet MR: DataPageV2                         2116           2163          67          7.4         134.5       6.5X
+SQL ORC Vectorized                                  128            137           9        122.5           8.2     107.2X
+SQL ORC MR                                         1691           1702          15          9.3         107.5       8.1X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Parquet Reader Single BIGINT Column Scan:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-ParquetReader Vectorized: DataPageV1                   315            322          11         49.9          20.0       1.0X
-ParquetReader Vectorized: DataPageV2                   205            206           1         76.9          13.0       1.5X
-ParquetReader Vectorized -> Row: DataPageV1            332            334           2         47.4          21.1       0.9X
-ParquetReader Vectorized -> Row: DataPageV2            219            221           2         71.8          13.9       1.4X
+ParquetReader Vectorized: DataPageV1                   320            322           1         49.1          20.4       1.0X
+ParquetReader Vectorized: DataPageV2                   218            220           2         72.1          13.9       1.5X
+ParquetReader Vectorized -> Row: DataPageV1            329            332           2         47.8          20.9       1.0X
+ParquetReader Vectorized -> Row: DataPageV2            232            234           2         67.7          14.8       1.4X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 SQL Single FLOAT Column Scan:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                           13460          13468          11          1.2         855.8       1.0X
-SQL Json                                          11451          11489          54          1.4         728.0       1.2X
-SQL Json with UnsafeRow                           12351          12372          29          1.3         785.2       1.1X
-SQL Parquet Vectorized: DataPageV1                   82             85           3        190.9           5.2     163.3X
-SQL Parquet Vectorized: DataPageV2                   81             84           3        193.8           5.2     165.8X
-SQL Parquet MR: DataPageV1                         2027           2080          76          7.8         128.9       6.6X
-SQL Parquet MR: DataPageV2                         1913           1922          13          8.2         121.6       7.0X
-SQL ORC Vectorized                                  242            246           5         65.1          15.4      55.7X
-SQL ORC MR                                         1788           1789           0          8.8         113.7       7.5X
+SQL CSV                                           14385          14421          50          1.1         914.6       1.0X
+SQL Json                                          11200          11214          20          1.4         712.1       1.3X
+SQL Json with UnsafeRow                           11987          12002          22          1.3         762.1       1.2X
+SQL Parquet Vectorized: DataPageV1                   85             89           3        184.4           5.4     168.7X
+SQL Parquet Vectorized: DataPageV2                   85             88           2        184.6           5.4     168.8X
+SQL Parquet MR: DataPageV1                         2024           2024           1          7.8         128.7       7.1X
+SQL Parquet MR: DataPageV2                         1935           1956          30          8.1         123.1       7.4X
+SQL ORC Vectorized                                  249            251           2         63.2          15.8      57.8X
+SQL ORC MR                                         1679           1690          15          9.4         106.8       8.6X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Parquet Reader Single FLOAT Column Scan:     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-ParquetReader Vectorized: DataPageV1                   138            138           0        114.3           8.7       1.0X
-ParquetReader Vectorized: DataPageV2                   134            136           1        117.0           8.5       1.0X
-ParquetReader Vectorized -> Row: DataPageV1            133            136           6        118.1           8.5       1.0X
-ParquetReader Vectorized -> Row: DataPageV2            133            136           3        118.1           8.5       1.0X
+ParquetReader Vectorized: DataPageV1                   135            137           1        116.5           8.6       1.0X
+ParquetReader Vectorized: DataPageV2                   136            139           5        115.8           8.6       1.0X
+ParquetReader Vectorized -> Row: DataPageV1            134            138           8        117.1           8.5       1.0X
+ParquetReader Vectorized -> Row: DataPageV2            134            139           4        117.0           8.5       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 SQL Single DOUBLE Column Scan:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                           13669          13678          12          1.2         869.1       1.0X
-SQL Json                                          11696          11714          25          1.3         743.6       1.2X
-SQL Json with UnsafeRow                           12529          12545          23          1.3         796.6       1.1X
-SQL Parquet Vectorized: DataPageV1                  261            263           3         60.3          16.6      52.4X
-SQL Parquet Vectorized: DataPageV2                  260            264           3         60.4          16.6      52.5X
-SQL Parquet MR: DataPageV1                         2457           2468          16          6.4         156.2       5.6X
-SQL Parquet MR: DataPageV2                         2334           2398          91          6.7         148.4       5.9X
-SQL ORC Vectorized                                  576            582           4         27.3          36.7      23.7X
-SQL ORC MR                                         2114           2121          10          7.4         134.4       6.5X
+SQL CSV                                           14585          14594          13          1.1         927.3       1.0X
+SQL Json                                          11269          11294          35          1.4         716.5       1.3X
+SQL Json with UnsafeRow                           12098          12126          40          1.3         769.2       1.2X
+SQL Parquet Vectorized: DataPageV1                  265            268           3         59.4          16.8      55.1X
+SQL Parquet Vectorized: DataPageV2                  264            266           2         59.6          16.8      55.2X
+SQL Parquet MR: DataPageV1                         2599           2606          10          6.1         165.2       5.6X
+SQL Parquet MR: DataPageV2                         2488           2490           3          6.3         158.2       5.9X
+SQL ORC Vectorized                                  579            582           4         27.2          36.8      25.2X
+SQL ORC MR                                         2117           2144          38          7.4         134.6       6.9X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Parquet Reader Single DOUBLE Column Scan:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-ParquetReader Vectorized: DataPageV1                   314            315           1         50.2          19.9       1.0X
-ParquetReader Vectorized: DataPageV2                   308            324          31         51.1          19.6       1.0X
-ParquetReader Vectorized -> Row: DataPageV1            334            335           1         47.1          21.2       0.9X
-ParquetReader Vectorized -> Row: DataPageV2            335            336           1         47.0          21.3       0.9X
+ParquetReader Vectorized: DataPageV1                   315            317           1         50.0          20.0       1.0X
+ParquetReader Vectorized: DataPageV2                   317            318           1         49.6          20.2       1.0X
+ParquetReader Vectorized -> Row: DataPageV1            334            336           3         47.1          21.2       0.9X
+ParquetReader Vectorized -> Row: DataPageV2            333            334           1         47.2          21.2       0.9X
 
 
 ================================================================================================
 SQL Single Numeric Column Scan in Struct
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 SQL Single TINYINT Column Scan in Struct:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------------
-SQL ORC MR                                                            1958           1972          21          8.0         124.5       1.0X
-SQL ORC Vectorized (Nested Column Disabled)                           1985           1986           1          7.9         126.2       1.0X
-SQL ORC Vectorized (Nested Column Enabled)                             127            133           6        123.8           8.1      15.4X
-SQL Parquet MR: DataPageV1                                            2395           2397           2          6.6         152.3       0.8X
-SQL Parquet Vectorized: DataPageV1 (Nested Column Disabled)           2745           2754          12          5.7         174.5       0.7X
-SQL Parquet Vectorized: DataPageV1 (Nested Column Enabled)              99            105           5        158.2           6.3      19.7X
-SQL Parquet MR: DataPageV2                                            2291           2291           1          6.9         145.6       0.9X
-SQL Parquet Vectorized: DataPageV2 (Nested Column Disabled)           2675           2681           9          5.9         170.1       0.7X
-SQL Parquet Vectorized: DataPageV2 (Nested Column Enabled)              99            104           5        159.2           6.3      19.8X
+SQL ORC MR                                                            2048           2050           3          7.7         130.2       1.0X
+SQL ORC Vectorized (Nested Column Disabled)                           2030           2053          33          7.7         129.1       1.0X
+SQL ORC Vectorized (Nested Column Enabled)                             112            116           4        140.7           7.1      18.3X
+SQL Parquet MR: DataPageV1                                            2205           2207           4          7.1         140.2       0.9X
+SQL Parquet Vectorized: DataPageV1 (Nested Column Disabled)           2760           2826          93          5.7         175.5       0.7X
+SQL Parquet Vectorized: DataPageV1 (Nested Column Enabled)              95             99           5        166.0           6.0      21.6X
+SQL Parquet MR: DataPageV2                                            2145           2147           2          7.3         136.4       1.0X
+SQL Parquet Vectorized: DataPageV2 (Nested Column Disabled)           2587           2591           6          6.1         164.5       0.8X
+SQL Parquet Vectorized: DataPageV2 (Nested Column Enabled)              94             99           3        166.9           6.0      21.7X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 SQL Single SMALLINT Column Scan in Struct:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------------
-SQL ORC MR                                                            2000           2006           8          7.9         127.2       1.0X
-SQL ORC Vectorized (Nested Column Disabled)                           2011           2016           7          7.8         127.9       1.0X
-SQL ORC Vectorized (Nested Column Enabled)                             284            290           7         55.3          18.1       7.0X
-SQL Parquet MR: DataPageV1                                            2499           2504           8          6.3         158.9       0.8X
-SQL Parquet Vectorized: DataPageV1 (Nested Column Disabled)           3087           3089           3          5.1         196.3       0.6X
-SQL Parquet Vectorized: DataPageV1 (Nested Column Enabled)             112            120           8        141.0           7.1      17.9X
-SQL Parquet MR: DataPageV2                                            2322           2323           2          6.8         147.6       0.9X
-SQL Parquet Vectorized: DataPageV2 (Nested Column Disabled)           2966           2969           5          5.3         188.6       0.7X
-SQL Parquet Vectorized: DataPageV2 (Nested Column Enabled)             240            253          10         65.5          15.3       8.3X
+SQL ORC MR                                                            2057           2083          38          7.6         130.8       1.0X
+SQL ORC Vectorized (Nested Column Disabled)                           2067           2072           7          7.6         131.4       1.0X
+SQL ORC Vectorized (Nested Column Enabled)                             257            262           7         61.3          16.3       8.0X
+SQL Parquet MR: DataPageV1                                            2475           2480           7          6.4         157.3       0.8X
+SQL Parquet Vectorized: DataPageV1 (Nested Column Disabled)           3189           3196          10          4.9         202.8       0.6X
+SQL Parquet Vectorized: DataPageV1 (Nested Column Enabled)             125            129           4        125.9           7.9      16.5X
+SQL Parquet MR: DataPageV2                                            2370           2371           1          6.6         150.7       0.9X
+SQL Parquet Vectorized: DataPageV2 (Nested Column Disabled)           2888           2892           6          5.4         183.6       0.7X
+SQL Parquet Vectorized: DataPageV2 (Nested Column Enabled)             244            247           2         64.4          15.5       8.4X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 SQL Single INT Column Scan in Struct:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------------
-SQL ORC MR                                                            2118           2196         110          7.4         134.6       1.0X
-SQL ORC Vectorized (Nested Column Disabled)                           2129           2184          77          7.4         135.4       1.0X
-SQL ORC Vectorized (Nested Column Enabled)                             293            304           9         53.8          18.6       7.2X
-SQL Parquet MR: DataPageV1                                            2483           2505          32          6.3         157.8       0.9X
-SQL Parquet Vectorized: DataPageV1 (Nested Column Disabled)           3260           3265           6          4.8         207.3       0.6X
-SQL Parquet Vectorized: DataPageV1 (Nested Column Enabled)             113            127          17        138.8           7.2      18.7X
-SQL Parquet MR: DataPageV2                                            2326           2343          23          6.8         147.9       0.9X
-SQL Parquet Vectorized: DataPageV2 (Nested Column Disabled)           2928           2944          23          5.4         186.2       0.7X
-SQL Parquet Vectorized: DataPageV2 (Nested Column Enabled)             259            264           3         60.8          16.4       8.2X
+SQL ORC MR                                                            2069           2131          88          7.6         131.5       1.0X
+SQL ORC Vectorized (Nested Column Disabled)                           2085           2115          43          7.5         132.5       1.0X
+SQL ORC Vectorized (Nested Column Enabled)                             278            287           6         56.6          17.7       7.4X
+SQL Parquet MR: DataPageV1                                            2350           2355           7          6.7         149.4       0.9X
+SQL Parquet Vectorized: DataPageV1 (Nested Column Disabled)           2822           2836          20          5.6         179.4       0.7X
+SQL Parquet Vectorized: DataPageV1 (Nested Column Enabled)             115            118           3        136.4           7.3      17.9X
+SQL Parquet MR: DataPageV2                                            2285           2290           7          6.9         145.3       0.9X
+SQL Parquet Vectorized: DataPageV2 (Nested Column Disabled)           2970           2981          16          5.3         188.8       0.7X
+SQL Parquet Vectorized: DataPageV2 (Nested Column Enabled)             257            260           3         61.2          16.3       8.0X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 SQL Single BIGINT Column Scan in Struct:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------------
-SQL ORC MR                                                            2122           2165          61          7.4         134.9       1.0X
-SQL ORC Vectorized (Nested Column Disabled)                           2113           2115           3          7.4         134.4       1.0X
-SQL ORC Vectorized (Nested Column Enabled)                             308            315           5         51.1          19.6       6.9X
-SQL Parquet MR: DataPageV1                                            2838           2865          38          5.5         180.4       0.7X
-SQL Parquet Vectorized: DataPageV1 (Nested Column Disabled)           3238           3250          17          4.9         205.9       0.7X
-SQL Parquet Vectorized: DataPageV1 (Nested Column Enabled)             303            307           5         51.9          19.3       7.0X
-SQL Parquet MR: DataPageV2                                            2315           2332          24          6.8         147.2       0.9X
-SQL Parquet Vectorized: DataPageV2 (Nested Column Disabled)           2685           2686           1          5.9         170.7       0.8X
-SQL Parquet Vectorized: DataPageV2 (Nested Column Enabled)             187            197           8         84.2          11.9      11.4X
+SQL ORC MR                                                            2119           2146          39          7.4         134.7       1.0X
+SQL ORC Vectorized (Nested Column Disabled)                           2143           2169          37          7.3         136.2       1.0X
+SQL ORC Vectorized (Nested Column Enabled)                             280            286           7         56.1          17.8       7.6X
+SQL Parquet MR: DataPageV1                                            2785           2794          14          5.6         177.0       0.8X
+SQL Parquet Vectorized: DataPageV1 (Nested Column Disabled)           3359           3363           6          4.7         213.5       0.6X
+SQL Parquet Vectorized: DataPageV1 (Nested Column Enabled)             291            294           2         54.1          18.5       7.3X
+SQL Parquet MR: DataPageV2                                            2293           2321          39          6.9         145.8       0.9X
+SQL Parquet Vectorized: DataPageV2 (Nested Column Disabled)           2871           2877           8          5.5         182.5       0.7X
+SQL Parquet Vectorized: DataPageV2 (Nested Column Enabled)             190            194           4         82.8          12.1      11.2X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 SQL Single FLOAT Column Scan in Struct:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------------
-SQL ORC MR                                                            2243           2255          17          7.0         142.6       1.0X
-SQL ORC Vectorized (Nested Column Disabled)                           2229           2251          31          7.1         141.7       1.0X
-SQL ORC Vectorized (Nested Column Enabled)                             379            395          11         41.5          24.1       5.9X
-SQL Parquet MR: DataPageV1                                            2388           2408          28          6.6         151.8       0.9X
-SQL Parquet Vectorized: DataPageV1 (Nested Column Disabled)           2869           2881          17          5.5         182.4       0.8X
-SQL Parquet Vectorized: DataPageV1 (Nested Column Enabled)              95            116          16        165.2           6.1      23.6X
-SQL Parquet MR: DataPageV2                                            2322           2333          16          6.8         147.6       1.0X
-SQL Parquet Vectorized: DataPageV2 (Nested Column Disabled)           2769           2797          40          5.7         176.0       0.8X
-SQL Parquet Vectorized: DataPageV2 (Nested Column Enabled)              90             96           6        175.4           5.7      25.0X
+SQL ORC MR                                                            2262           2314          73          7.0         143.8       1.0X
+SQL ORC Vectorized (Nested Column Disabled)                           2157           2185          40          7.3         137.1       1.0X
+SQL ORC Vectorized (Nested Column Enabled)                             380            383           3         41.3          24.2       5.9X
+SQL Parquet MR: DataPageV1                                            2395           2400           7          6.6         152.2       0.9X
+SQL Parquet Vectorized: DataPageV1 (Nested Column Disabled)           2865           2869           6          5.5         182.2       0.8X
+SQL Parquet Vectorized: DataPageV1 (Nested Column Enabled)              94            100           6        167.9           6.0      24.2X
+SQL Parquet MR: DataPageV2                                            2343           2351          12          6.7         148.9       1.0X
+SQL Parquet Vectorized: DataPageV2 (Nested Column Disabled)           2799           2807          11          5.6         177.9       0.8X
+SQL Parquet Vectorized: DataPageV2 (Nested Column Enabled)              93             99           7        169.2           5.9      24.3X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 SQL Single DOUBLE Column Scan in Struct:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------------
-SQL ORC MR                                                            2570           2570           0          6.1         163.4       1.0X
-SQL ORC Vectorized (Nested Column Disabled)                           2576           2581           6          6.1         163.8       1.0X
-SQL ORC Vectorized (Nested Column Enabled)                             721            722           2         21.8          45.8       3.6X
-SQL Parquet MR: DataPageV1                                            2808           2831          34          5.6         178.5       0.9X
-SQL Parquet Vectorized: DataPageV1 (Nested Column Disabled)           3286           3316          42          4.8         208.9       0.8X
-SQL Parquet Vectorized: DataPageV1 (Nested Column Enabled)             283            296          12         55.5          18.0       9.1X
-SQL Parquet MR: DataPageV2                                            2642           2659          23          6.0         168.0       1.0X
-SQL Parquet Vectorized: DataPageV2 (Nested Column Disabled)           3126           3129           5          5.0         198.7       0.8X
-SQL Parquet Vectorized: DataPageV2 (Nested Column Enabled)             289            297           7         54.4          18.4       8.9X
+SQL ORC MR                                                            2589           2613          34          6.1         164.6       1.0X
+SQL ORC Vectorized (Nested Column Disabled)                           2600           2638          53          6.0         165.3       1.0X
+SQL ORC Vectorized (Nested Column Enabled)                             723            735          13         21.8          46.0       3.6X
+SQL Parquet MR: DataPageV1                                            2782           2807          36          5.7         176.9       0.9X
+SQL Parquet Vectorized: DataPageV1 (Nested Column Disabled)           3259           3266          11          4.8         207.2       0.8X
+SQL Parquet Vectorized: DataPageV1 (Nested Column Enabled)             279            288           7         56.4          17.7       9.3X
+SQL Parquet MR: DataPageV2                                            2699           2720          31          5.8         171.6       1.0X
+SQL Parquet Vectorized: DataPageV2 (Nested Column Disabled)           3174           3182          12          5.0         201.8       0.8X
+SQL Parquet Vectorized: DataPageV2 (Nested Column Enabled)             275            284           7         57.1          17.5       9.4X
 
 
 ================================================================================================
 SQL Nested Column Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 SQL Nested Column Scan:                                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------------
-SQL ORC MR                                                           12768          12973         132          0.1       12176.7       1.0X
-SQL ORC Vectorized (Nested Column Disabled)                          12932          13289         327          0.1       12333.3       1.0X
-SQL ORC Vectorized (Nested Column Enabled)                            7205           7270          60          0.1        6870.8       1.8X
-SQL Parquet MR: DataPageV1                                            9028           9123          63          0.1        8609.9       1.4X
-SQL Parquet Vectorized: DataPageV1 (Nested Column Disabled)           9363           9406          38          0.1        8928.9       1.4X
-SQL Parquet Vectorized: DataPageV1 (Nested Column Enabled)            5947           6003          50          0.2        5671.6       2.1X
-SQL Parquet MR: DataPageV2                                            9731          10064         276          0.1        9280.2       1.3X
-SQL Parquet Vectorized: DataPageV2 (Nested Column Disabled)           9999          10015          14          0.1        9535.5       1.3X
-SQL Parquet Vectorized: DataPageV2 (Nested Column Enabled)            5554           5581          16          0.2        5297.1       2.3X
+SQL ORC MR                                                           13352          13556         177          0.1       12733.3       1.0X
+SQL ORC Vectorized (Nested Column Disabled)                          13179          13338         148          0.1       12568.6       1.0X
+SQL ORC Vectorized (Nested Column Enabled)                            7419           7472          53          0.1        7075.5       1.8X
+SQL Parquet MR: DataPageV1                                            8783           8858          49          0.1        8375.8       1.5X
+SQL Parquet Vectorized: DataPageV1 (Nested Column Disabled)           9105           9163          39          0.1        8683.3       1.5X
+SQL Parquet Vectorized: DataPageV1 (Nested Column Enabled)            5874           5929          36          0.2        5601.5       2.3X
+SQL Parquet MR: DataPageV2                                            9562           9661          78          0.1        9118.9       1.4X
+SQL Parquet Vectorized: DataPageV2 (Nested Column Disabled)           9851           9891          24          0.1        9394.4       1.4X
+SQL Parquet Vectorized: DataPageV2 (Nested Column Enabled)            5640           5684          27          0.2        5379.0       2.4X
 
 
 ================================================================================================
 Int and String Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Int and String Scan:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                           12435          12520         120          0.8        1185.9       1.0X
-SQL Json                                          10492          10539          67          1.0        1000.6       1.2X
-SQL Parquet Vectorized: DataPageV1                 1788           1793           7          5.9         170.5       7.0X
-SQL Parquet Vectorized: DataPageV2                 1918           1924           9          5.5         182.9       6.5X
-SQL Parquet MR: DataPageV1                         4163           4169           8          2.5         397.0       3.0X
-SQL Parquet MR: DataPageV2                         4092           4108          21          2.6         390.3       3.0X
-SQL ORC Vectorized                                 1843           1847           6          5.7         175.7       6.7X
-SQL ORC MR                                         3565           3573          11          2.9         340.0       3.5X
+SQL CSV                                           12583          12752         240          0.8        1200.0       1.0X
+SQL Json                                          10318          10364          64          1.0         984.0       1.2X
+SQL Parquet Vectorized: DataPageV1                 1792           1802          15          5.9         170.9       7.0X
+SQL Parquet Vectorized: DataPageV2                 1890           1897          10          5.5         180.3       6.7X
+SQL Parquet MR: DataPageV1                         3919           3921           2          2.7         373.8       3.2X
+SQL Parquet MR: DataPageV2                         3924           3945          30          2.7         374.2       3.2X
+SQL ORC Vectorized                                 1922           1928           9          5.5         183.3       6.5X
+SQL ORC MR                                         3550           3556           8          3.0         338.6       3.5X
 
 
 ================================================================================================
 Repeated String Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Repeated String:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                            7117           7146          41          1.5         678.8       1.0X
-SQL Json                                           6813           6814           1          1.5         649.7       1.0X
-SQL Parquet Vectorized: DataPageV1                  487            492           5         21.5          46.4      14.6X
-SQL Parquet Vectorized: DataPageV2                  492            502          12         21.3          46.9      14.5X
-SQL Parquet MR: DataPageV1                         1659           1667          12          6.3         158.2       4.3X
-SQL Parquet MR: DataPageV2                         1613           1621          11          6.5         153.8       4.4X
-SQL ORC Vectorized                                  398            409          13         26.3          38.0      17.9X
-SQL ORC MR                                         1857           1860           5          5.6         177.1       3.8X
+SQL CSV                                            7707           7781         104          1.4         735.0       1.0X
+SQL Json                                           6650           6655           7          1.6         634.2       1.2X
+SQL Parquet Vectorized: DataPageV1                  511            524          18         20.5          48.7      15.1X
+SQL Parquet Vectorized: DataPageV2                  513            521          14         20.5          48.9      15.0X
+SQL Parquet MR: DataPageV1                         1628           1674          66          6.4         155.2       4.7X
+SQL Parquet MR: DataPageV2                         1576           1580           7          6.7         150.3       4.9X
+SQL ORC Vectorized                                  408            411           2         25.7          38.9      18.9X
+SQL ORC MR                                         1683           1683           0          6.2         160.5       4.6X
 
 
 ================================================================================================
 Partitioned Table Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Partitioned Table:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------------
-Data column - CSV                                          13634          13651          24          1.2         866.8       1.0X
-Data column - Json                                         10104          10109           7          1.6         642.4       1.3X
-Data column - Parquet Vectorized: DataPageV1                 102            122          17        154.3           6.5     133.8X
-Data column - Parquet Vectorized: DataPageV2                 236            252          17         66.8          15.0      57.9X
-Data column - Parquet MR: DataPageV1                        2341           2361          28          6.7         148.9       5.8X
-Data column - Parquet MR: DataPageV2                        2297           2311          20          6.8         146.0       5.9X
-Data column - ORC Vectorized                                 146            151           5        108.1           9.3      93.7X
-Data column - ORC MR                                        1848           1849           0          8.5         117.5       7.4X
-Partition column - CSV                                      3362           3435         103          4.7         213.8       4.1X
-Partition column - Json                                     8775           8801          37          1.8         557.9       1.6X
-Partition column - Parquet Vectorized: DataPageV1             31             34           3        512.8           2.0     444.5X
-Partition column - Parquet Vectorized: DataPageV2             30             34           4        522.3           1.9     452.8X
-Partition column - Parquet MR: DataPageV1                   1205           1208           4         13.1          76.6      11.3X
-Partition column - Parquet MR: DataPageV2                   1218           1240          31         12.9          77.4      11.2X
-Partition column - ORC Vectorized                             29             32           3        549.4           1.8     476.3X
-Partition column - ORC MR                                   1255           1260           7         12.5          79.8      10.9X
-Both columns - CSV                                         13329          13349          28          1.2         847.4       1.0X
-Both columns - Json                                        10467          10476          13          1.5         665.5       1.3X
-Both columns - Parquet Vectorized: DataPageV1                121            140          14        129.6           7.7     112.4X
-Both columns - Parquet Vectorized: DataPageV2                250            275          17         63.0          15.9      54.6X
-Both columns - Parquet MR: DataPageV1                       2295           2316          31          6.9         145.9       5.9X
-Both columns - Parquet MR: DataPageV2                       2356           2378          30          6.7         149.8       5.8X
-Both columns - ORC Vectorized                                178            187          16         88.5          11.3      76.7X
-Both columns - ORC MR                                       1893           1893           0          8.3         120.3       7.2X
+Data column - CSV                                          14303          14342          55          1.1         909.4       1.0X
+Data column - Json                                          9732           9830         139          1.6         618.8       1.5X
+Data column - Parquet Vectorized: DataPageV1                 109            120           6        144.7           6.9     131.6X
+Data column - Parquet Vectorized: DataPageV2                 264            275           8         59.7          16.8      54.3X
+Data column - Parquet MR: DataPageV1                        2340           2346           9          6.7         148.8       6.1X
+Data column - Parquet MR: DataPageV2                        2230           2238          11          7.1         141.8       6.4X
+Data column - ORC Vectorized                                 172            192           9         91.2          11.0      83.0X
+Data column - ORC MR                                        2021           2031          14          7.8         128.5       7.1X
+Partition column - CSV                                      3387           3413          36          4.6         215.4       4.2X
+Partition column - Json                                     8342           8348           9          1.9         530.4       1.7X
+Partition column - Parquet Vectorized: DataPageV1             33             36           3        470.0           2.1     427.4X
+Partition column - Parquet Vectorized: DataPageV2             34             37           4        466.6           2.1     424.3X
+Partition column - Parquet MR: DataPageV1                   1204           1209           7         13.1          76.5      11.9X
+Partition column - Parquet MR: DataPageV2                   1202           1210          11         13.1          76.4      11.9X
+Partition column - ORC Vectorized                             36             38           3        438.3           2.3     398.6X
+Partition column - ORC MR                                   1348           1349           2         11.7          85.7      10.6X
+Both columns - CSV                                         14140          14184          62          1.1         899.0       1.0X
+Both columns - Json                                        10105          10120          21          1.6         642.4       1.4X
+Both columns - Parquet Vectorized: DataPageV1                140            155          17        112.2           8.9     102.0X
+Both columns - Parquet Vectorized: DataPageV2                302            330          21         52.1          19.2      47.4X
+Both columns - Parquet MR: DataPageV1                       2385           2404          26          6.6         151.6       6.0X
+Both columns - Parquet MR: DataPageV2                       2354           2374          28          6.7         149.6       6.1X
+Both columns - ORC Vectorized                                208            244          21         75.5          13.2      68.7X
+Both columns - ORC MR                                       2162           2163           1          7.3         137.4       6.6X
 
 
 ================================================================================================
 String with Nulls Scan
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 String with Nulls Scan (0.0%):            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                            8636           8656          28          1.2         823.6       1.0X
-SQL Json                                           8982           9006          34          1.2         856.6       1.0X
-SQL Parquet Vectorized: DataPageV1                 1302           1305           3          8.1         124.2       6.6X
-SQL Parquet Vectorized: DataPageV2                 1342           1360          25          7.8         128.0       6.4X
-SQL Parquet MR: DataPageV1                         3495           3511          22          3.0         333.3       2.5X
-SQL Parquet MR: DataPageV2                         3660           3673          17          2.9         349.1       2.4X
-ParquetReader Vectorized: DataPageV1                859            862           3         12.2          81.9      10.1X
-ParquetReader Vectorized: DataPageV2                873            877           6         12.0          83.3       9.9X
-SQL ORC Vectorized                                  923            940          17         11.4          88.0       9.4X
-SQL ORC MR                                         2963           2966           4          3.5         282.6       2.9X
+SQL CSV                                            9147           9239         130          1.1         872.4       1.0X
+SQL Json                                           9080           9083           4          1.2         865.9       1.0X
+SQL Parquet Vectorized: DataPageV1                 1277           1299          31          8.2         121.8       7.2X
+SQL Parquet Vectorized: DataPageV2                 1369           1387          26          7.7         130.6       6.7X
+SQL Parquet MR: DataPageV1                         3487           3491           5          3.0         332.6       2.6X
+SQL Parquet MR: DataPageV2                         3582           3583           2          2.9         341.6       2.6X
+ParquetReader Vectorized: DataPageV1                869            886          19         12.1          82.9      10.5X
+ParquetReader Vectorized: DataPageV2                899            903           4         11.7          85.7      10.2X
+SQL ORC Vectorized                                  971            988          15         10.8          92.6       9.4X
+SQL ORC MR                                         2933           2955          32          3.6         279.7       3.1X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 String with Nulls Scan (50.0%):           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                            6432           6443          15          1.6         613.4       1.0X
-SQL Json                                           7575           7586          15          1.4         722.4       0.8X
-SQL Parquet Vectorized: DataPageV1                  867            885          15         12.1          82.7       7.4X
-SQL Parquet Vectorized: DataPageV2                  927            946          22         11.3          88.4       6.9X
-SQL Parquet MR: DataPageV1                         2864           2868           5          3.7         273.1       2.2X
-SQL Parquet MR: DataPageV2                         3055           3055           0          3.4         291.3       2.1X
-ParquetReader Vectorized: DataPageV1                755            767          11         13.9          72.0       8.5X
-ParquetReader Vectorized: DataPageV2                793            801           7         13.2          75.6       8.1X
-SQL ORC Vectorized                                  999           1001           4         10.5          95.2       6.4X
-SQL ORC MR                                         2740           2743           4          3.8         261.3       2.3X
+SQL CSV                                            6715           6773          83          1.6         640.4       1.0X
+SQL Json                                           7526           7531           6          1.4         717.8       0.9X
+SQL Parquet Vectorized: DataPageV1                  859            875          20         12.2          81.9       7.8X
+SQL Parquet Vectorized: DataPageV2                  950            958           7         11.0          90.6       7.1X
+SQL Parquet MR: DataPageV1                         2656           2668          18          3.9         253.3       2.5X
+SQL Parquet MR: DataPageV2                         2819           2828          13          3.7         268.8       2.4X
+ParquetReader Vectorized: DataPageV1                760            780          19         13.8          72.5       8.8X
+ParquetReader Vectorized: DataPageV2                823            830          12         12.7          78.5       8.2X
+SQL ORC Vectorized                                 1040           1040           0         10.1          99.2       6.5X
+SQL ORC MR                                         2782           2791          13          3.8         265.3       2.4X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 String with Nulls Scan (95.0%):           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                            4835           4848          18          2.2         461.1       1.0X
-SQL Json                                           5469           5472           5          1.9         521.5       0.9X
-SQL Parquet Vectorized: DataPageV1                  166            169           2         63.0          15.9      29.1X
-SQL Parquet Vectorized: DataPageV2                  183            184           2         57.3          17.5      26.4X
-SQL Parquet MR: DataPageV1                         1775           1785          14          5.9         169.3       2.7X
-SQL Parquet MR: DataPageV2                         1800           1815          21          5.8         171.7       2.7X
-ParquetReader Vectorized: DataPageV1                169            173           2         62.2          16.1      28.7X
-ParquetReader Vectorized: DataPageV2                183            187           2         57.4          17.4      26.5X
-SQL ORC Vectorized                                  304            308           2         34.5          29.0      15.9X
-SQL ORC MR                                         1535           1541           9          6.8         146.4       3.2X
+SQL CSV                                            4498           4509          16          2.3         429.0       1.0X
+SQL Json                                           5349           5355           8          2.0         510.1       0.8X
+SQL Parquet Vectorized: DataPageV1                  167            172           2         63.0          15.9      27.0X
+SQL Parquet Vectorized: DataPageV2                  189            190           1         55.5          18.0      23.8X
+SQL Parquet MR: DataPageV1                         1658           1675          24          6.3         158.1       2.7X
+SQL Parquet MR: DataPageV2                         1613           1640          39          6.5         153.8       2.8X
+ParquetReader Vectorized: DataPageV1                172            173           1         61.0          16.4      26.1X
+ParquetReader Vectorized: DataPageV2                191            194           3         54.9          18.2      23.5X
+SQL ORC Vectorized                                  331            336           8         31.7          31.5      13.6X
+SQL ORC MR                                         1634           1642          11          6.4         155.8       2.8X
 
 
 ================================================================================================
 Single Column Scan From Wide Columns
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Single Column Scan from 10 columns:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                            1202           1210          11          0.9        1146.3       1.0X
-SQL Json                                           1734           1735           1          0.6        1654.0       0.7X
-SQL Parquet Vectorized: DataPageV1                   24             27           3         43.9          22.8      50.3X
-SQL Parquet Vectorized: DataPageV2                   32             34           3         32.7          30.5      37.5X
-SQL Parquet MR: DataPageV1                          156            160           4          6.7         149.0       7.7X
-SQL Parquet MR: DataPageV2                          153            156           2          6.9         145.9       7.9X
-SQL ORC Vectorized                                   29             33           4         36.0          27.8      41.3X
-SQL ORC MR                                          123            129           6          8.5         117.2       9.8X
+SQL CSV                                            1267           1279          17          0.8        1208.4       1.0X
+SQL Json                                           1757           1762           6          0.6        1676.0       0.7X
+SQL Parquet Vectorized: DataPageV1                   25             29           4         41.5          24.1      50.2X
+SQL Parquet Vectorized: DataPageV2                   34             38           4         30.9          32.3      37.4X
+SQL Parquet MR: DataPageV1                          158            163           4          6.6         150.6       8.0X
+SQL Parquet MR: DataPageV2                          154            158           4          6.8         146.5       8.3X
+SQL ORC Vectorized                                   30             32           4         35.1          28.5      42.4X
+SQL ORC MR                                          130            132           3          8.1         123.9       9.8X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Single Column Scan from 50 columns:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                            2618           2631          18          0.4        2497.0       1.0X
-SQL Json                                           6142           6146           6          0.2        5857.1       0.4X
-SQL Parquet Vectorized: DataPageV1                   26             29           3         40.1          24.9     100.2X
-SQL Parquet Vectorized: DataPageV2                   34             37           4         31.1          32.2      77.6X
-SQL Parquet MR: DataPageV1                          161            165           5          6.5         153.4      16.3X
-SQL Parquet MR: DataPageV2                          155            161           4          6.7         148.2      16.8X
-SQL ORC Vectorized                                   32             35           3         32.9          30.4      82.1X
-SQL ORC MR                                          125            129           3          8.4         119.5      20.9X
+SQL CSV                                            2691           2740          70          0.4        2566.3       1.0X
+SQL Json                                           6037           6057          29          0.2        5757.4       0.4X
+SQL Parquet Vectorized: DataPageV1                   28             30           3         38.0          26.3      97.5X
+SQL Parquet Vectorized: DataPageV2                   37             40           4         28.3          35.3      72.6X
+SQL Parquet MR: DataPageV1                          163            167           3          6.4         155.9      16.5X
+SQL Parquet MR: DataPageV2                          158            163           6          6.6         150.7      17.0X
+SQL ORC Vectorized                                   34             37           3         31.3          32.0      80.3X
+SQL ORC MR                                          133            136           2          7.9         127.2      20.2X
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Single Column Scan from 100 columns:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SQL CSV                                            4450           4453           4          0.2        4244.0       1.0X
-SQL Json                                          11304          11358          77          0.1       10780.6       0.4X
-SQL Parquet Vectorized: DataPageV1                   34             37           4         30.9          32.4     131.2X
-SQL Parquet Vectorized: DataPageV2                   41             46           6         25.6          39.1     108.5X
-SQL Parquet MR: DataPageV1                          169            177           6          6.2         160.7      26.4X
-SQL Parquet MR: DataPageV2                          168            172           3          6.3         159.7      26.6X
-SQL ORC Vectorized                                   37             41           7         28.2          35.5     119.6X
-SQL ORC MR                                          129            135           4          8.1         123.1      34.5X
+SQL CSV                                            4417           4431          19          0.2        4212.5       1.0X
+SQL Json                                          11107          11201         134          0.1       10592.1       0.4X
+SQL Parquet Vectorized: DataPageV1                   36             40           5         29.3          34.1     123.5X
+SQL Parquet Vectorized: DataPageV2                   45             49           5         23.5          42.5      99.1X
+SQL Parquet MR: DataPageV1                          176            180           2          5.9         168.1      25.1X
+SQL Parquet MR: DataPageV2                          172            175           3          6.1         163.6      25.7X
+SQL ORC Vectorized                                   43             47           5         24.6          40.7     103.6X
+SQL ORC MR                                          146            149           3          7.2         139.3      30.2X
 
 

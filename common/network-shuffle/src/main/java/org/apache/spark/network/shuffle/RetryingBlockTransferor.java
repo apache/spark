@@ -25,8 +25,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Uninterruptibles;
 
 import org.apache.spark.internal.SparkLogger;
@@ -35,6 +33,7 @@ import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.sasl.SaslTimeoutException;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
@@ -131,7 +130,7 @@ public class RetryingBlockTransferor {
     this.listener = listener;
     this.maxRetries = conf.maxIORetries();
     this.retryWaitTime = conf.ioRetryWaitTimeMs();
-    this.outstandingBlocksIds = Sets.newLinkedHashSet();
+    this.outstandingBlocksIds = new LinkedHashSet<>();
     Collections.addAll(outstandingBlocksIds, blockIds);
     this.currentListener = new RetryingBlockTransferListener();
     this.errorHandler = errorHandler;
@@ -247,7 +246,7 @@ public class RetryingBlockTransferor {
     // If this is a non SASL request failure, reduce earlier SASL failures from retryCount
     // since some subsequent SASL attempt was successful
     if (!isSaslTimeout && saslRetryCount > 0) {
-      Preconditions.checkState(retryCount >= saslRetryCount,
+      JavaUtils.checkState(retryCount >= saslRetryCount,
         "retryCount must be greater than or equal to saslRetryCount");
       retryCount -= saslRetryCount;
       saslRetryCount = 0;
@@ -282,7 +281,7 @@ public class RetryingBlockTransferor {
           // If there were SASL failures earlier, remove them from retryCount, as there was
           // a SASL success (and some other request post bootstrap was also successful).
           if (saslRetryCount > 0) {
-            Preconditions.checkState(retryCount >= saslRetryCount,
+            JavaUtils.checkState(retryCount >= saslRetryCount,
               "retryCount must be greater than or equal to saslRetryCount");
             retryCount -= saslRetryCount;
             saslRetryCount = 0;

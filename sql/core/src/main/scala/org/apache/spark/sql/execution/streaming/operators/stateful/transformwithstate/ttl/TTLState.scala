@@ -14,14 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.ttl
 
 import java.time.Duration
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateKeyValueRowSchemaUtils._
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TTLEncoder
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.TWSMetricsUtils
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, RangeKeyScanStateEncoderSpec, StateStore}
 import org.apache.spark.sql.streaming.TTLConfig
 import org.apache.spark.sql.types._

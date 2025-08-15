@@ -127,7 +127,7 @@ def _test() -> None:
         print("Not supported in no-GIL mode", file=sys.stderr)
         sys.exit(0)
 
-    from pyspark.testing import should_test_connect
+    from pyspark.testing.utils import should_test_connect
 
     if not should_test_connect:
         print("Skipping pyspark.sql.connect.tvf doctests", file=sys.stderr)

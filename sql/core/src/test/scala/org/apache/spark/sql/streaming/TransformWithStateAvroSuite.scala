@@ -27,8 +27,9 @@ import org.scalatest.time.{Seconds, Span}
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MemoryStream, MicroBatchExecution}
-import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.DIR_NAME_OFFSETS
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, MicroBatchExecution}
+import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_OFFSETS
 import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataV2, RocksDBStateStoreProvider, StateStoreInvalidValueSchemaEvolution, StateStoreValueSchemaEvolutionThresholdExceeded}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock

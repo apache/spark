@@ -44,6 +44,7 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
+import org.apache.spark.util.collection.Utils.createArray
 import org.apache.spark.util.io.ChunkedByteBufferInputStream
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
@@ -1115,7 +1116,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val chi = new ChiSquareTest()
 
     // We expect an even distribution; this array will be rescaled by `chiSquareTest`
-    val expected = Array.fill(arraySize * arraySize)(1.0)
+    val expected = createArray(arraySize * arraySize, 1.0)
     val observed = results.flatten
 
     // Performs Pearson's chi-squared test. Using the sum-of-squares as the test statistic, gives

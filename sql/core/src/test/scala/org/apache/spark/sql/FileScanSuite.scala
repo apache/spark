@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql
 
+import java.util.{Map => JMap}
+
 import scala.collection.mutable
 
-import com.google.common.collect.ImmutableMap
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -81,10 +82,10 @@ trait FileScanSuiteBase extends SharedSparkSession {
       Array[Filter](sources.And(sources.IsNull("data"), sources.LessThan("data", 0)))
     val pushedFiltersNotEqual =
       Array[Filter](sources.And(sources.IsNull("data"), sources.LessThan("data", 1)))
-    val optionsMap = ImmutableMap.of("key", "value")
-    val options = new CaseInsensitiveStringMap(ImmutableMap.copyOf(optionsMap))
+    val optionsMap = JMap.of("key", "value")
+    val options = new CaseInsensitiveStringMap(JMap.copyOf(optionsMap))
     val optionsNotEqual =
-      new CaseInsensitiveStringMap(ImmutableMap.copyOf(ImmutableMap.of("key2", "value2")))
+      new CaseInsensitiveStringMap(JMap.copyOf(JMap.of("key2", "value2")))
     val partitionFilters = Seq(And(IsNull($"data".int), LessThan($"data".int, 0)))
     val partitionFiltersNotEqual = Seq(And(IsNull($"data".int),
       LessThan($"data".int, 1)))
@@ -113,7 +114,7 @@ trait FileScanSuiteBase extends SharedSparkSession {
           readDataSchema.copy(),
           readPartitionSchema.copy(),
           pushedFilters.clone(),
-          new CaseInsensitiveStringMap(ImmutableMap.copyOf(optionsMap)),
+          new CaseInsensitiveStringMap(JMap.copyOf(optionsMap)),
           Seq(partitionFilters: _*),
           Seq(dataFilters: _*))
 

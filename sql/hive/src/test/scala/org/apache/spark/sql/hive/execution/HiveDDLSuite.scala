@@ -2650,7 +2650,7 @@ class HiveDDLSuite
   }
 
   test("SPARK-21216: join with a streaming DataFrame") {
-    import org.apache.spark.sql.execution.streaming.MemoryStream
+    import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
     import testImplicits._
 
     implicit val _sqlContext = spark.sqlContext

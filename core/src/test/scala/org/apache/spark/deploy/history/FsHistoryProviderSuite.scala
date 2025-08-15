@@ -1839,16 +1839,15 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     val fstream = new FileOutputStream(file)
     val cstream = codec.map(_.compressedContinuousOutputStream(fstream)).getOrElse(fstream)
     val bstream = new BufferedOutputStream(cstream)
-    val jsonProtocol = new JsonProtocol(new SparkConf())
 
     val metadata = SparkListenerLogStart(org.apache.spark.SPARK_VERSION)
-    val eventJsonString = jsonProtocol.sparkEventToJsonString(metadata)
+    val eventJsonString = JsonProtocol.sparkEventToJsonString(metadata)
     val metadataJson = eventJsonString + "\n"
     bstream.write(metadataJson.getBytes(StandardCharsets.UTF_8))
 
     val writer = new OutputStreamWriter(bstream, StandardCharsets.UTF_8)
     Utils.tryWithSafeFinally {
-      events.foreach(e => writer.write(jsonProtocol.sparkEventToJsonString(e) + "\n"))
+      events.foreach(e => writer.write(JsonProtocol.sparkEventToJsonString(e) + "\n"))
     } {
       writer.close()
     }

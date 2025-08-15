@@ -29,7 +29,7 @@ import javax.security.sasl.AuthenticationException;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hive.service.ServiceUtils;
 
-import org.apache.spark.util.SparkStringUtils;
+import org.apache.spark.util.Utils;
 
 public class LdapAuthenticationProviderImpl implements PasswdAuthenticationProvider {
 
@@ -63,8 +63,8 @@ public class LdapAuthenticationProviderImpl implements PasswdAuthenticationProvi
 
     // setup the security principal
     List<String> candidatePrincipals = new ArrayList<>();
-    if (SparkStringUtils.isBlank(userDNPattern)) {
-      if (SparkStringUtils.isNotBlank(baseDN)) {
+    if (Utils.isBlank(userDNPattern)) {
+      if (Utils.isNotBlank(baseDN)) {
         String pattern = "uid=" + user + "," + baseDN;
         candidatePrincipals.add(pattern);
       }

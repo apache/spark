@@ -1479,7 +1479,12 @@ class SessionCatalog(
     requireDbExists(db)
     val newFuncDefinition = funcDefinition.copy(identifier = qualifiedIdent)
     if (!functionExists(qualifiedIdent)) {
-      externalCatalog.createFunction(db, newFuncDefinition)
+      try {
+        externalCatalog.createFunction(db, newFuncDefinition)
+      } catch {
+        case e: FunctionAlreadyExistsException if ignoreIfExists =>
+          // Ignore the exception as ignoreIfNotExists is set to true
+      }
     } else if (!ignoreIfExists) {
       throw new FunctionAlreadyExistsException(Seq(db, qualifiedIdent.funcName))
     }

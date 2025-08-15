@@ -20,9 +20,8 @@ package org.apache.spark.unsafe.types;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 
-import com.google.common.primitives.Ints;
-
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.network.util.JavaUtils;
 
 public final class ByteArray {
 
@@ -169,7 +168,7 @@ public final class ByteArray {
     }
     if (totalLength > 0) totalLength -= delimiter.length;
     // Allocate a new byte array, and copy the inputs one by one into it
-    final byte[] result = new byte[Ints.checkedCast(totalLength)];
+    final byte[] result = new byte[JavaUtils.checkedCast(totalLength)];
     int offset = 0;
     for (int i = 0; i < inputs.length; i++) {
       byte[] input = inputs[i];

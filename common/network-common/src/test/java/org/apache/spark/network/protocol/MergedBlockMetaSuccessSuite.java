@@ -21,9 +21,9 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.List;
 
-import com.google.common.collect.Lists;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
@@ -65,7 +65,7 @@ public class MergedBlockMetaSuccessSuite {
     MergedBlockMetaSuccess expectedMeta = new MergedBlockMetaSuccess(requestId, 2,
       new FileSegmentManagedBuffer(conf, chunkMetaFile, 0, chunkMetaFile.length()));
 
-    List<Object> out = Lists.newArrayList();
+    List<Object> out = new ArrayList<>();
     ChannelHandlerContext context = mock(ChannelHandlerContext.class);
     when(context.alloc()).thenReturn(ByteBufAllocator.DEFAULT);
 

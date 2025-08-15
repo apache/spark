@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming.continuous
 
-import org.apache.spark.sql.execution.streaming.StreamExecution
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.tags.SlowSQLTest

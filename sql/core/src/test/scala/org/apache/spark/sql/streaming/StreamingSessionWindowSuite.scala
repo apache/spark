@@ -24,7 +24,7 @@ import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoder, Encoders}
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider}
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._

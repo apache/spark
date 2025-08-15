@@ -98,7 +98,7 @@ def require_minimum_pyarrow_version() -> None:
 
 def require_minimum_numpy_version() -> None:
     """Raise ImportError if minimum version of NumPy is not installed"""
-    minimum_numpy_version = "1.21"
+    minimum_numpy_version = "1.22"
 
     try:
         import numpy

@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
-import org.apache.spark.sql.execution.streaming.LongOffset
+import org.apache.spark.sql.execution.streaming.runtime.LongOffset
 import org.apache.spark.unsafe.types.UTF8String
 
 /**

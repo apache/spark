@@ -47,6 +47,12 @@ def determine_modules_for_files(filenames):
     for filename in filenames:
         if filename.endswith("README.md"):
             continue
+        if filename in (
+            "scalastyle-config.xml",
+            "dev/checkstyle.xml",
+            "dev/checkstyle-suppressions.xml",
+        ):
+            continue
         if ("GITHUB_ACTIONS" not in os.environ) and filename.startswith(".github"):
             continue
         matched_at_least_one_module = False

@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.checkpointing
 
 import java.io.{FileNotFoundException, OutputStream}
 import java.lang.reflect.InvocationTargetException
@@ -30,7 +30,8 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{FINAL_PATH, PATH, TEMP_PATH}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager.RenameHelperMethods
+import org.apache.spark.sql.execution.streaming.StreamingErrors
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.RenameHelperMethods
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -50,7 +51,7 @@ import org.apache.spark.util.Utils
  */
 trait CheckpointFileManager {
 
-  import org.apache.spark.sql.execution.streaming.CheckpointFileManager._
+  import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager._
 
   /**
    * Create a file and make its contents available atomically after the output stream is closed.

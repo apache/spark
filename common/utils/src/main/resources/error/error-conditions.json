@@ -1494,6 +1494,12 @@
     ],
     "sqlState" : "42711"
   },
+  "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE" : {
+    "message" : [
+      "Found duplicate variable <variableName> in the declare variable list. Please, remove one of them."
+    ],
+    "sqlState" : "42734"
+  },
   "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED" : {
     "message" : [
       "Previous node emitted a row with eventTime=<emittedRowEventTime> which is older than current_watermark_value=<currentWatermark>",

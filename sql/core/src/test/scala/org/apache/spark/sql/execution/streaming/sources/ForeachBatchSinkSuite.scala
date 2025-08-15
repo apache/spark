@@ -26,7 +26,7 @@ import org.apache.spark.ExecutorDeadException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.SerializeFromObjectExec
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.StateStoreCommitValidationFailed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf

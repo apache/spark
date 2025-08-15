@@ -27,7 +27,6 @@ import java.util.zip.Checksum;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.Metric;
 import com.codahale.metrics.Timer;
-import com.google.common.io.ByteStreams;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -136,7 +135,7 @@ public class ExternalBlockHandlerSuite {
       CheckedInputStream checkedIn = new CheckedInputStream(
         blockMarkers[0].createInputStream(), checksum);
       byte[] buffer = new byte[10];
-      ByteStreams.readFully(checkedIn, buffer, 0, (int) blockMarkers[0].size());
+      JavaUtils.readFully(checkedIn, buffer, 0, (int) blockMarkers[0].size());
       long checksumByWriter = checkedIn.getChecksum().getValue();
 
       // when checksumByWriter == checksumRecalculated and checksumByReader != checksumByWriter

@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 
-import com.google.common.base.Throwables;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 
@@ -33,6 +32,7 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.*;
 import org.apache.spark.network.protocol.*;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportFrameDecoder;
 
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
@@ -145,7 +145,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       logger.error("Error opening stream {} for request from {}", e,
         MDC.of(LogKeys.STREAM_ID, req.streamId),
         MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
-      respond(new StreamFailure(req.streamId, Throwables.getStackTraceAsString(e)));
+      respond(new StreamFailure(req.streamId, JavaUtils.stackTraceToString(e)));
       return;
     }
 
@@ -172,14 +172,14 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
         @Override
         public void onFailure(Throwable e) {
-          respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+          respond(new RpcFailure(req.requestId, JavaUtils.stackTraceToString(e)));
         }
       });
     } catch (Exception e) {
       logger.error("Error while invoking RpcHandler#receive() on RPC id {} from {}", e,
         MDC.of(LogKeys.REQUEST_ID, req.requestId),
         MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
-      respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+      respond(new RpcFailure(req.requestId, JavaUtils.stackTraceToString(e)));
     } finally {
       req.body().release();
     }
@@ -199,7 +199,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
         @Override
         public void onFailure(Throwable e) {
-          respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+          respond(new RpcFailure(req.requestId, JavaUtils.stackTraceToString(e)));
         }
       };
       TransportFrameDecoder frameDecoder = (TransportFrameDecoder)
@@ -266,7 +266,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
         logger.error("Error while invoking RpcHandler#receive() on RPC id {} from {}", e,
           MDC.of(LogKeys.REQUEST_ID, req.requestId),
           MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
-        respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+        respond(new RpcFailure(req.requestId, JavaUtils.stackTraceToString(e)));
       }
       // We choose to totally fail the channel, rather than trying to recover as we do in other
       // cases.  We don't know how many bytes of the stream the client has already sent for the
@@ -302,7 +302,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
           @Override
           public void onFailure(Throwable e) {
             logger.trace("Failed to send meta for {}", req);
-            respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+            respond(new RpcFailure(req.requestId, JavaUtils.stackTraceToString(e)));
           }
       });
     } catch (Exception e) {
@@ -311,7 +311,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
           MDC.of(LogKeys.SHUFFLE_ID, req.shuffleId),
           MDC.of(LogKeys.REDUCE_ID, req.reduceId),
           MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
-      respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+      respond(new RpcFailure(req.requestId, JavaUtils.stackTraceToString(e)));
     }
   }
 

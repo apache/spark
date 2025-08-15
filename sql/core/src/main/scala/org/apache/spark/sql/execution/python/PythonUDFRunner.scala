@@ -193,7 +193,7 @@ object PythonUDFRunner {
     funcs.zip(argMetas).foreach { case ((chained, resultId), metas) =>
       dataOut.writeInt(metas.length)
       metas.foreach {
-        case ArgumentMetadata(offset, name) =>
+        case ArgumentMetadata(offset, name, _) =>
           dataOut.writeInt(offset)
           name match {
             case Some(name) =>

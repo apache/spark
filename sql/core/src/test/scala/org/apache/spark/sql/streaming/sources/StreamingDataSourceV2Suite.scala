@@ -29,7 +29,9 @@ import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReaderF
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, PhysicalWriteInfo, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.streaming.{ContinuousTrigger, RateStreamOffset, Sink, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.streaming.ContinuousTrigger
+import org.apache.spark.sql.execution.streaming.Sink
+import org.apache.spark.sql.execution.streaming.runtime.{RateStreamOffset, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}

@@ -1340,8 +1340,11 @@ def read_udtf(pickleSer, infile, eval_type):
             v = utf8_deserializer.loads(infile)
             runner_conf[k] = v
         prefers_large_var_types = use_large_var_types(runner_conf)
-        # Use PyArrow-native serializer for Arrow UDTFs
-        ser = ArrowStreamArrowUDTFSerializer()
+        # Read the table argument offsets
+        num_table_arg_offsets = read_int(infile)
+        table_arg_offsets = [read_int(infile) for _ in range(num_table_arg_offsets)]
+        # Use PyArrow-native serializer for Arrow UDTFs with potential UDT support
+        ser = ArrowStreamArrowUDTFSerializer(table_arg_offsets=table_arg_offsets)
     else:
         # Each row is a group so do not batch but send one by one.
         ser = BatchedSerializer(CPickleSerializer(), 1)

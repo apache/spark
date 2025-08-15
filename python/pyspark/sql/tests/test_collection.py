@@ -15,9 +15,11 @@
 # limitations under the License.
 #
 
+import datetime
 import unittest
 
 from pyspark.sql.types import (
+    Row,
     ArrayType,
     StringType,
     IntegerType,
@@ -362,6 +364,49 @@ class DataFrameCollectionTestsMixin:
             if i == 7:
                 break
         self.assertEqual(df.take(8), result)
+
+    def test_collect_time(self):
+        import pandas as pd
+
+        query = """
+                SELECT * FROM VALUES
+                (TIME '12:34:56', 'a'), (TIME '22:56:01', 'b'), (NULL, 'c')
+                AS tab(t, i)
+                """
+
+        df = self.spark.sql(query)
+
+        rows = df.collect()
+        self.assertEqual(
+            rows,
+            [
+                Row(t=datetime.time(12, 34, 56), i="a"),
+                Row(t=datetime.time(22, 56, 1), i="b"),
+                Row(t=None, i="c"),
+            ],
+        )
+
+        pdf = df.toPandas()
+        self.assertTrue(
+            pdf.equals(
+                pd.DataFrame(
+                    {
+                        "t": [datetime.time(12, 34, 56), datetime.time(22, 56, 1), None],
+                        "i": ["a", "b", "c"],
+                    }
+                )
+            )
+        )
+
+        tbl = df.toArrow()
+        self.assertEqual(
+            [t.as_py() for t in tbl.column("t")],
+            [datetime.time(12, 34, 56), datetime.time(22, 56, 1), None],
+        )
+        self.assertEqual(
+            [i.as_py() for i in tbl.column("i")],
+            ["a", "b", "c"],
+        )
 
 
 class DataFrameCollectionTests(

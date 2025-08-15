@@ -14,15 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.streaming
+// scalastyle:off line.size.limit
+package org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statevariables
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.CompositeKeyStateEncoder
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateKeyValueRowSchemaUtils._
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.TWSMetricsUtils
 import org.apache.spark.sql.execution.streaming.state.{PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors, UnsafeRowPair}
 import org.apache.spark.sql.streaming.MapState
 import org.apache.spark.sql.types.StructType
+// scalastyle:on line.size.limit
 
 /**
  * Class that provides a concrete implementation for map state associated with state

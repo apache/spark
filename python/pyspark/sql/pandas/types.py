@@ -128,6 +128,8 @@ def to_arrow_type(
         arrow_type = pa.timestamp("us", tz=None)
     elif type(dt) == DayTimeIntervalType:
         arrow_type = pa.duration("us")
+    elif type(dt) == TimeType:
+        arrow_type = pa.time64("ns")
     elif type(dt) == ArrayType:
         field = pa.field(
             "element",

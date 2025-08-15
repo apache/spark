@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.connect.planner
 
-import java.util.Properties
-import java.util.UUID
+import java.util.{HashMap, Properties, UUID}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -26,7 +25,7 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.google.common.base.Throwables
-import com.google.common.collect.{Lists, Maps}
+import com.google.common.collect.Lists
 import com.google.protobuf.{Any => ProtoAny, ByteString}
 import io.grpc.{Context, Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
@@ -78,8 +77,8 @@ import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDat
 import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.execution.python.streaming.PythonForeachWriter
 import org.apache.spark.sql.execution.stat.StatFunctions
-import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
-import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
+import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl.groupStateTimeoutFromString
+import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
@@ -1190,7 +1189,7 @@ class SparkConnectPlanner(
     SimplePythonFunction(
       command = fun.getCommand.toByteArray.toImmutableArraySeq,
       // Empty environment variables
-      envVars = Maps.newHashMap(),
+      envVars = new HashMap[String, String](),
       pythonIncludes = sessionHolder.artifactManager.getPythonIncludes.asJava,
       pythonExec = pythonExec,
       pythonVer = fun.getPythonVer,
@@ -1204,7 +1203,7 @@ class SparkConnectPlanner(
     SimplePythonFunction(
       command = ds.getCommand.toByteArray.toImmutableArraySeq,
       // Empty environment variables
-      envVars = Maps.newHashMap(),
+      envVars = new HashMap[String, String](),
       pythonIncludes = sessionHolder.artifactManager.getPythonIncludes.asJava,
       pythonExec = pythonExec,
       pythonVer = ds.getPythonVer,
@@ -2033,7 +2032,7 @@ class SparkConnectPlanner(
     SimplePythonFunction(
       command = fun.getCommand.toByteArray.toImmutableArraySeq,
       // Empty environment variables
-      envVars = Maps.newHashMap(),
+      envVars = new HashMap[String, String](),
       pythonExec = pythonExec,
       // Merge the user specified includes with the includes managed by the artifact manager.
       pythonIncludes = (fun.getAdditionalIncludesList.asScala.toSeq ++

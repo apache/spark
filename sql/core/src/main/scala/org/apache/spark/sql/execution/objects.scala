@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.python.BatchIterator
 import org.apache.spark.sql.execution.r.ArrowRRunner
-import org.apache.spark.sql.execution.streaming.GroupStateImpl
+import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.GroupStateTimeout
 import org.apache.spark.sql.types._

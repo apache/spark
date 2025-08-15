@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.runtime
 
 import org.json4s.DefaultFormats
 import org.json4s.jackson.Serialization

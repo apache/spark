@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.checkpointing
 
 import java.io._
 import java.nio.charset.StandardCharsets

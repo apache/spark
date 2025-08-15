@@ -118,9 +118,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
     }
 
-    // We will return Nil or throw exception at the beginning if the table already exists, so when
-    // we reach here, the table should not exist and we should set `ignoreIfExists` to false.
-    sessionState.catalog.createTable(newTable, ignoreIfExists = false)
+    sessionState.catalog.createTable(newTable, ignoreIfExists)
 
     Seq.empty[Row]
   }

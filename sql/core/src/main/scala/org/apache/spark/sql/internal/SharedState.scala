@@ -34,7 +34,7 @@ import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, PATH, VALUE}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.CacheManager
-import org.apache.spark.sql.execution.streaming.StreamExecution
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab, StreamingQueryStatusStore}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.streaming.ui.{StreamingQueryStatusListener, StreamingQueryTab}

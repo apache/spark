@@ -49,7 +49,9 @@ import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.python.PythonDataSourceV2
 import org.apache.spark.sql.execution.datasources.xml.XmlFileFormat
-import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.{Sink, Source}
+import org.apache.spark.sql.execution.streaming.runtime._
+import org.apache.spark.sql.execution.streaming.sinks.FileStreamSink
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._

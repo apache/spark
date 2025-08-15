@@ -22,8 +22,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceUnspecifiedRequiredOption, StateSourceOptions}
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, LongOffset, MemoryStream, OffsetSeq, OffsetSeqLog}
-import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.DIR_NAME_OFFSETS
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetSeq, OffsetSeqLog}
+import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream}
+import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_OFFSETS
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, RunningCountStatefulProcessor, StreamTest, TimeMode}

@@ -38,6 +38,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
   private static File dummyPropsFile;
   private static File connectPropsFile;
+  private static File driverMemPropsFile;
   private static SparkSubmitOptionParser parser;
 
   @BeforeAll
@@ -45,6 +46,9 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     dummyPropsFile = File.createTempFile("spark", "properties");
     connectPropsFile = File.createTempFile("spark", "properties");
     Files.writeString(connectPropsFile.toPath(), "spark.remote=sc://connect-server:15002");
+    driverMemPropsFile = File.createTempFile("spark", "properties");
+    Files.writeString(driverMemPropsFile.toPath(),
+        "spark.driver.memory=4g\nspark.driver.memoryOverhead=768m");
     parser = new SparkSubmitOptionParser();
   }
 
@@ -52,6 +56,73 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   public static void cleanUp() throws Exception {
     dummyPropsFile.delete();
     connectPropsFile.delete();
+    driverMemPropsFile.delete();
+  }
+
+  @Test
+  public void testGetEffectiveConfig() throws Exception {
+    doTestGetEffectiveConfig(null, true, true);
+    doTestGetEffectiveConfig(null, true, false);
+    doTestGetEffectiveConfig(null, false, true);
+    doTestGetEffectiveConfig(null, false, false);
+    doTestGetEffectiveConfig(driverMemPropsFile, true, true);
+    doTestGetEffectiveConfig(driverMemPropsFile, true, false);
+    doTestGetEffectiveConfig(driverMemPropsFile, false, true);
+    doTestGetEffectiveConfig(driverMemPropsFile, false, false);
+  }
+
+  private void doTestGetEffectiveConfig(
+      File propertiesFile, boolean loadSparkDefaults, boolean confDriverMemory) throws Exception {
+    SparkSubmitCommandBuilder launcher =
+        newCommandBuilder(Collections.emptyList());
+    launcher.loadSparkDefaults = loadSparkDefaults;
+    launcher.conf.put("spark.foo", "bar");
+    launcher.childEnv.put("SPARK_CONF_DIR", System.getProperty("spark.test.home")
+        + "/launcher/src/test/resources");
+
+    if (propertiesFile != null) {
+      launcher.setPropertiesFile(propertiesFile.getAbsolutePath());
+    }
+
+    if (confDriverMemory) {
+      launcher.conf.put(SparkLauncher.DRIVER_MEMORY, "2g");
+    }
+
+    Map<String, String> effectiveConfig = launcher.getEffectiveConfig();
+
+    assertEquals("bar", effectiveConfig.get("spark.foo"));
+    if (confDriverMemory) {
+      assertEquals("2g", effectiveConfig.get(SparkLauncher.DRIVER_MEMORY));
+    } else if (propertiesFile != null) {
+      try (FileReader reader = new FileReader(propertiesFile, StandardCharsets.UTF_8)) {
+        Properties props = new Properties();
+        props.load(reader);
+        if (props.containsKey(SparkLauncher.DRIVER_MEMORY)) {
+          assertEquals(props.getProperty(SparkLauncher.DRIVER_MEMORY),
+            effectiveConfig.get(SparkLauncher.DRIVER_MEMORY));
+        }
+      }
+    } else {
+      assertEquals("1g", effectiveConfig.get(SparkLauncher.DRIVER_MEMORY));
+    }
+
+    if (propertiesFile != null) {
+      try (FileReader reader = new FileReader(propertiesFile, StandardCharsets.UTF_8)) {
+        Properties props = new Properties();
+        props.load(reader);
+        if (props.containsKey("spark.driver.memoryOverhead")) {
+          assertEquals(props.getProperty("spark.driver.memoryOverhead"),
+              effectiveConfig.get("spark.driver.memoryOverhead"));
+        }
+      }
+      if (loadSparkDefaults) {
+        assertEquals("/driver", effectiveConfig.get(SparkLauncher.DRIVER_EXTRA_CLASSPATH));
+      } else {
+        assertFalse(effectiveConfig.containsKey(SparkLauncher.DRIVER_EXTRA_CLASSPATH));
+      }
+    } else {
+      assertEquals("/driver", effectiveConfig.get(SparkLauncher.DRIVER_EXTRA_CLASSPATH));
+    }
   }
 
   @Test

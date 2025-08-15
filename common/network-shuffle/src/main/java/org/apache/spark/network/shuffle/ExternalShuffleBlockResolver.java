@@ -20,6 +20,7 @@ package org.apache.spark.network.shuffle;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -34,7 +35,6 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.cache.Weigher;
-import com.google.common.collect.Maps;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
@@ -136,7 +136,7 @@ public class ExternalShuffleBlockResolver {
         MDC.of(LogKeys.SHUFFLE_DB_BACKEND_KEY, Constants.SHUFFLE_SERVICE_DB_BACKEND));
       executors = reloadRegisteredExecutors(db);
     } else {
-      executors = Maps.newConcurrentMap();
+      executors = new ConcurrentHashMap<>();
     }
     this.directoryCleaner = directoryCleaner;
   }
@@ -472,7 +472,7 @@ public class ExternalShuffleBlockResolver {
   @VisibleForTesting
   static ConcurrentMap<AppExecId, ExecutorShuffleInfo> reloadRegisteredExecutors(DB db)
       throws IOException {
-    ConcurrentMap<AppExecId, ExecutorShuffleInfo> registeredExecutors = Maps.newConcurrentMap();
+    ConcurrentMap<AppExecId, ExecutorShuffleInfo> registeredExecutors = new ConcurrentHashMap<>();
     if (db != null) {
       try (DBIterator itr = db.iterator()) {
         itr.seek(APP_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));

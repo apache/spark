@@ -22,7 +22,7 @@ import java.io.File
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType

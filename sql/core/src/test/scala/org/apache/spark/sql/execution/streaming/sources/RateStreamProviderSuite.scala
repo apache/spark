@@ -28,8 +28,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
-import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
+import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, RateStreamOffset, StreamExecution}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.util.CaseInsensitiveStringMap

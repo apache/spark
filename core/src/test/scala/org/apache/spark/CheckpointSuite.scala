@@ -21,7 +21,6 @@ import java.io.File
 
 import scala.reflect.ClassTag
 
-import com.google.common.io.ByteStreams
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.config.CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME
@@ -612,7 +611,7 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
       val compressedInputStream = CompressionCodec.createCodec(conf)
         .compressedInputStream(fs.open(checkpointFile))
       try {
-        ByteStreams.toByteArray(compressedInputStream)
+        compressedInputStream.readAllBytes()
       } finally {
         compressedInputStream.close()
       }

@@ -21,12 +21,13 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
-import org.apache.parquet.Preconditions;
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.column.values.bitpacking.BytePackerForLong;
 import org.apache.parquet.column.values.bitpacking.Packer;
 import org.apache.parquet.io.ParquetDecodingException;
+
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.execution.datasources.DataSourceUtils;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
@@ -80,14 +81,14 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
 
   @Override
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
-    Preconditions.checkArgument(valueCount >= 1,
+    JavaUtils.checkArgument(valueCount >= 1,
         "Page must have at least one value, but it has " + valueCount);
     this.in = in;
     // Read the header
     this.blockSizeInValues = BytesUtils.readUnsignedVarInt(in);
     this.miniBlockNumInABlock = BytesUtils.readUnsignedVarInt(in);
     double miniSize = (double) blockSizeInValues / miniBlockNumInABlock;
-    Preconditions.checkArgument(miniSize % 8 == 0,
+    JavaUtils.checkArgument(miniSize % 8 == 0,
         "miniBlockSize must be multiple of 8, but it's " + miniSize);
     this.miniBlockSizeInValues = (int) miniSize;
     // True value count. May be less than valueCount because of nulls

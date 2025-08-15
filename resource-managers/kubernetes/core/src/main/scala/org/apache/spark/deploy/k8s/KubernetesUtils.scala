@@ -19,13 +19,12 @@ package org.apache.spark.deploy.k8s
 import java.io.{File, IOException}
 import java.net.URI
 import java.security.SecureRandom
-import java.util.{Collections, UUID}
+import java.util.{Collections, HexFormat, UUID}
 
 import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, OwnerReferenceBuilder, Pod, PodBuilder, Quantity}
 import io.fabric8.kubernetes.client.KubernetesClient
-import org.apache.commons.codec.binary.Hex
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -241,7 +240,7 @@ object KubernetesUtils extends Logging {
     }
 
     val time = java.lang.Long.toHexString(clock.getTimeMillis() & 0xFFFFFFFFFFL)
-    Hex.encodeHexString(random) + time
+    HexFormat.of().formatHex(random) + time
   }
 
   /**

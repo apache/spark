@@ -4610,16 +4610,12 @@ def _test() -> None:
     import numpy
     from pyspark.sql import SparkSession
     import pyspark.pandas.groupby
-    from pyspark.testing.utils import is_ansi_mode_test
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.groupby.__dict__.copy()
     globs["np"] = numpy
     globs["ps"] = pyspark.pandas
-
-    if is_ansi_mode_test:
-        del pyspark.pandas.groupby.DataFrameGroupBy.corr.__doc__
 
     spark = (
         SparkSession.builder.master("local[4]")

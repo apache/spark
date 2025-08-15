@@ -14,13 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.streaming
+// scalastyle:off line.size.limit
+package org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor
 
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.NoTime
-import org.apache.spark.sql.execution.streaming.StatefulProcessorHandleState.{INITIALIZED, PRE_INIT, StatefulProcessorHandleState, TIMER_PROCESSED}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.StatefulProcessorHandleState.{INITIALIZED, PRE_INIT, StatefulProcessorHandleState, TIMER_PROCESSED}
 import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 import org.apache.spark.sql.streaming.{StatefulProcessorHandle, TimeMode}
+// scalastyle:on line.size.limit
 
 abstract class StatefulProcessorHandleImplBase(
     timeMode: TimeMode, keyExprEnc: ExpressionEncoder[Any]) extends StatefulProcessorHandle {

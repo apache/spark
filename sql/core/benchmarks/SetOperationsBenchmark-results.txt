@@ -2,12 +2,12 @@
 Set Operations Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.14+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Parsing + Analysis:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-UNION ALL                                           371            502         142          0.0       24706.1       1.0X
-EXCEPT ALL                                          270            281           8          0.1       17967.1       1.4X
-INTERSECT ALL                                       267            276           7          0.1       17797.3       1.4X
+UNION ALL                                           171            298         142          0.1       11411.6       1.0X
+EXCEPT ALL                                          123            130           6          0.1        8185.4       1.4X
+INTERSECT ALL                                       123            129           6          0.1        8200.2       1.4X
 
 

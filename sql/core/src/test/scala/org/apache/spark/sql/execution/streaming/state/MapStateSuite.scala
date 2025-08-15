@@ -22,7 +22,8 @@ import java.util.UUID
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, MapStateImplWithTTL, StatefulProcessorHandleImpl}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.ttl.MapStateImplWithTTL
 import org.apache.spark.sql.streaming.{ListState, MapState, TimeMode, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{BinaryType, StructType}
 

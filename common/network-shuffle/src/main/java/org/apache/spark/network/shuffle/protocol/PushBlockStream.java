@@ -17,7 +17,8 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.protocol.Encoders;
@@ -65,7 +66,7 @@ public class PushBlockStream extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(appId, appAttemptId, shuffleId, shuffleMergeId, mapIndex , reduceId,
+    return Objects.hash(appId, appAttemptId, shuffleId, shuffleMergeId, mapIndex , reduceId,
       index);
   }
 
@@ -79,7 +80,7 @@ public class PushBlockStream extends BlockTransferMessage {
   @Override
   public boolean equals(Object other) {
     if (other instanceof PushBlockStream o) {
-      return Objects.equal(appId, o.appId)
+      return Objects.equals(appId, o.appId)
         && appAttemptId == o.appAttemptId
         && shuffleId == o.shuffleId
         && shuffleMergeId == o.shuffleMergeId

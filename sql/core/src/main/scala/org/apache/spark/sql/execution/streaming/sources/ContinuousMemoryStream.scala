@@ -32,7 +32,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReader, ContinuousPartitionReaderFactory, ContinuousStream, Offset, PartitionOffset}
-import org.apache.spark.sql.execution.streaming.{Offset => _, _}
+import org.apache.spark.sql.execution.streaming.{Offset => _}
+import org.apache.spark.sql.execution.streaming.runtime.{ContinuousRecordEndpoint, ContinuousRecordPartitionOffset, GetRecord, MemoryStreamBase}
 import org.apache.spark.util.RpcUtils
 
 /**

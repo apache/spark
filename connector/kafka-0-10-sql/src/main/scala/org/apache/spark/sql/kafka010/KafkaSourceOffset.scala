@@ -21,7 +21,8 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.PartitionOffset
-import org.apache.spark.sql.execution.streaming.{Offset, SerializedOffset}
+import org.apache.spark.sql.execution.streaming.Offset
+import org.apache.spark.sql.execution.streaming.runtime.SerializedOffset
 
 /**
  * An [[Offset]] for the [[KafkaSource]]. This one tracks all partitions of subscribed topics and

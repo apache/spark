@@ -23,7 +23,8 @@ import org.scalatest.Assertions
 
 import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
-import org.apache.spark.sql.execution.streaming.{MemoryStream, StateStoreRestoreExec, StateStoreSaveExec}
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StateStoreRestoreExec, StateStoreSaveExec}
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode.Update

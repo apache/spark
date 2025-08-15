@@ -26,7 +26,6 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
@@ -35,8 +34,8 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -662,7 +661,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
             fileToRead, toString(), keySize)
         } else {
           val keyRowBuffer = new Array[Byte](keySize)
-          ByteStreams.readFully(input, keyRowBuffer, 0, keySize)
+          Utils.readFully(input, keyRowBuffer, 0, keySize)
 
           val keyRow = new UnsafeRow(keySchema.fields.length)
           keyRow.pointTo(keyRowBuffer, keySize)
@@ -672,7 +671,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
             map.remove(keyRow)
           } else {
             val valueRowBuffer = new Array[Byte](valueSize)
-            ByteStreams.readFully(input, valueRowBuffer, 0, valueSize)
+            Utils.readFully(input, valueRowBuffer, 0, valueSize)
             val valueRow = new UnsafeRow(valueSchema.fields.length)
             // If valueSize in existing file is not multiple of 8, floor it to multiple of 8.
             // This is a workaround for the following:
@@ -782,7 +781,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
             fileToRead, toString(), keySize)
         } else {
           val keyRowBuffer = new Array[Byte](keySize)
-          ByteStreams.readFully(input, keyRowBuffer, 0, keySize)
+          Utils.readFully(input, keyRowBuffer, 0, keySize)
 
           val keyRow = new UnsafeRow(keySchema.fields.length)
           keyRow.pointTo(keyRowBuffer, keySize)
@@ -793,7 +792,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
               fileToRead, toString(), valueSize)
           } else {
             val valueRowBuffer = new Array[Byte](valueSize)
-            ByteStreams.readFully(input, valueRowBuffer, 0, valueSize)
+            Utils.readFully(input, valueRowBuffer, 0, valueSize)
             val valueRow = new UnsafeRow(valueSchema.fields.length)
             // If valueSize in existing file is not multiple of 8, floor it to multiple of 8.
             // This is a workaround for the following:

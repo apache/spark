@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.collection.Utils.createArray
 
 /**
  * Benchmark primitive arrays via DataFrame and Dataset program using primitive arrays
@@ -53,7 +54,7 @@ object PrimitiveArrayBenchmark extends SqlBasedBenchmark {
     val count = 1024 * 1024 * 2
 
     val sc = spark.sparkContext
-    val primitiveIntArray = Array.fill[Int](count)(65535)
+    val primitiveIntArray = createArray(count, 65535)
     val dsInt = sc.parallelize(Seq(primitiveIntArray), 1).toDS()
     dsInt.count()  // force to build dataset
     val intArray = { i: Int =>
@@ -64,7 +65,7 @@ object PrimitiveArrayBenchmark extends SqlBasedBenchmark {
         n += 1
       }
     }
-    val primitiveDoubleArray = Array.fill[Double](count)(65535.0)
+    val primitiveDoubleArray = createArray(count, 65535.0)
     val dsDouble = sc.parallelize(Seq(primitiveDoubleArray), 1).toDS()
     dsDouble.count()  // force to build dataset
     val doubleArray = { i: Int =>

@@ -17,7 +17,8 @@
 
 package org.apache.spark.unsafe.types
 
-import scala.collection.parallel.immutable.ParSeq
+import java.util.stream.IntStream
+
 import scala.jdk.CollectionConverters.MapHasAsScala
 
 import com.ibm.icu.util.ULocale
@@ -293,7 +294,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     (0 to 10).foreach(_ => {
       val collator = fetchCollation("UNICODE").getCollator
 
-      ParSeq(0 to 100).foreach { _ =>
+      IntStream.rangeClosed(0, 100).parallel().forEach { _ =>
         collator.getCollationKey("aaa")
       }
     })

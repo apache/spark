@@ -40,7 +40,8 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-import org.apache.spark.sql.execution.streaming.{StatefulOperatorStateInfo, StreamExecution}
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.execution.streaming.state.MaintenanceTaskType._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{NextIterator, ThreadUtils, Utils}

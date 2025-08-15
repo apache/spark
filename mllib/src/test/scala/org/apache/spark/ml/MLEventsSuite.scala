@@ -26,7 +26,6 @@ import org.mockito.Mockito.when
 import org.scalatest.concurrent.Eventually
 import org.scalatestplus.mockito.MockitoSugar.mock
 
-import org.apache.spark.SparkConf
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{DefaultParamsReader, DefaultParamsWriter, MLWriter}
@@ -44,7 +43,6 @@ class MLEventsSuite extends SparkFunSuite with MLlibTestSparkContext with Eventu
       case _ =>
     }
   }
-  private val jsonProtocol = new JsonProtocol(new SparkConf())
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -145,8 +143,8 @@ class MLEventsSuite extends SparkFunSuite with MLlibTestSparkContext with Eventu
     }
     // Test if they can be ser/de via JSON protocol.
     assert(events.nonEmpty)
-    events.map(jsonProtocol.sparkEventToJsonString).foreach { event =>
-      assert(jsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
+    events.map(JsonProtocol.sparkEventToJsonString).foreach { event =>
+      assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
     }
   }
 
@@ -203,8 +201,8 @@ class MLEventsSuite extends SparkFunSuite with MLlibTestSparkContext with Eventu
     }
     // Test if they can be ser/de via JSON protocol.
     assert(events.nonEmpty)
-    events.map(jsonProtocol.sparkEventToJsonString).foreach { event =>
-      assert(jsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
+    events.map(JsonProtocol.sparkEventToJsonString).foreach { event =>
+      assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
     }
   }
 
@@ -235,8 +233,8 @@ class MLEventsSuite extends SparkFunSuite with MLlibTestSparkContext with Eventu
       // Test if they can be ser/de via JSON protocol.
       eventually(timeout(10.seconds), interval(1.second)) {
         assert(events.nonEmpty)
-        events.map(jsonProtocol.sparkEventToJsonString).foreach { event =>
-          assert(jsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
+        events.map(JsonProtocol.sparkEventToJsonString).foreach { event =>
+          assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
         }
       }
       sc.listenerBus.waitUntilEmpty(timeoutMillis = 10000)
@@ -263,8 +261,8 @@ class MLEventsSuite extends SparkFunSuite with MLlibTestSparkContext with Eventu
       // Test if they can be ser/de via JSON protocol.
       eventually(timeout(10.seconds), interval(1.second)) {
         assert(events.nonEmpty)
-        events.map(jsonProtocol.sparkEventToJsonString).foreach { event =>
-          assert(jsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
+        events.map(JsonProtocol.sparkEventToJsonString).foreach { event =>
+          assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
         }
       }
     }
@@ -298,8 +296,8 @@ class MLEventsSuite extends SparkFunSuite with MLlibTestSparkContext with Eventu
       // Test if they can be ser/de via JSON protocol.
       eventually(timeout(10.seconds), interval(1.second)) {
         assert(events.nonEmpty)
-        events.map(jsonProtocol.sparkEventToJsonString).foreach { event =>
-          assert(jsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
+        events.map(JsonProtocol.sparkEventToJsonString).foreach { event =>
+          assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
         }
       }
       sc.listenerBus.waitUntilEmpty(timeoutMillis = 10000)
@@ -326,8 +324,8 @@ class MLEventsSuite extends SparkFunSuite with MLlibTestSparkContext with Eventu
       // Test if they can be ser/de via JSON protocol.
       eventually(timeout(10.seconds), interval(1.second)) {
         assert(events.nonEmpty)
-        events.map(jsonProtocol.sparkEventToJsonString).foreach { event =>
-          assert(jsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
+        events.map(JsonProtocol.sparkEventToJsonString).foreach { event =>
+          assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
         }
       }
     }

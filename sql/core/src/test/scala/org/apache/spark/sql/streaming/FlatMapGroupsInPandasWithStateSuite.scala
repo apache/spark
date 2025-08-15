@@ -22,7 +22,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.logical.{NoTimeout, ProcessingTimeTimeout}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.{Complete, Update}
 import org.apache.spark.sql.execution.python.streaming.FlatMapGroupsInPandasWithStateExec
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.{lit, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock

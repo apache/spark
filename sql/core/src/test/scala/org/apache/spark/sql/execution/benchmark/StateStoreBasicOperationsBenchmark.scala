@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.execution.streaming.StreamExecution
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType, TimestampType}

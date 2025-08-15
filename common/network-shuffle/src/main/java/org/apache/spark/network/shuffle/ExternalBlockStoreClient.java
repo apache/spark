@@ -19,6 +19,7 @@ package org.apache.spark.network.shuffle;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -27,7 +28,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
 import com.codahale.metrics.MetricSet;
-import com.google.common.collect.Lists;
 
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
@@ -82,7 +82,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     this.appId = appId;
     TransportContext context = new TransportContext(
       transportConf, new NoOpRpcHandler(), true, true);
-    List<TransportClientBootstrap> bootstraps = Lists.newArrayList();
+    List<TransportClientBootstrap> bootstraps = new ArrayList<>();
     if (authEnabled) {
       bootstraps.add(new AuthClientBootstrap(transportConf, appId, secretKeyHolder));
     }

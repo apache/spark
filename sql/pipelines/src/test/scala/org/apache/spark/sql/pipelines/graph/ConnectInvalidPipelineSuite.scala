@@ -18,7 +18,7 @@
 package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}

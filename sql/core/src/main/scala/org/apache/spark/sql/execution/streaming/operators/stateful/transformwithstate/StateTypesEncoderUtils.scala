@@ -15,13 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate
 
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateKeyValueRowSchemaUtils._
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.ttl.StateTTL
 import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 import org.apache.spark.sql.types._
 
@@ -180,7 +182,7 @@ class CompositeKeyStateEncoder[K, V](
     stateName: String,
     hasTtl: Boolean = false)
   extends StateTypesEncoder[V](keyEncoder, valEncoder, stateName, hasTtl) {
-  import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
+  import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateKeyValueRowSchemaUtils._
 
   /** Encoders */
   private val userKeyExpressionEnc = encoderFor(userKeyEnc)

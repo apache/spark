@@ -22,14 +22,13 @@ import java.io.{BufferedWriter, DataInputStream, DataOutputStream, File, FileInp
 import scala.io.Source
 import scala.util.Random
 
-import com.google.common.io.ByteStreams
-
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types.{BinaryType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType, StructType, TimestampType}
+import org.apache.spark.util.Utils
 
 /**
  * To run the test suite:
@@ -110,7 +109,7 @@ class StreamingQueryHashPartitionVerifySuite extends StreamTest {
     val rows = (1 to numRows).map { _ =>
       val rowSize = is.readInt()
       val rowBuffer = new Array[Byte](rowSize)
-      ByteStreams.readFully(is, rowBuffer, 0, rowSize)
+      Utils.readFully(is, rowBuffer, 0, rowSize)
       val row = new UnsafeRow(1)
       row.pointTo(rowBuffer, rowSize)
       row

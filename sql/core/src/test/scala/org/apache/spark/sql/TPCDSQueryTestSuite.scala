@@ -23,7 +23,7 @@ import java.nio.file.{Files, Paths}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.catalyst.util.{fileToString, resourceToString, stringToFile}
+import org.apache.spark.sql.catalyst.util.{resourceToString, stringToFile}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.tags.ExtendedSQLTest
@@ -130,7 +130,7 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
 
         // Read back the golden file.
         val (expectedSchema, expectedOutput) = {
-          val goldenOutput = fileToString(goldenFile)
+          val goldenOutput = Files.readString(goldenFile.toPath)
           val segments = goldenOutput.split("-- !query.*\n")
 
           // query has 3 segments, plus the header
