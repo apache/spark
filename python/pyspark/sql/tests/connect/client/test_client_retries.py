@@ -16,6 +16,7 @@
 #
 
 import unittest
+import warnings
 
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
@@ -30,7 +31,6 @@ if should_test_connect:
         Retrying,
         DefaultPolicy,
     )
-    from pyspark.errors import RetriesExceeded
     from pyspark.sql.tests.connect.client.test_client import (
         TestPolicy,
         TestException,
@@ -91,7 +91,7 @@ class SparkConnectClientRetriesTestCase(unittest.TestCase):
             for attempt in Retrying(client._retry_policies, sleep=sleep_tracker.sleep):
                 with attempt:
                     raise TestException("Retryable error", grpc.StatusCode.UNAVAILABLE)
-        except RetriesExceeded:
+        except TestException:
             pass
 
         # tolerated at least 10 mins of fails
@@ -106,6 +106,28 @@ class SparkConnectClientRetriesTestCase(unittest.TestCase):
         client.set_retry_policies([policyA, policyB])
 
         self.assertEqual(client.get_retry_policies(), [policyA, policyB])
+
+    def test_warning_works(self):
+        client = SparkConnectClient("sc://foo/;token=bar")
+        policy = get_client_policies_map(client).get(DefaultPolicy)
+        self.assertIsNotNone(policy)
+
+        num_attempts = 0
+        sleep_tracker = SleepTimeTracker()
+        with warnings.catch_warnings(record=True) as warning_list:
+            warnings.simplefilter("always")
+            try:
+                for attempt in Retrying(client._retry_policies, sleep=sleep_tracker.sleep):
+                    with attempt:
+                        raise TestException(msg="Some error message", code=grpc.StatusCode.UNAVAILABLE)
+            except TestException:
+                pass
+            self.assertEqual(len(sleep_tracker.times), policy.max_retries)
+            self.assertEqual(len(warning_list), 1)
+            self.assertEqual(
+                str(warning_list[0].message),
+                "[RETRIES_EXCEEDED] The maximum number of retries has been exceeded.",
+            )
 
     def test_default_policy_retries_retry_info(self):
         client = SparkConnectClient("sc://foo/;token=bar")
@@ -124,7 +146,7 @@ class SparkConnectClientRetriesTestCase(unittest.TestCase):
                         code=grpc.StatusCode.UNIMPLEMENTED,
                         retry_delay=retry_delay,
                     )
-        except RetriesExceeded:
+        except TestException:
             pass
         expected_times = [
             min(policy.max_backoff, policy.initial_backoff * policy.backoff_multiplier**i)
@@ -151,7 +173,7 @@ class SparkConnectClientRetriesTestCase(unittest.TestCase):
                         grpc.StatusCode.UNAVAILABLE,
                         retry_delay,
                     )
-        except RetriesExceeded:
+        except TestException:
             pass
         expected_times = [retry_delay] * policy.max_retries
         self.assertListsAlmostEqual(sleep_tracker.times, expected_times, delta=policy.jitter)
@@ -173,7 +195,7 @@ class SparkConnectClientRetriesTestCase(unittest.TestCase):
                         grpc.StatusCode.UNAVAILABLE,
                         retry_delay,
                     )
-        except RetriesExceeded:
+        except TestException:
             pass
 
         expected_times = [policy.max_server_retry_delay] * policy.max_retries
@@ -204,7 +226,7 @@ class SparkConnectClientRetriesTestCase(unittest.TestCase):
                         grpc.StatusCode.UNAVAILABLE,
                         retry_delay,
                     )
-        except RetriesExceeded:
+        except TestException:
             pass
 
         expected_times = [initial_retry_delay] * 2 + [

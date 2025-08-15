@@ -987,11 +987,6 @@
       "Columns do not match in their data type: <mismatch>."
     ]
   },
-  "RETRIES_EXCEEDED": {
-    "message": [
-      "The maximum number of retries has been exceeded."
-    ]
-  },
   "REUSE_OBSERVATION": {
     "message": [
       "An Observation can be used with a DataFrame only once."
