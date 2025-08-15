@@ -50,17 +50,19 @@ class ExecutorPodsInformerSnapshotSource extends ExecutorPodsInformerCustomSnaps
 
   private class ExecutorPodsInformer extends ResourceEventHandler[Pod] {
     override def onAdd(pod: Pod): Unit = {
-      logInfo(s"Received add executor pod event for pod named ${pod.getMetadata.getName}")
+      logDebug(s"Received add executor pod event for pod named ${pod.getMetadata.getName}")
       store.updatePod(pod)
       }
 
     override def onUpdate(oldPod: Pod, newPod: Pod): Unit = {
-      logInfo(s"Received update executor pod event for pod named ${newPod.getMetadata.getName}")
-      store.updatePod(newPod)
+      logDebug(s"Received update executor pod event for pod named ${newPod.getMetadata.getName}")
+      if (!(oldPod.getMetadata.getResourceVersion == newPod.getMetadata.getResourceVersion)) {
+        store.updatePod(newPod)
+      }
     }
 
     override def onDelete(pod: Pod, deletedFinalStateUnknown: Boolean): Unit = {
-      logInfo(s"Received delete executor pod update for pod named ${pod.getMetadata.getName}")
+      logDebug(s"Received delete executor pod update for pod named ${pod.getMetadata.getName}")
       store.updatePod(pod)
     }
   }
