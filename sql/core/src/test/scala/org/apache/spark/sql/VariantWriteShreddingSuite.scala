@@ -77,6 +77,12 @@ class VariantWriteShreddingSuite extends SparkFunSuite with ExpressionEvalHelper
         StructField("value", BinaryType, nullable = true),
         StructField("typed_value", IntegerType, nullable = true))))
 
+    // If typed_value is not provided, value is required.
+    assert(SparkShreddingUtils.variantShreddingSchema(VariantType) ==
+      StructType(Seq(
+        StructField("metadata", BinaryType, nullable = false),
+        StructField("value", BinaryType, nullable = false))))
+
     val fieldA = StructType(Seq(
       StructField("value", BinaryType, nullable = true),
       StructField("typed_value", TimestampNTZType, nullable = true)))
@@ -86,10 +92,22 @@ class VariantWriteShreddingSuite extends SparkFunSuite with ExpressionEvalHelper
     val fieldB = StructType(Seq(
       StructField("value", BinaryType, nullable = true),
       StructField("typed_value", arrayType, nullable = true)))
+    // If typed_value is not provided for an object field, value is still optional.
+    val fieldC = StructType(Seq(
+      StructField("value", BinaryType, nullable = true)))
+    // If typed_value is not provided for an array element, value is required.
+    val untypedArrayType = ArrayType(StructType(Seq(
+      StructField("value", BinaryType, nullable = false))), containsNull = false)
+    val fieldD = StructType(Seq(
+      StructField("value", BinaryType, nullable = true),
+      StructField("typed_value", untypedArrayType, nullable = true)))
     val objectType = StructType(Seq(
       StructField("a", fieldA, nullable = false),
-      StructField("b", fieldB, nullable = false)))
-    val structSchema = DataType.fromDDL("a timestamp_ntz, b array<string>")
+      StructField("b", fieldB, nullable = false),
+      StructField("c", fieldC, nullable = false),
+      StructField("d", fieldD, nullable = false)))
+    val structSchema = DataType.fromDDL(
+      "a timestamp_ntz, b array<string>, c variant, d array<variant>")
     assert(SparkShreddingUtils.variantShreddingSchema(structSchema) ==
       StructType(Seq(
         StructField("metadata", BinaryType, nullable = false),
