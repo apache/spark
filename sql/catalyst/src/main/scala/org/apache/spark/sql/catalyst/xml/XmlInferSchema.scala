@@ -207,19 +207,56 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
   }
 
+  def inferFromReaders(xml: RDD[StaxXMLRecordReader]): StructType = {
+    val schemaData = if (options.samplingRatio < 1.0) {
+      xml.sample(withReplacement = false, options.samplingRatio, 1)
+    } else {
+      xml
+    }
+    // perform schema inference on each row and merge afterwards
+    val mergedTypesFromPartitions = schemaData.mapPartitions { iter =>
+      val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
+
+      iter.flatMap { xmlReader =>
+        infer(xmlReader, xsdSchema)
+      }.reduceOption(compatibleType(caseSensitive, options.valueTag)).iterator
+    }
+
+    // Here we manually submit a fold-like Spark job, so that we can set the SQLConf when running
+    // the fold functions in the scheduler event loop thread.
+    val existingConf = SQLConf.get
+    var rootType: DataType = StructType(Nil)
+    val foldPartition = (iter: Iterator[DataType]) =>
+      iter.fold(StructType(Nil))(compatibleType(caseSensitive, options.valueTag))
+    val mergeResult = (index: Int, taskResult: DataType) => {
+      rootType = SQLConf.withExistingConf(existingConf) {
+        compatibleType(caseSensitive, options.valueTag)(rootType, taskResult)
+      }
+    }
+    xml.sparkContext.runJob(mergedTypesFromPartitions, foldPartition, mergeResult)
+
+    canonicalizeType(rootType) match {
+      case Some(st: StructType) => st
+      case _ =>
+        // canonicalizeType erases all empty structs, including the only one we want to keep
+        // XML shouldn't run into this line
+        StructType(Seq())
+    }
+  }
+
   /**
    * Infer the schema of the next XML record in the XML event stream.
    * Note that the method will **NOT** close the XML event stream as there could have more XML
-   * records to parse. It's the caller's responsibility to close the stream.
+   * records to parse. The StaxXMLRecordReader will automatically close the stream when there are
+   * no more XML records to parse.
    */
-  def infer(parser: StaxXMLRecordReader, shouldSkipToNextReader: Boolean): Option[DataType] = {
+  def infer(parser: StaxXMLRecordReader, xsdSchema: Option[Schema]): Option[DataType] = {
     try {
-      if (shouldSkipToNextReader && !parser.skipToNextRecord()) {
+      if (!parser.skipToNextRecord()) {
         return None
       }
 
-      val xsd = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
-      xsd.foreach { schema =>
+      xsdSchema.foreach { schema =>
         parser.validateXSDSchema(schema)
       }
       val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)

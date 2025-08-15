@@ -59,7 +59,7 @@ object StaxXmlParserUtils {
 
   def filteredReader(
       inputStream: () => java.io.InputStream,
-      options: XmlOptions): XMLEventReader = {
+      options: XmlOptions): StaxXMLRecordReader = {
     StaxXMLRecordReader(inputStream, options)
   }
 
