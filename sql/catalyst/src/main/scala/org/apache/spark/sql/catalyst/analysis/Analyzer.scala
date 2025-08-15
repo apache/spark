@@ -2229,12 +2229,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             case _ => tvf
           }
 
-          Project(
-            Seq(UnresolvedStar(Some(Seq(alias)))),
-            LateralJoin(
-              tableArgs.map(_._2).reduceLeft(Join(_, _, Inner, None, JoinHint.NONE)),
-              LateralSubquery(SubqueryAlias(alias, tvfWithTableColumnIndexes)), Inner, None)
-          )
+          val lateralJoin = LateralJoin(
+            tableArgs.map(_._2).reduceLeft(Join(_, _, Inner, None, JoinHint.NONE)),
+            LateralSubquery(SubqueryAlias(alias, tvfWithTableColumnIndexes)), Inner, None)
+
+          // Set the tag so that it can be used to differentiate lateral join added by
+          // TABLE argument vs added by user.
+          lateralJoin.setTagValue(LateralJoin.BY_TABLE_ARGUMENT, ())
+
+          Project(Seq(UnresolvedStar(Some(Seq(alias)))), lateralJoin)
         }
 
       case q: LogicalPlan =>
@@ -4248,6 +4251,8 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
     }
   }
 }
+
+
 
 /**
  * Rule that's used to handle `UnresolvedHaving` nodes with resolved `condition` and `child`.
