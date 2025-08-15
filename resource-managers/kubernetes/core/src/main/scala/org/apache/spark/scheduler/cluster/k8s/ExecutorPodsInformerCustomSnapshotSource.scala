@@ -20,7 +20,10 @@ package org.apache.spark.scheduler.cluster.k8s
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SparkConf
+import org.apache.spark.annotation.{DeveloperApi, Unstable}
 
+@Unstable
+@DeveloperApi
 abstract class ExecutorPodsInformerCustomSnapshotSource extends ExecutorPodsSnapshotSource {
   def init(sparkConf: SparkConf, kubernetesClient: KubernetesClient,
            snapshotStore: ExecutorPodsSnapshotsStore,

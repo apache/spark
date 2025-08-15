@@ -152,8 +152,6 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       if (sources.nonEmpty) sources else Seq(podsWatchEventSource, podsPollingEventSource)
     }
 
-    logDebug(s"Using snapshot sources: ${snapshotSources.mkString(", ")}")
-
     new KubernetesClusterSchedulerBackend(
       scheduler.asInstanceOf[TaskSchedulerImpl],
       sc,
