@@ -1195,44 +1195,52 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     validateCheckpointInfo(6, 1, Set(2, 4, 6))
   }
 
-  testWithCheckpointInfoTracked(
-    s"checkpointFormatVersion2 validate StreamingGlobalLimit") {
-    withTempDir { checkpointDir =>
-      val inputData = MemoryStream[Int]
-      val aggregated = inputData
-        .toDF()
-        .limit(10)
 
-      testStream(aggregated, Append)(
-        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
-        AddData(inputData, 3),
-        CheckLastBatch(3),
-        AddData(inputData, 3, 2),
-        CheckLastBatch(3, 2),
-        StopStream
-      )
+  // No matter the number of shuffle partitions, global limit should always use one partition
+  Seq(1, 2, 10, 200).foreach { shufflePartitions =>
+    testWithCheckpointInfoTracked(
+      s"checkpointFormatVersion2 validate StreamingGlobalLimit with " +
+        s"shufflePartitions = $shufflePartitions") {
+      withTempDir { checkpointDir =>
+        withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, shufflePartitions.toString)) {
+          val inputData = MemoryStream[Int]
+          val aggregated = inputData
+            .toDF()
+            .limit(10)
 
-      // Test recovery
-      testStream(aggregated, Append)(
-        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
-        AddData(inputData, 4, 1, 3),
-        CheckLastBatch(4, 1, 3),
-        AddData(inputData, 5, 4, 4),
-        CheckLastBatch(5, 4, 4),
-        StopStream
-      )
+          testStream(aggregated, Append)(
+            StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+            AddData(inputData, 3),
+            CheckLastBatch(3),
+            AddData(inputData, 3, 2),
+            CheckLastBatch(3, 2),
+            StopStream
+          )
 
-      // crash recovery again
-      testStream(aggregated, Append)(
-        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
-        AddData(inputData, 4, 7),
-        CheckLastBatch(4),
-        AddData(inputData, 5),
-        CheckLastBatch(),
-        StopStream
-      )
+          // Test recovery
+          testStream(aggregated, Append)(
+            StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+            AddData(inputData, 4, 1, 3),
+            CheckLastBatch(4, 1, 3),
+            AddData(inputData, 5, 4, 4),
+            CheckLastBatch(5, 4, 4),
+            StopStream
+          )
+
+          // crash recovery again
+          testStream(aggregated, Append)(
+            StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+            AddData(inputData, 4, 7),
+            CheckLastBatch(4),
+            AddData(inputData, 5),
+            CheckLastBatch(),
+            StopStream
+          )
+
+          validateCheckpointInfoGlobalLimit(6, 1, Set(2, 3, 4, 5, 6))
+        }
+      }
     }
-    validateCheckpointInfoGlobalLimit(6, 1, Set(2, 3, 4, 5, 6))
   }
 
   test("checkpointFormatVersion2 validate transformWithState") {
