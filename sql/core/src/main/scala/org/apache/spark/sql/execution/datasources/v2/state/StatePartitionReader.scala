@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.SymmetricHashJoinStateManager
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{StateVariableType, TransformWithStateVariableInfo}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.streaming.state.RecordType.{getRecordTypeAsString, RecordType}
@@ -95,6 +96,31 @@ abstract class StatePartitionReaderBase(
       schema, "value").asInstanceOf[StructType]
   }
 
+  protected val getStoreUniqueId : Option[String] = {
+    val partitionStateUniqueIds =
+      partition.sourceOptions.operatorStateUniqueIds.map(_(partition.partition))
+    if (partition.sourceOptions.storeName == StateStoreId.DEFAULT_STORE_NAME) {
+      partitionStateUniqueIds.map(_.head)
+    } else {
+      val stateStoreCheckpointIds = SymmetricHashJoinStateManager.getStateStoreCheckpointIds(
+        partition.partition,
+        partition.sourceOptions.operatorStateUniqueIds,
+        useColumnFamiliesForJoins = false)
+
+      if (partition.sourceOptions.storeName == "left-keyToNumValues") {
+        stateStoreCheckpointIds.left.keyToNumValues
+      } else if (partition.sourceOptions.storeName == "left-keyWithIndexToValue") {
+        stateStoreCheckpointIds.left.valueToNumKeys
+      } else if (partition.sourceOptions.storeName == "right-keyToNumValues") {
+        stateStoreCheckpointIds.right.keyToNumValues
+      } else if (partition.sourceOptions.storeName == "right-keyWithIndexToValue") {
+        stateStoreCheckpointIds.right.valueToNumKeys
+      } else {
+        None
+      }
+    }
+  }
+
   protected lazy val provider: StateStoreProvider = {
     val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
       partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
@@ -113,7 +139,9 @@ abstract class StatePartitionReaderBase(
     val isInternal = partition.sourceOptions.readRegisteredTimers
 
     if (useColFamilies) {
-      val store = provider.getStore(partition.sourceOptions.batchId + 1)
+      val store = provider.getStore(
+        partition.sourceOptions.batchId + 1,
+        getStoreUniqueId)
       require(stateStoreColFamilySchemaOpt.isDefined)
       val stateStoreColFamilySchema = stateStoreColFamilySchemaOpt.get
       require(stateStoreColFamilySchema.keyStateEncoderSpec.isDefined)
@@ -171,7 +199,11 @@ class StatePartitionReader(
 
   private lazy val store: ReadStateStore = {
     partition.sourceOptions.fromSnapshotOptions match {
-      case None => provider.getReadStore(partition.sourceOptions.batchId + 1)
+      case None =>
+        provider.getReadStore(
+          partition.sourceOptions.batchId + 1,
+          getStoreUniqueId
+        )
 
       case Some(fromSnapshotOptions) =>
         if (!provider.isInstanceOf[SupportsFineGrainedReplay]) {

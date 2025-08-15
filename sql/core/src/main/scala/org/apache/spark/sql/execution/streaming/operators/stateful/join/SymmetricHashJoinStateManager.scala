@@ -1167,26 +1167,26 @@ object SymmetricHashJoinStateManager {
    */
   def getStateStoreCheckpointIds(
       partitionId: Int,
-      stateInfo: StatefulOperatorStateInfo,
+      stateStoreCkptIds: Option[Array[Array[String]]],
       useColumnFamiliesForJoins: Boolean): JoinStateStoreCheckpointId = {
     if (useColumnFamiliesForJoins) {
-      val ckpt = stateInfo.stateStoreCkptIds.map(_(partitionId)).map(_.head)
+      val ckpt = stateStoreCkptIds.map(_(partitionId)).map(_.head)
       JoinStateStoreCheckpointId(
         left = JoinerStateStoreCheckpointId(keyToNumValues = ckpt, valueToNumKeys = ckpt),
         right = JoinerStateStoreCheckpointId(keyToNumValues = ckpt, valueToNumKeys = ckpt)
       )
     } else {
-      val stateStoreCkptIds = stateInfo.stateStoreCkptIds
+      val stateStoreCkptIdsOpt = stateStoreCkptIds
         .map(_(partitionId))
         .map(_.map(Option(_)))
         .getOrElse(Array.fill[Option[String]](4)(None))
       JoinStateStoreCheckpointId(
         left = JoinerStateStoreCheckpointId(
-          keyToNumValues = stateStoreCkptIds(0),
-          valueToNumKeys = stateStoreCkptIds(1)),
+          keyToNumValues = stateStoreCkptIdsOpt(0),
+          valueToNumKeys = stateStoreCkptIdsOpt(1)),
         right = JoinerStateStoreCheckpointId(
-          keyToNumValues = stateStoreCkptIds(2),
-          valueToNumKeys = stateStoreCkptIds(3)))
+          keyToNumValues = stateStoreCkptIdsOpt(2),
+          valueToNumKeys = stateStoreCkptIdsOpt(3)))
     }
   }
 
