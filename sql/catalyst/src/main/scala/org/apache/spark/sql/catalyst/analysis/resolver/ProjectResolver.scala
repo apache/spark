@@ -60,12 +60,19 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
    *
    * After the subtree and project-list expressions are resolved in the child scope we overwrite
    * current scope with resolved operators output to expose new names to the parent operators.
+   *
+   * We need to clear [[NameScope.availableAliases]]. Those are only relevant for the immediate
+   * project list for output prioritization to work correctly in
+   * [[NameScope.tryResolveMultipartNameByOutput]].
    */
   override def resolve(unresolvedProject: Project): LogicalPlan = {
     scopes.pushScope()
 
     val (resolvedOperator, resolvedProjectList) = try {
       val resolvedChild = operatorResolver.resolve(unresolvedProject.child)
+
+      scopes.current.availableAliases.clear()
+
       val childReferencedAttributes = expressionResolver.getLastReferencedAttributes
       val resolvedProjectList =
         expressionResolver.resolveProjectList(unresolvedProject.projectList, unresolvedProject)
@@ -87,7 +94,8 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
             expressions = aggregateWithLcaResolutionResult.outputList,
             hasAggregateExpressions = false,
             hasLateralColumnAlias = false,
-            aggregateListAliases = aggregateWithLcaResolutionResult.aggregateListAliases
+            aggregateListAliases = aggregateWithLcaResolutionResult.aggregateListAliases,
+            baseAggregate = Some(aggregateWithLcaResolutionResult.baseAggregate)
           )
           (aggregateWithLcaResolutionResult.resolvedOperator, projectList)
         } else {
@@ -95,8 +103,10 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
           // single-pass Analyzer.
           ExprUtils.assertValidAggregation(aggregate)
 
-          val resolvedAggregateList =
-            resolvedProjectList.copy(aggregateListAliases = scopes.current.aggregateListAliases)
+          val resolvedAggregateList = resolvedProjectList.copy(
+            aggregateListAliases = scopes.current.aggregateListAliases,
+            baseAggregate = Some(aggregate)
+          )
 
           (aggregate, resolvedAggregateList)
         }
@@ -119,7 +129,8 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
 
     scopes.overwriteOutputAndExtendHiddenOutput(
       output = resolvedProjectList.expressions.map(namedExpression => namedExpression.toAttribute),
-      aggregateListAliases = resolvedProjectList.aggregateListAliases
+      aggregateListAliases = resolvedProjectList.aggregateListAliases,
+      baseAggregate = resolvedProjectList.baseAggregate
     )
 
     resolvedOperator

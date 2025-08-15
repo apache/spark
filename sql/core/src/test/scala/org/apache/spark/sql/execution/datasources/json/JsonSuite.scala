@@ -26,7 +26,6 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 
 import com.fasterxml.jackson.core.JsonFactory
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
@@ -796,7 +795,7 @@ abstract class JsonSuite
   test("Find compatible types even if inferred DecimalType is not capable of other IntegralType") {
     val mixedIntegerAndDoubleRecords = Seq(
       """{"a": 3, "b": 1.1}""",
-      s"""{"a": 3.1, "b": 0.${"0" * 38}1}""").toDS()
+      s"""{"a": 3.1, "b": 0.${"0".repeat(38)}1}""").toDS()
     val jsonDF = spark.read
       .option("prefersDecimal", "true")
       .json(mixedIntegerAndDoubleRecords)
@@ -3372,7 +3371,7 @@ abstract class JsonSuite
     )
 
     checkError(
-      exception = ExceptionUtils.getRootCause(exception).asInstanceOf[SparkRuntimeException],
+      exception = Utils.getRootCause(exception).asInstanceOf[SparkRuntimeException],
       condition = "INVALID_JSON_ROOT_FIELD",
       parameters = Map.empty
     )
@@ -4065,7 +4064,7 @@ abstract class JsonSuite
 
     // Test scan with partitions.
     withTempDir { dir =>
-      new File(dir, "a=1/b=2/").mkdirs()
+      Utils.createDirectory(new File(dir, "a=1/b=2/"))
       Files.write(new File(dir, "a=1/b=2/file.json").toPath, content)
       checkAnswer(
         spark.read.format("json").option("singleVariantColumn", "var")

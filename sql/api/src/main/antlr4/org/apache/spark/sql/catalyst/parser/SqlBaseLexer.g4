@@ -518,7 +518,7 @@ ZONE: 'ZONE';
 
 EQ  : '=' | '==';
 NSEQ: '<=>';
-NEQ : '<>';
+NEQ : '<>' {complex_type_level_counter == 0}?;
 NEQJ: '!=';
 LT  : '<';
 LTE : '<=' | '!>';
@@ -548,13 +548,13 @@ HENT_END: '*/';
 QUESTION: '?';
 
 STRING_LITERAL
-    : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
+    : '\'' ( ~('\''|'\\') | ('\\' .) | ('\'' '\'') )* '\''
     | 'R\'' (~'\'')* '\''
     | 'R"'(~'"')* '"'
     ;
 
 DOUBLEQUOTED_STRING
-    :'"' ( ~('"'|'\\') | ('\\' .) )* '"'
+    :'"' ( ~('"'|'\\') | '""' | ('\\' .) )* '"'
     ;
 
 // NOTE: If you move a numeric literal, you should modify `ParserUtils.toExprAlias()`

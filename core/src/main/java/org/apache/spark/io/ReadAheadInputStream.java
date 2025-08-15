@@ -28,13 +28,11 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.concurrent.GuardedBy;
 
-import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
-
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.util.ThreadUtils;
 
 /**
@@ -105,7 +103,7 @@ public class ReadAheadInputStream extends InputStream {
    */
   public ReadAheadInputStream(
       InputStream inputStream, int bufferSizeInBytes) {
-    Preconditions.checkArgument(bufferSizeInBytes > 0,
+    JavaUtils.checkArgument(bufferSizeInBytes > 0,
         "bufferSizeInBytes should be greater than 0, but the value is " + bufferSizeInBytes);
     activeBuffer = ByteBuffer.allocate(bufferSizeInBytes);
     readAheadBuffer = ByteBuffer.allocate(bufferSizeInBytes);
@@ -120,8 +118,10 @@ public class ReadAheadInputStream extends InputStream {
 
   private void checkReadException() throws IOException {
     if (readAborted) {
-      Throwables.throwIfInstanceOf(readException, IOException.class);
-      Throwables.throwIfUnchecked(readException);
+      if (readException == null) throw new NullPointerException("readException is not captured.");
+      if (readException instanceof IOException ie) throw ie;
+      if (readException instanceof Error error) throw error;
+      if (readException instanceof RuntimeException re) throw re;
       throw new IOException(readException);
     }
   }
@@ -213,7 +213,7 @@ public class ReadAheadInputStream extends InputStream {
       try {
         underlyingInputStream.close();
       } catch (IOException e) {
-        logger.warn("{}", e, MDC.of(LogKeys.ERROR$.MODULE$, e.getMessage()));
+        logger.warn("{}", e, MDC.of(LogKeys.ERROR, e.getMessage()));
       }
     }
   }

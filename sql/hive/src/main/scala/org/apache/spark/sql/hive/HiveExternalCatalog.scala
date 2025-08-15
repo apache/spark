@@ -34,7 +34,7 @@ import org.apache.hadoop.hive.serde.serdeConstants.SERIALIZATION_FORMAT
 import org.apache.thrift.TException
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{DATABASE_NAME, INCOMPATIBLE_TYPES, PROVIDER, SCHEMA, SCHEMA2, TABLE_NAME}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -712,6 +712,49 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val schemaProps =
       tableMetaToTableProps(oldTable, StructType(newDataSchema ++ oldTable.partitionSchema)).toMap
 
+    val hiveSchema = removeCollation(newDataSchema)
+
+    if (isDatasourceTable(oldTable)) {
+      // For data source tables, first try to write it with the schema set; if that does not work,
+      // try again with updated properties and the partition schema. This is a simplified version of
+      // what createDataSourceTable() does, and may leave the table in a state unreadable by Hive
+      // (for example, the schema does not match the data source schema, or does not match the
+      // storage descriptor).
+      try {
+        client.alterTableDataSchema(db, table, hiveSchema, schemaProps)
+      } catch {
+        case NonFatal(e) =>
+          val warningMessage = log"Could not alter schema of table " +
+            log"${MDC(TABLE_NAME, oldTable.identifier.quotedString)} in a Hive compatible way. " +
+            log"Updating Hive metastore in Spark SQL specific format."
+          logWarning(warningMessage, e)
+          client.alterTableDataSchema(db, table, EMPTY_DATA_SCHEMA, schemaProps)
+      }
+    } else {
+      client.alterTableDataSchema(db, table, hiveSchema, schemaProps)
+    }
+  }
+
+  /**
+   * Alter the schema of a table identified by the provided database and table name.
+   */
+  override def alterTableSchema(
+      db: String,
+      table: String,
+      newSchema: StructType): Unit = withClient {
+    requireTableExists(db, table)
+    val oldTable = getTable(db, table)
+    val schemaProps = {
+      tableMetaToTableProps(oldTable, StructType(newSchema)).toMap
+    }
+
+    val partCols = oldTable.partitionColumnNames
+    assert(newSchema.map(_.name).takeRight(partCols.length) == partCols,
+      s"Partition columns ${partCols.mkString("[", ", ", "]")} are only supported at the end of " +
+        s"the new schema ${newSchema.catalogString} for now.")
+
+    val newDataSchema = StructType(newSchema.filter(
+      f => !oldTable.partitionColumnNames.contains(f.name)))
     val hiveSchema = removeCollation(newDataSchema)
 
     if (isDatasourceTable(oldTable)) {

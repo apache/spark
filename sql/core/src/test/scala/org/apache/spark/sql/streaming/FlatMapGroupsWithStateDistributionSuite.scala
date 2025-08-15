@@ -19,10 +19,9 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Update
-import org.apache.spark.sql.execution.streaming.{FlatMapGroupsWithStateExec, MemoryStream}
+import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.FlatMapGroupsWithStateExec
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.GroupStateTimeout.ProcessingTimeTimeout
 import org.apache.spark.sql.streaming.util.{StatefulOpClusteredDistributionTestHelper, StreamManualClock}
@@ -188,7 +187,7 @@ class FlatMapGroupsWithStateDistributionSuite extends StreamTest
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
     inputData.addData(("a", "a", 1L))
 
@@ -292,7 +291,7 @@ class FlatMapGroupsWithStateDistributionSuite extends StreamTest
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
     inputData.addData(("a", "a", 1L))
 
@@ -391,7 +390,7 @@ class FlatMapGroupsWithStateDistributionSuite extends StreamTest
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
 
     inputData.addData(("a", "a", 1L))
 

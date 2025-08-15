@@ -162,8 +162,8 @@ class RetryTests(unittest.TestCase):
                 with attempt:
                     self.stub(10, grpc.StatusCode.INTERNAL)
 
-        self.assertEqual(self.call_wrap["attempts"], 7)
-        self.assertEqual(self.call_wrap["raised"], 7)
+        self.assertEqual(self.call_wrap["attempts"], 3)
+        self.assertEqual(self.call_wrap["raised"], 3)
 
 
 if __name__ == "__main__":

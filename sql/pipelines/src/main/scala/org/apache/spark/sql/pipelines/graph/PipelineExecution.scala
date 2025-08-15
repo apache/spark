@@ -21,6 +21,7 @@ import org.apache.spark.sql.pipelines.common.RunState
 import org.apache.spark.sql.pipelines.logging.{
   ConstructPipelineEvent,
   EventLevel,
+  PipelineEvent,
   PipelineEventOrigin,
   RunProgress
 }
@@ -38,31 +39,19 @@ class PipelineExecution(context: PipelineUpdateContext) {
 
   def executionStarted: Boolean = synchronized { graphExecution.nonEmpty }
 
-
   /**
    * Starts the pipeline execution by initializing the graph and starting the graph execution
    * thread. This function does not block on the completion of the graph execution thread.
    */
   def startPipeline(): Unit = synchronized {
     // Initialize the graph.
-    val initializedGraph = initializeGraph()
+    val resolvedGraph = resolveGraph()
+    val initializedGraph = DatasetManager.materializeDatasets(resolvedGraph, context)
 
     // Execute the graph.
     graphExecution = Option(
       new TriggeredGraphExecution(initializedGraph, context, onCompletion = terminationReason => {
-        context.eventBuffer.addEvent(
-          ConstructPipelineEvent(
-            origin = PipelineEventOrigin(
-              flowName = None,
-              datasetName = None,
-              sourceCodeLocation = None
-            ),
-            level = EventLevel.INFO,
-            message = terminationReason.message,
-            details = RunProgress(terminationReason.terminalState),
-            exception = terminationReason.cause
-          )
-        )
+        context.eventCallback(constructTerminationEvent(terminationReason))
       })
     )
     graphExecution.foreach(_.start())
@@ -75,7 +64,7 @@ class PipelineExecution(context: PipelineUpdateContext) {
       context.pipelineExecution.awaitCompletion()
     } catch {
       case e: Throwable =>
-        context.eventBuffer.addEvent(
+        context.eventCallback(
           ConstructPipelineEvent(
             origin = PipelineEventOrigin(
               flowName = None,
@@ -91,15 +80,38 @@ class PipelineExecution(context: PipelineUpdateContext) {
     }
   }
 
-  private def initializeGraph(): DataflowGraph = {
-    val resolvedGraph = try {
+  /** Validates that the pipeline graph can be successfully resolved and validates it. */
+  def dryRunPipeline(): Unit = synchronized {
+    resolveGraph()
+    context.eventCallback(
+      constructTerminationEvent(RunCompletion())
+    )
+  }
+
+  private def constructTerminationEvent(
+      terminationReason: RunTerminationReason
+  ): PipelineEvent = {
+    ConstructPipelineEvent(
+      origin = PipelineEventOrigin(
+        flowName = None,
+        datasetName = None,
+        sourceCodeLocation = None
+      ),
+      level = EventLevel.INFO,
+      message = terminationReason.message,
+      details = RunProgress(terminationReason.terminalState),
+      exception = terminationReason.cause
+    )
+  }
+
+  private def resolveGraph(): DataflowGraph = {
+    try {
       context.unresolvedGraph.resolve().validate()
     } catch {
       case e: UnresolvedPipelineException =>
         handleInvalidPipeline(e)
         throw e
     }
-    DatasetManager.materializeDatasets(resolvedGraph, context)
   }
 
   /** Waits for the execution to complete. Only used in tests */

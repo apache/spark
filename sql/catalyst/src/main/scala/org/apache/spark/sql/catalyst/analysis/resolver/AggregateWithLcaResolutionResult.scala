@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, NamedExpression}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 
 /**
  * Stores the result of resolution of lateral column aliases in an [[Aggregate]].
@@ -26,8 +26,11 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  * @param outputList The output list of the resolved operator.
  * @param aggregateListAliases List of aliases from aggregate list and all artificially inserted
  *   [[Project]] nodes.
+ * @param baseAggregate [[Aggregate]] node constructed by [[LateralColumnAliasResolver]] while
+ *   resolving lateral column references in [[Aggregate]].
  */
 case class AggregateWithLcaResolutionResult(
     resolvedOperator: LogicalPlan,
     outputList: Seq[NamedExpression],
-    aggregateListAliases: Seq[Alias])
+    aggregateListAliases: Seq[Alias],
+    baseAggregate: Aggregate)

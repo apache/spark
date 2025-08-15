@@ -25,8 +25,7 @@ from typing import Iterator, Tuple
 
 from pyspark.util import PythonEvalType
 
-# TODO: import arrow_udf from public API
-from pyspark.sql.pandas.functions import arrow_udf, ArrowUDFType
+from pyspark.sql.functions import arrow_udf, ArrowUDFType
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
     IntegerType,
@@ -98,7 +97,7 @@ class ScalarArrowUDFTestsMixin:
         df = self.spark.createDataFrame([("hi boo",), ("bye boo",)], ["vals"])
 
         tokenize = arrow_udf(
-            lambda s: pa.array([pa.compute.ascii_split_whitespace(s).to_pylist()]),
+            lambda s: pa.array([[v] for v in pa.compute.ascii_split_whitespace(s).to_pylist()]),
             ArrayType(ArrayType(StringType())),
         )
 
@@ -594,6 +593,22 @@ class ScalarArrowUDFTestsMixin:
         self.assertEqual(expected.collect(), res1.collect())
         self.assertEqual(expected.collect(), res2.collect())
 
+        @arrow_udf(LongType())
+        def scalar_iter_add(it: Iterator[Tuple[pa.Array, pa.Array]]) -> Iterator[pa.Array]:
+            for a, b in it:
+                yield pa.compute.add(a, b)
+
+        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS add1")
+        new_add = self.spark.udf.register("add1", scalar_iter_add)
+
+        res3 = df.select(new_add(F.col("a"), F.col("b")))
+        res4 = self.spark.sql(
+            "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t"
+        )
+        expected = df.select(F.expr("a + b"))
+        self.assertEqual(expected.collect(), res3.collect())
+        self.assertEqual(expected.collect(), res4.collect())
+
     def test_catalog_register_arrow_udf_basic(self):
         import pyarrow as pa
 
@@ -619,6 +634,22 @@ class ScalarArrowUDFTestsMixin:
         expected = df.select(F.expr("a + b"))
         self.assertEqual(expected.collect(), res1.collect())
         self.assertEqual(expected.collect(), res2.collect())
+
+        @arrow_udf(LongType())
+        def scalar_iter_add(it: Iterator[Tuple[pa.Array, pa.Array]]) -> Iterator[pa.Array]:
+            for a, b in it:
+                yield pa.compute.add(a, b)
+
+        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS add1")
+        new_add = self.spark.catalog.registerFunction("add1", scalar_iter_add)
+
+        res3 = df.select(new_add(F.col("a"), F.col("b")))
+        res4 = self.spark.sql(
+            "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t"
+        )
+        expected = df.select(F.expr("a + b"))
+        self.assertEqual(expected.collect(), res3.collect())
+        self.assertEqual(expected.collect(), res4.collect())
 
     def test_udf_register_nondeterministic_arrow_udf(self):
         import pyarrow as pa
@@ -968,6 +999,28 @@ class ScalarArrowUDFTestsMixin:
 
         result = df.select(multiple("a", "b", "c").alias("res"))
         self.assertEqual(expected, result.collect())
+
+    def test_return_type_coercion(self):
+        import pyarrow as pa
+
+        df = self.spark.range(10)
+
+        scalar_long = arrow_udf(lambda x: pa.compute.add(x, 1), LongType())
+        result1 = df.select(scalar_long("id").alias("res"))
+        self.assertEqual(10, len(result1.collect()))
+
+        # long -> int coercion
+        scalar_int1 = arrow_udf(lambda x: pa.compute.add(x, 1), IntegerType())
+        result2 = df.select(scalar_int1("id").alias("res"))
+        self.assertEqual(10, len(result2.collect()))
+
+        # long -> int coercion, overflow
+        scalar_int2 = arrow_udf(lambda x: pa.compute.add(x, 2147483647), IntegerType())
+        result3 = df.select(scalar_int2("id").alias("res"))
+        with self.assertRaises(Exception):
+            # pyarrow.lib.ArrowInvalid:
+            # Integer value 2147483652 not in range: -2147483648 to 2147483647
+            result3.collect()
 
 
 class ScalarArrowUDFTests(ScalarArrowUDFTestsMixin, ReusedSQLTestCase):

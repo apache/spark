@@ -59,7 +59,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case _ => false
   }
 
-  private def constantFolding(
+  private[sql] def constantFolding(
       e: Expression,
       isConditionalBranch: Boolean = false): Expression = e match {
     case c: ConditionalExpression if !c.foldable =>
@@ -726,7 +726,7 @@ object SupportedBinaryExpr {
     case _: BinaryArithmetic => Some(expr, expr.children.head, expr.children.last)
     case _: BinaryMathExpression => Some(expr, expr.children.head, expr.children.last)
     case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub |
-         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimeAdd =>
+         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimestampAddInterval =>
       Some(expr, expr.children.head, expr.children.last)
     case _: FindInSet | _: RoundBase => Some(expr, expr.children.head, expr.children.last)
     case BinaryPredicate(expr) =>
@@ -743,10 +743,11 @@ object SupportedBinaryExpr {
 object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
   // if guards below protect from escapes on trailing %.
   // Cases like "something\%" are not optimized, but this does not affect correctness.
-  private val startsWith = "([^_%]+)%".r
-  private val endsWith = "%([^_%]+)".r
-  private val startsAndEndsWith = "([^_%]+)%([^_%]+)".r
-  private val contains = "%([^_%]+)%".r
+  // Consecutive wildcard characters are equivalent to a single wildcard character.
+  private val startsWith = "([^_%]+)%+".r
+  private val endsWith = "%+([^_%]+)".r
+  private val startsAndEndsWith = "([^_%]+)%+([^_%]+)".r
+  private val contains = "%+([^_%]+)%+".r
   private val equalTo = "([^_%]*)".r
 
   private def simplifyLike(

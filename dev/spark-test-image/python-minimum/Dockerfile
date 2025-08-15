@@ -24,11 +24,12 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark wi
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20250327
+ENV FULL_REFRESH_DATE=20250703
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
 
+# Should keep the installation consistent with https://apache.github.io/spark/api/python/getting_started/install.html
 RUN apt-get update && apt-get install -y \
     build-essential \
     ca-certificates \
@@ -52,30 +53,19 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     openjdk-17-jdk-headless \
     pkg-config \
+    python3.10 \
+    python3-psutil \
     qpdf \
     tzdata \
     software-properties-common \
     wget \
     zlib1g-dev
 
-
-# Should keep the installation consistent with https://apache.github.io/spark/api/python/getting_started/install.html
-
-# Install Python 3.9
-RUN add-apt-repository ppa:deadsnakes/ppa
-RUN apt-get update && apt-get install -y \
-    python3.9 \
-    python3.9-distutils \
-    && apt-get autoremove --purge -y \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-
-ARG BASIC_PIP_PKGS="numpy==1.21 pyarrow==11.0.0 pandas==2.0.0 six==1.16.0 scipy scikit-learn coverage unittest-xml-reporting"
+ARG BASIC_PIP_PKGS="numpy==1.22.4 pyarrow==15.0.0 pandas==2.2.0 six==1.16.0 scipy scikit-learn coverage unittest-xml-reporting"
 # Python deps for Spark Connect
 ARG CONNECT_PIP_PKGS="grpcio==1.67.0 grpcio-status==1.67.0 googleapis-common-protos==1.65.0 graphviz==0.20 protobuf"
 
 # Install Python 3.9 packages
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
-RUN python3.9 -m pip install --force $BASIC_PIP_PKGS $CONNECT_PIP_PKGS && \
-    python3.9 -m pip cache purge
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
+RUN python3.10 -m pip install --force $BASIC_PIP_PKGS $CONNECT_PIP_PKGS && \
+    python3.10 -m pip cache purge

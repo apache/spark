@@ -2369,6 +2369,14 @@ class PlanGenerationTestSuite
     fn.to_date(fn.col("s"), "yyyy-MM-dd")
   }
 
+  temporalFunctionTest("try_to_date") {
+    fn.try_to_date(fn.col("s"))
+  }
+
+  temporalFunctionTest("try_to_date with format") {
+    fn.try_to_date(fn.col("s"), "yyyy-MM-dd")
+  }
+
   temporalFunctionTest("xpath") {
     fn.xpath(fn.col("s"), lit("a/b/text()"))
   }
@@ -3319,6 +3327,7 @@ class PlanGenerationTestSuite
       fn.lit(java.sql.Date.valueOf("2023-02-23")),
       fn.lit(java.time.Duration.ofSeconds(200L)),
       fn.lit(java.time.Period.ofDays(100)),
+      fn.lit(java.time.LocalTime.of(23, 59, 59, 999999999)),
       fn.lit(new CalendarInterval(2, 20, 100L)))
   }
 
@@ -3389,6 +3398,7 @@ class PlanGenerationTestSuite
       fn.typedLit(java.sql.Date.valueOf("2023-02-23")),
       fn.typedLit(java.time.Duration.ofSeconds(200L)),
       fn.typedLit(java.time.Period.ofDays(100)),
+      fn.typedLit(java.time.LocalTime.of(23, 59, 59, 999999999)),
       fn.typedLit(new CalendarInterval(2, 20, 100L)),
 
       // Handle parameterized scala types e.g.: List, Seq and Map.

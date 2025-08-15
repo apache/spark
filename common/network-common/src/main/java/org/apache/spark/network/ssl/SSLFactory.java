@@ -20,6 +20,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -40,8 +41,6 @@ import javax.net.ssl.SSLException;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
-
-import com.google.common.io.Files;
 
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.handler.ssl.OpenSsl;
@@ -378,7 +377,7 @@ public class SSLFactory {
 
   private static TrustManager[] defaultTrustManagers(File trustStore, String trustStorePassword)
       throws IOException, KeyStoreException, CertificateException, NoSuchAlgorithmException {
-    try (InputStream input = Files.asByteSource(trustStore).openStream()) {
+    try (InputStream input = Files.newInputStream(trustStore.toPath())) {
       KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
       char[] passwordCharacters = trustStorePassword != null?
         trustStorePassword.toCharArray() : null;

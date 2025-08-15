@@ -919,8 +919,14 @@ private[spark] class JsonProtocol(sparkConf: SparkConf) extends JsonUtils {
       case `stageExecutorMetrics` => stageExecutorMetricsFromJson(json)
       case `blockUpdate` => blockUpdateFromJson(json)
       case `resourceProfileAdded` => resourceProfileAddedFromJson(json)
-      case other => mapper.readValue(json.toString, Utils.classForName(other))
-        .asInstanceOf[SparkListenerEvent]
+      case other =>
+        val otherClass = Utils.classForName(other)
+        if (classOf[SparkListenerEvent].isAssignableFrom(otherClass)) {
+          mapper.readValue(json.toString, otherClass)
+            .asInstanceOf[SparkListenerEvent]
+        } else {
+          throw new SparkException(s"Unknown event type: $other")
+        }
     }
   }
 
@@ -1298,12 +1304,12 @@ private[spark] class JsonProtocol(sparkConf: SparkConf) extends JsonUtils {
         jsonOption(readJson.get("Total Records Read")).map(_.extractLong).getOrElse(0L))
       readMetrics.incRemoteReqsDuration(jsonOption(readJson.get("Remote Requests Duration"))
         .map(_.extractLong).getOrElse(0L))
-      jsonOption(readJson.get("Shuffle Push Read Metrics")).foreach { shufflePushReadJson =>
+      jsonOption(readJson.get("Push Based Shuffle")).foreach { shufflePushReadJson =>
         readMetrics.incCorruptMergedBlockChunks(jsonOption(
           shufflePushReadJson.get("Corrupt Merged Block Chunks"))
             .map(_.extractLong).getOrElse(0L))
         readMetrics.incMergedFetchFallbackCount(jsonOption(
-          shufflePushReadJson.get("Merged Fallback Count")).map(_.extractLong).getOrElse(0L))
+          shufflePushReadJson.get("Merged Fetch Fallback Count")).map(_.extractLong).getOrElse(0L))
         readMetrics.incRemoteMergedBlocksFetched(jsonOption(shufflePushReadJson
           .get("Merged Remote Blocks Fetched")).map(_.extractLong).getOrElse(0L))
         readMetrics.incLocalMergedBlocksFetched(jsonOption(shufflePushReadJson

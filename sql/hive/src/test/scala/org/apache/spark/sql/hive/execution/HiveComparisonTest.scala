@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io._
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util
 import java.util.Locale
 
@@ -322,7 +323,7 @@ abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
         val hiveCachedResults = hiveCacheFiles.flatMap { cachedAnswerFile =>
           logDebug(s"Looking for cached answer file $cachedAnswerFile.")
           if (cachedAnswerFile.exists) {
-            Some(fileToString(cachedAnswerFile))
+            Some(Files.readString(cachedAnswerFile.toPath))
           } else {
             logDebug(s"File $cachedAnswerFile not found")
             None

@@ -19,6 +19,7 @@ package org.apache.spark.types.variant;
 
 import org.apache.spark.QueryContext;
 import org.apache.spark.SparkRuntimeException;
+import org.apache.spark.network.util.JavaUtils;
 import scala.collection.immutable.Map$;
 
 import java.math.BigDecimal;
@@ -140,7 +141,7 @@ public class VariantUtil {
   // Both variant value and variant metadata need to be no longer than 128MiB.
   // Note: to make tests more reliable, we set the max size to 16Mib to avoid OOM in tests.
   public static final int SIZE_LIMIT =
-    System.getenv("SPARK_TESTING") != null ? U24_MAX + 1 : 128 * 1024 * 1024;
+    JavaUtils.isTesting() ? U24_MAX + 1 : 128 * 1024 * 1024;
 
   public static final int MAX_DECIMAL4_PRECISION = 9;
   public static final int MAX_DECIMAL8_PRECISION = 18;

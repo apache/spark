@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
-import org.apache.spark.sql.connector.catalog.{CatalogManager, DefaultValue, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, DefaultValue, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
@@ -571,6 +571,14 @@ object ResolveDefaultColumns extends QueryErrorsBase
       }
     }
     rows.toSeq
+  }
+
+  /** If any fields in a schema have default values, appends them to the result. */
+  def getDescribeMetadata(cols: Array[Column]): Seq[(String, String, String)] = {
+    cols.filter(_.defaultValue() != null).flatMap { col =>
+      ("", "", "") :: ("# Column Default Values", "", "") ::
+        (col.name, col.dataType.simpleString, col.defaultValue().getSql) :: Nil
+    }.toSeq
   }
 
   /**

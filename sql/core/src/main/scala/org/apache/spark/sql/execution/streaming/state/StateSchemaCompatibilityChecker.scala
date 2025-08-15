@@ -25,14 +25,15 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataInputStream, Path}
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.avro.{AvroDeserializer, AvroSerializer, SchemaConverters}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StatefulOperatorStateInfo}
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaReader, SchemaWriter}
 import org.apache.spark.sql.execution.streaming.state.StateSchemaCompatibilityChecker.SCHEMA_FORMAT_V3
-import org.apache.spark.sql.internal.SessionState
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types._
 
 // Result returned after validating the schema of the state store for schema changes
@@ -88,7 +89,7 @@ class StateSchemaCompatibilityChecker(
   // per query. This variable is the latest one
   private val schemaFileLocation = if (oldSchemaFilePaths.isEmpty) {
     val storeCpLocation = providerId.storeId.storeCheckpointLocation()
-    schemaFile(storeCpLocation)
+    StateSchemaCompatibilityChecker.schemaFile(storeCpLocation)
   } else {
     oldSchemaFilePaths.last
   }
@@ -97,7 +98,7 @@ class StateSchemaCompatibilityChecker(
 
   fm.mkdirs(schemaFileLocation.getParent)
 
-  private val conf = SparkSession.getActiveSession.get.sessionState.conf
+  private val conf = SparkSession.getActiveSession.map(_.sessionState.conf).getOrElse(new SQLConf())
 
   // Read most recent schema file
   def readSchemaFile(): List[StateStoreColFamilySchema] = {
@@ -302,9 +303,6 @@ class StateSchemaCompatibilityChecker(
       newSchemaFileWritten
     }
   }
-
-  private def schemaFile(storeCpLocation: Path): Path =
-    new Path(new Path(storeCpLocation, "_metadata"), "schema")
 }
 
 object StateSchemaCompatibilityChecker extends Logging {
@@ -432,4 +430,7 @@ object StateSchemaCompatibilityChecker extends Logging {
 
     StateSchemaValidationResult(evolvedSchema, schemaFileLocation)
   }
+
+  def schemaFile(storeCpLocation: Path): Path =
+    new Path(new Path(storeCpLocation, "_metadata"), "schema")
 }

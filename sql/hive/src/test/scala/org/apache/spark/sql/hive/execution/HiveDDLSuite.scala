@@ -2650,7 +2650,7 @@ class HiveDDLSuite
   }
 
   test("SPARK-21216: join with a streaming DataFrame") {
-    import org.apache.spark.sql.execution.streaming.MemoryStream
+    import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
     import testImplicits._
 
     implicit val _sqlContext = spark.sqlContext
@@ -3418,7 +3418,7 @@ class HiveDDLSuite
       assert(loaded.properties().get("foo") == "bar")
 
       verify(spyCatalog, times(1)).alterTable(any[CatalogTable])
-      verify(spyCatalog, times(0)).alterTableDataSchema(
+      verify(spyCatalog, times(0)).alterTableSchema(
         any[String], any[String], any[StructType])
 
       v2SessionCatalog.alterTable(identifier,
@@ -3428,7 +3428,7 @@ class HiveDDLSuite
       assert(loaded2.columns.head.comment() == "comment2")
 
       verify(spyCatalog, times(1)).alterTable(any[CatalogTable])
-      verify(spyCatalog, times(1)).alterTableDataSchema(
+      verify(spyCatalog, times(1)).alterTableSchema(
         any[String], any[String], any[StructType])
     }
   }

@@ -809,7 +809,20 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1",
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "0",
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      testSpill()
+    }
+  }
 
+  test("SPARK-49386: test SortMergeJoin (with spill by size threshold)") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1",
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "0",
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> Int.MaxValue.toString,
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SIZE_SPILL_THRESHOLD.key -> "1") {
+      testSpill()
+    }
+  }
+
+  private def testSpill(): Unit = {
       assertSpilled(sparkContext, "inner join") {
         checkAnswer(
           sql("SELECT * FROM testData JOIN testData2 ON key = a where key = 2"),
@@ -896,7 +909,6 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
         )
       }
     }
-  }
 
   test("outer broadcast hash join should not throw NPE") {
     withTempView("v1", "v2") {

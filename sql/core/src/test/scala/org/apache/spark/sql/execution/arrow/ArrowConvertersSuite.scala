@@ -17,12 +17,12 @@
 package org.apache.spark.sql.execution.arrow
 
 import java.io.{ByteArrayOutputStream, DataOutputStream, File}
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
+import java.time.LocalTime
 import java.util.Locale
 
-import com.google.common.io.Files
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot}
 import org.apache.arrow.vector.ipc.JsonFileReader
@@ -731,6 +731,43 @@ class ArrowConvertersSuite extends SharedSparkSession {
     }
   }
 
+  test("time type conversion") {
+    val json =
+      s"""
+         |{
+         |  "schema" : {
+         |    "fields" : [ {
+         |      "name" : "time",
+         |      "type" : {
+         |        "name" : "time",
+         |        "unit" : "NANOSECOND",
+         |        "bitWidth" : 64
+         |      },
+         |      "nullable" : true,
+         |      "children" : [ ]
+         |    } ]
+         |  },
+         |  "batches" : [ {
+         |    "count" : 3,
+         |    "columns" : [ {
+         |      "name" : "time",
+         |      "count" : 3,
+         |      "VALIDITY" : [ 1, 1, 1 ],
+         |      "DATA" : [ 0, 43200000000000, 3723123456789 ]
+         |    } ]
+         |  } ]
+         |}
+       """.stripMargin
+
+    val t1 = LocalTime.of(0, 0, 0)
+    val t2 = LocalTime.of(12, 0, 0)
+    val t3 = LocalTime.of(1, 2, 3, 123456789)
+
+    val df = Seq(t1, t2, t3).toDF("time")
+
+    collectAndValidate(df, json, "timeData.json")
+  }
+
   test("floating-point NaN") {
     val json =
       s"""
@@ -1218,8 +1255,8 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
     val tempFile1 = new File(tempDataPath, "testData2-ints-part1.json")
     val tempFile2 = new File(tempDataPath, "testData2-ints-part2.json")
-    Files.asCharSink(tempFile1, StandardCharsets.UTF_8).write(json1)
-    Files.asCharSink(tempFile2, StandardCharsets.UTF_8).write(json2)
+    Files.writeString(tempFile1.toPath, json1)
+    Files.writeString(tempFile2.toPath, json2)
 
     validateConversion(schema, arrowBatches(0), tempFile1)
     validateConversion(schema, arrowBatches(1), tempFile2)
@@ -1507,7 +1544,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
     // NOTE: coalesce to single partition because can only load 1 batch in validator
     val batchBytes = df.coalesce(1).toArrowBatchRdd.collect().head
     val tempFile = new File(tempDataPath, file)
-    Files.asCharSink(tempFile, StandardCharsets.UTF_8).write(json)
+    Files.writeString(tempFile.toPath, json)
     validateConversion(df.schema, batchBytes, tempFile, timeZoneId, errorOnDuplicatedFieldNames)
   }
 

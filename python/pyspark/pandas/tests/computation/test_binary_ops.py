@@ -23,7 +23,6 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.testing.utils import is_ansi_mode_test, ansi_mode_not_supported_message
 
 
 # This file contains test cases for 'Binary operator functions'
@@ -122,8 +121,7 @@ class FrameBinaryOpsMixin:
             dtype=np.float32,
         )
         psdf = ps.from_pandas(pdf)
-        # TODO(SPARK-52332): Fix promotion from float32 to float64 during division
-        self.assert_eq(psdf["a"] / psdf["b"], (pdf["a"] / pdf["b"]).astype(np.float64))
+        self.assert_eq(psdf["a"] / psdf["b"], pdf["a"] / pdf["b"])
 
         # np.float64
         pdf = pd.DataFrame(
@@ -195,6 +193,10 @@ class FrameBinaryOpsMixin:
 
         self.assert_eq(psdf["a"] / psdf["b"], pdf["a"] / pdf["b"])
 
+        pser = pd.Series([1.1, 2.2, 3.3], dtype=np.float32)
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser / 1, pser / 1)
+
         # Negative
         psdf = ps.DataFrame({"a": ["x"], "b": [1]})
 
@@ -214,6 +216,10 @@ class FrameBinaryOpsMixin:
         self.assert_eq(pdf["c"] // 0, psdf["c"] // 0)
         self.assert_eq(pdf["d"] // 0, psdf["d"] // 0)
 
+        pser = pd.Series([1.1, 2.2, 3.3], dtype=np.float32)
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser // 1, pser // 1)
+
         ks_err_msg = "Floor division can not be applied to strings"
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] // psdf["b"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: 1 // psdf["a"])
@@ -225,11 +231,12 @@ class FrameBinaryOpsMixin:
 
     def test_binary_operator_mod(self):
         # Positive
-        pdf = pd.DataFrame({"a": [3], "b": [2]})
+        pdf = pd.DataFrame({"a": [3], "b": [2], "c": [0]})
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(psdf["a"] % psdf["b"], pdf["a"] % pdf["b"])
         self.assert_eq(psdf["a"] % 0, pdf["a"] % 0)
+        self.assert_eq(1 % psdf["c"], 1 % pdf["c"])
 
         # Negative
         psdf = ps.DataFrame({"a": ["x"], "b": [1]})

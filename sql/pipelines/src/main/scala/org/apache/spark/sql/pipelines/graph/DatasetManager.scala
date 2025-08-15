@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.{NonFatal, NoStackTrace}
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connector.catalog.{
@@ -31,6 +31,7 @@ import org.apache.spark.sql.connector.catalog.{
   TableChange,
   TableInfo
 }
+import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructType
 import org.apache.spark.sql.connector.expressions.Expressions
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils.diffSchemas
@@ -178,15 +179,15 @@ object DatasetManager extends Logging {
     }
 
     // Wipe the data if we need to
-    if ((isFullRefresh || !table.isStreamingTableOpt.get) && existingTableOpt.isDefined) {
+    if ((isFullRefresh || !table.isStreamingTable) && existingTableOpt.isDefined) {
       context.spark.sql(s"TRUNCATE TABLE ${table.identifier.quotedString}")
     }
 
     // Alter the table if we need to
     if (existingTableOpt.isDefined) {
-      val existingSchema = existingTableOpt.get.schema()
+      val existingSchema = v2ColumnsToStructType(existingTableOpt.get.columns())
 
-      val targetSchema = if (table.isStreamingTableOpt.get && !isFullRefresh) {
+      val targetSchema = if (table.isStreamingTable && !isFullRefresh) {
         SchemaMergingUtils.mergeSchemas(existingSchema, outputSchema)
       } else {
         outputSchema

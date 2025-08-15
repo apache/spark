@@ -80,6 +80,7 @@ __all__ = [
     "BinaryType",
     "BooleanType",
     "DateType",
+    "TimeType",
     "TimestampType",
     "TimestampNTZType",
     "DecimalType",
@@ -215,6 +216,7 @@ class DataType:
                 VarcharType,
                 DayTimeIntervalType,
                 YearMonthIntervalType,
+                TimeType,
             ),
         ):
             return dataType.simpleString()
@@ -296,11 +298,8 @@ class StringType(AtomicType):
 
         return f"string collate {self.collation}"
 
-    # For backwards compatibility and compatibility with other readers all string types
-    # are serialized in json as regular strings and the collation info is written to
-    # struct field metadata
     def jsonValue(self) -> str:
-        return "string"
+        return self.simpleString()
 
     def __repr__(self) -> str:
         return (
@@ -367,7 +366,11 @@ class BooleanType(AtomicType, metaclass=DataTypeSingleton):
     pass
 
 
-class DateType(AtomicType, metaclass=DataTypeSingleton):
+class DatetimeType(AtomicType):
+    """Super class of all datetime data type."""
+
+
+class DateType(DatetimeType, metaclass=DataTypeSingleton):
     """Date (datetime.date) data type."""
 
     EPOCH_ORDINAL = datetime.datetime(1970, 1, 1).toordinal()
@@ -384,7 +387,49 @@ class DateType(AtomicType, metaclass=DataTypeSingleton):
             return datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
 
 
-class TimestampType(AtomicType, metaclass=DataTypeSingleton):
+class AnyTimeType(DatetimeType):
+    """A TIME type of any valid precision."""
+
+    pass
+
+
+class TimeType(AnyTimeType):
+    """Time (datetime.time) data type."""
+
+    def __init__(self, precision: int = 6):
+        self.precision = precision
+
+    def needConversion(self) -> bool:
+        return True
+
+    def toInternal(self, t: datetime.time) -> int:
+        if t is not None:
+            return (
+                t.hour * 3_600_000_000_000
+                + t.minute * 60_000_000_000
+                + t.second * 1_000_000_000
+                + t.microsecond * 1_000
+            )
+
+    def fromInternal(self, nano: int) -> datetime.time:
+        if nano is not None:
+            hours, remainder = divmod(nano, 3_600_000_000_000)
+            minutes, remainder = divmod(remainder, 60_000_000_000)
+            seconds, remainder = divmod(remainder, 1_000_000_000)
+            microseconds = remainder // 1_000
+            return datetime.time(hours, minutes, seconds, microseconds)
+
+    def simpleString(self) -> str:
+        return "time(%d)" % (self.precision)
+
+    def jsonValue(self) -> str:
+        return "time(%d)" % (self.precision)
+
+    def __repr__(self) -> str:
+        return "TimeType(%d)" % (self.precision)
+
+
+class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
     """Timestamp (datetime.datetime) data type."""
 
     def needConversion(self) -> bool:
@@ -403,7 +448,7 @@ class TimestampType(AtomicType, metaclass=DataTypeSingleton):
             return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
 
 
-class TimestampNTZType(AtomicType, metaclass=DataTypeSingleton):
+class TimestampNTZType(DatetimeType, metaclass=DataTypeSingleton):
     """Timestamp (datetime.datetime) data type without timezone information."""
 
     def needConversion(self) -> bool:
@@ -1010,10 +1055,38 @@ class StructField(DataType):
 
         return {
             "name": self.name,
-            "type": self.dataType.jsonValue(),
+            "type": self._dataTypeJsonValue(collationMetadata),
             "nullable": self.nullable,
             "metadata": metadata,
         }
+
+    def _dataTypeJsonValue(self, collationMetadata: Dict[str, str]) -> Union[str, Dict[str, Any]]:
+        if not collationMetadata:
+            return self.dataType.jsonValue()
+
+        def removeCollations(dt: DataType) -> DataType:
+            # Only recurse into map and array types as any child struct type
+            # will have already been processed.
+            if isinstance(dt, ArrayType):
+                return ArrayType(removeCollations(dt.elementType), dt.containsNull)
+            elif isinstance(dt, MapType):
+                return MapType(
+                    removeCollations(dt.keyType),
+                    removeCollations(dt.valueType),
+                    dt.valueContainsNull,
+                )
+            elif isinstance(dt, StringType):
+                return StringType()
+            elif isinstance(dt, VarcharType):
+                return VarcharType(dt.length)
+            elif isinstance(dt, CharType):
+                return CharType(dt.length)
+            else:
+                return dt
+
+        # As we want to be backwards compatible we should remove all collations information from the
+        # json and only keep that information in the metadata.
+        return removeCollations(self.dataType).jsonValue()
 
     @classmethod
     def fromJson(cls, json: Dict[str, Any]) -> "StructField":
@@ -1843,9 +1916,11 @@ _all_mappable_types: Dict[str, Type[DataType]] = {
 
 _LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)")
 _LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
+_STRING_WITH_COLLATION = re.compile(r"string\s+collate\s+(\w+)")
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
 _INTERVAL_DAYTIME = re.compile(r"interval (day|hour|minute|second)( to (day|hour|minute|second))?")
 _INTERVAL_YEARMONTH = re.compile(r"interval (year|month)( to (year|month))?")
+_TIME = re.compile(r"time\(\s*(\d+)\s*\)")
 
 _COLLATIONS_METADATA_KEY = "__COLLATIONS"
 
@@ -1987,6 +2062,9 @@ def _parse_datatype_json_value(
         elif _FIXED_DECIMAL.match(json_value):
             m = _FIXED_DECIMAL.match(json_value)
             return DecimalType(int(m.group(1)), int(m.group(2)))  # type: ignore[union-attr]
+        elif _TIME.match(json_value):
+            m = _TIME.match(json_value)
+            return TimeType(int(m.group(1)))  # type: ignore[union-attr]
         elif _INTERVAL_DAYTIME.match(json_value):
             m = _INTERVAL_DAYTIME.match(json_value)
             inverted_fields = DayTimeIntervalType._inverted_fields
@@ -2003,6 +2081,9 @@ def _parse_datatype_json_value(
             if first_field is not None and second_field is None:
                 return YearMonthIntervalType(first_field)
             return YearMonthIntervalType(first_field, second_field)
+        elif _STRING_WITH_COLLATION.match(json_value):
+            m = _STRING_WITH_COLLATION.match(json_value)
+            return StringType(m.group(1))  # type: ignore[union-attr]
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
             return CharType(int(m.group(1)))  # type: ignore[union-attr]
@@ -2012,7 +2093,7 @@ def _parse_datatype_json_value(
         else:
             raise PySparkValueError(
                 errorClass="CANNOT_PARSE_DATATYPE",
-                messageParameters={"error": str(json_value)},
+                messageParameters={"msg": str(json_value)},
             )
     else:
         tpe = json_value["type"]
@@ -2603,6 +2684,7 @@ _acceptable_types = {
     VarcharType: (str,),
     BinaryType: (bytearray, bytes),
     DateType: (datetime.date, datetime.datetime),
+    TimeType: (datetime.time,),
     TimestampType: (datetime.datetime,),
     TimestampNTZType: (datetime.datetime,),
     DayTimeIntervalType: (datetime.timedelta,),
@@ -2707,7 +2789,9 @@ def _make_type_verifier(
             return "field %s in %s" % (n, name)
 
     def verify_nullability(obj: Any) -> bool:
-        if obj is None:
+        if obj is None or (isinstance(obj, decimal.Decimal) and obj.is_nan()):
+            # Spark's DecimalType doesn't support NaN,
+            # casting DoubleType NaN to DecimalType will return Null.
             if nullable:
                 return True
             else:
@@ -3209,6 +3293,17 @@ class DateConverter:
         return Date.valueOf(obj.strftime("%Y-%m-%d"))
 
 
+class TimeConverter:
+    def can_convert(self, obj: Any) -> bool:
+        return isinstance(obj, datetime.time)
+
+    def convert(self, obj: datetime.time, gateway_client: "GatewayClient") -> "JavaGateway":
+        from py4j.java_gateway import JavaClass
+
+        LocalTime = JavaClass("java.time.LocalTime", gateway_client)
+        return LocalTime.of(obj.hour, obj.minute, obj.second, obj.microsecond * 1000)
+
+
 class DatetimeConverter:
     def can_convert(self, obj: Any) -> bool:
         return isinstance(obj, datetime.datetime)
@@ -3337,6 +3432,7 @@ if not is_remote_only():
     register_input_converter(DatetimeNTZConverter())
     register_input_converter(DatetimeConverter())
     register_input_converter(DateConverter())
+    register_input_converter(TimeConverter())
     register_input_converter(DayTimeIntervalTypeConverter())
     register_input_converter(NumpyScalarConverter())
     # NumPy array satisfies py4j.java_collections.ListConverter,

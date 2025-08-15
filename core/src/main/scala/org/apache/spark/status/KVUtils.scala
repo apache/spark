@@ -31,7 +31,7 @@ import org.rocksdb.RocksDBException
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.{FsHistoryProvider, FsHistoryProviderMetadata}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.History.HYBRID_STORE_DISK_BACKEND
@@ -210,6 +210,20 @@ private[spark] object KVUtils extends Logging {
   def mapToSeq[T, B](view: KVStoreView[T])(mapFunc: T => B): Seq[B] = {
     Utils.tryWithResource(view.closeableIterator()) { iter =>
       iter.asScala.map(mapFunc).toList
+    }
+  }
+
+  /**
+   * Maps all values of KVStoreView to new values using a transformation function
+   * and filtered by a filter function.
+   */
+  def mapToSeqWithFilter[T, B](
+      view: KVStoreView[T],
+      max: Int)
+      (mapFunc: T => B)
+      (filterFunc: B => Boolean): Seq[B] = {
+    Utils.tryWithResource(view.closeableIterator()) { iter =>
+      iter.asScala.map(mapFunc).filter(filterFunc).take(max).toList
     }
   }
 

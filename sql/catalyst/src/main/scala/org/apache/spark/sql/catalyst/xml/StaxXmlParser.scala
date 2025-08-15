@@ -16,8 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import java.io.{CharConversionException, FileNotFoundException, InputStream, IOException}
-import java.nio.charset.MalformedInputException
+import java.io.{BufferedReader, CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException}
+import java.nio.charset.{Charset, MalformedInputException}
 import java.text.NumberFormat
 import java.util
 import java.util.Locale
@@ -33,12 +33,14 @@ import scala.util.control.NonFatal
 import scala.xml.SAXException
 
 import com.google.common.io.ByteStreams
+import org.apache.hadoop.hdfs.BlockMissingException
+import org.apache.hadoop.security.AccessControlException
 import org.apache.hadoop.shaded.org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
+import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow, ToStringBase}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, DateFormatter, FailureSafeParser, GenericArrayData, MapData, PartialResultArrayException, PartialResultException, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
@@ -74,6 +76,8 @@ class StaxXmlParser(
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
+
+  private lazy val binaryParser = ToStringBase.getBinaryParser
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
@@ -521,6 +525,7 @@ class StaxXmlParser(
         case _: TimestampNTZType => timestampNTZFormatter.parseWithoutTimeZone(datum, false)
         case _: DateType => parseXmlDate(datum, options)
         case _: StringType => UTF8String.fromString(datum)
+        case _: BinaryType => binaryParser(UTF8String.fromString(datum))
         case _ => throw new SparkIllegalArgumentException(
           errorClass = "_LEGACY_ERROR_TEMP_3244",
           messageParameters = Map("castType" -> "castType.typeName"))
@@ -564,6 +569,7 @@ class StaxXmlParser(
         case DoubleType => signSafeToDouble(value)
         case BooleanType => castTo(value, BooleanType)
         case StringType => castTo(value, StringType)
+        case BinaryType => castTo(value, BinaryType)
         case DateType => castTo(value, DateType)
         case TimestampType => castTo(value, TimestampType)
         case TimestampNTZType => castTo(value, TimestampNTZType)
@@ -662,6 +668,267 @@ class StaxXmlParser(
       case None => // do nothing
     }
     new GenericInternalRow(row)
+  }
+}
+
+/**
+ * XMLRecordReader class to read through a given xml document to output xml blocks as records
+ * as specified by the start tag and end tag.
+ *
+ * This implementation is ultimately loosely based on LineRecordReader in Hadoop.
+ */
+class XmlTokenizer(
+  inputStream: InputStream,
+  options: XmlOptions) extends Logging {
+  private var reader = new BufferedReader(
+    new InputStreamReader(inputStream, Charset.forName(options.charset)))
+  private var currentStartTag: String = _
+  private var buffer = new StringBuilder()
+  private val startTag = s"<${options.rowTag}>"
+  private val endTag = s"</${options.rowTag}>"
+  private val commentStart = s"<!--"
+  private val commentEnd = s"-->"
+  private val cdataStart = s"<![CDATA["
+  private val cdataEnd = s"]]>"
+
+    /**
+   * Finds the start of the next record.
+   * It treats data from `startTag` and `endTag` as a record.
+   *
+   * @param key the current key that will be written
+   * @param value  the object that will be written
+   * @return whether it reads successfully
+   */
+    def next(): Option[String] = {
+      var nextString: Option[String] = None
+      try {
+        if (readUntilStartElement()) {
+          buffer.append(currentStartTag)
+          // Don't check whether the end element was found. Even if not, return everything
+          // that was read, which will invariably cause a parse error later
+          readUntilEndElement(currentStartTag.endsWith(">"))
+          nextString = Some(buffer.toString())
+          buffer = new StringBuilder()
+        }
+      } catch {
+        case e: FileNotFoundException if options.ignoreMissingFiles =>
+          logWarning(
+            "Skipping the rest of" +
+              " the content in the missing file during schema inference",
+            e)
+        case NonFatal(e) =>
+          Utils.getRootCause(e) match {
+            case _: AccessControlException | _: BlockMissingException =>
+              reader.close()
+              reader = null
+              throw e
+            case _: RuntimeException | _: IOException if options.ignoreCorruptFiles =>
+              logWarning(
+                "Skipping the rest of" +
+                  " the content in the corrupted file during schema inference",
+                e)
+            case e: Throwable =>
+              reader.close()
+              reader = null
+              throw e
+          }
+      } finally {
+        if (nextString.isEmpty && reader != null) {
+          reader.close()
+          reader = null
+        }
+      }
+      nextString
+    }
+
+  private def readUntilMatch(end: String): Boolean = {
+    var i = 0
+    while (true) {
+      val cOrEOF = reader.read()
+      if (cOrEOF == -1) {
+        // End of file.
+        return false
+      }
+      val c = cOrEOF.toChar
+      if (c == end(i)) {
+        i += 1
+        if (i >= end.length) {
+          // Found the end string.
+          return true
+        }
+      } else {
+        i = 0
+      }
+    }
+    // Unreachable.
+    false
+  }
+
+  private def readUntilStartElement(): Boolean = {
+    currentStartTag = startTag
+    var i = 0
+    var commentIdx = 0
+    var cdataIdx = 0
+
+    while (true) {
+      val cOrEOF = reader.read()
+      if (cOrEOF == -1) { // || (i == 0 && getFilePosition() > end)) {
+        // End of file or end of split.
+        return false
+      }
+      val c = cOrEOF.toChar
+
+      if (c == commentStart(commentIdx)) {
+        if (commentIdx >= commentStart.length - 1) {
+          //  If a comment beigns we must ignore all character until its end
+          commentIdx = 0
+          readUntilMatch(commentEnd)
+        } else {
+          commentIdx += 1
+        }
+      } else {
+        commentIdx = 0
+      }
+
+      if (c == cdataStart(cdataIdx)) {
+        if (cdataIdx >= cdataStart.length - 1) {
+          //  If a CDATA beigns we must ignore all character until its end
+          cdataIdx = 0
+          readUntilMatch(cdataEnd)
+        } else {
+          cdataIdx += 1
+        }
+      } else {
+        cdataIdx = 0
+      }
+
+      if (c == startTag(i)) {
+        if (i >= startTag.length - 1) {
+          // Found start tag.
+          return true
+        }
+        // else in start tag
+        i += 1
+      } else {
+        // if doesn't match the closing angle bracket, check if followed by attributes
+        if (i == (startTag.length - 1) && Character.isWhitespace(c)) {
+          // Found start tag with attributes. Remember to write with following whitespace
+          // char, not angle bracket
+          currentStartTag = startTag.dropRight(1) + c
+          return true
+        }
+        // else not in start tag
+        i = 0
+      }
+    }
+    // Unreachable.
+    false
+  }
+
+  private def readUntilEndElement(startTagClosed: Boolean): Boolean = {
+    // Index into the start or end tag that has matched so far
+    var si = 0
+    var ei = 0
+    // Index into the start of a comment tag that matched so far
+    var commentIdx = 0
+    // Index into the start of a CDATA tag that matched so far
+    var cdataIdx = 0
+    // How many other start tags enclose the one that's started already?
+    var depth = 0
+    // Previously read character
+    var prevC = '\u0000'
+
+    // The current start tag already found may or may not have terminated with
+    // a '>' as it may have attributes we read here. If not, we search for
+    // a self-close tag, but only until a non-self-closing end to the start
+    // tag is found
+    var canSelfClose = !startTagClosed
+
+    while (true) {
+
+      val cOrEOF = reader.read()
+      if (cOrEOF == -1) {
+        // End of file (ignore end of split).
+        return false
+      }
+
+      val c = cOrEOF.toChar
+      buffer.append(c)
+
+      if (c == commentStart(commentIdx)) {
+        if (commentIdx >= commentStart.length - 1) {
+          //  If a comment beigns we must ignore everything until its end
+          buffer.setLength(buffer.length - commentStart.length)
+          commentIdx = 0
+          readUntilMatch(commentEnd)
+        } else {
+          commentIdx += 1
+        }
+      } else {
+        commentIdx = 0
+      }
+
+      if (c == '>' && prevC != '/') {
+        canSelfClose = false
+      }
+
+      // Still matching a start tag?
+      if (c == startTag(si)) {
+        // Still also matching an end tag?
+        if (c == endTag(ei)) {
+          // In start tag or end tag.
+          si += 1
+          ei += 1
+        } else {
+          if (si >= startTag.length - 1) {
+            // Found start tag.
+            si = 0
+            ei = 0
+            depth += 1
+          } else {
+            // In start tag.
+            si += 1
+            ei = 0
+          }
+        }
+      } else if (c == endTag(ei)) {
+        if (ei >= endTag.length - 1) {
+          if (depth == 0) {
+            // Found closing end tag.
+            return true
+          }
+          // else found nested end tag.
+          si = 0
+          ei = 0
+          depth -= 1
+        } else {
+          // In end tag.
+          si = 0
+          ei += 1
+        }
+      } else if (c == '>' && prevC == '/' && canSelfClose) {
+        if (depth == 0) {
+          // found a self-closing tag (end tag)
+          return true
+        }
+        // else found self-closing nested tag (end tag)
+        si = 0
+        ei = 0
+        depth -= 1
+      } else if (si == (startTag.length - 1) && Character.isWhitespace(c)) {
+        // found a start tag with attributes
+        si = 0
+        ei = 0
+        depth += 1
+      } else {
+        // Not in start tag or end tag.
+        si = 0
+        ei = 0
+      }
+      prevC = c
+    }
+    // Unreachable.
+    false
   }
 }
 

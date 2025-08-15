@@ -26,8 +26,19 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 
 trait SparkParserUtils {
 
-  /** Unescape backslash-escaped string enclosed by quotes. */
-  def unescapeSQLString(b: String): String = {
+  /**
+   * Unescape escaped string enclosed by quotes, with support for:
+   *   1. Double-quote escaping (`""`, `''`)
+   *   2. Traditional backslash escaping (\n, \t, \", etc.)
+   *
+   * @param b
+   *   The input string
+   * @param ignoreQuoteQuote
+   *   If true, consecutive quotes (`''` or `""`) are treated as string concatenation and will be
+   *   removed directly (e.g., `'a''b'` → `ab`). If false, they are treated as escape sequences
+   *   (e.g., `'a''b'` → `a'b`). Default is false (standard SQL escaping).
+   */
+  def unescapeSQLString(b: String, ignoreQuoteQuote: Boolean = false): String = {
     def appendEscapedChar(n: Char, sb: JStringBuilder): Unit = {
       n match {
         case '0' => sb.append('\u0000')
@@ -71,10 +82,20 @@ trait SparkParserUtils {
       firstChar == 'r' || firstChar == 'R'
     }
 
+    val isDoubleQuotedString = {
+      b.charAt(0) == '"'
+    }
+
+    val isSingleQuotedString = {
+      b.charAt(0) == '\''
+    }
+
     if (isRawString) {
       // Skip the 'r' or 'R' and the first and last quotations enclosing the string literal.
       b.substring(2, b.length - 1)
-    } else if (b.indexOf('\\') == -1) {
+    } else if (b.indexOf('\\') == -1 &&
+      (!isDoubleQuotedString || b.indexOf("\"\"") == -1) &&
+      (!isSingleQuotedString || b.indexOf("''") == -1)) {
       // Fast path for the common case where the string has no escaped characters,
       // in which case we just skip the first and last quotations enclosing the string literal.
       b.substring(1, b.length - 1)
@@ -85,7 +106,19 @@ trait SparkParserUtils {
       val length = b.length - 1
       while (i < length) {
         val c = b.charAt(i)
-        if (c != '\\' || i + 1 == length) {
+        // First check for double-quote escaping (`""`, `''`)
+        if (isDoubleQuotedString && c == '"' && i + 1 < length && b.charAt(i + 1) == '"') {
+          if (!ignoreQuoteQuote) {
+            sb.append('"')
+          }
+          i += 2
+        } else if (isSingleQuotedString && c == '\'' && i + 1 < length && b.charAt(
+            i + 1) == '\'') {
+          if (!ignoreQuoteQuote) {
+            sb.append('\'')
+          }
+          i += 2
+        } else if (c != '\\' || i + 1 == length) {
           // Either a regular character or a backslash at the end of the string:
           sb.append(c)
           i += 1
@@ -137,6 +170,9 @@ trait SparkParserUtils {
 
   /** Convert a string token into a string. */
   def string(token: Token): String = unescapeSQLString(token.getText)
+
+  /** Convert a string token into a string and remove `""` and `''`. */
+  def stringIgnoreQuoteQuote(token: Token): String = unescapeSQLString(token.getText, true)
 
   /** Convert a string node into a string. */
   def string(node: TerminalNode): String = unescapeSQLString(node.getText)

@@ -55,9 +55,6 @@ trait Flow extends GraphElement with Logging {
   /** The current query context (catalog and database) when the query is defined. */
   def queryContext: QueryContext
 
-  /** The comment associated with this flow */
-  def comment: Option[String]
-
   def sqlConf: Map[String, String]
 }
 
@@ -127,7 +124,6 @@ case class UnresolvedFlow(
     func: FlowFunction,
     queryContext: QueryContext,
     sqlConf: Map[String, String],
-    comment: Option[String] = None,
     override val once: Boolean,
     override val origin: QueryOrigin
 ) extends Flow
@@ -145,7 +141,6 @@ trait ResolutionCompletedFlow extends Flow {
   val destinationIdentifier: TableIdentifier = flow.destinationIdentifier
   def func: FlowFunction = flow.func
   def queryContext: QueryContext = flow.queryContext
-  def comment: Option[String] = flow.comment
   def sqlConf: Map[String, String] = funcResult.sqlConf
   def origin: QueryOrigin = flow.origin
 }

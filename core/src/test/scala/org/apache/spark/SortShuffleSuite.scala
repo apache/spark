@@ -17,19 +17,16 @@
 
 package org.apache.spark
 
-import java.io.File
-
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.io.FileUtils
-import org.apache.commons.io.filefilter.TrueFileFilter
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.internal.config.SHUFFLE_MANAGER
+import org.apache.spark.internal.config.{SHUFFLE_CHECKSUM_ALGORITHM, SHUFFLE_MANAGER}
 import org.apache.spark.rdd.ShuffledRDD
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.shuffle.sort.SortShuffleManager
+import org.apache.spark.util.Utils
 
 class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
 
@@ -62,15 +59,15 @@ class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
   }
 
   private def ensureFilesAreCleanedUp(shuffledRdd: ShuffledRDD[_, _, _]): Unit = {
-    def getAllFiles: Set[File] =
-      FileUtils.listFiles(tempDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
+    def getAllFiles = Utils.listFiles(tempDir).asScala.toSet
     val filesBeforeShuffle = getAllFiles
     // Force the shuffle to be performed
     shuffledRdd.count()
     // Ensure that the shuffle actually created files that will need to be cleaned up
     val filesCreatedByShuffle = getAllFiles -- filesBeforeShuffle
-    filesCreatedByShuffle.map(_.getName) should be
-    Set("shuffle_0_0_0.data", "shuffle_0_0_0.index")
+    filesCreatedByShuffle.map(_.getName) should be(
+      Set("shuffle_0_0_0.data", s"shuffle_0_0_0.checksum.${conf.get(SHUFFLE_CHECKSUM_ALGORITHM)}",
+        "shuffle_0_0_0.index"))
     // Check that the cleanup actually removes the files
     sc.env.blockManager.master.removeShuffle(0, blocking = true)
     for (file <- filesCreatedByShuffle) {

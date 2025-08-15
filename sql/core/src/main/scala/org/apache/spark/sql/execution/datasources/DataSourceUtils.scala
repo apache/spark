@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.IOException
 import java.util.Locale
 
 import scala.jdk.CollectionConverters._
@@ -195,6 +196,11 @@ object DataSourceUtils extends PredicateHelper {
       case _ => throw SparkException.internalError(s"Unrecognized format $format.")
     }
     QueryExecutionErrors.sparkUpgradeInWritingDatesError(format, config)
+  }
+
+  def shouldIgnoreCorruptFileException(e: Throwable): Boolean = e match {
+    case _: RuntimeException | _: IOException | _: InternalError => true
+    case _ => false
   }
 
   def createDateRebaseFuncInRead(

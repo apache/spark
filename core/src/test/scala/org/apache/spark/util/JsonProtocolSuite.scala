@@ -349,6 +349,18 @@ class jsonProtocolSuite extends SparkFunSuite {
     assert(newMetrics.shuffleWriteMetrics.recordsWritten == 0)
   }
 
+  test("SPARK-43100: Push Based Shuffle metrics should be read correctly") {
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0,
+      hasHadoopInput = false, hasOutput = true, hasRecords = false)
+    val expectedTaskMetricsJson =
+      jsonProtocol.toJsonString(jsonProtocol.taskMetricsToJson(metrics, _))
+    val foundTaskMetrics = jsonProtocol.taskMetricsFromJson(parse(expectedTaskMetricsJson))
+    val foundTaskMetricsJson = jsonProtocol.toJsonString(
+      jsonProtocol.taskMetricsToJson(foundTaskMetrics, _))
+    assert(expectedTaskMetricsJson.equals(foundTaskMetricsJson),
+      s"Expected: $expectedTaskMetricsJson, Found: $foundTaskMetricsJson")
+  }
+
   test("OutputMetrics backward compatibility") {
     // OutputMetrics were added after 1.1
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0, hasHadoopInput = false, hasOutput = true)
@@ -1022,6 +1034,36 @@ class jsonProtocolSuite extends SparkFunSuite {
       "String value length (10000) exceeds the maximum allowed"
     ))
   }
+
+  test("SPARK-52381: handle class not found") {
+    val unknownJson =
+      """{
+        |  "Event" : "com.example.UnknownEvent",
+        |  "foo" : "foo"
+        |}""".stripMargin
+    try {
+      jsonProtocol.sparkEventFromJson(unknownJson)
+      fail("Expected ClassNotFoundException for unknown event type")
+    } catch {
+      case e: ClassNotFoundException =>
+    }
+  }
+
+  test("SPARK-52381: only read classes that extend SparkListenerEvent") {
+    val unknownJson =
+      """{
+        |  "Event" : "org.apache.spark.SparkException",
+        |  "foo" : "foo"
+        |}""".stripMargin
+    try {
+      jsonProtocol.sparkEventFromJson(unknownJson)
+      fail("Expected SparkException for unknown event type")
+    } catch {
+      case e: SparkException =>
+        assert(e.getMessage.startsWith("Unknown event type"))
+    }
+  }
+
 }
 
 

@@ -18,7 +18,7 @@
 package org.apache.spark.internal.plugin
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.{Map => JMap}
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
@@ -27,7 +27,6 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 import com.codahale.metrics.Gauge
-import com.google.common.io.Files
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{mock, spy, verify, when}
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
@@ -38,7 +37,7 @@ import org.apache.spark.api.plugin._
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.MemoryMode
-import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.resource.ResourceUtils.GPU
 import org.apache.spark.resource.TestResourceIDs.{DRIVER_GPU_ID, EXECUTOR_GPU_ID, WORKER_GPU_ID}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
@@ -219,7 +218,7 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
       val execFiles =
         children.filter(_.getName.startsWith(NonLocalModeSparkPlugin.executorFileStr))
       assert(execFiles.length === 1)
-      val allLines = Files.readLines(execFiles(0), StandardCharsets.UTF_8)
+      val allLines = Files.readAllLines(execFiles(0).toPath)
       assert(allLines.size === 1)
       val addrs = NonLocalModeSparkPlugin.extractGpuAddrs(allLines.get(0))
       assert(addrs.length === 2)
@@ -237,6 +236,7 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
     val conf = new SparkConf()
       .setAppName(getClass().getName())
       .set(SparkLauncher.SPARK_MASTER, "local-cluster[2,1,1024]")
+      .set(EXECUTOR_MEMORY.key, "1024M")
       .set(PLUGINS, Seq(classOf[MemoryOverridePlugin].getName()))
 
     var sc: SparkContext = null
@@ -246,6 +246,14 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
 
       assert(memoryManager.tungstenMemoryMode == MemoryMode.OFF_HEAP)
       assert(memoryManager.maxOffHeapStorageMemory == MemoryOverridePlugin.offHeapMemory)
+
+      val defaultResourceProfile = sc.resourceProfileManager.defaultResourceProfile
+      assert(512L ==
+        defaultResourceProfile.executorResources
+          .get(ResourceProfile.MEMORY).map(_.amount).getOrElse(-1L))
+      assert(512L ==
+        defaultResourceProfile.executorResources
+          .get(ResourceProfile.OFFHEAP_MEM).map(_.amount).getOrElse(-1L))
 
       // Ensure all executors has started
       TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
@@ -315,10 +323,13 @@ class MemoryOverridePlugin extends SparkPlugin {
       override def init(sc: SparkContext, pluginContext: PluginContext): JMap[String, String] = {
         // Take the original executor memory, and set `spark.memory.offHeap.size` to be the
         // same value. Also set `spark.memory.offHeap.enabled` to true.
-        val originalExecutorMemBytes =
+        val originalExecutorMem =
           sc.conf.getSizeAsMb(EXECUTOR_MEMORY.key, EXECUTOR_MEMORY.defaultValueString)
+        val newExecutorMem = originalExecutorMem / 2
+        val offHeapSize = originalExecutorMem - newExecutorMem
+        sc.conf.set(EXECUTOR_MEMORY.key, s"${newExecutorMem}M")
         sc.conf.set(MEMORY_OFFHEAP_ENABLED.key, "true")
-        sc.conf.set(MEMORY_OFFHEAP_SIZE.key, s"${originalExecutorMemBytes}M")
+        sc.conf.set(MEMORY_OFFHEAP_SIZE.key, s"${offHeapSize}M")
         MemoryOverridePlugin.offHeapMemory = sc.conf.getSizeAsBytes(MEMORY_OFFHEAP_SIZE.key)
         Map.empty[String, String].asJava
       }
@@ -398,7 +409,7 @@ object NonLocalModeSparkPlugin {
       resources: Map[String, ResourceInformation]): Unit = {
     val path = conf.get(TEST_PATH_CONF)
     val strToWrite = createFileStringWithGpuAddrs(id, resources)
-    Files.asCharSink(new File(path, s"$filePrefix$id"), StandardCharsets.UTF_8).write(strToWrite)
+    Files.writeString(new File(path, s"$filePrefix$id").toPath, strToWrite)
   }
 
   def reset(): Unit = {

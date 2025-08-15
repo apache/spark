@@ -22,7 +22,7 @@ import java.io.Closeable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, MAX_NUM_ROWS_IN_MEMORY_BUFFER}
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.serializer.SerializerManager
@@ -52,9 +52,12 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
     initialSize: Int,
     pageSizeBytes: Long,
     numRowsInMemoryBufferThreshold: Int,
-    numRowsSpillThreshold: Int) extends Logging {
+    numRowsSpillThreshold: Int,
+    maxSizeSpillThreshold: Long) extends Logging {
 
-  def this(numRowsInMemoryBufferThreshold: Int, numRowsSpillThreshold: Int) = {
+  def this(numRowsInMemoryBufferThreshold: Int,
+    numRowsSpillThreshold: Int,
+    maxSizeSpillThreshold: Long) = {
     this(
       TaskContext.get().taskMemoryManager(),
       SparkEnv.get.blockManager,
@@ -63,7 +66,8 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
       1024,
       SparkEnv.get.memoryManager.pageSizeBytes,
       numRowsInMemoryBufferThreshold,
-      numRowsSpillThreshold)
+      numRowsSpillThreshold,
+      maxSizeSpillThreshold)
   }
 
   private val initialSizeOfInMemoryBuffer =
@@ -138,6 +142,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
           initialSize,
           pageSizeBytes,
           numRowsSpillThreshold,
+          maxSizeSpillThreshold,
           false)
 
         // populate with existing in-memory buffered rows

@@ -27,7 +27,7 @@ import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark._
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.Serializer

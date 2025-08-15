@@ -35,7 +35,7 @@ if should_test_connect:
     )
     from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
-    from pyspark.errors import PySparkRuntimeError, RetriesExceeded
+    from pyspark.errors import PySparkRuntimeError
     import pyspark.sql.connect.proto as proto
 
     class TestPolicy(DefaultPolicy):
@@ -227,35 +227,6 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client.close()
         self.assertTrue(client.is_closed)
 
-    def test_retry(self):
-        client = SparkConnectClient("sc://foo/;token=bar")
-
-        total_sleep = 0
-
-        def sleep(t):
-            nonlocal total_sleep
-            total_sleep += t
-
-        try:
-            for attempt in Retrying(client._retry_policies, sleep=sleep):
-                with attempt:
-                    raise TestException("Retryable error", grpc.StatusCode.UNAVAILABLE)
-        except RetriesExceeded:
-            pass
-
-        # tolerated at least 10 mins of fails
-        self.assertGreaterEqual(total_sleep, 600)
-
-    def test_retry_client_unit(self):
-        client = SparkConnectClient("sc://foo/;token=bar")
-
-        policyA = TestPolicy()
-        policyB = DefaultPolicy()
-
-        client.set_retry_policies([policyA, policyB])
-
-        self.assertEqual(client.get_retry_policies(), [policyA, policyB])
-
     def test_channel_builder_with_session(self):
         dummy = str(uuid.uuid4())
         chan = DefaultChannelBuilder(f"sc://foo/;session_id={dummy}")
@@ -423,7 +394,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             def checks():
                 self.assertEqual(2, stub.execute_calls)
                 self.assertEqual(0, stub.attach_calls)
-                self.assertEqual(0, stub.release_calls)
+                self.assertEqual(1, stub.release_calls)
                 self.assertEqual(0, stub.release_until_calls)
 
             eventually(timeout=1, catch_assertions=True)(checks)()

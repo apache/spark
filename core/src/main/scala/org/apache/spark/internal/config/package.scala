@@ -500,6 +500,16 @@ package object config {
     .doubleConf
     .createWithDefault(0.6)
 
+  private[spark] val UNMANAGED_MEMORY_POLLING_INTERVAL =
+    ConfigBuilder("spark.memory.unmanagedMemoryPollingInterval")
+      .doc("Interval for polling unmanaged memory users to track their memory usage. " +
+        "Unmanaged memory users are components that manage their own memory outside of " +
+        "Spark's core memory management, such as RocksDB for Streaming State Store. " +
+        "Setting this to 0 disables unmanaged memory polling.")
+      .version("4.1.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("0s")
+
   private[spark] val STORAGE_UNROLL_MEMORY_THRESHOLD =
     ConfigBuilder("spark.storage.unrollMemoryThreshold")
       .doc("Initial memory to request before unrolling any block")
@@ -1596,6 +1606,18 @@ package object config {
       .intConf
       .createWithDefault(Integer.MAX_VALUE)
 
+  private[spark] val SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD =
+    ConfigBuilder("spark.shuffle.spill.maxRecordsSizeForSpillThreshold")
+      .internal()
+      .doc("The maximum size in memory before forcing the shuffle sorter to spill. " +
+        "By default it is Long.MAX_VALUE, which means we never force the sorter to spill, " +
+        "until we reach some limitations, like the max page size limitation for the pointer " +
+        "array in the sorter.")
+      .version("4.1.0")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(v => v > 0, "The threshold should be positive.")
+      .createWithDefault(Long.MaxValue)
+
   private[spark] val SHUFFLE_MAP_OUTPUT_PARALLEL_AGGREGATION_THRESHOLD =
     ConfigBuilder("spark.shuffle.mapOutput.parallelAggregationThreshold")
       .internal()
@@ -2112,6 +2134,15 @@ package object config {
       .version("2.3.0")
       .intConf
       .createWithDefault(1)
+
+  private[spark] val IO_COMPRESSION_ZSTD_STRATEGY =
+    ConfigBuilder("spark.io.compression.zstd.strategy")
+      .doc("Compression strategy for Zstd compression codec. The higher the value is, the more " +
+        "complex it becomes, usually resulting stronger but slower compression or higher CPU " +
+        "cost.")
+      .version("4.1.0")
+      .intConf
+      .createOptional
 
   private[spark] val IO_COMPRESSION_LZF_PARALLEL =
     ConfigBuilder("spark.io.compression.lzf.parallel.enabled")

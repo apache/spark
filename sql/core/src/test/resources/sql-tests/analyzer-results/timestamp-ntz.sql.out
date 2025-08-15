@@ -118,7 +118,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"0:0:0\"",
     "inputType" : "\"STRING\"",
     "paramIndex" : "second",
-    "requiredType" : "(\"TIME(0)\" or \"TIME(1)\" or \"TIME(2)\" or \"TIME(3)\" or \"TIME(4)\" or \"TIME(5)\" or \"TIME(6)\")",
+    "requiredType" : "\"TIME\"",
     "sqlExpr" : "\"make_timestamp_ntz(DATE '2025-06-20', 0:0:0)\""
   },
   "queryContext" : [ {
@@ -127,6 +127,73 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 8,
     "stopIndex" : 52,
     "fragment" : "make_timestamp_ntz(DATE'2025-06-20', '0:0:0')"
+  } ]
+}
+
+
+-- !query
+SELECT try_make_timestamp_ntz(make_date(2025, 6, 27), make_time(16, 08, 45.123456))
+-- !query analysis
+Project [try_make_timestamp_ntz(make_timestamp_ntz(make_date(2025, 6, 27, true), make_time(16, 8, cast(45.123456 as decimal(16,6))))) AS try_make_timestamp_ntz(make_timestamp_ntz(make_date(2025, 6, 27), make_time(16, 8, 45.123456)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_make_timestamp_ntz(NULL, TIME'23:59:59.00001')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT try_make_timestamp_ntz(DATE'0001-01-01', NULL)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT try_make_timestamp_ntz('2018-11-17 13:33:33', TIME'0:0:0')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"2018-11-17 13:33:33\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"DATE\"",
+    "sqlExpr" : "\"make_timestamp_ntz(2018-11-17 13:33:33, TIME '00:00:00')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 65,
+    "fragment" : "try_make_timestamp_ntz('2018-11-17 13:33:33', TIME'0:0:0')"
+  } ]
+}
+
+
+-- !query
+SELECT try_make_timestamp_ntz(DATE'2025-06-20', 10D)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"10.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"make_timestamp_ntz(DATE '2025-06-20', 10.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "try_make_timestamp_ntz(DATE'2025-06-20', 10D)"
   } ]
 }
 
@@ -217,7 +284,7 @@ INSERT INTO a PARTITION(a=timestamp_ntz'2018-11-17 13:33:33') VALUES (1)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/a, [a=2018-11-17 13:33:33], false, [a#x], Parquet, [path=file:[not included in comparison]/{warehouse_dir}/a], Append, `spark_catalog`.`default`.`a`, org.apache.spark.sql.execution.datasources.CatalogFileIndex(file:[not included in comparison]/{warehouse_dir}/a), [b, a]
 +- Project [b#x, cast(2018-11-17 13:33:33 as timestamp_ntz) AS a#x]
-   +- Project [cast(col1#x as int) AS b#x]
+   +- Project [col1#x AS b#x]
       +- LocalRelation [col1#x]
 
 

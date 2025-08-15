@@ -90,6 +90,30 @@
     ],
     "sqlState" : "42000"
   },
+  "APPROX_TOP_K_MAX_ITEMS_TRACKED_EXCEEDS_LIMIT" : {
+    "message" : [
+      "The max items tracked `maxItemsTracked`(<maxItemsTracked>) of `approx_top_k` should be less than or equal to <limit>."
+    ],
+    "sqlState" : "22023"
+  },
+  "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K" : {
+    "message" : [
+      "The max items tracked `maxItemsTracked`(<maxItemsTracked>) of `approx_top_k` should be greater than or equal to `k`(<k>)."
+    ],
+    "sqlState" : "22023"
+  },
+  "APPROX_TOP_K_NON_POSITIVE_ARG" : {
+    "message" : [
+      "The value of <argName> in `approx_top_k` must be a positive integer, but got <argValue>."
+    ],
+    "sqlState" : "22023"
+  },
+  "APPROX_TOP_K_NULL_ARG" : {
+    "message" : [
+      "The value of <argName> in `approx_top_k` cannot be NULL."
+    ],
+    "sqlState" : "22004"
+  },
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
@@ -248,6 +272,24 @@
       "Dataset transformations and actions can only be invoked by the driver, not inside of other Dataset transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the dataset1.map transformation. For more information, see SPARK-28702."
     ],
     "sqlState" : "0A000"
+  },
+  "CANNOT_LOAD_CHECKPOINT_FILE_MANAGER" : {
+    "message" : [
+      "Error loading streaming checkpoint file manager for path=<path>."
+    ],
+    "subClass" : {
+      "ERROR_LOADING_CLASS" : {
+        "message" : [
+          "Error instantiating streaming checkpoint file manager for path=<path> with className=<className>. msg=<msg>."
+        ]
+      },
+      "UNCATEGORIZED" : {
+        "message" : [
+          ""
+        ]
+      }
+    },
+    "sqlState" : "58030"
   },
   "CANNOT_LOAD_FUNCTION_CLASS" : {
     "message" : [
@@ -925,6 +967,12 @@
       }
     },
     "sqlState" : "21S01"
+  },
+  "CYCLIC_FUNCTION_REFERENCE" : {
+    "message" : [
+      "Cyclic function reference detected: <path>."
+    ],
+    "sqlState" : "42887"
   },
   "DATAFLOW_GRAPH_NOT_FOUND" : {
     "message" : [
@@ -2719,6 +2767,34 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_FLOW_QUERY_TYPE" : {
+    "message" : [
+      "Flow <flowIdentifier> returns an invalid relation type."
+    ],
+    "subClass" : {
+      "BATCH_RELATION_FOR_STREAMING_TABLE" : {
+        "message" : [
+          "Streaming tables may only be defined by streaming relations, but the flow <flowIdentifier> attempts to write a batch relation to the streaming table <tableIdentifier>. Consider using the STREAM operator in Spark-SQL to convert the batch relation into a streaming relation, or populating the streaming table with an append once-flow instead."
+        ]
+      },
+      "STREAMING_RELATION_FOR_MATERIALIZED_VIEW" : {
+        "message" : [
+          "Materialized views may only be defined by a batch relation, but the flow <flowIdentifier> attempts to write a streaming relation to the materialized view <tableIdentifier>."
+        ]
+      },
+      "STREAMING_RELATION_FOR_ONCE_FLOW" : {
+        "message" : [
+          "<flowIdentifier> is an append once-flow that is defined by a streaming relation. Append once-flows may only be defined by or return a batch relation."
+        ]
+      },
+      "STREAMING_RELATION_FOR_PERSISTED_VIEW" : {
+        "message" : [
+          "Persisted views may only be defined by a batch relation, but the flow <flowIdentifier> attempts to write a streaming relation to the persisted view <viewIdentifier>."
+        ]
+      }
+    },
+    "sqlState" : "42000"
+  },
   "INVALID_FORMAT" : {
     "message" : [
       "The format is invalid: <format>."
@@ -3360,6 +3436,11 @@
           "expects a string literal, but got <invalidValue>."
         ]
       },
+      "TIME_UNIT" : {
+        "message" : [
+          "expects one of the units 'HOUR', 'MINUTE', 'SECOND', 'MILLISECOND', 'MICROSECOND', but got '<invalidValue>'."
+        ]
+      },
       "ZERO_INDEX" : {
         "message" : [
           "expects %1$, %2$ and so on, but got %0$."
@@ -3418,7 +3499,7 @@
   },
   "INVALID_RECURSIVE_CTE" : {
     "message" : [
-      "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references."
+      "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references. Any top level inner CTE must not contain self references."
     ],
     "sqlState" : "42836"
   },
@@ -3556,6 +3637,12 @@
       "The argument <name> of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`."
     ],
     "sqlState" : "42K08"
+  },
+  "INVALID_SQL_FUNCTION_DATA_ACCESS" : {
+    "message" : [
+      "Cannot create a SQL function with CONTAINS SQL that accesses a table/view or a SQL function that reads SQL data. Please use READS SQL DATA instead."
+    ],
+    "sqlState" : "42K0E"
   },
   "INVALID_SQL_FUNCTION_PLAN_STRUCTURE" : {
     "message" : [
@@ -3981,15 +4068,15 @@
     ],
     "sqlState" : "42K0L"
   },
-  "LABEL_ALREADY_EXISTS" : {
+  "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS" : {
     "message" : [
-      "The label <label> already exists. Choose another name or rename the existing label."
+      "The label or FOR variable <label> already exists. Choose another name or rename the existing one."
     ],
     "sqlState" : "42K0L"
   },
-  "LABEL_NAME_FORBIDDEN" : {
+  "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN" : {
     "message" : [
-      "The label name <label> is forbidden."
+      "The label or FOR variable name <label> is forbidden."
     ],
     "sqlState" : "42K0L"
   },
@@ -4358,6 +4445,18 @@
       "Operation <operation> is not allowed for <tableIdentWithDB> because it is not a partitioned table."
     ],
     "sqlState" : "42809"
+  },
+  "NOT_A_SCALAR_FUNCTION" : {
+    "message" : [
+      "<functionName> appears as a scalar expression here, but the function was defined as a table function. Please update the query to move the function call into the FROM clause, or redefine <functionName> as a scalar function instead."
+    ],
+    "sqlState" : "42887"
+  },
+  "NOT_A_TABLE_FUNCTION" : {
+    "message" : [
+      "<functionName> appears as a table function here, but the function was defined as a scalar function. Please update the query to move the function call outside the FROM clause, or redefine <functionName> as a table function instead."
+    ],
+    "sqlState" : "42887"
   },
   "NOT_NULL_ASSERT_VIOLATION" : {
     "message" : [
@@ -4866,6 +4965,13 @@
     ],
     "sqlState" : "22023"
   },
+  "RUN_EMPTY_PIPELINE" : {
+    "message" : [
+      "Pipelines are expected to have at least one non-temporary dataset defined (tables, persisted views) but no non-temporary datasets were found in your pipeline.",
+      "Please verify that you have included the expected source files, and that your source code includes table definitions (e.g., CREATE MATERIALIZED VIEW in SQL code, @sdp.table in python code)."
+    ],
+    "sqlState" : "42617"
+  },
   "SCALAR_FUNCTION_NOT_COMPATIBLE" : {
     "message" : [
       "ScalarFunction <scalarFunc> not overrides method 'produceResult(InternalRow)' with custom implementation."
@@ -5055,6 +5161,16 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_COMMIT_VALIDATION_FAILED" : {
+    "message" : [
+      "State store commit validation failed for batch <batchId>.",
+      "Expected <expectedCommits> commits but got <actualCommits>.",
+      "Missing commits: <missingCommits>.",
+      "This error typically occurs when using operations like show() or limit() in foreachBatch that don't process all partitions, or if you are swallowing an exception and returning from the function early.",
+      "To fix: ensure your foreachBatch function processes the entire DataFrame."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_HANDLE_NOT_INITIALIZED" : {
     "message" : [
       "The handle has not been initialized for this StatefulProcessor.",
@@ -5085,6 +5201,18 @@
       "The given State Store Provider <inputClass> does not extend org.apache.spark.sql.execution.streaming.state.StateStoreProvider."
     ],
     "sqlState" : "42K06"
+  },
+  "STATE_STORE_INVALID_STAMP" : {
+    "message" : [
+      "Invalid stamp <providedStamp>, current stamp: <currentStamp>."
+    ],
+    "sqlState" : "XXKST"
+  },
+  "STATE_STORE_INVALID_STATE_MACHINE_TRANSITION" : {
+    "message" : [
+      "Invalid state machine transition detected for state store <storeId>. Old state: <oldState>, New state: <newState>, Operation: <operation>."
+    ],
+    "sqlState" : "XXKST"
   },
   "STATE_STORE_INVALID_VALUE_SCHEMA_EVOLUTION" : {
     "message" : [
@@ -8293,11 +8421,6 @@
       "Failed to get outer pointer for <innerCls>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2155" : {
-    "message" : [
-      "<userClass> is not annotated with SQLUserDefinedType nor registered with UDTRegistration.}"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2163" : {
     "message" : [
       "Initial type <dataType> must be a <target>."
@@ -8629,7 +8752,7 @@
   },
   "_LEGACY_ERROR_TEMP_2250" : {
     "message" : [
-      "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastJoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg>"
+      "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastJoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg> or apply the shuffle sort merge join hint as described in the Spark documentation: https://spark.apache.org/docs/latest/sql-ref-syntax-qry-select-hints.html#join-hints."
     ]
   },
   "_LEGACY_ERROR_TEMP_2251" : {

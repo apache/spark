@@ -18,10 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.io._
-import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets.UTF_8
-
-import com.google.common.io.ByteStreams
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.TempResolvedColumn
@@ -29,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.connector.catalog.MetadataColumn
 import org.apache.spark.sql.types.{MetadataBuilder, NumericType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.{SparkErrorUtils, Utils}
+import org.apache.spark.util.{SparkErrorUtils, SparkStringUtils, Utils}
 
 package object util extends Logging {
 
@@ -48,21 +45,12 @@ package object util extends Logging {
     }
   }
 
-  def fileToString(file: File, encoding: Charset = UTF_8): String = {
-    val inStream = new FileInputStream(file)
-    try {
-      new String(ByteStreams.toByteArray(inStream), encoding)
-    } finally {
-      inStream.close()
-    }
-  }
-
   def resourceToBytes(
       resource: String,
       classLoader: ClassLoader = Utils.getSparkClassLoader): Array[Byte] = {
     val inStream = classLoader.getResourceAsStream(resource)
     try {
-      ByteStreams.toByteArray(inStream)
+      inStream.readAllBytes()
     } finally {
       inStream.close()
     }

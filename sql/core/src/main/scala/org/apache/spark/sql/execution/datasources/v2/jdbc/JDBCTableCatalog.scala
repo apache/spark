@@ -24,11 +24,13 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, TableSummary}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JDBCRDD, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JDBCRDD, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -151,8 +153,13 @@ class JDBCTableCatalog extends TableCatalog
       description = s"Failed to load table: $ident",
       isRuntime = false
     ) {
-      val schema = JDBCRDD.resolveTable(optionsWithTableName)
-      JDBCTable(ident, schema, optionsWithTableName)
+      val remoteSchemaFetchMetric = JdbcUtils
+        .createSchemaFetchMetric(SparkSession.active.sparkContext)
+      val schema = SQLMetrics.withTimingNs(remoteSchemaFetchMetric) {
+        JDBCRDD.resolveTable(optionsWithTableName)
+      }
+      JDBCTable(ident, schema, optionsWithTableName,
+        Map(JDBCRelation.schemaFetchKey -> remoteSchemaFetchMetric))
     }
   }
 
