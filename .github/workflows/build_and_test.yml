@@ -521,13 +521,9 @@ jobs:
           - >-
             pyspark-pandas-slow
           - >-
-            pyspark-pandas-connect-part0
+            pyspark-pandas-connect-part0, pyspark-pandas-connect-part3
           - >-
-            pyspark-pandas-connect-part1
-          - >-
-            pyspark-pandas-connect-part2
-          - >-
-            pyspark-pandas-connect-part3
+            pyspark-pandas-connect-part1, pyspark-pandas-connect-part2
         exclude:
           # Always run if pyspark == 'true', even infra-image is skip (such as non-master job)
           # In practice, the build will run in individual PR, but not against the individual commit
