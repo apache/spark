@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.util.Locale
-
-import com.google.common.collect.Maps
+import java
 
 import org.apache.spark.sql.catalyst.analysis.{Resolver, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
@@ -95,23 +93,56 @@ package object expressions  {
       StructType(attrs.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
     }
 
+    // Compute min and max expression IDs in a single pass
+    @transient private lazy val minMaxExprId: (Long, Long) = {
+      if (attrs.isEmpty) {
+        (0L, -1L)
+      } else {
+        var min = Long.MaxValue
+        var max = Long.MinValue
+        attrs.foreach { attr =>
+          val id = attr.exprId.id
+          if (id < min) min = id
+          if (id > max) max = id
+        }
+        (min, max)
+      }
+    }
+
+    // Extract as primitive fields to avoid boxing on access
+    @transient private lazy val minExprId: Long = minMaxExprId._1
+    @transient private lazy val maxExprId: Long = minMaxExprId._2
+
+    // Create a direct indexed array using the min and max expression IDs as an offset.
+    @transient private lazy val ordinalArrays: (Array[Int], Array[Attribute]) = {
+      if (attrs.isEmpty) {
+        (Array.empty[Int], Array.empty[Attribute])
+      } else {
+        // Create directly indexed array
+        val arraySize = (maxExprId - minExprId + 1).toInt
+        val ordinalArray = Array.fill(arraySize)(-1) // -1 indicates no attribute with this ID
+        val ordinalAttrsArray = new Array[Attribute](attrs.size)
+
+        // Populate the array based on expression IDs
+        var i = 0
+        attrs.foreach { attr =>
+          val id = attr.exprId.id
+          val arrayIndex = (id - minExprId).toInt
+          ordinalArray(arrayIndex) = i
+          ordinalAttrsArray(i) = attr
+          i += 1
+        }
+        (ordinalArray, ordinalAttrsArray)
+      }
+    }
+
+    @transient private lazy val exprIdToOrdinalArray: Array[Int] = ordinalArrays._1
+
+
     // It's possible that `attrs` is a linked list, which can lead to bad O(n) loops when
     // accessing attributes by their ordinals. To avoid this performance penalty, convert the input
     // to an array.
-    @transient private lazy val attrsArray = attrs.toArray
-
-    @transient private lazy val exprIdToOrdinal = {
-      val arr = attrsArray
-      val map = Maps.newHashMapWithExpectedSize[ExprId, Int](arr.length)
-      // Iterate over the array in reverse order so that the final map value is the first attribute
-      // with a given expression id.
-      var index = arr.length - 1
-      while (index >= 0) {
-        map.put(arr(index).exprId, index)
-        index -= 1
-      }
-      map
-    }
+    @transient private lazy val attrsArray = ordinalArrays._2
 
     /**
      * Returns the attribute at the given index.
@@ -122,7 +153,13 @@ package object expressions  {
      * Returns the index of first attribute with a matching expression id, or -1 if no match exists.
      */
     def indexOf(exprId: ExprId): Int = {
-      Option(exprIdToOrdinal.get(exprId)).getOrElse(-1)
+      val id = exprId.id
+      if (exprIdToOrdinalArray.isEmpty || id < minExprId || id > maxExprId) {
+        -1
+      } else {
+        val arrayIndex = (id - minExprId).toInt
+        exprIdToOrdinalArray(arrayIndex)
+      }
     }
 
     private def unique[T](m: Map[T, Seq[Attribute]]): Map[T, Seq[Attribute]] = {
