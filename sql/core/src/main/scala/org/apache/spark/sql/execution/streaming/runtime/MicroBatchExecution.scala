@@ -43,7 +43,7 @@ import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, On
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitMetadata, OffsetSeq, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.runtime.AcceptsLatestSeenOffsetHandler
-import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_STATE}
+import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchSink, WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
 import org.apache.spark.sql.execution.streaming.state.{StateSchemaBroadcast, StateStoreErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -572,13 +572,18 @@ class MicroBatchExecution(
     }
   }
 
+  /**
+   * Verify that the checkpoint directory is in a good state to start a new
+   * streaming query. This checks that the offsets, state, commits directories are
+   * either non-existent or empty.
+   *
+   * If this check fails, an exception is thrown.
+   */
   private def verifyStartCheckpointDirectory(): Unit = {
-    // Check to see if we can use this checkpoint location for state and commits.
     val fileManager = CheckpointFileManager.create(new Path(resolvedCheckpointRoot),
       sparkSession.sessionState.newHadoopConf())
-    // If state or commits has been created, but offsets have not, that means there could be
-    // multiple writers to the state or commits directory of the query.
-    val dirNamesThatShouldNotHaveFiles = Array[String](DIR_NAME_STATE, DIR_NAME_COMMITS)
+    val dirNamesThatShouldNotHaveFiles = Array[String](
+      DIR_NAME_OFFSETS, DIR_NAME_STATE, DIR_NAME_COMMITS)
 
     dirNamesThatShouldNotHaveFiles.foreach { dirName =>
       val path = new Path(resolvedCheckpointRoot, dirName)
