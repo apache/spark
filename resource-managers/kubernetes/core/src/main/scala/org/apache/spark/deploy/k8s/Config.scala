@@ -771,8 +771,8 @@ private[spark] object Config extends Logging {
         "independently for each resource profile ID.")
       .version("4.1.0")
       .intConf
-      .checkValue(value => value > 0, 
-        "Maximum number of pending pods per rpid should be a positive integer")
+      .checkValue(value => value > 0,
+        "Maximum number of pending pods per rp id should be a positive integer")
       .createWithDefault(Int.MaxValue)
 
   val KUBERNETES_EXECUTOR_SNAPSHOTS_SUBSCRIBERS_GRACE_PERIOD =
