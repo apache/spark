@@ -1260,7 +1260,6 @@ class XmlSuite
     assert(basketDF.filter($"_malformed_records".isNotNull).count() == 1)
     assert(basketDF.filter($"_malformed_records".isNull).count() == 1)
     val rec = basketDF.select("_malformed_records").collect()(1).getString(0)
-    assert(rec.startsWith("<baskets>") && rec.endsWith("</baskets>"))
     assert(rec.startsWith("<basket>") && rec.indexOf("<extra>123</extra>") != -1 &&
       rec.endsWith("</basket>"))
   }
