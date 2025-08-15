@@ -174,39 +174,6 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
   }
 
-  def mergeType(inferredTypes: RDD[DataType]): StructType = {
-    val sampledRdd = if (options.samplingRatio < 1.0) {
-      inferredTypes.sample(withReplacement = false, options.samplingRatio, 1)
-    } else {
-      inferredTypes
-    }
-    // perform schema inference on each row and merge afterwards
-    val mergedTypesFromPartitions = sampledRdd.mapPartitions { iter =>
-      iter.reduceOption(compatibleType(caseSensitive, options.valueTag)).iterator
-    }
-
-    // Here we manually submit a fold-like Spark job, so that we can set the SQLConf when running
-    // the fold functions in the scheduler event loop thread.
-    val existingConf = SQLConf.get
-    var rootType: DataType = StructType(Nil)
-    val foldPartition = (iter: Iterator[DataType]) =>
-      iter.fold(StructType(Nil))(compatibleType(caseSensitive, options.valueTag))
-    val mergeResult = (index: Int, taskResult: DataType) => {
-      rootType = SQLConf.withExistingConf(existingConf) {
-        compatibleType(caseSensitive, options.valueTag)(rootType, taskResult)
-      }
-    }
-    sampledRdd.sparkContext.runJob(mergedTypesFromPartitions, foldPartition, mergeResult)
-
-    canonicalizeType(rootType) match {
-      case Some(st: StructType) => st
-      case _ =>
-        // canonicalizeType erases all empty structs, including the only one we want to keep
-        // XML shouldn't run into this line
-        StructType(Seq())
-    }
-  }
-
   def inferFromReaders(xml: RDD[StaxXMLRecordReader]): StructType = {
     val schemaData = if (options.samplingRatio < 1.0) {
       xml.sample(withReplacement = false, options.samplingRatio, 1)
