@@ -378,45 +378,8 @@ capabilities to standardize type coercion and address these issues effectively.
 A note on Arrow Python UDF type coercion: In Spark 4.1, unnecessary conversion to pandas instances is removed in the serializer
 when ``spark.sql.execution.pythonUDF.arrow.enabled`` is enabled. As a result, the type coercion changes
 when the produced output has a schema different from the specified schema. To restore the previous behavior,
-enable ``spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled``. The behavior difference is summarized in the tables below.
-
-Legacy type coercion:
-
-=========== ====== ====== === === ========== ============= ==== =========== ===== ===== ========== ======== ========
-SQL Type    None   True   1   a   date       datetime      1.0  array       [1]   (1,)  bytearray  Decimal  dict
-=========== ====== ====== === === ========== ============= ==== =========== ===== ===== ========== ======== ========
-boolean     None   True   T   X   X          X             T    X           X     X     X          X        X
-tinyint     None   1      1   X   X          X             1    X           X     X     X          1        X
-smallint    None   1      1   X   X          X             1    X           X     X     X          1        X
-int         None   1      1   X   0          X             1    X           X     X     X          1        X
-bigint      None   1      1   X   X          0             1    X           X     X     X          1        X
-string      None   'True' '1' 'a' '1970...'  '1970...'     '1'  "array..."  '[1]' '(1)' "byte..."  '1'      "{'a'}"
-date        None   X      X   X   date(...)  date(...)     X    X           X     X     X          date(..) X
-timestamp   None   X      dt  X   X          datetime(...) X    X           X     X     X          dt(...)  X
-float       None   1.0    1.0 X   X          X             1.0  X           X     X     X          1.0      X
-double      None   1.0    1.0 X   X          X             1.0  X           X     X     X          1.0      X
-binary      None   b'\x0' b'0' X   X          X             X    b'\x01'...  b'1'  b'1'  b'ABC'     X        X
-decimal     None   X      X   X   X          X             D(1) X           X     X     X          D(1)     X
-=========== ====== ====== === === ========== ============= ==== =========== ===== ===== ========== ======== ========
-
-New type coercion:
-
-=========== ====== ====== === === ========== ============= ==== =========== ===== ===== ========== ======== ========
-SQL Type    None   True   1   a   date       datetime      1.0  array       [1]   (1,)  bytearray  Decimal  dict
-=========== ====== ====== === === ========== ============= ==== =========== ===== ===== ========== ======== ========
-boolean     None   True   T   X   X          X             T    X           X     X     X          X        X
-tinyint     None   X      1   X   X          X             1    X           X     X     X          1        X
-smallint    None   X      1   X   X          X             1    X           X     X     X          1        X
-int         None   X      1   X   0          X             1    X           X     X     X          1        X
-bigint      None   X      1   X   X          0             1    X           X     X     X          1        X
-string      None   'true' '1' 'a' '1970...'  '1970...'     '1'  "array..."  '[1]' '(1)' "byte..."  '1'      "{'a'}"
-date        None   X      dt  X   date(...)  date(...)     dt   X           X     X     X          dt(..)   X
-timestamp   None   X      X   X   X          datetime(...) X    X           X     X     X          X        X
-float       None   1.0    1.0 X   X          X             1.0  X           X     X     X          1.0      X
-double      None   1.0    1.0 X   X          X             1.0  X           X     X     X          1.0      X
-binary      None   X      X   X   X          X             X    X           X     X     b'ABC'     X        X
-decimal     None   X      X   X   X          X             X    X           X     X     X          D(1)     X
-=========== ====== ====== === === ========== ============= ==== =========== ===== ===== ========== ======== ========
+enable ``spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled``. 
+The behavior difference is summarized in the tables `here <https://github.com/apache/spark/pull/51225>`_.
 
 Usage Notes
 -----------
