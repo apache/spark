@@ -324,8 +324,10 @@ trait StateStoreWriter
       .map(_._2)
       .toArray
     assert(
-      ret.length == getStateInfo.numPartitions,
-      s"ChekpointInfo length: ${ret.length}, numPartitions: ${getStateInfo.numPartitions}")
+      // Normally, we should have checkpoint info for all partitions.
+      // However, for globalLimit operator, there is only one partition (0) that has state.
+      ret.length == getStateInfo.numPartitions || (shortName == "globalLimit" && ret.length == 1),
+      s"CheckpointInfo length: ${ret.length}, numPartitions: ${getStateInfo.numPartitions}")
     ret
   }
 

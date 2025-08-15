@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.streaming.state.StateStoreTestsHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
-import org.apache.spark.sql.streaming.OutputMode.Update
+import org.apache.spark.sql.streaming.OutputMode.{Append, Update}
 import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.sql.types.StructType
 
@@ -610,6 +610,29 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     validateBaseCheckpointInfo()
   }
 
+  def validateCheckpointInfoGlobalLimit(
+      numBatches: Int,
+      numStateStores: Int,
+      batchVersionSet: Set[Long]): Unit = {
+    val checkpointInfoList = CkptIdCollectingStateStoreWrapper.getStateStoreCheckpointInfos
+    // We have 6 batches, 1 partitions (since global limit), and 1 state store per batch
+    assert(checkpointInfoList.size == numBatches * numStateStores * 1)
+    checkpointInfoList.foreach { l =>
+      assert(l.stateStoreCkptId.isDefined)
+      if (batchVersionSet.contains(l.batchVersion)) {
+        assert(l.baseStateStoreCkptId.isDefined)
+      }
+    }
+    assert(checkpointInfoList.count(_.partitionId == 0) == numBatches * numStateStores)
+    // Since we use global limit, there should be no partition 1
+    assert(checkpointInfoList.count(_.partitionId == 1) == 0)
+    for (i <- 1 to numBatches) {
+      // Since we use global limit, there should be only one store per batch
+      assert(checkpointInfoList.count(_.batchVersion == i) == numStateStores * 1)
+    }
+    validateBaseCheckpointInfo()
+  }
+
   /**
    * Verify lineage for each partition across batches. Below should satisfy because
    * these ids are stored in the following manner:
@@ -1170,6 +1193,46 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
       )
     }
     validateCheckpointInfo(6, 1, Set(2, 4, 6))
+  }
+
+  testWithCheckpointInfoTracked(
+    s"checkpointFormatVersion2 validate StreamingGlobalLimit") {
+    withTempDir { checkpointDir =>
+      val inputData = MemoryStream[Int]
+      val aggregated = inputData
+        .toDF()
+        .limit(10)
+
+      testStream(aggregated, Append)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 3),
+        CheckLastBatch(3),
+        AddData(inputData, 3, 2),
+        CheckLastBatch(3, 2),
+        StopStream
+      )
+
+      // Test recovery
+      testStream(aggregated, Append)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 4, 1, 3),
+        CheckLastBatch(4, 1, 3),
+        AddData(inputData, 5, 4, 4),
+        CheckLastBatch(5, 4, 4),
+        StopStream
+      )
+
+      // crash recovery again
+      testStream(aggregated, Append)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, 4, 7),
+        CheckLastBatch(4),
+        AddData(inputData, 5),
+        CheckLastBatch(),
+        StopStream
+      )
+    }
+    validateCheckpointInfoGlobalLimit(6, 1, Set(2, 3, 4, 5, 6))
   }
 
   test("checkpointFormatVersion2 validate transformWithState") {
