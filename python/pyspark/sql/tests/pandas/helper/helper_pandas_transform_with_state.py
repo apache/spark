@@ -1707,8 +1707,13 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
         attributes_map, confs_map = self._update_map_state(key, total_temperature)
 
         import json
+        import numpy as np
 
-        np_int64_to_int = lambda x: int(x) if isinstance(x, np.int64) else x
+        def np_int64_to_int(x):
+            if isinstance(x, np.int64):
+                return int(x)
+            return x
+
         yield pd.DataFrame(
             {
                 "id": [key],
