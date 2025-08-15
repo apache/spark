@@ -47,12 +47,14 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
   // Reader for the XML record parsing.
   private val in1 = inputStream()
   private val primaryEventReader = filteredEventReader(in1, options)
+
   // Reader for the XSD validation, if an XSD schema is provided.
   private val in2 = Option(options.rowValidationXSDPath).map(_ => inputStream())
-  private val streamReaderForXSDValidation =
-    in2.map(in => filteredStreamReader(in, options))
-  private val eventReaderForXSDValidation =
-    streamReaderForXSDValidation.map(filteredEventReader)
+  // An XMLStreamReader used by StAXSource for XSD validation.
+  private val xsdValidationStreamReader = in2.map(in => filteredStreamReader(in, options))
+  // An XMLEventReader wrapping the XMLStreamReader for XSD validation. This is used to ensure that
+  // the inputStream for XSD validation is synced with the primaryEventReader.
+  private val xsdValidationEventReader = xsdValidationStreamReader.map(filteredEventReader)
 
   final var hasMoreRecord: Boolean = true
 
@@ -61,9 +63,11 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
    * Returns true if a row start element is found, false if end of stream is reached.
    */
   def skipToNextRecord(): Boolean = {
-    hasMoreRecord = skipToNextRowStart(primaryEventReader) && eventReaderForXSDValidation.forall(
-        skipToNextRowStart
-      )
+    hasMoreRecord = skipToNextRowStart(primaryEventReader)
+    xsdValidationEventReader.foreach { r =>
+      val xsdReaderHasMoreRecord = skipToNextRowStart(r)
+      assert(hasMoreRecord == xsdReaderHasMoreRecord)
+    }
     if (!hasMoreRecord) {
       closeAllReaders()
     }
@@ -101,7 +105,7 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
   }
 
   def validateXSDSchema(schema: Schema): Unit = {
-    streamReaderForXSDValidation match {
+    xsdValidationStreamReader match {
       case Some(p) =>
         try {
           // StAXSource requires the stream reader to start with the START_DOCUMENT OR START_ELEMENT
@@ -130,8 +134,8 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
 
   def closeAllReaders(): Unit = {
     primaryEventReader.close()
-    streamReaderForXSDValidation.foreach(_.close())
-    eventReaderForXSDValidation.foreach(_.close())
+    xsdValidationEventReader.foreach(_.close())
+    xsdValidationStreamReader.foreach(_.close())
     in1.close()
     in2.foreach(_.close())
     hasMoreRecord = false

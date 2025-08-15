@@ -16,11 +16,13 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
-import java.io.{CharConversionException, FileNotFoundException, IOException}
+import java.io.{CharConversionException, FileNotFoundException, IOException, StringReader}
 import java.nio.charset.MalformedInputException
 import java.util.Locale
 import javax.xml.stream.{XMLEventReader, XMLStreamException}
 import javax.xml.stream.events._
+import javax.xml.transform.stream.StreamSource
+import javax.xml.validation.Schema
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -247,7 +249,8 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
             parser.closeAllReaders()
             handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
           case _: AccessControlException | _: BlockMissingException => throw e
-          case _: IOException | _: RuntimeException if options.ignoreCorruptFiles =>
+          case _: IOException | _: RuntimeException | _: InternalError
+              if options.ignoreCorruptFiles =>
             logWarning("Skipped the rest of the content in the corrupted file", e)
             parser.closeAllReaders()
             Some(StructType(Nil))

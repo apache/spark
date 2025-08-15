@@ -35,7 +35,7 @@ object StaxXmlParserUtils {
     factory
   }
 
-  private val eventTypeFilter: Int => Boolean = {
+  private[sql] val eventTypeFilter: Int => Boolean = {
     // Ignore comments and processing instructions
     case XMLStreamConstants.COMMENT |
          XMLStreamConstants.PROCESSING_INSTRUCTION => false

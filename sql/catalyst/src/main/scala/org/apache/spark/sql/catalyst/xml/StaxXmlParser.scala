@@ -272,7 +272,8 @@ class StaxXmlParser(
             logWarning("Skipped missing file", e)
             parser.closeAllReaders()
             None
-          case _: IOException | _: RuntimeException if options.ignoreCorruptFiles =>
+          case _: IOException | _: RuntimeException | _: InternalError
+              if options.ignoreCorruptFiles =>
             logWarning("Skipped the rest of the content in the corrupted file", e)
             parser.closeAllReaders()
             None
