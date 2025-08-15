@@ -345,8 +345,6 @@ class MicroBatchExecution(
 
     populateStartOffsets(execCtx, sparkSessionForStream)
 
-    verifyCheckpointDirectory(execCtx)
-
     logInfo(log"Stream started from ${MDC(LogKeys.STREAMING_OFFSETS_START, execCtx.startOffsets)}")
     execCtx
   }
@@ -568,29 +566,27 @@ class MicroBatchExecution(
           log"offsets ${MDC(LogKeys.STREAMING_OFFSETS_START, execCtx.startOffsets)} and " +
           log"available offsets ${MDC(LogKeys.STREAMING_OFFSETS_END, execCtx.endOffsets)}")
       case None => // We are starting this stream for the first time.
+        verifyStartCheckpointDirectory()
         logInfo(s"Starting new streaming query.")
         execCtx.batchId = 0
         watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf, logicalPlan)
     }
   }
 
-  private def verifyCheckpointDirectory(
-      execCtx: MicroBatchExecutionContext): Unit = {
+  private def verifyStartCheckpointDirectory(): Unit = {
     // Check to see if we can use this checkpoint location for state and commits.
-    if (execCtx.batchId == 0) {
-      val fileManager = CheckpointFileManager.create(new Path(resolvedCheckpointRoot),
-        sparkSession.sessionState.newHadoopConf())
-      // If state or commits has been created, but offsets have not, that means there could be
-      // multiple writers to the state or commits directory of the query.
-      val dirNamesThatShouldNotHaveFiles = Array[String](DIR_NAME_STATE, DIR_NAME_COMMITS)
+    val fileManager = CheckpointFileManager.create(new Path(resolvedCheckpointRoot),
+      sparkSession.sessionState.newHadoopConf())
+    // If state or commits has been created, but offsets have not, that means there could be
+    // multiple writers to the state or commits directory of the query.
+    val dirNamesThatShouldNotHaveFiles = Array[String](DIR_NAME_STATE, DIR_NAME_COMMITS)
 
-      dirNamesThatShouldNotHaveFiles.foreach { dirName =>
-        val path = new Path(resolvedCheckpointRoot, dirName)
+    dirNamesThatShouldNotHaveFiles.foreach { dirName =>
+      val path = new Path(resolvedCheckpointRoot, dirName)
 
-        if (fileManager.exists(path) && !fileManager.list(path).isEmpty) {
-          val loc = path.toString
-          throw StateStoreErrors.streamingStateCheckpointLocationNotEmpty(loc)
-        }
+      if (fileManager.exists(path) && !fileManager.list(path).isEmpty) {
+        val loc = path.toString
+        throw StateStoreErrors.streamingStateCheckpointLocationNotEmpty(loc)
       }
     }
   }
