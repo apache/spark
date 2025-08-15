@@ -30,7 +30,6 @@ import scala.xml.SAXException
 
 import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.security.AccessControlException
-import org.apache.hadoop.shaded.org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.Logging
@@ -42,6 +41,7 @@ import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.SparkErrorUtils
 
 class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     extends Serializable
@@ -93,16 +93,83 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
    *   3. Replace any remaining null fields with string, the top type
    */
   def infer(xml: RDD[String]): StructType = {
-    val inferredTypesRdd = xml.mapPartitions { iter =>
+    val schemaData = if (options.samplingRatio < 1.0) {
+      xml.sample(withReplacement = false, options.samplingRatio, 1)
+    } else {
+      xml
+    }
+    // perform schema inference on each row and merge afterwards
+    val mergedTypesFromPartitions = schemaData.mapPartitions { iter =>
+      val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
+
       iter.flatMap { xml =>
-        val parser = StaxXmlParserUtils.staxXMLRecordReader(xml, options)
-        val inferredType = infer(parser, shouldSkipToNextReader = false)
-        parser.close()
-        inferredType
-      }
+        infer(xml, xsdSchema)
+      }.reduceOption(compatibleType(caseSensitive, options.valueTag)).iterator
     }
 
-    mergeType(inferredTypesRdd)
+    // Here we manually submit a fold-like Spark job, so that we can set the SQLConf when running
+    // the fold functions in the scheduler event loop thread.
+    val existingConf = SQLConf.get
+    var rootType: DataType = StructType(Nil)
+    val foldPartition = (iter: Iterator[DataType]) =>
+      iter.fold(StructType(Nil))(compatibleType(caseSensitive, options.valueTag))
+    val mergeResult = (index: Int, taskResult: DataType) => {
+      rootType = SQLConf.withExistingConf(existingConf) {
+        compatibleType(caseSensitive, options.valueTag)(rootType, taskResult)
+      }
+    }
+    xml.sparkContext.runJob(mergedTypesFromPartitions, foldPartition, mergeResult)
+
+    canonicalizeType(rootType) match {
+      case Some(st: StructType) => st
+      case _ =>
+        // canonicalizeType erases all empty structs, including the only one we want to keep
+        // XML shouldn't run into this line
+        StructType(Seq())
+    }
+  }
+
+  def infer(xml: String, xsdSchema: Option[Schema] = None): Option[DataType] = {
+    var parser: XMLEventReader = null
+    try {
+      val xsd = xsdSchema.orElse(Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema))
+      xsd.foreach { schema =>
+        schema.newValidator().validate(new StreamSource(new StringReader(xml)))
+      }
+      parser = StaxXmlParserUtils.filteredReader(xml)
+      val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
+      val schema = Some(inferObject(parser, rootAttributes))
+      parser.close()
+      schema
+    } catch {
+      case e @ (_: XMLStreamException | _: MalformedInputException | _: SAXException) =>
+        handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
+      case e: CharConversionException if options.charset.isEmpty =>
+        val msg =
+          """XML parser cannot handle a character in its input.
+            |Specifying encoding as an input option explicitly might help to resolve the issue.
+            |""".stripMargin + e.getMessage
+        val wrappedCharException = new CharConversionException(msg)
+        wrappedCharException.initCause(e)
+        handleXmlErrorsByParseMode(
+          options.parseMode,
+          options.columnNameOfCorruptRecord,
+          wrappedCharException)
+      case e: FileNotFoundException if options.ignoreMissingFiles =>
+        logWarning("Skipped missing file", e)
+        Some(StructType(Nil))
+      case e: FileNotFoundException if !options.ignoreMissingFiles => throw e
+      case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
+      case e @ (_: IOException | _: RuntimeException) if options.ignoreCorruptFiles =>
+        logWarning("Skipped the rest of the content in the corrupted file", e)
+        Some(StructType(Nil))
+      case NonFatal(e) =>
+        handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
+    } finally {
+      if (parser != null) {
+        parser.close()
+      }
+    }
   }
 
   def mergeType(inferredTypes: RDD[DataType]): StructType = {
@@ -135,18 +202,6 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         // canonicalizeType erases all empty structs, including the only one we want to keep
         // XML shouldn't run into this line
         StructType(Seq())
-    }
-  }
-
-  /**
-   * Infer the schema of the single XML record string
-   */
-  def infer(xml: String): Option[DataType] = {
-    val parser = StaxXmlParserUtils.staxXMLRecordReader(xml, options)
-    try {
-      infer(parser, shouldSkipToNextReader = false)
-    } finally {
-      parser.close()
     }
   }
 
@@ -185,7 +240,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         Some(StructType(Nil))
       case e: FileNotFoundException if !options.ignoreMissingFiles => throw e
       case NonFatal(e) =>
-        ExceptionUtils.getRootCause(e) match {
+        SparkErrorUtils.getRootCause(e) match {
           case _: XMLStreamException | _: MalformedInputException | _: SAXException =>
             logWarning("Malformed XML record found", e)
             // Close the XML event stream from the first malformed XML record

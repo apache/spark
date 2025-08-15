@@ -6230,6 +6230,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val MEMORY_EFFICIENT_XML_PARSER_ENABLED = {
+    buildConf("spark.sql.xml.memoryEfficientXmlParser.enabled")
+      .internal()
+      .doc("When set to true, use a memory efficient XML parser for parsing XML files. " +
+        "This parser uses less memory when parsing large XML files compared to the default " +
+        "parser. However, it may introduce some behavior changes.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+  }
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -7335,6 +7346,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def maxFlowRetryAttempts: Int = getConf(SQLConf.PIPELINES_MAX_FLOW_RETRY_ATTEMPTS)
 
   def hadoopLineRecordReaderEnabled: Boolean = getConf(SQLConf.HADOOP_LINE_RECORD_READER_ENABLED)
+
+  def memoryEfficientXMLParserEnabled: Boolean = getConf(SQLConf.MEMORY_EFFICIENT_XML_PARSER_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

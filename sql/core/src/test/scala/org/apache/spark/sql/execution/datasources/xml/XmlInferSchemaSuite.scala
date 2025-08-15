@@ -20,6 +20,7 @@ import java.io.File
 import java.nio.file.Files
 import java.util.UUID
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Encoders, QueryTest, Row}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
@@ -958,3 +959,7 @@ trait XmlSchemaInferenceCaseSensitivityTests extends QueryTest {
   }
 }
 
+class XmlInferSchemaWithOptimizedParserSuite extends XmlInferSchemaSuite {
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set("spark.sql.xml.memoryEfficientXmlParser.enabled", "true")
+}

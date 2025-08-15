@@ -17,17 +17,24 @@
 package org.apache.spark.sql.catalyst.xml
 
 import java.io.InputStream
-import javax.xml.stream.{XMLEventReader, XMLStreamConstants}
+import javax.xml.stream.{
+  EventFilter,
+  StreamFilter,
+  XMLEventReader,
+  XMLStreamConstants,
+  XMLStreamReader
+}
 import javax.xml.stream.events.{EndDocument, StartElement, XMLEvent}
 import javax.xml.transform.stax.StAXSource
 import javax.xml.validation.Schema
 
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.exception.ExceptionUtils
+import org.apache.commons.io.input.BOMInputStream
 import org.apache.hadoop.shaded.com.ctc.wstx.exc.WstxEOFException
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.SparkErrorUtils
 
 /**
  * XML record reader that reads the next XML record in the underlying XML stream. It can support XSD
@@ -39,13 +46,13 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
     with Logging {
   // Reader for the XML record parsing.
   private val in1 = inputStream()
-  private val primaryEventReader = StaxXmlParserUtils.filteredEventReader(in1, options)
+  private val primaryEventReader = filteredEventReader(in1, options)
   // Reader for the XSD validation, if an XSD schema is provided.
   private val in2 = Option(options.rowValidationXSDPath).map(_ => inputStream())
   private val streamReaderForXSDValidation =
-    in2.map(in => StaxXmlParserUtils.filteredStreamReader(in, options))
+    in2.map(in => filteredStreamReader(in, options))
   private val eventReaderForXSDValidation =
-    streamReaderForXSDValidation.map(StaxXmlParserUtils.filteredEventReader)
+    streamReaderForXSDValidation.map(filteredEventReader)
 
   final var hasMoreRecord: Boolean = true
 
@@ -55,8 +62,8 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
    */
   def skipToNextRecord(): Boolean = {
     hasMoreRecord = skipToNextRowStart(primaryEventReader) && eventReaderForXSDValidation.forall(
-      skipToNextRowStart
-    )
+        skipToNextRowStart
+      )
     if (!hasMoreRecord) {
       closeAllReaders()
     }
@@ -87,7 +94,7 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
       }
       false
     } catch {
-      case NonFatal(e) if ExceptionUtils.getRootCause(e).isInstanceOf[WstxEOFException] =>
+      case NonFatal(e) if SparkErrorUtils.getRootCause(e).isInstanceOf[WstxEOFException] =>
         logWarning("Reached end of file while looking for next row start element.")
         false
     }
@@ -138,4 +145,34 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
   override def getProperty(name: String): AnyRef = primaryEventReader.getProperty(name)
   override def close(): Unit = {}
   override def next(): AnyRef = primaryEventReader.next()
+
+  private def filteredEventReader(
+      inputStream: java.io.InputStream,
+      options: XmlOptions): XMLEventReader = {
+    val streamReader = filteredStreamReader(inputStream, options)
+    filteredEventReader(streamReader)
+  }
+
+  private def filteredEventReader(streamReader: XMLStreamReader): XMLEventReader = {
+    val filter = new EventFilter {
+      override def accept(event: XMLEvent): Boolean =
+        StaxXmlParserUtils.eventTypeFilter(event.getEventType)
+    }
+    val eventReader = StaxXmlParserUtils.factory.createXMLEventReader(streamReader)
+    StaxXmlParserUtils.factory.createFilteredReader(eventReader, filter)
+  }
+
+  private def filteredStreamReader(
+      inputStream: java.io.InputStream,
+      options: XmlOptions): XMLStreamReader = {
+    val filter = new StreamFilter {
+      override def accept(event: XMLStreamReader): Boolean =
+        StaxXmlParserUtils.eventTypeFilter(event.getEventType)
+    }
+    val bomInputStreamBuilder = new BOMInputStream.Builder
+    bomInputStreamBuilder.setInputStream(inputStream)
+    val streamReader =
+      StaxXmlParserUtils.factory.createXMLStreamReader(bomInputStreamBuilder.get(), options.charset)
+    StaxXmlParserUtils.factory.createFilteredReader(streamReader, filter)
+  }
 }

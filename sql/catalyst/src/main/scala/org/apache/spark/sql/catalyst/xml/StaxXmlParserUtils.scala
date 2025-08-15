@@ -16,14 +16,13 @@
  */
 package org.apache.spark.sql.catalyst.xml
 
+import java.io.StringReader
 import javax.xml.namespace.QName
-import javax.xml.stream.{EventFilter, StreamFilter, XMLEventReader, XMLInputFactory, XMLStreamConstants, XMLStreamReader}
+import javax.xml.stream.{EventFilter, XMLEventReader, XMLInputFactory, XMLStreamConstants}
 import javax.xml.stream.events._
 
 import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
-
-import org.apache.commons.io.input.BOMInputStream
 
 object StaxXmlParserUtils {
 
@@ -48,33 +47,19 @@ object StaxXmlParserUtils {
     case _ => true
   }
 
-  def filteredStreamReader(
-      inputStream: java.io.InputStream,
-      options: XmlOptions): XMLStreamReader = {
-    val filter = new StreamFilter {
-      override def accept(event: XMLStreamReader): Boolean = eventTypeFilter(event.getEventType)
-    }
-    val bomInputStreamBuilder = new BOMInputStream.Builder
-    bomInputStreamBuilder.setInputStream(inputStream)
-    val streamReader = factory.createXMLStreamReader(bomInputStreamBuilder.get(), options.charset)
-    factory.createFilteredReader(streamReader, filter)
-  }
-
-  def filteredEventReader(inputStream: java.io.InputStream, options: XmlOptions): XMLEventReader = {
-    val streamReader = filteredStreamReader(inputStream, options)
-    filteredEventReader(streamReader)
-  }
-
-  def filteredEventReader(streamReader: XMLStreamReader): XMLEventReader = {
+  def filteredReader(xml: String): XMLEventReader = {
     val filter = new EventFilter {
       override def accept(event: XMLEvent): Boolean = eventTypeFilter(event.getEventType)
     }
-    val eventReader = factory.createXMLEventReader(streamReader)
+    // It does not have to skip for white space, since `XmlInputFormat`
+    // always finds the root tag without a heading space.
+    val eventReader = factory.createXMLEventReader(new StringReader(xml))
     factory.createFilteredReader(eventReader, filter)
   }
 
-  def staxXMLRecordReader(xml: String, options: XmlOptions): StaxXMLRecordReader = {
-    val inputStream = () => new java.io.ByteArrayInputStream(xml.getBytes(options.charset))
+  def filteredReader(
+      inputStream: () => java.io.InputStream,
+      options: XmlOptions): XMLEventReader = {
     StaxXMLRecordReader(inputStream, options)
   }
 
