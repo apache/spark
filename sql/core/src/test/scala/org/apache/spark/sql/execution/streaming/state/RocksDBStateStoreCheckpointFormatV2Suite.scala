@@ -1200,7 +1200,7 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
   Seq(1, 2, 10, 200).foreach { shufflePartitions =>
     testWithCheckpointInfoTracked(
       s"checkpointFormatVersion2 validate StreamingGlobalLimit with " +
-        s"shufflePartitions = $shufflePartitions") {
+      s"shufflePartitions = $shufflePartitions") {
       withTempDir { checkpointDir =>
         withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, shufflePartitions.toString)) {
           val inputData = MemoryStream[Int]
