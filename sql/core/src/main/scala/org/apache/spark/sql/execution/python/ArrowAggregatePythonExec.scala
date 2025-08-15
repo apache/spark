@@ -35,7 +35,13 @@ import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 /**
- * Physical node for aggregation with group aggregate Pandas UDF.
+ * Physical node for aggregation with group aggregate vectorized UDF.
+ * Following eval types are supported:
+ *
+ * <ul>
+ *   <li> SQL_GROUPED_AGG_ARROW_UDF for Arrow UDF
+ *   <li> SQL_GROUPED_AGG_PANDAS_UDF for Pandas UDF
+ * </ul>
  *
  * This plan works by sending the necessary (projected) input grouped data as Arrow record batches
  * to the python worker, the python worker invokes the UDF and sends the results to the executor,
