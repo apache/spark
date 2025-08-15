@@ -1508,7 +1508,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
           fm.mkdirs(new Path(new Path(checkpointDir.getCanonicalPath, "state"), "0"))
 
           checkError(
-            exception = intercept[StateStoreCheckpointLocationNotEmpty] {
+            exception = intercept[StreamingQueryException] {
               MemoryStream[Int].toDS().groupBy().count()
                 .writeStream
                 .format("memory")
@@ -1516,11 +1516,13 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
                 .queryName(s"name${RandomStringUtils.secure.nextAlphabetic(10)}")
                 .option("checkpointLocation", checkpointDir.getCanonicalPath)
                 .start()
-            },
+                .processAllAvailable()
+            }.getCause.asInstanceOf[StateStoreCheckpointLocationNotEmpty],
             condition = "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY",
             sqlState = "42K03",
             parameters = Map(
-              "checkpointLocation" -> (new Path(checkpointDir.getCanonicalPath, "state")).toString
+              "checkpointLocation" ->
+                ("file:" + (new Path(checkpointDir.getCanonicalPath, "state")).toString)
             ))
         }
 
@@ -1533,7 +1535,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
           fm.mkdirs(new Path(new Path(checkpointDir.getCanonicalPath, "commits"), "0"))
 
           checkError(
-            exception = intercept[StateStoreCheckpointLocationNotEmpty] {
+            exception = intercept[StreamingQueryException] {
               MemoryStream[Int].toDS().groupBy().count()
                 .writeStream
                 .format("memory")
@@ -1541,11 +1543,13 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
                 .queryName(s"name${RandomStringUtils.secure.nextAlphabetic(10)}")
                 .option("checkpointLocation", checkpointDir.getCanonicalPath)
                 .start()
-            },
+                .processAllAvailable()
+            }.getCause.asInstanceOf[StateStoreCheckpointLocationNotEmpty],
             condition = "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY",
             sqlState = "42K03",
             parameters = Map(
-              "checkpointLocation" -> (new Path(checkpointDir.getCanonicalPath, "commits")).toString
+              "checkpointLocation" ->
+                ("file:" + (new Path(checkpointDir.getCanonicalPath, "commits")).toString)
             ))
         }
       }

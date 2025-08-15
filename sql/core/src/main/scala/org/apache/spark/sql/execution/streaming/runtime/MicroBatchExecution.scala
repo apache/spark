@@ -21,6 +21,8 @@ import scala.collection.mutable.{Map => MutableMap}
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys.BATCH_ID
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -38,11 +40,12 @@ import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, OneTimeTrigger, ProcessingTimeTrigger, Sink, Source}
-import org.apache.spark.sql.execution.streaming.checkpointing.{CommitMetadata, OffsetSeq, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitMetadata, OffsetSeq, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.runtime.AcceptsLatestSeenOffsetHandler
+import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchSink, WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
-import org.apache.spark.sql.execution.streaming.state.StateSchemaBroadcast
+import org.apache.spark.sql.execution.streaming.state.{StateSchemaBroadcast, StateStoreErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.{Clock, Utils}
@@ -341,6 +344,9 @@ class MicroBatchExecution(
     setLatestExecutionContext(execCtx)
 
     populateStartOffsets(execCtx, sparkSessionForStream)
+
+    verifyCheckpointDirectory(execCtx)
+
     logInfo(log"Stream started from ${MDC(LogKeys.STREAMING_OFFSETS_START, execCtx.startOffsets)}")
     execCtx
   }
@@ -565,6 +571,27 @@ class MicroBatchExecution(
         logInfo(s"Starting new streaming query.")
         execCtx.batchId = 0
         watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf, logicalPlan)
+    }
+  }
+
+  private def verifyCheckpointDirectory(
+      execCtx: MicroBatchExecutionContext): Unit = {
+    // Check to see if we can use this checkpoint location for state and commits.
+    if (execCtx.batchId == 0) {
+      val fileManager = CheckpointFileManager.create(new Path(resolvedCheckpointRoot),
+        sparkSession.sessionState.newHadoopConf())
+      // If state or commits has been created, but offsets have not, that means there could be
+      // multiple writers to the state or commits directory of the query.
+      val dirNamesThatShouldNotHaveFiles = Array[String](DIR_NAME_STATE, DIR_NAME_COMMITS)
+
+      dirNamesThatShouldNotHaveFiles.foreach { dirName =>
+        val path = new Path(resolvedCheckpointRoot, dirName)
+
+        if (fileManager.exists(path) && !fileManager.list(path).isEmpty) {
+          val loc = path.toString
+          throw StateStoreErrors.streamingStateCheckpointLocationNotEmpty(loc)
+        }
+      }
     }
   }
 
