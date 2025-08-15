@@ -75,31 +75,23 @@ class HybridAnalyzer(
   private val sampleRateGenerator = new Random()
 
   def apply(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
-    val passedResolvedGuard = resolverGuard.apply(plan)
-
     val dualRun =
       conf.getConf(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER) &&
-      passedResolvedGuard &&
-      checkDualRunSampleRate()
+      checkDualRunSampleRate() &&
+      checkResolverGuard(plan)
 
     withTrackedAnalyzerBridgeState(dualRun) {
       if (dualRun) {
         resolveInDualRun(plan, tracker)
       } else if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED)) {
         resolveInSinglePass(plan, tracker)
-      } else if (passedResolvedGuard && conf.getConf(
-          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY
-        )) {
+      } else if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY)) {
         resolveInSinglePassTentatively(plan, tracker)
       } else {
         resolveInFixedPoint(plan, tracker)
       }
     }
   }
-
-  def getSinglePassResolutionDuration: Option[Long] = singlePassResolutionDuration
-
-  def getFixedPointResolutionDuration: Option[Long] = fixedPointResolutionDuration
 
   /**
    * Call `body` in the context of tracked [[AnalyzerBridgeState]]. Set the new bridge state
@@ -206,10 +198,21 @@ class HybridAnalyzer(
   private def resolveInSinglePassTentatively(
       plan: LogicalPlan,
       tracker: QueryPlanningTracker): LogicalPlan = {
-    try {
-      resolveInSinglePass(plan, tracker)
-    } catch {
-      case _: ExplicitlyUnsupportedResolverFeature =>
+    val singlePassResult = if (checkResolverGuard(plan)) {
+      try {
+        Some(resolveInSinglePass(plan, tracker))
+      } catch {
+        case _: ExplicitlyUnsupportedResolverFeature =>
+          None
+      }
+    } else {
+      None
+    }
+
+    singlePassResult match {
+      case Some(result) =>
+        result
+      case None =>
         resolveInFixedPoint(plan, tracker)
     }
   }
@@ -253,6 +256,16 @@ class HybridAnalyzer(
         fixedPointResult,
         singlePassResult
       )
+    }
+  }
+
+  private def checkResolverGuard(plan: LogicalPlan): Boolean = {
+    try {
+      resolverGuard.apply(plan)
+    } catch {
+      case e: Throwable
+          if !conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_EXPOSE_RESOLVER_GUARD_FAILURE) =>
+        false
     }
   }
 

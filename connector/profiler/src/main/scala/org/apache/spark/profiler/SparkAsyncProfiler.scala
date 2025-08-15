@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext.DRIVER_IDENTIFIER
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -36,7 +36,6 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 private[spark] class SparkAsyncProfiler(conf: SparkConf, executorId: String) extends Logging {
 
   private var running = false
-  private val enableProfiler = conf.get(PROFILER_EXECUTOR_ENABLED)
   private val profilerOptions = conf.get(PROFILER_ASYNC_PROFILER_OPTIONS)
   private val profilerDfsDirOpt = conf.get(PROFILER_DFS_DIR)
   private val profilerLocalDir = conf.get(PROFILER_LOCAL_DIR)
@@ -71,7 +70,7 @@ private[spark] class SparkAsyncProfiler(conf: SparkConf, executorId: String) ext
 
   val profiler: Option[AsyncProfiler] = {
     Option(
-      if (enableProfiler && AsyncProfilerLoader.isSupported) {
+      if (AsyncProfilerLoader.isSupported) {
         AsyncProfilerLoader.setExtractionDirectory(extractionDir)
         AsyncProfilerLoader.load()
       } else null

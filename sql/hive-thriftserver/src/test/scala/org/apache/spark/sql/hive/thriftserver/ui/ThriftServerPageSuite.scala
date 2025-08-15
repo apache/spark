@@ -28,6 +28,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.scheduler.SparkListenerJobStart
 import org.apache.spark.sql.hive.thriftserver._
 import org.apache.spark.status.ElementTrackingStore
+import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.InMemoryStore
 
 
@@ -39,7 +40,7 @@ class ThriftServerPageSuite extends SparkFunSuite with BeforeAndAfter {
     val tmpDirName = System.getProperty("java.io.tmpdir")
     val tmpDir = new File(tmpDirName)
     if (!tmpDir.exists()) {
-      tmpDir.mkdirs()
+      Utils.createDirectory(tmpDir)
     }
     super.beforeAll()
   }

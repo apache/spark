@@ -25,7 +25,7 @@ import warnings
 import inspect
 import json
 import types
-from functools import partial, reduce
+from functools import partial, reduce, wraps
 import sys
 from itertools import zip_longest, chain
 from types import TracebackType
@@ -42,6 +42,7 @@ from typing import (
     Sequence,
     Tuple,
     Type,
+    TypeVar,
     Union,
     cast,
     no_type_check,
@@ -109,9 +110,11 @@ from pyspark.pandas.correlation import (
 from pyspark.pandas.spark.accessors import SparkFrameMethods, CachedSparkFrameMethods
 from pyspark.pandas.utils import (
     align_diff_frames,
+    ansi_mode_context,
     column_labels_level,
     combine_frames,
     default_session,
+    is_ansi_mode_enabled,
     is_name_like_tuple,
     is_name_like_value,
     is_testing,
@@ -166,6 +169,18 @@ REPR_PATTERN = re.compile(r"\n\n\[(?P<rows>[0-9]+) rows x (?P<columns>[0-9]+) co
 REPR_HTML_PATTERN = re.compile(
     r"\n\<p\>(?P<rows>[0-9]+) rows × (?P<columns>[0-9]+) columns\<\/p\>\n\<\/div\>$"
 )
+
+
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
+
+
+def with_ansi_mode_context(f: FuncT) -> FuncT:
+    @wraps(f)
+    def _with_ansi_mode_context(self: "DataFrame", *args: Any, **kwargs: Any) -> Any:
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return f(self, *args, **kwargs)
+
+    return cast(FuncT, _with_ansi_mode_context)
 
 
 _flex_doc_FRAME = """
@@ -739,6 +754,7 @@ class DataFrame(Frame, Generic[T]):
         """
         return [self.index, self.columns]
 
+    @with_ansi_mode_context
     def _reduce_for_stat_function(
         self,
         sfun: Callable[["Series"], PySparkColumn],
@@ -869,6 +885,7 @@ class DataFrame(Frame, Generic[T]):
         """
         return self._pssers[label]
 
+    @with_ansi_mode_context
     def _apply_series_op(
         self,
         op: Callable[["Series"], Union["Series", PySparkColumn]],
@@ -883,6 +900,7 @@ class DataFrame(Frame, Generic[T]):
         return DataFrame(internal)
 
     # Arithmetic Operators
+    @with_ansi_mode_context
     def _map_series_op(self, op: str, other: Any) -> "DataFrame":
         from pyspark.pandas.base import IndexOpsMixin
 
@@ -1506,6 +1524,7 @@ class DataFrame(Frame, Generic[T]):
 
     agg = aggregate
 
+    @with_ansi_mode_context
     def corr(self, method: str = "pearson", min_periods: Optional[int] = None) -> "DataFrame":
         """
         Compute pairwise correlation of columns, excluding NA/null values.
@@ -1725,6 +1744,7 @@ class DataFrame(Frame, Generic[T]):
             )
         )
 
+    @with_ansi_mode_context
     def corrwith(
         self, other: DataFrameOrSeries, axis: Axis = 0, drop: bool = False, method: str = "pearson"
     ) -> "Series":
@@ -8383,6 +8403,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         by_scols = self._prepare_sort_by_scols(columns)
         return self._sort(by=by_scols, ascending=True, na_position="last", keep=keep).head(n=n)
 
+    @with_ansi_mode_context
     def isin(self, values: Union[List, Dict]) -> "DataFrame":
         """
         Whether each element in the DataFrame is contained in values.
@@ -8456,7 +8477,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
 
             for label in self._internal.column_labels:
-                scol = self._internal.spark_column_for(label).isin([F.lit(v) for v in values])
+                if is_ansi_mode_enabled(self._internal.spark_frame.sparkSession):
+                    col_type = self._internal.spark_type_for(label)
+                    scol = self._internal.spark_column_for(label).isin(
+                        [F.lit(v).try_cast(col_type) for v in values]
+                    )
+                else:
+                    scol = self._internal.spark_column_for(label).isin([F.lit(v) for v in values])
                 scol = F.coalesce(scol, F.lit(False))
                 data_spark_columns.append(scol.alias(self._internal.spark_column_name_for(label)))
         else:
@@ -10425,6 +10452,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             raise TypeError("other must be a pandas-on-Spark DataFrame")
 
+    @with_ansi_mode_context
     def melt(
         self,
         id_vars: Optional[Union[Name, List[Name]]] = None,
@@ -10610,12 +10638,35 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             var_name = [var_name]  # type: ignore[list-item]
 
+        use_cast = is_ansi_mode_enabled(self._internal.spark_frame.sparkSession)
+        string_cast_required_type = None
+        if use_cast:
+            field_by_label = {
+                label: field
+                for label, field in zip(self._internal.column_labels, self._internal.data_fields)
+            }
+
+            value_col_types = [field_by_label[label].spark_type for label in value_vars]
+            # If any value column is of StringType, cast all value columns to StringType to avoid
+            # ANSI mode errors during explode - mixing strings and integers.
+            string_cast_required_type = (
+                StringType() if any(isinstance(t, StringType) for t in value_col_types) else None
+            )
+
         pairs = F.explode(
             F.array(
                 *[
                     F.struct(
                         *[F.lit(c).alias(name) for c, name in zip(label, var_name)],
-                        *[self._internal.spark_column_for(label).alias(value_name)],
+                        *[
+                            (
+                                self._internal.spark_column_for(label).cast(
+                                    string_cast_required_type
+                                )
+                                if use_cast and string_cast_required_type is not None
+                                else self._internal.spark_column_for(label)
+                            ).alias(value_name)
+                        ],
                     )
                     for label in column_labels
                     if label in value_vars
@@ -13778,31 +13829,11 @@ def _test() -> None:
     import uuid
     from pyspark.sql import SparkSession
     import pyspark.pandas.frame
-    from pyspark.testing.utils import is_ansi_mode_test
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.frame.__dict__.copy()
     globs["ps"] = pyspark.pandas
-
-    if is_ansi_mode_test:
-        del pyspark.pandas.frame.DataFrame.add.__doc__
-        del pyspark.pandas.frame.DataFrame.div.__doc__
-        del pyspark.pandas.frame.DataFrame.floordiv.__doc__
-        del pyspark.pandas.frame.DataFrame.melt.__doc__
-        del pyspark.pandas.frame.DataFrame.mod.__doc__
-        del pyspark.pandas.frame.DataFrame.mul.__doc__
-        del pyspark.pandas.frame.DataFrame.pow.__doc__
-        del pyspark.pandas.frame.DataFrame.radd.__doc__
-        del pyspark.pandas.frame.DataFrame.rdiv.__doc__
-        del pyspark.pandas.frame.DataFrame.rfloordiv.__doc__
-        del pyspark.pandas.frame.DataFrame.rmod.__doc__
-        del pyspark.pandas.frame.DataFrame.rmul.__doc__
-        del pyspark.pandas.frame.DataFrame.rpow.__doc__
-        del pyspark.pandas.frame.DataFrame.rsub.__doc__
-        del pyspark.pandas.frame.DataFrame.rtruediv.__doc__
-        del pyspark.pandas.frame.DataFrame.sub.__doc__
-        del pyspark.pandas.frame.DataFrame.truediv.__doc__
 
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.frame tests").getOrCreate()

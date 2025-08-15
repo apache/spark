@@ -268,7 +268,7 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
 
     Seq(1, 5, 10, 15, 20, 30).foreach { length =>
       val builder = new UTF8StringBuilder()
-      builder.append(RandomStringUtils.random(length))
+      builder.append(RandomStringUtils.secure.next(length))
       val row = InternalRow(builder.build())
       testWrite(valuesPerIteration, batchSize, StringType, row)
     }
@@ -281,7 +281,7 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
 
     Seq(1, 5, 10, 15, 20, 30).foreach { length =>
       val builder = new UTF8StringBuilder()
-      builder.append(RandomStringUtils.random(length))
+      builder.append(RandomStringUtils.secure.next(length))
       val row = InternalRow(builder.build())
       testRead(valuesPerIteration, batchSize, StringType, row)
     }
@@ -293,7 +293,7 @@ object ConstantColumnVectorBenchmark extends BenchmarkBase {
 
     Seq(1, 5, 10, 15, 20, 30).foreach { length =>
       val builder = new UTF8StringBuilder()
-      builder.append(RandomStringUtils.random(length))
+      builder.append(RandomStringUtils.secure.next(length))
       val row = InternalRow(builder.build())
       testWriteAndRead(valuesPerIteration, batchSize, StringType, row)
     }

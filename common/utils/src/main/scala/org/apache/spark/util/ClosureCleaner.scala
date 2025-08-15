@@ -24,7 +24,6 @@ import java.lang.reflect.{Field, Modifier}
 import scala.collection.mutable.{Map, Queue, Set, Stack}
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.lang3.ClassUtils
 import org.apache.xbean.asm9.{ClassReader, ClassVisitor, Handle, MethodVisitor, Type}
 import org.apache.xbean.asm9.Opcodes._
 import org.apache.xbean.asm9.tree.{ClassNode, MethodNode}
@@ -619,7 +618,7 @@ private[spark] object IndylambdaScalaClosures extends Logging {
   def getSerializationProxy(maybeClosure: AnyRef): Option[SerializedLambda] = {
     def isClosureCandidate(cls: Class[_]): Boolean = {
       // TODO: maybe lift this restriction to support other functional interfaces in the future
-      val implementedInterfaces = ClassUtils.getAllInterfaces(cls).asScala
+      val implementedInterfaces = SparkClassUtils.getAllInterfaces(cls)
       implementedInterfaces.exists(_.getName.startsWith("scala.Function"))
     }
 

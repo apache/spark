@@ -62,11 +62,9 @@ public class FetchShuffleBlocks extends AbstractFetchShuffleBlocks {
 
   @Override
   public String toString() {
-    return toStringHelper()
-      .append("mapIds", Arrays.toString(mapIds))
-      .append("reduceIds", Arrays.deepToString(reduceIds))
-      .append("batchFetchEnabled", batchFetchEnabled)
-      .toString();
+    return "FetchShuffleBlocks[appId=" + appId + ",execId=" + execId + ",shuffleId=" + shuffleId +
+        ",mapIds=" + Arrays.toString(mapIds) + ",reduceIds=" + Arrays.deepToString(reduceIds) +
+        ",batchFetchEnabled=" + batchFetchEnabled + "]";
   }
 
   @Override

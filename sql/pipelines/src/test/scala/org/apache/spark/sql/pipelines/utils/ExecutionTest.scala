@@ -34,7 +34,6 @@ import org.apache.spark.sql.pipelines.logging.{
   FlowProgress,
   FlowProgressEventLogger,
   PipelineEvent,
-  PipelineRunEventBuffer,
   RunProgress
 }
 
@@ -60,12 +59,12 @@ trait TestPipelineUpdateContextMixin {
       refreshTables: TableFilter = AllTables,
       resetCheckpointFlows: FlowFilter = AllFlows
   ) extends PipelineUpdateContext {
-    val eventBuffer = new PipelineRunEventBuffer(eventCallback = _ => ())
+    val eventBuffer = new PipelineRunEventBuffer()
+
+    override val eventCallback: PipelineEvent => Unit = eventBuffer.addEvent
 
     override def flowProgressEventLogger: FlowProgressEventLogger = {
-      new FlowProgressEventLogger(
-        eventBuffer = eventBuffer
-      )
+      new FlowProgressEventLogger(eventCallback = eventCallback)
     }
   }
 }

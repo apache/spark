@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.catalog.SQLFunction.parseDefault
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, Expression, ExpressionInfo, LateralSubquery, NamedArgumentExpression, NamedExpression, OuterReference, ScalarSubquery, UpCast}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter, LateralJoin, LocalRelation, LogicalPlan, NamedParametersSupport, OneRowRelation, Project, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter, LateralJoin, LogicalPlan, NamedParametersSupport, OneRowRelation, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -484,6 +484,7 @@ class SessionCatalog(
    *
    * @param identifier TableIdentifier
    * @param newDataSchema Updated data schema to be used for the table
+   * @deprecated since 4.1.0 use `alterTableSchema` instead.
    */
   def alterTableDataSchema(
       identifier: TableIdentifier,
@@ -505,6 +506,25 @@ class SessionCatalog(
     }
 
     externalCatalog.alterTableDataSchema(db, table, newDataSchema)
+  }
+
+  /**
+   * Alter the schema of a table identified by the provided table identifier. All partition columns
+   * must be preserved.
+   *
+   * @param identifier TableIdentifier
+   * @param newSchema Updated schema to be used for the table
+   */
+  def alterTableSchema(
+      identifier: TableIdentifier,
+      newSchema: StructType): Unit = {
+    val qualifiedIdent = qualifyIdentifier(identifier)
+    val db = qualifiedIdent.database.get
+    val table = qualifiedIdent.table
+    requireDbExists(db)
+    requireTableExists(qualifiedIdent)
+
+    externalCatalog.alterTableSchema(db, table, newSchema)
   }
 
   private def columnNameResolved(
@@ -1481,6 +1501,8 @@ class SessionCatalog(
         // For a permanent function, because we loaded it to the FunctionRegistry
         // when it's first used, we also need to drop it from the FunctionRegistry.
         functionRegistry.dropFunction(qualifiedIdent)
+      } else if (tableFunctionRegistry.functionExists(qualifiedIdent)) {
+        tableFunctionRegistry.dropFunction(qualifiedIdent)
       }
       externalCatalog.dropFunction(db, funcName)
     } else if (!ignoreIfNotExists) {
@@ -1646,7 +1668,14 @@ class SessionCatalog(
 
         paddedInput.zip(param.fields).map {
           case (expr, param) =>
-            Alias(Cast(expr, param.dataType), param.name)(
+            // Add outer references to all resolved attributes and outer references in the function
+            // input. Outer references also need to be wrapped because the function input may
+            // already contain outer references.
+            val outer = expr.transform {
+              case a: Attribute if a.resolved => OuterReference(a)
+              case o: OuterReference => OuterReference(o)
+            }
+            Alias(Cast(outer, param.dataType), param.name)(
               qualifier = qualifier,
               // mark the alias as function input
               explicitMetadata = Some(metaForFuncInputAlias))
@@ -1654,8 +1683,7 @@ class SessionCatalog(
       }.getOrElse(Nil)
 
       val body = if (query.isDefined) ScalarSubquery(query.get) else expression.get
-      Project(Alias(Cast(body, returnType), funcName)() :: Nil,
-        Project(inputs, LocalRelation(inputs.flatMap(_.references))))
+      Project(Alias(Cast(body, returnType), funcName)() :: Nil, Project(inputs, OneRowRelation()))
     }
   }
 

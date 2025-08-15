@@ -22,20 +22,21 @@ import org.apache.logging.log4j.Level
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sample, Sort}
+import org.apache.spark.sql.connector.DataSourcePushdownTestUtils
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.NullOrdering
-import org.apache.spark.sql.connector.expressions.aggregate.GeneralAggregateFunc
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
-private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFunSuite {
+private[v2] trait V2JDBCTest
+  extends DataSourcePushdownTestUtils
+  with DockerIntegrationFunSuite
+  with SharedSparkSession {
   import testImplicits._
 
   val catalogName: String
@@ -468,56 +469,6 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   def supportsTableSample: Boolean = false
 
-  private def checkSamplePushed(df: DataFrame, pushed: Boolean = true): Unit = {
-    val sample = df.queryExecution.optimizedPlan.collect {
-      case s: Sample => s
-    }
-    if (pushed) {
-      assert(sample.isEmpty)
-    } else {
-      assert(sample.nonEmpty)
-    }
-  }
-
-  protected def checkFilterPushed(df: DataFrame, pushed: Boolean = true): Unit = {
-    val filter = df.queryExecution.optimizedPlan.collect {
-      case f: Filter => f
-    }
-    if (pushed) {
-      assert(filter.isEmpty)
-    } else {
-      assert(filter.nonEmpty)
-    }
-  }
-
-  protected def checkLimitRemoved(df: DataFrame, pushed: Boolean = true): Unit = {
-    val limit = df.queryExecution.optimizedPlan.collect {
-      case l: LocalLimit => l
-      case g: GlobalLimit => g
-    }
-    if (pushed) {
-      assert(limit.isEmpty)
-    } else {
-      assert(limit.nonEmpty)
-    }
-  }
-
-  private def checkLimitPushed(df: DataFrame, limit: Option[Int]): Unit = {
-    df.queryExecution.optimizedPlan.collect {
-      case relation: DataSourceV2ScanRelation => relation.scan match {
-        case v1: V1ScanWrapper =>
-          assert(v1.pushedDownOperators.limit == limit)
-      }
-    }
-  }
-
-  private def checkColumnPruned(df: DataFrame, col: String): Unit = {
-    val scan = df.queryExecution.optimizedPlan.collectFirst {
-      case s: DataSourceV2ScanRelation => s
-    }.get
-    assert(scan.schema.names.sameElements(Seq(col)))
-  }
-
   test("SPARK-48172: Test CONTAINS") {
     val df1 = spark.sql(
       s"""
@@ -841,39 +792,6 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     }
   }
 
-  private def checkSortRemoved(df: DataFrame, pushed: Boolean = true): Unit = {
-    val sorts = df.queryExecution.optimizedPlan.collect {
-      case s: Sort => s
-    }
-
-    if (pushed) {
-      assert(sorts.isEmpty)
-    } else {
-      assert(sorts.nonEmpty)
-    }
-  }
-
-  private def checkOffsetRemoved(df: DataFrame, pushed: Boolean = true): Unit = {
-    val offsets = df.queryExecution.optimizedPlan.collect {
-      case o: Offset => o
-    }
-
-    if (pushed) {
-      assert(offsets.isEmpty)
-    } else {
-      assert(offsets.nonEmpty)
-    }
-  }
-
-  private def checkOffsetPushed(df: DataFrame, offset: Option[Int]): Unit = {
-    df.queryExecution.optimizedPlan.collect {
-      case relation: DataSourceV2ScanRelation => relation.scan match {
-        case v1: V1ScanWrapper =>
-          assert(v1.pushedDownOperators.offset == offset)
-      }
-    }
-  }
-
   gridTest("simple scan")(partitioningEnabledTestCase) { partitioningEnabled =>
     val (tableOptions, partitionInfo) = getTableOptions("employee", partitioningEnabled)
     val df = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
@@ -1025,27 +943,6 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(rows2(0).getString(0) === "amy")
       assert(rows2(0).getDecimal(1) === new java.math.BigDecimal("10000.00"))
       assert(rows2(0).getDouble(2) === 1000d)
-    }
-  }
-
-  private def checkAggregateRemoved(df: DataFrame): Unit = {
-    val aggregates = df.queryExecution.optimizedPlan.collect {
-      case agg: Aggregate => agg
-    }
-    assert(aggregates.isEmpty)
-  }
-
-  private def checkAggregatePushed(df: DataFrame, funcName: String): Unit = {
-    df.queryExecution.optimizedPlan.collect {
-      case DataSourceV2ScanRelation(_, scan, _, _, _) =>
-        assert(scan.isInstanceOf[V1ScanWrapper])
-        val wrapper = scan.asInstanceOf[V1ScanWrapper]
-        assert(wrapper.pushedDownOperators.aggregation.isDefined)
-        val aggregationExpressions =
-          wrapper.pushedDownOperators.aggregation.get.aggregateExpressions()
-        assert(aggregationExpressions.length == 1)
-        assert(aggregationExpressions(0).isInstanceOf[GeneralAggregateFunc])
-        assert(aggregationExpressions(0).asInstanceOf[GeneralAggregateFunc].name() == funcName)
     }
   }
 

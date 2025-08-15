@@ -33,7 +33,6 @@ from typing import (
     Dict,
     List,
     Tuple,
-    TypeAlias,
     Set,
     cast,
     overload,
@@ -132,7 +131,7 @@ class SparkSession:
         def __init__(self) -> None:
             self._options: Dict[str, Any] = {}
             self._channel_builder: Optional[DefaultChannelBuilder] = None
-            self._hook_factories: list["SparkSession.HookFactory"] = []
+            self._hook_factories: list["Callable[[SparkSession], SparkSession.Hook]"] = []
 
         @overload
         def config(self, key: str, value: Any) -> "SparkSession.Builder":
@@ -194,7 +193,9 @@ class SparkSession:
                 self._channel_builder = channelBuilder
                 return self
 
-        def _registerHook(self, hook_factory: "SparkSession.HookFactory") -> "SparkSession.Builder":
+        def _registerHook(
+            self, hook_factory: "Callable[[SparkSession], SparkSession.Hook]"
+        ) -> "SparkSession.Builder":
             with self._lock:
                 self._hook_factories.append(hook_factory)
                 return self
@@ -275,9 +276,6 @@ class SparkSession:
             """
             return request
 
-    HookFactory: TypeAlias = Callable[["SparkSession"], Hook]
-    """A function that, given a session, returns a hook set up for it."""
-
     _client: SparkConnectClient
 
     # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
@@ -289,7 +287,7 @@ class SparkSession:
         self,
         connection: Union[str, DefaultChannelBuilder],
         userId: Optional[str] = None,
-        hook_factories: Optional[list[HookFactory]] = None,
+        hook_factories: Optional[list["Callable[[SparkSession], Hook]"]] = None,
     ) -> None:
         """
         Creates a new SparkSession for the Spark Connect interface.
@@ -305,7 +303,7 @@ class SparkSession:
             isolate their Spark Sessions. If the `user_id` is not set, will default to
             the $USER environment. Defining the user ID as part of the connection string
             takes precedence.
-        hook_factories: list[HookFactory], optional
+        hook_factories: list[Callable[[SparkSession], Hook]], optional
             Optional list of hook factories for hooks that should be registered for this session.
         """
         hook_factories = hook_factories or []
@@ -621,7 +619,7 @@ class SparkSession:
 
             safecheck = configs["spark.sql.execution.pandas.convertToArrowArraySafely"]
 
-            ser = ArrowStreamPandasSerializer(cast(str, timezone), safecheck == "true")
+            ser = ArrowStreamPandasSerializer(cast(str, timezone), safecheck == "true", False)
 
             _table = pa.Table.from_batches(
                 [

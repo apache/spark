@@ -23,9 +23,10 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import org.rocksdb.RocksIterator;
+
+import org.apache.spark.network.util.JavaUtils;
 
 class RocksDBIterator<T> implements KVStoreIterator<T> {
 
@@ -58,7 +59,7 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     this.resourceCleaner = new RocksDBIterator.ResourceCleaner(it, db);
     this.cleanable = CLEANER.register(this, resourceCleaner);
 
-    Preconditions.checkArgument(!index.isChild() || params.parent != null,
+    JavaUtils.checkArgument(!index.isChild() || params.parent != null,
       "Cannot iterate over child index %s without parent value.", params.index);
     byte[] parent = index.isChild() ? index.parent().childPrefix(params.parent) : null;
 

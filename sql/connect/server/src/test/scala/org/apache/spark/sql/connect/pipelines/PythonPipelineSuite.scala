@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.pipelines
 import java.io.{BufferedReader, InputStreamReader}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Paths
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuffer
@@ -28,6 +29,7 @@ import scala.util.Try
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.connect.service.SparkConnectService
 import org.apache.spark.sql.pipelines.graph.DataflowGraph
 import org.apache.spark.sql.pipelines.utils.{EventVerificationTestHelpers, TestPipelineUpdateContextMixin}
 
@@ -42,6 +44,8 @@ class PythonPipelineSuite
 
   def buildGraph(pythonText: String): DataflowGraph = {
     val indentedPythonText = pythonText.linesIterator.map("    " + _).mkString("\n")
+    // create a unique identifier to allow identifying the session and dataflow graph
+    val customSessionIdentifier = UUID.randomUUID().toString
     val pythonCode =
       s"""
          |from pyspark.sql import SparkSession
@@ -57,6 +61,7 @@ class PythonPipelineSuite
          |spark = SparkSession.builder \\
          |    .remote("sc://localhost:$serverPort") \\
          |    .config("spark.connect.grpc.channel.timeout", "5s") \\
+         |    .config("spark.custom.identifier", "$customSessionIdentifier") \\
          |    .create()
          |
          |dataflow_graph_id = create_dataflow_graph(
@@ -78,8 +83,17 @@ class PythonPipelineSuite
       throw new RuntimeException(
         s"Python process failed with exit code $exitCode. Output: ${output.mkString("\n")}")
     }
+    val activeSessions = SparkConnectService.sessionManager.listActiveSessions
 
-    val dataflowGraphContexts = DataflowGraphRegistry.getAllDataflowGraphs
+    // get the session holder by finding the session with the custom UUID set in the conf
+    val sessionHolder = activeSessions
+      .map(info => SparkConnectService.sessionManager.getIsolatedSession(info.key, None))
+      .find(_.session.conf.get("spark.custom.identifier") == customSessionIdentifier)
+      .getOrElse(
+        throw new RuntimeException(s"Session with identifier $customSessionIdentifier not found"))
+
+    // get all dataflow graphs from the session holder
+    val dataflowGraphContexts = sessionHolder.dataflowGraphRegistry.getAllDataflowGraphs
     assert(dataflowGraphContexts.size == 1)
 
     dataflowGraphContexts.head.toDataflowGraph
@@ -93,7 +107,7 @@ class PythonPipelineSuite
     val graph = buildGraph("""
         |@sdp.table
         |def table1():
-        |    return spark.range(10)
+        |    return spark.readStream.format("rate").load()
         |""".stripMargin)
       .resolve()
       .validate()
@@ -112,11 +126,11 @@ class PythonPipelineSuite
         |def c():
         |  return spark.readStream.table("a")
         |
-        |@sdp.table()
+        |@sdp.materialized_view()
         |def d():
         |  return spark.read.table("a")
         |
-        |@sdp.table()
+        |@sdp.materialized_view()
         |def a():
         |  return spark.range(5)
         |""".stripMargin)
@@ -177,11 +191,11 @@ class PythonPipelineSuite
   test("referencing external datasets") {
     sql("CREATE TABLE spark_catalog.default.src AS SELECT * FROM RANGE(5)")
     val graph = buildGraph("""
-        |@sdp.table
+        |@sdp.materialized_view
         |def a():
         |  return spark.read.table("spark_catalog.default.src")
         |
-        |@sdp.table
+        |@sdp.materialized_view
         |def b():
         |  return spark.table("spark_catalog.default.src")
         |
@@ -230,11 +244,11 @@ class PythonPipelineSuite
         |def a():
         |  return spark.read.table("spark_catalog.default.src")
         |
-        |@sdp.table
+        |@sdp.materialized_view
         |def b():
         |  return spark.table("spark_catalog.default.src")
         |
-        |@sdp.table
+        |@sdp.materialized_view
         |def c():
         |  return spark.readStream.table("spark_catalog.default.src")
         |""".stripMargin).resolve()
@@ -339,8 +353,12 @@ class PythonPipelineSuite
         TableIdentifier("st", Some("some_schema"), Some("some_catalog"))))
   }
 
-  test("view works") {
+  test("temporary views works") {
+    // A table is defined since pipeline with only temporary views is invalid.
     val graph = buildGraph(s"""
+         |@sdp.table
+         |def mv_1():
+         |  return spark.range(5)
          |@sdp.temporary_view
          |def view_1():
          |  return spark.range(5)
@@ -354,9 +372,9 @@ class PythonPipelineSuite
          |  return spark.read.table("view_1")
          |""".stripMargin).resolve()
     // views are temporary views, so they're not fully qualified.
-    assert(graph.tables.isEmpty)
     assert(
-      graph.flows.map(_.identifier.unquotedString).toSet == Set("view_1", "view_2", "view_3"))
+      Set("view_1", "view_2", "view_3").subsetOf(
+        graph.flows.map(_.identifier.unquotedString).toSet))
     // dependencies are correctly resolved view_2 reading from view_1
     assert(
       graph.resolvedFlow(TableIdentifier("view_2")).inputs.contains(TableIdentifier("view_1")))
@@ -414,6 +432,43 @@ class PythonPipelineSuite
       graph
         .flowsTo(graphIdentifier("a"))
         .map(_.identifier) == Seq(graphIdentifier("a"), graphIdentifier("something")))
+  }
+
+  test("create pipeline without table will throw RUN_EMPTY_PIPELINE exception") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        buildGraph(s"""
+            |spark.range(1)
+            |""".stripMargin)
+      },
+      condition = "RUN_EMPTY_PIPELINE",
+      parameters = Map.empty)
+  }
+
+  test("create pipeline with only temp view will throw RUN_EMPTY_PIPELINE exception") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        buildGraph(s"""
+            |@sdp.temporary_view
+            |def view_1():
+            |  return spark.range(5)
+            |""".stripMargin)
+      },
+      condition = "RUN_EMPTY_PIPELINE",
+      parameters = Map.empty)
+  }
+
+  test("create pipeline with only flow will throw RUN_EMPTY_PIPELINE exception") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        buildGraph(s"""
+            |@sdp.append_flow(target = "a")
+            |def flow():
+            |  return spark.range(5)
+            |""".stripMargin)
+      },
+      condition = "RUN_EMPTY_PIPELINE",
+      parameters = Map.empty)
   }
 
   /**

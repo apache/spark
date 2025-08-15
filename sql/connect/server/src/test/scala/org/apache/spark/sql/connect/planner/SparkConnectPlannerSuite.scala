@@ -38,7 +38,7 @@ import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -960,5 +960,50 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     assert(plan.aggregateExpressions.forall(aggregateExpression =>
       !aggregateExpression.containsPattern(TreePattern.UNRESOLVED_ORDINAL)))
+  }
+
+  test("Time literal") {
+    val project = proto.Project.newBuilder
+      .addExpressions(
+        proto.Expression.newBuilder
+          .setLiteral(proto.Expression.Literal.newBuilder.setTime(
+            proto.Expression.Literal.newBuilder.getTimeBuilder
+              .setNano(86399999999999L)
+              .setPrecision(TimeType.MIN_PRECISION)))
+          .build())
+      .addExpressions(
+        proto.Expression.newBuilder
+          .setLiteral(
+            proto.Expression.Literal.newBuilder.setTime(
+              proto.Expression.Literal.newBuilder.getTimeBuilder
+                .setNano(86399999999999L)
+                .setPrecision(TimeType.MAX_PRECISION)))
+          .build())
+      .addExpressions(
+        proto.Expression.newBuilder
+          .setLiteral(
+            proto.Expression.Literal.newBuilder.setTime(
+              proto.Expression.Literal.newBuilder.getTimeBuilder
+                .setNano(86399999999999L)
+                .setPrecision(TimeType.DEFAULT_PRECISION)))
+          .build())
+      .addExpressions(proto.Expression.newBuilder
+        .setLiteral(proto.Expression.Literal.newBuilder.setTime(
+          proto.Expression.Literal.newBuilder.getTimeBuilder.setNano(86399999999999L)))
+        .build())
+      .build()
+
+    val logical = transform(proto.Relation.newBuilder.setProject(project).build())
+    val df = Dataset.ofRows(spark, logical)
+    assertResult(df.schema.fields(0).dataType)(TimeType(TimeType.MIN_PRECISION))
+    assertResult(df.schema.fields(1).dataType)(TimeType(TimeType.MAX_PRECISION))
+    assertResult(df.schema.fields(2).dataType)(TimeType(TimeType.DEFAULT_PRECISION))
+    assertResult(df.schema.fields(3).dataType)(TimeType(TimeType.DEFAULT_PRECISION))
+    assertResult(df.collect()(0).toString)(
+      InternalRow(
+        "23:59:59.999999999",
+        "23:59:59.999999999",
+        "23:59:59.999999999",
+        "23:59:59.999999999").toString)
   }
 }

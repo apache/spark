@@ -564,7 +564,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     }
   }
 
-  test("alter table add columns") {
+  test("alter data schema add columns") {
     withBasicCatalog { sessionCatalog =>
       sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
       val oldTab = sessionCatalog.externalCatalog.getTable("default", "t1")
@@ -577,6 +577,22 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       val expectedTableSchema = StructType(oldTab.dataSchema.fields ++
         Seq(StructField("c3", IntegerType)) ++ oldTab.partitionSchema)
       assert(newTab.schema == expectedTableSchema)
+    }
+  }
+
+  test("alter schema add columns") {
+    withBasicCatalog { sessionCatalog =>
+      sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
+      val oldTab = sessionCatalog.externalCatalog.getTable("default", "t1")
+      val newSchema = StructType(oldTab.dataSchema.fields ++
+        Seq(StructField("c3", IntegerType)) ++ oldTab.partitionSchema)
+
+      sessionCatalog.alterTableSchema(
+        TableIdentifier("t1", Some("default")),
+        newSchema)
+
+      val newTab = sessionCatalog.externalCatalog.getTable("default", "t1")
+      assert(newTab.schema == newSchema)
     }
   }
 

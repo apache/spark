@@ -50,6 +50,11 @@ on:
         description: 'Number of job splits'
         required: true
         default: '1'
+      create-commit:
+        type: boolean
+        description: 'Commit the benchmark results to the current branch'
+        required: true
+        default: false
 
 jobs:
   matrix-gen:
@@ -195,10 +200,31 @@ jobs:
         # To keep the directory structure and file permissions, tar them
         # See also https://github.com/actions/upload-artifact#maintaining-file-permissions-and-case-sensitive-files
         echo "Preparing the benchmark results:"
-        tar -cvf benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}.tar `git diff --name-only` `git ls-files --others --exclude=tpcds-sf-1 --exclude=tpcds-sf-1-text --exclude-standard`
+        tar -cvf target/benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}.tar `git diff --name-only` `git ls-files --others --exclude=tpcds-sf-1 --exclude=tpcds-sf-1-text --exclude-standard`
+    - name: Create a pull request with the results
+      if: ${{ inputs.create-commit && success() }}
+      run: |
+        git config --local user.name "${{ github.actor }}"
+        git config --local user.email "${{ github.event.pusher.email || format('{0}@users.noreply.github.com', github.actor) }}"
+        git add -A
+        git commit -m "Benchmark results for ${{ inputs.class }} (JDK ${{ inputs.jdk }}, Scala ${{ inputs.scala }}, split ${{ matrix.split }} of ${{ inputs.num-splits }})"
+        for i in {1..5}; do
+          echo "Attempt $i to push..."
+          git fetch origin ${{ github.ref_name }}
+          git rebase origin/${{ github.ref_name }}
+          if git push origin ${{ github.ref_name }}:${{ github.ref_name }}; then
+            echo "Push successful."
+            exit 0
+          else
+            echo "Push failed, retrying in 3 seconds..."
+            sleep 3
+          fi
+        done
+        echo "Error: Failed to push after 5 attempts."
+        exit 1
     - name: Upload benchmark results
       uses: actions/upload-artifact@v4
       with:
         name: benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}-${{ matrix.split }}
-        path: benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}.tar
+        path: target/benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}.tar
 

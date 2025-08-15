@@ -105,7 +105,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
    */
   private def clear(): Unit = {
     if (!lastProgressBar.isEmpty) {
-      console.printf(s"$CR${" " * TerminalWidth}$CR")
+      console.printf(s"$CR${" ".repeat(TerminalWidth)}$CR")
       lastProgressBar = ""
     }
   }

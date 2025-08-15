@@ -18,10 +18,9 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{Locale, OptionalLong}
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{PATH, REASON}
 import org.apache.spark.internal.config.IO_WARNING_LARGEFILETHRESHOLD
 import org.apache.spark.sql.SparkSession
@@ -30,11 +29,11 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, Expr
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.connector.read.{Batch, InputPartition, Scan, Statistics, SupportsReportStatistics}
+import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
@@ -113,10 +112,7 @@ trait FileScan extends Scan
 
   override def hashCode(): Int = getClass.hashCode()
 
-  override def conf: SQLConf = {
-    val sessionState: SessionState = sparkSession.sessionState
-    sessionState.conf
-  }
+  override def conf: SQLConf = SessionStateHelper.getSqlConf(sparkSession)
 
   val maxMetadataValueLength = conf.maxMetadataStringLength
 
@@ -125,7 +121,7 @@ trait FileScan extends Scan
       case (key, value) =>
         val redactedValue =
           Utils.redact(conf.stringRedactionPattern, value)
-        key + ": " + StringUtils.abbreviate(redactedValue, maxMetadataValueLength)
+        key + ": " + Utils.abbreviate(redactedValue, maxMetadataValueLength)
     }.mkString(", ")
     s"${this.getClass.getSimpleName} $metadataStr"
   }
@@ -177,7 +173,7 @@ trait FileScan extends Scan
     if (splitFiles.length == 1) {
       val path = splitFiles(0).toPath
       if (!isSplitable(path) && splitFiles(0).length >
-        sparkSession.sparkContext.conf.get(IO_WARNING_LARGEFILETHRESHOLD)) {
+        SessionStateHelper.getSparkConf(sparkSession).get(IO_WARNING_LARGEFILETHRESHOLD)) {
         logWarning(log"Loading one large unsplittable file ${MDC(PATH, path.toString)} with only " +
           log"one partition, the reason is: ${MDC(REASON, getFileUnSplittableReason(path))}")
       }

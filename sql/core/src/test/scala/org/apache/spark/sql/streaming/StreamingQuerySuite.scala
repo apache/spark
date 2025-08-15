@@ -18,14 +18,13 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
-import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.Files
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
 
 import scala.collection.mutable
 import scala.util.{Success, Try}
 
-import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.RandomStringUtils
 import org.apache.hadoop.fs.Path
 import org.mockito.Mockito.when
@@ -46,12 +45,15 @@ import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit}
 import org.apache.spark.sql.execution.exchange.{REQUIRED_BY_STATEFUL_OPERATOR, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
+import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, MetricsReporter, StreamExecution, StreamingExecutionRelation, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.sources.{MemorySink, TestForeachWriter}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.{BlockingSource, MockSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.util.Utils
 
 @SlowSQLTest
 class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging with MockitoSugar {
@@ -104,12 +106,14 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       var cpDir: String = null
 
       def startQuery(restart: Boolean): StreamingQuery = {
-        if (cpDir == null || !restart) cpDir = s"$dir/${RandomStringUtils.randomAlphabetic(10)}"
+        if (cpDir == null || !restart) {
+          cpDir = s"$dir/${RandomStringUtils.secure.nextAlphabetic(10)}"
+        }
         MemoryStream[Int].toDS().groupBy().count()
           .writeStream
           .format("memory")
           .outputMode("complete")
-          .queryName(s"name${RandomStringUtils.randomAlphabetic(10)}")
+          .queryName(s"name${RandomStringUtils.secure.nextAlphabetic(10)}")
           .option("checkpointLocation", cpDir)
           .start()
       }
@@ -1095,7 +1099,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val inputDir = new File(input.toURI)
 
     // Copy test files to tempDir so that we won't modify the original data.
-    FileUtils.copyDirectory(inputDir, dir)
+    Utils.copyDirectory(inputDir, dir)
 
     // Spark 2.4 and earlier escaped the _spark_metadata path once
     val legacySparkMetadataDir = new File(
@@ -1106,10 +1110,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     // Ideally we should copy "_spark_metadata" directly like what the user is supposed to do to
     // migrate to new version. However, in our test, "tempDir" will be different in each run and
     // we need to fix the absolute path in the metadata to match "tempDir".
-    val sparkMetadata = FileUtils.readFileToString(new File(legacySparkMetadataDir, "0"), UTF_8)
-    FileUtils.write(
-      new File(legacySparkMetadataDir, "0"),
-      sparkMetadata.replaceAll("TEMPDIR", dir.getCanonicalPath), UTF_8)
+    val sparkMetadata = Files.readString(new File(legacySparkMetadataDir, "0").toPath)
+    Files.writeString(
+      new File(legacySparkMetadataDir, "0").toPath,
+      sparkMetadata.replaceAll("TEMPDIR", dir.getCanonicalPath))
   }
 
   test("detect escaped path and report the migration guide") {
@@ -1160,7 +1164,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       assertMigrationError(e2.getMessage, sparkMetadataDir, legacySparkMetadataDir)
 
       // Move "_spark_metadata" to fix the file sink and test the checkpoint path.
-      FileUtils.moveDirectory(legacySparkMetadataDir, sparkMetadataDir)
+      Utils.moveDirectory(legacySparkMetadataDir, sparkMetadataDir)
 
       // Restarting the streaming query should detect the legacy
       // checkpoint path and throw an error.
@@ -1174,7 +1178,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       assertMigrationError(e3.getMessage, checkpointDir, legacyCheckpointDir)
 
       // Fix the checkpoint path and verify that the user can migrate the issue by moving files.
-      FileUtils.moveDirectory(legacyCheckpointDir, checkpointDir)
+      Utils.moveDirectory(legacyCheckpointDir, checkpointDir)
 
       val q = inputData.toDF()
         .writeStream
