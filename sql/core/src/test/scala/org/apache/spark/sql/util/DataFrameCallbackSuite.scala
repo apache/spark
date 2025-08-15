@@ -49,7 +49,6 @@ class DataFrameCallbackSuite extends QueryTest
 
   override protected def sparkConf: SparkConf = {
     val sparkConf = super.sparkConf
-    sparkConf.set(SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED.key, "false")
     sparkConf.set(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, "false")
 
   }
