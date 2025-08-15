@@ -40,8 +40,8 @@ class ExecutorPodsListerSnapshotSource extends ExecutorPodsInformerCustomSnapsho
   private var im: InformerManager = _
 
   override def init(sparkConf: SparkConf, kubernetesClient: KubernetesClient,
-                    snapshotStore: ExecutorPodsSnapshotsStore,
-                    informerManager: InformerManager): Unit = {
+    snapshotStore: ExecutorPodsSnapshotsStore,
+    informerManager: InformerManager): Unit = {
     logDebug(s"Starting lister for pods with labels $SPARK_APP_ID_LABEL=$appId," +
       s" $SPARK_ROLE_LABEL=$SPARK_POD_EXECUTOR_ROLE.")
     im = informerManager

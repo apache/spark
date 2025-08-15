@@ -27,7 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 class InformerManager(kubernetesClient: KubernetesClient,
-                            applicationId: String, conf: SparkConf) extends Logging {
+  applicationId: String, conf: SparkConf) extends Logging {
 
   private val resyncInterval = conf.get(KUBERNETES_EXECUTOR_INFORMER_RESYNC_INTERVAL)
   // VisibleForTesting
