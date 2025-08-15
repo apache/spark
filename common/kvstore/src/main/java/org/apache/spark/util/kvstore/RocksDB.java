@@ -31,7 +31,6 @@ import java.util.stream.Collectors;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Throwables;
 import org.rocksdb.*;
 
 import org.apache.spark.annotation.Private;
@@ -288,7 +287,7 @@ public class RocksDB implements KVStore {
           iteratorTracker.add(new WeakReference<>(it));
           return it;
         } catch (Exception e) {
-          Throwables.throwIfUnchecked(e);
+          if (e instanceof RuntimeException re) throw re;
           throw new RuntimeException(e);
         }
       }

@@ -221,7 +221,7 @@ def arrow_udf(f=None, returnType=None, functionType=None):
 
         The function takes `pyarrow.Array` and returns a scalar value. The returned scalar
         can be a python primitive type, (e.g., int or float), a numpy data type (e.g.,
-        numpy.int64 or numpy.float64), or a pyarrow.Scalar instance which supports complex
+        numpy.int64 or numpy.float64), or a `pyarrow.Scalar` instance which supports complex
         return types.
         `Any` should ideally be a specific scalar type accordingly.
 
@@ -240,6 +240,7 @@ def arrow_udf(f=None, returnType=None, functionType=None):
         +---+-----------+
 
         The retun type can also be a complex type such as struct, list, or map.
+
         >>> @arrow_udf("struct<m1: double, m2: double>")
         ... def min_max_udf(v: pa.Array) -> pa.Scalar:
         ...     m1 = pa.compute.min(v)
