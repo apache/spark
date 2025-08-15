@@ -49,15 +49,14 @@ object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
         val changes = MergeIntoTable.schemaChanges(relation.schema, source.schema)
         c.alterTable(i, changes: _*)
         val newTable = c.loadTable(i)
+        val newSchema = CatalogV2Util.v2ColumnsToStructType(newTable.columns())
         // Check if there are any remaining changes not applied.
-        val remainingChanges = MergeIntoTable.schemaChanges(
-          CatalogV2Util.v2ColumnsToStructType(newTable.columns()), source.schema)
+        val remainingChanges = MergeIntoTable.schemaChanges(newSchema, source.schema)
         if (remainingChanges.nonEmpty) {
           throw QueryCompilationErrors.unsupportedTableChangesInAutoSchemaEvolutionError(
             remainingChanges, i.toQualifiedNameParts(c))
         }
-        relation.copy(table = newTable, output = DataTypeUtils.toAttributes(
-          CatalogV2Util.v2ColumnsToStructType(newTable.columns())))
+        relation.copy(table = newTable, output = DataTypeUtils.toAttributes(newSchema))
       case _ => logWarning(s"Schema Evolution enabled but data source $relation " +
         s"does not support it, skipping.")
         relation
