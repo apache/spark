@@ -287,7 +287,7 @@ _options: List[Option] = [
             "If False, pandas API on Spark may hit unexpected results or errors. "
             "The default is False."
         ),
-        default=is_testing(),
+        default=True,
         types=bool,
     ),
     Option(
