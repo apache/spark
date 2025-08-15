@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import java
+import java.util.Locale
 
 import org.apache.spark.sql.catalyst.analysis.{Resolver, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
@@ -120,8 +120,9 @@ package object expressions  {
       } else {
         // Create directly indexed array
         val arraySize = (maxExprId - minExprId + 1).toInt
-        val ordinalArray = Array.fill(arraySize)(-1) // -1 indicates no attribute with this ID
+        val ordinalArray = new Array[Int](arraySize)
         val ordinalAttrsArray = new Array[Attribute](attrs.size)
+        java.util.Arrays.fill(ordinalArray, -1) // -1 indicates no attribute with this ID
 
         // Populate the array based on expression IDs
         var i = 0
