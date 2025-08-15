@@ -352,10 +352,10 @@ class JsonProtocolSuite extends SparkFunSuite {
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0,
       hasHadoopInput = false, hasOutput = true, hasRecords = false)
     val expectedTaskMetricsJson =
-      jsonProtocol.toJsonString(jsonProtocol.taskMetricsToJson(metrics, _))
-    val foundTaskMetrics = jsonProtocol.taskMetricsFromJson(parse(expectedTaskMetricsJson))
-    val foundTaskMetricsJson = jsonProtocol.toJsonString(
-      jsonProtocol.taskMetricsToJson(foundTaskMetrics, _))
+      JsonProtocol.toJsonString(JsonProtocol.taskMetricsToJson(metrics, _))
+    val foundTaskMetrics = JsonProtocol.taskMetricsFromJson(parse(expectedTaskMetricsJson))
+    val foundTaskMetricsJson = JsonProtocol.toJsonString(
+      JsonProtocol.taskMetricsToJson(foundTaskMetrics, _))
     assert(expectedTaskMetricsJson.equals(foundTaskMetricsJson),
       s"Expected: $expectedTaskMetricsJson, Found: $foundTaskMetricsJson")
   }
@@ -1015,7 +1015,7 @@ class JsonProtocolSuite extends SparkFunSuite {
         |  "foo" : "foo"
         |}""".stripMargin
     try {
-      jsonProtocol.sparkEventFromJson(unknownJson)
+      JsonProtocol.sparkEventFromJson(unknownJson)
       fail("Expected ClassNotFoundException for unknown event type")
     } catch {
       case e: ClassNotFoundException =>
@@ -1029,7 +1029,7 @@ class JsonProtocolSuite extends SparkFunSuite {
         |  "foo" : "foo"
         |}""".stripMargin
     try {
-      jsonProtocol.sparkEventFromJson(unknownJson)
+      JsonProtocol.sparkEventFromJson(unknownJson)
       fail("Expected SparkException for unknown event type")
     } catch {
       case e: SparkException =>
