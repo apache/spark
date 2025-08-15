@@ -16,7 +16,7 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import io.fabric8.kubernetes.api.model.Pod
+import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.informers.{ResourceEventHandler, SharedIndexInformer}
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
@@ -93,16 +93,25 @@ class ExecutorPodsInformerSnapshotSourceSuite extends SparkFunSuite
 
     val exec1 = runningExecutor(1)
     val exec2 = runningExecutor(2)
+    val exec2ResourceVersionChanged = withNewResourceVersion(exec2, "1")
     val exec3 = runningExecutor(3)
 
     val handler = handlerCaptor.getValue
 
     handler.onAdd(exec1)
-    handler.onUpdate(exec2, exec2)
+    handler.onUpdate(exec2, exec2ResourceVersionChanged)
     handler.onDelete(exec3, false)
 
     verify(snapshotsStore).updatePod(exec1)
-    verify(snapshotsStore).updatePod(exec2)
+    verify(snapshotsStore).updatePod(exec2ResourceVersionChanged)
     verify(snapshotsStore).updatePod(exec3)
+  }
+
+  def withNewResourceVersion(pod: Pod, version: String): Pod = {
+    new PodBuilder(pod)
+      .editMetadata()
+      .withResourceVersion(version)
+      .endMetadata()
+      .build()
   }
 }
