@@ -44,44 +44,4 @@ if sys.version_info >= (3, 12) and _unittest_main is None:
 
 from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual
 
-
-grpc_requirement_message = None
-try:
-    import grpc
-except ImportError as e:
-    grpc_requirement_message = str(e)
-have_grpc = grpc_requirement_message is None
-
-
-grpc_status_requirement_message = None
-try:
-    import grpc_status
-except ImportError as e:
-    grpc_status_requirement_message = str(e)
-have_grpc_status = grpc_status_requirement_message is None
-
-googleapis_common_protos_requirement_message = None
-try:
-    from google.rpc import error_details_pb2
-except ImportError as e:
-    googleapis_common_protos_requirement_message = str(e)
-have_googleapis_common_protos = googleapis_common_protos_requirement_message is None
-
-
-from pyspark.testing.utils import (
-    PySparkErrorTestUtils,
-    pandas_requirement_message,
-    pyarrow_requirement_message,
-)
-
-
-connect_requirement_message = (
-    pandas_requirement_message
-    or pyarrow_requirement_message
-    or grpc_requirement_message
-    or googleapis_common_protos_requirement_message
-    or grpc_status_requirement_message
-)
-should_test_connect: str = typing.cast(str, connect_requirement_message is None)
-
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]

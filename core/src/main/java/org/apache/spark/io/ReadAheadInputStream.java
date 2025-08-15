@@ -28,8 +28,6 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.concurrent.GuardedBy;
 
-import com.google.common.base.Throwables;
-
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
@@ -120,8 +118,10 @@ public class ReadAheadInputStream extends InputStream {
 
   private void checkReadException() throws IOException {
     if (readAborted) {
-      Throwables.throwIfInstanceOf(readException, IOException.class);
-      Throwables.throwIfUnchecked(readException);
+      if (readException == null) throw new NullPointerException("readException is not captured.");
+      if (readException instanceof IOException ie) throw ie;
+      if (readException instanceof Error error) throw error;
+      if (readException instanceof RuntimeException re) throw re;
       throw new IOException(readException);
     }
   }

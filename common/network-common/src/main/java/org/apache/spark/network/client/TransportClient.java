@@ -28,7 +28,6 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.SettableFuture;
 import io.netty.channel.Channel;
 import io.netty.util.concurrent.Future;
@@ -289,10 +288,9 @@ public class TransportClient implements Closeable {
     try {
       return result.get(timeoutMs, TimeUnit.MILLISECONDS);
     } catch (ExecutionException e) {
-      Throwables.throwIfUnchecked(e.getCause());
       throw new RuntimeException(e.getCause());
     } catch (Exception e) {
-      Throwables.throwIfUnchecked(e);
+      if (e instanceof RuntimeException re) throw re;
       throw new RuntimeException(e);
     }
   }

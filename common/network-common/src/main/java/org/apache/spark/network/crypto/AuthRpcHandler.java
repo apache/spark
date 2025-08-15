@@ -20,7 +20,6 @@ package org.apache.spark.network.crypto;
 import java.nio.ByteBuffer;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Throwables;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -132,7 +131,7 @@ class AuthRpcHandler extends AbstractAuthRpcHandler {
         try {
           engine.close();
         } catch (Exception e) {
-          Throwables.throwIfUnchecked(e);
+          if (e instanceof RuntimeException re) throw re;
           throw new RuntimeException(e);
         }
       }

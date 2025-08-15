@@ -87,10 +87,7 @@ def infer_eval_type(
     ) and (return_annotation == pd.Series or return_annotation == pd.DataFrame)
 
     # pa.Array, ... -> pa.Array
-    is_arrow_array = all(
-        a == pa.Array or check_union_annotation(a, parameter_check_func=lambda na: na == pa.Array)
-        for a in parameters_sig
-    ) and (return_annotation == pa.Array)
+    is_arrow_array = all(a == pa.Array for a in parameters_sig) and (return_annotation == pa.Array)
 
     # Iterator[Tuple[Series, Frame or Union[DataFrame, Series], ...] -> Iterator[Series or Frame]
     is_iterator_tuple_series_or_frame = (

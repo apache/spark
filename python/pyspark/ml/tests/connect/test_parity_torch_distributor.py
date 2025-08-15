@@ -21,8 +21,12 @@ import unittest
 
 from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession
-from pyspark.testing import should_test_connect, connect_requirement_message
-from pyspark.testing.utils import have_torch, torch_requirement_message
+from pyspark.testing.utils import (
+    have_torch,
+    torch_requirement_message,
+    should_test_connect,
+    connect_requirement_message,
+)
 
 if not is_remote_only() and should_test_connect:
     from pyspark.ml.torch.tests.test_distributor import (
