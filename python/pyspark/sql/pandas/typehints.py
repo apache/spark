@@ -149,7 +149,7 @@ def infer_eval_type(
         len(parameters_sig) == 1
         and check_iterator_annotation(
             parameters_sig[0],
-            parameter_check_func=lambda a: (a == pd.Series or a == pa.Array),
+            parameter_check_func=lambda a: a == pa.Array,
         )
         and check_iterator_annotation(
             return_annotation, parameter_check_func=lambda a: a == pa.Array
