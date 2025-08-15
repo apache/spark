@@ -570,7 +570,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def writeIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = "CANNOT_WRITE_VIEW",
-      messageParameters = Map("identifier" -> identifier.toString),
+      messageParameters = Map("identifier" -> toSQLId(identifier.nameParts)),
       origin = t.origin)
   }
 
