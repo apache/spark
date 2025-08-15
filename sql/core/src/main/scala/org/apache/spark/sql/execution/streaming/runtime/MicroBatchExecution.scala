@@ -344,7 +344,6 @@ class MicroBatchExecution(
     setLatestExecutionContext(execCtx)
 
     populateStartOffsets(execCtx, sparkSessionForStream)
-
     logInfo(log"Stream started from ${MDC(LogKeys.STREAMING_OFFSETS_START, execCtx.startOffsets)}")
     execCtx
   }
