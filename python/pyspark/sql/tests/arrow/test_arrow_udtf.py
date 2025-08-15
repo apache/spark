@@ -18,7 +18,7 @@ import unittest
 from typing import Iterator
 
 from pyspark.errors import PySparkAttributeError
-from pyspark.errors.exceptions.captured import PythonException
+from pyspark.errors import PythonException
 from pyspark.sql.functions import arrow_udtf, lit
 from pyspark.sql.types import Row, StructType, StructField, IntegerType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pyarrow, pyarrow_requirement_message
