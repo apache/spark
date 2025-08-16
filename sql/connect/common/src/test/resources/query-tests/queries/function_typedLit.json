@@ -403,10 +403,6 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "integer": {
-            }
-          },
           "elements": [{
             "integer": 8
           }, {
@@ -700,10 +696,6 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "integer": {
-            }
-          },
           "elements": [{
             "integer": 1
           }, {
@@ -733,10 +725,6 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "integer": {
-            }
-          },
           "elements": [{
             "integer": 1
           }, {
@@ -769,10 +757,6 @@
           "keyType": {
             "string": {
               "collation": "UTF8_BINARY"
-            }
-          },
-          "valueType": {
-            "integer": {
             }
           },
           "keys": [{
@@ -875,10 +859,6 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "integer": {
-            }
-          },
           "elements": [{
             "integer": 1
           }]
@@ -904,14 +884,6 @@
     }, {
       "literal": {
         "map": {
-          "keyType": {
-            "integer": {
-            }
-          },
-          "valueType": {
-            "integer": {
-            }
-          },
           "keys": [{
             "integer": 1
           }],
@@ -943,14 +915,6 @@
     }, {
       "literal": {
         "map": {
-          "keyType": {
-            "integer": {
-            }
-          },
-          "valueType": {
-            "integer": {
-            }
-          },
           "keys": [{
             "integer": 1
           }],
@@ -982,14 +946,6 @@
     }, {
       "literal": {
         "map": {
-          "keyType": {
-            "integer": {
-            }
-          },
-          "valueType": {
-            "integer": {
-            }
-          },
           "keys": [{
             "integer": 1
           }],
@@ -1021,20 +977,8 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "array": {
-              "elementType": {
-                "integer": {
-                }
-              }
-            }
-          },
           "elements": [{
             "array": {
-              "elementType": {
-                "integer": {
-                }
-              },
               "elements": [{
                 "integer": 1
               }, {
@@ -1045,10 +989,6 @@
             }
           }, {
             "array": {
-              "elementType": {
-                "integer": {
-                }
-              },
               "elements": [{
                 "integer": 4
               }, {
@@ -1059,10 +999,6 @@
             }
           }, {
             "array": {
-              "elementType": {
-                "integer": {
-                }
-              },
               "elements": [{
                 "integer": 7
               }, {
@@ -1094,28 +1030,11 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "map": {
-              "keyType": {
-                "string": {
-                  "collation": "UTF8_BINARY"
-                }
-              },
-              "valueType": {
-                "integer": {
-                }
-              }
-            }
-          },
           "elements": [{
             "map": {
               "keyType": {
                 "string": {
                   "collation": "UTF8_BINARY"
-                }
-              },
-              "valueType": {
-                "integer": {
                 }
               },
               "keys": [{
@@ -1136,10 +1055,6 @@
                   "collation": "UTF8_BINARY"
                 }
               },
-              "valueType": {
-                "integer": {
-                }
-              },
               "keys": [{
                 "string": "a"
               }, {
@@ -1156,10 +1071,6 @@
               "keyType": {
                 "string": {
                   "collation": "UTF8_BINARY"
-                }
-              },
-              "valueType": {
-                "integer": {
                 }
               },
               "keys": [{
@@ -1196,23 +1107,6 @@
     }, {
       "literal": {
         "map": {
-          "keyType": {
-            "integer": {
-            }
-          },
-          "valueType": {
-            "map": {
-              "keyType": {
-                "string": {
-                  "collation": "UTF8_BINARY"
-                }
-              },
-              "valueType": {
-                "integer": {
-                }
-              }
-            }
-          },
           "keys": [{
             "integer": 1
           }, {
@@ -1223,10 +1117,6 @@
               "keyType": {
                 "string": {
                   "collation": "UTF8_BINARY"
-                }
-              },
-              "valueType": {
-                "integer": {
                 }
               },
               "keys": [{
@@ -1245,10 +1135,6 @@
               "keyType": {
                 "string": {
                   "collation": "UTF8_BINARY"
-                }
-              },
-              "valueType": {
-                "integer": {
                 }
               },
               "keys": [{
@@ -1287,10 +1173,6 @@
         "struct": {
           "elements": [{
             "array": {
-              "elementType": {
-                "integer": {
-                }
-              },
               "elements": [{
                 "integer": 1
               }, {
@@ -1304,10 +1186,6 @@
               "keyType": {
                 "string": {
                   "collation": "UTF8_BINARY"
-                }
-              },
-              "valueType": {
-                "integer": {
                 }
               },
               "keys": [{
@@ -1327,10 +1205,6 @@
                 "string": "a"
               }, {
                 "map": {
-                  "keyType": {
-                    "integer": {
-                    }
-                  },
                   "valueType": {
                     "string": {
                       "collation": "UTF8_BINARY"
@@ -1359,20 +1233,6 @@
                   "nullable": true
                 }, {
                   "name": "_2",
-                  "dataType": {
-                    "map": {
-                      "keyType": {
-                        "integer": {
-                        }
-                      },
-                      "valueType": {
-                        "string": {
-                          "collation": "UTF8_BINARY"
-                        }
-                      },
-                      "valueContainsNull": true
-                    }
-                  },
                   "nullable": true
                 }]
               }
@@ -1381,30 +1241,9 @@
           "dataTypeStruct": {
             "fields": [{
               "name": "_1",
-              "dataType": {
-                "array": {
-                  "elementType": {
-                    "integer": {
-                    }
-                  }
-                }
-              },
               "nullable": true
             }, {
               "name": "_2",
-              "dataType": {
-                "map": {
-                  "keyType": {
-                    "string": {
-                      "collation": "UTF8_BINARY"
-                    }
-                  },
-                  "valueType": {
-                    "integer": {
-                    }
-                  }
-                }
-              },
               "nullable": true
             }, {
               "name": "_3",

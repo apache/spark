@@ -40,41 +40,20 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "array": {
-              "elementType": {
-                "integer": {
-                }
-              },
-              "containsNull": true
-            }
-          },
           "elements": [{
             "array": {
-              "elementType": {
-                "integer": {
-                }
-              },
               "elements": [{
                 "integer": 1
               }]
             }
           }, {
             "array": {
-              "elementType": {
-                "integer": {
-                }
-              },
               "elements": [{
                 "integer": 2
               }]
             }
           }, {
             "array": {
-              "elementType": {
-                "integer": {
-                }
-              },
               "elements": [{
                 "integer": 3
               }]
@@ -102,37 +81,10 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "array": {
-              "elementType": {
-                "array": {
-                  "elementType": {
-                    "integer": {
-                    }
-                  },
-                  "containsNull": true
-                }
-              },
-              "containsNull": true
-            }
-          },
           "elements": [{
             "array": {
-              "elementType": {
-                "array": {
-                  "elementType": {
-                    "integer": {
-                    }
-                  },
-                  "containsNull": true
-                }
-              },
               "elements": [{
                 "array": {
-                  "elementType": {
-                    "integer": {
-                    }
-                  },
                   "elements": [{
                     "integer": 1
                   }]
@@ -141,21 +93,8 @@
             }
           }, {
             "array": {
-              "elementType": {
-                "array": {
-                  "elementType": {
-                    "integer": {
-                    }
-                  },
-                  "containsNull": true
-                }
-              },
               "elements": [{
                 "array": {
-                  "elementType": {
-                    "integer": {
-                    }
-                  },
                   "elements": [{
                     "integer": 2
                   }]
@@ -164,21 +103,8 @@
             }
           }, {
             "array": {
-              "elementType": {
-                "array": {
-                  "elementType": {
-                    "integer": {
-                    }
-                  },
-                  "containsNull": true
-                }
-              },
               "elements": [{
                 "array": {
-                  "elementType": {
-                    "integer": {
-                    }
-                  },
                   "elements": [{
                     "integer": 3
                   }]
@@ -208,10 +134,6 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "boolean": {
-            }
-          },
           "elements": [{
             "boolean": true
           }, {
@@ -260,10 +182,6 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "short": {
-            }
-          },
           "elements": [{
             "short": 9872
           }, {
@@ -293,10 +211,6 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "integer": {
-            }
-          },
           "elements": [{
             "integer": -8726532
           }, {
@@ -326,10 +240,6 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "long": {
-            }
-          },
           "elements": [{
             "long": "7834609328726531"
           }, {
@@ -359,10 +269,6 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "double": {
-            }
-          },
           "elements": [{
             "double": 2.718281828459045
           }, {
@@ -392,10 +298,6 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "float": {
-            }
-          },
           "elements": [{
             "float": -0.8
           }, {
@@ -592,10 +494,6 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "date": {
-            }
-          },
           "elements": [{
             "date": 18545
           }, {
@@ -623,10 +521,6 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "timestamp": {
-            }
-          },
           "elements": [{
             "timestamp": "1677155519808000"
           }, {
@@ -654,10 +548,6 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "timestamp": {
-            }
-          },
           "elements": [{
             "timestamp": "12345000"
           }, {
@@ -685,10 +575,6 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "timestampNtz": {
-            }
-          },
           "elements": [{
             "timestampNtz": "1677184560000000"
           }, {
@@ -716,10 +602,6 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "date": {
-            }
-          },
           "elements": [{
             "date": 19411
           }, {
@@ -813,10 +695,6 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "calendarInterval": {
-            }
-          },
           "elements": [{
             "calendarInterval": {
               "months": 2,
