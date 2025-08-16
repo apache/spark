@@ -71,6 +71,14 @@ object GraphErrors {
     )
   }
 
+  def unresolvedSinkPath(identifier: TableIdentifier): SparkException = {
+    new SparkException(
+      errorClass = "UNRESOLVED_SINK_PATH",
+      messageParameters = Map("identifier" -> identifier.toString),
+      cause = null
+    )
+  }
+
   /**
    * Throws an error if the user-specified schema and the inferred schema are not compatible.
    *
