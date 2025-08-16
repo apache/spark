@@ -112,7 +112,6 @@ class SparkConnectClientRetriesTestCase(unittest.TestCase):
         policy = get_client_policies_map(client).get(DefaultPolicy)
         self.assertIsNotNone(policy)
 
-        num_attempts = 0
         sleep_tracker = SleepTimeTracker()
         with warnings.catch_warnings(record=True) as warning_list:
             warnings.simplefilter("always")
