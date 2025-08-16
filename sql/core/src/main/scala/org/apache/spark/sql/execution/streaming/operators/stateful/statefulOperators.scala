@@ -1280,6 +1280,8 @@ abstract class BaseStreamingDeduplicateExec
       keyExpressions, getStateInfo, conf) :: Nil
   }
 
+  override def supportsSchemaEvolution: Boolean = true
+
   protected val schemaForValueRow: StructType
   protected val extraOptionOnStateStore: Map[String, String]
 
@@ -1404,7 +1406,7 @@ case class StreamingDeduplicateExec(
       keyExpressions.toStructType, 0, schemaForValueRow))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newStateSchema, session.sessionState, stateSchemaVersion,
-      extraOptions = extraOptionOnStateStore))
+      extraOptions = extraOptionOnStateStore, schemaEvolutionEnabled = true))
   }
 }
 
