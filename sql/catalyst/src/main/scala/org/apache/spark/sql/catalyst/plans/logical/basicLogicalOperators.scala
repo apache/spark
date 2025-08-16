@@ -2115,6 +2115,15 @@ case class LateralJoin(
   }
 }
 
+
+object LateralJoin {
+  /**
+   * A tag to identify if a Lateral Join is added by resolving table argument.
+   */
+  val BY_TABLE_ARGUMENT = TreeNodeTag[Unit]("by_table_argument")
+}
+
+
 /**
  * A logical plan for as-of join.
  */
