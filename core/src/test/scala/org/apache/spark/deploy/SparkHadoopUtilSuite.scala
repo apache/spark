@@ -22,7 +22,7 @@ import java.net.InetAddress
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.SparkHadoopUtil.{SET_TO_DEFAULT_VALUES, SOURCE_SPARK_HADOOP, SOURCE_SPARK_HIVE}
+import org.apache.spark.deploy.SparkHadoopUtil.{SET_TO_DEFAULT_VALUES, SOURCE_SPARK, SOURCE_SPARK_HADOOP, SOURCE_SPARK_HIVE}
 import org.apache.spark.internal.config.BUFFER_SIZE
 
 class SparkHadoopUtilSuite extends SparkFunSuite {
@@ -50,6 +50,46 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
     sc.set("spark.hadoop.fs.s3a.downgrade.syncable.exceptions", "false")
     new SparkHadoopUtil().appendSparkHadoopConfigs(sc, hadoopConf)
     assertConfigValue(hadoopConf, "fs.s3a.downgrade.syncable.exceptions", "false")
+  }
+
+  /**
+   * Verify that the GCS user agent is set correctly when no custom suffix is provided.
+   */
+  test("GCS user agent should be set when not provided by user") {
+    val sparkConf = new SparkConf()
+    val hadoopConf = SparkHadoopUtil.newConfiguration(sparkConf)
+
+    val expectedUserAgent = s"apache_spark/${org.apache.spark.SPARK_VERSION} (GPN:apache_spark)"
+    assertConfigMatches(hadoopConf, "fs.gs.application.name.suffix", expectedUserAgent,
+      SOURCE_SPARK)
+  }
+
+  /**
+   * Verify that the Spark identifier is prepended to a user-provided GCS user agent suffix.
+   */
+  test("GCS user agent should be prepended when suffix is provided by user") {
+    val sparkConf = new SparkConf()
+    val userSuffix = "my-awesome-app"
+    sparkConf.set("spark.hadoop.fs.gs.application.name.suffix", userSuffix)
+    val hadoopConf = SparkHadoopUtil.newConfiguration(sparkConf)
+
+    val sparkPrefix = s"apache_spark/${org.apache.spark.SPARK_VERSION} (GPN:apache_spark)"
+    val expectedUserAgent = s"$sparkPrefix $userSuffix"
+    assertConfigMatches(hadoopConf, "fs.gs.application.name.suffix", expectedUserAgent,
+      SOURCE_SPARK)
+  }
+
+  /**
+   * Verify that the GCS user agent is set correctly when the user provides an empty suffix.
+   */
+  test("GCS user agent should be set when user provided suffix is empty") {
+    val sparkConf = new SparkConf()
+    sparkConf.set("spark.hadoop.fs.gs.application.name.suffix", "")
+    val hadoopConf = SparkHadoopUtil.newConfiguration(sparkConf)
+
+    val expectedUserAgent = s"apache_spark/${org.apache.spark.SPARK_VERSION} (GPN:apache_spark)"
+    assertConfigMatches(hadoopConf, "fs.gs.application.name.suffix", expectedUserAgent,
+      SOURCE_SPARK)
   }
 
   /**

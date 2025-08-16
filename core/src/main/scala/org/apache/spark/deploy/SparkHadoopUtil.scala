@@ -521,6 +521,17 @@ private[spark] object SparkHadoopUtil extends Logging {
         SOURCE_SPARK_HADOOP)
     }
     val setBySpark = SET_TO_DEFAULT_VALUES
+    // The GCS connector allows appending a custom suffix to the user-agent string.
+    // To prepend Spark's application information, we read the existing suffix,
+    // add our prefix, and set the result back as the new suffix.
+    val sparkGcsPrefix = s"apache_spark/${org.apache.spark.SPARK_VERSION} (GPN:apache_spark)"
+    val userGcsSuffix = hadoopConf.get("fs.gs.application.name.suffix")
+    val gcsUserAgent = if (userGcsSuffix != null && userGcsSuffix.nonEmpty) {
+      s"$sparkGcsPrefix $userGcsSuffix"
+    } else {
+      sparkGcsPrefix
+    }
+    hadoopConf.set("fs.gs.application.name.suffix", gcsUserAgent, SOURCE_SPARK)
     if (conf.getOption("spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version").isEmpty) {
       hadoopConf.set("mapreduce.fileoutputcommitter.algorithm.version", "1", setBySpark)
     }
