@@ -45,6 +45,9 @@ private[spark] object SparkExitCode {
       OutOfMemoryError. */
   val OOM = 52
 
+  /** Exit because the SparkContext is stopped. */
+  val SPARK_CONTEXT_STOPPED = 69
+
   /** Exit due to ClassNotFoundException or NoClassDefFoundError. */
   val CLASS_NOT_FOUND = 101
 
