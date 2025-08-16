@@ -43,9 +43,9 @@ _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "pyspark.sql.connect.proto.types_pb2", _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
     _globals["DESCRIPTOR"]._loaded_options = None
-    _globals[
-        "DESCRIPTOR"
-    ]._serialized_options = b"\n\036org.apache.spark.connect.protoP\001Z\022internal/generated"
+    _globals["DESCRIPTOR"]._serialized_options = (
+        b"\n\036org.apache.spark.connect.protoP\001Z\022internal/generated"
+    )
     _globals["_DATATYPE"]._serialized_start = 45
     _globals["_DATATYPE"]._serialized_end = 4569
     _globals["_DATATYPE_BOOLEAN"]._serialized_start = 1647
