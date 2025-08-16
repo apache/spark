@@ -1782,9 +1782,8 @@ def cardinality(col: "ColumnOrName") -> Column:
 cardinality.__doc__ = pysparkfuncs.cardinality.__doc__
 
 
-def array_position(col: "ColumnOrName", value: Any) -> Column:
-    return _invoke_function("array_position", _to_col(col), lit(value))
-
+def array_position(col: "ColumnOrName", value: Any, start: Union[Column, int] = 1) -> Column:
+    return _invoke_function("array_position", _to_col(col), lit(value), lit(start))
 
 array_position.__doc__ = pysparkfuncs.array_position.__doc__
 

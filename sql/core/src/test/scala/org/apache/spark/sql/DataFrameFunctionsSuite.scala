@@ -2263,7 +2263,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("array position function") {
     val df = Seq(
-      (Seq[Int](1, 2), "x", 1),
+      (Seq[Int](1, 2, 1), "x", 1),
       (Seq[Int](), "x", 1)
     ).toDF("a", "b", "c")
 
@@ -2272,8 +2272,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1L), Row(0L))
     )
     checkAnswer(
+      df.select(array_position(df("a"), 1, 2)),
+      Seq(Row(3L), Row(0L))
+    )
+    checkAnswer(
       df.selectExpr("array_position(a, 1)"),
       Seq(Row(1L), Row(0L))
+    )
+    checkAnswer(
+      df.selectExpr("array_position(a, 1, 2)"),
+      Seq(Row(3L), Row(0L))
     )
     checkAnswer(
       df.selectExpr("array_position(a, c)"),
@@ -2303,6 +2311,21 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
     checkAnswer(
+      OneRowRelation().selectExpr("array_position(array(1, 1), 1.0D)"),
+      Seq(Row(1L))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_position(array(1), 1.0D, 2)"),
+      Seq(Row(0L))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_position(array(1, 1), 1.0D, 2)"),
+      Seq(Row(2L))
+    )
+
+    checkAnswer(
       OneRowRelation().selectExpr("array_position(array(1.D), 1)"),
       Seq(Row(1L))
     )
@@ -2326,6 +2349,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       OneRowRelation().selectExpr("array_position(array(array(1), null)[0], 1)"),
       Seq(Row(1L))
     )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_position(array(array(1), null)[0], 1, array(1)[0])"),
+      Seq(Row(1L))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_position(array(array(1, 1), null)[0], 1, 2)"),
+      Seq(Row(2L))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("array_position(array(array(1, 1), null)[0], 1, array(2)[0])"),
+      Seq(Row(2L))
+    )
+
     checkAnswer(
       OneRowRelation().selectExpr("array_position(array(1, null), array(1, null)[0])"),
       Seq(Row(1L))
@@ -2333,56 +2372,71 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkError(
       exception = intercept[AnalysisException] {
-        Seq((null, "a")).toDF().selectExpr("array_position(_1, _2)")
+        Seq((null, "a")).toDF().selectExpr("array_position(_1, _2, 1)")
       },
       condition = "DATATYPE_MISMATCH.NULL_TYPE",
       parameters = Map(
-        "sqlExpr" -> "\"array_position(_1, _2)\"",
+        "sqlExpr" -> "\"array_position(_1, _2, 1)\"",
         "functionName" -> "`array_position`"
       ),
-      queryContext = Array(ExpectedContext("", "", 0, 21, "array_position(_1, _2)"))
+      queryContext = Array(ExpectedContext("", "", 0, 24, "array_position(_1, _2, 1)"))
     )
 
     checkError(
       exception = intercept[AnalysisException] {
-        Seq(("a string element", null)).toDF().selectExpr("array_position(_1, _2)")
+        Seq(("a string element", null)).toDF().selectExpr("array_position(_1, _2, 1)")
       },
       condition = "DATATYPE_MISMATCH.NULL_TYPE",
       parameters = Map(
-        "sqlExpr" -> "\"array_position(_1, _2)\"",
+        "sqlExpr" -> "\"array_position(_1, _2, 1)\"",
         "functionName" -> "`array_position`"
       ),
-      queryContext = Array(ExpectedContext("", "", 0, 21, "array_position(_1, _2)"))
+      queryContext = Array(ExpectedContext("", "", 0, 24, "array_position(_1, _2, 1)"))
     )
 
     checkError(
       exception = intercept[AnalysisException] {
-        Seq(("a string element", "a")).toDF().selectExpr("array_position(_1, _2)")
+        Seq(("a string element", "a")).toDF().selectExpr("array_position(_1, _2, 1)")
       },
       condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" -> "\"array_position(_1, _2)\"",
+        "sqlExpr" -> "\"array_position(_1, _2, 1)\"",
         "paramIndex" -> "first",
         "requiredType" -> "\"ARRAY\"",
         "inputSql" -> "\"_1\"",
         "inputType" -> "\"STRING\""
       ),
-      queryContext = Array(ExpectedContext("", "", 0, 21, "array_position(_1, _2)"))
+      queryContext = Array(ExpectedContext("", "", 0, 24, "array_position(_1, _2, 1)"))
     )
 
     checkError(
       exception = intercept[AnalysisException] {
-        OneRowRelation().selectExpr("array_position(array(1), '1')")
+        OneRowRelation().selectExpr("array_position(array(1), '1', 1)")
       },
       condition = "DATATYPE_MISMATCH.ARRAY_FUNCTION_DIFF_TYPES",
       parameters = Map(
-        "sqlExpr" -> "\"array_position(array(1), 1)\"",
+        "sqlExpr" -> "\"array_position(array(1), 1, 1)\"",
         "functionName" -> "`array_position`",
         "dataType" -> "\"ARRAY\"",
-        "leftType" -> "\"ARRAY<INT>\"",
-        "rightType" -> "\"STRING\""
+        "arrayType" -> "\"ARRAY<INT>\"",
+        "elementType" -> "\"STRING\""
       ),
-      queryContext = Array(ExpectedContext("", "", 0, 28, "array_position(array(1), '1')"))
+      queryContext = Array(ExpectedContext("", "", 0, 31, "array_position(array(1), '1', 1)"))
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq(("a string element", "a")).toDF().selectExpr("array_position(array(1), 1, _1)")
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"array_position(array(1), 1, _1)\"",
+        "paramIndex" -> "third",
+        "requiredType" -> "\"INT\"",
+        "inputSql" -> "\"_1\"",
+        "inputType" -> "\"STRING\""
+      ),
+      queryContext = Array(ExpectedContext("", "", 0, 30, "array_position(array(1), 1, _1)"))
     )
   }
 
