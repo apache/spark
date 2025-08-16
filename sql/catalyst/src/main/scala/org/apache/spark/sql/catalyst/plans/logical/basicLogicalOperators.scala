@@ -1651,6 +1651,19 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
     copy(child = newChild)
 }
 
+object LimitAll {
+  def apply(child: LogicalPlan): UnaryNode = {
+    LocalLimit(LimitAllExpr, child)
+  }
+
+  def unapply(p: LocalLimit): Option[LogicalPlan] = {
+    p.limitExpr match {
+      case LimitAllExpr => Some(p.child)
+      case _ => None
+    }
+  }
+}
+
 object OffsetAndLimit {
   def unapply(p: GlobalLimit): Option[(Int, Int, LogicalPlan)] = {
     p match {
