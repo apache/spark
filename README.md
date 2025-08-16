@@ -49,13 +49,13 @@ This README file only contains basic setup instructions.
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_connect35.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_connect35.yml)                 |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_connect.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_connect.yml)                     |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_sparkr_window.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_sparkr_window.yml)                       |
-|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/publish_snapshot.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/publish_snapshot.yml)                             |
+|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_snapshot.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_snapshot.yml)                             |
 | branch-4.0 | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_branch40.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_branch40.yml)                                 |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_branch40_java21.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_branch40_java21.yml)                   |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_branch40_non_ansi.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_branch40_non_ansi.yml)               |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_branch40_maven.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_branch40_maven.yml)                     |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_branch40_maven_java21.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_branch40_maven_java21.yml)       |
-|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_branch40_python.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_branch40_python.yml)                   |
+|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_branch40_python.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_python_3.11_arm.yml)                   |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_branch40_python_pypy3.10.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_branch40_python_pypy3.10.yml) |
 | branch-3.5 | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_branch35.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_branch35.yml)                                 |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_branch35_python.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_branch35_python.yml)                   |
@@ -142,6 +142,42 @@ Please see the guidance on how to
 [run tests for a module, or individual tests](https://spark.apache.org/developer-tools.html#individual-tests).
 
 There is also a Kubernetes integration test, see resource-managers/kubernetes/integration-tests/README.md
+
+## Troubleshooting
+
+If you encounter issues with Spark installation or setup, you can use the built-in validation tools:
+
+### Validate Spark Installation
+
+To check if your Spark installation is properly configured:
+
+```bash
+./bin/pyspark --validate-installation
+```
+
+This will verify:
+- SPARK_HOME is set correctly
+- Essential Spark files and directories exist
+- Python environment is properly configured
+- PySpark can be imported successfully
+- Java environment is set up
+
+### Debug SPARK_HOME Detection
+
+If you're having trouble with SPARK_HOME detection:
+
+```bash
+python3 python/pyspark/find_spark_home.py --debug
+```
+
+This will show detailed information about the search process and help identify why SPARK_HOME might not be found.
+
+### Common Issues
+
+1. **Python Version**: Spark requires Python 3.8 or later. Check your version with `python3 --version`
+2. **Java Installation**: Ensure JAVA_HOME is set and Java 8 or later is installed
+3. **PySpark Import**: If `import pyspark` fails, ensure PySpark is installed: `pip install pyspark`
+4. **Permission Issues**: Make sure you have execute permissions on Spark scripts: `chmod +x bin/*`
 
 ## A Note About Hadoop Versions
 
