@@ -71,7 +71,7 @@ object SparkConnectServerUtils {
       findJar("sql/catalyst", "spark-catalyst", "spark-catalyst", test = true).getCanonicalPath
 
     val command = Seq.newBuilder[String]
-    command += "bin/spark-submit"
+    command += s"$sparkHome/bin/spark-submit"
     command += "--driver-class-path" += connectJar
     command += "--class" += "org.apache.spark.sql.connect.SimpleSparkConnectService"
     command += "--jars" += catalystTestJar
@@ -79,7 +79,14 @@ object SparkConnectServerUtils {
     command ++= testConfigs
     command ++= debugConfigs
     command += connectJar
-    val builder = new ProcessBuilder(command.result(): _*)
+    val cmds = command.result()
+    debug {
+      cmds.reduce[String] {
+        case (acc, cmd) if cmd startsWith "-" => acc + " \\\n    " + cmd
+        case (acc, cmd) => acc + " " + cmd
+      }
+    }
+    val builder = new ProcessBuilder(cmds: _*)
     builder.directory(new File(sparkHome))
     val environment = builder.environment()
     environment.remove("SPARK_DIST_CLASSPATH")
