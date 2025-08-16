@@ -24,7 +24,7 @@ from typing import Any, Callable, Dict, Iterator, List, Tuple, Union, Optional
 
 from pyspark._globals import _NoValue, _NoValueType
 from pyspark.sql.session import SparkSession
-from pyspark.pandas.utils import default_session, is_testing
+from pyspark.pandas.utils import default_session
 
 
 __all__ = ["get_option", "set_option", "reset_option", "options", "option_context"]
@@ -287,7 +287,7 @@ _options: List[Option] = [
             "If False, pandas API on Spark may hit unexpected results or errors. "
             "The default is False."
         ),
-        default=is_testing(),
+        default=True,
         types=bool,
     ),
     Option(
