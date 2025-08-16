@@ -59,6 +59,39 @@ SELECT make_timestamp(timestamp_ntz '2018-11-17 13:33:33', TIME'0:0:0', 'CET');
 SELECT make_timestamp(DATE'1970-01-01', timestamp '2018-11-17 13:33:33', 'CET');
 SELECT make_timestamp(DATE'1970-01-01', timestamp_ntz '2018-11-17 13:33:33', 'CET');
 
+-- SPARK-53113: try_make_timestamp; date constructor.
+SELECT try_make_timestamp(make_date(2021, 07, 11));
+SELECT try_make_timestamp(DATE'1970-01-01');
+SELECT try_make_timestamp(NULL);
+
+-- SPARK-53113: try_make_timestamp; date + time constructor.
+SELECT try_make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678));
+SELECT try_make_timestamp(DATE'1970-01-01', TIME'00:00:00');
+SELECT try_make_timestamp(NULL, TIME'00:00:00');
+SELECT try_make_timestamp(DATE'1970-01-01', NULL);
+SELECT try_make_timestamp(NULL, NULL);
+
+-- SPARK-53113: try_make_timestamp; date + time + timezone constructor.
+SELECT try_make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'MIT');
+SELECT try_make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'PST');
+SELECT try_make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'UTC');
+SELECT try_make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'CET');
+SELECT try_make_timestamp(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'JST');
+SELECT try_make_timestamp(DATE'1970-01-01', TIME'00:00:00', 'UTC');
+SELECT try_make_timestamp(NULL, TIME'00:00:00', 'UTC');
+SELECT try_make_timestamp(DATE'1970-01-01', NULL, 'UTC');
+SELECT try_make_timestamp(DATE'1970-01-01', TIME'00:00:00', NULL);
+SELECT try_make_timestamp(NULL, NULL, 'UTC');
+SELECT try_make_timestamp(NULL, TIME'00:00:00', NULL);
+SELECT try_make_timestamp(DATE'1970-01-01', NULL, NULL);
+SELECT try_make_timestamp(NULL, NULL, NULL);
+
+-- SPARK-53113: try_make_timestamp; unsupported input types.
+SELECT try_make_timestamp(timestamp '2018-11-17 13:33:33', TIME'0:0:0', 'CET');
+SELECT try_make_timestamp(timestamp_ntz '2018-11-17 13:33:33', TIME'0:0:0', 'CET');
+SELECT try_make_timestamp(DATE'1970-01-01', timestamp '2018-11-17 13:33:33', 'CET');
+SELECT try_make_timestamp(DATE'1970-01-01', timestamp_ntz '2018-11-17 13:33:33', 'CET');
+
 -- [SPARK-31710] TIMESTAMP_SECONDS, TIMESTAMP_MILLISECONDS and TIMESTAMP_MICROSECONDS that always create timestamp_ltz
 select TIMESTAMP_SECONDS(1230219000),TIMESTAMP_SECONDS(-1230219000),TIMESTAMP_SECONDS(null);
 select TIMESTAMP_SECONDS(1.23), TIMESTAMP_SECONDS(1.23d), TIMESTAMP_SECONDS(FLOAT(1.23));
