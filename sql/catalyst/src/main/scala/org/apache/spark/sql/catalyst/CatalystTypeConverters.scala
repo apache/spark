@@ -66,8 +66,8 @@ object CatalystTypeConverters {
       case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
       case mapType: MapType => MapConverter(mapType.keyType, mapType.valueType)
       case structType: StructType => StructConverter(structType)
-      case CharType(length) => new CharConverter(length)
-      case VarcharType(length) => new VarcharConverter(length)
+      case CharType(length, _) => new CharConverter(length)
+      case VarcharType(length, _) => new VarcharConverter(length)
       case _: StringType => StringConverter
       case DateType if SQLConf.get.datetimeJava8ApiEnabled => LocalDateConverter
       case DateType => DateConverter

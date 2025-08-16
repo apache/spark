@@ -142,7 +142,7 @@ case class AnalyzeColumnCommand(
     case DoubleType | FloatType => true
     case BooleanType => true
     case _: DatetimeType => true
-    case CharType(_) | VarcharType(_) => false
+    case CharType(_, _) | VarcharType(_, _) => false
     case BinaryType | _: StringType => true
     case _ => false
   }
