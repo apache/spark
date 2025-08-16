@@ -41,14 +41,14 @@ on:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
         type: string
-        default: '{"PYSPARK_IMAGE_TO_TEST": "python-311", "PYTHON_TO_TEST": "python3.11"}'
+        default: '{"PYSPARK_IMAGE_TO_TEST": "python-314", "PYTHON_TO_TEST": "python3.14"}'
       jobs:
         description: >-
           Jobs to run, and should be in JSON format. The values should be matched with the job's key defined
           in this file, e.g., build. See precondition job below.
         required: false
         type: string
-        default: ''
+        default: '{"pyspark": "true", "pyspark-pandas": "true"}'
     secrets:
       codecov_token:
         description: The upload token of codecov.
