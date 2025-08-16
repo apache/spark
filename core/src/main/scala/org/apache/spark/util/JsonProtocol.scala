@@ -66,6 +66,11 @@ private[spark] class JsonProtocolOptions(conf: SparkConf) {
 private[spark] object JsonProtocol extends JsonUtils {
   // TODO: Remove this file and put JSON serialization into each individual class.
 
+  // SPARK-49872: Remove jackson JSON string length limitation.
+  mapper.getFactory.setStreamReadConstraints(
+    StreamReadConstraints.builder().maxStringLength(Int.MaxValue).build()
+  )
+
   private[util]
   val defaultOptions: JsonProtocolOptions = new JsonProtocolOptions(new SparkConf(false))
 
