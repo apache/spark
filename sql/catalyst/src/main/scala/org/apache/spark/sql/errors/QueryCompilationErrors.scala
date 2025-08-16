@@ -3348,6 +3348,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "change" -> change.toString, "tableName" -> toSQLId(sanitizedTableName)))
   }
 
+  def unsupportedTableChangesInAutoSchemaEvolutionError(
+      changes: Array[TableChange], tableName: Seq[String]): Throwable = {
+    val sanitizedTableName = tableName.map(_.replaceAll("\"", ""))
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_TABLE_CHANGES_IN_AUTO_SCHEMA_EVOLUTION",
+      messageParameters = Map(
+        "changes" -> changes.mkString(","), "tableName" -> toSQLId(sanitizedTableName)))
+  }
+
   def pathOptionNotSetCorrectlyWhenReadingError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1306",

@@ -134,6 +134,8 @@ abstract class InMemoryBaseTable(
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
 
   private val acceptAnySchema = properties.getOrDefault("accept-any-schema", "false").toBoolean
+  private val autoSchemaEvolution = properties.getOrDefault("auto-schema-evolution", "true")
+    .toBoolean
 
   partitioning.foreach {
     case _: IdentityTransform =>
@@ -349,13 +351,11 @@ abstract class InMemoryBaseTable(
     TableCapability.OVERWRITE_DYNAMIC,
     TableCapability.TRUNCATE)
 
-  override def capabilities(): util.Set[TableCapability] = {
-    if (acceptAnySchema) {
-      (baseCapabiilities ++ Set(TableCapability.ACCEPT_ANY_SCHEMA)).asJava
-    } else {
-      baseCapabiilities.asJava
-    }
-  }
+  override def capabilities(): util.Set[TableCapability] =
+    (baseCapabiilities ++
+      (if (acceptAnySchema) Seq(TableCapability.ACCEPT_ANY_SCHEMA) else Seq.empty) ++
+      (if (autoSchemaEvolution) Seq(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION) else Seq.empty))
+      .asJava
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new InMemoryScanBuilder(schema, options)
