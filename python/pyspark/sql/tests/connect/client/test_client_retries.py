@@ -119,7 +119,9 @@ class SparkConnectClientRetriesTestCase(unittest.TestCase):
             try:
                 for attempt in Retrying(client._retry_policies, sleep=sleep_tracker.sleep):
                     with attempt:
-                        raise TestException(msg="Some error message", code=grpc.StatusCode.UNAVAILABLE)
+                        raise TestException(
+                            msg="Some error message", code=grpc.StatusCode.UNAVAILABLE
+                        )
             except TestException:
                 pass
             self.assertEqual(len(sleep_tracker.times), policy.max_retries)
