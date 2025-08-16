@@ -32,6 +32,7 @@ class XmlPartitioningSuite extends SparkFunSuite with Matchers with BeforeAndAft
       .master("local[2]")
       .appName("XmlPartitioningSuite")
       .config("spark.hadoop.fs.local.block.size", blockSize)
+      .config("spark.sql.xml.memoryEfficientXmlParser.enabled", "false")
       .getOrCreate()
     try {
       val fileName = s"test-data/xml-resources/fias_house${if (large) ".large" else ""}.xml$suffix"

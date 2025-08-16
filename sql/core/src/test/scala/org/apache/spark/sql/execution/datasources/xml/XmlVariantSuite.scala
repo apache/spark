@@ -31,6 +31,11 @@ import org.apache.spark.unsafe.types.VariantVal
 
 class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData {
 
+  protected val memoryEfficientParserEnabled: Boolean = false
+
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set("spark.sql.xml.memoryEfficientXmlParser.enabled", memoryEfficientParserEnabled.toString)
+
   private val baseOptions = Map("rowTag" -> "ROW", "valueTag" -> "_VALUE", "attributePrefix" -> "_")
 
   private val resDir = "test-data/xml-resources/"
@@ -936,8 +941,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
 }
 
 class XmlVariantWithOptimizedParserSuite extends XmlVariantSuite {
-  override protected def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.xml.memoryEfficientXmlParser.enabled", "true")
+  override protected val memoryEfficientParserEnabled: Boolean = true
 
   override def excluded: Seq[String] = {
     super.excluded ++ Seq(

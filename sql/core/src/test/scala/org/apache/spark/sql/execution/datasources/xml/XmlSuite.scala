@@ -60,6 +60,11 @@ class XmlSuite
     with TestXmlData {
   import testImplicits._
 
+  protected val memoryEfficientParserEnabled: Boolean = false
+
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set("spark.sql.xml.memoryEfficientXmlParser.enabled", memoryEfficientParserEnabled.toString)
+
   protected val resDir = "test-data/xml-resources/"
 
   private var tempDir: Path = _
@@ -3522,8 +3527,7 @@ class XmlSuite
 class XmlSuiteWithOptimizedXMLParser extends XmlSuite {
   import testImplicits._
 
-  override protected def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.xml.memoryEfficientXmlParser.enabled", "true")
+  override protected val memoryEfficientParserEnabled: Boolean = true
 
   override def excluded: Seq[String] = {
     super.excluded ++ Seq(

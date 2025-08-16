@@ -6238,7 +6238,7 @@ object SQLConf {
         "parser. However, it may introduce some behavior changes.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
   }
 
   /**
@@ -7347,7 +7347,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def hadoopLineRecordReaderEnabled: Boolean = getConf(SQLConf.HADOOP_LINE_RECORD_READER_ENABLED)
 
-  def memoryEfficientXMLParserEnabled: Boolean = getConf(SQLConf.MEMORY_EFFICIENT_XML_PARSER_ENABLED)
+  def memoryEfficientXMLParserEnabled: Boolean =
+    getConf(SQLConf.MEMORY_EFFICIENT_XML_PARSER_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 
