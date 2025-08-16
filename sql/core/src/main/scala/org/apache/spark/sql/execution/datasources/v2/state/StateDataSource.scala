@@ -370,7 +370,8 @@ case class StateSourceOptions(
     readChangeFeedOptions: Option[ReadChangeFeedOptions],
     stateVarName: Option[String],
     readRegisteredTimers: Boolean,
-    flattenCollectionTypes: Boolean) {
+    flattenCollectionTypes: Boolean,
+    operatorStateUniqueIds: Option[Array[Array[String]]] = None) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
 
   override def toString: String = {
@@ -567,10 +568,31 @@ object StateSourceOptions extends DataSourceOptions {
       }
     }
 
+
+    val startBatchId = if (fromSnapshotOptions.isDefined) {
+      fromSnapshotOptions.get.snapshotStartBatchId
+    } else if (readChangeFeedOptions.isDefined) {
+      readChangeFeedOptions.get.changeStartBatchId
+    } else {
+      batchId.get
+    }
+
+    val operatorStateUniqueIds = getOperatorStateUniqueIds(
+      sparkSession,
+      startBatchId,
+      operatorId,
+      resolvedCpLocation)
+
+    if (operatorStateUniqueIds.isDefined
+      && (fromSnapshotOptions.isDefined || readChangeFeedOptions.isDefined)) {
+      throw new UnsupportedOperationException(
+        "Reading from snapshot or reading change feed is not supported yet with Checkpoint v2.")
+    }
+
     StateSourceOptions(
       resolvedCpLocation, batchId.get, operatorId, storeName, joinSide,
       readChangeFeed, fromSnapshotOptions, readChangeFeedOptions,
-      stateVarName, readRegisteredTimers, flattenCollectionTypes)
+      stateVarName, readRegisteredTimers, flattenCollectionTypes, operatorStateUniqueIds)
   }
 
   private def resolvedCheckpointLocation(
@@ -587,6 +609,26 @@ object StateSourceOptions extends DataSourceOptions {
       case Some((lastId, _)) => lastId
       case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
     }
+  }
+
+  private def getOperatorStateUniqueIds(
+    session: SparkSession,
+    batchId: Long,
+    operatorId: Long,
+    checkpointLocation: String): Option[Array[Array[String]]] = {
+    val commitLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).commitLog
+    val commitMetadata = commitLog.get(batchId) match {
+      case Some(commitMetadata) => commitMetadata
+      case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
+    }
+
+    val operatorStateUniqueIds = if (commitMetadata.stateUniqueIds.isDefined) {
+      Some(commitMetadata.stateUniqueIds.get(operatorId))
+    } else {
+      None
+    }
+
+    operatorStateUniqueIds
   }
 
   // Modifies options due to external data. Returns modified options.

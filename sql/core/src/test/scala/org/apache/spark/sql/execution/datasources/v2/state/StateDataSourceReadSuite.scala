@@ -617,6 +617,14 @@ StateDataSourceReadSuite {
   }
 }
 
+class RocksDBWithCheckpointV2StateDataSourceReaderSuite
+  extends RocksDBWithChangelogCheckpointStateDataSourceReaderSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 2)
+  }
+}
+
 abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Assertions {
 
   import testImplicits._
