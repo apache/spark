@@ -1176,7 +1176,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // Thus, we need to look at the raw plan if `relation` is a temporary view.
         unwrapRelationPlan(relation) match {
           case v: View =>
-            throw QueryCompilationErrors.insertIntoViewNotAllowedError(v.desc.identifier, table)
+            throw QueryCompilationErrors.expectTableNotViewError(
+              v.desc.identifier.nameParts, cmd = "INSERT", suggestAlternative = false, table)
           case other => i.copy(table = other)
         }
 
