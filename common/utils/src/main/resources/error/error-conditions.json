@@ -5161,6 +5161,13 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY" : {
+    "message" : [
+      "The checkpoint location <checkpointLocation> should be empty on batch 0",
+      "Please either use a new checkpoint location, or delete the existing data in the checkpoint location."
+    ],
+    "sqlState" : "42K03"
+  },
   "STATE_STORE_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE" : {
     "message" : [
       "Incompatible schema transformation with column family=<colFamilyName>, oldSchema=<oldSchema>, newSchema=<newSchema>."
