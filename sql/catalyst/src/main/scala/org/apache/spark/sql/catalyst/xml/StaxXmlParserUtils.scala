@@ -35,19 +35,21 @@ object StaxXmlParserUtils {
     factory
   }
 
+  private[sql] val eventTypeFilter: Int => Boolean = {
+    // Ignore comments and processing instructions
+    case XMLStreamConstants.COMMENT |
+         XMLStreamConstants.PROCESSING_INSTRUCTION => false
+    // unsupported events
+    case XMLStreamConstants.DTD |
+         XMLStreamConstants.ENTITY_DECLARATION |
+         XMLStreamConstants.ENTITY_REFERENCE |
+         XMLStreamConstants.NOTATION_DECLARATION => false
+    case _ => true
+  }
+
   def filteredReader(xml: String): XMLEventReader = {
     val filter = new EventFilter {
-      override def accept(event: XMLEvent): Boolean =
-        event.getEventType match {
-          // Ignore comments and processing instructions
-          case XMLStreamConstants.COMMENT | XMLStreamConstants.PROCESSING_INSTRUCTION => false
-          // unsupported events
-          case XMLStreamConstants.DTD |
-               XMLStreamConstants.ENTITY_DECLARATION |
-               XMLStreamConstants.ENTITY_REFERENCE |
-               XMLStreamConstants.NOTATION_DECLARATION => false
-          case _ => true
-        }
+      override def accept(event: XMLEvent): Boolean = eventTypeFilter(event.getEventType)
     }
     // It does not have to skip for white space, since `XmlInputFormat`
     // always finds the root tag without a heading space.
@@ -55,9 +57,19 @@ object StaxXmlParserUtils {
     factory.createFilteredReader(eventReader, filter)
   }
 
+  def filteredReader(
+      inputStream: () => java.io.InputStream,
+      options: XmlOptions): StaxXMLRecordReader = {
+    StaxXMLRecordReader(inputStream, options)
+  }
+
   def gatherRootAttributes(parser: XMLEventReader): Array[Attribute] = {
-    val rootEvent =
-      StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.START_ELEMENT)
+    val rootEvent = parser.peek() match {
+      case _: StartElement =>
+        parser.nextEvent()
+      case _ =>
+        StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.START_ELEMENT)
+    }
     rootEvent.asStartElement.getAttributes.asScala.toArray
   }
 

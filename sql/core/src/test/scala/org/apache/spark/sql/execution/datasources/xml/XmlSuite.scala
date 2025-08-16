@@ -35,7 +35,7 @@ import org.apache.hadoop.fs.FSDataInputStream
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
 
-import org.apache.spark.{DebugFilesystem, SparkException}
+import org.apache.spark.{DebugFilesystem, SparkConf, SparkException}
 import org.apache.spark.io.ZStdCompressionCodec
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode, YearUDT}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UDTEncoder
@@ -60,7 +60,12 @@ class XmlSuite
     with TestXmlData {
   import testImplicits._
 
-  private val resDir = "test-data/xml-resources/"
+  protected val memoryEfficientParserEnabled: Boolean = false
+
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set("spark.sql.xml.memoryEfficientXmlParser.enabled", memoryEfficientParserEnabled.toString)
+
+  protected val resDir = "test-data/xml-resources/"
 
   private var tempDir: Path = _
 
@@ -2446,10 +2451,12 @@ class XmlSuite
   test("Timestamp type inference for a mix of TIMESTAMP_NTZ and TIMESTAMP_LTZ") {
     withTempPath { path =>
       Seq(
+        "<ROWS>",
         "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
         "<ROW><col0>2020-12-12T17:12:12.000Z</col0></ROW>",
         "<ROW><col0>2020-12-12T17:12:12.000+05:00</col0></ROW>",
-        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>"
+        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
+        "</ROWS>"
       ).toDF("data")
         .coalesce(1)
         .write.text(path.getAbsolutePath)
@@ -2481,10 +2488,12 @@ class XmlSuite
   test("Malformed records when reading TIMESTAMP_LTZ as TIMESTAMP_NTZ") {
     withTempPath { path =>
       Seq(
+        "<ROWS>",
         "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
         "<ROW><col0>2020-12-12T12:12:12.000Z</col0></ROW>",
         "<ROW><col0>2020-12-12T12:12:12.000+05:00</col0></ROW>",
-        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>"
+        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
+        "</ROWS>"
       ).toDF("data")
         .coalesce(1)
         .write.text(path.getAbsolutePath)
@@ -3512,6 +3521,103 @@ class XmlSuite
       assert(df.schema === StructType(Seq(StructField("value", LongType))))
       checkAnswer(df, spark.range(2018, 2025).toDF("value"))
     }
+  }
+}
+
+class XmlSuiteWithOptimizedXMLParser extends XmlSuite {
+  import testImplicits._
+
+  override protected val memoryEfficientParserEnabled: Boolean = true
+
+  override def excluded: Seq[String] = {
+    super.excluded ++ Seq(
+      "DSL test for permissive mode for corrupt records",
+      "test XSD validation with validation error",
+      "test XSD validation with addFile() with validation error",
+      "ignore commented and CDATA row tags"
+    )
+  }
+
+  test("DSL test with malformed attributes - optimized parser") {
+    val results = spark.read
+      .option("mode", DropMalformedMode.name)
+      .option("rowTag", "book")
+      .xml(getTestResourcePath(resDir + "books-malformed-attributes.xml"))
+      .collect()
+
+    // The optimized parser has more deterministic behavior when dealing with malformed XML
+    // It will only parse the well-formed records before the first malformed record
+    assert(results.length === 1)
+    assert(results(0)(0) === "bk111")
+  }
+
+  test("DSL test for permissive mode for corrupt records - optimized parser") {
+    val carsDf = spark.read
+      .option("rowTag", "ROW")
+      .option("mode", PermissiveMode.name)
+      .option("columnNameOfCorruptRecord", "_malformed_records")
+      .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
+    val cars = carsDf.collect()
+
+    // The optimized parser has more deterministic behavior when dealing with malformed XML
+    // It will only parse the well-formed records before the first malformed record
+    assert(cars.length === 2)
+    assert(carsDf.cache().filter("_malformed_records is not null").count() === 1)
+    assert(cars(0).toSeq.takeRight(3) === Seq("Chevy", "Volt", 2015))
+  }
+
+  test("test XSD validation with addFile() with validation error - optimized parser") {
+    spark.sparkContext.addFile(getTestResourcePath(resDir + "basket.xsd"))
+    val basketDF = spark.read
+      .option("rowTag", "basket")
+      .option("inferSchema", true)
+      .option("rowValidationXSDPath", "basket.xsd")
+      .option("mode", "PERMISSIVE")
+      .option("columnNameOfCorruptRecord", "_malformed_records")
+      .xml(getTestResourcePath(resDir + "basket_invalid.xml")).cache()
+    // The first record is valid and the second is invalid, the whole document is put in the
+    // _malformed_records column for the second record.
+    assert(basketDF.filter($"_malformed_records".isNotNull).count() == 1)
+    assert(basketDF.filter($"_malformed_records".isNull).count() == 1)
+    val rec = basketDF.select("_malformed_records").collect()(1).getString(0)
+    assert(rec.startsWith("<baskets>") && rec.endsWith("</baskets>"))
+  }
+
+  test("ignore commented and CDATA row tags - optimized parser") {
+    val results = spark.read.format("xml")
+      .option("rowTag", "ROW")
+      .load(getTestResourcePath(resDir + "ignored-rows.xml"))
+    val expectedResults = Seq.range(1, 18).map(Row(_))
+    checkAnswer(results, expectedResults)
+    val results2 = spark.read.format("xml")
+      .option("rowTag", "ROW")
+      .load(getTestResourcePath(resDir + "cdata-ending-eof.xml"))
+
+    assert(
+      results2.schema == new StructType().add("_corrupt_record", StringType).add("a", LongType))
+
+    // The last row is null because the last CDATA at eof is invalid
+    val expectedResults2 = Seq.range(1, 18).map(Row(_)) ++ Seq(Row(null))
+    checkAnswer(results2.selectExpr("a"), expectedResults2)
+
+    val results3 = spark.read.format("xml")
+      .option("rowTag", "ROW")
+      .load(getTestResourcePath(resDir + "cdata-no-close.xml"))
+
+    // Similar to the previous test, the last row is null because the last CDATA section is invalid
+    val expectedResults3 = Seq.range(1, 18).map(Row(_)) ++ Seq(Row(null))
+    checkAnswer(results3.select("a"), expectedResults3)
+
+    val results4 = spark.read.format("xml")
+      .option("rowTag", "ROW")
+      .load(getTestResourcePath(resDir + "cdata-no-ignore.xml"))
+    val expectedResults4 = Seq(
+      Row("<a>1</a>"),
+      Row("2"),
+      Row("<ROW>3</ROW>"),
+      Row("4"),
+      Row("<ROW>5</ROW>"))
+    checkAnswer(results4, expectedResults4)
   }
 }
 

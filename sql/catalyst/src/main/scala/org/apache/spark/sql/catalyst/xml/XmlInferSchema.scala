@@ -43,6 +43,7 @@ import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.SparkErrorUtils
 
 class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     extends Serializable
@@ -170,6 +171,97 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       if (parser != null) {
         parser.close()
       }
+    }
+  }
+
+  def inferFromReaders(xml: RDD[StaxXMLRecordReader]): StructType = {
+    val schemaData = if (options.samplingRatio < 1.0) {
+      xml.sample(withReplacement = false, options.samplingRatio, 1)
+    } else {
+      xml
+    }
+    // perform schema inference on each row and merge afterwards
+    val mergedTypesFromPartitions = schemaData.mapPartitions { iter =>
+      val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
+
+      iter.flatMap { xmlReader =>
+        infer(xmlReader, xsdSchema)
+      }.reduceOption(compatibleType(caseSensitive, options.valueTag)).iterator
+    }
+
+    // Here we manually submit a fold-like Spark job, so that we can set the SQLConf when running
+    // the fold functions in the scheduler event loop thread.
+    val existingConf = SQLConf.get
+    var rootType: DataType = StructType(Nil)
+    val foldPartition = (iter: Iterator[DataType]) =>
+      iter.fold(StructType(Nil))(compatibleType(caseSensitive, options.valueTag))
+    val mergeResult = (index: Int, taskResult: DataType) => {
+      rootType = SQLConf.withExistingConf(existingConf) {
+        compatibleType(caseSensitive, options.valueTag)(rootType, taskResult)
+      }
+    }
+    xml.sparkContext.runJob(mergedTypesFromPartitions, foldPartition, mergeResult)
+
+    canonicalizeType(rootType) match {
+      case Some(st: StructType) => st
+      case _ =>
+        // canonicalizeType erases all empty structs, including the only one we want to keep
+        // XML shouldn't run into this line
+        StructType(Seq())
+    }
+  }
+
+  /**
+   * Infer the schema of the next XML record in the XML event stream.
+   * Note that the method will **NOT** close the XML event stream as there could have more XML
+   * records to parse. The StaxXMLRecordReader will automatically close the stream when there are
+   * no more XML records to parse.
+   */
+  def infer(parser: StaxXMLRecordReader, xsdSchema: Option[Schema]): Option[DataType] = {
+    try {
+      if (!parser.skipToNextRecord()) {
+        return None
+      }
+
+      xsdSchema.foreach { schema =>
+        parser.validateXSDSchema(schema)
+      }
+      val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
+      val schema = Some(inferObject(parser, rootAttributes))
+      schema
+    } catch {
+      case e: CharConversionException if options.charset.isEmpty =>
+        val msg =
+          """XML parser cannot handle a character in its input.
+            |Specifying encoding as an input option explicitly might help to resolve the issue.
+            |""".stripMargin + e.getMessage
+        val wrappedCharException = new CharConversionException(msg)
+        wrappedCharException.initCause(e)
+        handleXmlErrorsByParseMode(
+          options.parseMode,
+          options.columnNameOfCorruptRecord,
+          wrappedCharException)
+      case e: FileNotFoundException if options.ignoreMissingFiles =>
+        logWarning("Skipped missing file", e)
+        Some(StructType(Nil))
+      case e: FileNotFoundException if !options.ignoreMissingFiles => throw e
+      case NonFatal(e) =>
+        SparkErrorUtils.getRootCause(e) match {
+          case _: XMLStreamException | _: MalformedInputException | _: SAXException =>
+            logWarning("Malformed XML record found", e)
+            // Close the XML event stream from the first malformed XML record
+            parser.closeAllReaders()
+            handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
+          case _: AccessControlException | _: BlockMissingException => throw e
+          case _: IOException | _: RuntimeException | _: InternalError
+              if options.ignoreCorruptFiles =>
+            logWarning("Skipped the rest of the content in the corrupted file", e)
+            parser.closeAllReaders()
+            Some(StructType(Nil))
+          case _ =>
+            logWarning("Failed to infer schema from XML record", e)
+            handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
+        }
     }
   }
 
