@@ -60,7 +60,7 @@ class XmlSuite
     with TestXmlData {
   import testImplicits._
 
-  protected val memoryEfficientParserEnabled: Boolean = false
+  protected val memoryEfficientParserEnabled: Boolean = true
 
   override protected def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.xml.memoryEfficientXmlParser.enabled", memoryEfficientParserEnabled.toString)
@@ -339,21 +339,10 @@ class XmlSuite
       .option("columnNameOfCorruptRecord", "_malformed_records")
       .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
     val cars = carsDf.collect()
-    assert(cars.length === 3)
 
-    val malformedRowOne = carsDf.cache().select("_malformed_records").first().get(0).toString
-    val malformedRowTwo = carsDf.cache().select("_malformed_records").take(2).last.get(0).toString
-    val expectedMalformedRowOne = "<ROW><year>2012</year><make>Tesla</make><model>>S" +
-      "<comment>No comment</comment></ROW>"
-    val expectedMalformedRowTwo = "<ROW></year><make>Ford</make><model>E350</model>model></model>" +
-      "<comment>Go get one now they are going fast</comment></ROW>"
-
-    assert(malformedRowOne.replaceAll("\\s", "") === expectedMalformedRowOne.replaceAll("\\s", ""))
-    assert(malformedRowTwo.replaceAll("\\s", "") === expectedMalformedRowTwo.replaceAll("\\s", ""))
-    assert(cars(2)(0) === null)
-    assert(cars(0).toSeq.takeRight(3) === Seq(null, null, null))
-    assert(cars(1).toSeq.takeRight(3) === Seq(null, null, null))
-    assert(cars(2).toSeq.takeRight(3) === Seq("Chevy", "Volt", 2015))
+    assert(cars.length === 2)
+    assert(carsDf.cache().filter("_malformed_records is not null").count() === 1)
+    assert(cars(0).toSeq.takeRight(3) === Seq("Chevy", "Volt", 2015))
   }
 
   test("DSL test with empty file and known schema") {
@@ -1079,9 +1068,8 @@ class XmlSuite
       .xml(getTestResourcePath(resDir + "books-malformed-attributes.xml"))
       .collect()
 
-    assert(results.length === 2)
+    assert(results.length === 1)
     assert(results(0)(0) === "bk111")
-    assert(results(1)(0) === "bk112")
   }
 
   test("read utf-8 encoded file with empty tag") {
@@ -1281,8 +1269,7 @@ class XmlSuite
     assert(basketDF.filter($"_malformed_records".isNotNull).count() == 1)
     assert(basketDF.filter($"_malformed_records".isNull).count() == 1)
     val rec = basketDF.select("_malformed_records").collect()(1).getString(0)
-    assert(rec.startsWith("<basket>") && rec.indexOf("<extra>123</extra>") != -1 &&
-      rec.endsWith("</basket>"))
+    assert(rec.startsWith("<baskets>") && rec.endsWith("</baskets>"))
   }
 
   test("test xmlDataset") {
@@ -2692,28 +2679,30 @@ class XmlSuite
     val results = spark.read.format("xml")
       .option("rowTag", "ROW")
       .load(getTestResourcePath(resDir + "ignored-rows.xml"))
-
     val expectedResults = Seq.range(1, 18).map(Row(_))
     checkAnswer(results, expectedResults)
-
     val results2 = spark.read.format("xml")
       .option("rowTag", "ROW")
       .load(getTestResourcePath(resDir + "cdata-ending-eof.xml"))
 
-    val expectedResults2 = Seq.range(1, 18).map(Row(_))
-    checkAnswer(results2, expectedResults2)
+    assert(
+      results2.schema == new StructType().add("_corrupt_record", StringType).add("a", LongType))
+
+    // The last row is null because the last CDATA at eof is invalid
+    val expectedResults2 = Seq.range(1, 18).map(Row(_)) ++ Seq(Row(null))
+    checkAnswer(results2.selectExpr("a"), expectedResults2)
 
     val results3 = spark.read.format("xml")
       .option("rowTag", "ROW")
       .load(getTestResourcePath(resDir + "cdata-no-close.xml"))
 
-    val expectedResults3 = Seq.range(1, 18).map(Row(_))
-    checkAnswer(results3, expectedResults3)
+    // Similar to the previous test, the last row is null because the last CDATA section is invalid
+    val expectedResults3 = Seq.range(1, 18).map(Row(_)) ++ Seq(Row(null))
+    checkAnswer(results3.select("a"), expectedResults3)
 
     val results4 = spark.read.format("xml")
       .option("rowTag", "ROW")
       .load(getTestResourcePath(resDir + "cdata-no-ignore.xml"))
-
     val expectedResults4 = Seq(
       Row("<a>1</a>"),
       Row("2"),
@@ -3529,6 +3518,7 @@ class XmlSuiteWithLegacyParser extends XmlSuite {
 
   override protected val memoryEfficientParserEnabled: Boolean = false
 
+  // The following tests will behave differently with the legacy parser
   override def excluded: Seq[String] = {
     super.excluded ++ Seq(
       "DSL test for permissive mode for corrupt records",
@@ -3538,35 +3528,43 @@ class XmlSuiteWithLegacyParser extends XmlSuite {
     )
   }
 
-  test("DSL test with malformed attributes - optimized parser") {
+  test("DSL test with malformed attributes - legacy parser") {
     val results = spark.read
       .option("mode", DropMalformedMode.name)
       .option("rowTag", "book")
       .xml(getTestResourcePath(resDir + "books-malformed-attributes.xml"))
       .collect()
 
-    // The optimized parser has more deterministic behavior when dealing with malformed XML
-    // It will only parse the well-formed records before the first malformed record
-    assert(results.length === 1)
+    assert(results.length === 2)
     assert(results(0)(0) === "bk111")
+    assert(results(1)(0) === "bk112")
   }
 
-  test("DSL test for permissive mode for corrupt records - optimized parser") {
+  test("DSL test for permissive mode for corrupt records - legacy parser") {
     val carsDf = spark.read
       .option("rowTag", "ROW")
       .option("mode", PermissiveMode.name)
       .option("columnNameOfCorruptRecord", "_malformed_records")
       .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
     val cars = carsDf.collect()
+    assert(cars.length === 3)
 
-    // The optimized parser has more deterministic behavior when dealing with malformed XML
-    // It will only parse the well-formed records before the first malformed record
-    assert(cars.length === 2)
-    assert(carsDf.cache().filter("_malformed_records is not null").count() === 1)
-    assert(cars(0).toSeq.takeRight(3) === Seq("Chevy", "Volt", 2015))
+    val malformedRowOne = carsDf.cache().select("_malformed_records").first().get(0).toString
+    val malformedRowTwo = carsDf.cache().select("_malformed_records").take(2).last.get(0).toString
+    val expectedMalformedRowOne = "<ROW><year>2012</year><make>Tesla</make><model>>S" +
+      "<comment>No comment</comment></ROW>"
+    val expectedMalformedRowTwo = "<ROW></year><make>Ford</make><model>E350</model>model></model>" +
+      "<comment>Go get one now they are going fast</comment></ROW>"
+
+    assert(malformedRowOne.replaceAll("\\s", "") === expectedMalformedRowOne.replaceAll("\\s", ""))
+    assert(malformedRowTwo.replaceAll("\\s", "") === expectedMalformedRowTwo.replaceAll("\\s", ""))
+    assert(cars(2)(0) === null)
+    assert(cars(0).toSeq.takeRight(3) === Seq(null, null, null))
+    assert(cars(1).toSeq.takeRight(3) === Seq(null, null, null))
+    assert(cars(2).toSeq.takeRight(3) === Seq("Chevy", "Volt", 2015))
   }
 
-  test("test XSD validation with addFile() with validation error - optimized parser") {
+  test("test XSD validation with addFile() with validation error - legacy parser") {
     spark.sparkContext.addFile(getTestResourcePath(resDir + "basket.xsd"))
     val basketDF = spark.read
       .option("rowTag", "basket")
@@ -3575,42 +3573,39 @@ class XmlSuiteWithLegacyParser extends XmlSuite {
       .option("mode", "PERMISSIVE")
       .option("columnNameOfCorruptRecord", "_malformed_records")
       .xml(getTestResourcePath(resDir + "basket_invalid.xml")).cache()
-    // The first record is valid and the second is invalid, the whole document is put in the
-    // _malformed_records column for the second record.
     assert(basketDF.filter($"_malformed_records".isNotNull).count() == 1)
     assert(basketDF.filter($"_malformed_records".isNull).count() == 1)
     val rec = basketDF.select("_malformed_records").collect()(1).getString(0)
-    assert(rec.startsWith("<baskets>") && rec.endsWith("</baskets>"))
+    assert(rec.startsWith("<basket>") && rec.indexOf("<extra>123</extra>") != -1 &&
+      rec.endsWith("</basket>"))
   }
 
-  test("ignore commented and CDATA row tags - optimized parser") {
+  test("ignore commented and CDATA row tags - legacy parser") {
     val results = spark.read.format("xml")
       .option("rowTag", "ROW")
       .load(getTestResourcePath(resDir + "ignored-rows.xml"))
+
     val expectedResults = Seq.range(1, 18).map(Row(_))
     checkAnswer(results, expectedResults)
+
     val results2 = spark.read.format("xml")
       .option("rowTag", "ROW")
       .load(getTestResourcePath(resDir + "cdata-ending-eof.xml"))
 
-    assert(
-      results2.schema == new StructType().add("_corrupt_record", StringType).add("a", LongType))
-
-    // The last row is null because the last CDATA at eof is invalid
-    val expectedResults2 = Seq.range(1, 18).map(Row(_)) ++ Seq(Row(null))
-    checkAnswer(results2.selectExpr("a"), expectedResults2)
+    val expectedResults2 = Seq.range(1, 18).map(Row(_))
+    checkAnswer(results2, expectedResults2)
 
     val results3 = spark.read.format("xml")
       .option("rowTag", "ROW")
       .load(getTestResourcePath(resDir + "cdata-no-close.xml"))
 
-    // Similar to the previous test, the last row is null because the last CDATA section is invalid
-    val expectedResults3 = Seq.range(1, 18).map(Row(_)) ++ Seq(Row(null))
-    checkAnswer(results3.select("a"), expectedResults3)
+    val expectedResults3 = Seq.range(1, 18).map(Row(_))
+    checkAnswer(results3, expectedResults3)
 
     val results4 = spark.read.format("xml")
       .option("rowTag", "ROW")
       .load(getTestResourcePath(resDir + "cdata-no-ignore.xml"))
+
     val expectedResults4 = Seq(
       Row("<a>1</a>"),
       Row("2"),

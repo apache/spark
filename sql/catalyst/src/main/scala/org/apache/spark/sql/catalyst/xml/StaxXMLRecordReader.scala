@@ -26,7 +26,6 @@ import javax.xml.stream.{
 }
 import javax.xml.stream.events.{EndDocument, StartElement, XMLEvent}
 import javax.xml.transform.stax.StAXSource
-import javax.xml.validation.Schema
 
 import scala.util.control.NonFatal
 
@@ -48,8 +47,11 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
   private val in1 = inputStream()
   private val primaryEventReader = filteredEventReader(in1, options)
 
+  private val xsdSchema = Option(options.rowValidationXSDPath).map { path =>
+    ValidatorUtil.getSchema(path)
+  }
   // Reader for the XSD validation, if an XSD schema is provided.
-  private val in2 = Option(options.rowValidationXSDPath).map(_ => inputStream())
+  private val in2 = xsdSchema.map(_ => inputStream())
   // An XMLStreamReader used by StAXSource for XSD validation.
   private val xsdValidationStreamReader = in2.map(in => filteredStreamReader(in, options))
   // An XMLEventReader wrapping the XMLStreamReader for XSD validation. This is used to ensure that
@@ -67,6 +69,7 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
     xsdValidationEventReader.foreach { r =>
       val xsdReaderHasMoreRecord = skipToNextRowStart(r)
       assert(hasMoreRecord == xsdReaderHasMoreRecord)
+      validateXSDSchema()
     }
     if (!hasMoreRecord) {
       closeAllReaders()
@@ -104,7 +107,7 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
     }
   }
 
-  def validateXSDSchema(schema: Schema): Unit = {
+  def validateXSDSchema(): Unit = {
     xsdValidationStreamReader match {
       case Some(p) =>
         try {
@@ -116,7 +119,7 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
           while (!rowTagStarted && p.hasNext) {
             p.next()
           }
-          schema.newValidator().validate(new StAXSource(p))
+          xsdSchema.get.newValidator().validate(new StAXSource(p))
         } catch {
           case NonFatal(e) =>
             try {

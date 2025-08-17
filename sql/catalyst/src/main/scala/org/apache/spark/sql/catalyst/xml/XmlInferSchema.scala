@@ -176,12 +176,12 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
 
   def inferFromReaders(recordReader: RDD[StaxXMLRecordReader]): StructType = {
     val sampledRecordReader = if (options.samplingRatio < 1.0) {
-      xml.sample(withReplacement = false, options.samplingRatio, 1)
+      recordReader.sample(withReplacement = false, options.samplingRatio, 1)
     } else {
-      xml
+      recordReader
     }
     // perform schema inference on each row and merge afterwards
-    val mergedTypesFromPartitions = schemaData.mapPartitions { iter =>
+    val mergedTypesFromPartitions = sampledRecordReader.mapPartitions { iter =>
       val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
 
       iter.flatMap { xmlReader =>
@@ -200,7 +200,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         compatibleType(caseSensitive, options.valueTag)(rootType, taskResult)
       }
     }
-    xml.sparkContext.runJob(mergedTypesFromPartitions, foldPartition, mergeResult)
+    recordReader.sparkContext.runJob(mergedTypesFromPartitions, foldPartition, mergeResult)
 
     canonicalizeType(rootType) match {
       case Some(st: StructType) => st
@@ -223,9 +223,6 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         return None
       }
 
-      xsdSchema.foreach { schema =>
-        parser.validateXSDSchema(schema)
-      }
       val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
       val schema = Some(inferObject(parser, rootAttributes))
       schema

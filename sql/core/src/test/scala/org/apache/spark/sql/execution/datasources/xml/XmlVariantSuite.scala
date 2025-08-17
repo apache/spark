@@ -31,7 +31,7 @@ import org.apache.spark.unsafe.types.VariantVal
 
 class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData {
 
-  protected val memoryEfficientParserEnabled: Boolean = false
+  protected val memoryEfficientParserEnabled: Boolean = true
 
   override protected def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.xml.memoryEfficientXmlParser.enabled", memoryEfficientParserEnabled.toString)
@@ -510,9 +510,11 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       singleVariantColumn = Some("var"),
       extraOptions = Map("mode" -> "PERMISSIVE")
     )
+    // When the optimized parser is enabled, there are only two records:
+    // one is the valid xml record, the rest is treated as one malformed record
     checkAnswer(
       df.select(variant_get(col("var"), "$.year", "int")),
-      Seq(Row(2015), Row(null), Row(null))
+      Seq(Row(2015), Row(null))
     )
 
     // DROPMALFORMED mode
@@ -949,7 +951,7 @@ class XmlVariantSuiteWithLegacyParser extends XmlVariantSuite {
     )
   }
 
-  test("DSL: handle malformed record in singleVariantColumn mode - optimized parser") {
+  test("DSL: handle malformed record in singleVariantColumn mode - legacy parser") {
     // FAILFAST mode
     checkError(
       exception = intercept[SparkException] {
@@ -969,11 +971,9 @@ class XmlVariantSuiteWithLegacyParser extends XmlVariantSuite {
       singleVariantColumn = Some("var"),
       extraOptions = Map("mode" -> "PERMISSIVE")
     )
-    // When the optimized parser is enabled, there are only two records:
-    // one is the valid xml record, the rest is treated as one malformed record
     checkAnswer(
       df.select(variant_get(col("var"), "$.year", "int")),
-      Seq(Row(2015), Row(null))
+      Seq(Row(2015), Row(null), Row(null))
     )
 
     // DROPMALFORMED mode

@@ -234,9 +234,6 @@ class StaxXmlParser(
         return None
       }
 
-      xsdSchema.foreach { schema =>
-        parser.validateXSDSchema(schema)
-      }
       options.singleVariantColumn match {
         case Some(_) =>
           // If the singleVariantColumn is specified, parse the entire xml record as a Variant
