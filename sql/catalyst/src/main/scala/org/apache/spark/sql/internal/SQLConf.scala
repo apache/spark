@@ -926,6 +926,15 @@ object SQLConf {
       .version("3.0.0")
       .fallbackConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
+  val REBALANCE_ADVISORY_PARTITION_SIZE_IN_BYTES =
+    buildConf("spark.sql.adaptive.rebalance.advisoryPartitionSizeInBytes")
+      .doc("The advisory size in bytes of the shuffle partition during rebalance hints " +
+        s"(when ${ADAPTIVE_EXECUTION_ENABLED.key} is true). It takes effect when Spark " +
+        "coalesces small shuffle partitions or splits skewed shuffle partition " +
+        "in RebalancePartitions.")
+      .version("4.0.0")
+      .fallbackConf(ADVISORY_PARTITION_SIZE_IN_BYTES)
+
   val COALESCE_PARTITIONS_ENABLED =
     buildConf("spark.sql.adaptive.coalescePartitions.enabled")
       .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is true, Spark will coalesce " +

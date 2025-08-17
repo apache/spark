@@ -69,7 +69,8 @@ object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
   }
 
   private def tryOptimizeSkewedPartitions(shuffle: ShuffleQueryStageExec): SparkPlan = {
-    val defaultAdvisorySize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+    val defaultAdvisorySize = ShufflePartitionsUtil
+      .getAdvisorySizeByRebalance(shuffle.addedByRebalance)
     val advisorySize = shuffle.advisoryPartitionSize.getOrElse(defaultAdvisorySize)
     val mapStats = shuffle.mapStats
     if (mapStats.isEmpty ||

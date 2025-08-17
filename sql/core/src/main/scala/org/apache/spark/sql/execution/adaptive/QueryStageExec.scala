@@ -74,6 +74,11 @@ abstract class QueryStageExec extends LeafExecNode {
   protected def doMaterialize(): Future[Any]
 
   /**
+   * whether QueryStageExec is added by RebalancePartitions or not
+   */
+  def addedByRebalance: Option[Boolean] = None
+
+  /**
    * Returns the runtime statistics after stage materialization.
    */
   def getRuntimeStatistics: Statistics
@@ -198,7 +203,13 @@ abstract class ExchangeQueryStageExec extends QueryStageExec {
 case class ShuffleQueryStageExec(
     override val id: Int,
     override val plan: SparkPlan,
-    override val _canonicalized: SparkPlan) extends ExchangeQueryStageExec {
+    override val _canonicalized: SparkPlan,
+    override val addedByRebalance: Option[Boolean]) extends ExchangeQueryStageExec {
+
+  def this(
+      id: Int,
+      plan: SparkPlan,
+      _canonicalized: SparkPlan) = this(id, plan, _canonicalized, Some(false))
 
   @transient val shuffle = plan match {
     case s: ShuffleExchangeLike => s
@@ -216,7 +227,8 @@ case class ShuffleQueryStageExec(
     val reuse = ShuffleQueryStageExec(
       newStageId,
       ReusedExchangeExec(newOutput, shuffle),
-      _canonicalized)
+      _canonicalized,
+      addedByRebalance)
     reuse._resultOption = this._resultOption
     reuse._error = this._error
     reuse

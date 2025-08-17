@@ -675,7 +675,11 @@ case class AdaptiveSparkPlanExec(
             throw SparkException.internalError(
               "Custom columnar rules cannot transform shuffle node to something else.")
           }
-          ShuffleQueryStageExec(currentStageId, newPlan, e.canonicalized)
+          ShuffleQueryStageExec(
+            currentStageId,
+            newPlan,
+            e.canonicalized,
+            e.asInstanceOf[ShuffleExchangeLike].addedByRebalance)
         } else {
           assert(e.isInstanceOf[BroadcastExchangeLike])
           if (!newPlan.isInstanceOf[BroadcastExchangeLike]) {

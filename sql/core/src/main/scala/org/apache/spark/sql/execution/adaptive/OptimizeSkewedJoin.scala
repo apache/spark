@@ -71,8 +71,11 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
    * to split skewed partitions is the average size of non-skewed partition, or the
    * advisory partition size if avg size is smaller than it.
    */
-  private def targetSize(sizes: Array[Long], skewThreshold: Long): Long = {
-    val advisorySize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+  private def targetSize(
+      sizes: Array[Long],
+      skewThreshold: Long,
+      addedByRabalance: Option[Boolean]): Long = {
+    val advisorySize = ShufflePartitionsUtil.getAdvisorySizeByRebalance(addedByRabalance)
     val nonSkewSizes = sizes.filter(_ <= skewThreshold)
     if (nonSkewSizes.isEmpty) {
       advisorySize
@@ -133,8 +136,8 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
 
     val leftSkewThreshold = getSkewThreshold(leftMedSize)
     val rightSkewThreshold = getSkewThreshold(rightMedSize)
-    val leftTargetSize = targetSize(leftSizes, leftSkewThreshold)
-    val rightTargetSize = targetSize(rightSizes, rightSkewThreshold)
+    val leftTargetSize = targetSize(leftSizes, leftSkewThreshold, left.addedByRebalance)
+    val rightTargetSize = targetSize(rightSizes, rightSkewThreshold, right.addedByRebalance)
 
     val leftSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
     val rightSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]

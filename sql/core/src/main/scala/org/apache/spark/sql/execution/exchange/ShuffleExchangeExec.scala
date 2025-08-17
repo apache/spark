@@ -67,6 +67,11 @@ trait ShuffleExchangeLike extends Exchange {
    */
   def shuffleOrigin: ShuffleOrigin
 
+  /**
+   * whether ShuffleExchangeLike is added by RebalancePartitions or not
+   */
+  def addedByRebalance: Option[Boolean] = None
+
   @transient
   private lazy val promise = Promise[MapOutputStatistics]()
 
@@ -189,8 +194,16 @@ case class ShuffleExchangeExec(
     override val outputPartitioning: Partitioning,
     child: SparkPlan,
     shuffleOrigin: ShuffleOrigin = ENSURE_REQUIREMENTS,
-    advisoryPartitionSize: Option[Long] = None)
+    advisoryPartitionSize: Option[Long] = None,
+    override val addedByRebalance: Option[Boolean] = None)
   extends ShuffleExchangeLike {
+
+  def this(
+      outputPartitioning: Partitioning,
+      child: SparkPlan,
+      shuffleOrigin: ShuffleOrigin,
+      advisoryPartitionSize: Option[Long])
+  = this(outputPartitioning, child, shuffleOrigin, advisoryPartitionSize, None)
 
   private lazy val writeMetrics =
     SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)

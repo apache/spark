@@ -81,7 +81,7 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
   }
 
   override protected def userSpecifiedRepartition(p: LogicalPlan): Boolean = p match {
-    case LogicalQueryStage(_, ShuffleQueryStageExec(_, shuffle: ShuffleExchangeLike, _))
+    case LogicalQueryStage(_, ShuffleQueryStageExec(_, shuffle: ShuffleExchangeLike, _, _))
       if shuffle.shuffleOrigin == REPARTITION_BY_COL ||
         shuffle.shuffleOrigin == REPARTITION_BY_NUM => true
     case _ => false
