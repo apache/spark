@@ -1269,7 +1269,51 @@ class XmlSuite
     assert(basketDF.filter($"_malformed_records".isNotNull).count() == 1)
     assert(basketDF.filter($"_malformed_records".isNull).count() == 1)
     val rec = basketDF.select("_malformed_records").collect()(1).getString(0)
-    assert(rec.startsWith("<baskets>") && rec.endsWith("</baskets>"))
+    assert(rec.startsWith("<basket>") && rec.indexOf("<extra>123</extra>") != -1 &&
+      rec.endsWith("</basket>"))
+  }
+
+  test("test XSD validation where row tag is the root tag") {
+    val basketDF = spark.read
+      .option("rowTag", "baskets")
+      .option("inferSchema", true)
+      .option("mode", "PERMISSIVE")
+      .option("rowValidationXSDPath", getTestResourcePath(resDir + "basket.xsd")
+        .replace("file:/", "/"))
+      .option("columnNameOfCorruptRecord", "_malformed_records")
+      .xml(getTestResourcePath(resDir + "basket.xml"))
+      .cache()
+    assert(basketDF.schema == new StructType().add("_malformed_records", StringType))
+  }
+
+  Seq(
+    "basket_invalid_in_the_beginning.xml",
+    "basket_invalid_in_the_middle.xml",
+    "basket_invalid_at_the_end.xml"
+  ).foreach { file =>
+    test("test XSD validation with invalid XSD records in different places, file: " + file) {
+      val basketDF = spark.read
+        .option("rowTag", "basket")
+        .option("inferSchema", true)
+        .option(
+          "rowValidationXSDPath",
+          getTestResourcePath(resDir + "basket.xsd")
+            .replace("file:/", "/")
+        )
+        .option("mode", "PERMISSIVE")
+        .option("columnNameOfCorruptRecord", "_malformed_records")
+        .xml(getTestResourcePath(resDir + file))
+        .cache()
+
+      // Should have both valid and invalid records
+      assert(basketDF.count() == 4)
+      assert(basketDF.filter($"_malformed_records".isNotNull).count() == 1)
+      assert(basketDF.filter($"_malformed_records".isNull).count() == 3)
+      checkAnswer(
+        basketDF.filter($"_malformed_records".isNull).select($"entry".getItem(0)),
+        Seq(Row(Row(1, "fork")), Row(Row(3, "apple")), Row(Row(5, "straw")))
+      )
+    }
   }
 
   test("test xmlDataset") {
@@ -3514,16 +3558,12 @@ class XmlSuite
 }
 
 class XmlSuiteWithLegacyParser extends XmlSuite {
-  import testImplicits._
-
   override protected val memoryEfficientParserEnabled: Boolean = false
 
   // The following tests will behave differently with the legacy parser
   override def excluded: Seq[String] = {
     super.excluded ++ Seq(
       "DSL test for permissive mode for corrupt records",
-      "test XSD validation with validation error",
-      "test XSD validation with addFile() with validation error",
       "ignore commented and CDATA row tags"
     )
   }
@@ -3562,22 +3602,6 @@ class XmlSuiteWithLegacyParser extends XmlSuite {
     assert(cars(0).toSeq.takeRight(3) === Seq(null, null, null))
     assert(cars(1).toSeq.takeRight(3) === Seq(null, null, null))
     assert(cars(2).toSeq.takeRight(3) === Seq("Chevy", "Volt", 2015))
-  }
-
-  test("test XSD validation with addFile() with validation error - legacy parser") {
-    spark.sparkContext.addFile(getTestResourcePath(resDir + "basket.xsd"))
-    val basketDF = spark.read
-      .option("rowTag", "basket")
-      .option("inferSchema", true)
-      .option("rowValidationXSDPath", "basket.xsd")
-      .option("mode", "PERMISSIVE")
-      .option("columnNameOfCorruptRecord", "_malformed_records")
-      .xml(getTestResourcePath(resDir + "basket_invalid.xml")).cache()
-    assert(basketDF.filter($"_malformed_records".isNotNull).count() == 1)
-    assert(basketDF.filter($"_malformed_records".isNull).count() == 1)
-    val rec = basketDF.select("_malformed_records").collect()(1).getString(0)
-    assert(rec.startsWith("<basket>") && rec.indexOf("<extra>123</extra>") != -1 &&
-      rec.endsWith("</basket>"))
   }
 
   test("ignore commented and CDATA row tags - legacy parser") {

@@ -18,11 +18,20 @@ package org.apache.spark.sql.catalyst.xml
 
 import java.io.StringReader
 import javax.xml.namespace.QName
-import javax.xml.stream.{EventFilter, XMLEventReader, XMLInputFactory, XMLStreamConstants}
+import javax.xml.stream.{
+  EventFilter,
+  StreamFilter,
+  XMLEventReader,
+  XMLInputFactory,
+  XMLStreamConstants,
+  XMLStreamReader
+}
 import javax.xml.stream.events._
 
 import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
+
+import org.apache.commons.io.input.BOMInputStream
 
 object StaxXmlParserUtils {
 
@@ -57,10 +66,34 @@ object StaxXmlParserUtils {
     factory.createFilteredReader(eventReader, filter)
   }
 
+  def filteredReader(inputStream: java.io.InputStream): XMLEventReader = {
+    val filter = new EventFilter {
+      override def accept(event: XMLEvent): Boolean = eventTypeFilter(event.getEventType)
+    }
+    val bomInputStreamBuilder = new BOMInputStream.Builder
+    bomInputStreamBuilder.setInputStream(inputStream)
+    val eventReader = factory.createXMLEventReader(bomInputStreamBuilder.get())
+    factory.createFilteredReader(eventReader, filter)
+  }
+
   def filteredReader(
       inputStream: () => java.io.InputStream,
       options: XmlOptions): StaxXMLRecordReader = {
     StaxXMLRecordReader(inputStream, options)
+  }
+
+  def filteredStreamReader(
+      inputStream: java.io.InputStream,
+      options: XmlOptions): XMLStreamReader = {
+    val filter = new StreamFilter {
+      override def accept(event: XMLStreamReader): Boolean =
+        StaxXmlParserUtils.eventTypeFilter(event.getEventType)
+    }
+    val bomInputStreamBuilder = new BOMInputStream.Builder
+    bomInputStreamBuilder.setInputStream(inputStream)
+    val streamReader =
+      StaxXmlParserUtils.factory.createXMLStreamReader(bomInputStreamBuilder.get(), options.charset)
+    StaxXmlParserUtils.factory.createFilteredReader(streamReader, filter)
   }
 
   def gatherRootAttributes(parser: XMLEventReader): Array[Attribute] = {

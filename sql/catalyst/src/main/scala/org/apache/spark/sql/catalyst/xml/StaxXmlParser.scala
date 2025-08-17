@@ -196,7 +196,6 @@ class StaxXmlParser(
   def parseStreamOptimized(
       inputStream: () => InputStream,
       schema: StructType): Iterator[InternalRow] = {
-    val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
     val streamLiteral = () =>
       Utils.tryWithResource(
         inputStream()
@@ -204,7 +203,7 @@ class StaxXmlParser(
         UTF8String.fromBytes(ByteStreams.toByteArray(is))
       }
     val safeParser = new FailureSafeParser[StaxXMLRecordReader](
-      input => doParseColumnOptimized(input, xsdSchema, streamLiteral),
+      input => doParseColumnOptimized(input, streamLiteral),
       options.parseMode,
       schema,
       options.columnNameOfCorruptRecord
@@ -227,7 +226,6 @@ class StaxXmlParser(
    */
   def doParseColumnOptimized(
       parser: StaxXMLRecordReader,
-      xsdSchema: Option[Schema] = None,
       xmlLiteral: () => UTF8String): Option[InternalRow] = {
     try {
       if (!parser.skipToNextRecord()) {
@@ -274,7 +272,7 @@ class StaxXmlParser(
             logWarning("Skipped the rest of the content in the corrupted file", e)
             parser.closeAllReaders()
             None
-          case _: XMLStreamException | _: MalformedInputException | _: SAXException =>
+          case _: XMLStreamException | _: MalformedInputException =>
             // Skip rest of the content in the parser and put the whole XML file in the
             // BadRecordException.
             parser.closeAllReaders()
@@ -282,6 +280,11 @@ class StaxXmlParser(
             // For such records, all fields other than the field configured by
             // `columnNameOfCorruptRecord` are set to `null`.
             throw BadRecordException(xmlLiteral, () => Array.empty, e)
+          case _: SAXException =>
+            // XSD validation failed, throw a bad record exception and continue to parse the rest
+            // records.
+            val record = UTF8String.fromString(parser.getNextRecordString)
+            throw BadRecordException(() => record, () => Array.empty, e)
         }
     }
   }

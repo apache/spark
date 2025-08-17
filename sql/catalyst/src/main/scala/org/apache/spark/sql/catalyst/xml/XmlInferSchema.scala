@@ -244,10 +244,16 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       case e: FileNotFoundException if !options.ignoreMissingFiles => throw e
       case NonFatal(e) =>
         SparkErrorUtils.getRootCause(e) match {
-          case _: XMLStreamException | _: MalformedInputException | _: SAXException =>
+          case _: XMLStreamException | _: MalformedInputException =>
             logWarning("Malformed XML record found", e)
-            // Close the XML event stream from the first malformed XML record
+            // Close the parser from the first malformed XML record
             parser.closeAllReaders()
+            handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
+          case _: SAXException =>
+            // For XSD validation errors, don't close the parser as there might be more valid
+            // records to parse.
+            // Advance the parser so that the next record can be parsed.
+            parser.nextEvent()
             handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
           case _: AccessControlException | _: BlockMissingException => throw e
           case _: IOException | _: RuntimeException | _: InternalError
