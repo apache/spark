@@ -40,9 +40,10 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
   private val in1 = inputStream()
   private val primaryEventReader = StaxXmlParserUtils.filteredReader(in1)
 
-  private val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
+  private val xsdSchemaValidator = Option(options.rowValidationXSDPath)
+    .map(path => ValidatorUtil.getSchema(path).newValidator())
   // Reader for the XSD validation, if an XSD schema is provided.
-  private val in2 = xsdSchema.map(_ => inputStream())
+  private val in2 = xsdSchemaValidator.map(_ => inputStream())
   // An XMLStreamReader used by StAXSource for XSD validation.
   private val xsdValidationStreamReader =
     in2.map(in => StaxXmlParserUtils.filteredStreamReader(in, options))
@@ -103,7 +104,8 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
       while (!rowTagStarted && p.hasNext) {
         p.next()
       }
-      xsdSchema.get.newValidator().validate(new StAXSource(p))
+      xsdSchemaValidator.get.reset()
+      xsdSchemaValidator.get.validate(new StAXSource(p))
     }
   }
 

@@ -182,10 +182,8 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
     // perform schema inference on each row and merge afterwards
     val mergedTypesFromPartitions = sampledRecordReader.mapPartitions { iter =>
-      val xsdSchema = Option(options.rowValidationXSDPath).map(ValidatorUtil.getSchema)
-
       iter.flatMap { xmlReader =>
-        infer(xmlReader, xsdSchema)
+        infer(xmlReader)
       }.reduceOption(compatibleType(caseSensitive, options.valueTag)).iterator
     }
 
@@ -217,7 +215,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
    * records to parse. The StaxXMLRecordReader will automatically close the stream when there are
    * no more XML records to parse.
    */
-  def infer(parser: StaxXMLRecordReader, xsdSchema: Option[Schema]): Option[DataType] = {
+  def infer(parser: StaxXMLRecordReader): Option[DataType] = {
     try {
       if (!parser.skipToNextRecord()) {
         return None

@@ -510,12 +510,19 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       singleVariantColumn = Some("var"),
       extraOptions = Map("mode" -> "PERMISSIVE")
     )
-    // When the optimized parser is enabled, there are only two records:
-    // one is the valid xml record, the rest is treated as one malformed record
-    checkAnswer(
-      df.select(variant_get(col("var"), "$.year", "int")),
-      Seq(Row(2015), Row(null))
-    )
+    if (memoryEfficientParserEnabled) {
+      // When the optimized parser is enabled, there are only two records:
+      // one is the valid xml record, the rest is treated as one malformed record
+      checkAnswer(
+        df.select(variant_get(col("var"), "$.year", "int")),
+        Seq(Row(2015), Row(null))
+      )
+    } else {
+      checkAnswer(
+        df.select(variant_get(col("var"), "$.year", "int")),
+        Seq(Row(2015), Row(null), Row(null))
+      )
+    }
 
     // DROPMALFORMED mode
     val df2 = createDSLDataFrame(
@@ -944,47 +951,4 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
 
 class XmlVariantSuiteWithLegacyParser extends XmlVariantSuite {
   override protected val memoryEfficientParserEnabled: Boolean = false
-
-  override def excluded: Seq[String] = {
-    super.excluded ++ Seq(
-      "DSL: handle malformed record in singleVariantColumn mode"
-    )
-  }
-
-  test("DSL: handle malformed record in singleVariantColumn mode - legacy parser") {
-    // FAILFAST mode
-    checkError(
-      exception = intercept[SparkException] {
-        createDSLDataFrame(
-          fileName = "cars-malformed.xml",
-          singleVariantColumn = Some("var"),
-          extraOptions = Map("mode" -> "FAILFAST")
-        ).collect()
-      }.getCause.asInstanceOf[SparkException],
-      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-      parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST")
-    )
-
-    // PERMISSIVE mode
-    val df = createDSLDataFrame(
-      fileName = "cars-malformed.xml",
-      singleVariantColumn = Some("var"),
-      extraOptions = Map("mode" -> "PERMISSIVE")
-    )
-    checkAnswer(
-      df.select(variant_get(col("var"), "$.year", "int")),
-      Seq(Row(2015), Row(null), Row(null))
-    )
-
-    // DROPMALFORMED mode
-    val df2 = createDSLDataFrame(
-      fileName = "cars-malformed.xml",
-      singleVariantColumn = Some("var"),
-      extraOptions = Map("mode" -> "DROPMALFORMED")
-    )
-    checkAnswer(
-      df2.select(variant_get(col("var"), "$.year", "int")),
-      Seq(Row(2015))
-    )
-  }
 }
