@@ -19,49 +19,28 @@ package org.apache.spark.sql.execution.datasources.xml
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.matchers.should.Matchers
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SparkSession
 
 /**
  * Tests various cases of partition size, compression.
  */
 class XmlPartitioningSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
+  protected val memoryEfficientXmlParserEnabled: Boolean = true
 
   protected def doPartitionTest(suffix: String, blockSize: Long, large: Boolean): Unit = {
     val spark = SparkSession.builder()
       .master("local[2]")
       .appName("XmlPartitioningSuite")
       .config("spark.hadoop.fs.local.block.size", blockSize)
-      .config("spark.sql.xml.memoryEfficientXmlParser.enabled", "true")
+      .config("spark.sql.xml.memoryEfficientXmlParser.enabled", memoryEfficientXmlParserEnabled)
       .getOrCreate()
     try {
       val fileName = s"test-data/xml-resources/fias_house${if (large) ".large" else ""}.xml$suffix"
       val xmlFile = getClass.getClassLoader.getResource(fileName).getFile
-      if (large) {
-        // The large file is invalid because it concatenates several XML files together and thus
-        // there are more one root tags, and each one has a BOM character at the beginning.
-
-        // In FAILFAST mode, we should throw an exception
-        val error = intercept[SparkException] {
-          spark.read.option("rowTag", "House").option("mode", "FAILFAST").xml(xmlFile)
-        }
-        checkError(
-          exception = error,
-          condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-          parameters = Map("badRecord" -> "_corrupt_record", "failFastMode" -> "FAILFAST")
-        )
-
-        // In PERMISSIVE mode, we should read the records in the first root tag and ignore the rest
-        // of the content
-        val results = spark.read.option("rowTag", "House").option("mode", "PERMISSIVE").xml(xmlFile)
-        // There should be 38 records: 37 valid records in the first root tag and the rest of the
-        // content in the _corrupt_record column
-        assert(results.count() === 38)
-      } else {
-        val results = spark.read.option("rowTag", "House").option("mode", "FAILFAST").xml(xmlFile)
-        // Test file has 37 records; large file is 20x the records
-        assert(results.count() === 37)
-      }
+      val results = spark.read.option("rowTag", "House").option("mode", "FAILFAST").xml(xmlFile)
+      // Test file has 37 records; large file is 20x the records
+      assert(results.count() === (if (large) 740 else 37))
     } finally {
       spark.stop()
     }
@@ -98,21 +77,5 @@ class XmlPartitioningSuite extends SparkFunSuite with Matchers with BeforeAndAft
 }
 
 class XmlPartitioningSuiteWithLegacyParser extends XmlPartitioningSuite {
-  override protected def doPartitionTest(suffix: String, blockSize: Long, large: Boolean): Unit = {
-    val spark = SparkSession.builder()
-      .master("local[2]")
-      .appName("XmlPartitioningSuite")
-      .config("spark.hadoop.fs.local.block.size", blockSize)
-      .config("spark.sql.xml.memoryEfficientXmlParser.enabled", "false")
-      .getOrCreate()
-    try {
-      val fileName = s"test-data/xml-resources/fias_house${if (large) ".large" else ""}.xml$suffix"
-      val xmlFile = getClass.getClassLoader.getResource(fileName).getFile
-      val results = spark.read.option("rowTag", "House").option("mode", "FAILFAST").xml(xmlFile)
-      // Test file has 37 records; large file is 20x the records
-      assert(results.count() === (if (large) 740 else 37))
-    } finally {
-      spark.stop()
-    }
-  }
+  override protected val memoryEfficientXmlParserEnabled: Boolean = false
 }
