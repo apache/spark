@@ -250,7 +250,7 @@ object MultiLineXmlDataSource extends XmlDataSource {
           case NonFatal(e) =>
             Utils.getRootCause(e) match {
               case e @ (_: AccessControlException | _: BlockMissingException) => throw e
-              case _: RuntimeException | _: IOException if parsedOptions.ignoreCorruptFiles =>
+              case _: RuntimeException | _: IOException | _: InternalError if parsedOptions.ignoreCorruptFiles =>
                 logWarning("Skipped the rest of the content in the corrupted file", e)
                 None
               case o => throw o

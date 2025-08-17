@@ -3524,10 +3524,10 @@ class XmlSuite
   }
 }
 
-class XmlSuiteWithOptimizedXMLParser extends XmlSuite {
+class XmlSuiteWithLegacyParser extends XmlSuite {
   import testImplicits._
 
-  override protected val memoryEfficientParserEnabled: Boolean = true
+  override protected val memoryEfficientParserEnabled: Boolean = false
 
   override def excluded: Seq[String] = {
     super.excluded ++ Seq(

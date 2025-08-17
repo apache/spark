@@ -174,8 +174,8 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
   }
 
-  def inferFromReaders(xml: RDD[StaxXMLRecordReader]): StructType = {
-    val schemaData = if (options.samplingRatio < 1.0) {
+  def inferFromReaders(recordReader: RDD[StaxXMLRecordReader]): StructType = {
+    val sampledRecordReader = if (options.samplingRatio < 1.0) {
       xml.sample(withReplacement = false, options.samplingRatio, 1)
     } else {
       xml

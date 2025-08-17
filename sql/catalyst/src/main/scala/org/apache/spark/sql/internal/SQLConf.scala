@@ -6235,7 +6235,7 @@ object SQLConf {
       .internal()
       .doc("When set to true, use a memory efficient XML parser for parsing XML files. " +
         "This parser uses less memory when parsing large XML files compared to the default " +
-        "parser. However, it may introduce some behavior changes.")
+        "parser. However, it enforces stricter validation to ensure the XML is well-formed. The parser will stop processing the file where malformed-ness is detected.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)

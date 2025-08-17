@@ -940,8 +940,8 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
   }
 }
 
-class XmlVariantWithOptimizedParserSuite extends XmlVariantSuite {
-  override protected val memoryEfficientParserEnabled: Boolean = true
+class XmlVariantSuiteWithLegacyParser extends XmlVariantSuite {
+  override protected val memoryEfficientParserEnabled: Boolean = false
 
   override def excluded: Seq[String] = {
     super.excluded ++ Seq(
