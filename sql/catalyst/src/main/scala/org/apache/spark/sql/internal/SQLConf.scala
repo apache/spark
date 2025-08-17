@@ -6230,15 +6230,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val MEMORY_EFFICIENT_XML_PARSER_ENABLED = {
-    buildConf("spark.sql.xml.memoryEfficientXmlParser.enabled")
+  val LEGACY_XML_PARSER_ENABLED = {
+    buildConf("spark.sql.xml.legacyXMLParser.enabled")
       .internal()
-      .doc("When set to true, use a memory efficient XML parser for parsing XML files. " +
-        "This parser uses less memory when parsing large XML files compared to the default " +
-        "parser. However, it enforces stricter validation to ensure the XML is well-formed. The parser will stop processing the file where malformed-ness is detected.")
+      .doc(
+        "When set to true, use the legacy XML parser for parsing XML files. " +
+        "Compared to the default parser, the legacy parser has less stringent validation checks " +
+        "for malformed content, but it's less memory-efficient"
+      )
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
   }
 
   /**
@@ -7347,8 +7349,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def hadoopLineRecordReaderEnabled: Boolean = getConf(SQLConf.HADOOP_LINE_RECORD_READER_ENABLED)
 
-  def memoryEfficientXMLParserEnabled: Boolean =
-    getConf(SQLConf.MEMORY_EFFICIENT_XML_PARSER_ENABLED)
+  def legacyXMLParserEnabled: Boolean =
+    getConf(SQLConf.LEGACY_XML_PARSER_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

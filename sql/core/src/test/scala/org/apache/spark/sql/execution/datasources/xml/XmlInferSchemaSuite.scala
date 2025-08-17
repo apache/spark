@@ -43,10 +43,10 @@ class XmlInferSchemaSuite
     with TestXmlData
     with XmlSchemaInferenceCaseSensitivityTests {
 
-  protected val memoryEfficientParserEnabled: Boolean = true
+  protected val legacyParserEnabled: Boolean = false
 
   override protected def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.xml.memoryEfficientXmlParser.enabled", memoryEfficientParserEnabled.toString)
+    .set("spark.sql.xml.legacyXMLParser.enabled", legacyParserEnabled.toString)
 
   private val baseOptions = Map("rowTag" -> "ROW")
 
@@ -965,5 +965,5 @@ trait XmlSchemaInferenceCaseSensitivityTests extends QueryTest {
 }
 
 class XmlInferSchemaSuiteWithLegacyParser extends XmlInferSchemaSuite {
-  override val memoryEfficientParserEnabled: Boolean = false
+  override val legacyParserEnabled: Boolean = true
 }

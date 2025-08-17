@@ -26,14 +26,14 @@ import org.apache.spark.sql.SparkSession
  * Tests various cases of partition size, compression.
  */
 class XmlPartitioningSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
-  protected val memoryEfficientXmlParserEnabled: Boolean = true
+  protected val legacyParserEnabled: Boolean = false
 
   protected def doPartitionTest(suffix: String, blockSize: Long, large: Boolean): Unit = {
     val spark = SparkSession.builder()
       .master("local[2]")
       .appName("XmlPartitioningSuite")
       .config("spark.hadoop.fs.local.block.size", blockSize)
-      .config("spark.sql.xml.memoryEfficientXmlParser.enabled", memoryEfficientXmlParserEnabled)
+      .config("spark.sql.xml.legacyXMLParser.enabled", legacyParserEnabled)
       .getOrCreate()
     try {
       val fileName = s"test-data/xml-resources/fias_house${if (large) ".large" else ""}.xml$suffix"
@@ -77,5 +77,5 @@ class XmlPartitioningSuite extends SparkFunSuite with Matchers with BeforeAndAft
 }
 
 class XmlPartitioningSuiteWithLegacyParser extends XmlPartitioningSuite {
-  override protected val memoryEfficientXmlParserEnabled: Boolean = false
+  override protected val legacyParserEnabled: Boolean = true
 }

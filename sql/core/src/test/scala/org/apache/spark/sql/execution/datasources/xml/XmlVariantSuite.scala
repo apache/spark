@@ -31,10 +31,10 @@ import org.apache.spark.unsafe.types.VariantVal
 
 class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData {
 
-  protected val memoryEfficientParserEnabled: Boolean = true
+  protected val legacyParserEnabled: Boolean = false
 
   override protected def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.xml.memoryEfficientXmlParser.enabled", memoryEfficientParserEnabled.toString)
+    .set("spark.sql.xml.legacyXMLParser.enabled", legacyParserEnabled.toString)
 
   private val baseOptions = Map("rowTag" -> "ROW", "valueTag" -> "_VALUE", "attributePrefix" -> "_")
 
@@ -510,17 +510,17 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       singleVariantColumn = Some("var"),
       extraOptions = Map("mode" -> "PERMISSIVE")
     )
-    if (memoryEfficientParserEnabled) {
+    if (legacyParserEnabled) {
+      checkAnswer(
+        df.select(variant_get(col("var"), "$.year", "int")),
+        Seq(Row(2015), Row(null), Row(null))
+      )
+    } else {
       // When the optimized parser is enabled, there are only two records:
       // one is the valid xml record, the rest is treated as one malformed record
       checkAnswer(
         df.select(variant_get(col("var"), "$.year", "int")),
         Seq(Row(2015), Row(null))
-      )
-    } else {
-      checkAnswer(
-        df.select(variant_get(col("var"), "$.year", "int")),
-        Seq(Row(2015), Row(null), Row(null))
       )
     }
 
@@ -950,5 +950,5 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
 }
 
 class XmlVariantSuiteWithLegacyParser extends XmlVariantSuite {
-  override protected val memoryEfficientParserEnabled: Boolean = false
+  override protected val legacyParserEnabled: Boolean = true
 }

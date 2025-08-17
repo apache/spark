@@ -175,13 +175,13 @@ object MultiLineXmlDataSource extends XmlDataSource {
       file: PartitionedFile,
       parser: StaxXmlParser,
       requiredSchema: StructType): Iterator[InternalRow] = {
-    if (SQLConf.get.memoryEfficientXMLParserEnabled) {
-      parser.parseStreamOptimized(
-        () => CodecStreams.createInputStreamWithCloseResource(conf, file.toPath),
-        requiredSchema)
-    } else {
+    if (SQLConf.get.legacyXMLParserEnabled) {
       parser.parseStream(
         CodecStreams.createInputStreamWithCloseResource(conf, file.toPath),
+        requiredSchema)
+    } else {
+      parser.parseStreamOptimized(
+        () => CodecStreams.createInputStreamWithCloseResource(conf, file.toPath),
         requiredSchema)
     }
   }
@@ -191,7 +191,7 @@ object MultiLineXmlDataSource extends XmlDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: XmlOptions): StructType = {
 
-    if (SQLConf.get.memoryEfficientXMLParserEnabled) {
+    if (!SQLConf.get.legacyXMLParserEnabled) {
       return inferOptimized(sparkSession, inputPaths, parsedOptions)
     }
 
