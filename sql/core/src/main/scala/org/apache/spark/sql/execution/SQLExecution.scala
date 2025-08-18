@@ -124,8 +124,6 @@ object SQLExecution extends Logging {
           redactedStr.substring(0, Math.min(truncateLength, redactedStr.length))
         }.getOrElse(callSite.shortForm)
 
-      sparkSession.sparkContext.setJobGroup(executionId.toString, desc, true)
-
       val globalConfigs = sparkSession.sharedState.conf.getAll.toMap
       val modifiedConfigs = sparkSession.sessionState.conf.getAllConfs
         .filterNot { case (key, value) =>
@@ -214,7 +212,8 @@ object SQLExecution extends Logging {
                 }
               }
 
-              sparkSession.sparkContext.cancelJobGroup(executionId.toString)
+              sparkSession.sparkContext.cancelJobsWithTag(
+                executionIdJobTag(sparkSession, executionId))
 
               val event = SparkListenerSQLExecutionEnd(
                 executionId,
