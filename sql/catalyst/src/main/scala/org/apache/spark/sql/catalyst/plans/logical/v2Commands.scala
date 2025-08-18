@@ -1684,12 +1684,14 @@ case class TableSpec(
  * The logical plan of the DECLARE [OR REPLACE] TEMPORARY VARIABLE command.
  */
 case class CreateVariable(
-    name: LogicalPlan,
+    names: Seq[LogicalPlan],
     defaultExpr: DefaultValueExpression,
-    replace: Boolean) extends UnaryCommand with SupportsSubquery {
-  override def child: LogicalPlan = name
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(name = newChild)
+    replace: Boolean) extends Command with SupportsSubquery {
+  override def children: Seq[LogicalPlan] = names
+  override def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    assert(newChildren.size == names.size, "Incorrect number of children")
+    copy(names = newChildren)
+  }
 }
 
 /**

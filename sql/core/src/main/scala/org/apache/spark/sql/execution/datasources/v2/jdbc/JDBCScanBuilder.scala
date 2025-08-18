@@ -187,6 +187,8 @@ case class JDBCScanBuilder(
 
     val joinTypeStringOption = joinType match {
       case JoinType.INNER_JOIN => Some("INNER JOIN")
+      case JoinType.LEFT_OUTER_JOIN => Some("LEFT JOIN")
+      case JoinType.RIGHT_OUTER_JOIN => Some("RIGHT JOIN")
       case _ => None
     }
     if (!joinTypeStringOption.isDefined) {
