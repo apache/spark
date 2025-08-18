@@ -662,7 +662,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     val initialStateEncoder = if (initialState.isDefined) {
       agnosticEncoderFor[S]
     } else {
-      // Can not use `agnosticEncoderFor[S]` here because it points to incorrect encoder
+      // Cannot use `agnosticEncoderFor[S]` here because it points to incorrect encoder
       // when the initial state is not provided. Using an empty state encoder instead.
       ScalaReflection.encoderFor[EmptyInitialStateStruct]
     }
@@ -792,9 +792,9 @@ private object KeyValueGroupedDatasetImpl {
  * A marker case class used as a placeholder type for initial state encoders when no actual
  * initial state is provided to stateful streaming operations.
  *
- * In the `transformWithStateHelper` method, when `initialState` is not provided, we cannot
- * use `agnosticEncoderFor[S]` for the initial state encoder because it would incorrectly
- * point to the other encoders. Instead, we use `EmptyStruct` as a sentinel type to create
- * a proper encoder that represents the absence of initial state data.
+ * In the `transformWithStateHelper` method, when `initialState` is not provided, we cannot use
+ * `agnosticEncoderFor[S]` for the initial state encoder because it would incorrectly point to the
+ * other encoders. Instead, we use `EmptyStruct` as a sentinel type to create a proper encoder
+ * that represents the absence of initial state data.
  */
 case class EmptyInitialStateStruct()
