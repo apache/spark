@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.Expression
 
 /**
  * Context for passing parameter values to the SQL parser.
@@ -46,22 +46,21 @@ case class PositionalParameterContext(params: Seq[Expression]) extends Parameter
  */
 object ThreadLocalParameterContext {
   private val context = new ThreadLocal[Option[ParameterContext]]()
-  
   /**
    * Set the parameter context for the current thread.
    */
   def set(ctx: ParameterContext): Unit = context.set(Some(ctx))
-  
+
   /**
    * Get the parameter context for the current thread.
    */
   def get(): Option[ParameterContext] = Option(context.get()).flatten
-  
+
   /**
    * Clear the parameter context for the current thread.
    */
   def clear(): Unit = context.remove()
-  
+
   /**
    * Execute a block of code with the given parameter context,
    * ensuring cleanup happens even if an exception occurs.
