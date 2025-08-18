@@ -168,6 +168,17 @@ class SQLTestsMixin:
         self.assertEqual(df3.take(1), [Row(id=4)])
         self.assertEqual(df3.tail(1), [Row(id=9)])
 
+    def test_nested_dataframe_for_sql_scripting(self):
+        with self.sql_conf({"spark.sql.scripting.enabled": True}):
+            df0 = self.spark.range(10)
+            df1 = self.spark.sql(
+                "BEGIN SELECT * FROM {df} WHERE id > 1; END;",
+                df=df0,
+            )
+            self.assertEqual(df1.count(), 8)
+            self.assertEqual(df1.take(1), [Row(id=2)])
+            self.assertEqual(df1.tail(1), [Row(id=9)])
+
     def test_lit_time(self):
         import datetime
 
