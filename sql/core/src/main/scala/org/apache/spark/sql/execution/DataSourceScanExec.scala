@@ -34,7 +34,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
-import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
+import org.apache.spark.sql.execution.datasources.v2.{PushedDownOperators, TableSampleInfo}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
 import org.apache.spark.sql.internal.SQLConf
@@ -157,10 +157,12 @@ case class RowDataSourceScanExec(
 
   override def inputRDD: RDD[InternalRow] = rdd
 
+  private def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
+
+  private def pushedSampleMetadataString(s: TableSampleInfo): String =
+    s"SAMPLE (${(s.upperBound - s.lowerBound) * 100}) ${s.withReplacement} SEED(${s.seed})"
+
   override val metadata: Map[String, String] = {
-
-    def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
-
     val markedFilters = if (filters.nonEmpty) {
       for (filter <- filters) yield {
         if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
@@ -187,8 +189,11 @@ case class RowDataSourceScanExec(
       seqToString(markedFilters.toSeq)
     }
 
-    val pushedJoins = if (pushedDownOperators.joinedRelations.length > 1) {
-      Map("PushedJoins" -> seqToString(pushedDownOperators.joinedRelations))
+    val pushedJoins = if (pushedDownOperators.joinedRelationPushedDownOperators.nonEmpty) {
+      Map("PushedJoins" ->
+        s"\n${getPushedJoinString(
+          pushedDownOperators.joinedRelationPushedDownOperators(0),
+          pushedDownOperators.joinedRelationPushedDownOperators(1))}\n")
     } else {
       Map()
     }
@@ -202,10 +207,78 @@ case class RowDataSourceScanExec(
             seqToString(v.groupByExpressions.map(_.describe()).toImmutableArraySeq))} ++
       topNOrLimitInfo ++
       offsetInfo ++
-      pushedDownOperators.sample.map(v => "PushedSample" ->
-        s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
-      ) ++
+      pushedDownOperators.sample.map(v => "PushedSample" -> pushedSampleMetadataString(v)) ++
       pushedJoins
+  }
+
+  /**
+   * Build string for all the pushed down join operators. The method is recursive, so if there is
+   * join on top of 2 already joined relations, all of these will be present in string.
+   *
+   * The exmaple of resulting string is the following:
+   *
+   * PushedFilters: [id_3 = (id_4 + 1)], PushedJoins:
+   * [L]: PushedFilters: [ID_1 = (id_3 + 1)]
+   *      PushedJoins:
+   *      [L]: PushedFilters: [ID = (ID_1 + 1)]
+   *           PushedJoins:
+   *           [L]: Relation: join_pushdown_catalog.JOIN_SCHEMA.JOIN_TABLE_1
+   *                PushedFilters: [ID IS NOT NULL]
+   *           [R]: Relation: join_pushdown_catalog.JOIN_SCHEMA.JOIN_TABLE_2
+   *                PushedFilters: [ID IS NOT NULL]
+   *      [R]: Relation: join_pushdown_catalog.JOIN_SCHEMA.JOIN_TABLE_3
+   *           PushedFilters: [id IS NOT NULL]
+   * [R]: Relation: join_pushdown_catalog.JOIN_SCHEMA.JOIN_TABLE_4
+   *      PushedFilters: [id IS NOT NULL]
+   */
+  private def getPushedJoinString(
+      leftSidePushedDownOperators: PushedDownOperators,
+      rightSidePushedDownOperators: PushedDownOperators,
+      indent: Int = 0): String = {
+    val indentStr = " ".repeat(indent)
+
+    val leftSideOperators = buildOperatorParts(leftSidePushedDownOperators, indent)
+    val leftSideMetadataStr = formatMetadata(leftSideOperators, indentStr + " ".repeat(5))
+
+    val rightSideOperators = buildOperatorParts(rightSidePushedDownOperators, indent)
+    val rightSideMetadataStr = formatMetadata(rightSideOperators, indentStr + " ".repeat(5))
+
+    val leftSideString = s"$indentStr[L]: $leftSideMetadataStr"
+    val rightSideString = s"$indentStr[R]: $rightSideMetadataStr"
+    Seq(leftSideString, rightSideString).mkString("\n")
+  }
+
+  private def buildOperatorParts(operators: PushedDownOperators, indent: Int): List[String] = {
+    val parts = List.newBuilder[String]
+
+    // Add relation name for leaf nodes (nodes without further joins)
+    if (operators.joinedRelationPushedDownOperators.isEmpty) {
+      operators.relationName.foreach(name => parts += s"Relation: $name")
+    }
+
+    if (operators.pushedPredicates.nonEmpty) {
+      parts += s"PushedFilters: ${seqToString(operators.pushedPredicates.map(_.describe()))}"
+    }
+
+    operators.sample.foreach { sample =>
+      parts += s"PushedSample: ${pushedSampleMetadataString(sample)}"
+    }
+
+    // Recursively get the pushed join string for child with correct indentation.
+    if (operators.joinedRelationPushedDownOperators.nonEmpty) {
+      val nestedJoins = getPushedJoinString(
+        operators.joinedRelationPushedDownOperators(0),
+        operators.joinedRelationPushedDownOperators(1),
+        indent + 5)
+      parts += s"PushedJoins:\n$nestedJoins"
+    }
+
+    parts.result()
+  }
+
+  private def formatMetadata(parts: List[String], indentStr: String): String = {
+    val (basicParts, nestedJoinsParts) = parts.partition(!_.startsWith("PushedJoins:"))
+    (basicParts ++ nestedJoinsParts).mkString("\n" + indentStr)
   }
 
   // Don't care about `rdd` and `tableIdentifier`, and `stream` when canonicalizing.

@@ -1168,8 +1168,19 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String repeat(int times) {
-    if (times <= 0) {
+    if (times <= 0 || numBytes == 0) {
       return EMPTY_UTF8;
+    }
+
+    if (times == 1) {
+      return this;
+    }
+
+    if (numBytes == 1) {
+      byte[] newBytes = new byte[times];
+      byte b = getByte(0);
+      Arrays.fill(newBytes, b);
+      return fromBytes(newBytes);
     }
 
     byte[] newBytes = new byte[Math.multiplyExact(numBytes, times)];

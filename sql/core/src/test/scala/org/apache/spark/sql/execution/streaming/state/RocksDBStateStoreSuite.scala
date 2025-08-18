@@ -37,7 +37,8 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.streaming.{StatefulOperatorStateInfo, StreamExecution}
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -278,19 +279,20 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     keySchemaWithSomeUnsupportedTypeCols.fields.zipWithIndex.foreach { case (field, index) =>
       val isAllowed = allowedRangeOrdinals.contains(index)
 
-      val getStore = () => {
+      if (isAllowed) {
         tryWithProviderResource(newStoreProvider(keySchemaWithSomeUnsupportedTypeCols,
             RangeKeyScanStateEncoderSpec(keySchemaWithSomeUnsupportedTypeCols, Seq(index)),
             colFamiliesEnabled)) { provider =>
-            provider.getStore(0)
+          val store = provider.getStore(0)
+          store.abort()
         }
-      }
-
-      if (isAllowed) {
-        getStore()
       } else {
         val ex = intercept[SparkUnsupportedOperationException] {
-          getStore()
+          tryWithProviderResource(newStoreProvider(keySchemaWithSomeUnsupportedTypeCols,
+              RangeKeyScanStateEncoderSpec(keySchemaWithSomeUnsupportedTypeCols, Seq(index)),
+              colFamiliesEnabled)) { provider =>
+            provider.getStore(0)
+          }
         }
         checkError(
           ex,
@@ -652,6 +654,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         (key._1, key._2)
       }.toSeq
       assert(result === timerTimestamps.sorted)
+      store.abort()
     }
   }
 
@@ -1487,6 +1490,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           (key._1, key._2)
         }.toSeq
       assert(result.map(_._1) === timerTimestamps.map(_._1).sorted)
+      store.abort()
     }
   }
 
@@ -1532,6 +1536,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         (key._1, key._2)
       }.toSeq
       assert(result === timerTimestamps.sorted)
+      store.abort()
     }
   }
 
@@ -1647,6 +1652,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       assert(valueRowToData(store.get(keyRow2)) === 2)
       store.remove(keyRow2)
       assert(store.get(keyRow2) === null)
+      store.abort()
     }
   }
 
@@ -1755,6 +1761,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         assert(!iterator2.hasNext)
 
         assert(get(store, "a", 0).isEmpty)
+        store.abort()
       }
     }
   }
@@ -1794,6 +1801,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           )
         }
       }
+      store.abort()
     }
   }
 
@@ -1830,6 +1838,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           )
         }
       }
+      store.abort()
     }
   }
 
@@ -2666,7 +2675,12 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     tryWithProviderResource(newStoreProvider(provider.stateStoreId,
       useColumnFamilies)) { reloadedProvider =>
       val versionToRead = if (version < 0) reloadedProvider.latestVersion else version
-      reloadedProvider.getStore(versionToRead).iterator().map(rowPairToDataPair).toSet
+      val store = reloadedProvider.getStore(versionToRead)
+      try {
+        store.iterator().map(rowPairToDataPair).toSet
+      } finally {
+        if (!store.hasCommitted) store.abort()
+      }
     }
   }
 

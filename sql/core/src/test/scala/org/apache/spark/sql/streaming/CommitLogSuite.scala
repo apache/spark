@@ -21,7 +21,7 @@ import java.io.{ByteArrayInputStream, FileInputStream, FileOutputStream}
 import java.nio.file.Path
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.streaming.{CommitLog, CommitMetadata}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 

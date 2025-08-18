@@ -98,12 +98,15 @@ class ArrowUDTFTests(ReusedSQLTestCase):
                 size = batch_size[0].as_py()
 
                 for batch_id in range(3):
+                    # Create arrays for each column
+                    batch_id_array = pa.array([batch_id] * size, type=pa.int32())
+                    name_array = pa.array([f"batch_{batch_id}"] * size, type=pa.string())
+                    count_array = pa.array(list(range(size)), type=pa.int32())
+
+                    # Create record batch from arrays and names
                     batch = pa.record_batch(
-                        {
-                            "batch_id": pa.array([batch_id] * size, type=pa.int32()),
-                            "name": pa.array([f"batch_{batch_id}"] * size, type=pa.string()),
-                            "count": pa.array(list(range(size)), type=pa.int32()),
-                        }
+                        [batch_id_array, name_array, count_array],
+                        names=["batch_id", "name", "count"],
                     )
                     yield batch
 
@@ -382,8 +385,85 @@ class ArrowUDTFTests(ReusedSQLTestCase):
 
         self.assertIn("INVALID_UDTF_BOTH_RETURN_TYPE_AND_ANALYZE", str(cm.exception))
 
+    def test_arrow_udtf_with_table_argument_basic(self):
+        @arrow_udtf(returnType="filtered_id bigint")  # Use bigint to match int64
+        class TableArgUDTF:
+            def eval(self, table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
+                assert isinstance(
+                    table_data, pa.RecordBatch
+                ), f"Expected pa.RecordBatch, got {type(table_data)}"
+
+                # Convert record batch to table to work with it more easily
+                table = pa.table(table_data)
+
+                # Filter rows where id > 5
+                id_column = table.column("id")
+                mask = pa.compute.greater(id_column, pa.scalar(5))
+                filtered_table = table.filter(mask)
+
+                if filtered_table.num_rows > 0:
+                    result_table = pa.table(
+                        {"filtered_id": filtered_table.column("id")}  # Keep original type (int64)
+                    )
+                    yield result_table
+
+        # Test with DataFrame API using asTable()
+        input_df = self.spark.range(8)
+        result_df = TableArgUDTF(input_df.asTable())
+        expected_df = self.spark.createDataFrame([(6,), (7,)], "filtered_id bigint")
+        assertDataFrameEqual(result_df, expected_df)
+
+        # Test SQL registration and usage with TABLE() syntax
+        self.spark.udtf.register("test_table_arg_udtf", TableArgUDTF)
+        sql_result_df = self.spark.sql(
+            "SELECT * FROM test_table_arg_udtf(TABLE(SELECT id FROM range(0, 8)))"
+        )
+        assertDataFrameEqual(sql_result_df, expected_df)
+
+    def test_arrow_udtf_with_table_argument_and_scalar(self):
+        @arrow_udtf(returnType="filtered_id bigint")  # Use bigint to match int64
+        class MixedArgsUDTF:
+            def eval(
+                self, table_data: "pa.RecordBatch", threshold: "pa.Array"
+            ) -> Iterator["pa.Table"]:
+                assert isinstance(
+                    threshold, pa.Array
+                ), f"Expected pa.Array for threshold, got {type(threshold)}"
+                assert isinstance(
+                    table_data, pa.RecordBatch
+                ), f"Expected pa.RecordBatch for table_data, got {type(table_data)}"
+
+                threshold_val = threshold[0].as_py()
+
+                # Convert record batch to table
+                table = pa.table(table_data)
+                id_column = table.column("id")
+                mask = pa.compute.greater(id_column, pa.scalar(threshold_val))
+                filtered_table = table.filter(mask)
+
+                if filtered_table.num_rows > 0:
+                    result_table = pa.table(
+                        {"filtered_id": filtered_table.column("id")}  # Keep original type
+                    )
+                    yield result_table
+
+        # # Test with DataFrame API
+        input_df = self.spark.range(8)
+        result_df = MixedArgsUDTF(input_df.asTable(), lit(5))
+        expected_df = self.spark.createDataFrame([(6,), (7,)], "filtered_id bigint")
+        assertDataFrameEqual(result_df, expected_df)
+
+        # Test SQL registration and usage
+        self.spark.udtf.register("test_mixed_args_udtf", MixedArgsUDTF)
+        sql_result_df = self.spark.sql(
+            "SELECT * FROM test_mixed_args_udtf(TABLE(SELECT id FROM range(0, 8)), 5)"
+        )
+        assertDataFrameEqual(sql_result_df, expected_df)
+
 
 if __name__ == "__main__":
+    from pyspark.sql.tests.arrow.test_arrow_udtf import *  # noqa: F401
+
     try:
         import xmlrunner
 

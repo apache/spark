@@ -18,6 +18,7 @@ package org.apache.spark.network.util;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 
 import org.junit.jupiter.api.Test;
 
@@ -54,5 +55,34 @@ public class JavaUtilsSuite {
     assertThrows(IOException.class,
       () -> JavaUtils.createDirectory(testDirPath, "scenario4"));
     assertTrue(testDir.setWritable(true));
+  }
+
+  @Test
+  public void testListFiles() throws IOException {
+    File tmp = Files.createTempDirectory("testListFiles").toFile();
+    File file = new File(tmp, "file");
+
+    // Return emtpy set on non-existent input
+    assertFalse(file.exists());
+    assertEquals(0, JavaUtils.listFiles(file).size());
+    assertEquals(0, JavaUtils.listPaths(file).size());
+
+    // Return emtpy set on non-directory input
+    file.createNewFile();
+    assertTrue(file.exists());
+    assertEquals(0, JavaUtils.listFiles(file).size());
+    assertEquals(0, JavaUtils.listPaths(file).size());
+
+    // Return empty set on an empty directory location
+    File dir = new File(tmp, "dir");
+    dir.mkdir();
+    new File(dir, "1").createNewFile();
+    assertEquals(1, JavaUtils.listFiles(dir).size());
+    assertEquals(1, JavaUtils.listPaths(dir).size());
+
+    File symlink = new File(tmp, "symlink");
+    Files.createSymbolicLink(symlink.toPath(), dir.toPath());
+    assertEquals(1, JavaUtils.listFiles(symlink).size());
+    assertEquals(1, JavaUtils.listPaths(symlink).size());
   }
 }

@@ -26,7 +26,6 @@ import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.ByteStreams
 import org.apache.commons.crypto.random._
 import org.apache.commons.crypto.stream._
 
@@ -84,7 +83,7 @@ private[spark] object CryptoStreamUtils extends Logging {
       sparkConf: SparkConf,
       key: Array[Byte]): InputStream = {
     val iv = new Array[Byte](IV_LENGTH_IN_BYTES)
-    ByteStreams.readFully(is, iv)
+    JavaUtils.readFully(is, iv, 0, IV_LENGTH_IN_BYTES)
     val params = new CryptoParams(key, sparkConf)
     new CryptoInputStream(params.transformation, params.conf, is, params.keySpec,
       new IvParameterSpec(iv))

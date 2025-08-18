@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.net.URI
+import java.nio.file.Files
 import java.util.Locale
 
 import org.apache.spark.{SparkConf, TestUtils}
@@ -27,8 +28,8 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
+import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
@@ -229,7 +230,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
   /** Run a test case. */
   protected def runSqlTestCase(testCase: TestCase, listTestCases: Seq[TestCase]): Unit = {
-    val input = fileToString(new File(testCase.inputFile))
+    val input = Files.readString(new File(testCase.inputFile).toPath)
     val (comments, code) = splitCommentsAndCodes(input)
     val queries = getQueries(code, comments, listTestCases)
     val settings = getSparkSettings(comments)
@@ -639,7 +640,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       makeOutput: (String, Option[String], String) => QueryTestOutput): Unit = {
     // Read back the golden file.
     val expectedOutputs: Seq[QueryTestOutput] = {
-      val goldenOutput = fileToString(new File(resultFile))
+      val goldenOutput = Files.readString(new File(resultFile).toPath)
       val segments = goldenOutput.split("-- !query.*\n")
 
       val numSegments = outputs.map(_.numSegments).sum + 1

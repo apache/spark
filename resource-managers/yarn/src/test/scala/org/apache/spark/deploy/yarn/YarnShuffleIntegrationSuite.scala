@@ -18,9 +18,8 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
-import com.google.common.io.Files
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -181,7 +180,7 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
       if (execStateCopy != null) {
         Utils.deleteRecursively(execStateCopy)
       }
-      Files.asCharSink(status, StandardCharsets.UTF_8).write(result)
+      Files.writeString(status.toPath, result)
     }
   }
 

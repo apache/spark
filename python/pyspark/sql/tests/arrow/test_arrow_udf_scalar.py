@@ -97,7 +97,7 @@ class ScalarArrowUDFTestsMixin:
         df = self.spark.createDataFrame([("hi boo",), ("bye boo",)], ["vals"])
 
         tokenize = arrow_udf(
-            lambda s: pa.array([pa.compute.ascii_split_whitespace(s).to_pylist()]),
+            lambda s: pa.array([[v] for v in pa.compute.ascii_split_whitespace(s).to_pylist()]),
             ArrayType(ArrayType(StringType())),
         )
 
@@ -593,6 +593,22 @@ class ScalarArrowUDFTestsMixin:
         self.assertEqual(expected.collect(), res1.collect())
         self.assertEqual(expected.collect(), res2.collect())
 
+        @arrow_udf(LongType())
+        def scalar_iter_add(it: Iterator[Tuple[pa.Array, pa.Array]]) -> Iterator[pa.Array]:
+            for a, b in it:
+                yield pa.compute.add(a, b)
+
+        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS add1")
+        new_add = self.spark.udf.register("add1", scalar_iter_add)
+
+        res3 = df.select(new_add(F.col("a"), F.col("b")))
+        res4 = self.spark.sql(
+            "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t"
+        )
+        expected = df.select(F.expr("a + b"))
+        self.assertEqual(expected.collect(), res3.collect())
+        self.assertEqual(expected.collect(), res4.collect())
+
     def test_catalog_register_arrow_udf_basic(self):
         import pyarrow as pa
 
@@ -618,6 +634,22 @@ class ScalarArrowUDFTestsMixin:
         expected = df.select(F.expr("a + b"))
         self.assertEqual(expected.collect(), res1.collect())
         self.assertEqual(expected.collect(), res2.collect())
+
+        @arrow_udf(LongType())
+        def scalar_iter_add(it: Iterator[Tuple[pa.Array, pa.Array]]) -> Iterator[pa.Array]:
+            for a, b in it:
+                yield pa.compute.add(a, b)
+
+        self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS add1")
+        new_add = self.spark.catalog.registerFunction("add1", scalar_iter_add)
+
+        res3 = df.select(new_add(F.col("a"), F.col("b")))
+        res4 = self.spark.sql(
+            "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t"
+        )
+        expected = df.select(F.expr("a + b"))
+        self.assertEqual(expected.collect(), res3.collect())
+        self.assertEqual(expected.collect(), res4.collect())
 
     def test_udf_register_nondeterministic_arrow_udf(self):
         import pyarrow as pa

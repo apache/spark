@@ -27,8 +27,6 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import com.google.common.io.ByteStreams
-
 import org.apache.spark.{SparkConf, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
@@ -905,7 +903,7 @@ private[storage] class PartiallySerializedBlock[T](
         // We want to close the output stream in order to free any resources associated with the
         // serializer itself (such as Kryo's internal buffers). close() might cause data to be
         // written, so redirect the output stream to discard that data.
-        redirectableOutputStream.setOutputStream(ByteStreams.nullOutputStream())
+        redirectableOutputStream.setOutputStream(OutputStream.nullOutputStream())
         serializationStream.close()
       } finally {
         discarded = true
@@ -923,7 +921,7 @@ private[storage] class PartiallySerializedBlock[T](
     verifyNotConsumedAndNotDiscarded()
     consumed = true
     // `unrolled`'s underlying buffers will be freed once this input stream is fully read:
-    ByteStreams.copy(unrolledBuffer.toInputStream(dispose = true), os)
+    unrolledBuffer.toInputStream(dispose = true).transferTo(os)
     memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
     redirectableOutputStream.setOutputStream(os)
     while (rest.hasNext) {

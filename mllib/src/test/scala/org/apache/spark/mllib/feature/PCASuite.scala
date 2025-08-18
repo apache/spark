@@ -23,6 +23,7 @@ import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.collection.Utils.createArray
 
 class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -58,8 +59,8 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("number of features more than 65535") {
     val data1 = sc.parallelize(Seq(
-      Vectors.dense(Array.fill(100000)(2.0)),
-      Vectors.dense(Array.fill(100000)(0.0))
+      Vectors.dense(createArray(100000, 2.0)),
+      Vectors.dense(createArray(100000, 0.0))
     ), 2)
 
     val pca = new PCA(2).fit(data1)

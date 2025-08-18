@@ -18,13 +18,12 @@ package org.apache.spark.deploy.history
 
 import java.io.{File, FileInputStream, FileWriter, InputStream, IOException}
 import java.net.{HttpURLConnection, URI, URL}
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.zip.ZipInputStream
 
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.{ByteStreams, Files}
 import jakarta.servlet._
 import jakarta.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
@@ -308,9 +307,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
         val expectedFile = {
           new File(logDir, entry.getName)
         }
-        val expected = Files.asCharSource(expectedFile, StandardCharsets.UTF_8).read()
-        val actual = new String(ByteStreams.toByteArray(zipStream), StandardCharsets.UTF_8)
-        actual should be (expected)
+        Utils.toString(zipStream) should be (Files.readString(expectedFile.toPath))
         filesCompared += 1
       }
       entry = zipStream.getNextEntry

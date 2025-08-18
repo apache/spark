@@ -32,7 +32,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
-import com.google.common.collect.Sets;
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.junit.jupiter.api.AfterAll;
@@ -222,7 +221,7 @@ public class ExternalShuffleIntegrationSuite {
     try (ExternalBlockStoreClient client = createExternalBlockStoreClient()) {
       registerExecutor(client, "exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
       FetchResult exec0Fetch = fetchBlocks("exec-0", new String[] { "shuffle_0_0_0" });
-      assertEquals(Sets.newHashSet("shuffle_0_0_0"), exec0Fetch.successBlocks);
+      assertEquals(Set.of("shuffle_0_0_0"), exec0Fetch.successBlocks);
       assertTrue(exec0Fetch.failedBlocks.isEmpty());
       assertBufferListsEqual(exec0Fetch.buffers, Arrays.asList(exec0Blocks[0]));
       exec0Fetch.releaseBuffers();
@@ -235,7 +234,7 @@ public class ExternalShuffleIntegrationSuite {
       registerExecutor(client,"exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
       FetchResult exec0Fetch = fetchBlocks("exec-0",
         new String[]{"shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2"});
-      assertEquals(Sets.newHashSet("shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2"),
+      assertEquals(Set.of("shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2"),
         exec0Fetch.successBlocks);
       assertTrue(exec0Fetch.failedBlocks.isEmpty());
       assertBufferListsEqual(exec0Fetch.buffers, Arrays.asList(exec0Blocks));
@@ -256,7 +255,7 @@ public class ExternalShuffleIntegrationSuite {
       registerExecutor(client, "exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
       FetchResult execFetch = fetchBlocks("exec-1", new String[]{"broadcast_1"});
       assertTrue(execFetch.successBlocks.isEmpty());
-      assertEquals(Sets.newHashSet("broadcast_1"), execFetch.failedBlocks);
+      assertEquals(Set.of("broadcast_1"), execFetch.failedBlocks);
     }
   }
 
@@ -267,7 +266,7 @@ public class ExternalShuffleIntegrationSuite {
       String validBlockId = "rdd_" + RDD_ID + "_" + SPLIT_INDEX_VALID_BLOCK;
       FetchResult execFetch = fetchBlocks("exec-1", new String[]{validBlockId});
       assertTrue(execFetch.failedBlocks.isEmpty());
-      assertEquals(Sets.newHashSet(validBlockId), execFetch.successBlocks);
+      assertEquals(Set.of(validBlockId), execFetch.successBlocks);
       assertBuffersEqual(new NioManagedBuffer(ByteBuffer.wrap(exec0RddBlockValid)),
         execFetch.buffers.get(0));
     }
@@ -280,7 +279,7 @@ public class ExternalShuffleIntegrationSuite {
       String missingBlockId = "rdd_" + RDD_ID + "_" + SPLIT_INDEX_MISSING_FILE;
       FetchResult execFetch = fetchBlocks("exec-1", new String[]{missingBlockId});
       assertTrue(execFetch.successBlocks.isEmpty());
-      assertEquals(Sets.newHashSet(missingBlockId), execFetch.failedBlocks);
+      assertEquals(Set.of(missingBlockId), execFetch.failedBlocks);
     }
   }
 
@@ -310,7 +309,7 @@ public class ExternalShuffleIntegrationSuite {
       String corruptBlockId = "rdd_" + RDD_ID + "_" + SPLIT_INDEX_CORRUPT_LENGTH;
       FetchResult execFetch = fetchBlocks("exec-1", new String[]{corruptBlockId});
       assertTrue(execFetch.successBlocks.isEmpty());
-      assertEquals(Sets.newHashSet(corruptBlockId), execFetch.failedBlocks);
+      assertEquals(Set.of(corruptBlockId), execFetch.failedBlocks);
     }
   }
 
@@ -321,7 +320,7 @@ public class ExternalShuffleIntegrationSuite {
       FetchResult execFetch = fetchBlocks("exec-0",
         new String[]{"shuffle_2_0_0"});
       assertTrue(execFetch.successBlocks.isEmpty());
-      assertEquals(Sets.newHashSet("shuffle_2_0_0"), execFetch.failedBlocks);
+      assertEquals(Set.of("shuffle_2_0_0"), execFetch.failedBlocks);
     }
   }
 
@@ -331,8 +330,8 @@ public class ExternalShuffleIntegrationSuite {
       registerExecutor(client,"exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
       FetchResult execFetch0 = fetchBlocks("exec-0", new String[]{"shuffle_0_0_0" /* right */});
       FetchResult execFetch1 = fetchBlocks("exec-0", new String[]{"shuffle_1_0_0" /* wrong */});
-      assertEquals(Sets.newHashSet("shuffle_0_0_0"), execFetch0.successBlocks);
-      assertEquals(Sets.newHashSet("shuffle_1_0_0"), execFetch1.failedBlocks);
+      assertEquals(Set.of("shuffle_0_0_0"), execFetch0.successBlocks);
+      assertEquals(Set.of("shuffle_1_0_0"), execFetch1.failedBlocks);
     }
   }
 
@@ -343,7 +342,7 @@ public class ExternalShuffleIntegrationSuite {
       FetchResult execFetch = fetchBlocks("exec-2",
         new String[]{"shuffle_0_0_0", "shuffle_1_0_0"});
       assertTrue(execFetch.successBlocks.isEmpty());
-      assertEquals(Sets.newHashSet("shuffle_0_0_0", "shuffle_1_0_0"), execFetch.failedBlocks);
+      assertEquals(Set.of("shuffle_0_0_0", "shuffle_1_0_0"), execFetch.failedBlocks);
     }
   }
 
@@ -355,7 +354,7 @@ public class ExternalShuffleIntegrationSuite {
       FetchResult execFetch = fetchBlocks("exec-0",
         new String[]{"shuffle_1_0_0", "shuffle_1_0_1"}, clientConf, 1 /* port */);
       assertTrue(execFetch.successBlocks.isEmpty());
-      assertEquals(Sets.newHashSet("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.failedBlocks);
+      assertEquals(Set.of("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.failedBlocks);
     }
   }
 
