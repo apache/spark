@@ -55,11 +55,11 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
   /**
    * Verify that the GCS user agent is set correctly when no custom suffix is provided.
    */
-  test("GCS user agent should be set when not provided by user") {
+  test("SPARK-52336: GCS user agent should be set when not provided by user") {
     val sparkConf = new SparkConf()
     val hadoopConf = SparkHadoopUtil.newConfiguration(sparkConf)
 
-    val expectedUserAgent = s"apache_spark/${org.apache.spark.SPARK_VERSION} (GPN:apache_spark)"
+    val expectedUserAgent = s"apache-spark/${org.apache.spark.SPARK_VERSION} (GPN:apache-spark)"
     assertConfigMatches(hadoopConf, "fs.gs.application.name.suffix", expectedUserAgent,
       SOURCE_SPARK)
   }
@@ -67,13 +67,13 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
   /**
    * Verify that the Spark identifier is prepended to a user-provided GCS user agent suffix.
    */
-  test("GCS user agent should be prepended when suffix is provided by user") {
+  test("SPARK-52336: GCS user agent should be prepended when suffix is provided by user") {
     val sparkConf = new SparkConf()
     val userSuffix = "my-awesome-app"
     sparkConf.set("spark.hadoop.fs.gs.application.name.suffix", userSuffix)
     val hadoopConf = SparkHadoopUtil.newConfiguration(sparkConf)
 
-    val sparkPrefix = s"apache_spark/${org.apache.spark.SPARK_VERSION} (GPN:apache_spark)"
+    val sparkPrefix = s"apache-spark/${org.apache.spark.SPARK_VERSION} (GPN:apache-spark)"
     val expectedUserAgent = s"$sparkPrefix $userSuffix"
     assertConfigMatches(hadoopConf, "fs.gs.application.name.suffix", expectedUserAgent,
       SOURCE_SPARK)
@@ -82,12 +82,12 @@ class SparkHadoopUtilSuite extends SparkFunSuite {
   /**
    * Verify that the GCS user agent is set correctly when the user provides an empty suffix.
    */
-  test("GCS user agent should be set when user provided suffix is empty") {
+  test("SPARK-52336: GCS user agent should be set when user provided suffix is empty") {
     val sparkConf = new SparkConf()
     sparkConf.set("spark.hadoop.fs.gs.application.name.suffix", "")
     val hadoopConf = SparkHadoopUtil.newConfiguration(sparkConf)
 
-    val expectedUserAgent = s"apache_spark/${org.apache.spark.SPARK_VERSION} (GPN:apache_spark)"
+    val expectedUserAgent = s"apache-spark/${org.apache.spark.SPARK_VERSION} (GPN:apache-spark)"
     assertConfigMatches(hadoopConf, "fs.gs.application.name.suffix", expectedUserAgent,
       SOURCE_SPARK)
   }
