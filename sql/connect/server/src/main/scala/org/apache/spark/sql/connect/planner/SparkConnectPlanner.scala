@@ -34,13 +34,13 @@ import org.apache.spark.{SparkClassNotFoundException, SparkEnv, SparkException, 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{CheckpointCommand, CreateResourceProfileCommand, ExecutePlanResponse, SqlCommand, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
+import org.apache.spark.connect.proto.{CreateResourceProfileCommand, ExecutePlanResponse, SqlCommand, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.{Logging, LogKeys}
-import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
+import org.apache.spark.internal.LogKeys.SESSION_ID
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Column, Encoders, ForeachWriter, Observation, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
@@ -62,6 +62,7 @@ import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
+import org.apache.spark.sql.connect.execution.command.{CheckpointCommand, ConnectLeafRunnableCommand, RemoveCachedRemoteRelationCommand}
 import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.pipelines.PipelinesHandler
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
@@ -2652,6 +2653,12 @@ class SparkConnectPlanner(
         Some(transformWriteOperationV2(command.getWriteOperationV2))
       case proto.Command.CommandTypeCase.MERGE_INTO_TABLE_COMMAND =>
         Some(transformMergeIntoTableCommand(command.getMergeIntoTableCommand))
+      case proto.Command.CommandTypeCase.CHECKPOINT_COMMAND =>
+        Some(_ => transformCheckpointCommand(command.getCheckpointCommand))
+      case proto.Command.CommandTypeCase.REMOVE_CACHED_REMOTE_RELATION_COMMAND =>
+        Some(_ =>
+          transformRemoveCachedRemoteRelationCommand(
+            command.getRemoveCachedRemoteRelationCommand))
       case _ =>
         None
     }
@@ -2662,7 +2669,7 @@ class SparkConnectPlanner(
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val transformerOpt = transformCommand(command)
     if (transformerOpt.isDefined) {
-      transformAndRunCommand(transformerOpt.get)
+      transformAndRunCommand(transformerOpt.get, responseObserver)
       return
     }
     command.getCommandTypeCase match {
@@ -2697,10 +2704,6 @@ class SparkConnectPlanner(
         handleCreateResourceProfileCommand(
           command.getCreateResourceProfileCommand,
           responseObserver)
-      case proto.Command.CommandTypeCase.CHECKPOINT_COMMAND =>
-        handleCheckpointCommand(command.getCheckpointCommand, responseObserver)
-      case proto.Command.CommandTypeCase.REMOVE_CACHED_REMOTE_RELATION_COMMAND =>
-        handleRemoveCachedRemoteRelationCommand(command.getRemoveCachedRemoteRelationCommand)
       case proto.Command.CommandTypeCase.ML_COMMAND =>
         handleMlCommand(command.getMlCommand, responseObserver)
       case proto.Command.CommandTypeCase.PIPELINE_COMMAND =>
@@ -3156,11 +3159,22 @@ class SparkConnectPlanner(
     }
   }
 
-  private def transformAndRunCommand(transformer: QueryPlanningTracker => LogicalPlan): Unit = {
+  private def transformAndRunCommand(
+      transformer: QueryPlanningTracker => LogicalPlan,
+      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val qe = new QueryExecution(session, transformer(tracker), tracker)
     qe.assertCommandExecuted()
     executeHolder.eventsManager.postFinished()
+    qe.logical match {
+      case connectCommand: ConnectLeafRunnableCommand =>
+        connectCommand.handleConnectResponse(
+          responseObserver,
+          sessionId,
+          sessionHolder.serverSessionId)
+      case _ =>
+      // Do nothing
+    }
   }
 
   /**
@@ -3714,48 +3728,27 @@ class SparkConnectPlanner(
         .build())
   }
 
-  private def handleCheckpointCommand(
-      checkpointCommand: CheckpointCommand,
-      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
-    val target = Dataset
-      .ofRows(session, transformRelation(checkpointCommand.getRelation))
-    val checkpointed = if (checkpointCommand.getLocal) {
-      if (checkpointCommand.hasStorageLevel) {
-        target.localCheckpoint(
-          eager = checkpointCommand.getEager,
-          storageLevel =
-            StorageLevelProtoConverter.toStorageLevel(checkpointCommand.getStorageLevel))
-      } else {
-        target.localCheckpoint(eager = checkpointCommand.getEager)
-      }
+  private def transformCheckpointCommand(
+      checkpointCommand: proto.CheckpointCommand): LogicalPlan = {
+    val storageLevelOpt = if (checkpointCommand.hasStorageLevel) {
+      Some(StorageLevelProtoConverter.toStorageLevel(checkpointCommand.getStorageLevel))
     } else {
-      target.checkpoint(eager = checkpointCommand.getEager)
+      None
     }
-
-    val dfId = UUID.randomUUID().toString
-    logInfo(log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")
-    sessionHolder.cacheDataFrameById(dfId, checkpointed)
-
-    executeHolder.eventsManager.postFinished()
-    responseObserver.onNext(
-      proto.ExecutePlanResponse
-        .newBuilder()
-        .setSessionId(sessionId)
-        .setServerSideSessionId(sessionHolder.serverSessionId)
-        .setCheckpointCommandResult(
-          proto.CheckpointCommandResult
-            .newBuilder()
-            .setRelation(proto.CachedRemoteRelation.newBuilder().setRelationId(dfId).build())
-            .build())
-        .build())
+    CheckpointCommand(
+      transformRelation(checkpointCommand.getRelation),
+      checkpointCommand.getLocal,
+      storageLevelOpt,
+      checkpointCommand.getEager,
+      UUID.randomUUID().toString,
+      sessionHolder.cacheDataFrameById)
   }
 
-  private def handleRemoveCachedRemoteRelationCommand(
-      removeCachedRemoteRelationCommand: proto.RemoveCachedRemoteRelationCommand): Unit = {
-    val dfId = removeCachedRemoteRelationCommand.getRelation.getRelationId
-    logInfo(log"Removing DataFrame with id ${MDC(DATAFRAME_ID, dfId)} from the cache")
-    sessionHolder.removeCachedDataFrame(dfId)
-    executeHolder.eventsManager.postFinished()
+  private def transformRemoveCachedRemoteRelationCommand(
+      removeCachedRemoteRelationCommand: proto.RemoveCachedRemoteRelationCommand): LogicalPlan = {
+    RemoveCachedRemoteRelationCommand(
+      removeCachedRemoteRelationCommand.getRelation.getRelationId,
+      sessionHolder.removeCachedDataFrame)
   }
 
   private def transformMergeIntoTableCommand(cmd: proto.MergeIntoTableCommand)(
