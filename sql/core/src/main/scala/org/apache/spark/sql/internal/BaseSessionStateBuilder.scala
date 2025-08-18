@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.classic.{SparkSession, Strategy, StreamingQueryManager, UDFRegistration}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
+import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, ShuffleCleanupMode, SparkOptimizer, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
 import org.apache.spark.sql.execution.aggregate.{ResolveEncodersInScalaAgg, ScalaUDAF}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
@@ -406,9 +406,9 @@ abstract class BaseSessionStateBuilder(
    * Create a query execution object.
    */
   protected def createQueryExecution:
-    (LogicalPlan, CommandExecutionMode.Value) => QueryExecution =
-      (plan, mode) => new QueryExecution(session, plan, mode = mode,
-        shuffleCleanupMode = QueryExecution.determineShuffleCleanupMode(session.sessionState.conf))
+    (LogicalPlan, CommandExecutionMode.Value, ShuffleCleanupMode) => QueryExecution =
+      (plan, mode, cleanupMode) => new QueryExecution(session, plan, mode = mode,
+        shuffleCleanupMode = cleanupMode)
 
   /**
    * Interface to start and stop streaming queries.
