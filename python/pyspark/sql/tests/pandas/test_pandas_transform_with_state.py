@@ -39,6 +39,8 @@ from pyspark.sql.types import (
     LongType,
     BooleanType,
     FloatType,
+    ArrayType,
+    MapType,
 )
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
