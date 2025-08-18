@@ -30,6 +30,16 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{NextIterator, SerializableConfiguration}
 
 /**
+ * Constants for store names used in Stream-Stream joins.
+ */
+object StatePartitionReaderStoreNames {
+  val LEFT_KEY_TO_NUM_VALUES_STORE = "left-keyToNumValues"
+  val LEFT_KEY_WITH_INDEX_TO_VALUE_STORE = "left-keyWithIndexToValue"
+  val RIGHT_KEY_TO_NUM_VALUES_STORE = "right-keyToNumValues"
+  val RIGHT_KEY_WITH_INDEX_TO_VALUE_STORE = "right-keyWithIndexToValue"
+}
+
+/**
  * An implementation of [[PartitionReaderFactory]] for State data source. This is used to support
  * general read from a state store instance, rather than specific to the operator.
  * @param stateSchemaProviderOpt Optional provider that maintains mapping between schema IDs and
@@ -107,16 +117,16 @@ abstract class StatePartitionReaderBase(
         partition.sourceOptions.operatorStateUniqueIds,
         useColumnFamiliesForJoins = false)
 
-      if (partition.sourceOptions.storeName == "left-keyToNumValues") {
-        stateStoreCheckpointIds.left.keyToNumValues
-      } else if (partition.sourceOptions.storeName == "left-keyWithIndexToValue") {
-        stateStoreCheckpointIds.left.valueToNumKeys
-      } else if (partition.sourceOptions.storeName == "right-keyToNumValues") {
-        stateStoreCheckpointIds.right.keyToNumValues
-      } else if (partition.sourceOptions.storeName == "right-keyWithIndexToValue") {
-        stateStoreCheckpointIds.right.valueToNumKeys
-      } else {
-        None
+      partition.sourceOptions.storeName match {
+        case StatePartitionReaderStoreNames.LEFT_KEY_TO_NUM_VALUES_STORE =>
+          stateStoreCheckpointIds.left.keyToNumValues
+        case StatePartitionReaderStoreNames.LEFT_KEY_WITH_INDEX_TO_VALUE_STORE =>
+          stateStoreCheckpointIds.left.valueToNumKeys
+        case StatePartitionReaderStoreNames.RIGHT_KEY_TO_NUM_VALUES_STORE =>
+          stateStoreCheckpointIds.right.keyToNumValues
+        case StatePartitionReaderStoreNames.RIGHT_KEY_WITH_INDEX_TO_VALUE_STORE =>
+          stateStoreCheckpointIds.right.valueToNumKeys
+        case _ => None
       }
     }
   }
