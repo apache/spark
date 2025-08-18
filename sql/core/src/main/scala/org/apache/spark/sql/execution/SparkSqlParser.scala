@@ -27,7 +27,9 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView, LocalTempView, PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
+import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView, LocalTempView,
+  PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution,
+  UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -53,7 +55,8 @@ class SparkSqlParser extends AbstractSqlParser {
 
   protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     // Step 1: Check if we have a parameterized query context and substitute parameters
-    val paramSubstituted = org.apache.spark.sql.catalyst.parser.ThreadLocalParameterContext.get() match {
+    val paramSubstituted = 
+      org.apache.spark.sql.catalyst.parser.ThreadLocalParameterContext.get() match {
       case Some(context) =>
         println(s"DEBUG: Found parameter context for command: $command")
         val result = substituteParametersIfNeeded(command, context)
