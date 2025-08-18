@@ -21,7 +21,6 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.utils import is_ansi_mode_test, ansi_mode_not_supported_message
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 

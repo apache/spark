@@ -24,7 +24,6 @@ import org.apache.logging.log4j.Level;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 
-import org.apache.spark.internal.Logging$;
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 
@@ -33,13 +32,13 @@ public class StructuredSparkLoggerSuite extends SparkLoggerSuiteBase {
   // Enable Structured Logging before running the tests
   @BeforeAll
   public static void setup() {
-    Logging$.MODULE$.enableStructuredLogging();
+    SparkLoggerFactory.enableStructuredLogging();
   }
 
   // Disable Structured Logging after running the tests
   @AfterAll
   public static void teardown() {
-    Logging$.MODULE$.disableStructuredLogging();
+    SparkLoggerFactory.disableStructuredLogging();
   }
 
   private static final SparkLogger LOGGER =
@@ -176,28 +175,14 @@ public class StructuredSparkLoggerSuite extends SparkLoggerSuiteBase {
   }
 
   @Override
-  String expectedPatternForScalaCustomLogKey(Level level) {
+  String expectedPatternForCustomLogKey(Level level) {
     return compactAndToRegexPattern(level, """
       {
         "ts": "<timestamp>",
         "level": "<level>",
-        "msg": "Scala custom log message.",
+        "msg": "Custom log message.",
         "context": {
-          "custom_log_key": "Scala custom log message."
-        },
-        "logger": "<className>"
-      }""");
-  }
-
-  @Override
-  String expectedPatternForJavaCustomLogKey(Level level) {
-    return compactAndToRegexPattern(level, """
-      {
-        "ts": "<timestamp>",
-        "level": "<level>",
-        "msg": "Java custom log message.",
-        "context": {
-          "custom_log_key": "Java custom log message."
+          "custom_log_key": "Custom log message."
         },
         "logger": "<className>"
       }""");

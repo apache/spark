@@ -28,7 +28,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -465,7 +465,7 @@ case class AlterTableChangeColumnCommand(
   // when altering column. Only changes in collation of data type or its nested types (recursively)
   // are allowed.
   private def canEvolveType(from: StructField, to: StructField): Boolean = {
-    DataType.equalsIgnoreCompatibleCollation(from.dataType, to.dataType)
+    DataType.equalsIgnoreCompatibleCollation(from.dataType, to.dataType, checkComplexTypes = false)
   }
 }
 

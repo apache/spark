@@ -17,25 +17,25 @@
 
 package org.apache.spark.util
 
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
-import java.util.{ArrayList => JList}
 
 import scala.jdk.CollectionConverters._
-import scala.reflect.runtime.universe._
 
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.util.ArrayImplicits._
 
 // scalastyle:off line.size.limit
 /**
- * To re-generate the file `LogKey.scala`, run:
+ * To re-generate the file `LogKeys.java`, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "common-utils/testOnly org.apache.spark.util.LogKeySuite"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "common-utils/testOnly org.apache.spark.util.LogKeysSuite"
  * }}}
  */
 // scalastyle:on line.size.limit
-class LogKeySuite
+class LogKeysSuite
     extends AnyFunSuite // scalastyle:ignore funsuite
     with Logging {
 
@@ -52,36 +52,33 @@ class LogKeySuite
 
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
-  private val logKeyFilePath = getWorkspaceFilePath("common", "utils", "src", "main", "scala",
-    "org", "apache", "spark", "internal", "LogKey.scala")
+  private val logKeyFilePath = getWorkspaceFilePath("common", "utils", "src", "main", "java",
+    "org", "apache", "spark", "internal", "LogKeys.java")
 
-  // regenerate the file `LogKey.scala` with its members sorted alphabetically
+  // regenerate the file `LogKeys.java` with its members sorted alphabetically
   private def regenerateLogKeyFile(
       originalKeys: Seq[String], sortedKeys: Seq[String]): Unit = {
     if (originalKeys != sortedKeys) {
-      logInfo(s"Regenerating the file $logKeyFilePath")
-      val originalContents = Files.readAllLines(logKeyFilePath)
-      val sortedContents = new JList[String]()
-      var firstMatch = false
-      originalContents.asScala.foreach { line =>
-        if (line.trim.startsWith("case object ") && line.trim.endsWith(" extends LogKey")) {
-          if (!firstMatch) {
-            sortedKeys.foreach { key =>
-              sortedContents.add(s"  case object $key extends LogKey")
-            }
-            firstMatch = true
-          }
-        } else {
-          sortedContents.add(line)
-        }
-      }
-      Files.delete(logKeyFilePath)
-      Files.write(logKeyFilePath, sortedContents)
+      val logKeyFile = logKeyFilePath.toFile
+      logInfo(s"Regenerating the file $logKeyFile")
+      val originalContents = Files.readAllLines(logKeyFile.toPath, StandardCharsets.UTF_8).asScala
+
+      val beforeFirstIndex = originalContents
+        .indexWhere(_.contains("public enum LogKeys implements LogKey"))
+
+      val content =
+        s"""${originalContents.take(beforeFirstIndex + 1).mkString("\n")}
+           |${sortedKeys.map { key => s"  $key" }.mkString(",\n")}
+           |}
+           |""".stripMargin
+
+      Files.delete(logKeyFile.toPath)
+      Files.writeString(logKeyFile.toPath, content, StandardCharsets.UTF_8)
     }
   }
 
   test("The members of LogKeys are correctly sorted") {
-    val originalKeys = getAllLogKeys.reverse
+    val originalKeys = LogKeys.values.map(_.name).toImmutableArraySeq
     val sortedKeys = originalKeys.sorted
     if (regenerateGoldenFiles) {
       regenerateLogKeyFile(originalKeys, sortedKeys)
@@ -89,12 +86,5 @@ class LogKeySuite
       assert(originalKeys === sortedKeys,
         "The members of LogKeys must be sorted alphabetically")
     }
-  }
-
-  private def getAllLogKeys: Seq[String] = {
-    val logKeysType = typeOf[LogKeys.type]
-    val classSymbol = logKeysType.typeSymbol.asClass
-    val members = classSymbol.typeSignature.members
-    members.filter(m => m.isTerm && !m.isMethod).map(_.name.toString).toSeq
   }
 }

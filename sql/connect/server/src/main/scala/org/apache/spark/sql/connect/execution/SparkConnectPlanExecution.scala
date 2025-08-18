@@ -81,10 +81,13 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
           dataframe).foreach(responseObserver.onNext)
       case proto.Plan.OpTypeCase.COMMAND =>
         val command = request.getPlan.getCommand
-        planner.transformCommand(command, tracker) match {
-          case Some(plan) =>
-            val qe =
-              new QueryExecution(session, plan, tracker, shuffleCleanupMode = shuffleCleanupMode)
+        planner.transformCommand(command) match {
+          case Some(transformer) =>
+            val qe = new QueryExecution(
+              session,
+              transformer(tracker),
+              tracker,
+              shuffleCleanupMode = shuffleCleanupMode)
             qe.assertCommandExecuted()
             executeHolder.eventsManager.postFinished()
           case None =>

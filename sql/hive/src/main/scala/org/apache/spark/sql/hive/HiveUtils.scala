@@ -36,7 +36,7 @@ import org.apache.hive.common.util.HiveVersionInfo
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.classic.SQLContext

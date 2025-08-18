@@ -28,7 +28,7 @@ import org.antlr.v4.runtime.{ParserRuleContext, RuleContext, Token}
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable, SparkThrowableHelper}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PARTITION_SPECIFICATION
 import org.apache.spark.sql.catalyst.{EvaluateUnresolvedInlineTable, FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
@@ -6379,7 +6379,7 @@ class AstBuilder extends DataTypeAstBuilder
    *
    * For example:
    * {{{
-   *   DECLARE [OR REPLACE] [VARIABLE] [db_name.]variable_name
+   *   DECLARE [OR REPLACE] [VARIABLE] variable_name [COMMA variable_name]*
    *   [dataType] [defaultExpression];
    * }}}
    *
@@ -6392,7 +6392,7 @@ class AstBuilder extends DataTypeAstBuilder
         throw new ParseException(
           errorClass = "INVALID_SQL_SYNTAX.VARIABLE_TYPE_OR_DEFAULT_REQUIRED",
           messageParameters = Map.empty,
-          ctx.identifierReference)
+          ctx.identifierReferences.get(0))
       }
       DefaultValueExpression(Literal(null, dataTypeOpt.get), "null")
     } else {
@@ -6400,7 +6400,11 @@ class AstBuilder extends DataTypeAstBuilder
       dataTypeOpt.map { dt => default.copy(child = Cast(default.child, dt)) }.getOrElse(default)
     }
     CreateVariable(
-      withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
+      ctx.identifierReferences.asScala.map (
+        identifierReference => {
+          withIdentClause(identifierReference, UnresolvedIdentifier(_))
+        }
+      ).toSeq,
       defaultExpression,
       ctx.REPLACE() != null
     )

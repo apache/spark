@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{JOIN_CONDITION, JOIN_TYPE, SCHEMA}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.expressions.{FieldReference, SortOrder}
@@ -187,6 +187,8 @@ case class JDBCScanBuilder(
 
     val joinTypeStringOption = joinType match {
       case JoinType.INNER_JOIN => Some("INNER JOIN")
+      case JoinType.LEFT_OUTER_JOIN => Some("LEFT JOIN")
+      case JoinType.RIGHT_OUTER_JOIN => Some("RIGHT JOIN")
       case _ => None
     }
     if (!joinTypeStringOption.isDefined) {

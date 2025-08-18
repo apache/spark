@@ -721,7 +721,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           case c: CreateVariable
               if c.resolved && c.defaultExpr.child.containsPattern(PLAN_EXPRESSION) =>
-            val ident = c.name.asInstanceOf[ResolvedIdentifier]
+            val ident = c.names(0).asInstanceOf[ResolvedIdentifier]
             val varName = toSQLId(
               (ident.catalog.name +: ident.identifier.namespace :+ ident.identifier.name)
                 .toImmutableArraySeq)

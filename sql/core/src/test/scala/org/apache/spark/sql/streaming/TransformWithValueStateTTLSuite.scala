@@ -23,7 +23,10 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MemoryStream, ValueStateImpl, ValueStateImplWithTTL}
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statevariables.ValueStateImpl
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.ttl.ValueStateImplWithTTL
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -220,6 +223,8 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         // advance clock to trigger processing
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
+        assertNumStateRows(total = 2, updated = 2),
+
         // get both state values, and make sure we get unexpired value
         AddData(inputStream, InputEvent(ttlKey, "get", -1)),
         AddData(inputStream, InputEvent(noTtlKey, "get", -1)),
@@ -228,15 +233,21 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           OutputEvent(ttlKey, 1, isTTLValue = false, -1),
           OutputEvent(noTtlKey, 2, isTTLValue = false, -1)
         ),
+        assertNumStateRows(total = 2, updated = 0),
+
         // ensure ttl values were added correctly, and noTtlKey has no ttl values
         AddData(inputStream, InputEvent(ttlKey, "get_ttl_value_from_state", -1)),
         AddData(inputStream, InputEvent(noTtlKey, "get_ttl_value_from_state", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(OutputEvent(ttlKey, 1, isTTLValue = true, 61000)),
+        assertNumStateRows(total = 2, updated = 0),
+
         AddData(inputStream, InputEvent(ttlKey, "get_values_in_ttl_state", -1)),
         AddData(inputStream, InputEvent(noTtlKey, "get_values_in_ttl_state", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(OutputEvent(ttlKey, -1, isTTLValue = true, 61000)),
+        assertNumStateRows(total = 2, updated = 0),
+
         // advance clock after expiry
         AdvanceManualClock(60 * 1000),
         AddData(inputStream, InputEvent(ttlKey, "get", -1)),
@@ -245,19 +256,27 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         AdvanceManualClock(1 * 1000),
         // validate ttlKey is expired, bot noTtlKey is still present
         CheckNewAnswer(OutputEvent(noTtlKey, 2, isTTLValue = false, -1)),
+        assertNumStateRows(total = 1, updated = 0),
+
         // validate ttl value is removed in the value state column family
         AddData(inputStream, InputEvent(ttlKey, "get_ttl_value_from_state", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
+        assertNumStateRows(total = 1, updated = 0),
+
         AddData(inputStream, InputEvent(ttlKey, "put", 3)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
+        assertNumStateRows(total = 2, updated = 1),
+
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
         },
         AddData(inputStream, InputEvent(noTtlKey, "get", -1)),
         AdvanceManualClock(60 * 1000),
         CheckNewAnswer(OutputEvent(noTtlKey, 2, isTTLValue = false, -1)),
+        assertNumStateRows(total = 1, updated = 0),
+
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
         }
@@ -471,6 +490,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           AddData(inputStream, InputEvent(noTtlKey, "put", 2)),
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
+          assertNumStateRows(total = 2, updated = 2),
           Execute { q =>
             val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
             val providerId = StateStoreProviderId(

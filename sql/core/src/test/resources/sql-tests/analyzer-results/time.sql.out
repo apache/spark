@@ -418,6 +418,391 @@ Project [extract(SECOND, cast(09:08:01.987654 as time(6))) AS extract(SECOND FRO
 
 
 -- !query
+SELECT TIME'0:0:0'
+-- !query analysis
+Project [00:00:00 AS TIME '00:00:00'#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'01:02:03'
+-- !query analysis
+Project [01:02:03 AS TIME '01:02:03'#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'12:34:56'
+-- !query analysis
+Project [12:34:56 AS TIME '12:34:56'#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'23:59:59'
+-- !query analysis
+Project [23:59:59 AS TIME '23:59:59'#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'23:59:59.9'
+-- !query analysis
+Project [23:59:59.9 AS TIME '23:59:59.9'#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'23:59:59.99'
+-- !query analysis
+Project [23:59:59.99 AS TIME '23:59:59.99'#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'23:59:59.999'
+-- !query analysis
+Project [23:59:59.999 AS TIME '23:59:59.999'#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'23:59:59.9999'
+-- !query analysis
+Project [23:59:59.9999 AS TIME '23:59:59.9999'#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'23:59:59.99999'
+-- !query analysis
+Project [23:59:59.99999 AS TIME '23:59:59.99999'#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'23:59:59.999999'
+-- !query analysis
+Project [23:59:59.999999 AS TIME '23:59:59.999999'#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'01:02:03 AM'
+-- !query analysis
+Project [01:02:03 AS TIME '01:02:03'#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'01:02:03 am'
+-- !query analysis
+Project [01:02:03 AS TIME '01:02:03'#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'01:02:03 Am'
+-- !query analysis
+Project [01:02:03 AS TIME '01:02:03'#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'01:02:03 PM'
+-- !query analysis
+Project [13:02:03 AS TIME '13:02:03'#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'01:02:03 pm'
+-- !query analysis
+Project [13:02:03 AS TIME '13:02:03'#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'01:02:03 pM'
+-- !query analysis
+Project [13:02:03 AS TIME '13:02:03'#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'00:00:60'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
+  "messageParameters" : {
+    "value" : "'00:00:60'",
+    "valueType" : "\"TIME\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 21,
+    "fragment" : "TIME'00:00:60'"
+  } ]
+}
+
+
+-- !query
+SELECT TIME'00:60:00'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
+  "messageParameters" : {
+    "value" : "'00:60:00'",
+    "valueType" : "\"TIME\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 21,
+    "fragment" : "TIME'00:60:00'"
+  } ]
+}
+
+
+-- !query
+SELECT TIME'24:00:00'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
+  "messageParameters" : {
+    "value" : "'24:00:00'",
+    "valueType" : "\"TIME\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 21,
+    "fragment" : "TIME'24:00:00'"
+  } ]
+}
+
+
+-- !query
+SELECT TIME'00:00:00 AM'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
+  "messageParameters" : {
+    "value" : "'00:00:00 AM'",
+    "valueType" : "\"TIME\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "TIME'00:00:00 AM'"
+  } ]
+}
+
+
+-- !query
+SELECT TIME'00:00:00 PM'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
+  "messageParameters" : {
+    "value" : "'00:00:00 PM'",
+    "valueType" : "\"TIME\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "TIME'00:00:00 PM'"
+  } ]
+}
+
+
+-- !query
+SELECT TIME'12:00:60 AM'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
+  "messageParameters" : {
+    "value" : "'12:00:60 AM'",
+    "valueType" : "\"TIME\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "TIME'12:00:60 AM'"
+  } ]
+}
+
+
+-- !query
+SELECT TIME'12:00:60 PM'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
+  "messageParameters" : {
+    "value" : "'12:00:60 PM'",
+    "valueType" : "\"TIME\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "TIME'12:00:60 PM'"
+  } ]
+}
+
+
+-- !query
+SELECT TIME'12:60:00 AM'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
+  "messageParameters" : {
+    "value" : "'12:60:00 AM'",
+    "valueType" : "\"TIME\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "TIME'12:60:00 AM'"
+  } ]
+}
+
+
+-- !query
+SELECT TIME'12:60:00 PM'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
+  "messageParameters" : {
+    "value" : "'12:60:00 PM'",
+    "valueType" : "\"TIME\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "TIME'12:60:00 PM'"
+  } ]
+}
+
+
+-- !query
+SELECT TIME'13:00:00 AM'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
+  "messageParameters" : {
+    "value" : "'13:00:00 AM'",
+    "valueType" : "\"TIME\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "TIME'13:00:00 AM'"
+  } ]
+}
+
+
+-- !query
+SELECT TIME'13:00:00 PM'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
+  "messageParameters" : {
+    "value" : "'13:00:00 PM'",
+    "valueType" : "\"TIME\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "TIME'13:00:00 PM'"
+  } ]
+}
+
+
+-- !query
+SELECT TIME'24:00:00 AM'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
+  "messageParameters" : {
+    "value" : "'24:00:00 AM'",
+    "valueType" : "\"TIME\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "TIME'24:00:00 AM'"
+  } ]
+}
+
+
+-- !query
+SELECT TIME'24:00:00 PM'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_TYPED_LITERAL",
+  "sqlState" : "42604",
+  "messageParameters" : {
+    "value" : "'24:00:00 PM'",
+    "valueType" : "\"TIME\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "TIME'24:00:00 PM'"
+  } ]
+}
+
+
+-- !query
 SELECT cast("12:34:56" as time)
 -- !query analysis
 Project [cast(12:34:56 as time(6)) AS CAST(12:34:56 AS TIME(6))#x]

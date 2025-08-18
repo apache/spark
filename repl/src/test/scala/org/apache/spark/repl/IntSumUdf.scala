@@ -15,19 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.internal;
+package org.apache.spark.repl
 
-// checkstyle.off: RegexpSinglelineJava
-import org.slf4j.LoggerFactory;
-// checkstyle.on: RegexpSinglelineJava
+import org.apache.spark.sql.api.java.UDF2
 
-public class SparkLoggerFactory {
-
-  public static SparkLogger getLogger(String name) {
-    return new SparkLogger(LoggerFactory.getLogger(name));
-  }
-
-  public static SparkLogger getLogger(Class<?> clazz) {
-    return new SparkLogger(LoggerFactory.getLogger(clazz));
-  }
+class IntSumUdf extends UDF2[Long, Long, Long] {
+  override def call(t1: Long, t2: Long): Long = t1 + t2
 }

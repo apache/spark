@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.hive.orc
 
-import java.util.Properties
+import java.util.{Base64, Properties}
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.Output
-import org.apache.commons.codec.binary.Base64
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.ql.io.orc._
@@ -215,7 +214,7 @@ case class OrcFileFormat() extends FileFormat with DataSourceRegister with Seria
     val out = new Output(4 * 1024, 10 * 1024 * 1024)
     kryo.writeObject(out, sarg)
     out.close()
-    Base64.encodeBase64String(out.toBytes)
+    Base64.getEncoder().encodeToString(out.toBytes)
   }
 }
 

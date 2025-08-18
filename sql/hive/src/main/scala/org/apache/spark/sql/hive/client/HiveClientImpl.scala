@@ -29,7 +29,6 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
@@ -50,7 +49,7 @@ import org.apache.thrift.transport.{TEndpointTransport, TTransport}
 
 import org.apache.spark.{SparkConf, SparkException, SparkThrowable}
 import org.apache.spark.deploy.SparkHadoopUtil.SOURCE_SPARK
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.metrics.source.HiveCatalogMetrics
@@ -921,7 +920,7 @@ private[hive] class HiveClientImpl(
               // Wrap the original hive error with QueryExecutionException and throw it
               // if there is an error in query processing.
               // This works for hive 4.x and later versions.
-              throw new QueryExecutionException(ExceptionUtils.getStackTrace(e))
+              throw new QueryExecutionException(Utils.stackTraceToString(e))
           } finally {
             closeDriver(driver)
           }

@@ -15,8 +15,15 @@
  * limitations under the License.
  */
 
-import org.apache.spark.sql.api.java.UDF2
+package org.apache.spark.internal;
 
-class IntSumUdf extends UDF2[Long, Long, Long] {
-  override def call(t1: Long, t2: Long): Long = t1 + t2
+/**
+ * Mapped Diagnostic Context (MDC) that will be used in log messages.
+ * The values of the MDC will be inline in the log message, while the key-value pairs will be
+ * part of the ThreadContext.
+ */
+public record MDC(LogKey key, Object value) {
+  public static MDC of(LogKey key, Object value) {
+    return new MDC(key, value);
+  }
 }

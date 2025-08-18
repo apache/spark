@@ -1549,7 +1549,7 @@ class DataStreamWriter:
         ...     def close(self, error):
         ...         print("Closed with error: %s" % str(error))
         ...
-        >>> q = df.writeStream.foreach(print_row).start()
+        >>> q = df.writeStream.foreach(RowPrinter()).start()
         >>> time.sleep(3)
         >>> q.stop()
         """

@@ -25,7 +25,6 @@ import java.util.concurrent.CountDownLatch
 import scala.collection.mutable
 import scala.util.{Success, Try}
 
-import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.RandomStringUtils
 import org.apache.hadoop.fs.Path
 import org.mockito.Mockito.when
@@ -46,6 +45,8 @@ import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit}
 import org.apache.spark.sql.execution.exchange.{REQUIRED_BY_STATEFUL_OPERATOR, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
+import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, MetricsReporter, StreamExecution, StreamingExecutionRelation, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.sources.{MemorySink, TestForeachWriter}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1163,7 +1164,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       assertMigrationError(e2.getMessage, sparkMetadataDir, legacySparkMetadataDir)
 
       // Move "_spark_metadata" to fix the file sink and test the checkpoint path.
-      FileUtils.moveDirectory(legacySparkMetadataDir, sparkMetadataDir)
+      Utils.moveDirectory(legacySparkMetadataDir, sparkMetadataDir)
 
       // Restarting the streaming query should detect the legacy
       // checkpoint path and throw an error.
@@ -1177,7 +1178,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       assertMigrationError(e3.getMessage, checkpointDir, legacyCheckpointDir)
 
       // Fix the checkpoint path and verify that the user can migrate the issue by moving files.
-      FileUtils.moveDirectory(legacyCheckpointDir, checkpointDir)
+      Utils.moveDirectory(legacyCheckpointDir, checkpointDir)
 
       val q = inputData.toDF()
         .writeStream

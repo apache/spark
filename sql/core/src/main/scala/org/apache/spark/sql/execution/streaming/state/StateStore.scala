@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.io.Closeable
 import java.util.UUID
 import java.util.concurrent.{ConcurrentLinkedQueue, ScheduledFuture, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
@@ -33,16 +34,36 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.{SparkContext, SparkEnv, SparkException, TaskContext}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.{EXCEPTION, STATE_STORE_ID, VERSION_NUM}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-import org.apache.spark.sql.execution.streaming.{StatefulOperatorStateInfo, StreamExecution}
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.execution.streaming.state.MaintenanceTaskType._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{NextIterator, ThreadUtils, Utils}
+
+/**
+ * Represents an iterator that provides additional functionalities for state store use cases.
+ *
+ * `close()` is useful for freeing underlying iterator resources when the iterator is no longer
+ * needed.
+ *
+ * The caller MUST call `close()` on the iterator if it was not fully consumed, and it is no
+ * longer needed.
+ */
+class StateStoreIterator[A](
+    val iter: Iterator[A],
+    val onClose: () => Unit = () => {}) extends Iterator[A] with Closeable {
+  override def hasNext: Boolean = iter.hasNext
+
+  override def next(): A = iter.next()
+
+  override def close(): Unit = onClose()
+}
 
 sealed trait StateStoreEncoding {
   override def toString: String = this match {
@@ -117,10 +138,11 @@ trait ReadStateStore {
    */
   def prefixScan(
       prefixKey: UnsafeRow,
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair]
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): StateStoreIterator[UnsafeRowPair]
 
   /** Return an iterator containing all the key-value pairs in the StateStore. */
-  def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair]
+  def iterator(
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): StateStoreIterator[UnsafeRowPair]
 
   /**
    * Clean up the resource.
@@ -227,8 +249,8 @@ trait StateStore extends ReadStateStore {
    * performed after initialization of the iterator. Callers should perform all updates before
    * calling this method if all updates should be visible in the returned iterator.
    */
-  override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
-    Iterator[UnsafeRowPair]
+  override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
+    : StateStoreIterator[UnsafeRowPair]
 
   /** Current metrics of the state store */
   def metrics: StateStoreMetrics
@@ -260,16 +282,16 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow = store.get(key,
     colFamilyName)
 
-  override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
-    Iterator[UnsafeRowPair] = store.iterator(colFamilyName)
+  override def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
+    : StateStoreIterator[UnsafeRowPair] = store.iterator(colFamilyName)
 
   override def abort(): Unit = store.abort()
 
   override def release(): Unit = store.release()
 
   override def prefixScan(prefixKey: UnsafeRow,
-    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair] =
-    store.prefixScan(prefixKey, colFamilyName)
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
+    : StateStoreIterator[UnsafeRowPair] = store.prefixScan(prefixKey, colFamilyName)
 
   override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
     store.valuesIterator(key, colFamilyName)

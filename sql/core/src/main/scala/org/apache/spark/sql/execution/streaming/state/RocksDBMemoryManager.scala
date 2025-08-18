@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 import org.rocksdb._
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.memory.{MemoryMode, UnifiedMemoryManager, UnmanagedMemoryConsumer, UnmanagedMemoryConsumerId}
 

@@ -123,6 +123,14 @@ case class UserDefinedPythonTableFunction(
      */
     NamedParametersSupport.splitAndCheckNamedArguments(exprs, name)
 
+    // Check which argument is a table argument here since it will be replaced with
+    // `UnresolvedAttribute` to construct lateral join.
+    val tableArgs = exprs.map {
+      case _: FunctionTableSubqueryArgumentExpression => true
+      case NamedArgumentExpression(_, _: FunctionTableSubqueryArgumentExpression) => true
+      case _ => false
+    }
+
     val udtf = returnType match {
       case Some(rt) =>
         PythonUDTF(
@@ -132,15 +140,9 @@ case class UserDefinedPythonTableFunction(
           pickledAnalyzeResult = None,
           children = exprs,
           evalType = pythonEvalType,
-          udfDeterministic = udfDeterministic)
+          udfDeterministic = udfDeterministic,
+          tableArguments = Some(tableArgs))
       case _ =>
-        // Check which argument is a table argument here since it will be replaced with
-        // `UnresolvedAttribute` to construct lateral join.
-        val tableArgs = exprs.map {
-          case _: FunctionTableSubqueryArgumentExpression => true
-          case NamedArgumentExpression(_, _: FunctionTableSubqueryArgumentExpression) => true
-          case _ => false
-        }
         val runAnalyzeInPython = (func: PythonFunction, exprs: Seq[Expression]) => {
           val runner =
             new UserDefinedPythonTableFunctionAnalyzeRunner(name, func, exprs, tableArgs, parser)
@@ -152,7 +154,8 @@ case class UserDefinedPythonTableFunction(
           children = exprs,
           evalType = pythonEvalType,
           udfDeterministic = udfDeterministic,
-          resolveElementMetadata = runAnalyzeInPython)
+          resolveElementMetadata = runAnalyzeInPython,
+          tableArguments = Some(tableArgs))
     }
     Generate(
       udtf,

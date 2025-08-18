@@ -18,12 +18,15 @@
 package org.apache.spark.network.util;
 
 import java.io.*;
+import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
@@ -34,12 +37,12 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import java.util.stream.Collectors;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
-import org.apache.spark.util.SparkSystemUtils$;
 
 /**
  * General utilities available in the network package. Many of these are sourced from Spark's
@@ -73,6 +76,71 @@ public class JavaUtils {
         walk.sorted(Comparator.reverseOrder()).map(Path::toFile).forEach(File::delete);
       } catch (Exception ignored) { /* No-op */ }
     }
+  }
+
+  /** Registers the file or directory for deletion when the JVM exists. */
+  public static void forceDeleteOnExit(File file) throws IOException {
+    if (file != null && file.exists()) {
+      if (!file.isDirectory()) {
+        file.deleteOnExit();
+      } else {
+        Path path = file.toPath();
+        Files.walkFileTree(path, new SimpleFileVisitor<Path>() {
+          @Override
+          public FileVisitResult preVisitDirectory(Path p, BasicFileAttributes a)
+              throws IOException {
+            p.toFile().deleteOnExit();
+            return a.isSymbolicLink() ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
+          }
+
+          @Override
+          public FileVisitResult visitFile(Path p, BasicFileAttributes a) throws IOException {
+            p.toFile().deleteOnExit();
+            return FileVisitResult.CONTINUE;
+          }
+        });
+      }
+    }
+  }
+
+  /** Move a file from src to dst. */
+  public static void moveFile(File src, File dst) throws IOException {
+    if (src == null || dst == null || !src.exists() || src.isDirectory() || dst.exists()) {
+      throw new IllegalArgumentException("Invalid input " + src + " or " + dst);
+    }
+    if (!src.renameTo(dst)) { // Try to use File.renameTo first
+      Files.move(src.toPath(), dst.toPath());
+    }
+  }
+
+  /** Move a directory from src to dst. */
+  public static void moveDirectory(File src, File dst) throws IOException {
+    if (src == null || dst == null || !src.exists() || !src.isDirectory() || dst.exists()) {
+      throw new IllegalArgumentException("Invalid input " + src + " or " + dst);
+    }
+    if (!src.renameTo(dst)) {
+      Path from = src.toPath().toAbsolutePath().normalize();
+      Path to = dst.toPath().toAbsolutePath().normalize();
+      if (to.startsWith(from)) {
+        throw new IllegalArgumentException("Cannot move directory to itself or its subdirectory");
+      }
+      moveDirectory(from, to);
+    }
+  }
+
+  private static void moveDirectory(Path src, Path dst) throws IOException {
+    Files.createDirectories(dst);
+    try (DirectoryStream<Path> stream = Files.newDirectoryStream(src)) {
+      for (Path from : stream) {
+        Path to = dst.resolve(from.getFileName());
+        if (Files.isDirectory(from)) {
+          moveDirectory(from, to);
+        } else {
+          Files.move(from, to, StandardCopyOption.REPLACE_EXISTING);
+        }
+      }
+    }
+    Files.delete(src);
   }
 
   /** Copy src to the target directory simply. File attribute times are not copied. */
@@ -196,15 +264,13 @@ public class JavaUtils {
     // On Unix systems, use operating system command to run faster
     // If that does not work out, fallback to the Java IO way
     // We exclude Apple Silicon test environment due to the limited resource issues.
-    if (SparkSystemUtils$.MODULE$.isUnix() && filter == null &&
-        !(SparkSystemUtils$.MODULE$.isMac() && (System.getenv("SPARK_TESTING") != null ||
-        System.getProperty("spark.testing") != null))) {
+    if (isUnix && filter == null && !(isMac && isTesting())) {
       try {
         deleteRecursivelyUsingUnixNative(file);
         return;
       } catch (IOException e) {
         logger.warn("Attempt to delete using native Unix OS command failed for path = {}. " +
-          "Falling back to Java IO way", e, MDC.of(LogKeys.PATH$.MODULE$, file.getAbsolutePath()));
+          "Falling back to Java IO way", e, MDC.of(LogKeys.PATH, file.getAbsolutePath()));
       }
     }
 
@@ -296,6 +362,25 @@ public class JavaUtils {
       return files;
     } else {
       return new File[0];
+    }
+  }
+
+  public static Set<Path> listPaths(File dir) throws IOException {
+    if (dir == null) throw new IllegalArgumentException("Input directory is null");
+    if (!dir.exists() || !dir.isDirectory()) return Collections.emptySet();
+    try (var stream = Files.walk(dir.toPath(), FileVisitOption.FOLLOW_LINKS)) {
+      return stream.filter(Files::isRegularFile).collect(Collectors.toCollection(HashSet::new));
+    }
+  }
+
+  public static Set<File> listFiles(File dir) throws IOException {
+    if (dir == null) throw new IllegalArgumentException("Input directory is null");
+    if (!dir.exists() || !dir.isDirectory()) return Collections.emptySet();
+    try (var stream = Files.walk(dir.toPath(), FileVisitOption.FOLLOW_LINKS)) {
+      return stream
+        .filter(Files::isRegularFile)
+        .map(Path::toFile)
+        .collect(Collectors.toCollection(HashSet::new));
     }
   }
 
@@ -502,7 +587,7 @@ public class JavaUtils {
         dir = new File(root, namePrefix + "-" + UUID.randomUUID());
         Files.createDirectories(dir.toPath());
       } catch (IOException | SecurityException e) {
-        logger.error("Failed to create directory {}", e, MDC.of(LogKeys.PATH$.MODULE$, dir));
+        logger.error("Failed to create directory {}", e, MDC.of(LogKeys.PATH, dir));
         dir = null;
       }
     }
@@ -522,6 +607,31 @@ public class JavaUtils {
     }
   }
 
+  /**
+   * Read len bytes exactly, otherwise throw exceptions.
+   */
+  public static void readFully(InputStream in, byte[] arr, int off, int len) throws IOException {
+    if (in == null || len < 0 || (off < 0 || off > arr.length - len)) {
+      throw new IllegalArgumentException("Invalid input argument");
+    }
+    if (len != in.readNBytes(arr, off, len)) {
+      throw new EOFException("Fail to read " + len + " bytes.");
+    }
+  }
+
+  /**
+   * Copy the content of a URL into a file.
+   */
+  public static void copyURLToFile(URL url, File file) throws IOException {
+    if (url == null || file == null || (file.exists() && file.isDirectory())) {
+      throw new IllegalArgumentException("Invalid input " + url + " or " + file);
+    }
+    Files.createDirectories(file.getParentFile().toPath());
+    try (InputStream in = url.openStream()) {
+      Files.copy(in, file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+    }
+  }
+
   public static String join(List<Object> arr, String sep) {
     if (arr == null) return "";
     StringJoiner joiner = new StringJoiner(sep == null ? "" : sep);
@@ -529,5 +639,122 @@ public class JavaUtils {
       joiner.add(a == null ? "" : a.toString());
     }
     return joiner.toString();
+  }
+
+  public static String stackTraceToString(Throwable t) {
+    if (t == null) {
+      return "";
+    }
+
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    try (PrintWriter writer = new PrintWriter(out)) {
+      t.printStackTrace(writer);
+      writer.flush();
+    }
+    return out.toString(StandardCharsets.UTF_8);
+  }
+
+  public static int checkedCast(long value) {
+    if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
+      throw new IllegalArgumentException("Cannot cast to integer.");
+    }
+    return (int) value;
+  }
+
+  /** Return true if the content of the files are equal or they both don't exist */
+  public static boolean contentEquals(File file1, File file2) throws IOException {
+    if (file1 == null && file2 != null || file1 != null && file2 == null) {
+      return false;
+    } else if (file1 == null && file2 == null || !file1.exists() && !file2.exists()) {
+      return true;
+    } else if (!file1.exists() || !file2.exists()) {
+      return false;
+    } else if (file1.isDirectory() || file2.isDirectory()) {
+      throw new IllegalArgumentException("Input is not a file: %s or %s".formatted(file1, file2));
+    } else if (file1.length() != file2.length()) {
+      return false;
+    } else {
+      Path path1 = file1.toPath();
+      Path path2 = file2.toPath();
+      return Files.isSameFile(path1, path2) || Files.mismatch(path1, path2) == -1L;
+    }
+  }
+
+  public static String toString(InputStream in) throws IOException {
+    return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+  }
+
+  /**
+   * Indicates whether Spark is currently running unit tests.
+   */
+  public static boolean isTesting() {
+    return System.getenv("SPARK_TESTING") != null || System.getProperty("spark.testing") != null;
+  }
+
+  /**
+   * The `os.name` system property.
+   */
+  public static String osName = System.getProperty("os.name");
+
+  /**
+   * The `os.version` system property.
+   */
+  public static String osVersion = System.getProperty("os.version");
+
+  /**
+   * The `java.version` system property.
+   */
+  public static String javaVersion = Runtime.version().toString();
+
+  /**
+   * The `os.arch` system property.
+   */
+  public static String osArch = System.getProperty("os.arch");
+
+  /**
+   * Whether the underlying operating system is Windows.
+   */
+  public static boolean isWindows = osName.regionMatches(true, 0, "Windows", 0, 7);
+
+  /**
+   * Whether the underlying operating system is Mac OS X.
+   */
+  public static boolean isMac = osName.regionMatches(true, 0, "Mac OS X", 0, 8);
+
+  /**
+   * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.
+   */
+  public static boolean isMacOnAppleSilicon = isMac && osArch.equals("aarch64");
+
+  /**
+   * Whether the underlying operating system is Linux.
+   */
+  public static boolean isLinux = osName.regionMatches(true, 0, "Linux", 0, 5);
+
+  /**
+   * Whether the underlying operating system is UNIX.
+   */
+  public static boolean isUnix = Stream.of("AIX", "HP-UX", "Irix", "Linux", "Mac OS X", "Solaris",
+    "SunOS", "FreeBSD", "OpenBSD", "NetBSD")
+    .anyMatch(prefix -> osName.regionMatches(true, 0, prefix, 0, prefix.length()));
+
+  /**
+   * Throws IllegalArgumentException with the given message if the check is false.
+   * Keep this clone of CommandBuilderUtils.checkArgument synced with the original.
+   */
+  public static void checkArgument(boolean check, String msg, Object... args) {
+    if (!check) {
+      throw new IllegalArgumentException(String.format(msg, args));
+    }
+  }
+
+  /**
+   * Throws IllegalStateException with the given message if the check is false.
+   * Keep this clone of CommandBuilderUtils.checkState synced with the original.
+   */
+  public static void checkState(boolean check, String msg, Object... args) {
+    if (!check) {
+      throw new IllegalStateException(String.format(msg, args));
+    }
   }
 }

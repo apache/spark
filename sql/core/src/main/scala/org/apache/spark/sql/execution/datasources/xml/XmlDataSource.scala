@@ -22,7 +22,6 @@ import java.nio.charset.{Charset, StandardCharsets}
 
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hdfs.BlockMissingException
@@ -199,7 +198,7 @@ object MultiLineXmlDataSource extends XmlDataSource {
             logWarning("Skipped missing file", e)
             Iterator.empty[String]
           case NonFatal(e) =>
-            ExceptionUtils.getRootCause(e) match {
+            Utils.getRootCause(e) match {
               case e @ (_ : AccessControlException | _ : BlockMissingException) => throw e
               case _: RuntimeException | _: IOException if parsedOptions.ignoreCorruptFiles =>
                 logWarning("Skipped the rest of the content in the corrupted file", e)

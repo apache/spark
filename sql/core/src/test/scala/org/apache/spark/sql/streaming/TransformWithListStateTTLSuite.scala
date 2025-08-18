@@ -20,7 +20,8 @@ package org.apache.spark.sql.streaming
 import java.time.Duration
 
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.execution.streaming.{ListStateImplWithTTL, MemoryStream}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.ttl.ListStateImplWithTTL
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -201,26 +202,32 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
         AddData(inputStream, "k1"),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k1", 1)),
+        assertNumStateRows(total = 3, updated = 3),
 
         AddData(inputStream, "k2"),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k2", 1)),
+        assertNumStateRows(total = 6, updated = 3),
 
         AddData(inputStream, "k1"),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k1", 2)),
+        assertNumStateRows(total = 7, updated = 3),
 
         AddData(inputStream, "k2"),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k2", 2)),
+        assertNumStateRows(total = 8, updated = 3),
 
         AddData(inputStream, "k1"),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k1", 3)),
+        assertNumStateRows(total = 9, updated = 3),
 
         AddData(inputStream, "k2"),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k2", 3)),
+        assertNumStateRows(total = 10, updated = 3)
 
         // For each unique key that occurs t times, the MultiStatefulVariableTTLProcessor maintains:
         //    - Map state: t records in the primary, and t records in the TTL index
@@ -238,7 +245,6 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
         // The number of updated rows is the total across the last time assertNumStateRows
         // was called, and we only update numRowsUpdated for primary key updates. We ran 6 batches
         // and each wrote 3 primary keys, so the total number of updated rows is 6 * 3 = 18.
-        assertNumStateRows(total = 10, updated = 18)
       )
     }
   }
@@ -267,6 +273,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
         ),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
+        assertNumStateRows(total = 1, updated = 3),
         // get ttl values
         AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1, null)),
         AdvanceManualClock(1 * 1000),
@@ -275,6 +282,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
           OutputEvent("k1", 2, isTTLValue = true, 62000),
           OutputEvent("k1", 3, isTTLValue = true, 62000)
         ),
+        assertNumStateRows(total = 1, updated = 0),
         // advance clock to add elements with later TTL
         AdvanceManualClock(45 * 1000), // batch timestamp: 48000
         AddData(inputStream,
@@ -284,6 +292,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
         ),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
+        assertNumStateRows(total = 1, updated = 3),
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).numRowsUpdated === 3)
         },
@@ -298,6 +307,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
           OutputEvent("k1", 5, isTTLValue = true, 109000),
           OutputEvent("k1", 6, isTTLValue = true, 109000)
         ),
+        assertNumStateRows(total = 1, updated = 0),
         AddData(inputStream, InputEvent("k1", "get", -1, null)),
         // advance clock to expire the first three elements
         AdvanceManualClock(15 * 1000), // batch timestamp: 65000
@@ -306,6 +316,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
           OutputEvent("k1", 5, isTTLValue = false, -1),
           OutputEvent("k1", 6, isTTLValue = false, -1)
         ),
+        assertNumStateRows(total = 1, updated = 0),
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).numRowsRemoved === 3)
         },
@@ -317,11 +328,13 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
           OutputEvent("k1", 5, isTTLValue = false, -1),
           OutputEvent("k1", 6, isTTLValue = false, -1)
         ),
+        assertNumStateRows(total = 1, updated = 0),
         AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(
           OutputEvent("k1", -1, isTTLValue = true, 109000)
-        )
+        ),
+        assertNumStateRows(total = 1, updated = 0)
       )
     }
   }
@@ -361,6 +374,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
           // advance clock to trigger processing
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
+          assertNumStateRows(total = 1, updated = 3),
 
           // get ttl values
           AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1, null)),
@@ -370,6 +384,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
             OutputEvent("k1", 2, isTTLValue = true, 182000),
             OutputEvent("k1", 3, isTTLValue = true, 182000)
           ),
+          assertNumStateRows(total = 1, updated = 0),
 
           AddData(inputStream, InputEvent("k1", "get", -1, null)),
           AdvanceManualClock(1 * 1000),
@@ -378,6 +393,8 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
             OutputEvent("k1", 2, isTTLValue = false, -1),
             OutputEvent("k1", 3, isTTLValue = false, -1)
           ),
+          assertNumStateRows(total = 1, updated = 0),
+
           StopStream
         )
 
@@ -402,6 +419,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
           // advance clock to trigger processing
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
+          assertNumStateRows(total = 1, updated = 3),
 
           // get all elements without enforcing ttl
           AddData(inputStream, InputEvent("k1", "get_without_enforcing_ttl", -1, null)),
@@ -414,6 +432,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
             OutputEvent("k1", 5, isTTLValue = false, -1),
             OutputEvent("k1", 6, isTTLValue = false, -1)
           ),
+          assertNumStateRows(total = 1, updated = 0),
 
           AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1, null)),
           AdvanceManualClock(1 * 1000),
@@ -425,6 +444,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
             OutputEvent("k1", 5, isTTLValue = true, 20000),
             OutputEvent("k1", 6, isTTLValue = true, 20000)
           ),
+          assertNumStateRows(total = 1, updated = 0),
           StopStream
         )
 
@@ -439,6 +459,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
           // advance clock to trigger processing
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
+          assertNumStateRows(total = 1, updated = 3),
 
           // advance clock to expire the middle three elements
           AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null)),
@@ -446,6 +467,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
           CheckNewAnswer(
             OutputEvent("k1", -1, isTTLValue = true, 20000)
           ),
+          assertNumStateRows(total = 1, updated = 0),
 
           // progress batch timestamp from 9000 to 54000, expiring the middle
           // three elements.
@@ -461,6 +483,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
             OutputEvent("k1", 8, isTTLValue = false, -1),
             OutputEvent("k1", 9, isTTLValue = false, -1)
           ),
+          assertNumStateRows(total = 1, updated = 0),
 
           AddData(inputStream, InputEvent("k1", "get_without_enforcing_ttl", -1, null)),
           AdvanceManualClock(1 * 1000),
@@ -472,6 +495,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
             OutputEvent("k1", 8, isTTLValue = false, -1),
             OutputEvent("k1", 9, isTTLValue = false, -1)
           ),
+          assertNumStateRows(total = 1, updated = 0),
 
           AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null)),
           AdvanceManualClock(1 * 1000),
@@ -516,14 +540,17 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
           AddData(inputStream, InputEvent("k1", "append", 1)),
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
+          assertNumStateRows(total = 1, updated = 1),
 
           AddData(inputStream, InputEvent("k1", "append", 2)),
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
+          assertNumStateRows(total = 1, updated = 1),
 
           AddData(inputStream, InputEvent("k1", "append", 3)),
           AdvanceManualClock(1 * 1000), // Time is 3000
           CheckNewAnswer(),
+          assertNumStateRows(total = 1, updated = 1),
 
           // Add a separate key; this should not be affected by k1 expiring.
           // It will have an expiration of 64000.
@@ -537,12 +564,14 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
             OutputEvent("k1", 2, isTTLValue = true, 62000),
             OutputEvent("k1", 3, isTTLValue = true, 63000)
           ),
+          assertNumStateRows(total = 2, updated = 1),
 
           AddData(inputStream, InputEvent("k1", "get_values_in_min_state", -1, null)),
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer( // Time is 5000 for this micro-batch
             OutputEvent("k1", -1, isTTLValue = true, 61000)
           ),
+          assertNumStateRows(total = 2, updated = 0),
 
           // The k1 records expire at 63000, and the current time is 5000. So, we advance the
           // clock by 63 - 5 = 58 seconds to expire those.
@@ -554,7 +583,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
           //
           // It's important to check with assertNumStateRows, since the InputEvents
           // only return values for the current grouping key, not the entirety of RocksDB.
-          assertNumStateRows(total = 1, updated = 4),
+          assertNumStateRows(total = 1, updated = 0),
 
           // The k1 calls should both return no values. However, the k2 calls should return
           // one record each. We put these into one AddData call since we want them all to
@@ -619,6 +648,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
           // advance clock to trigger processing
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
+          assertNumStateRows(total = 1, updated = 3),
 
           // get ttl values
           AddData(inputStream,
@@ -635,6 +665,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
             // From the get_values_in_min_state call
             OutputEvent("k1", -1, isTTLValue = true, 121000)
           ),
+          assertNumStateRows(total = 1, updated = 0),
 
           AddData(inputStream, InputEvent("k1", "get", -1, null)),
           AdvanceManualClock(1 * 1000),
@@ -643,6 +674,8 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
             OutputEvent("k1", 2, isTTLValue = false, -1),
             OutputEvent("k1", 3, isTTLValue = false, -1)
           ),
+          assertNumStateRows(total = 1, updated = 0),
+
           StopStream
         )
 
@@ -658,6 +691,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
           // advance clock to trigger processing
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
+          assertNumStateRows(total = 1, updated = 3),
 
           // get ttl values
           AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1, null)),
@@ -670,12 +704,15 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
             OutputEvent("k1", 5, isTTLValue = true, 65000),
             OutputEvent("k1", 6, isTTLValue = true, 65000)
           ),
+          assertNumStateRows(total = 1, updated = 0),
+
           AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null)),
           AdvanceManualClock(1 * 1000),
-
           CheckNewAnswer(
             OutputEvent("k1", -1, isTTLValue = true, 65000)
           ),
+          assertNumStateRows(total = 1, updated = 0),
+
           // expire end values, batch timestamp from 7000 to 67000
           AdvanceManualClock(60 * 1000),
           AddData(inputStream, InputEvent("k1", "get", -1, null)),
@@ -685,6 +722,8 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
             OutputEvent("k1", 2, isTTLValue = false, -1),
             OutputEvent("k1", 3, isTTLValue = false, -1)
           ),
+          assertNumStateRows(total = 1, updated = 0),
+
           AddData(inputStream, InputEvent("k1", "get_without_enforcing_ttl", -1, null)),
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(
@@ -692,14 +731,61 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
             OutputEvent("k1", 2, isTTLValue = false, -1),
             OutputEvent("k1", 3, isTTLValue = false, -1)
           ),
+          assertNumStateRows(total = 1, updated = 0),
+
           AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null)),
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(
             OutputEvent("k1", -1, isTTLValue = true, 121000)
           ),
+          assertNumStateRows(total = 1, updated = 0),
+
           StopStream
         )
       }
+    }
+  }
+
+  test("SPARK-53069: stopping and restarting the query maintains correct state total rows") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(10))
+      val inputStream = MemoryStream[String]
+      val result = inputStream.toDS()
+        .groupByKey(x => x)
+        .transformWithState(
+          new MultiStatefulVariableTTLProcessor(ttlConfig),
+          TimeMode.ProcessingTime(),
+          OutputMode.Append())
+      val clock = new StreamManualClock
+
+      testStream(result)(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+
+        AddData(inputStream, "k1"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("k1", 1)),
+        assertNumStateRows(total = 3, updated = 3),
+
+        StopStream,
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+
+        AddData(inputStream, "k1"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("k1", 2)),
+        assertNumStateRows(total = 4, updated = 3),
+
+        StopStream,
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+
+        AddData(inputStream, "k1"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("k1", 3)),
+        assertNumStateRows(total = 5, updated = 3),
+
+        StopStream
+      )
     }
   }
 }

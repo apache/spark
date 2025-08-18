@@ -241,6 +241,15 @@ object SQLConf {
     }
   }
 
+  val DONT_DEDUPLICATE_EXPRESSION_IF_EXPR_ID_IN_OUTPUT =
+    buildConf("spark.sql.analyzer.dontDeduplicateExpressionIfExprIdInOutput")
+    .internal()
+    .doc(
+      "DeduplicateRelations shouldn't remap expressions to new ExprIds if old ExprId still " +
+      "exists in output.")
+    .booleanConf
+    .createWithDefault(true)
+
   val UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED =
     buildConf("spark.sql.analyzer.unionIsResolvedWhenDuplicatesPerChildResolved")
     .internal()
@@ -1015,6 +1024,15 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  lazy val COLLATION_AWARE_HASHING_ENABLED =
+    buildConf("spark.sql.legacy.collationAwareHashFunctions")
+      .internal()
+      .doc("Enables collation aware hashing (legacy behavior) for collated strings in " +
+        "Murmur3Hash and XxHash64 user-facing expressions.")
+      .version("4.0.1")
+      .booleanConf
+      .createWithDefault(false)
 
   val ICU_CASE_MAPPINGS_ENABLED =
     buildConf("spark.sql.icu.caseMappings.enabled")
