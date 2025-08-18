@@ -19,12 +19,13 @@ import grpc
 import random
 import time
 import typing
+import warnings
 from google.rpc import error_details_pb2
 from grpc_status import rpc_status
 from typing import Optional, Callable, Generator, List, Type, cast
 from types import TracebackType
 from pyspark.sql.connect.logging import logger
-from pyspark.errors import PySparkRuntimeError, RetriesExceeded
+from pyspark.errors import PySparkRuntimeError
 
 """
 This module contains retry system. The system is designed to be
@@ -210,7 +211,7 @@ class Retrying:
             Do something that can throw exception
 
     In case error is considered retriable, it would be retried based on policies, and
-    RetriesExceeded will be raised if the retries limit would exceed.
+    it will be raised if the retries limit would exceed.
 
     Exceptions not considered retriable will be passed through transparently.
     """
@@ -277,7 +278,8 @@ class Retrying:
 
         # Exceeded retries
         logger.debug(f"Given up on retrying. error: {repr(exception)}")
-        raise RetriesExceeded(errorClass="RETRIES_EXCEEDED", messageParameters={}) from exception
+        warnings.warn("[RETRIES_EXCEEDED] The maximum number of retries has been exceeded.")
+        raise exception
 
     def __iter__(self) -> Generator[AttemptManager, None, None]:
         """
