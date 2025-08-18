@@ -49,9 +49,58 @@ class SparkSqlParser extends AbstractSqlParser {
   val astBuilder = new SparkSqlAstBuilder()
 
   private val substitutor = new VariableSubstitution()
+  private val paramSubstitutor = new SubstituteParamsParser()
 
   protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
-    super.parse(substitutor.substitute(command))(toResult)
+    // Step 1: Check if we have a parameterized query context and substitute parameters
+    val paramSubstituted = ThreadLocalParameterContext.get() match {
+      case Some(context) => 
+        substituteParametersIfNeeded(command, context)
+      case None => 
+        command  // No parameters to substitute
+    }
+    
+    // Step 2: Apply existing variable substitution
+    val variableSubstituted = substitutor.substitute(paramSubstituted)
+    
+    // Step 3: Continue with normal parsing
+    super.parse(variableSubstituted)(toResult)
+  }
+
+  private def substituteParametersIfNeeded(
+      command: String, 
+      context: ParameterContext): String = {
+    
+    // Detect if the SQL has parameter markers
+    val (hasPositional, hasNamed) = paramSubstitutor.detectParameters(
+      command, SubstitutionRule.Statement)
+    
+    if (!hasPositional && !hasNamed) {
+      return command  // No parameters to substitute
+    }
+    
+    // Apply parameter substitution based on context type
+    context match {
+      case NamedParameterContext(params) =>
+        val paramValues = params.map { case (name, expr) => 
+          (name, expressionToSqlValue(expr))
+        }
+        val (substituted, _) = paramSubstitutor.substitute(
+          command, SubstitutionRule.Statement, paramValues)
+        substituted
+        
+      case PositionalParameterContext(params) =>
+        val paramValues = params.map(expressionToSqlValue).toList
+        val (substituted, _) = paramSubstitutor.substitute(
+          command, SubstitutionRule.Statement, 
+          positionalParams = paramValues)
+        substituted
+    }
+  }
+
+  private def expressionToSqlValue(expr: Expression): String = expr match {
+    case lit: Literal => lit.sql
+    case _ => expr.toString
   }
 }
 

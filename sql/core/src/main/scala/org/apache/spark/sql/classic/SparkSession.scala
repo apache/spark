@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.parser.ParserInterface
+import org.apache.spark.sql.catalyst.parser.{NamedParameterContext, ParserInterface, PositionalParameterContext, ThreadLocalParameterContext}
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, Range}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -448,15 +448,19 @@ class SparkSession private(
   private[sql] def sql(sqlText: String, args: Array[_], tracker: QueryPlanningTracker): DataFrame =
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-        val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
         if (args.nonEmpty) {
-          if (parsedPlan.isInstanceOf[CompoundBody]) {
-            // Positional parameters are not supported for SQL scripting.
-            throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+          // Set parameter context for the parser
+          val paramContext = PositionalParameterContext(args.map(lit(_).expr).toSeq)
+          ThreadLocalParameterContext.withContext(paramContext) {
+            val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
+            if (parsedPlan.isInstanceOf[CompoundBody]) {
+              // Positional parameters are not supported for SQL scripting.
+              throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+            }
+            parsedPlan
           }
-          PosParameterizedQuery(parsedPlan, args.map(lit(_).expr).toImmutableArraySeq)
         } else {
-          parsedPlan
+          sessionState.sqlParser.parsePlan(sqlText)
         }
       }
       Dataset.ofRows(self, plan, tracker)
@@ -489,11 +493,14 @@ class SparkSession private(
       tracker: QueryPlanningTracker): DataFrame =
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-        val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
         if (args.nonEmpty) {
-          NameParameterizedQuery(parsedPlan, args.transform((_, v) => lit(v).expr))
+          // Set parameter context for the parser
+          val paramContext = NamedParameterContext(args.transform((_, v) => lit(v).expr))
+          ThreadLocalParameterContext.withContext(paramContext) {
+            sessionState.sqlParser.parsePlan(sqlText)
+          }
         } else {
-          parsedPlan
+          sessionState.sqlParser.parsePlan(sqlText)
         }
       }
       Dataset.ofRows(self, plan, tracker)
