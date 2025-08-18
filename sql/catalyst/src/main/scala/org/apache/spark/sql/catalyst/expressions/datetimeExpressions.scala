@@ -2735,7 +2735,11 @@ object TryMakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(year, month, day, hour, min, sec[, timezone]) - Create the current timestamp with local time zone from year, month, day, hour, min, sec and timezone fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.",
+  usage = """
+    _FUNC_(year, month, day, hour, min, sec[, timezone]) - Create the current timestamp with local time zone from year, month, day, hour, min, sec and (optional) timezone fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.
+
+    _FUNC_(date, time[, timezone]) - Create a local date-time from date, time and (optional) timezone fields.
+    """,
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
@@ -2765,7 +2769,16 @@ object TryMakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
 object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
-    if (numArgs == 6 || numArgs == 7) {
+    if (numArgs == 2 || numArgs == 3) {
+      // Overload for: date, time[, timezone].
+      MakeTimestampFromDateTime(
+        expressions(0),
+        Some(expressions(1)),
+        expressions.drop(2).lastOption
+      )
+    }
+    else if (numArgs == 6 || numArgs == 7) {
+      // Overload for: year, month, day, hour, min, sec[, timezone].
       MakeTimestamp(
         expressions(0),
         expressions(1),
@@ -2776,7 +2789,7 @@ object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
         expressions.drop(6).lastOption,
         dataType = TimestampType)
     } else {
-      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(6), numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2, 6), numArgs)
     }
   }
 }
