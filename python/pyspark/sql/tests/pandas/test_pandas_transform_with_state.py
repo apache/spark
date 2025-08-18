@@ -2264,6 +2264,7 @@ class UpcastProcessor(StatefulProcessor):
     def close(self) -> None:
         pass
 
+
 # A stateful processor that contains composite python type inside Value, List and Map state variable
 class PandasStatefulProcessorCompositeType(StatefulProcessor):
     TAGS = [["dummy1", "dummy2"], ["dummy3"]]
@@ -2367,6 +2368,7 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
 
     def close(self) -> None:
         pass
+
 
 class TransformWithStateInPandasTests(TransformWithStateInPandasTestsMixin, ReusedSQLTestCase):
     pass
