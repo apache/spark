@@ -912,7 +912,7 @@
       <dependency>
         <groupId>com.github.RoaringBitmap.RoaringBitmap</groupId>
         <artifactId>roaringbitmap</artifactId>
-        <version>1.4.1</version>
+        <version>1.5.2</version>
       </dependency>
 
       <!-- Netty Begin -->
