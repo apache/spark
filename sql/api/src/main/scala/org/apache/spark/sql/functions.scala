@@ -6303,10 +6303,10 @@ object functions {
    * @param end
    *   An ending TIME.
    * @return
-   *   The difference between two times, measured in specified units.
+   *   The difference between `end` and `start` times, measured in specified units.
    * @note
    *   If any of the inputs is `NULL`, the result is `NULL`.
-   * @throws IllegalArgumentException
+   * @throws SparkIllegalArgumentException
    *   If the `unit` is not supported.
    * @group datetime_funcs
    * @since 4.1.0

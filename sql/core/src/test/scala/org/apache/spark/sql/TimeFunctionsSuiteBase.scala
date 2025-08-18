@@ -275,6 +275,24 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
     checkAnswer(result1, expected)
     checkAnswer(result2, expected)
 
+    // NULL result is returned for any NULL input.
+    val nullInputDF = Seq(
+      (null, LocalTime.parse("01:02:03"), LocalTime.parse("01:02:03")),
+      ("HOUR", null, LocalTime.parse("01:02:03")),
+      ("HOUR", LocalTime.parse("01:02:03"), null),
+      ("HOUR", null, null),
+      (null, LocalTime.parse("01:02:03"), null),
+      (null, null, LocalTime.parse("01:02:03")),
+      (null, null, null)
+    ).toDF("unit", "start", "end")
+    val nullResult = Seq[Integer](
+      null, null, null, null, null, null, null,
+    ).toDF("diff").select(col("diff"))
+    checkAnswer(
+      nullInputDF.select(time_diff(col("unit"), col("start"), col("end"))),
+      nullResult
+    )
+
     // Error is thrown for malformed input.
     val invalidUnitDF = Seq(
       ("invalid_unit", LocalTime.parse("01:02:03"), LocalTime.parse("01:02:03"))
