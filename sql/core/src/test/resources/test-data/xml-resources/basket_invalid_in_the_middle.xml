@@ -9,7 +9,7 @@
             <value>cup</value>
         </entry>
     </basket>
-    <basket>
+    <basket invalid="true">
         <entry>
             <key>9027</key>
             <value>glasstop stove in black</value>

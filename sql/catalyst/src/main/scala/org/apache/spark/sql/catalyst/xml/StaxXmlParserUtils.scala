@@ -97,7 +97,12 @@ object StaxXmlParserUtils {
   }
 
   def gatherRootAttributes(parser: XMLEventReader): Array[Attribute] = {
-    val rootEvent = StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.START_ELEMENT)
+    val rootEvent = parser.peek() match {
+      case _: StartElement =>
+        parser.nextEvent()
+      case _ =>
+        StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.START_ELEMENT)
+    }
     rootEvent.asStartElement.getAttributes.asScala.toArray
   }
 
@@ -163,6 +168,21 @@ object StaxXmlParserUtils {
     }
   }
 
+  def startElementAsString(event: StartElement): String = {
+    val sb = new StringBuilder()
+    sb.append('<').append(event.getName)
+    event.getAttributes.asScala.foreach { att =>
+      sb
+        .append(' ')
+        .append(att.getName)
+        .append("=\"")
+        .append(att.getValue)
+        .append('"')
+    }
+    sb.append('>')
+    sb.toString()
+  }
+
   /**
    * Convert the current structure of XML document to a XML string.
    */
@@ -175,16 +195,7 @@ object StaxXmlParserUtils {
     do {
       parser.nextEvent match {
         case e: StartElement =>
-          xmlString.append('<').append(e.getName)
-          e.getAttributes.asScala.foreach { att =>
-            xmlString
-              .append(' ')
-              .append(att.getName)
-              .append("=\"")
-              .append(att.getValue)
-              .append('"')
-          }
-          xmlString.append('>')
+          xmlString.append(startElementAsString(e))
           indent += 1
         case e: EndElement =>
           xmlString.append("</").append(e.getName).append('>')

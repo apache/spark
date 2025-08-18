@@ -17,7 +17,7 @@
 package org.apache.spark.sql.catalyst.xml
 
 import java.io.InputStream
-import javax.xml.stream.{XMLEventReader, XMLStreamConstants}
+import javax.xml.stream.{XMLEventReader, XMLStreamConstants, XMLStreamReader}
 import javax.xml.stream.events.{EndDocument, StartElement, XMLEvent}
 import javax.xml.transform.stax.StAXSource
 
@@ -57,7 +57,7 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
   def skipToNextRecord(): Boolean = {
     hasMoreRecord = skipToNextRowStart()
     if (hasMoreRecord) {
-      validateXSDSchemaForNextRecordIfNecessary()
+      xsdValidationStreamReader.foreach(validateXSDSchema)
     } else {
       closeAllReaders()
     }
@@ -94,19 +94,17 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
     }
   }
 
-  private def validateXSDSchemaForNextRecordIfNecessary(): Unit = {
-    xsdValidationStreamReader foreach { p =>
-      // StAXSource requires the stream reader to start with the START_DOCUMENT OR START_ELEMENT
-      // events.
-      def rowTagStarted: Boolean =
-        p.getEventType == XMLStreamConstants.START_ELEMENT &&
-        StaxXmlParserUtils.getName(p.getName, options) == options.rowTag
-      while (!rowTagStarted && p.hasNext) {
-        p.next()
-      }
-      xsdSchemaValidator.get.reset()
-      xsdSchemaValidator.get.validate(new StAXSource(p))
+  private def validateXSDSchema(streamReader: XMLStreamReader): Unit = {
+    // StAXSource requires the stream reader to start with the START_DOCUMENT OR START_ELEMENT
+    // events.
+    def rowTagStarted: Boolean =
+      streamReader.getEventType == XMLStreamConstants.START_ELEMENT &&
+      StaxXmlParserUtils.getName(streamReader.getName, options) == options.rowTag
+    while (!rowTagStarted && streamReader.hasNext) {
+      streamReader.next()
     }
+    xsdSchemaValidator.get.reset()
+    xsdSchemaValidator.get.validate(new StAXSource(streamReader))
   }
 
   def closeAllReaders(): Unit = {
@@ -119,14 +117,14 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
 
   def getNextRecordString: String = {
     if (hasMoreRecord) {
-      // Advance the parser to the start element of the record
-      val start = primaryEventReader.next().asInstanceOf[StartElement]
-      val rowTagName = StaxXmlParserUtils.getName(start.getName, options)
       val record = new StringBuilder()
-      record.append("<").append(rowTagName).append(">")
+      // Advance the parser to get the start element
+      val start = primaryEventReader.next().asInstanceOf[StartElement]
+      record.append(StaxXmlParserUtils.startElementAsString(start))
       record.append(
         StaxXmlParserUtils.currentStructureAsString(primaryEventReader, options.rowTag, options)
       )
+      val rowTagName = StaxXmlParserUtils.getName(start.getName, options)
       record.append(s"</$rowTagName>\n")
       record.toString().trim
     } else {

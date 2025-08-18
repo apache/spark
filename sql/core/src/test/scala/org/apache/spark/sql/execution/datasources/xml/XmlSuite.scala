@@ -1338,7 +1338,18 @@ class XmlSuite
 
       // Should have both valid and invalid records
       assert(basketDF.count() == 4)
+
+      // Check invalid record
       assert(basketDF.filter($"_malformed_records".isNotNull).count() == 1)
+      val rec = basketDF
+        .filter($"_malformed_records".isNotNull)
+        .select("_malformed_records").collect()(0).getString(0)
+      assert(
+        rec.startsWith("""<basket invalid="true">""") &&
+          rec.indexOf("<extra>123</extra>") != -1 &&
+          rec.endsWith("</basket>"))
+
+      // Check valid records
       assert(basketDF.filter($"_malformed_records".isNull).count() == 3)
       checkAnswer(
         basketDF.filter($"_malformed_records".isNull).select($"entry".getItem(0)),

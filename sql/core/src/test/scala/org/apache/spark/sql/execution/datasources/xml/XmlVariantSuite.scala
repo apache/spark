@@ -392,7 +392,7 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
   // ====== DSL reader tests ======
   // ==============================
 
-  protected def createDSLDataFrame(
+  private def createDSLDataFrame(
       fileName: String,
       singleVariantColumn: Option[String] = None,
       schemaDDL: Option[String] = None,
@@ -510,19 +510,14 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       singleVariantColumn = Some("var"),
       extraOptions = Map("mode" -> "PERMISSIVE")
     )
-    if (legacyParserEnabled) {
-      checkAnswer(
-        df.select(variant_get(col("var"), "$.year", "int")),
-        Seq(Row(2015), Row(null), Row(null))
-      )
+    val expectedResult = if (legacyParserEnabled) {
+      Seq(Row(2015), Row(null), Row(null))
     } else {
       // When the optimized parser is enabled, there are only two records:
       // one is the valid xml record, the rest is treated as one malformed record
-      checkAnswer(
-        df.select(variant_get(col("var"), "$.year", "int")),
-        Seq(Row(2015), Row(null))
-      )
+      Seq(Row(2015), Row(null))
     }
+    checkAnswer(df.select(variant_get(col("var"), "$.year", "int")), expectedResult)
 
     // DROPMALFORMED mode
     val df2 = createDSLDataFrame(
