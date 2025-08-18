@@ -1262,8 +1262,7 @@ class LogisticRegression(
         lowerBoundsOnIntercepts: Optional[Vector] = ...,
         upperBoundsOnIntercepts: Optional[Vector] = ...,
         maxBlockSizeInMB: float = ...,
-    ):
-        ...
+    ): ...
 
     @overload
     def __init__(
@@ -1289,8 +1288,7 @@ class LogisticRegression(
         lowerBoundsOnIntercepts: Optional[Vector] = ...,
         upperBoundsOnIntercepts: Optional[Vector] = ...,
         maxBlockSizeInMB: float = ...,
-    ):
-        ...
+    ): ...
 
     @keyword_only
     def __init__(
@@ -1361,8 +1359,7 @@ class LogisticRegression(
         lowerBoundsOnIntercepts: Optional[Vector] = ...,
         upperBoundsOnIntercepts: Optional[Vector] = ...,
         maxBlockSizeInMB: float = ...,
-    ) -> "LogisticRegression":
-        ...
+    ) -> "LogisticRegression": ...
 
     @overload
     def setParams(
@@ -1388,8 +1385,7 @@ class LogisticRegression(
         lowerBoundsOnIntercepts: Optional[Vector] = ...,
         upperBoundsOnIntercepts: Optional[Vector] = ...,
         maxBlockSizeInMB: float = ...,
-    ) -> "LogisticRegression":
-        ...
+    ) -> "LogisticRegression": ...
 
     @keyword_only
     @since("1.3.0")
