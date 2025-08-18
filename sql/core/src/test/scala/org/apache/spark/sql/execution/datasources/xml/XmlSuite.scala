@@ -342,8 +342,9 @@ class XmlSuite
 
     if (legacyParserEnabled) {
       assert(cars.length === 3)
-      val malformedRowOne = carsDf.cache().select("_malformed_records").first().get(0).toString
-      val malformedRowTwo = carsDf.cache().select("_malformed_records").take(2).last.get(0).toString
+      val malformedRows = carsDf.cache().filter($"_malformed_records".isNotNull)
+      val malformedRowOne = malformedRows.select("_malformed_records").first().get(0).toString
+      val malformedRowTwo = malformedRows.select("_malformed_records").take(2).last.get(0).toString
       val expectedMalformedRowOne = "<ROW><year>2012</year><make>Tesla</make><model>>S" +
         "<comment>No comment</comment></ROW>"
       val expectedMalformedRowTwo = "<ROW></year><make>Ford</make><model>E350</model>" +
@@ -352,20 +353,22 @@ class XmlSuite
         malformedRowOne.replaceAll("\\s", "") === expectedMalformedRowOne.replaceAll("\\s", ""))
       assert(
         malformedRowTwo.replaceAll("\\s", "") === expectedMalformedRowTwo.replaceAll("\\s", ""))
-      assert(cars(2)(0) === null)
-      assert(cars(0).toSeq.takeRight(3) === Seq(null, null, null))
-      assert(cars(1).toSeq.takeRight(3) === Seq(null, null, null))
-      assert(cars(2).toSeq.takeRight(3) === Seq("Chevy", "Volt", 2015))
+
+      val validRows = carsDf.cache().filter($"_malformed_records".isNull)
+      checkAnswer(validRows, Seq(Row(null, "Chevy", "Volt", 2015)))
     } else {
       // Memory efficient parser skips parsing data once malformed-ness is detected.
       assert(cars.length === 2)
-      assert(cars(0).toSeq.takeRight(3) === Seq("Chevy", "Volt", 2015))
-      assert(carsDf.cache().filter("_malformed_records is not null").count() === 1)
+
       // Memory efficient parser will put the whole file into _malformed_records column
+      val malformedRows = carsDf.cache().filter($"_malformed_records".isNotNull)
       assert(
-        cars(1).getString(0).startsWith("<?xml version=\"1.0\"?>")
-          && cars(1).getString(0).endsWith("</ROWSET>\n")
+        malformedRows.first().getString(0).startsWith("<?xml version=\"1.0\"?>")
+          && malformedRows.first().getString(0).endsWith("</ROWSET>\n")
       )
+
+      val validRows = carsDf.cache().filter($"_malformed_records".isNull)
+      checkAnswer(validRows, Seq(Row(null, "Chevy", "Volt", 2015)))
     }
   }
 

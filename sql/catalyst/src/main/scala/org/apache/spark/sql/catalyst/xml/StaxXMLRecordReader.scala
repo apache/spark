@@ -38,7 +38,7 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
     with Logging {
   // Reader for the XML record parsing.
   private val in1 = inputStream()
-  private val primaryEventReader = StaxXmlParserUtils.filteredReader(in1)
+  private val primaryEventReader = StaxXmlParserUtils.filteredReader(in1, options)
 
   private val xsdSchemaValidator = Option(options.rowValidationXSDPath)
     .map(path => ValidatorUtil.getSchema(path).newValidator())

@@ -66,12 +66,13 @@ object StaxXmlParserUtils {
     factory.createFilteredReader(eventReader, filter)
   }
 
-  def filteredReader(inputStream: java.io.InputStream): XMLEventReader = {
+  def filteredReader(inputStream: java.io.InputStream, options: XmlOptions): XMLEventReader = {
     val filter = new EventFilter {
       override def accept(event: XMLEvent): Boolean = eventTypeFilter(event.getEventType)
     }
     val bomInputStreamBuilder = new BOMInputStream.Builder
     bomInputStreamBuilder.setInputStream(inputStream)
+    bomInputStreamBuilder.setCharset(options.charset)
     val eventReader = factory.createXMLEventReader(bomInputStreamBuilder.get())
     factory.createFilteredReader(eventReader, filter)
   }
