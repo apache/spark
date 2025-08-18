@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst
 
 import java.util.Locale
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.analysis.{Resolver, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -113,11 +115,15 @@ package object expressions  {
     @transient private lazy val minExprId: Long = minMaxExprId._1
     @transient private lazy val maxExprId: Long = minMaxExprId._2
 
-    // Create a direct indexed array using the min and max expression IDs as an offset.
-    @transient private lazy val ordinalArrays: (Array[Int], Array[Attribute]) = {
+    // Create a method that either uses a direct indexed array with the min
+    // and max expression IDs as an offset or a hash map.
+    @transient private lazy val ordinalArrays: (Long => Int, Array[Attribute]) = {
       if (attrs.isEmpty) {
-        (Array.empty[Int], Array.empty[Attribute])
-      } else {
+        (_ => -1, Array.empty[Attribute])
+      } else if (
+        maxExprId - minExprId <= Long.MaxValue &&  // prevent overflow
+          maxExprId - minExprId <= 0.5 * attrs.length  // in case of sparse ExprIds
+      ) {
         // Create directly indexed array
         val arraySize = (maxExprId - minExprId + 1).toInt
         val ordinalArray = new Array[Int](arraySize)
@@ -133,11 +139,42 @@ package object expressions  {
           ordinalAttrsArray(i) = attr
           i += 1
         }
-        (ordinalArray, ordinalAttrsArray)
+
+        // Return the ordinal (or -1) from the exprId.
+        val exprIdToOrdinalFunc = (id: Long) => {
+          if (id < minExprId || id > maxExprId) {
+            -1
+          } else {
+            val arrayIndex = (id - minExprId).toInt
+            ordinalArray(arrayIndex)
+          }
+        }
+
+        (exprIdToOrdinalFunc, ordinalAttrsArray)
+      } else {
+        val arr = attrs.toArray
+
+        // Use LongMap to avoid overhead of HashMap while hashing.
+        val map = new mutable.LongMap[Int](arr.length)
+
+        // Iterate over the array in reverse order so that the final map value is the first
+        // attribute with a given expression id.
+        var index = arr.length - 1
+        while (index >= 0) {
+          map.put(arr(index).exprId.id, index)
+          index -= 1
+        }
+
+        // Return the ordinal (or -1) from the exprId.
+        val exprIdToOrdinalFunc = (id: Long) => {
+          map(id)
+        }
+
+        (exprIdToOrdinalFunc, arr)
       }
     }
 
-    @transient private lazy val exprIdToOrdinalArray: Array[Int] = ordinalArrays._1
+    @transient private lazy val exprIdToOrdinal: Long => Int = ordinalArrays._1
 
 
     // It's possible that `attrs` is a linked list, which can lead to bad O(n) loops when
@@ -155,12 +192,7 @@ package object expressions  {
      */
     def indexOf(exprId: ExprId): Int = {
       val id = exprId.id
-      if (exprIdToOrdinalArray.isEmpty || id < minExprId || id > maxExprId) {
-        -1
-      } else {
-        val arrayIndex = (id - minExprId).toInt
-        exprIdToOrdinalArray(arrayIndex)
-      }
+      exprIdToOrdinal(id)
     }
 
     private def unique[T](m: Map[T, Seq[Attribute]]): Map[T, Seq[Attribute]] = {
