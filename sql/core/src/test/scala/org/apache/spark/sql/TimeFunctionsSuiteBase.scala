@@ -175,6 +175,20 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
     // Check that the results match the expected output.
     checkAnswer(result1, expected)
     checkAnswer(result2, expected)
+
+    // NULL result is returned for any NULL input.
+    val nullInputDF = Seq(
+      (null, LocalTime.parse("00:00:00")),
+      (LocalDate.parse("2020-01-01"), null),
+      (null, null)
+    ).toDF("date", "time")
+    val nullResult = Seq[Integer](
+      null, null, null
+    ).toDF("ts").select(col("ts"))
+    checkAnswer(
+      nullInputDF.select(make_timestamp_ntz(col("date"), col("time"))),
+      nullResult
+    )
   }
 
   test("SPARK-52885: hour function") {
@@ -395,6 +409,20 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
     // Check that the results match the expected output.
     checkAnswer(result1, expected)
     checkAnswer(result2, expected)
+
+    // NULL result is returned for any NULL input.
+    val nullInputDF = Seq(
+      (null, LocalTime.parse("00:00:00")),
+      (LocalDate.parse("2020-01-01"), null),
+      (null, null)
+    ).toDF("date", "time")
+    val nullResult = Seq[Integer](
+      null, null, null
+    ).toDF("ts").select(col("ts"))
+    checkAnswer(
+      nullInputDF.select(try_make_timestamp_ntz(col("date"), col("time"))),
+      nullResult
+    )
   }
 
   test("SPARK-52884: try_to_time function without format") {

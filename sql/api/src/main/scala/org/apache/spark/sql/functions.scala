@@ -8599,8 +8599,7 @@ object functions {
     Column.fn("make_timestamp_ntz", years, months, days, hours, mins, secs)
 
   /**
-   * Create a local date-time from date and time fields. The function throws an error on invalid
-   * inputs.
+   * Create a local date-time from date and time fields.
    *
    * @group datetime_funcs
    * @since 4.1.0
@@ -8625,8 +8624,7 @@ object functions {
     Column.fn("try_make_timestamp_ntz", years, months, days, hours, mins, secs)
 
   /**
-   * Try to create a local date-time from date and time fields. The function returns NULL on
-   * invalid inputs.
+   * Try to create a local date-time from date and time fields.
    *
    * @group datetime_funcs
    * @since 4.1.0
