@@ -122,7 +122,7 @@ package object expressions  {
         (_ => -1, Array.empty[Attribute])
       } else if (
         maxExprId - minExprId <= Long.MaxValue &&  // prevent overflow
-          maxExprId - minExprId <= 0.5 * attrs.length  // in case of sparse ExprIds
+          maxExprId - minExprId <= 1.5 * attrs.length  // in case of sparse ExprIds
       ) {
         // Create directly indexed array
         val arraySize = (maxExprId - minExprId + 1).toInt
