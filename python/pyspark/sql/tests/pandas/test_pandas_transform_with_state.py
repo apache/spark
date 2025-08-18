@@ -665,12 +665,6 @@ class TransformWithStateInPandasTestsMixin:
         time_mode="None",
         checkpoint_path=None,
         initial_state=None,
-        output_schema=StructType(
-            [
-                StructField("id", StringType(), True),
-                StructField("value", StringType(), True),
-            ]
-        ),
     ):
         input_path = tempfile.mkdtemp()
         if checkpoint_path is None:
@@ -684,6 +678,13 @@ class TransformWithStateInPandasTestsMixin:
 
         df = self._build_test_df(input_path)
         self.assertTrue(df.isStreaming)
+
+        output_schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("value", StringType(), True),
+            ]
+        )
 
         if initial_state is None:
             data = [("0", 789), ("3", 987)]
@@ -1392,7 +1393,7 @@ class TransformWithStateInPandasTestsMixin:
             ]
         )
 
-        self._test_transform_with_state_init_state_in_pandas(
+        self._test_transform_with_state_in_pandas_basic(
             PandasStatefulProcessorCompositeType(), check_results, output_schema=output_schema
         )
 
