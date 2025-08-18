@@ -51,10 +51,10 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("-1")
     check("1.0E10")
     check("\"\"")
-    check("\"" + ("a" * 63) + "\"")
-    check("\"" + ("b" * 64) + "\"")
+    check("\"" + "a".repeat(63) + "\"")
+    check("\"" + "b".repeat(64) + "\"")
     // scalastyle:off nonascii
-    check("\"" + ("你好，世界" * 20) + "\"")
+    check("\"" + "你好，世界".repeat(20) + "\"")
     // scalastyle:on nonascii
     check("[]")
     check("{}")
@@ -87,10 +87,10 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("-1")
     check("1.0E10")
     check("\"\"")
-    check("\"" + ("a" * 63) + "\"")
-    check("\"" + ("b" * 64) + "\"")
+    check("\"" + "a".repeat(63) + "\"")
+    check("\"" + "b".repeat(64) + "\"")
     // scalastyle:off nonascii
-    check("\"" + ("你好，世界" * 20) + "\"")
+    check("\"" + "你好，世界".repeat(20) + "\"")
     // scalastyle:on nonascii
     check("[]")
     check("{}")
@@ -137,10 +137,10 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("-1")
     check("1.0E10")
     check("\"\"")
-    check("\"" + ("a" * 63) + "\"")
-    check("\"" + ("b" * 64) + "\"")
+    check("\"" + "a".repeat(63) + "\"")
+    check("\"" + "b".repeat(64) + "\"")
     // scalastyle:off nonascii
-    check("\"" + ("你好，世界" * 20) + "\"")
+    check("\"" + "你好，世界".repeat(20) + "\"")
     // scalastyle:on nonascii
     check("[]")
     check("{}")
@@ -155,7 +155,7 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("{1:2}", null)
     check("{\"a\":1", null)
     check("{\"a\":[a,b,c]}", null)
-    check("\"" + "a" * (16 * 1024 * 1024) + "\"", null)
+    check("\"" + "a".repeat(16 * 1024 * 1024) + "\"", null)
   }
 
   test("to_json with nested variant") {

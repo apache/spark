@@ -23,7 +23,6 @@ import java.sql.Timestamp
 import java.time.{LocalDateTime, LocalTime, ZoneId, ZoneOffset}
 import java.util.Locale
 
-import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
@@ -37,11 +36,12 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.localDateTimeToMicros
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.{PartitionPath => Partition}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
@@ -79,8 +79,8 @@ abstract class ParquetPartitionDiscoverySuite
 
     check("10", IntegerType)
     check("1000000000000000", LongType)
-    val decimal = Decimal("1" * 20)
-    check("1" * 20, DecimalType(decimal.precision, decimal.scale))
+    val decimal = Decimal("1".repeat(20))
+    check("1".repeat(20), DecimalType(decimal.precision, decimal.scale))
     check("1.5", DoubleType)
     check("hello", StringType)
     check("1990-02-24", DateType)
@@ -770,7 +770,7 @@ abstract class ParquetPartitionDiscoverySuite
           Row(
             Long.MaxValue,
             4.5,
-            new java.math.BigDecimal(new BigInteger("1" * 20)),
+            new java.math.BigDecimal(new BigInteger("1".repeat(20))),
             java.sql.Date.valueOf("2015-05-23"),
             ts,
             "This is a string, /[]?=:",
@@ -821,8 +821,8 @@ abstract class ParquetPartitionDiscoverySuite
         .partitionBy("b", "c", "d")
         .save(dir.getCanonicalPath)
 
-      Files.touch(new File(s"${dir.getCanonicalPath}/b=1", ".DS_Store"))
-      Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
+      Utils.touch(new File(s"${dir.getCanonicalPath}/b=1", ".DS_Store"))
+      Utils.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
 
       checkAnswer(spark.read.format("parquet").load(dir.getCanonicalPath), df)
     }
@@ -838,8 +838,8 @@ abstract class ParquetPartitionDiscoverySuite
         .partitionBy("b", "c", "d")
         .save(tablePath.getCanonicalPath)
 
-      Files.touch(new File(s"${tablePath.getCanonicalPath}/", "_SUCCESS"))
-      Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
+      Utils.touch(new File(s"${tablePath.getCanonicalPath}/", "_SUCCESS"))
+      Utils.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
 
       checkAnswer(spark.read.format("parquet").load(tablePath.getCanonicalPath), df)
     }
@@ -855,8 +855,8 @@ abstract class ParquetPartitionDiscoverySuite
         .partitionBy("b", "c", "d")
         .save(tablePath.getCanonicalPath)
 
-      Files.touch(new File(s"${tablePath.getCanonicalPath}/", "_SUCCESS"))
-      Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
+      Utils.touch(new File(s"${tablePath.getCanonicalPath}/", "_SUCCESS"))
+      Utils.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
 
       checkAnswer(spark.read.format("parquet").load(tablePath.getCanonicalPath), df)
     }
@@ -953,9 +953,9 @@ abstract class ParquetPartitionDiscoverySuite
             .partitionBy("b", "c", "d")
             .save(tablePath.getCanonicalPath)
 
-          Files.touch(new File(s"${tablePath.getCanonicalPath}/b=1", "_SUCCESS"))
-          Files.touch(new File(s"${tablePath.getCanonicalPath}/b=1/c=1", "_SUCCESS"))
-          Files.touch(new File(s"${tablePath.getCanonicalPath}/b=1/c=1/d=1", "_SUCCESS"))
+          Utils.touch(new File(s"${tablePath.getCanonicalPath}/b=1", "_SUCCESS"))
+          Utils.touch(new File(s"${tablePath.getCanonicalPath}/b=1/c=1", "_SUCCESS"))
+          Utils.touch(new File(s"${tablePath.getCanonicalPath}/b=1/c=1/d=1", "_SUCCESS"))
           checkAnswer(spark.read.format("parquet").load(tablePath.getCanonicalPath), df)
         }
       }
@@ -1061,9 +1061,9 @@ abstract class ParquetPartitionDiscoverySuite
       //
       // The summary files and the dot-file under `p0=0` should not fail partition discovery.
 
-      Files.copy(new File(p1, "_metadata"), new File(p0, "_metadata"))
-      Files.copy(new File(p1, "_common_metadata"), new File(p0, "_common_metadata"))
-      Files.touch(new File(p0, ".dummy"))
+      Utils.copyFile(new File(p1, "_metadata"), new File(p0, "_metadata"))
+      Utils.copyFile(new File(p1, "_common_metadata"), new File(p0, "_common_metadata"))
+      Utils.touch(new File(p0, ".dummy"))
 
       checkAnswer(spark.read.parquet(s"$path"), Seq(
         Row(0, 0, 0),
@@ -1097,13 +1097,13 @@ abstract class ParquetPartitionDiscoverySuite
     }
 
     withTempPath { path =>
-      val df = Seq((1, "1"), (2, "3"), (3, "2" * 30)).toDF("i", "decimal")
+      val df = Seq((1, "1"), (2, "3"), (3, "2".repeat(30))).toDF("i", "decimal")
       df.write.format("parquet").partitionBy("decimal").save(path.getAbsolutePath)
       checkAnswer(
         spark.read.load(path.getAbsolutePath),
         Row(1, BigDecimal("1")) ::
           Row(2, BigDecimal("3")) ::
-          Row(3, BigDecimal("2" * 30)) :: Nil)
+          Row(3, BigDecimal("2".repeat(30))) :: Nil)
     }
   }
 

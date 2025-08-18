@@ -36,7 +36,7 @@ import org.apache.hive.common.util.HiveVersionInfo
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.classic.SQLContext
@@ -76,7 +76,7 @@ private[spark] object HiveUtils extends Logging {
     .doc("Version of the Hive metastore. Available options are " +
       "<code>2.0.0</code> through <code>2.3.10</code>, " +
       "<code>3.0.0</code> through <code>3.1.3</code> and " +
-      "<code>4.0.0</code> through <code>4.0.1</code>.")
+      "<code>4.0.0</code> through <code>4.1.0</code>.")
     .version("1.4.0")
     .stringConf
     .checkValue(isCompatibleHiveVersion, "Unsupported Hive Metastore version")

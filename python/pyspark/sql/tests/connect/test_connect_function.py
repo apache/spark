@@ -2559,7 +2559,8 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         cf_fn = {name for (name, value) in getmembers(CF, isfunction) if name[0] != "_"}
 
         # Functions in classic PySpark we do not expect to be available in Spark Connect
-        sf_excluded_fn = set()
+        # TODO: SPARK-53012 - Implement arrow_udtf in Spark Connect
+        sf_excluded_fn = {"arrow_udtf"}
 
         self.assertEqual(
             sf_fn - cf_fn,

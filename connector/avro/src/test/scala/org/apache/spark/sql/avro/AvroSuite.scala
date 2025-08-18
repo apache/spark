@@ -32,7 +32,6 @@ import org.apache.avro.Schema.Type._
 import org.apache.avro.file.{DataFileReader, DataFileWriter}
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
-import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkRuntimeException, SparkThrowable, SparkUpgradeException}
 import org.apache.spark.TestUtils.assertExceptionMsg
@@ -640,7 +639,7 @@ abstract class AvroSuite
 
   private def createDummyCorruptFile(dir: File): Unit = {
     Utils.tryWithResource {
-      FileUtils.forceMkdir(dir)
+      Files.createDirectories(dir.toPath)
       val corruptFile = new File(dir, "corrupt.avro")
       new BufferedWriter(new FileWriter(corruptFile))
     } { writer =>
@@ -1875,7 +1874,7 @@ abstract class AvroSuite
 
     intercept[FileNotFoundException] {
       withTempDir { dir =>
-        FileUtils.touch(new File(dir, "test"))
+        Utils.touch(new File(dir, "test"))
         withSQLConf(AvroFileFormat.IgnoreFilesWithoutExtensionProperty -> "true") {
           spark.read.format("avro").load(dir.toString)
         }
@@ -1884,7 +1883,7 @@ abstract class AvroSuite
 
     intercept[FileNotFoundException] {
       withTempDir { dir =>
-        FileUtils.touch(new File(dir, "test"))
+        Utils.touch(new File(dir, "test"))
 
         spark
           .read

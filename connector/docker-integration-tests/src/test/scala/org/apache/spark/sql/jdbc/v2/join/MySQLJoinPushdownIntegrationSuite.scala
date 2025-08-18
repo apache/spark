@@ -43,6 +43,8 @@ class MySQLJoinPushdownIntegrationSuite
 
   override def caseConvert(identifier: String): String = identifier.toUpperCase(Locale.ROOT)
 
+  override def remainColumnCase(identifier: String): String = "`" + identifier + "`"
+
   // This method comes from DockerJDBCIntegrationSuite
   override def dataPreparation(connection: Connection): Unit = {
     super.dataPreparation()

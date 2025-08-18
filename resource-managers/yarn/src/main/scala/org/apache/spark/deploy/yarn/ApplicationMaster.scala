@@ -41,7 +41,7 @@ import org.apache.spark.deploy.{ExecutorFailureTracker, SparkHadoopUtil}
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
@@ -747,7 +747,7 @@ private[spark] class ApplicationMaster(
             e.getCause match {
               case _: InterruptedException =>
                 // Reporter thread can interrupt to stop user class
-              case SparkUserAppException(exitCode) =>
+              case SparkUserAppException(exitCode, _) =>
                 val msg = log"User application exited with status " +
                   log"${MDC(LogKeys.EXIT_CODE, exitCode)}"
                 logError(msg)

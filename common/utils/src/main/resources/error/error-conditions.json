@@ -1494,6 +1494,12 @@
     ],
     "sqlState" : "42711"
   },
+  "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE" : {
+    "message" : [
+      "Found duplicate variable <variableName> in the declare variable list. Please, remove one of them."
+    ],
+    "sqlState" : "42734"
+  },
   "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED" : {
     "message" : [
       "Previous node emitted a row with eventTime=<emittedRowEventTime> which is older than current_watermark_value=<currentWatermark>",
@@ -3499,7 +3505,7 @@
   },
   "INVALID_RECURSIVE_CTE" : {
     "message" : [
-      "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references."
+      "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references. Any top level inner CTE must not contain self references."
     ],
     "sqlState" : "42836"
   },
@@ -3637,6 +3643,12 @@
       "The argument <name> of `sql()` is invalid. Consider to replace it either by a SQL literal or by collection constructor functions such as `map()`, `array()`, `struct()`."
     ],
     "sqlState" : "42K08"
+  },
+  "INVALID_SQL_FUNCTION_DATA_ACCESS" : {
+    "message" : [
+      "Cannot create a SQL function with CONTAINS SQL that accesses a table/view or a SQL function that reads SQL data. Please use READS SQL DATA instead."
+    ],
+    "sqlState" : "42K0E"
   },
   "INVALID_SQL_FUNCTION_PLAN_STRUCTURE" : {
     "message" : [

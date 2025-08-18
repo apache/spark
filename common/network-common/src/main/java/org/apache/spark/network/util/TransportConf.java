@@ -21,8 +21,6 @@ import java.io.File;
 import java.util.Locale;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
-import com.google.common.base.Preconditions;
-import com.google.common.primitives.Ints;
 import io.netty.util.NettyRuntime;
 
 /**
@@ -171,7 +169,7 @@ public class TransportConf {
    * memory mapping has high overhead for blocks close to or below the page size of the OS.
    */
   public int memoryMapBytes() {
-    return Ints.checkedCast(JavaUtils.byteStringAsBytes(
+    return JavaUtils.checkedCast(JavaUtils.byteStringAsBytes(
       conf.get("spark.storage.memoryMapThreshold", "2m")));
   }
 
@@ -248,7 +246,7 @@ public class TransportConf {
    * Maximum number of bytes to be encrypted at a time when SASL encryption is used.
    */
   public int maxSaslEncryptedBlockSize() {
-    return Ints.checkedCast(JavaUtils.byteStringAsBytes(
+    return JavaUtils.checkedCast(JavaUtils.byteStringAsBytes(
       conf.get("spark.network.sasl.maxEncryptedBlockSize", "64k")));
   }
 
@@ -263,7 +261,7 @@ public class TransportConf {
    * When Secure (SSL/TLS) Shuffle is enabled, the Chunk size to use for shuffling files.
    */
   public int sslShuffleChunkSize() {
-    return Ints.checkedCast(JavaUtils.byteStringAsBytes(
+    return JavaUtils.checkedCast(JavaUtils.byteStringAsBytes(
       conf.get("spark.network.ssl.maxEncryptedBlockSize", "64k")));
   }
 
@@ -504,7 +502,7 @@ public class TransportConf {
     if (!this.getModuleName().equalsIgnoreCase("shuffle")) {
       return 0;
     }
-    Preconditions.checkArgument(separateFinalizeShuffleMerge(),
+    JavaUtils.checkArgument(separateFinalizeShuffleMerge(),
         "Please set spark.shuffle.server.finalizeShuffleMergeThreadsPercent to a positive value");
     int finalizeShuffleMergeThreadsPercent =
         Integer.parseInt(conf.get("spark.shuffle.server.finalizeShuffleMergeThreadsPercent"));
@@ -567,7 +565,7 @@ public class TransportConf {
    * service unnecessarily.
    */
   public int minChunkSizeInMergedShuffleFile() {
-    return Ints.checkedCast(JavaUtils.byteStringAsBytes(
+    return JavaUtils.checkedCast(JavaUtils.byteStringAsBytes(
       conf.get("spark.shuffle.push.server.minChunkSizeInMergedShuffleFile", "2m")));
   }
 

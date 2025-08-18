@@ -20,13 +20,12 @@ package org.apache.spark.sql.connector.catalog
 import java.time.{Instant, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util
+import java.util.Objects
 import java.util.OptionalLong
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
-
-import com.google.common.base.Objects
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, MetadataStructFieldWithLogicalName}
@@ -756,7 +755,7 @@ case class PartitionInternalRow(keys: Array[Any])
     this.keys == other.asInstanceOf[PartitionInternalRow].keys
   }
   override def hashCode: Int = {
-    Objects.hashCode(keys)
+    Objects.hash(keys)
   }
 }
 

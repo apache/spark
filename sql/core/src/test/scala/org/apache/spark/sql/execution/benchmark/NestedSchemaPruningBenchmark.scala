@@ -41,8 +41,8 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
     .range(N * 10)
     .sample(false, 0.1)
     .map { x =>
-      val col3 = (0 until 5).map(i => (x + i, s"$x" * 5))
-      (x, (x, s"$x" * 100), col3)
+      val col3 = (0 until 5).map(i => (x + i, s"$x".repeat(5)))
+      (x, (x, s"$x".repeat(100)), col3)
     }.toDF("col1", "col2", "col3")
 
   private def addCase(benchmark: Benchmark, name: String, sql: String): Unit = {

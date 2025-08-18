@@ -23,7 +23,7 @@ import re
 import inspect
 import warnings
 from collections.abc import Mapping
-from functools import partial, reduce
+from functools import partial, reduce, wraps
 from typing import (
     Any,
     Callable,
@@ -36,6 +36,7 @@ from typing import (
     Sequence,
     Tuple,
     Type,
+    TypeVar,
     Union,
     cast,
     no_type_check,
@@ -103,6 +104,7 @@ from pyspark.pandas.internal import (
 from pyspark.pandas.missing.series import MissingPandasLikeSeries
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
 from pyspark.pandas.utils import (
+    ansi_mode_context,
     combine_frames,
     is_ansi_mode_enabled,
     is_name_like_tuple,
@@ -142,6 +144,18 @@ if TYPE_CHECKING:
 # pattern every time it is used in _repr_ in Series.
 # This pattern basically seeks the footer string from pandas'
 REPR_PATTERN = re.compile(r"Length: (?P<length>[0-9]+)")
+
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
+
+
+def with_ansi_mode_context(f: FuncT) -> FuncT:
+    @wraps(f)
+    def _with_ansi_mode_context(self: "Series", *args: Any, **kwargs: Any) -> Any:
+        with ansi_mode_context(self._internal.spark_frame.sparkSession):
+            return f(self, *args, **kwargs)
+
+    return cast(FuncT, _with_ansi_mode_context)
+
 
 _flex_doc_SERIES = """
 Return {desc} of series and other, element-wise (binary operator `{op_name}`).
@@ -3396,13 +3410,21 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             lag_scol = F.lag(scol, lag).over(Window.orderBy(NATURAL_ORDER_COLUMN_NAME))
             lag_col_name = verify_temp_column_name(sdf, "__autocorr_lag_tmp_col__")
-            corr = (
-                sdf.withColumn(lag_col_name, lag_scol)
-                .select(F.corr(scol, F.col(lag_col_name)))
-                .head()[0]
-            )
+
+            sdf_lag = sdf.withColumn(lag_col_name, lag_scol)
+            if is_ansi_mode_enabled(sdf.sparkSession):
+                # Compute covariance between the original and lagged columns.
+                # If the covariance is None or zero (indicating no linear relationship),
+                # return NaN, otherwise, proceeding to compute correlation may raise
+                # DIVIDE_BY_ZERO under ANSI mode.
+                cov_value = sdf_lag.select(F.covar_samp(scol, F.col(lag_col_name))).head()[0]
+                if cov_value is None or cov_value == 0.0:
+                    return np.nan
+            corr = sdf_lag.select(F.corr(scol, F.col(lag_col_name))).head()[0]
+
         return np.nan if corr is None else corr
 
+    @with_ansi_mode_context
     def corr(
         self, other: "Series", method: str = "pearson", min_periods: Optional[int] = None
     ) -> float:
@@ -4882,6 +4904,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         return self.index
 
     # TODO: introduce 'in_place'; fully support 'regex'
+    @with_ansi_mode_context
     def replace(
         self,
         to_replace: Optional[Union[Any, List, Tuple, Dict]] = None,
@@ -7397,15 +7420,11 @@ def _test() -> None:
     import sys
     from pyspark.sql import SparkSession
     import pyspark.pandas.series
-    from pyspark.testing.utils import is_ansi_mode_test
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.pandas.series.__dict__.copy()
     globs["ps"] = pyspark.pandas
-
-    if is_ansi_mode_test:
-        del pyspark.pandas.series.Series.autocorr.__doc__
 
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.series tests").getOrCreate()
