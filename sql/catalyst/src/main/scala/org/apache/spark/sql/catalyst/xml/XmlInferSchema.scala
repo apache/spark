@@ -245,7 +245,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           case _: XMLStreamException | _: MalformedInputException =>
             logWarning("Malformed XML record found", e)
             // Close the parser from the first malformed XML record
-            parser.closeAllReaders()
+            parser.close()
             handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
           case _: SAXException =>
             // For XSD validation errors, don't close the parser as there might be more valid
@@ -257,7 +257,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           case _: IOException | _: RuntimeException | _: InternalError
               if options.ignoreCorruptFiles =>
             logWarning("Skipped the rest of the content in the corrupted file", e)
-            parser.closeAllReaders()
+            parser.close()
             Some(StructType(Nil))
           case _ =>
             logWarning("Failed to infer schema from XML record", e)

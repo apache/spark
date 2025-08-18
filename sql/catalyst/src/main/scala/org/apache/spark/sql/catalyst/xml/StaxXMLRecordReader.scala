@@ -59,7 +59,7 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
     if (hasMoreRecord) {
       xsdValidationStreamReader.foreach(validateXSDSchema)
     } else {
-      closeAllReaders()
+      close()
     }
     hasMoreRecord
   }
@@ -107,7 +107,7 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
     xsdSchemaValidator.get.validate(new StAXSource(streamReader))
   }
 
-  def closeAllReaders(): Unit = {
+  override def close(): Unit = {
     primaryEventReader.close()
     xsdValidationStreamReader.foreach(_.close())
     in1.close()
@@ -138,6 +138,5 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
   override def getElementText: String = primaryEventReader.getElementText
   override def nextTag(): XMLEvent = primaryEventReader.nextTag()
   override def getProperty(name: String): AnyRef = primaryEventReader.getProperty(name)
-  override def close(): Unit = {}
   override def next(): AnyRef = primaryEventReader.next()
 }

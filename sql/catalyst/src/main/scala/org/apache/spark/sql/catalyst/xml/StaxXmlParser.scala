@@ -265,17 +265,17 @@ class StaxXmlParser(
         SparkErrorUtils.getRootCause(e) match {
           case _: FileNotFoundException if options.ignoreMissingFiles =>
             logWarning("Skipped missing file", e)
-            parser.closeAllReaders()
+            parser.close()
             None
           case _: IOException | _: RuntimeException | _: InternalError
               if options.ignoreCorruptFiles =>
             logWarning("Skipped the rest of the content in the corrupted file", e)
-            parser.closeAllReaders()
+            parser.close()
             None
           case _: XMLStreamException | _: MalformedInputException =>
             // Skip rest of the content in the parser and put the whole XML file in the
             // BadRecordException.
-            parser.closeAllReaders()
+            parser.close()
             // XML parser currently doesn't support partial results for corrupted records.
             // For such records, all fields other than the field configured by
             // `columnNameOfCorruptRecord` are set to `null`.
