@@ -1575,17 +1575,10 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
         // No join condition, ignore duplicated key.
         (s"SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2 ON t1.c1 = t2.c1",
           true),
-        // Have join condition on build join key only, ignore duplicated key.
+        // SPARK-52873: Have any join condition at all, do not ignore duplicated key.
         (s"""
             |SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2
             |ON t1.c1 = t2.c1 AND CAST(t1.c2 * 2 AS STRING) != t2.c1
-          """.stripMargin,
-          true),
-        // Have join condition on other build attribute beside join key, do not ignore
-        // duplicated key.
-        (s"""
-            |SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2
-            |ON t1.c1 = t2.c1 AND t1.c2 * 100 != t2.c2
           """.stripMargin,
           false)
       )
