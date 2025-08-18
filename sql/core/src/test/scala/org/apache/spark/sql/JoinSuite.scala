@@ -1765,7 +1765,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     }
   }
 
-  test("SPARK-52873") {
+  test("SPARK-52873: Don't ignore duplicate keys in SHJ when there is a bound condition") {
     val query =
       """select /*+ SHUFFLE_HASH(r) */ * from
         |testData2 l
