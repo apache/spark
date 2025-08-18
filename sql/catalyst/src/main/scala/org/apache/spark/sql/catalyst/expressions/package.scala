@@ -155,7 +155,7 @@ package object expressions  {
         val arr = attrs.toArray
 
         // Use LongMap to avoid overhead of HashMap while hashing.
-        val map = new mutable.LongMap[Int](arr.length)
+        val map = new mutable.LongMap[Int](_ => -1, arr.length)
 
         // Iterate over the array in reverse order so that the final map value is the first
         // attribute with a given expression id.
