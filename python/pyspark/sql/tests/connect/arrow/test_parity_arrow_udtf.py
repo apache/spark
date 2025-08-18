@@ -15,16 +15,25 @@
 # limitations under the License.
 #
 
+import unittest
+
 from pyspark.sql.tests.arrow.test_arrow_udtf import ArrowUDTFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class ArrowUDTFParityTests(ArrowUDTFTestsMixin, ReusedConnectTestCase):
-    ...
+    # TODO(SPARK-53323): Support table arguments in Spark Connect Arrow UDTFs
+    @unittest.skip("asTable() is not supported in Spark Connect")
+    def test_arrow_udtf_with_table_argument_basic(self):
+        super().test_arrow_udtf_with_table_argument_basic()
+
+    # TODO(SPARK-53323): Support table arguments in Spark Connect Arrow UDTFs
+    @unittest.skip("asTable() is not supported in Spark Connect")
+    def test_arrow_udtf_with_table_argument_and_scalar(self):
+        super().test_arrow_udtf_with_table_argument_and_scalar()
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.sql.tests.connect.arrow.test_parity_arrow_udtf import *  # noqa: F401
 
     try:
