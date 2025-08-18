@@ -43,13 +43,13 @@ echo "Building Spark distribution for ${VERSION}"
 build/mvn versions:set -DnewVersion=$VERSION -DgenerateBackupPoms=false
 dev/make-distribution.sh --name openai-spark --pip --tgz -Phive -Phive-thriftserver -Pyarn -Pkubernetes -Phadoop-cloud
 
+
+az acr login -n ${REPONAME} --subscription data-platform
+
 bin/docker-image-tool.sh \
     -r $REPOPATH \
     -t $VERSION \
     -p dist/kubernetes/dockerfiles/spark/bindings/python/Dockerfile \
     -b java_image_tag=17-noble \
+    -X \
     build
-
-az acr login -n ${REPONAME} --subscription api
-docker push ${IMAGE}:${VERSION}
-az acr repository update --name ${REPONAME} --image ${IMAGE_PATH}:${VERSION}
