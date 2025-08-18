@@ -628,6 +628,8 @@ class RocksDBWithCheckpointV2StateDataSourceReaderSuite extends StateDataSourceR
     spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 2)
     spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
       newStateStoreProvider().getClass.getName)
+    spark.conf.set("spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled",
+      "true")
   }
 
   test("check unsupported modes with checkpoint v2") {

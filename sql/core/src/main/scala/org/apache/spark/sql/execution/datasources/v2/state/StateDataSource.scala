@@ -629,13 +629,11 @@ object StateSourceOptions extends DataSourceOptions {
       case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
     }
 
-    val operatorStateUniqueIds = if (commitMetadata.stateUniqueIds.isDefined) {
+    if (commitMetadata.stateUniqueIds.isDefined) {
       Some(commitMetadata.stateUniqueIds.get(operatorId))
     } else {
       None
     }
-
-    operatorStateUniqueIds
   }
 
   // Modifies options due to external data. Returns modified options.
