@@ -49,6 +49,7 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
 )
 
+<<<<<<< HEAD
 if have_pandas:
     import pandas as pd
 
@@ -56,6 +57,32 @@ if have_pandas:
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
+=======
+from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
+    SimpleStatefulProcessorWithInitialStateFactory,
+    StatefulProcessorWithInitialStateTimersFactory,
+    StatefulProcessorWithListStateInitialStateFactory,
+    EventTimeStatefulProcessorFactory,
+    ProcTimeStatefulProcessorFactory,
+    SimpleStatefulProcessorFactory,
+    StatefulProcessorChainingOpsFactory,
+    SimpleTTLStatefulProcessorFactory,
+    TTLStatefulProcessorFactory,
+    InvalidSimpleStatefulProcessorFactory,
+    ListStateProcessorFactory,
+    ListStateLargeListProcessorFactory,
+    ListStateLargeTTLProcessorFactory,
+    MapStateProcessorFactory,
+    MapStateLargeTTLProcessorFactory,
+    BasicProcessorFactory,
+    BasicProcessorNotNullableFactory,
+    AddFieldsProcessorFactory,
+    RemoveFieldsProcessorFactory,
+    ReorderedFieldsProcessorFactory,
+    UpcastProcessorFactory,
+    MinEventTimeStatefulProcessorFactory,
+    StatefulProcessorCompositeTypeFactory,
+>>>>>>> 9e06a506a94 ([SPARK-51920][SS][PYTHON] Fix composite/nested type in value state for python TWS)
 )
 class TransformWithStateInPandasTestsMixin:
     @classmethod
@@ -124,6 +151,12 @@ class TransformWithStateInPandasTestsMixin:
         timeMode="None",
         checkpoint_path=None,
         initial_state=None,
+        output_schema=StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("countAsString", StringType(), True),
+            ]
+        ),
     ):
         input_path = tempfile.mkdtemp()
         if checkpoint_path is None:
@@ -139,12 +172,32 @@ class TransformWithStateInPandasTestsMixin:
             q.stop()
         self.assertTrue(df.isStreaming)
 
+<<<<<<< HEAD
         output_schema = StructType(
             [
                 StructField("id", StringType(), True),
                 StructField("countAsString", StringType(), True),
             ]
         )
+=======
+        stateful_processor = self.get_processor(stateful_processor_factory)
+        if self.use_pandas():
+            tws_df = df.groupBy("id").transformWithStateInPandas(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode=timeMode,
+                initialState=initial_state,
+            )
+        else:
+            tws_df = df.groupBy("id").transformWithState(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode=timeMode,
+                initialState=initial_state,
+            )
+>>>>>>> 9e06a506a94 ([SPARK-51920][SS][PYTHON] Fix composite/nested type in value state for python TWS)
 
         q = (
             df.groupBy("id")
@@ -1339,6 +1392,63 @@ class TransformWithStateInPandasTestsMixin:
             check_results_for_new_query,
             checkpoint_path=new_checkpoint_path,
             initial_state=init_df,
+        )
+
+    def test_transform_with_state_in_pandas_composite_type(self):
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                map_val = {"key1": [1], "key2": [10]}
+                nested_map_val = {"e1": {"e2": 5, "e3": 10}}
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(
+                        id="0",
+                        value_arr="0",
+                        list_state_arr="0",
+                        map_state_arr=json.dumps(map_val, sort_keys=True),
+                        nested_map_state_arr=json.dumps(nested_map_val, sort_keys=True),
+                    ),
+                    Row(
+                        id="1",
+                        value_arr="0",
+                        list_state_arr="0",
+                        map_state_arr=json.dumps(map_val, sort_keys=True),
+                        nested_map_state_arr=json.dumps(nested_map_val, sort_keys=True),
+                    ),
+                }, f"batch id: {batch_id}, real df is: {batch_df.collect()}"
+            else:
+                map_val_0 = {"key1": [1], "key2": [10], "0": [669]}
+                map_val_1 = {"key1": [1], "key2": [10], "1": [252]}
+                nested_map_val_0 = {"e1": {"e2": 5, "e3": 10, "0": 669}}
+                nested_map_val_1 = {"e1": {"e2": 5, "e3": 10, "1": 252}}
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(
+                        id="0",
+                        countAsString="669",
+                        list_state_arr="0,669",
+                        map_state_arr=json.dumps(map_val_0, sort_keys=True),
+                        nested_map_state_arr=json.dumps(nested_map_val_0, sort_keys=True),
+                    ),
+                    Row(
+                        id="1",
+                        countAsString="252",
+                        list_state_arr="0,252",
+                        map_state_arr=json.dumps(map_val_1, sort_keys=True),
+                        nested_map_state_arr=json.dumps(nested_map_val_1, sort_keys=True),
+                    ),
+                }, f"batch id: {batch_id}, real df is: {batch_df.collect()}"
+
+        output_schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("value_arr", StringType(), True),
+                StructField("list_state_arr", StringType(), True),
+                StructField("map_state_arr", StringType(), True),
+                StructField("nested_map_state_arr", StringType(), True),
+            ]
+        )
+
+        self._test_transform_with_state_basic(
+            StatefulProcessorCompositeTypeFactory(), check_results, output_schema=output_schema
         )
 
     # run the same test suites again but with single shuffle partition
