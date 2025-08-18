@@ -617,11 +617,61 @@ StateDataSourceReadSuite {
   }
 }
 
-class RocksDBWithCheckpointV2StateDataSourceReaderSuite
-  extends RocksDBWithChangelogCheckpointStateDataSourceReaderSuite {
+class RocksDBWithCheckpointV2StateDataSourceReaderSuite extends StateDataSourceReadSuite {
+  override protected def newStateStoreProvider(): RocksDBStateStoreProvider =
+    new RocksDBStateStoreProvider
+
+  import testImplicits._
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 2)
+    spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
+      newStateStoreProvider().getClass.getName)
+  }
+
+  test("check unsupported modes with checkpoint v2") {
+    withTempDir { tmpDir =>
+      val inputData = MemoryStream[(Int, Long)]
+      val query = getStreamStreamJoinQuery(inputData)
+      testStream(query)(
+        StartStream(checkpointLocation = tmpDir.getCanonicalPath),
+        AddData(inputData, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
+        ProcessAllAvailable(),
+        Execute { _ => Thread.sleep(2000) },
+        StopStream
+      )
+
+      // Verify reading snapshot throws error with checkpoint v2
+      val exc1 = intercept[StateDataSourceInvalidOptionValue] {
+        val stateSnapshotDf = spark.read.format("statestore")
+          .option("snapshotPartitionId", 2)
+          .option("snapshotStartBatchId", 0)
+          .option("joinSide", "left")
+          .load(tmpDir.getCanonicalPath)
+        stateSnapshotDf.collect()
+      }
+
+      checkError(exc1, "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE", "42616",
+        Map(
+          "optionName" -> StateSourceOptions.SNAPSHOT_START_BATCH_ID,
+          "message" -> "Snapshot reading is currently not supported with checkpoint v2."))
+
+      // Verify reading change feed throws error with checkpoint v2
+      val exc2 = intercept[StateDataSourceInvalidOptionValue] {
+        val stateDf = spark.read.format("statestore")
+          .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+          .option(StateSourceOptions.CHANGE_END_BATCH_ID, 1)
+          .load(tmpDir.getAbsolutePath)
+        stateDf.collect()
+      }
+
+      checkError(exc2, "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE", "42616",
+        Map(
+          "optionName" -> StateSourceOptions.READ_CHANGE_FEED,
+          "message" -> "Read change feed is currently not supported with checkpoint v2."))
+    }
   }
 }
 

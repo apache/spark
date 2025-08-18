@@ -583,10 +583,17 @@ object StateSourceOptions extends DataSourceOptions {
       operatorId,
       resolvedCpLocation)
 
-    if (operatorStateUniqueIds.isDefined
-      && (fromSnapshotOptions.isDefined || readChangeFeedOptions.isDefined)) {
-      throw new UnsupportedOperationException(
-        "Reading from snapshot or reading change feed is not supported yet with Checkpoint v2.")
+    if (operatorStateUniqueIds.isDefined) {
+      if (fromSnapshotOptions.isDefined) {
+        throw StateDataSourceErrors.invalidOptionValue(
+          SNAPSHOT_START_BATCH_ID,
+          "Snapshot reading is currently not supported with checkpoint v2.")
+      }
+      if (readChangeFeedOptions.isDefined) {
+        throw StateDataSourceErrors.invalidOptionValue(
+          READ_CHANGE_FEED,
+          "Read change feed is currently not supported with checkpoint v2.")
+      }
     }
 
     StateSourceOptions(
