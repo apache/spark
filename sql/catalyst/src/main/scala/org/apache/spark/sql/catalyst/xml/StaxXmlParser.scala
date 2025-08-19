@@ -239,7 +239,7 @@ class StaxXmlParser(
           Some(InternalRow(v))
         case _ =>
           // Otherwise, parse the xml record as Structs
-          val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
+          val rootAttributes = parser.nextEvent().asStartElement.getAttributes.asScala.toArray
           val result = Some(convertObject(parser, schema, rootAttributes))
           result
       }
@@ -1057,8 +1057,8 @@ object StaxXmlParser {
     v
   }
 
-  def parseVariant(parser: XMLEventReader, options: XmlOptions): VariantVal = {
-    val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
+  def parseVariant(parser: StaxXMLRecordReader, options: XmlOptions): VariantVal = {
+    val rootAttributes = parser.nextEvent().asStartElement.getAttributes.asScala.toArray
     val v = convertVariant(parser, rootAttributes, options)
     new VariantVal(v.getValue, v.getMetadata)
   }

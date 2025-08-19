@@ -221,7 +221,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         return None
       }
 
-      val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
+      val rootAttributes = parser.nextEvent().asStartElement.getAttributes.asScala.toArray
       val schema = Some(inferObject(parser, rootAttributes))
       schema
     } catch {

@@ -98,12 +98,7 @@ object StaxXmlParserUtils {
   }
 
   def gatherRootAttributes(parser: XMLEventReader): Array[Attribute] = {
-    val rootEvent = parser.peek() match {
-      case _: StartElement =>
-        parser.nextEvent()
-      case _ =>
-        StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.START_ELEMENT)
-    }
+    val rootEvent = StaxXmlParserUtils.skipUntil(parser, XMLStreamConstants.START_ELEMENT)
     rootEvent.asStartElement.getAttributes.asScala.toArray
   }
 
