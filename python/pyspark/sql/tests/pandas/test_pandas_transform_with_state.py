@@ -39,6 +39,8 @@ from pyspark.sql.types import (
     LongType,
     BooleanType,
     FloatType,
+    ArrayType,
+    MapType,
 )
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
@@ -124,6 +126,12 @@ class TransformWithStateInPandasTestsMixin:
         timeMode="None",
         checkpoint_path=None,
         initial_state=None,
+        output_schema=StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("countAsString", StringType(), True),
+            ]
+        ),
     ):
         input_path = tempfile.mkdtemp()
         if checkpoint_path is None:
@@ -138,13 +146,6 @@ class TransformWithStateInPandasTestsMixin:
         for q in self.spark.streams.active:
             q.stop()
         self.assertTrue(df.isStreaming)
-
-        output_schema = StructType(
-            [
-                StructField("id", StringType(), True),
-                StructField("countAsString", StringType(), True),
-            ]
-        )
 
         q = (
             df.groupBy("id")
@@ -1341,6 +1342,63 @@ class TransformWithStateInPandasTestsMixin:
             initial_state=init_df,
         )
 
+    def test_transform_with_state_in_pandas_composite_type(self):
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                map_val = {"key1": [1], "key2": [10]}
+                nested_map_val = {"e1": {"e2": 5, "e3": 10}}
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(
+                        id="0",
+                        value_arr="0",
+                        list_state_arr="0",
+                        map_state_arr=json.dumps(map_val, sort_keys=True),
+                        nested_map_state_arr=json.dumps(nested_map_val, sort_keys=True),
+                    ),
+                    Row(
+                        id="1",
+                        value_arr="0",
+                        list_state_arr="0",
+                        map_state_arr=json.dumps(map_val, sort_keys=True),
+                        nested_map_state_arr=json.dumps(nested_map_val, sort_keys=True),
+                    ),
+                }, f"batch id: {batch_id}, real df is: {batch_df.collect()}"
+            else:
+                map_val_0 = {"key1": [1], "key2": [10], "0": [669]}
+                map_val_1 = {"key1": [1], "key2": [10], "1": [252]}
+                nested_map_val_0 = {"e1": {"e2": 5, "e3": 10, "0": 669}}
+                nested_map_val_1 = {"e1": {"e2": 5, "e3": 10, "1": 252}}
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(
+                        id="0",
+                        countAsString="669",
+                        list_state_arr="0,669",
+                        map_state_arr=json.dumps(map_val_0, sort_keys=True),
+                        nested_map_state_arr=json.dumps(nested_map_val_0, sort_keys=True),
+                    ),
+                    Row(
+                        id="1",
+                        countAsString="252",
+                        list_state_arr="0,252",
+                        map_state_arr=json.dumps(map_val_1, sort_keys=True),
+                        nested_map_state_arr=json.dumps(nested_map_val_1, sort_keys=True),
+                    ),
+                }, f"batch id: {batch_id}, real df is: {batch_df.collect()}"
+
+        output_schema = StructType(
+            [
+                StructField("id", StringType(), True),
+                StructField("value_arr", StringType(), True),
+                StructField("list_state_arr", StringType(), True),
+                StructField("map_state_arr", StringType(), True),
+                StructField("nested_map_state_arr", StringType(), True),
+            ]
+        )
+
+        self._test_transform_with_state_in_pandas_basic(
+            PandasStatefulProcessorCompositeType(), check_results, output_schema=output_schema
+        )
+
     # run the same test suites again but with single shuffle partition
     def test_transform_with_state_with_timers_single_partition(self):
         with self.sql_conf({"spark.sql.shuffle.partitions": "1"}):
@@ -2204,6 +2262,113 @@ class UpcastProcessor(StatefulProcessor):
             id_val += self.state.get()[0] + 1
         self.state.update((id_val, name))
         yield pd.DataFrame({"id": [key[0]], "value": [{"id": id_val, "name": name}]})
+
+    def close(self) -> None:
+        pass
+
+
+# A stateful processor that contains composite python type inside Value, List and Map state variable
+class PandasStatefulProcessorCompositeType(StatefulProcessor):
+    TAGS = [["dummy1", "dummy2"], ["dummy3"]]
+    METADATA = [{"key": "env", "value": "prod"}, {"key": "region", "value": "us-west"}]
+    ATTRIBUTES_MAP = {"key1": [1], "key2": [10]}
+    CONFS_MAP = {"e1": {"e2": 5, "e3": 10}}
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        obj_schema = StructType(
+            [
+                StructField("id", ArrayType(IntegerType())),
+                StructField("tags", ArrayType(ArrayType(StringType()))),
+                StructField(
+                    "metadata",
+                    ArrayType(
+                        StructType(
+                            [StructField("key", StringType()), StructField("value", StringType())]
+                        )
+                    ),
+                ),
+            ]
+        )
+
+        map_value_schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True),
+                StructField(
+                    "confs", MapType(StringType(), MapType(StringType(), IntegerType()), True), True
+                ),
+            ]
+        )
+
+        self.obj_state = handle.getValueState("obj_state", obj_schema)
+        self.list_state = handle.getListState("list_state", obj_schema)
+        self.map_state = handle.getMapState("map_state", "name string", map_value_schema)
+
+    def _update_obj_state(self, total_temperature):
+        if self.obj_state.exists():
+            ids, tags, metadata = self.obj_state.get()
+            assert tags == self.TAGS, f"Tag mismatch: {tags}"
+            assert metadata == [Row(**m) for m in self.METADATA], f"Metadata mismatch: {metadata}"
+            ids = [int(x + total_temperature) for x in ids]
+        else:
+            ids = [0]
+        self.obj_state.update((ids, self.TAGS, self.METADATA))
+        return ids
+
+    def _update_list_state(self, total_temperature, initial_obj):
+        existing_list = self.list_state.get()
+        updated_list = []
+        import numpy as np
+
+        for ids, tags, metadata in existing_list:
+            ids = np.append(ids, total_temperature)
+            updated_list.append((ids, tags, [row for row in metadata]))
+        if not updated_list:
+            updated_list.append(initial_obj)
+        self.list_state.put(updated_list)
+        return [id_val for ids, _, _ in updated_list for id_val in ids]
+
+    def _update_map_state(self, key, total_temperature):
+        if not self.map_state.containsKey(key):
+            self.map_state.updateValue(key, (0, self.ATTRIBUTES_MAP, self.CONFS_MAP))
+        else:
+            id_val, attributes, confs = self.map_state.getValue(key)
+            attributes[key] = [total_temperature]
+            confs.setdefault("e1", {})[key] = total_temperature
+            self.map_state.updateValue(key, (id_val, attributes, confs))
+        return self.map_state.getValue(key)[1], self.map_state.getValue(key)[2]
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        key = key[0]
+        total_temperature = sum(pdf["temperature"].astype(int).sum() for pdf in rows)
+
+        updated_ids = self._update_obj_state(total_temperature)
+        flattened_ids = self._update_list_state(
+            total_temperature, (updated_ids, self.TAGS, self.METADATA)
+        )
+        attributes_map, confs_map = self._update_map_state(key, total_temperature)
+
+        import json
+        import numpy as np
+
+        def np_int64_to_int(x):
+            if isinstance(x, np.int64):
+                return int(x)
+            return x
+
+        yield pd.DataFrame(
+            {
+                "id": [key],
+                "value_arr": [",".join(map(str, updated_ids))],
+                "list_state_arr": [",".join(map(str, flattened_ids))],
+                "map_state_arr": [
+                    json.dumps(attributes_map, default=np_int64_to_int, sort_keys=True)
+                ],
+                "nested_map_state_arr": [
+                    json.dumps(confs_map, default=np_int64_to_int, sort_keys=True)
+                ],
+            }
+        )
 
     def close(self) -> None:
         pass
