@@ -280,12 +280,14 @@ object SQLExecution extends Logging {
    * side via job local properties.
    */
   def withSQLConfPropagated[T](sparkSession: SparkSession)(body: => T): T = {
+    val newPrefixes = sparkSession.sessionState.conf.getConf(SQLConf.PROPAGATE_CONF_PREFIXES).split(",").toSeq
+    val allPrefixes = newPrefixes :+ ("spark")
     val sc = sparkSession.sparkContext
     // Set all the specified SQL configs to local properties, so that they can be available at
     // the executor side.
     val allConfigs = sparkSession.sessionState.conf.getAllConfs
     val originalLocalProps = allConfigs.collect {
-      case (key, value) if key.startsWith("spark") =>
+      case (key, value) if allPrefixes.exists(key.startsWith(_)) =>
         val originalValue = sc.getLocalProperty(key)
         sc.setLocalProperty(key, value)
         (key, originalValue)
