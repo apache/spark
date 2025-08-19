@@ -27,8 +27,9 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
-import org.apache.spark.sql.types.{StructType, UserDefinedType}
+import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, StructType, UserDefinedType}
 import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 /**
  * Grouped a iterator into batches.
@@ -124,6 +125,20 @@ class ArrowEvalPythonEvaluatorFactory(
     profiler: Option[String])
   extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
 
+  private def typesEqual(
+      expectedTypes: Seq[DataType],
+      actualTypes: Seq[DataType]): Boolean = {
+    expectedTypes.length == actualTypes.length &&
+    expectedTypes.zip(actualTypes).forall {
+      case (expected: DayTimeIntervalType, actual: DayTimeIntervalType) =>
+        // Use lenient type checking that treats DayTimeIntervalType variants as compatible
+        // Arrow always returns the broadest range, so as long as we're not losing information,
+        // we can consider the types equal.
+        actual.startField <= expected.startField && expected.endField <= actual.endField
+      case (expected, actual) => equalsIgnoreCompatibleCollation(expected, actual)
+    }
+  }
+
   override def evaluate(
       funcs: Seq[(ChainedPythonFunctions, Long)],
       argMetas: Array[Array[ArgumentMetadata]],
@@ -152,10 +167,12 @@ class ArrowEvalPythonEvaluatorFactory(
 
     columnarBatchIter.flatMap { batch =>
       val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-      if (!equalsIgnoreCompatibleCollation(outputTypes, actualDataTypes)) {
+
+      if (!typesEqual(outputTypes, actualDataTypes)) {
         throw QueryExecutionErrors.arrowDataTypeMismatchError(
           "pandas_udf()", outputTypes, actualDataTypes)
       }
+
       batch.rowIterator.asScala
     }
   }
