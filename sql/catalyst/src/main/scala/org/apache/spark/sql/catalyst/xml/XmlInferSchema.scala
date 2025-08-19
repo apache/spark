@@ -74,6 +74,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     isParsing = true)
 
   private def handleXmlErrorsByParseMode(
+      parser: XMLEventReader,
       parseMode: ParseMode,
       columnNameOfCorruptRecord: String,
       e: Throwable): Option[StructType] = {
@@ -83,6 +84,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       case DropMalformedMode =>
         None
       case FailFastMode =>
+        parser.close()
         throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(
           e, columnNameOfCorruptRecord)
     }
@@ -145,7 +147,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       schema
     } catch {
       case e @ (_: XMLStreamException | _: MalformedInputException | _: SAXException) =>
-        handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
+        handleXmlErrorsByParseMode(parser, options.parseMode, options.columnNameOfCorruptRecord, e)
       case e: CharConversionException if options.charset.isEmpty =>
         val msg =
           """XML parser cannot handle a character in its input.
@@ -154,6 +156,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         val wrappedCharException = new CharConversionException(msg)
         wrappedCharException.initCause(e)
         handleXmlErrorsByParseMode(
+          parser,
           options.parseMode,
           options.columnNameOfCorruptRecord,
           wrappedCharException)
@@ -166,7 +169,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         logWarning("Skipped the rest of the content in the corrupted file", e)
         Some(StructType(Nil))
       case NonFatal(e) =>
-        handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
+        handleXmlErrorsByParseMode(parser, options.parseMode, options.columnNameOfCorruptRecord, e)
     } finally {
       if (parser != null) {
         parser.close()
@@ -233,27 +236,43 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
         val wrappedCharException = new CharConversionException(msg)
         wrappedCharException.initCause(e)
         handleXmlErrorsByParseMode(
+          parser,
           options.parseMode,
           options.columnNameOfCorruptRecord,
           wrappedCharException)
       case e: FileNotFoundException if options.ignoreMissingFiles =>
         logWarning("Skipped missing file", e)
+        parser.close()
         Some(StructType(Nil))
-      case e: FileNotFoundException if !options.ignoreMissingFiles => throw e
+      case e: FileNotFoundException if !options.ignoreMissingFiles =>
+        parser.close()
+        throw e
       case NonFatal(e) =>
         SparkErrorUtils.getRootCause(e) match {
           case _: XMLStreamException | _: MalformedInputException =>
             logWarning("Malformed XML record found", e)
             // Close the parser from the first malformed XML record
             parser.close()
-            handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
+            handleXmlErrorsByParseMode(
+              parser = parser,
+              parseMode = options.parseMode,
+              columnNameOfCorruptRecord = options.columnNameOfCorruptRecord,
+              e = e
+            )
           case _: SAXException =>
             // For XSD validation errors, don't close the parser as there might be more valid
             // records to parse.
             // Advance the parser so that the next record can be parsed.
             parser.nextEvent()
-            handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
-          case _: AccessControlException | _: BlockMissingException => throw e
+            handleXmlErrorsByParseMode(
+              parser = parser,
+              parseMode = options.parseMode,
+              columnNameOfCorruptRecord = options.columnNameOfCorruptRecord,
+              e = e
+            )
+          case _: AccessControlException | _: BlockMissingException =>
+            parser.close()
+            throw e
           case _: IOException | _: RuntimeException | _: InternalError
               if options.ignoreCorruptFiles =>
             logWarning("Skipped the rest of the content in the corrupted file", e)
@@ -261,7 +280,12 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
             Some(StructType(Nil))
           case _ =>
             logWarning("Failed to infer schema from XML record", e)
-            handleXmlErrorsByParseMode(options.parseMode, options.columnNameOfCorruptRecord, e)
+            handleXmlErrorsByParseMode(
+              parser = parser,
+              parseMode = options.parseMode,
+              columnNameOfCorruptRecord = options.columnNameOfCorruptRecord,
+              e = e
+            )
         }
     }
   }

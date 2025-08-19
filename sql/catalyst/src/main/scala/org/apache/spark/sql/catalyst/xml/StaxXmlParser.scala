@@ -244,7 +244,9 @@ class StaxXmlParser(
           result
       }
     } catch {
-      case e: SparkUpgradeException => throw e
+      case e: SparkUpgradeException =>
+        parser.close()
+        throw e
       case e: CharConversionException if options.charset.isEmpty =>
         val msg =
           """XML parser cannot handle a character in its input.
