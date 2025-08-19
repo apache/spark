@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.StateStoreColumnFamilySchemaUtils
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider.{SCHEMA_ID_PREFIX_BYTES, STATE_ENCODING_NUM_VERSION_BYTES, STATE_ENCODING_VERSION}
+import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 
@@ -805,9 +806,13 @@ class AvroStateEncoder(
   private def getAvroDeserializer(schema: StructType): AvroDeserializer = {
     val avroType = SchemaConverters.toAvroTypeWithDefaults(schema)
     val avroOptions = AvroOptions(Map.empty)
-    new AvroDeserializer(avroType, schema,
-      avroOptions.datetimeRebaseModeInRead, avroOptions.useStableIdForUnionType,
-      avroOptions.stableIdPrefixForUnionType, avroOptions.recursiveFieldMaxDepth)
+    new AvroDeserializer(
+      avroType,
+      schema,
+      LegacyBehaviorPolicy.withName(avroOptions.datetimeRebaseModeInRead),
+      avroOptions.useStableIdForUnionType,
+      avroOptions.stableIdPrefixForUnionType,
+      avroOptions.recursiveFieldMaxDepth)
   }
 
   /**
