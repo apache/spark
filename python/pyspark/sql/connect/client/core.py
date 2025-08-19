@@ -2027,3 +2027,18 @@ class SparkConnectClient(object):
             return [item.string for item in ml_command_result.param.array.elements]
 
         return []
+
+    def _query_model_size(self, model_ref_id) -> int:
+        command = pb2.Command()
+        command.ml_command.delete.obj_refs.extend(
+            [pb2.ObjectRef(id=cache_id) for cache_id in cache_ids]
+        )
+        command.ml_command.delete.evict_only = evict_only
+        (_, properties, _) = self.execute_command(command)
+
+        assert properties is not None
+
+        if properties is not None and "ml_command_result" in properties:
+            ml_command_result = properties["ml_command_result"]
+            deleted = ml_command_result.operator_info.obj_ref.id.split(",")
+            return cast(List[str], deleted)

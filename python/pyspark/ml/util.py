@@ -360,6 +360,13 @@ def del_remote_cache(ref_id: str) -> None:
             return
 
 
+# query estimated model in-memory size
+def query_model_size(ref_id: str) -> None:
+    assert ref_id is not None and "." not in ref_id
+    session = SparkSession.getActiveSession()
+    assert session is not None
+
+
 def try_remote_del(f: FuncT) -> FuncT:
     """Mark the function/property to delete a model on the server side."""
 
