@@ -33,6 +33,7 @@ import io.netty.util.internal.OutOfDirectMemoryError
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.{MapOutputTracker, SparkException, TaskContext}
+import org.apache.spark.ExecutorDeadException
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
@@ -975,41 +976,51 @@ final class ShuffleBlockFetcherIterator(
         case FailureFetchResult(blockId, mapIndex, address, e) =>
           var errorMsg: String = null
           if (e.isInstanceOf[OutOfDirectMemoryError]) {
-            errorMsg = s"Block $blockId fetch failed after $maxAttemptsOnNettyOOM " +
-              s"retries due to Netty OOM"
-            logError(errorMsg)
+            val logMessage = log"Block ${MDC(BLOCK_ID, blockId)} fetch failed after " +
+              log"${MDC(MAX_ATTEMPTS, maxAttemptsOnNettyOOM)} retries due to Netty OOM"
+            logError(logMessage)
+            errorMsg = logMessage.message
           } else {
             logInfo(s"Block $blockId fetch failed for mapIndex $mapIndex from $address")
           }
-
-          val newBlocksByAddr = blockId match {
-            case ShuffleBlockId(shuffleId, _, reduceId) =>
-              mapOutputTracker.unregisterShuffle(shuffleId)
-              mapOutputTracker.getMapSizesByExecutorId(
-                shuffleId,
-                mapIndex,
-                mapIndex + 1,
-                reduceId,
-                reduceId + 1)
-                .filter(_._1 != address)
-            case ShuffleBlockBatchId(shuffleId, _, startReduceId, endReduceId) =>
-              mapOutputTracker.unregisterShuffle(shuffleId)
-              mapOutputTracker.getMapSizesByExecutorId(
+          // If the fetch has failed due to a dead executor, the block may be available elsewhere
+          // in the event of graceful storage decommissioning / block migration.
+          // Rather than failing and potentially retrying the whole stage,
+          // we can check for a new block location and then re-queue the fetch with updated BM.
+          // TODO: skip this if spark.storage.decommission.enabled = false
+          if (e.isInstanceOf[ExecutorDeadException]) {
+            val newBlocksByAddr = blockId match {
+              case ShuffleBlockId(shuffleId, _, reduceId) =>
+                mapOutputTracker.unregisterShuffle(shuffleId)
+                mapOutputTracker.getMapSizesByExecutorId(
                   shuffleId,
                   mapIndex,
                   mapIndex + 1,
-                  startReduceId,
-                  endReduceId)
-                .filter(_._1 != address)
-            case _ =>
-              logInfo(s"Fetching block $blockId failed")
-              Iterator.empty
+                  reduceId,
+                  reduceId + 1)
+                  .filter(_._1 != address)
+              case ShuffleBlockBatchId(shuffleId, _, startReduceId, endReduceId) =>
+                mapOutputTracker.unregisterShuffle(shuffleId)
+                mapOutputTracker.getMapSizesByExecutorId(
+                    shuffleId,
+                    mapIndex,
+                    mapIndex + 1,
+                    startReduceId,
+                    endReduceId)
+                  .filter(_._1 != address)
+              case _ =>
+                logInfo(s"Fetching block $blockId failed")
+                Iterator.empty
+            }
+            if (newBlocksByAddr.nonEmpty) {
+              logInfo(s"New addresses found for block $blockId and mapIndex $mapIndex")
+              fallbackFetch(newBlocksByAddr)
+              result = null
+            } else {
+              throwFetchFailedException(blockId, mapIndex, address, e, Some(errorMsg))
+            }
           }
-          if (newBlocksByAddr.nonEmpty) {
-            logInfo(s"New addresses found for block $blockId and mapIndex $mapIndex")
-            fallbackFetch(newBlocksByAddr)
-            result = null
-          } else {
+          else {
             throwFetchFailedException(blockId, mapIndex, address, e, Some(errorMsg))
           }
 
