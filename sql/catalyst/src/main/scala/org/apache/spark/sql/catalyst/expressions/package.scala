@@ -115,15 +115,17 @@ package object expressions  {
     @transient private lazy val minExprId: Long = minMaxExprId._1
     @transient private lazy val maxExprId: Long = minMaxExprId._2
 
-    // Create a method that either uses a direct indexed array with the min
-    // and max expression IDs as an offset or a hash map.
-    @transient private lazy val ordinalArrays: (Long => Int, Array[Attribute]) = {
+    // Create a directly indexed array with the min and max expression
+    // IDs as an offset.
+    @transient private lazy val ordinalArrays: (Array[Int], Array[Attribute]) = {
       if (attrs.isEmpty) {
-        (_ => -1, Array.empty[Attribute])
+        (Array.empty[Int], Array.empty[Attribute])
       } else if (
-        maxExprId - minExprId <= Long.MaxValue &&  // prevent overflow
-          maxExprId - minExprId <= 1.5 * attrs.length  // in case of sparse ExprIds
+        maxExprId - minExprId > Int.MaxValue ||  // prevent overflow
+          maxExprId - minExprId > 2 * attrs.length  // in case of sparse ExprIds
       ) {
+        (Array.empty[Int], attrs.toArray)
+      } else {
         // Create directly indexed array
         val arraySize = (maxExprId - minExprId + 1).toInt
         val ordinalArray = new Array[Int](arraySize)
@@ -140,41 +142,28 @@ package object expressions  {
           i += 1
         }
 
-        // Return the ordinal (or -1) from the exprId.
-        val exprIdToOrdinalFunc = (id: Long) => {
-          if (id < minExprId || id > maxExprId) {
-            -1
-          } else {
-            val arrayIndex = (id - minExprId).toInt
-            ordinalArray(arrayIndex)
-          }
-        }
-
-        (exprIdToOrdinalFunc, ordinalAttrsArray)
-      } else {
-        val arr = attrs.toArray
-
-        // Use LongMap to avoid overhead of HashMap while hashing.
-        val map = new mutable.LongMap[Int](_ => -1, arr.length)
-
-        // Iterate over the array in reverse order so that the final map value is the first
-        // attribute with a given expression id.
-        var index = arr.length - 1
-        while (index >= 0) {
-          map.put(arr(index).exprId.id, index)
-          index -= 1
-        }
-
-        // Return the ordinal (or -1) from the exprId.
-        val exprIdToOrdinalFunc = (id: Long) => {
-          map(id)
-        }
-
-        (exprIdToOrdinalFunc, arr)
+        (ordinalArray, ordinalAttrsArray)
       }
     }
 
-    @transient private lazy val exprIdToOrdinal: Long => Int = ordinalArrays._1
+    @transient private lazy val exprIdToOrdinal: mutable.LongMap[Int] = {
+      val arr = attrsArray
+
+      // Use LongMap to avoid overhead of HashMap while hashing.
+      val map = new mutable.LongMap[Int](_ => -1, arr.length)
+
+      // Iterate over the array in reverse order so that the final map value is the first
+      // attribute with a given expression id.
+      var index = arr.length - 1
+      while (index >= 0) {
+        map.put(arr(index).exprId.id, index)
+        index -= 1
+      }
+
+      map
+    }
+
+    @transient private lazy val exprIdToOrdinalArray: Array[Int] = ordinalArrays._1
 
 
     // It's possible that `attrs` is a linked list, which can lead to bad O(n) loops when
@@ -192,7 +181,21 @@ package object expressions  {
      */
     def indexOf(exprId: ExprId): Int = {
       val id = exprId.id
-      exprIdToOrdinal(id)
+
+      // Only use one of array or hash map, trying to use array first if possible
+      if (attrs.isEmpty) {
+        -1
+      }
+      else if (exprIdToOrdinalArray.nonEmpty) {
+        if (id < minExprId || id > maxExprId) {
+          -1
+        } else {
+          val arrayIndex = (id - minExprId).toInt
+          exprIdToOrdinalArray(arrayIndex)
+        }
+      } else {
+        exprIdToOrdinal.getOrElse(id, -1)
+      }
     }
 
     private def unique[T](m: Map[T, Seq[Attribute]]): Map[T, Seq[Attribute]] = {
