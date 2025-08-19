@@ -3180,6 +3180,8 @@ class XmlSuite
         assert(dfRead.count() === numRecords)
         assert(XmlSuiteDebugFileSystem.totalFiles() === numFiles)
         assert(XmlSuiteDebugFileSystem.maxFiles() > 1)
+
+        XmlSuiteDebugFileSystem.reset()
       }
     }
   }
