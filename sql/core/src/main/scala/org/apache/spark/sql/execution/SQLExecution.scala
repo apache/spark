@@ -200,8 +200,10 @@ object SQLExecution extends Logging {
                 }
               }
 
-              sparkSession.sparkContext.cancelJobsWithTag(
-                executionIdJobTag(sparkSession, executionId))
+              if (executionId == rootExecutionId) {
+                sparkSession.sparkContext.cancelJobsWithTag(
+                  executionIdJobTag(sparkSession, executionId))
+              }
 
               val event = SparkListenerSQLExecutionEnd(
                 executionId,
