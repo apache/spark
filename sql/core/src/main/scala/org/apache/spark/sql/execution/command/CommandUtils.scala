@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{QueryExecution, RemoveShuffleFiles}
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFileIndex}
 import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
@@ -305,9 +305,7 @@ object CommandUtils extends Logging {
 
     val namedExpressions = expressions.map(e => Alias(e, e.toString)())
     val statsRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExpressions, relation),
-      shuffleCleanupMode =
-      QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf))
-      .executedPlan.executeTake(1).head
+      shuffleCleanupMode = RemoveShuffleFiles).executedPlan.executeTake(1).head
 
     val rowCount = statsRow.getLong(0)
     val columnStats = columns.zipWithIndex.map { case (attr, i) =>
@@ -344,9 +342,7 @@ object CommandUtils extends Logging {
       }
 
       val percentilesRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExprs, relation),
-        shuffleCleanupMode =
-          QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf))
-        .executedPlan.executeTake(1).head
+        shuffleCleanupMode = RemoveShuffleFiles).executedPlan.executeTake(1).head
       attrsToGenHistogram.zipWithIndex.foreach { case (attr, i) =>
         val percentiles = percentilesRow.getArray(i)
         // When there is no non-null value, `percentiles` is null. In such case, there is no
