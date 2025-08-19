@@ -41,7 +41,6 @@ import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StructField, StructType, VariantType}
 import org.apache.spark.util.Utils
 
@@ -175,7 +174,7 @@ object MultiLineXmlDataSource extends XmlDataSource {
       file: PartitionedFile,
       parser: StaxXmlParser,
       requiredSchema: StructType): Iterator[InternalRow] = {
-    if (SQLConf.get.legacyXMLParserEnabled) {
+    if (parser.options.useLegacyXMLParser) {
       parser.parseStream(
         CodecStreams.createInputStreamWithCloseResource(conf, file.toPath),
         requiredSchema)
@@ -191,7 +190,7 @@ object MultiLineXmlDataSource extends XmlDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: XmlOptions): StructType = {
 
-    if (!SQLConf.get.legacyXMLParserEnabled) {
+    if (!parsedOptions.useLegacyXMLParser) {
       return inferOptimized(sparkSession, inputPaths, parsedOptions)
     }
 
