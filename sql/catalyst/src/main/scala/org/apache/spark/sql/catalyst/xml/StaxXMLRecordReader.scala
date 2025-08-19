@@ -115,23 +115,6 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
     hasMoreRecord = false
   }
 
-  def getNextRecordString: String = {
-    if (hasMoreRecord) {
-      val record = new StringBuilder()
-      // Advance the parser to get the start element
-      val start = primaryEventReader.next().asInstanceOf[StartElement]
-      record.append(StaxXmlParserUtils.startElementAsString(start))
-      record.append(
-        StaxXmlParserUtils.currentStructureAsString(primaryEventReader, options.rowTag, options)
-      )
-      val rowTagName = StaxXmlParserUtils.getName(start.getName, options)
-      record.append(s"</$rowTagName>\n")
-      record.toString().trim
-    } else {
-      throw new IllegalStateException("No more records available to read.")
-    }
-  }
-
   override def nextEvent(): XMLEvent = primaryEventReader.nextEvent()
   override def hasNext: Boolean = primaryEventReader.hasNext
   override def peek(): XMLEvent = primaryEventReader.peek()

@@ -283,7 +283,9 @@ class StaxXmlParser(
           case _: SAXException =>
             // XSD validation failed, throw a bad record exception and continue to parse the rest
             // records.
-            val record = UTF8String.fromString(parser.getNextRecordString)
+            val record = UTF8String.fromString(
+              StaxXmlParserUtils.currentElementAsString(parser, options.rowTag, options).trim
+            )
             throw BadRecordException(() => record, () => Array.empty, e)
         }
     }

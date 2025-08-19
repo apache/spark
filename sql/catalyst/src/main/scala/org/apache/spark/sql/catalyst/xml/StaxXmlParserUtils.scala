@@ -169,23 +169,10 @@ object StaxXmlParserUtils {
     }
   }
 
-  def startElementAsString(event: StartElement): String = {
-    val sb = new StringBuilder()
-    sb.append('<').append(event.getName)
-    event.getAttributes.asScala.foreach { att =>
-      sb
-        .append(' ')
-        .append(att.getName)
-        .append("=\"")
-        .append(att.getValue)
-        .append('"')
-    }
-    sb.append('>')
-    sb.toString()
-  }
-
   /**
-   * Convert the current structure of XML document to a XML string.
+   * Convert the structure inside the target element to an XML string, **EXCLUDING** the target
+   * element layer itself. The parser is expected to be positioned **AT** the start tag of the
+   * target element.
    */
   def currentStructureAsString(
       parser: XMLEventReader,
@@ -194,17 +181,9 @@ object StaxXmlParserUtils {
     val xmlString = new StringBuilder()
     var indent = 0
     do {
-      parser.nextEvent match {
-        case e: StartElement =>
-          xmlString.append(startElementAsString(e))
-          indent += 1
-        case e: EndElement =>
-          xmlString.append("</").append(e.getName).append('>')
-          indent -= 1
-        case c: Characters =>
-          xmlString.append(c.getData)
-        case _: XMLEvent => // do nothing
-      }
+      val (str, ind) = nextEventToString(parser, indent)
+      indent = ind
+      xmlString.append(str)
     } while (parser.peek() match {
       case _: EndElement =>
         // until the unclosed end element for the whole parent is found
@@ -213,6 +192,52 @@ object StaxXmlParserUtils {
     })
     skipNextEndElement(parser, startElementName, options)
     xmlString.toString()
+  }
+
+  /**
+   * Convert the element with the target element name to an XML string. The next event of the parser
+   * is expected to be the start tag of the target element.
+   */
+  def currentElementAsString(
+      parser: XMLEventReader,
+      startElementName: String,
+      options: XmlOptions): String = {
+    assert(
+      getName(parser.peek().asStartElement().getName, options) == startElementName,
+      s"Expected StartElement <$startElementName>, but found ${parser.peek()}"
+    )
+    val xmlString = new StringBuilder()
+    var indent = 0
+    do {
+      val (str, ind) = nextEventToString(parser, indent)
+      indent = ind
+      xmlString.append(str)
+    } while (indent > 0)
+    xmlString.toString()
+  }
+
+  private def nextEventToString(parser: XMLEventReader, currentIdent: Int): (String, Int) = {
+    parser.nextEvent match {
+      case e: StartElement =>
+        val sb = new StringBuilder()
+        sb.append('<').append(e.getName)
+        e.getAttributes.asScala.foreach { att =>
+          sb
+            .append(' ')
+            .append(att.getName)
+            .append("=\"")
+            .append(att.getValue)
+            .append('"')
+        }
+        sb.append('>')
+        (sb.toString(), currentIdent + 1)
+      case e: EndElement =>
+        (s"</${e.getName}>", currentIdent - 1)
+      case c: Characters =>
+        (c.getData, currentIdent)
+      case _: XMLEvent => // do nothing
+        ("", currentIdent)
+    }
   }
 
   /**
