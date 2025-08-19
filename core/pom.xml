@@ -168,8 +168,8 @@
       <scope>compile</scope>
     </dependency>
     <dependency>
-      <groupId>org.eclipse.jetty</groupId>
-      <artifactId>jetty-proxy</artifactId>
+      <groupId>org.eclipse.jetty.ee10</groupId>
+      <artifactId>jetty-ee10-proxy</artifactId>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -563,7 +563,7 @@
               <include>org.spark-project.spark:unused</include>
               <include>org.eclipse.jetty:jetty-io</include>
               <include>org.eclipse.jetty:jetty-http</include>
-              <include>org.eclipse.jetty:jetty-proxy</include>
+              <include>org.eclipse.jetty.ee10:jetty-ee10-proxy</include>
               <include>org.eclipse.jetty:jetty-client</include>
               <include>org.eclipse.jetty.ee10:jetty-ee10-servlet</include>
               <include>org.eclipse.jetty.ee10:jetty-ee10-servlets</include>
