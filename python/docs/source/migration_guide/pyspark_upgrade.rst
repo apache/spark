@@ -31,7 +31,7 @@ Upgrading from PySpark 4.0 to 4.1
 * In Spark 4.1, unnecessary conversion to pandas instances is removed when ``spark.sql.execution.pythonUDTF.arrow.enabled`` is enabled. As a result, the type coercion changes when the produced output has a schema different from the specified schema. To restore the previous behavior, enable ``spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled``.
 
 * In Spark 4.1, the ``spark.sql.execution.pandas.convertToArrowArraySafely`` configuration is enabled by default. When this setting is enabled, PyArrow raises errors for unsafe conversions such as integer overflows, floating point truncation, and loss of precision. This change affects the return data serialization of arrow-enabled UDFs/pandas_udfs, and the creation of PySpark DataFrames. To restore the previous behavior, set the configuration to ``false``.
-* In Spark 4.1, pandas API on Spark works properly under ANSI mode.  The option ``compute.ansi_mode_support``(default ``True``) ensures that pandas API on Spark can run correctly with ANSI mode enabled. The earlier safeguard option ``compute.fail_on_ansi_mode`` is still available, but it only applies when ``compute.ansi_mode_support`` is set to ``False``.
+* In Spark 4.1, pandas API on Spark works under ANSI mode when ``compute.ansi_mode_support`` is set to ``True`` (default). The safeguard option ``compute.fail_on_ansi_mode`` remains available, but it only takes effect when ``compute.ansi_mode_support`` is ``False``.
 
 Upgrading from PySpark 3.5 to 4.0
 ---------------------------------
