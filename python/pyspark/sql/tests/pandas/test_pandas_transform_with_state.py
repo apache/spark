@@ -2318,9 +2318,10 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
     def _update_list_state(self, total_temperature, initial_obj):
         existing_list = self.list_state.get()
         updated_list = []
+        import numpy as np
         for ids, tags, metadata in existing_list:
-            ids.append(total_temperature)
-            updated_list.append((ids, tags, [row.asDict() for row in metadata]))
+            ids = np.append(ids, total_temperature)
+            updated_list.append((ids, tags, [row for row in metadata]))
         if not updated_list:
             updated_list.append(initial_obj)
         self.list_state.put(updated_list)
