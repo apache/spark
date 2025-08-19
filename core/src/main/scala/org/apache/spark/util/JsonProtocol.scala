@@ -22,7 +22,7 @@ import java.util.{Properties, UUID}
 import scala.collection.JavaConverters._
 import scala.collection.Map
 
-import com.fasterxml.jackson.core.JsonGenerator
+import com.fasterxml.jackson.core.{JsonGenerator, StreamReadConstraints}
 import com.fasterxml.jackson.databind.JsonNode
 import org.json4s.jackson.JsonMethods.compact
 
@@ -53,6 +53,11 @@ import org.apache.spark.util.Utils.weakIntern
  */
 private[spark] object JsonProtocol extends JsonUtils {
   // TODO: Remove this file and put JSON serialization into each individual class.
+
+  // SPARK-49872: Remove jackson JSON string length limitation.
+  mapper.getFactory.setStreamReadConstraints(
+    StreamReadConstraints.builder().maxStringLength(Int.MaxValue).build()
+  )
 
   /** ------------------------------------------------- *
    * JSON serialization methods for SparkListenerEvents |
