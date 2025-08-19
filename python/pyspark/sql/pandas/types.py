@@ -305,7 +305,7 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
         spark_type = BinaryType()
     elif types.is_date32(at):
         spark_type = DateType()
-    elif types.is_time(at):
+    elif types.is_time64(at):
         spark_type = TimeType()
     elif types.is_timestamp(at) and prefer_timestamp_ntz and at.tz is None:
         spark_type = TimestampNTZType()
