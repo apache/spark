@@ -3404,7 +3404,7 @@ class AstBuilder extends DataTypeAstBuilder
    * Currently Date, Timestamp, Interval and Binary typed literals are supported.
    */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
-    val value = string(visitStringLit(ctx.stringLit))
+    val value = string(visit(ctx.stringLitWithoutMarker).asInstanceOf[Token])
     val valueType = ctx.literalType.start.getType
 
     def toLiteral[T](f: UTF8String => Option[T], t: DataType): Literal = {

@@ -72,8 +72,10 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
 
   override def visitNamedParameterValue(ctx: NamedParameterValueContext): Token = {
     // For namedParameterValue in data type contexts, this shouldn't normally occur
-    // but if it does, return null to avoid NPE
-    null
+    // This indicates that parameter substitution failed or wasn't applied
+    throw new IllegalStateException(
+      s"Parameter marker '${ctx.getText}' found in data type context. " +
+      "Parameter substitution should have occurred before reaching this point.")
   }
 
   /**
@@ -283,7 +285,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   /**
    * Visit a stringLit context by delegating to the appropriate labeled visitor.
    */
-  def visitStringLit(ctx: StringLitContext): Token = {
+  override def visitStringLit(ctx: StringLitContext): Token = {
     visit(ctx).asInstanceOf[Token]
   }
 

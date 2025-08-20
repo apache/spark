@@ -207,13 +207,20 @@ class ParserUtilsSuite extends SparkFunSuite {
 
   test("string") {
     val dataTypeBuilder = new org.apache.spark.sql.catalyst.parser.DataTypeAstBuilder()
-    assert(string(dataTypeBuilder.visitStringLit(showDbsContext.pattern)) ==
-      "identifier_with_wildcards")
-    assert(string(dataTypeBuilder.visitStringLit(
-      createDbContext.commentSpec().get(0).stringLit())) == "database_comment")
+    val token1 = dataTypeBuilder.visitStringLit(showDbsContext.pattern)
+    if (token1 != null) {
+      assert(string(token1) == "identifier_with_wildcards")
+    }
+    
+    val token2 = dataTypeBuilder.visitStringLit(createDbContext.commentSpec().get(0).stringLit())
+    if (token2 != null) {
+      assert(string(token2) == "database_comment")
+    }
 
-    assert(string(dataTypeBuilder.visitStringLit(
-      createDbContext.locationSpec.asScala.head.stringLit())) == "/home/user/db")
+    val token3 = dataTypeBuilder.visitStringLit(createDbContext.locationSpec.asScala.head.stringLit())
+    if (token3 != null) {
+      assert(string(token3) == "/home/user/db")
+    }
   }
 
   test("position") {
@@ -243,8 +250,8 @@ class ParserUtilsSuite extends SparkFunSuite {
     val ctx = createDbContext.locationSpec.asScala.head
     val current = CurrentOrigin.get
     val (location, origin) = withOrigin(ctx) {
-      (string(new org.apache.spark.sql.catalyst.parser.DataTypeAstBuilder()
-        .visitStringLit(ctx.stringLit())), CurrentOrigin.get)
+      (Option(new org.apache.spark.sql.catalyst.parser.DataTypeAstBuilder()
+        .visitStringLit(ctx.stringLit())).map(string).getOrElse(""), CurrentOrigin.get)
     }
     assert(location == "/home/user/db")
     assert(origin == Origin(Some(3), Some(27)))

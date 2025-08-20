@@ -1272,7 +1272,7 @@ constant
     : NULL                                                                                     #nullLiteral
     | QUESTION                                                                                 #posParameterLiteral
     | interval                                                                                 #intervalLiteral
-    | literalType stringLit                                                                    #typeConstructor
+    | literalType stringLitWithoutMarker                                                       #typeConstructor
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
     | stringLit+                                                                               #stringLiteral
@@ -1687,10 +1687,18 @@ alterColumnAction
     | dropDefault=DROP DEFAULT
     ;
 
-stringLit
+stringLitWithoutMarker
     : STRING_LITERAL                                                                           #stringLiteralValue
     | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING                                        #doubleQuotedStringLiteralValue
-    | namedParameterMarker                                                                     #namedParameterValue
+;
+
+stringLit
+    : stringLitWithoutMarker
+    | namedParameterMarkerVal
+    ;
+
+namedParameterMarkerVal
+    : namedParameterMarker                                                                     #namedParameterValue
     ;
 
 comment
