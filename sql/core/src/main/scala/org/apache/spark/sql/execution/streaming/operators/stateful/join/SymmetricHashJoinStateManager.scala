@@ -1162,7 +1162,8 @@ object SymmetricHashJoinStateManager {
    * mergeStateStoreCheckpointInfo(). This function is used to read it back into individual state
    * store checkpoint IDs.
    * @param partitionId
-   * @param stateInfo
+   * @param stateStoreCkptIds
+   * @param useColumnFamiliesForJoins
    * @return
    */
   def getStateStoreCheckpointIds(
@@ -1187,6 +1188,42 @@ object SymmetricHashJoinStateManager {
         right = JoinerStateStoreCheckpointId(
           keyToNumValues = stateStoreCkptIdsOpt(2),
           valueToNumKeys = stateStoreCkptIdsOpt(3)))
+    }
+  }
+
+  /**
+   * Stream-stream join has 4 state stores instead of one. So it will generate 4 different
+   * checkpoint IDs when not using virtual column families.
+   * This function is used to get the checkpoint ID for a specific state store
+   * by the name of the store, partition ID and the checkpoint IDs array.
+   * @param storeName
+   * @param partitionId
+   * @param stateStoreCkptIds
+   * @param useColumnFamiliesForJoins
+   * @return
+   */
+  def getStateStoreCheckpointId(
+      storeName: String,
+      partitionId: Int,
+      stateStoreCkptIds: Option[Array[Array[String]]],
+      useColumnFamiliesForJoins: Boolean = false) : Option[String] = {
+    if (useColumnFamiliesForJoins || storeName == StateStoreId.DEFAULT_STORE_NAME) {
+      stateStoreCkptIds.map(_(partitionId)).map(_.head)
+    } else {
+      val joinStateStoreCkptIds = getStateStoreCheckpointIds(
+        partitionId, stateStoreCkptIds, useColumnFamiliesForJoins)
+
+      if (storeName == getStateStoreName(LeftSide, KeyToNumValuesType)) {
+        joinStateStoreCkptIds.left.keyToNumValues
+      } else if (storeName == getStateStoreName(RightSide, KeyToNumValuesType)) {
+        joinStateStoreCkptIds.right.keyToNumValues
+      } else if (storeName == getStateStoreName(LeftSide, KeyWithIndexToValueType)) {
+        joinStateStoreCkptIds.left.valueToNumKeys
+      } else if (storeName == getStateStoreName(RightSide, KeyWithIndexToValueType)) {
+        joinStateStoreCkptIds.right.valueToNumKeys
+      } else {
+        None
+      }
     }
   }
 
