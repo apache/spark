@@ -29,7 +29,6 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, StructType, UserDefinedType, ArrayType, MapType}
 import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
-import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 /**
  * Grouped a iterator into batches.
@@ -141,21 +140,21 @@ class ArrowEvalPythonEvaluatorFactory(
         // Arrow always returns the broadest range, so as long as we're not losing information,
         // we can consider the types equal.
         actual.startField <= expected.startField && expected.endField <= actual.endField
-      
+
       case (expected: ArrayType, actual: ArrayType) =>
         typesEqualRecursive(expected.elementType, actual.elementType)
-      
+
       case (expected: MapType, actual: MapType) =>
         typesEqualRecursive(expected.keyType, actual.keyType) &&
         typesEqualRecursive(expected.valueType, actual.valueType)
-      
+
       case (expected: StructType, actual: StructType) =>
         expected.fields.length == actual.fields.length &&
         expected.fields.zip(actual.fields).forall { case (expectedField, actualField) =>
           expectedField.name == actualField.name &&
           typesEqualRecursive(expectedField.dataType, actualField.dataType)
         }
-      
+
       case _ => equalsIgnoreCompatibleCollation(expected, actual)
     }
   }
