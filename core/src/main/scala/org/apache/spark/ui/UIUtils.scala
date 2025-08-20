@@ -24,16 +24,19 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.time.{Instant, ZoneId}
 import java.time.format.DateTimeFormatter
 import java.util.{Date, Locale, TimeZone}
+
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
+
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.ws.rs.core.{MediaType, MultivaluedMap, Response}
+import org.eclipse.jetty.server.Request
 import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.scope.RDDOperationGraph
-import org.eclipse.jetty.server.Request
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
