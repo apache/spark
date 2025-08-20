@@ -70,7 +70,7 @@ case class ExecuteEventsManager(executeHolder: ExecuteHolder, clock: Clock) {
 
   private def sessionStatus = sessionHolder.eventManager.status
 
-  private var _status: ExecuteStatus = ExecuteStatus.Pending
+  @volatile private var _status: ExecuteStatus = ExecuteStatus.Pending
 
   private var error = Option.empty[Boolean]
 

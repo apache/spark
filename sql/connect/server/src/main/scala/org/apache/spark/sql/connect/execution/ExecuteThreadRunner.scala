@@ -29,7 +29,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.planner.InvalidInputErrors
-import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteSessionTag, SparkConnectService}
+import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteSessionTag, ExecuteStatus, SparkConnectService}
 import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.util.Utils
 
@@ -79,6 +79,9 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
    *   true if the thread is running and interrupted.
    */
   private[connect] def interrupt(): Boolean = {
+    if (executeHolder.eventsManager.status == ExecuteStatus.Pending) {
+      return false
+    }
     var currentState = state.getAcquire()
     while (currentState == ThreadState.notStarted || currentState == ThreadState.started) {
       val newState = if (currentState == ThreadState.notStarted) {
