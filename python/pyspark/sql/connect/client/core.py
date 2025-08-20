@@ -2028,7 +2028,7 @@ class SparkConnectClient(object):
 
         return []
 
-    def _query_model_size(self, model_ref_id) -> int:
+    def _query_model_size(self, model_ref_id: str) -> int:
         command = pb2.Command()
         command.ml_command.get_model_size.CopyFrom(
             pb2.MlCommand.GetModelSize(model_ref=pb2.ObjectRef(id=model_ref_id))

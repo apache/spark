@@ -241,7 +241,6 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   def clear(): Int = this.synchronized {
     val size = cachedModel.size()
     cachedModel.clear()
-    totalMLCacheSizeBytes.set(0L)
     if (getMemoryControlEnabled) {
       SparkFileUtils.cleanDirectory(new File(offloadedModelsDir.toString))
     }
