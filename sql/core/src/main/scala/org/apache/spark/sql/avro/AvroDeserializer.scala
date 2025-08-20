@@ -58,7 +58,7 @@ private[sql] class AvroDeserializer(
   def this(
       rootAvroType: Schema,
       rootCatalystType: DataType,
-      datetimeRebaseMode: LegacyBehaviorPolicy.Value,
+      datetimeRebaseMode: String,
       useStableIdForUnionType: Boolean,
       stableIdPrefixForUnionType: String,
       recursiveFieldMaxDepth: Int) = {
@@ -66,7 +66,7 @@ private[sql] class AvroDeserializer(
       rootAvroType,
       rootCatalystType,
       positionalFieldMatch = false,
-      RebaseSpec(datetimeRebaseMode),
+      RebaseSpec(LegacyBehaviorPolicy.withName(datetimeRebaseMode)),
       new NoopFilters,
       useStableIdForUnionType,
       stableIdPrefixForUnionType,
