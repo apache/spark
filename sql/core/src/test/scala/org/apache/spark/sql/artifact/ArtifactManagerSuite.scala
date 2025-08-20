@@ -357,7 +357,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
     val targetPath2 = Paths.get(artifact2Path)
 
     val classPath1 = copyDir.resolve("Hello.class")
-    val classPath2 = copyDir.resolve("smallJar.jar")
+    val classPath2 = copyDir.resolve("udf_noA.jar")
     assume(artifactPath.resolve("Hello.class").toFile.exists)
     assume(artifactPath.resolve("smallClassFile.class").toFile.exists)
 

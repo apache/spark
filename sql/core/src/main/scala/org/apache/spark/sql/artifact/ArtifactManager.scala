@@ -267,7 +267,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
    * they are from a permanent location.
    */
   private[sql] def addLocalArtifacts(artifacts: Seq[Artifact]): Unit = {
-    val failedArtifactExceptions = ListBuffer[RuntimeException]()
+    val failedArtifactExceptions = ListBuffer[SparkRuntimeException]()
 
     artifacts.foreach { artifact =>
       try {
