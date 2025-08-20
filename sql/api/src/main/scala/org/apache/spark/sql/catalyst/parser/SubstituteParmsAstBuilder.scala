@@ -131,6 +131,9 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
         visitNamedParameterValue(ctx)
       case ctx: NamedParameterIntegerValueContext =>
         visitNamedParameterIntegerValue(ctx)
+      case ctx: StringLiteralInContextContext =>
+        // For string literals in context, continue traversing to find any nested parameters
+        visitChildren(ctx)
       case ruleNode: RuleNode =>
         // Continue traversing children for rule nodes
         visitChildren(ruleNode)

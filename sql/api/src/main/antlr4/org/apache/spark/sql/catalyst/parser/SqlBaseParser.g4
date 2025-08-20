@@ -1693,12 +1693,8 @@ stringLitWithoutMarker
 ;
 
 stringLit
-    : stringLitWithoutMarker
-    | namedParameterMarkerVal
-    ;
-
-namedParameterMarkerVal
-    : namedParameterMarker                                                                     #namedParameterValue
+    : stringLitWithoutMarker                                                                   #stringLiteralInContext
+    | namedParameterMarker                                                                     #namedParameterValue
     ;
 
 comment

@@ -70,6 +70,10 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     }
   }
 
+  override def visitStringLiteralInContext(ctx: StringLiteralInContextContext): Token = {
+    visit(ctx.stringLitWithoutMarker).asInstanceOf[Token]
+  }
+
   override def visitNamedParameterValue(ctx: NamedParameterValueContext): Token = {
     // For namedParameterValue in data type contexts, this shouldn't normally occur
     // This indicates that parameter substitution failed or wasn't applied
@@ -285,8 +289,12 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   /**
    * Visit a stringLit context by delegating to the appropriate labeled visitor.
    */
-  override def visitStringLit(ctx: StringLitContext): Token = {
-    visit(ctx).asInstanceOf[Token]
+  def visitStringLit(ctx: StringLitContext): Token = {
+    if (ctx == null) {
+      null
+    } else {
+      visit(ctx).asInstanceOf[Token]
+    }
   }
 
   /**

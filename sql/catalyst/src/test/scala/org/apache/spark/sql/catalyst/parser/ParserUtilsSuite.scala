@@ -211,13 +211,14 @@ class ParserUtilsSuite extends SparkFunSuite {
     if (token1 != null) {
       assert(string(token1) == "identifier_with_wildcards")
     }
-    
+
     val token2 = dataTypeBuilder.visitStringLit(createDbContext.commentSpec().get(0).stringLit())
     if (token2 != null) {
       assert(string(token2) == "database_comment")
     }
 
-    val token3 = dataTypeBuilder.visitStringLit(createDbContext.locationSpec.asScala.head.stringLit())
+    val token3 = dataTypeBuilder.visitStringLit(
+      createDbContext.locationSpec.asScala.head.stringLit())
     if (token3 != null) {
       assert(string(token3) == "/home/user/db")
     }
