@@ -55,7 +55,7 @@ class SparkSqlParser extends AbstractSqlParser {
 
     protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     // Step 1: Check if we have a parameterized query context and substitute parameters
-    val paramSubstituted = 
+    val paramSubstituted =
       org.apache.spark.sql.catalyst.parser.ThreadLocalParameterContext.get() match {
       case Some(context) =>
         substituteParametersIfNeeded(command, context)

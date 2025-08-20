@@ -493,7 +493,7 @@ clusterBySpec
 bucketSpec
     : CLUSTERED BY identifierList
       (SORTED BY orderedIdentifierList)?
-      INTO INTEGER_VALUE BUCKETS
+      INTO integerValue BUCKETS
     ;
 
 skewSpec
@@ -583,7 +583,7 @@ ctes
     ;
 
 namedQuery
-    : name=errorCapturingIdentifier (columnAliases=identifierList)? (MAX RECURSION LEVEL INTEGER_VALUE)? AS? LEFT_PAREN query RIGHT_PAREN
+    : name=errorCapturingIdentifier (columnAliases=identifierList)? (MAX RECURSION LEVEL integerValue)? AS? LEFT_PAREN query RIGHT_PAREN
     ;
 
 tableProvider
@@ -970,13 +970,13 @@ joinCriteria
     ;
 
 sample
-    : TABLESAMPLE LEFT_PAREN sampleMethod? RIGHT_PAREN (REPEATABLE LEFT_PAREN seed=INTEGER_VALUE RIGHT_PAREN)?
+    : TABLESAMPLE LEFT_PAREN sampleMethod? RIGHT_PAREN (REPEATABLE LEFT_PAREN seed=integerValue RIGHT_PAREN)?
     ;
 
-sampleMethod
-    : negativeSign=MINUS? percentage=(INTEGER_VALUE | DECIMAL_VALUE) PERCENTLIT   #sampleByPercentile
+  sampleMethod
+    : negativeSign=MINUS? (integerValue | DECIMAL_VALUE) PERCENTLIT   #sampleByPercentile
     | expression ROWS                                                             #sampleByRows
-    | sampleType=BUCKET numerator=INTEGER_VALUE OUT OF denominator=INTEGER_VALUE
+    | sampleType=BUCKET numerator=integerValue OUT OF denominator=integerValue
         (ON (identifier | qualifiedName LEFT_PAREN RIGHT_PAREN))?                 #sampleByBucket
     | bytes=expression                                                            #sampleByBytes
     ;
@@ -1249,13 +1249,13 @@ jsonPathBracketedIdentifier
 jsonPathFirstPart
     : jsonPathIdentifier
     | jsonPathBracketedIdentifier
-    | LEFT_BRACKET INTEGER_VALUE RIGHT_BRACKET
+    | LEFT_BRACKET integerValue RIGHT_BRACKET
     ;
 
 jsonPathParts
     : DOT jsonPathIdentifier
     | jsonPathBracketedIdentifier
-    | LEFT_BRACKET INTEGER_VALUE RIGHT_BRACKET
+    | LEFT_BRACKET integerValue RIGHT_BRACKET
     | LEFT_BRACKET identifier RIGHT_BRACKET
     ;
 
@@ -1271,14 +1271,17 @@ literalType
 constant
     : NULL                                                                                     #nullLiteral
     | QUESTION                                                                                 #posParameterLiteral
-    | COLON identifier                                                                         #namedParameterLiteral
     | interval                                                                                 #intervalLiteral
     | literalType stringLit                                                                    #typeConstructor
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
     | stringLit+                                                                               #stringLiteral
+    | namedParameterMarker                                                                     #namedParameterLiteral
     ;
 
+namedParameterMarker
+    : COLON identifier
+    ;
 comparisonOperator
     : EQ | NEQ | NEQJ | LT | LTE | GT | GTE | NSEQ
     ;
@@ -1344,15 +1347,15 @@ collateClause
 
 nonTrivialPrimitiveType
     : STRING collateClause?
-    | (CHARACTER | CHAR) (LEFT_PAREN length=INTEGER_VALUE RIGHT_PAREN)?
-    | VARCHAR (LEFT_PAREN length=INTEGER_VALUE RIGHT_PAREN)?
+    | (CHARACTER | CHAR) (LEFT_PAREN length=integerValue RIGHT_PAREN)?
+    | VARCHAR (LEFT_PAREN length=integerValue RIGHT_PAREN)?
     | (DECIMAL | DEC | NUMERIC)
-        (LEFT_PAREN precision=INTEGER_VALUE (COMMA scale=INTEGER_VALUE)? RIGHT_PAREN)?
+        (LEFT_PAREN precision=integerValue (COMMA scale=integerValue)? RIGHT_PAREN)?
     | INTERVAL
         (fromYearMonth=(YEAR | MONTH) (TO to=MONTH)? |
          fromDayTime=(DAY | HOUR | MINUTE | SECOND) (TO to=(HOUR | MINUTE | SECOND))?)?
     | TIMESTAMP (WITHOUT TIME ZONE)?
-    | TIME (LEFT_PAREN precision=INTEGER_VALUE RIGHT_PAREN)? (WITHOUT TIME ZONE)?
+    | TIME (LEFT_PAREN precision=integerValue RIGHT_PAREN)? (WITHOUT TIME ZONE)?
     ;
 
 trivialPrimitiveType
@@ -1373,7 +1376,7 @@ trivialPrimitiveType
 primitiveType
     : nonTrivialPrimitiveType
     | trivialPrimitiveType
-    | unsupportedType=identifier (LEFT_PAREN INTEGER_VALUE(COMMA INTEGER_VALUE)* RIGHT_PAREN)?
+    | unsupportedType=identifier (LEFT_PAREN integerValue(COMMA integerValue)* RIGHT_PAREN)?
     ;
 
 dataType
@@ -1454,7 +1457,7 @@ sequenceGeneratorOption
     ;
 
 sequenceGeneratorStartOrStep
-    : MINUS? INTEGER_VALUE
+    : MINUS? integerValue
     | MINUS? BIGINT_LITERAL
     ;
 
@@ -1606,6 +1609,11 @@ number
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
+integerValue
+    : INTEGER_VALUE                                                                          #integerVal
+    | namedParameterMarker                                                                   #namedParameterIntegerValue
+    ;
+
 columnConstraintDefinition
     : (CONSTRAINT name=errorCapturingIdentifier)? columnConstraint constraintCharacteristic*
     ;
@@ -1680,8 +1688,9 @@ alterColumnAction
     ;
 
 stringLit
-    : STRING_LITERAL
-    | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING
+    : STRING_LITERAL                                                                           #stringLiteralValue
+    | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING                                        #doubleQuotedStringLiteralValue
+    | namedParameterMarker                                                                     #namedParameterValue
     ;
 
 comment

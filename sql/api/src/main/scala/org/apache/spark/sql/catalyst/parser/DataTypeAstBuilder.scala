@@ -45,16 +45,35 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     withOrigin(ctx)(StructType(visitColTypeList(ctx.colTypeList)))
   }
 
-  override def visitStringLit(ctx: StringLitContext): Token = {
+  override def visitStringLiteralValue(ctx: StringLiteralValueContext): Token = {
     if (ctx != null) {
-      if (ctx.STRING_LITERAL != null) {
-        ctx.STRING_LITERAL.getSymbol
-      } else {
-        ctx.DOUBLEQUOTED_STRING.getSymbol
-      }
+      ctx.STRING_LITERAL.getSymbol
     } else {
       null
     }
+  }
+
+  override def visitDoubleQuotedStringLiteralValue(
+      ctx: DoubleQuotedStringLiteralValueContext): Token = {
+    if (ctx != null) {
+      ctx.DOUBLEQUOTED_STRING.getSymbol
+    } else {
+      null
+    }
+  }
+
+  override def visitIntegerVal(ctx: IntegerValContext): Token = {
+    if (ctx != null) {
+      ctx.INTEGER_VALUE.getSymbol
+    } else {
+      null
+    }
+  }
+
+  override def visitNamedParameterValue(ctx: NamedParameterValueContext): Token = {
+    // For namedParameterValue in data type contexts, this shouldn't normally occur
+    // but if it does, return null to avoid NPE
+    null
   }
 
   /**
@@ -138,7 +157,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       }
     } else {
       val badType = typeCtx.unsupportedType.getText
-      val params = typeCtx.INTEGER_VALUE().asScala.toList
+      val params = typeCtx.integerValue().asScala.toList
       val dtStr =
         if (params.nonEmpty) s"$badType(${params.mkString(",")})"
         else badType
@@ -258,7 +277,14 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
    * Create a comment string.
    */
   override def visitCommentSpec(ctx: CommentSpecContext): String = withOrigin(ctx) {
-    string(visitStringLit(ctx.stringLit))
+    string(visit(ctx.stringLit).asInstanceOf[Token])
+  }
+
+  /**
+   * Visit a stringLit context by delegating to the appropriate labeled visitor.
+   */
+  def visitStringLit(ctx: StringLitContext): Token = {
+    visit(ctx).asInstanceOf[Token]
   }
 
   /**
