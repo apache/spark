@@ -565,7 +565,11 @@ class MicroBatchExecution(
           log"offsets ${MDC(LogKeys.STREAMING_OFFSETS_START, execCtx.startOffsets)} and " +
           log"available offsets ${MDC(LogKeys.STREAMING_OFFSETS_END, execCtx.endOffsets)}")
       case None => // We are starting this stream for the first time.
-        verifyStartCheckpointDirectory()
+        val shouldVerifyNewCheckpointDirectory =
+          sparkSession.conf.get(SQLConf.STREAMING_VERIFY_CHECKPOINT_DIRECTORY_EMPTY_ON_START)
+        if (shouldVerifyNewCheckpointDirectory) {
+          verifyNewCheckpointDirectory()
+        }
         logInfo(s"Starting new streaming query.")
         execCtx.batchId = 0
         watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf, logicalPlan)
@@ -579,7 +583,7 @@ class MicroBatchExecution(
    *
    * If this check fails, an exception is thrown.
    */
-  private def verifyStartCheckpointDirectory(): Unit = {
+  private def verifyNewCheckpointDirectory(): Unit = {
     val fileManager = CheckpointFileManager.create(new Path(resolvedCheckpointRoot),
       sparkSession.sessionState.newHadoopConf())
     val dirNamesThatShouldNotHaveFiles = Array[String](
@@ -952,6 +956,8 @@ class MicroBatchExecution(
    * checkpointing to offset log and any microbatch startup tasks.
    */
   protected def markMicroBatchStart(execCtx: MicroBatchExecutionContext): Unit = {
+    println("Adding to offset log", plan.resolvedCheckpointLocation)
+
     if (!offsetLog.add(execCtx.batchId,
       execCtx.endOffsets.toOffsetSeq(sources, execCtx.offsetSeqMetadata))) {
       throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)

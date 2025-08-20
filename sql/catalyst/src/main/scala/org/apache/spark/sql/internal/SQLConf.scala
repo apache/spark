@@ -2687,6 +2687,15 @@ object SQLConf {
       .intConf
       .createWithDefault(16)
 
+  val STREAMING_VERIFY_CHECKPOINT_DIRECTORY_EMPTY_ON_START =
+    buildConf("spark.sql.streaming.verifyCheckpointDirectoryEmptyOnStart")
+      .doc("When true, verifies that the checkpoint directory (offsets, state, commits) is " +
+        "empty when first starting a streaming query. This prevents prevents sharing checkpoint " +
+        "directories between different queries.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")
       .internal()
