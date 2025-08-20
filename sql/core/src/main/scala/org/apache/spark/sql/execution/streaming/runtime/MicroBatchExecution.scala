@@ -956,8 +956,6 @@ class MicroBatchExecution(
    * checkpointing to offset log and any microbatch startup tasks.
    */
   protected def markMicroBatchStart(execCtx: MicroBatchExecutionContext): Unit = {
-    println("Adding to offset log", plan.resolvedCheckpointLocation)
-
     if (!offsetLog.add(execCtx.batchId,
       execCtx.endOffsets.toOffsetSeq(sources, execCtx.offsetSeqMetadata))) {
       throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)
