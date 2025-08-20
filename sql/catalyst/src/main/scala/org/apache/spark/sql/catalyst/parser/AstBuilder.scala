@@ -713,12 +713,12 @@ class AstBuilder extends DataTypeAstBuilder
   private def withCTE(ctx: CtesContext, plan: LogicalPlan): LogicalPlan = {
     val ctes = ctx.namedQuery.asScala.map { nCtx =>
       val namedQuery = visitNamedQuery(nCtx)
-      val rowLevelLimit: Option[Int] = if (nCtx.INTEGER_VALUE() != null) {
+      val rowLevelLimit: Option[Int] = if (nCtx.integerValue() != null) {
         if (ctx.RECURSIVE() == null) {
           operationNotAllowed("Cannot specify MAX RECURSION LEVEL when the CTE is not marked as " +
             "RECURSIVE", ctx)
         }
-        Some(nCtx.INTEGER_VALUE().getText().toInt)
+        Some(nCtx.integerValue().getText().toInt)
       } else {
         None
       }
@@ -2195,7 +2195,8 @@ class AstBuilder extends DataTypeAstBuilder
         Limit(expression(ctx.expression), query)
 
       case ctx: SampleByPercentileContext =>
-        val fraction = ctx.percentage.getText.toDouble
+        val fraction = if (ctx.DECIMAL_VALUE() != null) { ctx.DECIMAL_VALUE().getText.toDouble }
+        else { ctx.integerValue().getText.toDouble }
         val sign = if (ctx.negativeSign == null) 1 else -1
         sample(sign * fraction / 100.0d, seed)
 
@@ -2252,7 +2253,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitVersion(ctx: VersionContext): Option[String] = {
     if (ctx != null) {
-      if (ctx.INTEGER_VALUE != null) {
+      if (ctx.INTEGER_VALUE() != null) {
         Some(ctx.INTEGER_VALUE().getText)
       } else {
         Option(string(visitStringLit(ctx.stringLit())))
@@ -4182,7 +4183,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitBucketSpec(ctx: BucketSpecContext): BucketSpec = withOrigin(ctx) {
     BucketSpec(
-      ctx.INTEGER_VALUE.getText.toInt,
+      ctx.integerValue().getText.toInt,
       visitIdentifierList(ctx.identifierList),
       Option(ctx.orderedIdentifierList)
           .toSeq
@@ -6362,7 +6363,15 @@ class AstBuilder extends DataTypeAstBuilder
    * */
   override def visitNamedParameterLiteral(
       ctx: NamedParameterLiteralContext): Expression = withOrigin(ctx) {
-    NamedParameter(ctx.identifier().getText)
+    NamedParameter(ctx.namedParameterMarker().identifier().getText)
+  }
+
+  /**
+   * Create a named parameter in integer value context.
+   * */
+  override def visitNamedParameterIntegerValue(
+      ctx: NamedParameterIntegerValueContext): Expression = withOrigin(ctx) {
+    NamedParameter(ctx.namedParameterMarker().identifier().getText)
   }
 
   /**

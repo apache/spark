@@ -54,7 +54,7 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
    */
   override def visitNamedParameterLiteral(
       ctx: NamedParameterLiteralContext): String = withOrigin(ctx) {
-    val paramName = ctx.identifier().getText
+    val paramName = ctx.namedParameterMarker().identifier().getText
     namedParams += paramName
 
     // Calculate the location of the entire parameter (including the colon)
@@ -82,6 +82,40 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   }
 
   /**
+   * Handle namedParameterValue context for parameter markers in string literal contexts.
+   * This handles the namedParameterMarker case added to the stringLit grammar rule.
+   */
+  override def visitNamedParameterValue(
+      ctx: NamedParameterValueContext): String = withOrigin(ctx) {
+    val paramName = ctx.namedParameterMarker().identifier().getText
+    namedParams += paramName
+
+    // Calculate the location of the entire parameter (including the colon)
+    val startIndex = ctx.getStart.getStartIndex
+    val stopIndex = ctx.getStop.getStopIndex + 1
+    namedParamLocations(paramName) = ParameterLocation(startIndex, stopIndex)
+
+    paramName
+  }
+
+  /**
+   * Handle namedParameterIntegerValue context for parameter markers in integer value contexts.
+   * This handles the namedParameterMarker case added to the integerValue grammar rule.
+   */
+  override def visitNamedParameterIntegerValue(
+      ctx: NamedParameterIntegerValueContext): String = withOrigin(ctx) {
+    val paramName = ctx.namedParameterMarker().identifier().getText
+    namedParams += paramName
+
+    // Calculate the location of the entire parameter (including the colon)
+    val startIndex = ctx.getStart.getStartIndex
+    val stopIndex = ctx.getStop.getStopIndex + 1
+    namedParamLocations(paramName) = ParameterLocation(startIndex, stopIndex)
+
+    paramName
+  }
+
+  /**
    * Override visit to ensure we traverse all children to find parameters.
    */
   override def visit(tree: ParseTree): AnyRef = {
@@ -93,6 +127,10 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
         visitNamedParameterLiteral(ctx)
       case ctx: PosParameterLiteralContext =>
         visitPosParameterLiteral(ctx)
+      case ctx: NamedParameterValueContext =>
+        visitNamedParameterValue(ctx)
+      case ctx: NamedParameterIntegerValueContext =>
+        visitNamedParameterIntegerValue(ctx)
       case ruleNode: RuleNode =>
         // Continue traversing children for rule nodes
         visitChildren(ruleNode)
