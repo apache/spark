@@ -420,14 +420,12 @@ object LiteralValueProtoConverter {
   def toCatalystArray(array: proto.Expression.Literal.Array): Array[_] = {
     def makeArrayData[T](converter: proto.Expression.Literal => T)(implicit
         tag: ClassTag[T]): Array[T] = {
-      val builder = mutable.ArrayBuilder.make[T]
-      val elementList = array.getElementsList
-      builder.sizeHint(elementList.size())
-      val iter = elementList.iterator()
-      while (iter.hasNext) {
-        builder += converter(iter.next())
+      val size = array.getElementsCount
+      if (size > 0) {
+        Array.tabulate(size)(i => converter(array.getElements(i)))
+      } else {
+        Array.empty[T]
       }
-      builder.result()
     }
 
     makeArrayData(getConverter(array.getElementType))
@@ -439,14 +437,15 @@ object LiteralValueProtoConverter {
         valueConverter: proto.Expression.Literal => V)(implicit
         tagK: ClassTag[K],
         tagV: ClassTag[V]): mutable.Map[K, V] = {
-      val builder = mutable.LinkedHashMap.empty[K, V]
-      val keys = map.getKeysList.asScala
-      val values = map.getValuesList.asScala
-      builder.sizeHint(keys.size)
-      keys.zip(values).foreach { case (key, value) =>
-        builder += ((keyConverter(key), valueConverter(value)))
+      val size = map.getKeysCount
+      if (size > 0) {
+        val m = mutable.LinkedHashMap.empty[K, V]
+        m.sizeHint(size)
+        m.addAll(Iterator.tabulate(size)(i =>
+          (keyConverter(map.getKeys(i)), valueConverter(map.getValues(i)))))
+      } else {
+        mutable.Map.empty[K, V]
       }
-      builder
     }
 
     makeMapData(getConverter(map.getKeyType), getConverter(map.getValueType))
