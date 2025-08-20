@@ -35,7 +35,7 @@ import org.apache.hadoop.fs.FSDataInputStream
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
 
-import org.apache.spark.{DebugFilesystem, SparkException}
+import org.apache.spark.{DebugFilesystem, SparkConf, SparkException}
 import org.apache.spark.io.ZStdCompressionCodec
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode, YearUDT}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UDTEncoder
@@ -60,7 +60,12 @@ class XmlSuite
     with TestXmlData {
   import testImplicits._
 
-  private val resDir = "test-data/xml-resources/"
+  protected val legacyParserEnabled: Boolean = false
+
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set("spark.sql.xml.legacyXMLParser.enabled", legacyParserEnabled.toString)
+
+  protected val resDir = "test-data/xml-resources/"
 
   private var tempDir: Path = _
 
@@ -334,21 +339,37 @@ class XmlSuite
       .option("columnNameOfCorruptRecord", "_malformed_records")
       .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
     val cars = carsDf.collect()
-    assert(cars.length === 3)
 
-    val malformedRowOne = carsDf.cache().select("_malformed_records").first().get(0).toString
-    val malformedRowTwo = carsDf.cache().select("_malformed_records").take(2).last.get(0).toString
-    val expectedMalformedRowOne = "<ROW><year>2012</year><make>Tesla</make><model>>S" +
-      "<comment>No comment</comment></ROW>"
-    val expectedMalformedRowTwo = "<ROW></year><make>Ford</make><model>E350</model>model></model>" +
-      "<comment>Go get one now they are going fast</comment></ROW>"
+    if (legacyParserEnabled) {
+      assert(cars.length === 3)
+      val malformedRows = carsDf.cache().filter($"_malformed_records".isNotNull)
+      val malformedRowOne = malformedRows.select("_malformed_records").first().get(0).toString
+      val malformedRowTwo = malformedRows.select("_malformed_records").take(2).last.get(0).toString
+      val expectedMalformedRowOne = "<ROW><year>2012</year><make>Tesla</make><model>>S" +
+        "<comment>No comment</comment></ROW>"
+      val expectedMalformedRowTwo = "<ROW></year><make>Ford</make><model>E350</model>" +
+        "model></model><comment>Go get one now they are going fast</comment></ROW>"
+      assert(
+        malformedRowOne.replaceAll("\\s", "") === expectedMalformedRowOne.replaceAll("\\s", ""))
+      assert(
+        malformedRowTwo.replaceAll("\\s", "") === expectedMalformedRowTwo.replaceAll("\\s", ""))
 
-    assert(malformedRowOne.replaceAll("\\s", "") === expectedMalformedRowOne.replaceAll("\\s", ""))
-    assert(malformedRowTwo.replaceAll("\\s", "") === expectedMalformedRowTwo.replaceAll("\\s", ""))
-    assert(cars(2)(0) === null)
-    assert(cars(0).toSeq.takeRight(3) === Seq(null, null, null))
-    assert(cars(1).toSeq.takeRight(3) === Seq(null, null, null))
-    assert(cars(2).toSeq.takeRight(3) === Seq("Chevy", "Volt", 2015))
+      val validRows = carsDf.cache().filter($"_malformed_records".isNull)
+      checkAnswer(validRows, Seq(Row(null, "Chevy", "Volt", 2015)))
+    } else {
+      // Memory efficient parser skips parsing data once malformed-ness is detected.
+      assert(cars.length === 2)
+
+      // Memory efficient parser will put the whole file into _malformed_records column
+      val malformedRows = carsDf.cache().filter($"_malformed_records".isNotNull)
+      assert(
+        malformedRows.first().getString(0).startsWith("<?xml version=\"1.0\"?>")
+          && malformedRows.first().getString(0).endsWith("</ROWSET>\n")
+      )
+
+      val validRows = carsDf.cache().filter($"_malformed_records".isNull)
+      checkAnswer(validRows, Seq(Row(null, "Chevy", "Volt", 2015)))
+    }
   }
 
   test("DSL test with empty file and known schema") {
@@ -1074,9 +1095,15 @@ class XmlSuite
       .xml(getTestResourcePath(resDir + "books-malformed-attributes.xml"))
       .collect()
 
-    assert(results.length === 2)
-    assert(results(0)(0) === "bk111")
-    assert(results(1)(0) === "bk112")
+    if (legacyParserEnabled) {
+      assert(results.length === 2)
+      assert(results(0)(0) === "bk111")
+      assert(results(1)(0) === "bk112")
+    } else {
+      // Memory efficient parser skips parsing data once malformed-ness is detected.
+      assert(results.length === 1)
+      assert(results(0)(0) === "bk111")
+    }
   }
 
   test("read utf-8 encoded file with empty tag") {
@@ -1278,6 +1305,60 @@ class XmlSuite
     val rec = basketDF.select("_malformed_records").collect()(1).getString(0)
     assert(rec.startsWith("<basket>") && rec.indexOf("<extra>123</extra>") != -1 &&
       rec.endsWith("</basket>"))
+  }
+
+  test("test XSD validation where row tag is the root tag") {
+    val basketDF = spark.read
+      .option("rowTag", "baskets")
+      .option("inferSchema", true)
+      .option("mode", "PERMISSIVE")
+      .option("rowValidationXSDPath", getTestResourcePath(resDir + "basket.xsd")
+        .replace("file:/", "/"))
+      .option("columnNameOfCorruptRecord", "_malformed_records")
+      .xml(getTestResourcePath(resDir + "basket.xml"))
+      .cache()
+    assert(basketDF.schema == new StructType().add("_malformed_records", StringType))
+  }
+
+  Seq(
+    "basket_invalid_in_the_beginning.xml",
+    "basket_invalid_in_the_middle.xml",
+    "basket_invalid_at_the_end.xml"
+  ).foreach { file =>
+    test("test XSD validation with invalid XSD records in different places, file: " + file) {
+      val basketDF = spark.read
+        .option("rowTag", "basket")
+        .option("inferSchema", true)
+        .option(
+          "rowValidationXSDPath",
+          getTestResourcePath(resDir + "basket.xsd")
+            .replace("file:/", "/")
+        )
+        .option("mode", "PERMISSIVE")
+        .option("columnNameOfCorruptRecord", "_malformed_records")
+        .xml(getTestResourcePath(resDir + file))
+        .cache()
+
+      // Should have both valid and invalid records
+      assert(basketDF.count() == 4)
+
+      // Check invalid record
+      assert(basketDF.filter($"_malformed_records".isNotNull).count() == 1)
+      val rec = basketDF
+        .filter($"_malformed_records".isNotNull)
+        .select("_malformed_records").collect()(0).getString(0)
+      assert(
+        rec.startsWith("""<basket invalid="true">""") &&
+          rec.indexOf("<extra>123</extra>") != -1 &&
+          rec.endsWith("</basket>"))
+
+      // Check valid records
+      assert(basketDF.filter($"_malformed_records".isNull).count() == 3)
+      checkAnswer(
+        basketDF.filter($"_malformed_records".isNull).select($"entry".getItem(0)),
+        Seq(Row(Row(1, "fork")), Row(Row(3, "apple")), Row(Row(5, "straw")))
+      )
+    }
   }
 
   test("test xmlDataset") {
@@ -2446,10 +2527,12 @@ class XmlSuite
   test("Timestamp type inference for a mix of TIMESTAMP_NTZ and TIMESTAMP_LTZ") {
     withTempPath { path =>
       Seq(
+        "<ROWS>",
         "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
         "<ROW><col0>2020-12-12T17:12:12.000Z</col0></ROW>",
         "<ROW><col0>2020-12-12T17:12:12.000+05:00</col0></ROW>",
-        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>"
+        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
+        "</ROWS>"
       ).toDF("data")
         .coalesce(1)
         .write.text(path.getAbsolutePath)
@@ -2481,10 +2564,12 @@ class XmlSuite
   test("Malformed records when reading TIMESTAMP_LTZ as TIMESTAMP_NTZ") {
     withTempPath { path =>
       Seq(
+        "<ROWS>",
         "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
         "<ROW><col0>2020-12-12T12:12:12.000Z</col0></ROW>",
         "<ROW><col0>2020-12-12T12:12:12.000+05:00</col0></ROW>",
-        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>"
+        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
+        "</ROWS>"
       ).toDF("data")
         .coalesce(1)
         .write.text(path.getAbsolutePath)
@@ -3095,6 +3180,8 @@ class XmlSuite
         assert(dfRead.count() === numRecords)
         assert(XmlSuiteDebugFileSystem.totalFiles() === numFiles)
         assert(XmlSuiteDebugFileSystem.maxFiles() > 1)
+
+        XmlSuiteDebugFileSystem.reset()
       }
     }
   }
@@ -3513,6 +3600,10 @@ class XmlSuite
       checkAnswer(df, spark.range(2018, 2025).toDF("value"))
     }
   }
+}
+
+class XmlSuiteWithLegacyParser extends XmlSuite {
+  override protected val legacyParserEnabled: Boolean = true
 }
 
 // Mock file system that checks the number of open files
