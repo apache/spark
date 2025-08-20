@@ -25,6 +25,7 @@ import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.connect.proto.ExecutePlanResponse
+import org.apache.spark.sql.classic.{RuntimeConfig, SparkSession}
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.pipelines.common.FlowStatus
 import org.apache.spark.sql.pipelines.logging.{EventDetails, EventLevel, FlowProgress, PipelineEvent, PipelineEventOrigin}
@@ -118,6 +119,56 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
     eventSender.shutdown()
     intercept[IllegalStateException] {
       eventSender.sendEvent(createTestEvent())
+    }
+  }
+
+  test("PipelineEventSender drops events after reaching capacity") {
+    val (mockObserver, mockSessionHolder) = createMockSetup()
+    // Set the configuration on the test SparkSession
+    val mockSession = mock[SparkSession]
+    val mockConf = mock[RuntimeConfig]
+    when(mockSessionHolder.session).thenReturn(mockSession)
+    when(mockSession.conf).thenReturn(mockConf)
+    when(mockConf.get("spark.sql.connect.pipeline.event.queue.capacity", "1000"))
+      .thenReturn("1")
+
+
+    val eventSender = new PipelineEventSender(mockObserver, mockSessionHolder) {
+      override def sendEventToClient(event: PipelineEvent): Unit = {
+        Thread.sleep(2000) // Simulate processing time
+        super.sendEventToClient(event)
+      }
+    }
+    try {
+      // Send first event - should be queued and processed
+      val firstEvent = createTestEvent(id = "first", message = "First event")
+      eventSender.sendEvent(firstEvent)
+      // Send second event - should be queued
+      val secondEvent = createTestEvent(id = "second", message = "Second event")
+      eventSender.sendEvent(secondEvent)
+
+      // Send third event - should be discarded due to full queue
+      val thirdEvent = createTestEvent(id = "third", message = "Third event")
+      eventSender.sendEvent(thirdEvent)
+      // Shutdown to ensure all queued events are processed
+      eventSender.shutdown()
+
+      // Verify that only the first two events were processed
+      val responseCaptor = ArgumentCaptor.forClass(classOf[ExecutePlanResponse])
+      verify(mockObserver, times(2)).onNext(responseCaptor.capture())
+      val responses = responseCaptor.getAllValues
+      assert(responses.size == 2)
+
+      // First event should be processed
+      assert(responses.get(0).getPipelineEventResult.getEvent.getMessage == "First event")
+      // Second event should be processed
+
+      assert(responses.get(1).getPipelineEventResult.getEvent.getMessage == "Second event")
+      // Third event should have been discarded and never sent
+      // We can't directly verify this since it's silently dropped, but we know
+      // only 2 events were sent to the observer
+    } finally {
+      eventSender.shutdown()
     }
   }
 }

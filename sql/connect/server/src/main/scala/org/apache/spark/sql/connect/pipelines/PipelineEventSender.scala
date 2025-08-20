@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.pipelines
 
-import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.{ArrayBlockingQueue, ThreadFactory, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.util.control.NonFatal
@@ -30,7 +30,6 @@ import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.pipelines.logging.PipelineEvent
-import org.apache.spark.util.ThreadUtils
 
 /**
  * Handles sending pipeline events to the client in a background thread. This prevents pipeline
@@ -42,9 +41,41 @@ class PipelineEventSender(
     extends Logging
     with AutoCloseable {
 
+  private def queueCapacity: Int = {
+    val conf = sessionHolder.session.conf
+    conf.get(
+      "spark.sql.connect.pipeline.event.queue.capacity",
+      "1000"
+    ).toInt
+  }
+
   // ExecutorService for background event processing
-  private val executor: ThreadPoolExecutor = ThreadUtils
-    .newDaemonSingleThreadExecutor(s"pipeline-event-sender-${sessionHolder.sessionId}")
+  private val executor: ThreadPoolExecutor = {
+    val threadFactory = new ThreadFactory {
+      override def newThread(r: Runnable): Thread = {
+        val t = new Thread(r, "pipeline-event-sender-" + sessionHolder.sessionId)
+        t.setDaemon(true) // daemon thread, won't block JVM shutdown
+        t
+      }
+    }
+
+    new ThreadPoolExecutor(
+      1, // corePoolSize
+      1, // maxPoolSize
+      0L, TimeUnit.MILLISECONDS, // keepAliveTime
+      new ArrayBlockingQueue[Runnable](queueCapacity), // bounded queue
+      threadFactory, // daemon thread factory
+      new ThreadPoolExecutor.DiscardPolicy() {
+        // DiscardPolicy silently drops the newest task when the queue is full
+        // This is to prevent blocking the pipeline execution if the event queue is full
+        override def rejectedExecution(r: Runnable, executor: ThreadPoolExecutor): Unit = {
+          logWarning(
+            s"Pipeline event queue is full for session ${sessionHolder.sessionId}, " +
+              s"dropping new event: ${r.toString}")
+        }
+      }
+    )
+  }
 
   /*
    * Atomic flags to track the state of the sender
@@ -104,7 +135,7 @@ class PipelineEventSender(
   /**
    * Send a single event to the client
    */
-  private def sendEventToClient(event: PipelineEvent): Unit = {
+  private[connect] def sendEventToClient(event: PipelineEvent): Unit = {
     try {
       val message = if (event.error.nonEmpty) {
         // Returns the message associated with a Throwable and all its causes
