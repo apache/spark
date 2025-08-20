@@ -2689,6 +2689,7 @@ object SQLConf {
 
   val STREAMING_VERIFY_CHECKPOINT_DIRECTORY_EMPTY_ON_START =
     buildConf("spark.sql.streaming.verifyCheckpointDirectoryEmptyOnStart")
+      .internal()
       .doc("When true, verifies that the checkpoint directory (offsets, state, commits) is " +
         "empty when first starting a streaming query. This prevents prevents sharing checkpoint " +
         "directories between different queries.")
