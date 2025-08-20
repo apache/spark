@@ -129,6 +129,10 @@ package object expressions  {
         // Create directly indexed array
         val arraySize = (maxExprId - minExprId + 1).toInt
         val ordinalArray = new Array[Int](arraySize)
+
+        // It's possible that `attrs` is a linked list, which can lead to bad O(n) loops when
+        // accessing attributes by their ordinals. To avoid this performance penalty, convert
+        // the input to an array.
         val ordinalAttrsArray = new Array[Attribute](attrs.size)
         java.util.Arrays.fill(ordinalArray, -1) // -1 indicates no attribute with this ID
 
@@ -165,10 +169,6 @@ package object expressions  {
 
     @transient private lazy val exprIdToOrdinalArray: Array[Int] = ordinalArrays._1
 
-
-    // It's possible that `attrs` is a linked list, which can lead to bad O(n) loops when
-    // accessing attributes by their ordinals. To avoid this performance penalty, convert the input
-    // to an array.
     @transient private lazy val attrsArray = ordinalArrays._2
 
     /**
@@ -185,8 +185,7 @@ package object expressions  {
       // Only use one of array or hash map, trying to use array first if possible
       if (attrs.isEmpty) {
         -1
-      }
-      else if (exprIdToOrdinalArray.nonEmpty) {
+      } else if (exprIdToOrdinalArray.nonEmpty) {
         if (id < minExprId || id > maxExprId) {
           -1
         } else {
