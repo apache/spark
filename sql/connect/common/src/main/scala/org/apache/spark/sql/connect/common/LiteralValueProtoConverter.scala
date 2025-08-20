@@ -439,7 +439,7 @@ object LiteralValueProtoConverter {
         valueConverter: proto.Expression.Literal => V)(implicit
         tagK: ClassTag[K],
         tagV: ClassTag[V]): mutable.Map[K, V] = {
-      val builder = mutable.HashMap.empty[K, V]
+      val builder = mutable.LinkedHashMap.empty[K, V]
       val keys = map.getKeysList.asScala
       val values = map.getValuesList.asScala
       builder.sizeHint(keys.size)
