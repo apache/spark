@@ -62,6 +62,7 @@ import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
+import org.apache.spark.sql.connect.execution.command.RegisterPythonDataSourceCommand
 import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.pipelines.PipelinesHandler
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
@@ -2654,6 +2655,8 @@ class SparkConnectPlanner(
         Some(transformMergeIntoTableCommand(command.getMergeIntoTableCommand))
       case proto.Command.CommandTypeCase.CREATE_DATAFRAME_VIEW =>
         Some(_ => transformCreateViewCommand(command.getCreateDataframeView))
+      case proto.Command.CommandTypeCase.REGISTER_DATA_SOURCE =>
+        Some(_ => transformRegisterUserDefinedDataSource(command.getRegisterDataSource))
       case _ =>
         None
     }
@@ -2672,8 +2675,6 @@ class SparkConnectPlanner(
         handleRegisterUserDefinedFunction(command.getRegisterFunction)
       case proto.Command.CommandTypeCase.REGISTER_TABLE_FUNCTION =>
         handleRegisterUserDefinedTableFunction(command.getRegisterTableFunction)
-      case proto.Command.CommandTypeCase.REGISTER_DATA_SOURCE =>
-        handleRegisterUserDefinedDataSource(command.getRegisterDataSource)
       case proto.Command.CommandTypeCase.EXTENSION =>
         handleCommandPlugin(command.getExtension)
       case proto.Command.CommandTypeCase.SQL_COMMAND =>
@@ -2991,17 +2992,16 @@ class SparkConnectPlanner(
     executeHolder.eventsManager.postFinished()
   }
 
-  private def handleRegisterUserDefinedDataSource(
-      fun: proto.CommonInlineUserDefinedDataSource): Unit = {
+  private def transformRegisterUserDefinedDataSource(
+      fun: proto.CommonInlineUserDefinedDataSource): LogicalPlan = {
     fun.getDataSourceCase match {
       case proto.CommonInlineUserDefinedDataSource.DataSourceCase.PYTHON_DATA_SOURCE =>
         val ds = fun.getPythonDataSource
         val dataSource = UserDefinedPythonDataSource(transformPythonDataSource(ds))
-        session.dataSource.registerPython(fun.getName, dataSource)
+        RegisterPythonDataSourceCommand(fun.getName, dataSource)
       case other =>
         throw InvalidInputErrors.invalidOneOfField(other, fun.getDescriptorForType)
     }
-    executeHolder.eventsManager.postFinished()
   }
 
   private def createPythonUserDefinedTableFunction(
