@@ -27,7 +27,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
-import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, StructType, UserDefinedType, ArrayType, MapType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DayTimeIntervalType, MapType, StructType, UserDefinedType}
 import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
 
 /**
