@@ -243,6 +243,9 @@ private[connect] class ExecuteHolder(
    *   true if it was not interrupted before, false if it was already interrupted.
    */
   def interrupt(): Boolean = {
+    if (eventsManager.status == ExecuteStatus.Pending) {
+      return false
+    }
     runner.interrupt()
   }
 
