@@ -212,6 +212,11 @@ object SQLExecution extends Logging {
                 }
               }
 
+              // Cancel all spark jobs associated with this executionID, but only if it's the
+              // root execution.
+
+              // TODO: Consider enhancing this logic to cancel jobs earlier when nested
+              // query executions are completed.
               if (executionId == rootExecutionId) {
                 sparkSession.sparkContext.cancelJobsWithTag(
                   executionIdJobTag(sparkSession, executionId))
