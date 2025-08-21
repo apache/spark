@@ -74,12 +74,23 @@ class SparkSqlParser extends AbstractSqlParser {
       command: String,
       context: org.apache.spark.sql.catalyst.parser.ParameterContext): String = {
 
-    // Detect if the SQL has parameter markers
-    val (hasPositional, hasNamed) = paramSubstitutor.detectParameters(
-      command, org.apache.spark.sql.catalyst.parser.SubstitutionRule.Statement)
+    // Always try parameter detection, but gracefully handle syntax errors
+    try {
+      // Detect if the SQL has parameter markers
+      val (hasPositional, hasNamed) = paramSubstitutor.detectParameters(
+        command, org.apache.spark.sql.catalyst.parser.SubstitutionRule.Statement)
 
-    if (!hasPositional && !hasNamed) {
-      return command  // No parameters to substitute
+      if (!hasPositional && !hasNamed) {
+        return command  // No parameters to substitute
+      }
+
+      // Proceed with parameter substitution - the substitute method will handle
+      // missing parameters by throwing proper AnalysisException
+    } catch {
+      case _: org.apache.spark.sql.catalyst.parser.ParseException =>
+        // If parameter detection fails due to syntax errors, skip parameter processing
+        // and let the main parser handle the original SQL and produce the proper error
+        return command
     }
 
     // Apply parameter substitution based on context type
