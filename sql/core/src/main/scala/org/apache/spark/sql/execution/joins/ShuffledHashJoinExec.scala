@@ -65,9 +65,36 @@ case class ShuffledHashJoinExec(
     case _ => super.outputOrdering
   }
 
+  private def validCondForIgnoreDupKey(cond: Expression): Boolean = {
+    // to ignore duplicate keys on the build side, the join condition must
+    // have the following properties:
+    // 1) a subtree that is a semantic match to a build-side key, and/or
+    // 2) outside any subtree that is a semantic match to a build-side key,
+    //    all attributes should be from the stream-side.
+    val buildKeysSet = ExpressionSet(buildKeys)
+    val streamedOutputAttrs = AttributeSet(streamedOutput)
+    validCond0(cond, buildKeysSet, streamedOutputAttrs)
+  }
+
+  private def validCond0(cond: Expression,
+      buildKeysSet: ExpressionSet,
+      streamedOutputAttrs: AttributeSet): Boolean = {
+    cond match {
+      // don't bother traversing any subtree that has a semantic match to a build key
+      case e: Expression if buildKeysSet.contains(e) => true
+      // all attributes (outside any subtree that matches a build key) should be
+      // from the stream side
+      case a: Attribute if !streamedOutputAttrs.contains(a) => false
+      case e: Expression =>
+        e.children.forall(validCond0(_, buildKeysSet, streamedOutputAttrs))
+      case _ => true
+    }
+  }
+
   // Exposed for testing
   @transient lazy val ignoreDuplicatedKey = joinType match {
-    case LeftExistence(_) if condition.isEmpty => true
+    case LeftExistence(_) =>
+      condition.forall(validCondForIgnoreDupKey(_))
     case _ => false
   }
 

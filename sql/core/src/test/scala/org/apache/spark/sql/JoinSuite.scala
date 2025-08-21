@@ -1571,23 +1571,55 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       spark.range(10).map(i => (i.toString, i + 1)).toDF("c1", "c2").write.saveAsTable("t1")
       spark.range(10).map(i => ((i % 5).toString, i % 3)).toDF("c1", "c2").write.saveAsTable("t2")
 
+      val semiExpected1 = Seq(Row("0"), Row("1"), Row("2"), Row("3"), Row("4"))
+      val antiExpected1 = Seq(Row("5"), Row("6"), Row("7"), Row("8"), Row("9"))
+      val semiExpected2 = Seq(Row("0"))
+      val antiExpected2 = Seq.tabulate(9) { x => Row((x + 1).toString) }
+
       val semiJoinQueries = Seq(
         // No join condition, ignore duplicated key.
         (s"SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2 ON t1.c1 = t2.c1",
-          true),
-        // SPARK-52873: Have any join condition at all, do not ignore duplicated key.
+          true, semiExpected1, antiExpected1),
+        // Have join condition on build join key only, ignore duplicated key.
         (s"""
             |SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2
             |ON t1.c1 = t2.c1 AND CAST(t1.c2 * 2 AS STRING) != t2.c1
           """.stripMargin,
-          false)
+          true, semiExpected1, antiExpected1),
+        // Have join condition on other build attribute beside join key, do not ignore
+        // duplicated key.
+        (s"""
+            |SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2
+            |ON t1.c1 = t2.c1 AND t1.c2 * 100 != t2.c2
+          """.stripMargin,
+          false, semiExpected1, antiExpected1),
+        // SPARK-52873: Have a join condition that references attributes from the build-side
+        // join key, but those attributes are contained by a different expression than that
+        // used as the build-side join key (that is, CAST((t2.c2+10000)/1000 AS INT) is not
+        // the same as t2.c2). In this case, ignoreDuplicatedKey should be false
+        (
+          s"""
+             |SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2
+             |ON CAST((t1.c2+10000)/1000 AS INT) = CAST((t2.c2+10000)/1000 AS INT)
+             |AND t2.c2 >= t1.c2 + 1
+             |""".stripMargin,
+        false, semiExpected2, antiExpected2),
+        // SPARK-52873: Have a join condition that contains the same expression as the
+        // build-side join key,and does not violate any other rules for the join condition.
+        // In this case, ignoreDuplicatedKey should be true
+        (
+          s"""
+             |SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2
+             |ON t1.c1 * 10000 = t2.c1 * 1000 AND t2.c1 * 1000 >= t1.c1
+             |""".stripMargin,
+          true, semiExpected2, antiExpected2)
       )
       semiJoinQueries.foreach {
-        case (query, ignoreDuplicatedKey) =>
+        case (query, ignoreDuplicatedKey, semiExpected, antiExpected) =>
           val semiJoinDF = sql(query)
           val antiJoinDF = sql(query.replaceAll("SEMI", "ANTI"))
-          checkAnswer(semiJoinDF, Seq(Row("0"), Row("1"), Row("2"), Row("3"), Row("4")))
-          checkAnswer(antiJoinDF, Seq(Row("5"), Row("6"), Row("7"), Row("8"), Row("9")))
+          checkAnswer(semiJoinDF, semiExpected)
+          checkAnswer(antiJoinDF, antiExpected)
           Seq(semiJoinDF, antiJoinDF).foreach { df =>
             assert(collect(df.queryExecution.executedPlan) {
               case j: ShuffledHashJoinExec if j.ignoreDuplicatedKey == ignoreDuplicatedKey => true
@@ -1763,19 +1795,6 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     } finally {
       cached.unpersist()
     }
-  }
-
-  test("SPARK-52873: Don't ignore duplicate keys in SHJ when there is a bound condition") {
-    val query =
-      """select /*+ SHUFFLE_HASH(r) */ * from
-        |testData2 l
-        |left semi join testData2 r
-        |on cast(l.a / 100 as long) + 1  = cast(r.a / 100 as int) + 1
-        |and r.a >= cast(l.a/1000 as int) + 3""".stripMargin
-    val df = sql(query)
-    val expected = Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) ::
-      Row (3, 1) :: Row(3, 2) :: Nil;
-    checkAnswer(df, expected)
   }
 }
 
