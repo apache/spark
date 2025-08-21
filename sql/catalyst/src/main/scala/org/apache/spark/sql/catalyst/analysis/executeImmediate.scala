@@ -124,6 +124,84 @@ class SubstituteExecuteImmediate(
     }
   }
 
+  /**
+   * Apply parameter substitution to a query string using the provided expressions.
+   */
+  private def applyParameterSubstitution(
+      queryString: String,
+      expressions: Seq[Expression]): String = {
+
+    // Check if the query string has any parameter markers
+    val paramSubstitutor = new org.apache.spark.sql.catalyst.parser.SubstituteParamsParser()
+    val (hasPositional, hasNamed) = paramSubstitutor.detectParameters(
+      queryString, org.apache.spark.sql.catalyst.parser.SubstitutionRule.Statement)
+
+    if (!hasPositional && !hasNamed) {
+      return queryString  // No parameters to substitute
+    }
+
+    if (hasPositional && hasNamed) {
+      throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
+    }
+
+    if (hasPositional) {
+      // Convert expressions to string values for positional parameters
+      val foldedExpressions = expressions.map(foldToLiteral)
+      val paramValues = foldedExpressions.map(expressionToSqlValue)
+      val (substituted, _) = paramSubstitutor.substitute(
+        queryString,
+        org.apache.spark.sql.catalyst.parser.SubstitutionRule.Statement,
+        positionalParams = paramValues.toList)
+      substituted
+    } else {
+      // Handle named parameters - extract aliases
+      val aliases = expressions.collect {
+        case e: Alias => e
+        case u: VariableReference => Alias(u, u.identifier.name())()
+      }
+
+      if (aliases.size != expressions.size) {
+        val nonAliases = expressions.filter(attr =>
+          !attr.isInstanceOf[Alias] && !attr.isInstanceOf[VariableReference])
+        throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(nonAliases)
+      }
+
+      val paramMap = aliases.map { alias =>
+        alias.name -> expressionToSqlValue(foldToLiteral(alias.child))
+      }.toMap
+
+      val (substituted, _) = paramSubstitutor.substitute(
+        queryString,
+        org.apache.spark.sql.catalyst.parser.SubstitutionRule.Statement,
+        namedParams = paramMap)
+      substituted
+    }
+  }
+
+  /**
+   * Convert an expression to its SQL string representation.
+   */
+  private def expressionToSqlValue(expr: Expression): String = expr match {
+    case lit: Literal => lit.sql
+    case _ =>
+      try {
+        expr.sql
+      } catch {
+        case _: Exception =>
+          // Fall back to constant folding if SQL generation fails and expression is foldable
+          if (expr.foldable) {
+            try {
+              val literal = Literal.create(expr.eval(), expr.dataType)
+              literal.sql
+            } catch {
+              case _: Exception => expr.toString
+            }
+          } else {
+            expr.toString
+          }
+      }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
       case e @ ExecuteImmediateQuery(expressions, _, _) if expressions.exists(!_.resolved) =>
@@ -133,7 +211,9 @@ class SubstituteExecuteImmediate(
         if expressions.forall(_.resolved) =>
 
         val queryString = extractQueryString(query)
-        val plan = parseStatement(queryString, targetVariables)
+        // Apply parameter substitution to the query string before parsing
+        val substitutedQueryString = applyParameterSubstitution(queryString, expressions)
+        val plan = parseStatement(substitutedQueryString, targetVariables)
 
         val posNodes = plan.collect { case p: LogicalPlan =>
           p.expressions.flatMap(_.collect { case n: PosParameter => n })
