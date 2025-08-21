@@ -187,8 +187,8 @@ object StateStoreErrors {
       numSchemaFiles, schemaFilesThreshold, addedColFamilies, removedColFamilies)
   }
 
-  def streamingStateCheckpointLocationNotEmpty(checkpointLocation: String):
-  StateStoreCheckpointLocationNotEmpty = {
+  def streamingStateCheckpointLocationNotEmpty(checkpointLocation: String)
+    : StateStoreCheckpointLocationNotEmpty = {
     new StateStoreCheckpointLocationNotEmpty(checkpointLocation)
   }
 
