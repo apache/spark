@@ -482,9 +482,9 @@ class ArrowUDTFTestsMixin:
         with self.assertRaisesRegex(Exception, "LATERAL_JOIN_WITH_ARROW_UDTF_UNSUPPORTED"):
             self.spark.sql(
                 """
-            SELECT t.id, f.x, f.result
-            FROM test_table t, LATERAL simple_arrow_udtf(t.id) f
-            """
+                SELECT t.id, f.x, f.result
+                FROM test_table t, LATERAL simple_arrow_udtf(t.id) f
+                """
             )
 
     def test_arrow_udtf_lateral_join_with_table_argument_disallowed(self):
@@ -513,9 +513,9 @@ class ArrowUDTFTestsMixin:
         ):
             self.spark.sql(
                 """
-            SELECT t1.id, f.filtered_id
-            FROM test_table1 t1, LATERAL mixed_args_udtf(table(SELECT * FROM test_table2)) f
-            """
+                SELECT t1.id, f.filtered_id
+                FROM test_table1 t1, LATERAL mixed_args_udtf(table(SELECT * FROM test_table2)) f
+                """
             )
 
     def test_arrow_udtf_with_table_argument_then_lateral_join_allowed(self):
@@ -536,11 +536,11 @@ class ArrowUDTFTestsMixin:
 
         result_df = self.spark.sql(
             """
-        SELECT f.processed_id, j.label
-        FROM table_arg_udtf(table(SELECT * FROM source_table)) f,
-             join_table j
-        ORDER BY f.processed_id, j.label
-        """
+            SELECT f.processed_id, j.label
+            FROM table_arg_udtf(table(SELECT * FROM source_table)) f,
+                join_table j
+            ORDER BY f.processed_id, j.label
+            """
         )
 
         expected_data = [
@@ -581,10 +581,10 @@ class ArrowUDTFTestsMixin:
 
         result_df = self.spark.sql(
             """
-        SELECT c.computed_value, m.multiplied
-        FROM compute_udtf(table(SELECT * FROM values_table) WITH SINGLE PARTITION) c,
-             LATERAL multiply_udtf(c.computed_value) m
-        """
+            SELECT c.computed_value, m.multiplied
+            FROM compute_udtf(table(SELECT * FROM values_table) WITH SINGLE PARTITION) c,
+                LATERAL multiply_udtf(c.computed_value) m
+            """
         )
 
         expected_df = self.spark.createDataFrame([(60, 180)], "computed_value int, multiplied int")

@@ -4252,8 +4252,6 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
   }
 }
 
-
-
 /**
  * Rule that's used to handle `UnresolvedHaving` nodes with resolved `condition` and `child`.
  * It's placed outside the main batch to avoid conflicts with other rules that resolve
