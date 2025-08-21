@@ -28,15 +28,23 @@ import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.sql.classic.{RuntimeConfig, SparkSession}
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.pipelines.common.FlowStatus
-import org.apache.spark.sql.pipelines.logging.{EventDetails, EventLevel, FlowProgress, PipelineEvent, PipelineEventOrigin}
+import org.apache.spark.sql.pipelines.common.RunState.{COMPLETED, RUNNING}
+import org.apache.spark.sql.pipelines.logging.{EventDetails, EventLevel, FlowProgress, PipelineEvent, PipelineEventOrigin, RunProgress}
 
 class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with MockitoSugar {
 
-  private def createMockSetup(): (StreamObserver[ExecutePlanResponse], SessionHolder) = {
+  private def createMockSetup(queueSize: String = "1000"):
+  (StreamObserver[ExecutePlanResponse], SessionHolder) = {
     val mockObserver = mock[StreamObserver[ExecutePlanResponse]]
     val mockSessionHolder = mock[SessionHolder]
     when(mockSessionHolder.sessionId).thenReturn("test-session-id")
     when(mockSessionHolder.serverSessionId).thenReturn("test-server-session-id")
+    val mockSession = mock[SparkSession]
+    val mockConf = mock[RuntimeConfig]
+    when(mockSessionHolder.session).thenReturn(mockSession)
+    when(mockSession.conf).thenReturn(mockConf)
+    when(mockConf.get("spark.sql.connect.pipeline.event.queue.capacity", "1000"))
+      .thenReturn(queueSize)
     (mockObserver, mockSessionHolder)
   }
 
@@ -123,50 +131,85 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
   }
 
   test("PipelineEventSender drops events after reaching capacity") {
-    val (mockObserver, mockSessionHolder) = createMockSetup()
-    // Set the configuration on the test SparkSession
-    val mockSession = mock[SparkSession]
-    val mockConf = mock[RuntimeConfig]
-    when(mockSessionHolder.session).thenReturn(mockSession)
-    when(mockSession.conf).thenReturn(mockConf)
-    when(mockConf.get("spark.sql.connect.pipeline.event.queue.capacity", "1000"))
-      .thenReturn("1")
+    // This test simulates a scenario where the event queue is full and verifies that
+    // events are dropped when the queue is at capacity, except for terminal FlowProgress events and
+    // RunProgress events which should always be queued.
 
+    // Start with queue size of 1 to test capacity handling
+    val (mockObserver, mockSessionHolder) = createMockSetup(queueSize = "1")
 
     val eventSender = new PipelineEventSender(mockObserver, mockSessionHolder) {
       override def sendEventToClient(event: PipelineEvent): Unit = {
-        Thread.sleep(2000) // Simulate processing time
+        Thread.sleep(2000) // Simulate processing time so that we can test queue capacity
         super.sendEventToClient(event)
       }
     }
     try {
-      // Send first event - should be queued and processed
-      val firstEvent = createTestEvent(id = "first", message = "First event")
-      eventSender.sendEvent(firstEvent)
-      // Send second event - should be queued
-      val secondEvent = createTestEvent(id = "second", message = "Second event")
-      eventSender.sendEvent(secondEvent)
+      // Send FlowProgress.RUNNING event - should be sent
+      val startedEvent = createTestEvent(id = "startedEvent", message = "Flow a started", details =
+        FlowProgress(FlowStatus.STARTING))
+      eventSender.sendEvent(startedEvent)
 
-      // Send third event - should be discarded due to full queue
-      val thirdEvent = createTestEvent(id = "third", message = "Third event")
-      eventSender.sendEvent(thirdEvent)
+      // Send FlowProgress.RUNNING event - should be queued
+      val firstRunningEvent = createTestEvent(id = "firstRunningEvent", message = "Flow a running",
+        details = FlowProgress(FlowStatus.RUNNING))
+      eventSender.sendEvent(firstRunningEvent)
+
+      // Send FlowProgress.RUNNING event - should be discarded due to full queue
+      val secondRunningEvent = createTestEvent(id = "secondRunningEvent",
+        message = "Flow a running",
+        details = FlowProgress(FlowStatus.RUNNING))
+      eventSender.sendEvent(secondRunningEvent)
+
+      // Send RunProgress.RUNNING event - should be queued and processed
+      val runProgressRunningEvent = createTestEvent(
+        id = "runProgressRunning", message = "Update completed",
+        details = RunProgress(RUNNING))
+      eventSender.sendEvent(runProgressRunningEvent)
+
+      // Send FlowProgress.RUNNING event - should be discarded due to full queue
+      val thirdRunningEvent = createTestEvent(id = "thirdRunningEvent", message = "Flow a running",
+        details =
+          FlowProgress(FlowStatus.RUNNING))
+      eventSender.sendEvent(thirdRunningEvent)
+
+      // Send FlowProgress.COMPLETED event - should be queued and processed
+      val completedEvent = createTestEvent(
+        id = "completed", message = "Flow has completed",
+        details = FlowProgress(FlowStatus.COMPLETED))
+      eventSender.sendEvent(completedEvent)
+
+      // Send RunProgress.COMPLETED event - should be queued and processed
+      val runProgressCompletedEvent = createTestEvent(
+        id = "runProgressCompletedEvent", message = "Update completed",
+        details = RunProgress(COMPLETED))
+      eventSender.sendEvent(runProgressCompletedEvent)
+
       // Shutdown to ensure all queued events are processed
       eventSender.shutdown()
 
-      // Verify that only the first two events were processed
       val responseCaptor = ArgumentCaptor.forClass(classOf[ExecutePlanResponse])
-      verify(mockObserver, times(2)).onNext(responseCaptor.capture())
+      verify(mockObserver, times(5)).onNext(responseCaptor.capture())
       val responses = responseCaptor.getAllValues
-      assert(responses.size == 2)
+      assert(responses.size == 5)
 
-      // First event should be processed
-      assert(responses.get(0).getPipelineEventResult.getEvent.getMessage == "First event")
-      // Second event should be processed
+      // FlowProgress.STARTED should be processed immediately
+      assert(responses.get(0).getPipelineEventResult.getEvent.getMessage == startedEvent.message)
 
-      assert(responses.get(1).getPipelineEventResult.getEvent.getMessage == "Second event")
-      // Third event should have been discarded and never sent
-      // We can't directly verify this since it's silently dropped, but we know
-      // only 2 events were sent to the observer
+      // First FlowProgress.RUNNING should be queued and processed
+      assert(responses.get(1).getPipelineEventResult.getEvent.getMessage
+        == firstRunningEvent.message)
+
+      // RunProgress.RUNNING should be queued and processed
+      assert(responses.get(2).getPipelineEventResult.getEvent.getMessage
+        == runProgressRunningEvent.message)
+
+      // FlowProgress.COMPLETED event should also be processed because it is terminal
+      assert(responses.get(3).getPipelineEventResult.getEvent.getMessage == completedEvent.message)
+
+      // RunProgress.COMPLETED event should also be processed
+      assert(responses.get(4).getPipelineEventResult.getEvent.getMessage
+        == runProgressCompletedEvent.message)
     } finally {
       eventSender.shutdown()
     }
