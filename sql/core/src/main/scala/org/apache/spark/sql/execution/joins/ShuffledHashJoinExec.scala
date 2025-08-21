@@ -73,22 +73,21 @@ case class ShuffledHashJoinExec(
     //    all attributes should be from the stream-side.
     val buildKeysSet = ExpressionSet(buildKeys)
     val streamedOutputAttrs = AttributeSet(streamedOutput)
-    validCond0(cond, buildKeysSet, streamedOutputAttrs)
-  }
 
-  private def validCond0(cond: Expression,
-      buildKeysSet: ExpressionSet,
-      streamedOutputAttrs: AttributeSet): Boolean = {
-    cond match {
-      // don't bother traversing any subtree that has a semantic match to a build key
-      case e: Expression if buildKeysSet.contains(e) => true
-      // all attributes (outside any subtree that matches a build key) should be
-      // from the stream side
-      case a: Attribute if !streamedOutputAttrs.contains(a) => false
-      case e: Expression =>
-        e.children.forall(validCond0(_, buildKeysSet, streamedOutputAttrs))
-      case _ => true
+    def validCond(cond: Expression): Boolean = {
+      cond match {
+        // don't bother traversing any subtree that has a semantic match to a build key
+        case e: Expression if buildKeysSet.contains(e) => true
+        // all attributes (outside any subtree that matches a build key) should be
+        // from the stream side
+        case a: Attribute if !streamedOutputAttrs.contains(a) => false
+        case e: Expression =>
+          e.children.forall(validCond(_))
+        case _ => true
+      }
     }
+
+    validCond(cond)
   }
 
   // Exposed for testing
