@@ -163,7 +163,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       }
     } else {
       val badType = typeCtx.unsupportedType.getText
-      val params = typeCtx.integerValue().asScala.toList
+      val params = typeCtx.integerValue().asScala.map(_.getText).toList
       val dtStr =
         if (params.nonEmpty) s"$badType(${params.mkString(",")})"
         else badType

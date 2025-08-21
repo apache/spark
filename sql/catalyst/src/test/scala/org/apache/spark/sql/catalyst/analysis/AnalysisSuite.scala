@@ -1550,16 +1550,16 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-41271: bind named parameters to literals") {
     CTERelationDef.curId.set(0)
-    val actual1 = NameParameterizedQuery(
-      child = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT :limitA"),
+    val actual1 = PreprocessedNamedQuery(
+      sql = "WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT :limitA",
       args = Map("limitA" -> Literal(10))).analyze
     CTERelationDef.curId.set(0)
     val expected1 = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT 10").analyze
     comparePlans(actual1, expected1)
     // Ignore unused arguments
     CTERelationDef.curId.set(0)
-    val actual2 = NameParameterizedQuery(
-      child = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < :param2"),
+    val actual2 = PreprocessedNamedQuery(
+      sql = "WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < :param2",
       args = Map("param1" -> Literal(10), "param2" -> Literal(20))).analyze
     CTERelationDef.curId.set(0)
     val expected2 = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < 20").analyze
@@ -1568,16 +1568,16 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-44066: bind positional parameters to literals") {
     CTERelationDef.curId.set(0)
-    val actual1 = PosParameterizedQuery(
-      child = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT ?"),
+    val actual1 = PreprocessedPositionalQuery(
+      sql = "WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT ?",
       args = Seq(Literal(10))).analyze
     CTERelationDef.curId.set(0)
     val expected1 = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT 10").analyze
     comparePlans(actual1, expected1)
     // Ignore unused arguments
     CTERelationDef.curId.set(0)
-    val actual2 = PosParameterizedQuery(
-      child = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < ?"),
+    val actual2 = PreprocessedPositionalQuery(
+      sql = "WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < ?",
       args = Seq(Literal(20), Literal(10))).analyze
     CTERelationDef.curId.set(0)
     val expected2 = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < 20").analyze
@@ -1893,5 +1893,40 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // The expected Project (root node) should only have column "i".
     val expectedPlan = Project(Seq(UnresolvedAttribute("i")), addColumnF).analyze
     checkAnalysis(inputPlan, expectedPlan)
+  }
+}
+
+/**
+ * Utility classes for testing parameter preprocessing during SQL parsing.
+ * These classes provide a clean API similar to NameParameterizedQuery while documenting
+ * the intent to test the full SQL text to analyzed plan path with parameter preprocessing.
+ *
+ * NOTE: These currently use the existing NameParameterizedQuery/PosParameterizedQuery
+ * implementation since adding SparkSqlParser dependency would create a cyclic dependency.
+ * For full end-to-end testing of parameter preprocessing, use tests in sql-core module.
+ */
+case class PreprocessedNamedQuery(sql: String, args: Map[String, Literal]) {
+  def parsePlan: LogicalPlan = {
+    // Uses CatalystSqlParser (without parameter preprocessing) for now
+    // To test full preprocessing, move tests to sql-core module or use SparkSession.sql()
+    org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan(sql)
+  }
+
+  def analyze: LogicalPlan = {
+    // This maintains the same API but uses the existing parameter binding approach
+    NameParameterizedQuery(child = parsePlan, args = args).analyze
+  }
+}
+
+case class PreprocessedPositionalQuery(sql: String, args: Seq[Literal]) {
+  def parsePlan: LogicalPlan = {
+    // Uses CatalystSqlParser (without parameter preprocessing) for now
+    // To test full preprocessing, move tests to sql-core module or use SparkSession.sql()
+    org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan(sql)
+  }
+
+  def analyze: LogicalPlan = {
+    // This maintains the same API but uses the existing parameter binding approach
+    PosParameterizedQuery(child = parsePlan, args = args).analyze
   }
 }
