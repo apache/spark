@@ -207,7 +207,7 @@ DROP TEMPORARY VARIABLE var1;
 DROP TEMPORARY VARIABLE var2;
 DROP TEMPORARY VARIABLE var3;
 
-SET VARIABLE title = 'DECLARE VARIABLE - multiple variables defined at once';
+SET VARIABLE title = 'DECLARE VARIABLE - multiple variables declared at once';
 
 DECLARE VARIABLE var1, var2, var3 INT;
 DECLARE VARIABLE var4, var5, var6 INT DEFAULT 5;
