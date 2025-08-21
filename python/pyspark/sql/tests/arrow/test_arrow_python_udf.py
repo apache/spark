@@ -251,16 +251,14 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
         def return_interval(x):
             return x
 
-        df = (
-            self.spark.sql("SELECT INTERVAL '200:13:50.3' HOUR TO SECOND as value")
-            .select(return_interval("value").alias("result"))
+        df = self.spark.sql("SELECT INTERVAL '200:13:50.3' HOUR TO SECOND as value").select(
+            return_interval("value").alias("result")
         )
         self.assertEqual(df.schema.fields[0].dataType, DayTimeIntervalType(1, 3))
         self.assertIsNotNone(df.collect()[0]["result"])
 
-        df2 = (
-            self.spark.sql("SELECT INTERVAL '1 10:30:45.123' DAY TO SECOND as value")
-            .select(return_interval("value").alias("result"))
+        df2 = self.spark.sql("SELECT INTERVAL '1 10:30:45.123' DAY TO SECOND as value").select(
+            return_interval("value").alias("result")
         )
         self.assertEqual(df.schema.fields[0].dataType, DayTimeIntervalType(1, 3))
         self.assertIsNotNone(df2.collect()[0]["result"])
