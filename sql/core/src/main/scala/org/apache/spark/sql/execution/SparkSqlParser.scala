@@ -102,8 +102,25 @@ class SparkSqlParser extends AbstractSqlParser {
   }
 
   private def expressionToSqlValue(expr: Expression): String = expr match {
-    case lit: Literal => lit.sql
-    case _ => expr.toString
+    case lit: org.apache.spark.sql.catalyst.expressions.Literal => lit.sql
+    case _ =>
+      try {
+        expr.sql
+      } catch {
+        case _: Exception =>
+          // Only fall back to constant folding if SQL generation fails and expression is foldable
+          if (expr.foldable) {
+            try {
+              val literal = org.apache.spark.sql.catalyst.expressions.Literal.create(
+                expr.eval(), expr.dataType)
+              literal.sql
+            } catch {
+              case _: Exception => expr.toString
+            }
+          } else {
+            expr.toString
+          }
+      }
   }
 }
 

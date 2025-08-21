@@ -448,19 +448,15 @@ class SparkSession private(
   private[sql] def sql(sqlText: String, args: Array[_], tracker: QueryPlanningTracker): DataFrame =
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-        if (args.nonEmpty) {
-          // Set parameter context for the parser
-          val paramContext = PositionalParameterContext(args.map(lit(_).expr).toSeq)
-          ThreadLocalParameterContext.withContext(paramContext) {
-            val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-            if (parsedPlan.isInstanceOf[CompoundBody]) {
-              // Positional parameters are not supported for SQL scripting.
-              throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
-            }
-            parsedPlan
+        // Always set parameter context for the parser, even if args is empty
+        val paramContext = PositionalParameterContext(args.map(lit(_).expr).toSeq)
+        ThreadLocalParameterContext.withContext(paramContext) {
+          val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
+          if (parsedPlan.isInstanceOf[CompoundBody] && args.nonEmpty) {
+            // Positional parameters are not supported for SQL scripting.
+            throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
           }
-        } else {
-          sessionState.sqlParser.parsePlan(sqlText)
+          parsedPlan
         }
       }
       Dataset.ofRows(self, plan, tracker)
@@ -493,13 +489,9 @@ class SparkSession private(
       tracker: QueryPlanningTracker): DataFrame =
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-        if (args.nonEmpty) {
-          // Set parameter context for the parser
-          val paramContext = NamedParameterContext(args.transform((_, v) => lit(v).expr))
-          ThreadLocalParameterContext.withContext(paramContext) {
-            sessionState.sqlParser.parsePlan(sqlText)
-          }
-        } else {
+        // Always set parameter context for the parser, even if args is empty
+        val paramContext = NamedParameterContext(args.transform((_, v) => lit(v).expr))
+        ThreadLocalParameterContext.withContext(paramContext) {
           sessionState.sqlParser.parsePlan(sqlText)
         }
       }
