@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.execution.datasources.parquet.ParquetWriteSupport._
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 
@@ -110,6 +111,19 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
     this.rootFieldWriters = schema.map(_.dataType).map(makeWriter).toArray[ValueWriter]
 
+    // OAI specific
+    // Also add OAI Spark cluster name, and node name to the Parquet metadata.
+    // These are from environment variables on the OAI Spark cluster nodes
+
+    val clusterName = Option(System.getenv(OAI_CLUSTER_NAME_ENV_NAME))
+    val nodeName = Option(System.getenv(OAI_CLUSTER_NODE_NAME_ENV_NAME))
+    val extraMetadata = Seq(
+      OAI_CLUSTER_NAME_METADATA_KEY -> clusterName,
+      OAI_CLUSTER_NODE_NAME_METADATA_KEY -> nodeName
+    ).collect {
+      case (k, Some(v)) => k -> v
+    }.toMap
+
     val messageType = new SparkToParquetSchemaConverter(configuration).convert(schema)
     val metadata = Map(
       SPARK_VERSION_METADATA_KEY -> SPARK_VERSION_SHORT,
@@ -130,7 +144,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
       } else {
         Map.empty
       }
-    }
+    } ++ extraMetadata
 
     logInfo(
       s"""Initialized Parquet WriteSupport with Catalyst schema:
@@ -487,6 +501,10 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
 object ParquetWriteSupport {
   val SPARK_ROW_SCHEMA: String = "org.apache.spark.sql.parquet.row.attributes"
+  val OAI_CLUSTER_NAME_ENV_NAME: String = "OPENAI_CLUSTER"
+  val OAI_CLUSTER_NODE_NAME_ENV_NAME: String = "NODE_NAME"
+  val OAI_CLUSTER_NAME_METADATA_KEY: String = "openai.cluster.name"
+  val OAI_CLUSTER_NODE_NAME_METADATA_KEY: String = "openai.cluster.node.name"
 
   def setSchema(schema: StructType, configuration: Configuration): Unit = {
     configuration.set(SPARK_ROW_SCHEMA, schema.json)
