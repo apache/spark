@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.util.{Either, Left, Right}
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, VariableReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Literal, VariableReference}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -106,6 +106,24 @@ class SubstituteExecuteImmediate(
     }
   }
 
+  /**
+   * Performs constant folding on expressions to convert foldable expressions to literals.
+   * Uses the same approach as the ConstantFolding optimizer rule and tryEvalExpr pattern.
+   */
+  private def foldToLiteral(expr: Expression): Expression = {
+    expr match {
+      case alias: Alias =>
+        if (alias.child.foldable) {
+          Literal.create(alias.child.eval(), alias.child.dataType)
+        } else {
+          alias.child
+        }
+      case e if e.foldable =>
+          Literal.create(e.eval(), e.dataType)
+      case other => other
+    }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
       case e @ ExecuteImmediateQuery(expressions, _, _) if expressions.exists(!_.resolved) =>
@@ -130,7 +148,9 @@ class SubstituteExecuteImmediate(
           throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
         } else {
           if (posNodes.nonEmpty) {
-            PosParameterizedQuery(plan, expressions)
+            // Apply constant folding to positional parameters
+            val foldedArgs = expressions.map(foldToLiteral)
+            PosParameterizedQuery(plan, foldedArgs)
           } else {
             val aliases = expressions.collect {
               case e: Alias => e
@@ -144,13 +164,18 @@ class SubstituteExecuteImmediate(
               throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(nonAliases)
             }
 
+            // Extract names before folding
+            val names = aliases.map(_.name)
+            // Apply constant folding to named parameters
+            val values = aliases.map(foldToLiteral)
+
             NameParameterizedQuery(
               plan,
-              aliases.map(_.name),
+              names,
               // We need to resolve arguments before Resolution batch to make sure
               // that some rule does not accidentally resolve our parameters.
               // We do not want this as they can resolve some unsupported parameters.
-              aliases)
+              values)
           }
         }
 

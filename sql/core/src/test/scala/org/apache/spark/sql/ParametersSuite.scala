@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Limit
 import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
 import org.apache.spark.sql.internal.SQLConf
@@ -238,102 +237,72 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("named parameters not allowed in view body ") {
+  test("named parameters now allowed in view body ") {
     val sqlText = "CREATE VIEW v AS SELECT :p AS p"
     val args = Map("p" -> 1)
-    checkError(
-      exception = intercept[ParseException] {
-        spark.sql(sqlText, args)
-      },
-      condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "the query of CREATE VIEW"),
-      context = ExpectedContext(
-        fragment = sqlText,
-        start = 0,
-        stop = sqlText.length - 1))
+    // Named parameters are now supported in view bodies
+    withView("v") {
+      spark.sql(sqlText, args)
+      checkAnswer(spark.table("v"), Row(1))
+    }
   }
 
-  test("positional parameters not allowed in view body ") {
+  test("positional parameters now allowed in view body ") {
     val sqlText = "CREATE VIEW v AS SELECT ? AS p"
     val args = Array(1)
-    checkError(
-      exception = intercept[ParseException] {
-        spark.sql(sqlText, args)
-      },
-      condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "the query of CREATE VIEW"),
-      context = ExpectedContext(
-        fragment = sqlText,
-        start = 0,
-        stop = sqlText.length - 1))
+    // Positional parameters are now supported in view bodies
+    withView("v") {
+      spark.sql(sqlText, args)
+      checkAnswer(spark.table("v"), Row(1))
+    }
   }
 
-  test("named parameters not allowed in view body - WITH and scalar subquery") {
+  test("named parameters now allowed in view body - WITH and scalar subquery") {
     val sqlText = "CREATE VIEW v AS WITH cte(a) AS (SELECT (SELECT :p) AS a)  SELECT a FROM cte"
     val args = Map("p" -> 1)
-    checkError(
-      exception = intercept[ParseException] {
-        spark.sql(sqlText, args)
-      },
-      condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "the query of CREATE VIEW"),
-      context = ExpectedContext(
-        fragment = sqlText,
-        start = 0,
-        stop = sqlText.length - 1))
+    // Named parameters are now supported in view bodies with WITH and scalar subqueries
+    withView("v") {
+      spark.sql(sqlText, args)
+      checkAnswer(spark.table("v"), Row(1))
+    }
   }
 
-  test("positional parameters not allowed in view body - WITH and scalar subquery") {
+  test("positional parameters now allowed in view body - WITH and scalar subquery") {
     val sqlText = "CREATE VIEW v AS WITH cte(a) AS (SELECT (SELECT ?) AS a)  SELECT a FROM cte"
     val args = Array(1)
-    checkError(
-      exception = intercept[ParseException] {
-        spark.sql(sqlText, args)
-      },
-      condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "the query of CREATE VIEW"),
-      context = ExpectedContext(
-        fragment = sqlText,
-        start = 0,
-        stop = sqlText.length - 1))
+    // Positional parameters are now supported in view bodies with WITH and scalar subqueries
+    withView("v") {
+      spark.sql(sqlText, args)
+      checkAnswer(spark.table("v"), Row(1))
+    }
   }
 
-  test("named parameters not allowed in view body - nested WITH and EXIST") {
+  test("named parameters now allowed in view body - nested WITH and EXIST") {
     val sqlText =
       """CREATE VIEW v AS
         |SELECT a as a
         |FROM (WITH cte(a) AS (SELECT CASE WHEN EXISTS(SELECT :p) THEN 1 END AS a)
         |SELECT a FROM cte)""".stripMargin
     val args = Map("p" -> 1)
-    checkError(
-      exception = intercept[ParseException] {
-        spark.sql(sqlText, args)
-      },
-      condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "the query of CREATE VIEW"),
-      context = ExpectedContext(
-        fragment = sqlText,
-        start = 0,
-        stop = sqlText.length - 1))
+    // Named parameters are now supported in view bodies with nested WITH and EXISTS
+    withView("v") {
+      spark.sql(sqlText, args)
+      checkAnswer(spark.table("v"), Row(1))
+    }
   }
 
-  test("positional parameters not allowed in view body - nested WITH and EXIST") {
+  test("positional parameters now allowed in view body - nested WITH and EXIST") {
     val sqlText =
       """CREATE VIEW v AS
         |SELECT a as a
         |FROM (WITH cte(a) AS (SELECT CASE WHEN EXISTS(SELECT ?) THEN 1 END AS a)
         |SELECT a FROM cte)""".stripMargin
     val args = Array(1)
-    checkError(
-      exception = intercept[ParseException] {
-        spark.sql(sqlText, args)
-      },
-      condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "the query of CREATE VIEW"),
-      context = ExpectedContext(
-        fragment = sqlText,
-        start = 0,
-        stop = sqlText.length - 1))
+    // Positional parameters are now supported in view bodies with nested WITH and EXISTS
+    withView("v") {
+      spark.sql(sqlText, args)
+      checkAnswer(spark.table("v"), Row(1))
+    }
   }
 
   test("non-substituted named parameters") {
@@ -490,19 +459,21 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         stop = 13))
   }
 
-  test("SPARK-44680: parameters in DEFAULT") {
-    checkError(
-      exception = intercept[AnalysisException] {
-        spark.sql(
-          "CREATE TABLE t11(c1 int default :parm) USING parquet",
-          args = Map("parm" -> 5))
-      },
-      condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "DEFAULT"),
-      context = ExpectedContext(
-        fragment = "default :parm",
-        start = 24,
-        stop = 36))
+  test("SPARK-44680: parameters in DEFAULT now work") {
+    withTable("t11") {
+      // Parameter markers are now supported in DEFAULT expressions
+      spark.sql(
+        "CREATE TABLE t11(c1 int default :parm) USING parquet",
+        args = Map("parm" -> 5))
+
+      // Insert a row using the default value
+      spark.sql("INSERT INTO t11 (c1) VALUES (DEFAULT)")
+
+      // Verify the default value was used correctly
+      checkAnswer(
+        spark.table("t11"),
+        Row(5))
+    }
   }
 
   test("SPARK-44783: arrays as parameters") {
@@ -715,20 +686,18 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Row(11))
   }
 
-  test("SPARK-49398: Cache Table with parameter markers in select query should throw " +
-    "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT") {
+  test("SPARK-49398: Cache Table with parameter markers in select query now works") {
     val sqlText = "CACHE TABLE CacheTable as SELECT 1 + :param1"
-    checkError(
-      exception = intercept[AnalysisException] {
-        spark.sql(sqlText, Map("param1" -> "1")).show()
-      },
-      condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
-      parameters = Map("statement" -> "the query of CACHE TABLE"),
-      context = ExpectedContext(
-        fragment = sqlText,
-        start = 0,
-        stop = sqlText.length - 1)
-    )
+    // Parameter markers are now supported in CACHE TABLE statements
+    spark.sql(sqlText, Map("param1" -> "1"))
+
+    // Verify the cached table works correctly
+    checkAnswer(
+      spark.table("CacheTable"),
+      Row(2))
+
+    // Clean up
+    spark.sql("UNCACHE TABLE CacheTable")
   }
 
   test("SPARK-49398: Cache Table with parameter in identifier should work") {

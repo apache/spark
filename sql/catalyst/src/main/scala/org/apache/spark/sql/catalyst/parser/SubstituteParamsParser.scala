@@ -20,6 +20,7 @@ import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 
 /**
  * Enumeration for the types of SQL rules that can be parsed for parameter substitution.
@@ -141,15 +142,40 @@ class SubstituteParamsParser extends Logging {
         case Some(value) =>
           substitutions += Substitution(location.start, location.end, value)
         case None =>
-          throw new IllegalArgumentException(s"Missing value for named parameter: $name")
+          val queryContext = SQLQueryContext(
+            line = None,
+            startPosition = None,
+            originStartIndex = Some(location.start),
+            originStopIndex = Some(location.end - 1), // end is exclusive, so subtract 1
+            sqlText = Some(sqlText),
+            originObjectType = None,
+            originObjectName = None)
+          throw new AnalysisException(
+            errorClass = "UNBOUND_SQL_PARAMETER",
+            messageParameters = Map("name" -> name),
+            context = Array(queryContext),
+            cause = None)
       }
     }
 
     // Handle positional parameters
     if (locations.positionalParameterLocations.length > positionalParams.length) {
+      // Find the first unbound positional parameter
+      val unboundIndex = positionalParams.length
+      val unboundLocation = locations.positionalParameterLocations(unboundIndex)
+      val queryContext = SQLQueryContext(
+        line = None,
+        startPosition = None,
+        originStartIndex = Some(unboundLocation.start),
+        originStopIndex = Some(unboundLocation.end - 1),
+        sqlText = Some(sqlText),
+        originObjectType = None,
+        originObjectName = None)
       throw new AnalysisException(
         errorClass = "UNBOUND_SQL_PARAMETER",
-        messageParameters = Map("name" -> "?"))
+        messageParameters = Map("name" -> s"_${unboundLocation.start}"),
+        context = Array(queryContext),
+        cause = None)
     }
 
     locations.positionalParameterLocations.zip(positionalParams).foreach {
