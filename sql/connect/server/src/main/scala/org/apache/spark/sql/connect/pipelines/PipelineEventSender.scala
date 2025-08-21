@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.pipelines
 
-import java.util.concurrent.{ArrayBlockingQueue, ThreadFactory, ThreadPoolExecutor, TimeUnit}
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.util.control.NonFatal
@@ -29,7 +29,9 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.service.SessionHolder
-import org.apache.spark.sql.pipelines.logging.PipelineEvent
+import org.apache.spark.sql.pipelines.common.FlowStatus
+import org.apache.spark.sql.pipelines.logging.{FlowProgress, PipelineEvent, RunProgress}
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Handles sending pipeline events to the client in a background thread. This prevents pipeline
@@ -50,32 +52,9 @@ class PipelineEventSender(
   }
 
   // ExecutorService for background event processing
-  private val executor: ThreadPoolExecutor = {
-    val threadFactory = new ThreadFactory {
-      override def newThread(r: Runnable): Thread = {
-        val t = new Thread(r, "pipeline-event-sender-" + sessionHolder.sessionId)
-        t.setDaemon(true) // daemon thread, won't block JVM shutdown
-        t
-      }
-    }
-
-    new ThreadPoolExecutor(
-      1, // corePoolSize
-      1, // maxPoolSize
-      0L, TimeUnit.MILLISECONDS, // keepAliveTime
-      new ArrayBlockingQueue[Runnable](queueCapacity), // bounded queue
-      threadFactory, // daemon thread factory
-      new ThreadPoolExecutor.DiscardPolicy() {
-        // DiscardPolicy silently drops the newest task when the queue is full
-        // This is to prevent blocking the pipeline execution if the event queue is full
-        override def rejectedExecution(r: Runnable, executor: ThreadPoolExecutor): Unit = {
-          logWarning(
-            s"Pipeline event queue is full for session ${sessionHolder.sessionId}, " +
-              s"dropping new event: ${r.toString}")
-        }
-      }
-    )
-  }
+  private val executor: ThreadPoolExecutor = ThreadUtils.newDaemonSingleThreadExecutor(
+    threadName = s"PipelineEventSender-${sessionHolder.sessionId}"
+  )
 
   /*
    * Atomic flags to track the state of the sender
@@ -87,22 +66,41 @@ class PipelineEventSender(
   /**
    * Send an event async by submitting it to the executor, if the sender is not shut down.
    * Otherwise, throws an IllegalStateException, to raise awareness of the shutdown state.
+   *
+   * For RunProgress events, we ensure they are always queued even if the queue is full.
+   * For other events, we may drop them if the queue is at capacity to prevent blocking.
    */
-  def sendEvent(event: PipelineEvent): Unit = {
+  def sendEvent(event: PipelineEvent): Unit = synchronized {
     if (!isShutdown.get()) {
-      executor.submit(new Runnable {
-        override def run(): Unit = {
-          try {
-            sendEventToClient(event)
-          } catch {
-            case NonFatal(e) =>
-              logError(s"Failed to send pipeline event to client: ${event.message}", e)
+      if (shouldEnqueueEvent(event)) {
+        executor.submit(new Runnable {
+          override def run(): Unit = {
+            try {
+              sendEventToClient(event)
+            } catch {
+              case NonFatal(e) =>
+                logError(s"Failed to send pipeline event to client: ${event.message}", e)
+            }
           }
-        }
-      })
+        })
+      }
     } else {
       throw new IllegalStateException(
         s"Cannot send event after shutdown for session ${sessionHolder.sessionId}")
+    }
+  }
+
+  private def shouldEnqueueEvent(event: PipelineEvent): Boolean = {
+    event.details match {
+      case _: RunProgress =>
+        // For RunProgress events, always enqueue event
+        true
+      case flowProgress: FlowProgress if FlowStatus.isTerminal(flowProgress.status) =>
+        // For FlowProgress events that are terminal, always enqueue event
+        true
+      case _ =>
+        // For other events, check if we have capacity
+        executor.getQueue.size() < queueCapacity
     }
   }
 
