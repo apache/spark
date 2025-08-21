@@ -1247,10 +1247,10 @@ DropVariable false
 
 
 -- !query
-SET VARIABLE title = 'DECLARE VARIABLE - multiple variables defined at once'
+SET VARIABLE title = 'DECLARE VARIABLE - multiple variables declared at once'
 -- !query analysis
 SetVariable [variablereference(system.session.title='SET VARIABLE - comma separated target')]
-+- Project [DECLARE VARIABLE - multiple variables defined at once AS title#x]
++- Project [DECLARE VARIABLE - multiple variables declared at once AS title#x]
    +- OneRowRelation
 
 
@@ -1374,7 +1374,7 @@ DropVariable false
 -- !query
 SET VARIABLE title = 'DECLARE VARIABLE - duplicate names'
 -- !query analysis
-SetVariable [variablereference(system.session.title='DECLARE VARIABLE - multiple variables defined at once')]
+SetVariable [variablereference(system.session.title='DECLARE VARIABLE - multiple variables declared at once')]
 +- Project [DECLARE VARIABLE - duplicate names AS title#x]
    +- OneRowRelation
 
