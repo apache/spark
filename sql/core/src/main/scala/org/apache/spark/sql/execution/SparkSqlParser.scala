@@ -74,11 +74,19 @@ class SparkSqlParser extends AbstractSqlParser {
       command: String,
       context: org.apache.spark.sql.catalyst.parser.ParameterContext): String = {
 
+    // Choose the appropriate substitution rule based on SQL content
+    // scalastyle:off caselocale
+    val substitutionRule = if (command.trim.toUpperCase.startsWith("BEGIN")) {
+      org.apache.spark.sql.catalyst.parser.SubstitutionRule.CompoundOrSingleStatement
+    } else {
+      org.apache.spark.sql.catalyst.parser.SubstitutionRule.Statement
+    }
+    // scalastyle:on caselocale
+
     // Always try parameter detection, but gracefully handle syntax errors
     try {
       // Detect if the SQL has parameter markers
-      val (hasPositional, hasNamed) = paramSubstitutor.detectParameters(
-        command, org.apache.spark.sql.catalyst.parser.SubstitutionRule.Statement)
+      val (hasPositional, hasNamed) = paramSubstitutor.detectParameters(command, substitutionRule)
 
       if (!hasPositional && !hasNamed) {
         return command  // No parameters to substitute
@@ -86,29 +94,27 @@ class SparkSqlParser extends AbstractSqlParser {
 
       // Proceed with parameter substitution - the substitute method will handle
       // missing parameters by throwing proper AnalysisException
+      context match {
+        case org.apache.spark.sql.catalyst.parser.NamedParameterContext(params) =>
+          val paramValues = params.map { case (name, expr) =>
+            (name, expressionToSqlValue(expr))
+          }
+          val (substituted, _) = paramSubstitutor.substitute(
+            command, substitutionRule, paramValues)
+          substituted
+
+        case org.apache.spark.sql.catalyst.parser.PositionalParameterContext(params) =>
+          val paramValues = params.map(expressionToSqlValue).toList
+          val (substituted, _) = paramSubstitutor.substitute(
+            command, substitutionRule,
+            positionalParams = paramValues)
+          substituted
+      }
     } catch {
       case _: org.apache.spark.sql.catalyst.parser.ParseException =>
         // If parameter detection fails due to syntax errors, skip parameter processing
         // and let the main parser handle the original SQL and produce the proper error
         return command
-    }
-
-    // Apply parameter substitution based on context type
-    context match {
-      case org.apache.spark.sql.catalyst.parser.NamedParameterContext(params) =>
-        val paramValues = params.map { case (name, expr) =>
-          (name, expressionToSqlValue(expr))
-        }
-        val (substituted, _) = paramSubstitutor.substitute(
-          command, org.apache.spark.sql.catalyst.parser.SubstitutionRule.Statement, paramValues)
-        substituted
-
-      case org.apache.spark.sql.catalyst.parser.PositionalParameterContext(params) =>
-        val paramValues = params.map(expressionToSqlValue).toList
-        val (substituted, _) = paramSubstitutor.substitute(
-          command, org.apache.spark.sql.catalyst.parser.SubstitutionRule.Statement,
-          positionalParams = paramValues)
-        substituted
     }
   }
 

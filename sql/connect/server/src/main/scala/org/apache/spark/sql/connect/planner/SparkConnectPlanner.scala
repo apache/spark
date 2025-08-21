@@ -44,7 +44,7 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Column, Encoders, ForeachWriter, Observation, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
@@ -324,22 +324,108 @@ class SparkConnectPlanner(
     val namedArguments = sql.getNamedArgumentsMap
     val posArgs = sql.getPosArgsList
     val posArguments = sql.getPosArgumentsList
-    val parsedPlan = parser.parsePlan(sql.getQuery)
-    if (!namedArguments.isEmpty) {
-      NameParameterizedQuery(
-        parsedPlan,
-        namedArguments.asScala.toMap.transform((_, v) => transformExpression(v)))
+    // Apply text-level parameter substitution if we have parameters
+    val queryText = if (!namedArguments.isEmpty) {
+      // Use named arguments (expressions)
+      val paramMap = namedArguments.asScala.toMap.transform((_, v) => transformExpression(v))
+      substituteNamedParameters(sql.getQuery, paramMap)
     } else if (!posArguments.isEmpty) {
-      PosParameterizedQuery(parsedPlan, posArguments.asScala.map(transformExpression).toSeq)
+      // Use positional arguments (expressions)
+      val paramList = posArguments.asScala.map(transformExpression).toSeq
+      substitutePositionalParameters(sql.getQuery, paramList)
     } else if (!args.isEmpty) {
-      NameParameterizedQuery(
-        parsedPlan,
-        args.asScala.toMap.transform((_, v) => transformLiteral(v)))
+      // Use named arguments (literals)
+      val paramMap = args.asScala.toMap.transform((_, v) => transformLiteral(v))
+      substituteNamedParameters(sql.getQuery, paramMap)
     } else if (!posArgs.isEmpty) {
-      PosParameterizedQuery(parsedPlan, posArgs.asScala.map(transformLiteral).toSeq)
+      // Use positional arguments (literals)
+      val paramList = posArgs.asScala.map(transformLiteral).toSeq
+      substitutePositionalParameters(sql.getQuery, paramList)
     } else {
-      parsedPlan
+      // No parameters to substitute
+      sql.getQuery
     }
+    // Parse the substituted query
+    parser.parsePlan(queryText)
+  }
+
+  /**
+   * Substitute named parameters in SQL text using our parameter substitution infrastructure.
+   */
+  private def substituteNamedParameters(
+      queryText: String,
+      paramMap: Map[String, Expression]): String = {
+    val paramSubstitutor = new org.apache.spark.sql.catalyst.parser.SubstituteParamsParser()
+
+    // Convert expressions to SQL string values
+    val paramValues = paramMap.map { case (name, expr) =>
+      (name, expressionToSqlValue(expr))
+    }
+
+    try {
+      val (substituted, _) = paramSubstitutor.substitute(
+        queryText,
+        org.apache.spark.sql.catalyst.parser.SubstitutionRule.Statement,
+        namedParams = paramValues)
+      substituted
+    } catch {
+      case _: org.apache.spark.sql.catalyst.parser.ParseException =>
+        // If parameter substitution fails due to syntax errors, return original query
+        // and let the main parser handle the error
+        queryText
+    }
+  }
+
+  /**
+   * Substitute positional parameters in SQL text using our parameter substitution infrastructure.
+   */
+  private def substitutePositionalParameters(
+      queryText: String,
+      paramList: Seq[Expression]): String = {
+    val paramSubstitutor = new org.apache.spark.sql.catalyst.parser.SubstituteParamsParser()
+
+    // Convert expressions to SQL string values
+    val paramValues = paramList.map(expressionToSqlValue).toList
+
+    try {
+      val (substituted, _) = paramSubstitutor.substitute(
+        queryText,
+        org.apache.spark.sql.catalyst.parser.SubstitutionRule.Statement,
+        positionalParams = paramValues)
+      substituted
+    } catch {
+      case _: org.apache.spark.sql.catalyst.parser.ParseException =>
+        // If parameter substitution fails due to syntax errors, return original query
+        // and let the main parser handle the error
+        queryText
+    }
+  }
+
+  /**
+   * Convert an expression to its SQL string representation.
+   * This mirrors the logic in SparkSqlParser.expressionToSqlValue.
+   */
+  private def expressionToSqlValue(expr: Expression): String = expr match {
+    case Literal(null, _) => "NULL"
+    case Literal(value, dataType) => dataType match {
+      case StringType => s"'${value.toString.replace("'", "''")}'"
+      case _: NumericType => value.toString
+      // scalastyle:off caselocale
+      case BooleanType => value.toString.toUpperCase
+      // scalastyle:on caselocale
+      case DateType => s"DATE '${value.toString}'"
+      case TimestampType => s"TIMESTAMP '${value.toString}'"
+      case _ => s"'${value.toString.replace("'", "''")}'"
+    }
+    case other =>
+      // For complex expressions, try to evaluate them if possible
+      if (other.foldable) {
+        val evaluated = other.eval()
+        expressionToSqlValue(Literal.create(evaluated, other.dataType))
+      } else {
+        throw new IllegalArgumentException(
+          s"Cannot convert non-literal expression to SQL value: $other")
+      }
   }
 
   private def transformSqlWithRefs(query: proto.WithRelations): LogicalPlan = {

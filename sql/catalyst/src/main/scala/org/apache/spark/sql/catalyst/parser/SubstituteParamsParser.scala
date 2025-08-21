@@ -34,6 +34,9 @@ object SubstitutionRule {
   /** Rule for parsing SQL statements (includes queries, DDL, DML, etc.) */
   case object Statement extends SubstitutionRule
 
+  /** Rule for parsing compound or single statements (for SQL scripting) */
+  case object CompoundOrSingleStatement extends SubstitutionRule
+
   /** Rule for parsing SQL expressions */
   case object Expression extends SubstitutionRule
 
@@ -78,6 +81,7 @@ class SubstituteParamsParser extends Logging {
     val ctx = rule match {
       case SubstitutionRule.Query => parser.query()
       case SubstitutionRule.Statement => parser.singleStatement()
+      case SubstitutionRule.CompoundOrSingleStatement => parser.compoundOrSingleStatement()
       case SubstitutionRule.Expression => parser.expression()
       case SubstitutionRule.ColDefinitionList => parser.colDefinitionList()
     }
@@ -114,6 +118,7 @@ class SubstituteParamsParser extends Logging {
     val ctx = rule match {
       case SubstitutionRule.Query => parser.query()
       case SubstitutionRule.Statement => parser.singleStatement()
+      case SubstitutionRule.CompoundOrSingleStatement => parser.compoundOrSingleStatement()
       case SubstitutionRule.Expression => parser.expression()
       case SubstitutionRule.ColDefinitionList => parser.colDefinitionList()
     }
