@@ -29,8 +29,8 @@ import scala.jdk.CollectionConverters._
 import jakarta.servlet.{FilterChain, FilterConfig, ServletContext, ServletException, ServletOutputStream, ServletRequest, ServletResponse}
 import jakarta.servlet.http.{Cookie, HttpServlet, HttpServletRequest, HttpServletResponse}
 import jakarta.ws.rs.core.MediaType
+import org.eclipse.jetty.ee10.servlet.{ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.server.{Server, ServerConnector}
-import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.concurrent.Eventually._
