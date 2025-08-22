@@ -824,6 +824,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
             evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
             or evalType == PythonEvalType.SQL_SCALAR_ARROW_UDF
             or evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
+            or evalType == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
         )
         and len(argspec.args) == 0
         and argspec.varargs is None
