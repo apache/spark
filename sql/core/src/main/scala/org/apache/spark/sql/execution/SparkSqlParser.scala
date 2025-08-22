@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
@@ -68,6 +69,36 @@ class SparkSqlParser extends AbstractSqlParser {
 
     // Step 3: Continue with normal parsing
     super.parse(variableSubstituted)(toResult)
+  }
+
+  /** Override parsePlan to ensure ParseException contexts use the correct SQL text. */
+  override def parsePlan(sqlText: String): LogicalPlan = {
+    // Check if we have parameter substitution context
+    val finalSqlText =
+      org.apache.spark.sql.catalyst.parser.ThreadLocalParameterContext.get() match {
+      case Some(context) =>
+        // Apply parameter substitution
+        val paramSubstituted = substituteParametersIfNeeded(sqlText, context)
+        // Apply variable substitution
+        substitutor.substitute(paramSubstituted)
+      case None =>
+        // Apply variable substitution only
+        substitutor.substitute(sqlText)
+    }
+
+    // Parse with the final substituted text as both input and context
+    parse(finalSqlText) { parser =>
+      val ctx = parser.compoundOrSingleStatement()
+      withErrorHandling(ctx, Some(finalSqlText)) {
+        astBuilder.visitCompoundOrSingleStatement(ctx) match {
+          case compoundBody: CompoundPlanStatement => compoundBody
+          case plan: LogicalPlan => plan
+          case _ =>
+            val position = Origin(None, None)
+            throw QueryParsingErrors.sqlStatementUnsupportedError(finalSqlText, position)
+        }
+      }
+    }
   }
 
   private def substituteParametersIfNeeded(
