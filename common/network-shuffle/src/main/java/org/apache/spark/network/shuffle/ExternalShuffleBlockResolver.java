@@ -192,11 +192,11 @@ public class ExternalShuffleBlockResolver {
    * Obtains a FileSegmentManagedBuffer from a single block (shuffleId, mapId, reduceId).
    */
   public ManagedBuffer getBlockData(
-          String appId,
-          String execId,
-          int shuffleId,
-          long mapId,
-          int reduceId) {
+      String appId,
+      String execId,
+      int shuffleId,
+      long mapId,
+      int reduceId) {
     return getContinuousBlocksData(appId, execId, shuffleId, mapId, reduceId, reduceId + 1);
   }
 
