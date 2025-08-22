@@ -205,7 +205,7 @@ object SQLExecution extends Logging {
 
               // TODO: Consider enhancing this logic to cancel jobs earlier when nested
               // query executions are completed.
-              if (!sc.isStopped && executionId == rootExecutionId) {
+              if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == executionId.toString) {
                 sparkSession.sparkContext.cancelJobsWithTag(
                   executionIdJobTag(sparkSession, executionId))
               }
