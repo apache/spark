@@ -5594,6 +5594,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ASSUME_ANSI_FALSE_IF_NOT_PERSISTED =
+    buildConf("spark.sql.assumeAnsiFalseIfNotPersisted.enabled")
+      .internal()
+      .doc("If enabled, assume ANSI mode is false if not persisted during view or UDF " +
+        "creation. Otherwise use the default value.")
+      .version("4.0.1")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *

@@ -835,7 +835,10 @@ case class View(
 }
 
 object View {
-  def effectiveSQLConf(configs: Map[String, String], isTempView: Boolean): SQLConf = {
+  def effectiveSQLConf(
+      configs: Map[String, String],
+      isTempView: Boolean,
+      createSparkVersion: String = ""): SQLConf = {
     val activeConf = SQLConf.get
     // For temporary view, we always use captured sql configs
     if (activeConf.useCurrentSQLConfigsForView && !isTempView) return activeConf
@@ -844,7 +847,12 @@ object View {
     for ((k, v) <- configs) {
       sqlConf.settings.put(k, v)
     }
-    Analyzer.retainResolutionConfigsForAnalysis(newConf = sqlConf, existingConf = activeConf)
+    Analyzer.retainResolutionConfigsForAnalysis(
+      newConf = sqlConf,
+      existingConf = activeConf,
+      createSparkVersion = createSparkVersion
+    )
+
     sqlConf
   }
 }
