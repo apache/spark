@@ -2003,25 +2003,9 @@ def read_udtf(pickleSer, infile, eval_type):
                                 "func": f.__name__,
                             },
                         )
-                    if check_output_row_against_schema is not None:
-                        # For PyArrow UDTFs, we need to convert the result to rows for validation
-                        if isinstance(res, (pa.Table, pa.RecordBatch)):
-                            batches = res.to_batches() if isinstance(res, pa.Table) else [res]
-                            for batch in batches:
-                                for row_idx in range(batch.num_rows):
-                                    row_data = tuple(
-                                        batch.column(i)[row_idx].as_py()
-                                        for i in range(batch.num_columns)
-                                    )
-                                    check_output_row_against_schema(row_data)
-                        else:
-                            for row in res:
-                                if row is not None:
-                                    check_output_row_against_schema(row)
-                            yield from res
-                            return
-
-                    yield from res
+                    return res
+                else:
+                    return iter([])
 
             def convert_to_arrow(data: Iterable):
                 data_iter = check_return_value(data)
