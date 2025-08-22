@@ -289,6 +289,7 @@ class StaxXmlParser(
               StaxXmlParserUtils.currentElementAsString(parser, options.rowTag, options).trim
             )
             throw BadRecordException(() => record, () => Array.empty, e)
+          case _ => throw e
         }
     }
   }
