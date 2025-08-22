@@ -2066,11 +2066,7 @@ def read_udtf(pickleSer, infile, eval_type):
                         # Arrow UDTF should only return Arrow types (RecordBatch/Table)
                         raise PySparkRuntimeError(
                             errorClass="UDTF_ARROW_TYPE_CONVERSION_ERROR",
-                            messageParameters={
-                                "data": str(item),
-                                "schema": return_type.simpleString(),
-                                "arrow_schema": str(arrow_return_type),
-                            },
+                            messageParameters={},
                         )
                 return batches
 
