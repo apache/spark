@@ -29,7 +29,8 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
 
   private val namedParams = scala.collection.mutable.Set[String]()
   private val positionalParams = scala.collection.mutable.ListBuffer[Int]()
-  private val namedParamLocations = scala.collection.mutable.Map[String, ParameterLocation]()
+  private val namedParamLocations =
+    scala.collection.mutable.Map[String, scala.collection.mutable.ListBuffer[ParameterLocation]]()
   private val positionalParamLocations = scala.collection.mutable.ListBuffer[ParameterLocation]()
 
   /**
@@ -46,7 +47,9 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     // Visit the context to collect parameters and their locations
     visit(ctx)
 
-    ParameterLocationInfo(namedParamLocations.toMap, positionalParamLocations.toList)
+    ParameterLocationInfo(
+      namedParamLocations.view.mapValues(_.toList).toMap,
+      positionalParamLocations.toList)
   }
 
   /**
@@ -60,7 +63,9 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     // Calculate the location of the entire parameter (including the colon)
     val startIndex = ctx.getStart.getStartIndex
     val stopIndex = ctx.getStop.getStopIndex + 1
-    namedParamLocations(paramName) = ParameterLocation(startIndex, stopIndex)
+    namedParamLocations.getOrElseUpdate(paramName,
+      scala.collection.mutable.ListBuffer[ParameterLocation]()) +=
+      ParameterLocation(startIndex, stopIndex)
 
     paramName
   }
@@ -93,7 +98,9 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     // Calculate the location of the entire parameter (including the colon)
     val startIndex = ctx.getStart.getStartIndex
     val stopIndex = ctx.getStop.getStopIndex + 1
-    namedParamLocations(paramName) = ParameterLocation(startIndex, stopIndex)
+    namedParamLocations.getOrElseUpdate(paramName,
+      scala.collection.mutable.ListBuffer[ParameterLocation]()) +=
+      ParameterLocation(startIndex, stopIndex)
 
     paramName
   }
@@ -110,7 +117,9 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     // Calculate the location of the entire parameter (including the colon)
     val startIndex = ctx.getStart.getStartIndex
     val stopIndex = ctx.getStop.getStopIndex + 1
-    namedParamLocations(paramName) = ParameterLocation(startIndex, stopIndex)
+    namedParamLocations.getOrElseUpdate(paramName,
+      scala.collection.mutable.ListBuffer[ParameterLocation]()) +=
+      ParameterLocation(startIndex, stopIndex)
 
     paramName
   }
@@ -207,12 +216,13 @@ case class ParameterInfo(
  * Data class to hold parameter location information for substitution.
  */
 case class ParameterLocationInfo(
-    namedParameterLocations: Map[String, ParameterLocation],
+    namedParameterLocations: Map[String, List[ParameterLocation]],
     positionalParameterLocations: List[ParameterLocation]) {
 
   def isEmpty: Boolean = namedParameterLocations.isEmpty && positionalParameterLocations.isEmpty
   def nonEmpty: Boolean = !isEmpty
-  def totalCount: Int = namedParameterLocations.size + positionalParameterLocations.size
+  def totalCount: Int =
+    namedParameterLocations.values.map(_.size).sum + positionalParameterLocations.size
 }
 
 /**

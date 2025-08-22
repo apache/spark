@@ -356,7 +356,7 @@ SetVariable [variablereference(system.session.res_id=70)]
 +- GlobalLimit 2
    +- LocalLimit 2
       +- Project [id#x]
-         +- Filter (name#x = variablereference(system.session.a='name1'))
+         +- Filter (name#x = name1)
             +- SubqueryAlias tbl_view
                +- View (`tbl_view`, [id#x, name#x, data#x])
                   +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -494,7 +494,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "INVALID_STATEMENT_FOR_EXECUTE_INTO",
   "sqlState" : "07501",
   "messageParameters" : {
-    "sqlString" : "INSERT INTO X VALUES (?)"
+    "sqlString" : "INSERT INTO X VALUES (1)"
   }
 }
 

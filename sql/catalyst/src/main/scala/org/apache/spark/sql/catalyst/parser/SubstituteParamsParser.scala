@@ -142,11 +142,16 @@ class SubstituteParamsParser extends Logging {
     val substitutions = scala.collection.mutable.ListBuffer[Substitution]()
 
     // Handle named parameters
-    locations.namedParameterLocations.foreach { case (name, location) =>
+    locations.namedParameterLocations.foreach { case (name, locationList) =>
       namedParams.get(name) match {
         case Some(value) =>
-          substitutions += Substitution(location.start, location.end, value)
+          // Substitute all occurrences of this parameter
+          locationList.foreach { location =>
+            substitutions += Substitution(location.start, location.end, value)
+          }
         case None =>
+          // Use the first location for error reporting
+          val location = locationList.head
           val queryContext = SQLQueryContext(
             line = None,
             startPosition = None,
