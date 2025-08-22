@@ -43,18 +43,15 @@ class PipelineEventSender(
     extends Logging
     with AutoCloseable {
 
-  private def queueCapacity: Int = {
-    val conf = sessionHolder.session.conf
-    conf.get(
-      "spark.sql.connect.pipeline.event.queue.capacity",
-      "1000"
-    ).toInt
-  }
+  private final val queueCapacity: Int =
+    sessionHolder.session.conf
+      .get("spark.sql.connect.pipeline.event.queue.capacity", "1000").toInt
+
 
   // ExecutorService for background event processing
-  private val executor: ThreadPoolExecutor = ThreadUtils.newDaemonSingleThreadExecutor(
-    threadName = s"PipelineEventSender-${sessionHolder.sessionId}"
-  )
+  private val executor: ThreadPoolExecutor =
+    ThreadUtils.newDaemonSingleThreadExecutor(threadName =
+      s"PipelineEventSender-${sessionHolder.sessionId}")
 
   /*
    * Atomic flags to track the state of the sender
@@ -67,8 +64,8 @@ class PipelineEventSender(
    * Send an event async by submitting it to the executor, if the sender is not shut down.
    * Otherwise, throws an IllegalStateException, to raise awareness of the shutdown state.
    *
-   * For RunProgress events, we ensure they are always queued even if the queue is full.
-   * For other events, we may drop them if the queue is at capacity to prevent blocking.
+   * For RunProgress events, we ensure they are always queued even if the queue is full. For other
+   * events, we may drop them if the queue is at capacity to prevent blocking.
    */
   def sendEvent(event: PipelineEvent): Unit = synchronized {
     if (!isShutdown.get()) {

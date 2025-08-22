@@ -33,8 +33,8 @@ import org.apache.spark.sql.pipelines.logging.{EventDetails, EventLevel, FlowPro
 
 class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with MockitoSugar {
 
-  private def createMockSetup(queueSize: String = "1000"):
-  (StreamObserver[ExecutePlanResponse], SessionHolder) = {
+  private def createMockSetup(
+      queueSize: String = "1000"): (StreamObserver[ExecutePlanResponse], SessionHolder) = {
     val mockObserver = mock[StreamObserver[ExecutePlanResponse]]
     val mockSessionHolder = mock[SessionHolder]
     when(mockSessionHolder.sessionId).thenReturn("test-session-id")
@@ -146,42 +146,51 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
     }
     try {
       // Send FlowProgress.RUNNING event - should be sent
-      val startedEvent = createTestEvent(id = "startedEvent", message = "Flow a started", details =
-        FlowProgress(FlowStatus.STARTING))
+      val startedEvent = createTestEvent(
+        id = "startedEvent",
+        message = "Flow a started",
+        details = FlowProgress(FlowStatus.STARTING))
       eventSender.sendEvent(startedEvent)
 
       // Send FlowProgress.RUNNING event - should be queued
-      val firstRunningEvent = createTestEvent(id = "firstRunningEvent", message = "Flow a running",
+      val firstRunningEvent = createTestEvent(
+        id = "firstRunningEvent",
+        message = "Flow a running",
         details = FlowProgress(FlowStatus.RUNNING))
       eventSender.sendEvent(firstRunningEvent)
 
       // Send FlowProgress.RUNNING event - should be discarded due to full queue
-      val secondRunningEvent = createTestEvent(id = "secondRunningEvent",
+      val secondRunningEvent = createTestEvent(
+        id = "secondRunningEvent",
         message = "Flow a running",
         details = FlowProgress(FlowStatus.RUNNING))
       eventSender.sendEvent(secondRunningEvent)
 
       // Send RunProgress.RUNNING event - should be queued and processed
       val runProgressRunningEvent = createTestEvent(
-        id = "runProgressRunning", message = "Update completed",
+        id = "runProgressRunning",
+        message = "Update completed",
         details = RunProgress(RUNNING))
       eventSender.sendEvent(runProgressRunningEvent)
 
       // Send FlowProgress.RUNNING event - should be discarded due to full queue
-      val thirdRunningEvent = createTestEvent(id = "thirdRunningEvent", message = "Flow a running",
-        details =
-          FlowProgress(FlowStatus.RUNNING))
+      val thirdRunningEvent = createTestEvent(
+        id = "thirdRunningEvent",
+        message = "Flow a running",
+        details = FlowProgress(FlowStatus.RUNNING))
       eventSender.sendEvent(thirdRunningEvent)
 
       // Send FlowProgress.COMPLETED event - should be queued and processed
       val completedEvent = createTestEvent(
-        id = "completed", message = "Flow has completed",
+        id = "completed",
+        message = "Flow has completed",
         details = FlowProgress(FlowStatus.COMPLETED))
       eventSender.sendEvent(completedEvent)
 
       // Send RunProgress.COMPLETED event - should be queued and processed
       val runProgressCompletedEvent = createTestEvent(
-        id = "runProgressCompletedEvent", message = "Update completed",
+        id = "runProgressCompletedEvent",
+        message = "Update completed",
         details = RunProgress(COMPLETED))
       eventSender.sendEvent(runProgressCompletedEvent)
 
@@ -197,19 +206,23 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
       assert(responses.get(0).getPipelineEventResult.getEvent.getMessage == startedEvent.message)
 
       // First FlowProgress.RUNNING should be queued and processed
-      assert(responses.get(1).getPipelineEventResult.getEvent.getMessage
-        == firstRunningEvent.message)
+      assert(
+        responses.get(1).getPipelineEventResult.getEvent.getMessage
+          == firstRunningEvent.message)
 
       // RunProgress.RUNNING should be queued and processed
-      assert(responses.get(2).getPipelineEventResult.getEvent.getMessage
-        == runProgressRunningEvent.message)
+      assert(
+        responses.get(2).getPipelineEventResult.getEvent.getMessage
+          == runProgressRunningEvent.message)
 
       // FlowProgress.COMPLETED event should also be processed because it is terminal
-      assert(responses.get(3).getPipelineEventResult.getEvent.getMessage == completedEvent.message)
+      assert(
+        responses.get(3).getPipelineEventResult.getEvent.getMessage == completedEvent.message)
 
       // RunProgress.COMPLETED event should also be processed
-      assert(responses.get(4).getPipelineEventResult.getEvent.getMessage
-        == runProgressCompletedEvent.message)
+      assert(
+        responses.get(4).getPipelineEventResult.getEvent.getMessage
+          == runProgressCompletedEvent.message)
     } finally {
       eventSender.shutdown()
     }
