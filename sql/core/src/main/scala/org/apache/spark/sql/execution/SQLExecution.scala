@@ -208,7 +208,7 @@ object SQLExecution extends Logging {
               if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == executionId.toString) {
                 sparkSession.sparkContext.cancelJobsWithTag(
                   executionIdJobTag(sparkSession, executionId))
-                logInfo("the executionID is " + executionId.toString + "" +
+                logWarning("the executionID is " + executionId.toString + "" +
                   " and the SQLExecution is " + this + "" +
                   " queyexecution is " + queryExecution + " " +
                   "and sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) is" +
