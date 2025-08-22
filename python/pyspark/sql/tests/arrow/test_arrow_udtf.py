@@ -350,6 +350,23 @@ class ArrowUDTFTestsMixin:
             result_df = StringToIntUDTF()
             result_df.collect()
 
+    def test_arrow_udtf_with_empty_column_result(self):
+        @arrow_udtf(returnType=StructType())
+        class EmptyResultUDTF:
+            def eval(self) -> Iterator["pa.Table"]:
+                yield pa.Table.from_struct_array(pa.array([{}] * 3))
+
+        assertDataFrameEqual(EmptyResultUDTF(), [Row(), Row(), Row()])
+
+        @arrow_udtf(returnType="id int")
+        class InvalidEmptyResultUDTF:
+            def eval(self) -> Iterator["pa.Table"]:
+                yield pa.Table.from_struct_array(pa.array([{}] * 3))
+
+        with self.assertRaisesRegex(PythonException, "UDTF_RETURN_SCHEMA_MISMATCH"):
+            result_df = InvalidEmptyResultUDTF()
+            result_df.collect()
+
     def test_arrow_udtf_blocks_analyze_method_none_return_type(self):
         with self.assertRaises(PySparkAttributeError) as cm:
 

@@ -1959,39 +1959,16 @@ def read_udtf(pickleSer, infile, eval_type):
             return_type_size = len(return_type)
 
             def verify_result(result):
-                if not isinstance(result, (pa.Table, pa.RecordBatch)):
-                    raise PySparkTypeError(
-                        errorClass="INVALID_ARROW_UDTF_RETURN_TYPE",
+                # Validate the output schema when the result has columns
+                if result.num_columns != return_type_size:
+                    raise PySparkRuntimeError(
+                        errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
                         messageParameters={
-                            "return_type": type(result).__name__,
-                            "value": str(result),
+                            "expected": str(return_type_size),
+                            "actual": str(result.num_columns),
                             "func": f.__name__,
                         },
                     )
-
-                if isinstance(result, pa.Table):
-                    if result.num_rows == 0:
-                        return pa.RecordBatch.from_pylist(
-                            [], schema=pa.schema(list(arrow_return_type))
-                        )
-                    else:
-                        result = (
-                            result.to_batches()[0]
-                            if result.to_batches()
-                            else pa.RecordBatch.from_pylist([], schema=result.schema)
-                        )
-
-                # Validate the output schema when the result has columns
-                if result.num_columns > 0:
-                    if result.num_columns != return_type_size:
-                        raise PySparkRuntimeError(
-                            errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
-                            messageParameters={
-                                "expected": str(return_type_size),
-                                "actual": str(result.num_columns),
-                                "func": f.__name__,
-                            },
-                        )
 
                 # Verify the type and the schema of the result.
                 verify_arrow_result(
