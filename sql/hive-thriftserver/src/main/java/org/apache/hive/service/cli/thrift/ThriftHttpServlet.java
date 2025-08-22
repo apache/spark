@@ -19,9 +19,11 @@ package org.apache.hive.service.cli.thrift;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.Charset;
 import java.security.PrivilegedExceptionAction;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -47,6 +49,7 @@ import org.apache.hive.service.auth.HttpAuthenticationException;
 import org.apache.hive.service.auth.PasswdAuthenticationProvider;
 import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.cli.session.SessionManager;
+import org.apache.http.NameValuePair;
 import org.apache.thrift.TProcessor;
 import org.apache.thrift.protocol.TProtocolFactory;
 import org.ietf.jgss.GSSContext;
@@ -553,11 +556,10 @@ public class ThriftHttpServlet extends TServlet {
     if (queryString == null) {
       return null;
     }
-    Map<String, String[]> params = jakarta.servlet.http.HttpUtils.parseQueryString( queryString );
-    Set<String> keySet = params.keySet();
-    for (String key: keySet) {
-      if (key.equalsIgnoreCase("doAs")) {
-        return params.get(key)[0];
+    List<NameValuePair> params = org.apache.http.client.utils.URLEncodedUtils.parse( queryString, Charset.defaultCharset());
+    for (NameValuePair param: params) {
+      if (param.getName().equalsIgnoreCase("doAs")) {
+        return param.getValue();
       }
     }
     return null;

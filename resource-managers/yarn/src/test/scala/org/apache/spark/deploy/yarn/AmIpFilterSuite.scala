@@ -272,10 +272,6 @@ class AmIpFilterSuite extends SparkFunSuite {
 
     override def encodeRedirectURL(url: String): String = url
 
-    override def encodeUrl(url: String): String = null
-
-    override def encodeRedirectUrl(url: String): String = null
-
     @throws[IOException]
     override def sendError(sc: Int, msg: String): Unit = {}
 
@@ -283,8 +279,6 @@ class AmIpFilterSuite extends SparkFunSuite {
     override def sendError(sc: Int): Unit = {}
 
     override def setStatus(status: Int): Unit = this.status = status
-
-    override def setStatus(sc: Int, sm: String): Unit = {}
 
     override def getStatus: Int = 0
 
