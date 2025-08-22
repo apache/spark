@@ -833,7 +833,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
             errorClass="INVALID_PANDAS_UDF",
             messageParameters={
                 "detail": f"0-arg {kind_str} are not supported. "
-                "Instead, create a 1-arg pandas_udf and ignore the arg in your function.",
+                f"Instead, create a 1-arg {kind_str} and ignore the arg in your function.",
             },
         )
 
