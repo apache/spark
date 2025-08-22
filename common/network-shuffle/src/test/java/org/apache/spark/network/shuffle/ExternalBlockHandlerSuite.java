@@ -103,15 +103,15 @@ public class ExternalBlockHandlerSuite {
 
   @Test
   public void testCompatibilityWithOldVersion() {
-    when(blockResolver.getBlockData("app0", "exec1", 0, 0, 0)).thenReturn(blockMarkers[0]);
-    when(blockResolver.getBlockData("app0", "exec1", 0, 0, 1)).thenReturn(blockMarkers[1]);
+    when(blockResolver.getBlockData("app0", "exec1", "shuffle_0_0_0")).thenReturn(blockMarkers[0]);
+    when(blockResolver.getBlockData("app0", "exec1", "shuffle_0_0_1")).thenReturn(blockMarkers[1]);
 
     OpenBlocks openBlocks = new OpenBlocks(
       "app0", "exec1", new String[] { "shuffle_0_0_0", "shuffle_0_0_1" });
     checkOpenBlocksReceive(openBlocks, blockMarkers);
 
-    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 0);
-    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 1);
+    verify(blockResolver, times(1)).getBlockData("app0", "exec1", "shuffle_0_0_0");
+    verify(blockResolver, times(1)).getBlockData("app0", "exec1", "shuffle_0_0_1");
     verifyOpenBlockLatencyMetrics(2, 2);
   }
 
@@ -123,6 +123,7 @@ public class ExternalBlockHandlerSuite {
     int shuffleId = 0;
     long mapId = 0;
     int reduceId = 0;
+    String blockId = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".checksum.";
 
     // prepare the checksum file
     File tmpDir = JavaUtils.createDirectory(System.getProperty("java.io.tmpdir"), "spark");
@@ -162,20 +163,20 @@ public class ExternalBlockHandlerSuite {
     }
     out.close();
 
-    when(blockResolver.getBlockData(appId, execId, shuffleId, mapId, reduceId))
+    when(blockResolver.getBlockData(appId, execId, blockId))
       .thenReturn(blockMarkers[0]);
     Cause actualCause = ShuffleChecksumHelper.diagnoseCorruption(algorithm, checksumFile, reduceId,
-      blockResolver.getBlockData(appId, execId, shuffleId, mapId, reduceId), checksumByReader);
+      blockResolver.getBlockData(appId, execId, blockId), checksumByReader);
     when(blockResolver
       .diagnoseShuffleBlockCorruption(
-        appId, execId, shuffleId, mapId, reduceId, checksumByReader, algorithm))
+        appId, execId, blockId, checksumByReader, algorithm))
       .thenReturn(actualCause);
 
     when(client.getClientId()).thenReturn(appId);
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
     DiagnoseCorruption diagnoseMsg = new DiagnoseCorruption(
-      appId, execId, shuffleId, mapId, reduceId, checksumByReader, algorithm);
+      appId, execId, blockId, checksumByReader, algorithm);
     handler.receive(client, diagnoseMsg.toByteBuffer(), callback);
 
     ArgumentCaptor<ByteBuffer> response = ArgumentCaptor.forClass(ByteBuffer.class);
@@ -225,15 +226,15 @@ public class ExternalBlockHandlerSuite {
 
   @Test
   public void testFetchShuffleBlocks() {
-    when(blockResolver.getBlockData("app0", "exec1", 0, 0, 0)).thenReturn(blockMarkers[0]);
-    when(blockResolver.getBlockData("app0", "exec1", 0, 0, 1)).thenReturn(blockMarkers[1]);
+    when(blockResolver.getContinuousBlocksData("app0", "exec1", 0, 0, 0, 1)).thenReturn(blockMarkers[0]);
+    when(blockResolver.getContinuousBlocksData("app0", "exec1", 0, 0, 1, 2)).thenReturn(blockMarkers[1]);
 
     FetchShuffleBlocks fetchShuffleBlocks = new FetchShuffleBlocks(
       "app0", "exec1", 0, new long[] { 0 }, new int[][] {{ 0, 1 }}, false);
     checkOpenBlocksReceive(fetchShuffleBlocks, blockMarkers);
 
-    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 0);
-    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 1);
+    verify(blockResolver, times(1)).getContinuousBlocksData("app0", "exec1", 0, 0, 0, 1);
+    verify(blockResolver, times(1)).getContinuousBlocksData("app0", "exec1", 0, 0, 1, 2);
     verifyOpenBlockLatencyMetrics(2, 2);
   }
 
@@ -255,15 +256,15 @@ public class ExternalBlockHandlerSuite {
 
   @Test
   public void testOpenDiskPersistedRDDBlocks() {
-    when(blockResolver.getRddBlockData("app0", "exec1", 0, 0)).thenReturn(blockMarkers[0]);
-    when(blockResolver.getRddBlockData("app0", "exec1", 0, 1)).thenReturn(blockMarkers[1]);
+    when(blockResolver.getRddBlockData("app0", "exec1", "rdd_0_0")).thenReturn(blockMarkers[0]);
+    when(blockResolver.getRddBlockData("app0", "exec1", "rdd_0_1")).thenReturn(blockMarkers[1]);
 
     OpenBlocks openBlocks = new OpenBlocks(
       "app0", "exec1", new String[] { "rdd_0_0", "rdd_0_1" });
     checkOpenBlocksReceive(openBlocks, blockMarkers);
 
-    verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", 0, 0);
-    verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", 0, 1);
+    verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", "rdd_0_0");
+    verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", "rdd_0_1");
     verifyOpenBlockLatencyMetrics(2, 2);
   }
 
@@ -273,17 +274,17 @@ public class ExternalBlockHandlerSuite {
       new NioManagedBuffer(ByteBuffer.wrap(new byte[3])),
       null
     };
-    when(blockResolver.getRddBlockData("app0", "exec1", 0, 0))
+    when(blockResolver.getRddBlockData("app0", "exec1", "rdd_0_0"))
       .thenReturn(blockMarkersWithMissingBlock[0]);
-    when(blockResolver.getRddBlockData("app0", "exec1", 0, 1))
+    when(blockResolver.getRddBlockData("app0", "exec1", "rdd_0_1"))
       .thenReturn(null);
 
     OpenBlocks openBlocks = new OpenBlocks(
       "app0", "exec1", new String[] { "rdd_0_0", "rdd_0_1" });
     checkOpenBlocksReceive(openBlocks, blockMarkersWithMissingBlock);
 
-    verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", 0, 0);
-    verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", 0, 1);
+    verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", "rdd_0_0");
+    verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", "rdd_0_1");
   }
 
   private void checkOpenBlocksReceive(BlockTransferMessage msg, ManagedBuffer[] blockMarkers) {
@@ -465,7 +466,7 @@ public class ExternalBlockHandlerSuite {
     verify(mergedShuffleManager, never()).getMergedBlockMeta(anyString(), anyInt(), anyInt(),
         anyInt());
     verify(blockResolver, never()).getBlockData(
-      anyString(), anyString(), anyInt(), anyInt(), anyInt());
+      anyString(), anyString(), anyString());
     verify(mergedShuffleManager, times(1)).getMergedBlockData("app0", 0, 0, 0, 0);
     verify(mergedShuffleManager, times(1)).getMergedBlockData("app0", 0, 0, 0, 1);
 

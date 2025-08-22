@@ -42,6 +42,7 @@ import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
+import static org.apache.spark.network.shuffle.BlockIdUtils.*;
 import org.apache.spark.network.shuffle.checksum.Cause;
 import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
@@ -172,9 +173,30 @@ public class ExternalShuffleBlockResolver {
   public ManagedBuffer getBlockData(
       String appId,
       String execId,
-      int shuffleId,
-      long mapId,
-      int reduceId) {
+      String blockId) {
+    if (!isShuffleBlock(blockId)) {
+      throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockId);
+    }
+
+    int reduceId = getReduceId(blockId);
+    return getContinuousBlocksData(
+      appId,
+      execId,
+      getShuffleId(blockId),
+      getMapId(blockId),
+      reduceId,
+      reduceId + 1);
+  }
+
+  /**
+   * Obtains a FileSegmentManagedBuffer from a single block (shuffleId, mapId, reduceId).
+   */
+  public ManagedBuffer getBlockData(
+          String appId,
+          String execId,
+          int shuffleId,
+          long mapId,
+          int reduceId) {
     return getContinuousBlocksData(appId, execId, shuffleId, mapId, reduceId, reduceId + 1);
   }
 
@@ -207,7 +229,19 @@ public class ExternalShuffleBlockResolver {
       throw new RuntimeException(
         String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
     }
-    return getDiskPersistedRddBlockData(executor, rddId, splitIndex);
+    return getDiskPersistedRddBlockData(executor, "rdd_" + rddId + "_" + splitIndex);
+  }
+
+  public ManagedBuffer getRddBlockData(
+      String appId,
+      String execId,
+      String blockId) {
+    ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
+    if (executor == null) {
+      throw new RuntimeException(
+        String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
+    }
+    return getDiskPersistedRddBlockData(executor, blockId);
   }
   /**
    * Removes our metadata of all executors registered for the given application, and optionally
@@ -346,10 +380,10 @@ public class ExternalShuffleBlockResolver {
   }
 
   public ManagedBuffer getDiskPersistedRddBlockData(
-      ExecutorShuffleInfo executor, int rddId, int splitIndex) {
+      ExecutorShuffleInfo executor, String blockId) {
     File file = new File(
       ExecutorDiskUtils.getFilePath(
-        executor.localDirs, executor.subDirsPerLocalDir, "rdd_" + rddId + "_" + splitIndex));
+        executor.localDirs, executor.subDirsPerLocalDir, blockId));
     long fileLength = file.length();
     ManagedBuffer res = null;
     if (file.exists()) {
@@ -407,17 +441,18 @@ public class ExternalShuffleBlockResolver {
   public Cause diagnoseShuffleBlockCorruption(
       String appId,
       String execId,
-      int shuffleId,
-      long mapId,
-      int reduceId,
+      String blockId,
       long checksumByReader,
       String algorithm) {
+
+    int reduceId = getReduceId(blockId);
+
     ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
     // This should be in sync with IndexShuffleBlockResolver.getChecksumFile
-    String fileName = "shuffle_" + shuffleId + "_" + mapId + "_0.checksum." + algorithm;
+    String fileName = getChecksumFileName(blockId, algorithm);
     File checksumFile = new File(
       ExecutorDiskUtils.getFilePath(executor.localDirs, executor.subDirsPerLocalDir, fileName));
-    ManagedBuffer data = getBlockData(appId, execId, shuffleId, mapId, reduceId);
+    ManagedBuffer data = getBlockData(appId, execId, blockId);
     return ShuffleChecksumHelper.diagnoseCorruption(
       algorithm, checksumFile, reduceId, data, checksumByReader);
   }
