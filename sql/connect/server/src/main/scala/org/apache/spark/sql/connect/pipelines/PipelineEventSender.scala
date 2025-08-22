@@ -45,8 +45,8 @@ class PipelineEventSender(
 
   private final val queueCapacity: Int =
     sessionHolder.session.conf
-      .get("spark.sql.connect.pipeline.event.queue.capacity", "1000").toInt
-
+      .get("spark.sql.connect.pipeline.event.queue.capacity", "1000")
+      .toInt
 
   // ExecutorService for background event processing
   private val executor: ThreadPoolExecutor =
