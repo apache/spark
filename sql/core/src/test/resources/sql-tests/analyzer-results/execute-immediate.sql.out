@@ -152,7 +152,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE sql_string USING a, 'name2'
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((name#x = variablereference(system.session.a='name1')) OR (name#x = name2))
++- Filter ((name#x = name1) OR (name#x = name2))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -178,7 +178,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING a, 'name2'
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((name#x = variablereference(system.session.a='name1')) OR (name#x = name2))
++- Filter ((name#x = name1) OR (name#x = name2))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -191,7 +191,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING (a, 'name2')
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((name#x = variablereference(system.session.a='name1')) OR (name#x = name2))
++- Filter ((name#x = name1) OR (name#x = name2))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -256,7 +256,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE sql_string USING b as second, 'name7' as first
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((name#x = name7) OR (id#x = variablereference(system.session.b=40)))
++- Filter ((name#x = name7) OR (id#x = 40))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -282,7 +282,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first or id = :second' USING 'name7' as first, b as second
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((name#x = name7) OR (id#x = variablereference(system.session.b=40)))
++- Filter ((name#x = name7) OR (id#x = 40))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -422,7 +422,7 @@ Project [variablereference(system.session.b=10) AS b#x, variablereference(system
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where id = ? AND name = ?' USING b as first, a
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((id#x = variablereference(system.session.b=10)) AND (name#x = variablereference(system.session.a='name1')))
++- Filter ((id#x = 10) AND (name#x = name1))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
