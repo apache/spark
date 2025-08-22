@@ -786,16 +786,20 @@ EXPLAIN FORMATTED
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-* BroadcastHashJoin Inner BuildRight (10)
+* BroadcastHashJoin Inner BuildRight (14)
 :- * HashAggregate (6)
 :  +- Exchange (5)
 :     +- * HashAggregate (4)
 :        +- * Filter (3)
 :           +- * ColumnarToRow (2)
 :              +- Scan parquet spark_catalog.default.explain_temp1 (1)
-+- BroadcastExchange (9)
-   +- * HashAggregate (8)
-      +- ReusedExchange (7)
++- BroadcastExchange (13)
+   +- * HashAggregate (12)
+      +- Exchange (11)
+         +- * HashAggregate (10)
+            +- * Filter (9)
+               +- * ColumnarToRow (8)
+                  +- Scan parquet spark_catalog.default.explain_temp1 (7)
 
 
 (1) Scan parquet spark_catalog.default.explain_temp1
@@ -830,21 +834,43 @@ Functions [1]: [max(val#x)]
 Aggregate Attributes [1]: [max(val#x)#x]
 Results [2]: [key#x, max(val#x)#x AS max(val)#x]
 
-(7) ReusedExchange [Reuses operator id: 5]
-Output [2]: [key#x, max#x]
+(7) Scan parquet spark_catalog.default.explain_temp1
+Output [2]: [key#x, val#x]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/explain_temp1]
+PushedFilters: [IsNotNull(key), GreaterThan(key,10)]
+ReadSchema: struct<key:int,val:int>
 
-(8) HashAggregate [codegen id : 3]
+(8) ColumnarToRow [codegen id : 2]
+Input [2]: [key#x, val#x]
+
+(9) Filter [codegen id : 2]
+Input [2]: [key#x, val#x]
+Condition : (isnotnull(key#x) AND (key#x > 10))
+
+(10) HashAggregate [codegen id : 2]
+Input [2]: [key#x, val#x]
+Keys [1]: [key#x]
+Functions [1]: [partial_max(val#x)]
+Aggregate Attributes [1]: [max#x]
+Results [2]: [key#x, max#x]
+
+(11) Exchange
+Input [2]: [key#x, max#x]
+Arguments: hashpartitioning(key#x, 4), ENSURE_REQUIREMENTS, [plan_id=x]
+
+(12) HashAggregate [codegen id : 3]
 Input [2]: [key#x, max#x]
 Keys [1]: [key#x]
 Functions [1]: [max(val#x)]
 Aggregate Attributes [1]: [max(val#x)#x]
 Results [2]: [key#x, max(val#x)#x AS max(val)#x]
 
-(9) BroadcastExchange
+(13) BroadcastExchange
 Input [2]: [key#x, max(val)#x]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=x]
 
-(10) BroadcastHashJoin [codegen id : 4]
+(14) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [key#x]
 Right keys [1]: [key#x]
 Join type: Inner
