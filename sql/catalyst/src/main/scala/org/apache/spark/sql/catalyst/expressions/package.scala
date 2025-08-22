@@ -121,8 +121,8 @@ package object expressions  {
       if (attrs.isEmpty) {
         (Array.empty[Int], Array.empty[Attribute])
       } else if (
-        maxExprId - minExprId > Int.MaxValue ||  // prevent overflow
-          maxExprId - minExprId > 2 * attrs.length  // in case of sparse ExprIds
+        maxExprId - minExprId >= 2 * attrs.length ||  // in case of sparse ExprIds
+          maxExprId - minExprId >= Int.MaxValue  // prevent overflow
       ) {
         (Array.empty[Int], attrs.toArray)
       } else {
