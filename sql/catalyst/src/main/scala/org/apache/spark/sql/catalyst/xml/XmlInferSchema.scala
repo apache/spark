@@ -278,6 +278,10 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
             logWarning("Skipped the rest of the content in the corrupted file", e)
             parser.close()
             Some(StructType(Nil))
+          case _: IOException | _: RuntimeException | _: InternalError
+              if !options.ignoreCorruptFiles =>
+            parser.close()
+            throw e
           case _ =>
             logWarning("Failed to infer schema from XML record", e)
             handleXmlErrorsByParseMode(
