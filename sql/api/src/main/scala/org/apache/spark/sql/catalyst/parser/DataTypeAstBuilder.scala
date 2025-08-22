@@ -180,7 +180,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
    * Create a complex DataType. Arrays, Maps and Structures are supported.
    */
   override def visitComplexDataType(ctx: ComplexDataTypeContext): DataType = withOrigin(ctx) {
-    if (ctx.LT() == null) {
+    if (ctx.LT() == null && ctx.NEQ() == null) {
       throw QueryParsingErrors.nestedTypeMissingElementTypeError(ctx.getText, ctx)
     }
     ctx.complex.getType match {

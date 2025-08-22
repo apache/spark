@@ -50,7 +50,6 @@ Classes
     QueryContext
     QueryContextType
     QueryExecutionException
-    RetriesExceeded
     SessionNotSameException
     SparkRuntimeException
     SparkUpgradeException

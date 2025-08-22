@@ -298,7 +298,9 @@ statement
         RETURN (query | expression)                                    #createUserDefinedFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? identifierReference        #dropFunction
     | DECLARE (OR REPLACE)? variable?
-        identifierReference dataType? variableDefaultExpression?       #createVariable
+        identifierReferences+=identifierReference
+        (COMMA identifierReferences+=identifierReference)*
+        dataType? variableDefaultExpression?                           #createVariable
     | DROP TEMPORARY variable (IF EXISTS)? identifierReference         #dropVariable
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         (statement|setResetStatement)                                  #explain
@@ -1377,7 +1379,7 @@ primitiveType
 dataType
     : complex=ARRAY (LT dataType GT)?                           #complexDataType
     | complex=MAP (LT dataType COMMA dataType GT)?              #complexDataType
-    | complex=STRUCT (LT complexColTypeList? GT)?               #complexDataType
+    | complex=STRUCT ((LT complexColTypeList? GT) | NEQ)?       #complexDataType
     | primitiveType                                             #primitiveDataType
     ;
 

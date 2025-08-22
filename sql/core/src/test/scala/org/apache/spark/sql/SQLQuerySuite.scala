@@ -5073,6 +5073,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
     checkAnswer(df, Seq(Row(null, null, 820), Row(null, "east", 420), Row("a", null, 370)))
   }
+
+  test("SPARK-53308: Don't remove aliases in RemoveRedundantAliases that would cause duplicates") {
+    val df = sql("SELECT col1 FROM values(1) WHERE 1 IN (SELECT col1 UNION SELECT col1);")
+
+    checkAnswer(df, Row(1))
+  }
 }
 
 case class Foo(bar: Option[String])

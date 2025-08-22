@@ -6240,6 +6240,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_XML_PARSER_ENABLED = {
+    buildConf("spark.sql.xml.legacyXMLParser.enabled")
+      .internal()
+      .doc(
+        "When set to true, use the legacy XML parser for parsing XML files. " +
+        "Compared to the default parser, the legacy parser has less stringent validation checks " +
+        "for malformed content, but it's less memory-efficient"
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+  }
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -7345,6 +7358,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def maxFlowRetryAttempts: Int = getConf(SQLConf.PIPELINES_MAX_FLOW_RETRY_ATTEMPTS)
 
   def hadoopLineRecordReaderEnabled: Boolean = getConf(SQLConf.HADOOP_LINE_RECORD_READER_ENABLED)
+
+  def legacyXMLParserEnabled: Boolean =
+    getConf(SQLConf.LEGACY_XML_PARSER_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 
