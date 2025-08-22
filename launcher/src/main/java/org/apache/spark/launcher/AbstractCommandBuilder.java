@@ -66,6 +66,8 @@ abstract class AbstractCommandBuilder {
    */
   protected boolean isRemote = System.getenv().containsKey("SPARK_REMOTE");
 
+  protected boolean isBeeLine = false;
+
   AbstractCommandBuilder() {
     this.appArgs = new ArrayList<>();
     this.childEnv = new HashMap<>();
@@ -158,7 +160,6 @@ abstract class AbstractCommandBuilder {
         "common/sketch",
         "common/tags",
         "common/unsafe",
-        "sql/connect/client/jdbc",
         "sql/connect/common",
         "sql/connect/server",
         "core",
@@ -194,6 +195,9 @@ abstract class AbstractCommandBuilder {
             continue;
           }
           if (isRemote && "1".equals(getenv("SPARK_SCALA_SHELL")) && project.equals("sql/core")) {
+            continue;
+          }
+          if (isBeeLine && project.equals("sql/core")) {
             continue;
           }
           // SPARK-49534: The assumption here is that if `spark-hive_xxx.jar` is not in the
@@ -242,7 +246,7 @@ abstract class AbstractCommandBuilder {
         }
       }
 
-      if (isRemote) {
+      if (isRemote || isBeeLine) {
         for (File f: new File(jarsDir).listFiles()) {
           // Exclude Spark Classic SQL and Spark Connect server jars
           // if we're in Spark Connect Shell. Also exclude Spark SQL API and
