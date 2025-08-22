@@ -1135,17 +1135,17 @@ object SymmetricHashJoinStateManager {
     val ckptIds = joinCkptInfo.left.keyToNumValues.stateStoreCkptId.map(
       Array(
         _,
-        joinCkptInfo.left.valueToNumKeys.stateStoreCkptId.get,
+        joinCkptInfo.left.keyWithIndexToValue.stateStoreCkptId.get,
         joinCkptInfo.right.keyToNumValues.stateStoreCkptId.get,
-        joinCkptInfo.right.valueToNumKeys.stateStoreCkptId.get
+        joinCkptInfo.right.keyWithIndexToValue.stateStoreCkptId.get
       )
     )
     val baseCkptIds = joinCkptInfo.left.keyToNumValues.baseStateStoreCkptId.map(
       Array(
         _,
-        joinCkptInfo.left.valueToNumKeys.baseStateStoreCkptId.get,
+        joinCkptInfo.left.keyWithIndexToValue.baseStateStoreCkptId.get,
         joinCkptInfo.right.keyToNumValues.baseStateStoreCkptId.get,
-        joinCkptInfo.right.valueToNumKeys.baseStateStoreCkptId.get
+        joinCkptInfo.right.keyWithIndexToValue.baseStateStoreCkptId.get
       )
     )
 
@@ -1173,8 +1173,8 @@ object SymmetricHashJoinStateManager {
     if (useColumnFamiliesForJoins) {
       val ckpt = stateStoreCkptIds.map(_(partitionId)).map(_.head)
       JoinStateStoreCheckpointId(
-        left = JoinerStateStoreCheckpointId(keyToNumValues = ckpt, valueToNumKeys = ckpt),
-        right = JoinerStateStoreCheckpointId(keyToNumValues = ckpt, valueToNumKeys = ckpt)
+        left = JoinerStateStoreCheckpointId(keyToNumValues = ckpt, keyWithIndexToValue = ckpt),
+        right = JoinerStateStoreCheckpointId(keyToNumValues = ckpt, keyWithIndexToValue = ckpt)
       )
     } else {
       val stateStoreCkptIdsOpt = stateStoreCkptIds
@@ -1184,10 +1184,10 @@ object SymmetricHashJoinStateManager {
       JoinStateStoreCheckpointId(
         left = JoinerStateStoreCheckpointId(
           keyToNumValues = stateStoreCkptIdsOpt(0),
-          valueToNumKeys = stateStoreCkptIdsOpt(1)),
+          keyWithIndexToValue = stateStoreCkptIdsOpt(1)),
         right = JoinerStateStoreCheckpointId(
           keyToNumValues = stateStoreCkptIdsOpt(2),
-          valueToNumKeys = stateStoreCkptIdsOpt(3)))
+          keyWithIndexToValue = stateStoreCkptIdsOpt(3)))
     }
   }
 
@@ -1218,9 +1218,9 @@ object SymmetricHashJoinStateManager {
       } else if (storeName == getStateStoreName(RightSide, KeyToNumValuesType)) {
         joinStateStoreCkptIds.right.keyToNumValues
       } else if (storeName == getStateStoreName(LeftSide, KeyWithIndexToValueType)) {
-        joinStateStoreCkptIds.left.valueToNumKeys
+        joinStateStoreCkptIds.left.keyWithIndexToValue
       } else if (storeName == getStateStoreName(RightSide, KeyWithIndexToValueType)) {
-        joinStateStoreCkptIds.right.valueToNumKeys
+        joinStateStoreCkptIds.right.keyWithIndexToValue
       } else {
         None
       }

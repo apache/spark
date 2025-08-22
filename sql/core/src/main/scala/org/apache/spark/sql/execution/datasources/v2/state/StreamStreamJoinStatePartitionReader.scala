@@ -88,9 +88,9 @@ class StreamStreamJoinStatePartitionReader(
   }
 
   private val keyWithIndexToValueStateStoreCkptId = if (joinSide == LeftSide) {
-    stateStoreCheckpointIds.left.valueToNumKeys
+    stateStoreCheckpointIds.left.keyWithIndexToValue
   } else {
-    stateStoreCheckpointIds.right.valueToNumKeys
+    stateStoreCheckpointIds.right.keyWithIndexToValue
   }
 
   /*

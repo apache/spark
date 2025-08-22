@@ -568,7 +568,6 @@ object StateSourceOptions extends DataSourceOptions {
       }
     }
 
-
     val startBatchId = if (fromSnapshotOptions.isDefined) {
       fromSnapshotOptions.get.snapshotStartBatchId
     } else if (readChangeFeedOptions.isDefined) {

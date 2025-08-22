@@ -363,12 +363,12 @@ case class StreamingSymmetricHashJoinExec(
       new OneSideHashJoiner(
         LeftSide, left.output, leftKeys, leftInputIter,
         condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId,
-        checkpointIds.left.keyToNumValues, checkpointIds.left.valueToNumKeys,
+        checkpointIds.left.keyToNumValues, checkpointIds.left.keyWithIndexToValue,
         skippedNullValueCount, joinStateManagerStoreGenerator),
       new OneSideHashJoiner(
         RightSide, right.output, rightKeys, rightInputIter,
         condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId,
-        checkpointIds.right.keyToNumValues, checkpointIds.right.valueToNumKeys,
+        checkpointIds.right.keyToNumValues, checkpointIds.right.keyWithIndexToValue,
         skippedNullValueCount, joinStateManagerStoreGenerator))
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
