@@ -444,6 +444,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       AddMetadataColumns ::
       DeduplicateRelations ::
       ResolveCollationName ::
+      ResolveMergeIntoSchemaEvolution ::
       new ResolveReferences(catalogManager) ::
       // Please do not insert any other rules in between. See the TODO comments in rule
       // ResolveLateralColumnAliasReference for more details.
@@ -1669,7 +1670,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case u: UpdateTable => resolveReferencesInUpdate(u)
 
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _, _, _)
-        if !m.resolved && targetTable.resolved && sourceTable.resolved =>
+        if !m.resolved && targetTable.resolved && sourceTable.resolved && !m.needSchemaEvolution =>
 
         EliminateSubqueryAliases(targetTable) match {
           case r: NamedRelation if r.skipSchemaResolution =>
@@ -1692,9 +1693,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   // The update value can access columns from both target and source tables.
                   resolveAssignments(assignments, m, MergeResolvePolicy.BOTH))
               case UpdateStarAction(updateCondition) =>
-                val assignments = targetTable.output.map { attr =>
-                  Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
-                }
+                // Use only source columns.  Missing columns in target will be handled in
+                // ResolveRowLevelCommandAssignments.
+                val assignments = targetTable.output.flatMap{ targetAttr =>
+                  sourceTable.output.find(
+                      sourceCol => conf.resolver(sourceCol.name, targetAttr.name))
+                    .map(Assignment(targetAttr, _))}
                 UpdateAction(
                   updateCondition.map(resolveExpressionByPlanChildren(_, m)),
                   // For UPDATE *, the value must be from source table.
@@ -1715,9 +1719,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 // access columns from the source table.
                 val resolvedInsertCondition = insertCondition.map(
                   resolveExpressionByPlanOutput(_, m.sourceTable))
-                val assignments = targetTable.output.map { attr =>
-                  Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
-                }
+                // Use only source columns.  Missing columns in target will be handled in
+                // ResolveRowLevelCommandAssignments.
+                val assignments = targetTable.output.flatMap{ targetAttr =>
+                  sourceTable.output.find(
+                      sourceCol => conf.resolver(sourceCol.name, targetAttr.name))
+                    .map(Assignment(targetAttr, _))}
                 InsertAction(
                   resolvedInsertCondition,
                   resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE))
