@@ -116,6 +116,8 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
       xsdValidationStreamReader.foreach(_.close())
     } catch {
       case NonFatal(e) =>
+        // If the file is corrupted/missing, we won't be able to close the XML readers. However,
+        // the main input stream has been closed already, so we can just log the error and move on.
         logWarning("Error closing XML stream", e)
     }
   }
