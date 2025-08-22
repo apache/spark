@@ -1264,12 +1264,9 @@ CreateVariable defaultvalueexpression(null, null), false
 
 
 -- !query
-DECLARE VARIABLE var4, var5, var6 INT DEFAULT 5
+DECLARE VARIABLE var4, var5, var6 INT DEFAULT CAST(RAND(0) * 10 AS INT)
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(5 as int), 5), false
-:- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var4
-:- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var5
-+- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var6
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -1282,6 +1279,13 @@ CreateVariable defaultvalueexpression(5, 5), false
 
 
 -- !query
+SELECT var4 = var5, var4 = var6, var5 = var6
+-- !query analysis
+Project [(variablereference(system.session.var4=7) = variablereference(system.session.var5=7)) AS (variablereference(system.session.var4=7) = variablereference(system.session.var5=7))#x, (variablereference(system.session.var4=7) = variablereference(system.session.var6=7)) AS (variablereference(system.session.var4=7) = variablereference(system.session.var6=7))#x, (variablereference(system.session.var5=7) = variablereference(system.session.var6=7)) AS (variablereference(system.session.var5=7) = variablereference(system.session.var6=7))#x]
++- OneRowRelation
+
+
+-- !query
 DECLARE OR REPLACE VARIABLE var1, var2, var3 DOUBLE
 -- !query analysis
 CreateVariable defaultvalueexpression(null, null), true
@@ -1291,12 +1295,9 @@ CreateVariable defaultvalueexpression(null, null), true
 
 
 -- !query
-DECLARE OR REPLACE VARIABLE var4, var5, var6 DOUBLE DEFAULT 1.5
+DECLARE OR REPLACE VARIABLE var4, var5, var6 DOUBLE DEFAULT RAND(0)
 -- !query analysis
-CreateVariable defaultvalueexpression(cast(1.5 as double), 1.5), true
-:- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var4
-:- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var5
-+- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var6
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -1306,6 +1307,13 @@ CreateVariable defaultvalueexpression(1.5, 1.5), true
 :- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var7
 :- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var8
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var9
+
+
+-- !query
+SELECT var4 = var5, var4 = var6, var5 = var6
+-- !query analysis
+Project [(variablereference(system.session.var4=0.7604953758285915D) = variablereference(system.session.var5=0.7604953758285915D)) AS (variablereference(system.session.var4=0.7604953758285915D) = variablereference(system.session.var5=0.7604953758285915D))#x, (variablereference(system.session.var4=0.7604953758285915D) = variablereference(system.session.var6=0.7604953758285915D)) AS (variablereference(system.session.var4=0.7604953758285915D) = variablereference(system.session.var6=0.7604953758285915D))#x, (variablereference(system.session.var5=0.7604953758285915D) = variablereference(system.session.var6=0.7604953758285915D)) AS (variablereference(system.session.var5=0.7604953758285915D) = variablereference(system.session.var6=0.7604953758285915D))#x]
++- OneRowRelation
 
 
 -- !query
