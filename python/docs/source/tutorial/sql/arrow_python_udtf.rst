@@ -23,7 +23,7 @@ Spark 4.1 introduces the Vectorized Python user-defined table function (UDTF), a
 It can be used via the ``@arrow_udtf`` decorator.
 Unlike scalar functions that return a single result value from each call, each UDTF is invoked in
 the ``FROM`` clause of a query and returns an entire table as output.
-Unlike the traditional Python UDTF that evaluates row by row, the Vectorized Python UDTF let you directly operate on top of Apache Arrow arrays and columnm batches.
+Unlike the traditional Python UDTF that evaluates row by row, the Vectorized Python UDTF lets you directly operate on top of Apache Arrow arrays and column batches.
 This allows you to leverage vectorized operations and improve the performance of your UDTF.
 
 Vectorized Python UDTF Interface
@@ -65,7 +65,7 @@ Vectorized Python UDTF Interface
               the columns in the order they appear in the provided input table,
               and with the names computed by the query analyzer.
 
-            This method is called on every batch of input row, and can produce zero or more
+            This method is called on every batch of input rows, and can produce zero or more
             output pyarrow record batches or pyarrow tables. Each element in the output tuple
             corresponds to one column specified in the return type of the UDTF.
 
@@ -93,17 +93,17 @@ Vectorized Python UDTF Interface
 
             Examples
             --------
-            This `eval` method that takes table argument and returns an arrow record batch for each input batch.
+            This `eval` method takes a table argument and returns an arrow record batch for each input batch.
 
             >>> def eval(self, batch: pa.RecordBatch):
             ...     yield batch
 
-            This `eval` method that takes table argument and returns a pyarrow table for each input batch.
+            This `eval` method takes a table argument and returns a pyarrow table for each input batch.
 
             >>> def eval(self, batch: pa.RecordBatch):
             ...     yield pa.table({"x": batch.column(0), "y": batch.column(1)})
 
-            This `eval` method that takes both table and scalar arguments and returns a pyarrow table for each input batch.
+            This `eval` method takes both table and scalar arguments and returns a pyarrow table for each input batch.
 
             >>> def eval(self, batch: pa.RecordBatch, x: pa.Array):
             ...     yield pa.table({"x": x, "y": batch.column(0)})
