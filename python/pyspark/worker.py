@@ -2029,10 +2029,8 @@ def read_udtf(pickleSer, infile, eval_type):
                     if check_output_row_against_schema is not None:
                         # For PyArrow UDTFs, we need to convert the result to rows for validation
                         if isinstance(res, (pa.Table, pa.RecordBatch)):
-                            table = (
-                                res if isinstance(res, pa.Table) else pa.Table.from_batches([res])
-                            )
-                            for batch in table.to_batches():
+                            batches = res.to_batches() if isinstance(res, pa.Table) else [res]
+                            for batch in batches:
                                 for row_idx in range(batch.num_rows):
                                     row_data = tuple(
                                         batch.column(i)[row_idx].as_py()
@@ -2049,19 +2047,16 @@ def read_udtf(pickleSer, infile, eval_type):
                     yield from res
 
             def convert_to_arrow(data: Iterable):
-                data_list = list(check_return_value(data))
-                if len(data_list) == 0:
-                    return [
-                        pa.RecordBatch.from_pylist([], schema=pa.schema(list(arrow_return_type)))
-                    ]
+                data_iter = check_return_value(data)
 
                 # Handle PyArrow Tables/RecordBatches directly
-                batches = []
-                for item in data_list:
+                is_empty = True
+                for item in data_iter:
+                    is_empty = False
                     if isinstance(item, pa.Table):
-                        batches.extend(item.to_batches())
+                        yield from item.to_batches()
                     elif isinstance(item, pa.RecordBatch):
-                        batches.append(item)
+                        yield item
                     else:
                         # Arrow UDTF should only return Arrow types (RecordBatch/Table)
                         raise PySparkRuntimeError(
@@ -2072,17 +2067,14 @@ def read_udtf(pickleSer, infile, eval_type):
                                 "arrow_schema": str(arrow_return_type),
                             },
                         )
-                return batches
+
+                if is_empty:
+                    yield pa.RecordBatch.from_pylist([], schema=pa.schema(list(arrow_return_type)))
 
             def evaluate(*args: pa.RecordBatch):
-                if len(args) == 0:
-                    for batch in convert_to_arrow(func()):
-                        yield verify_result(batch), arrow_return_type
-                else:
-                    # For Arrow UDTFs, unpack the RecordBatches and pass them to the function
-                    # TODO(SPARK-52981): support table arguments
-                    for batch in convert_to_arrow(func(*args)):
-                        yield verify_result(batch), arrow_return_type
+                # For Arrow UDTFs, unpack the RecordBatches and pass them to the function
+                for batch in convert_to_arrow(func(*args)):
+                    yield verify_result(batch), arrow_return_type
 
             return evaluate
 
