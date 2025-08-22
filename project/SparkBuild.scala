@@ -719,6 +719,7 @@ object SparkConnectCommon {
     },
 
     (assembly / assemblyMergeStrategy) := {
+      case PathList("META-INF", "services", xs @ _*) => MergeStrategy.filterDistinctLines
       case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
       // Drop all proto files that are not needed as artifacts of the build.
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
@@ -826,6 +827,7 @@ object SparkConnect {
     ),
 
     (assembly / assemblyMergeStrategy) := {
+      case PathList("META-INF", "services", xs @ _*) => MergeStrategy.filterDistinctLines
       case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
       // Drop all proto files that are not needed as artifacts of the build.
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
@@ -913,6 +915,7 @@ object SparkConnectJdbc {
     ),
 
     (assembly / assemblyMergeStrategy) := {
+      case PathList("META-INF", "services", xs @ _*) => MergeStrategy.filterDistinctLines
       case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
       // Drop all proto files that are not needed as artifacts of the build.
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
@@ -991,6 +994,7 @@ object SparkConnectClient {
     ),
 
     (assembly / assemblyMergeStrategy) := {
+      case PathList("META-INF", "services", xs @ _*) => MergeStrategy.filterDistinctLines
       case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
       // Drop all proto files that are not needed as artifacts of the build.
       case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
@@ -1652,7 +1656,7 @@ object CopyDependencies {
           } else if (noProvidedSparkJars && jar.getName.contains("spark-avro")) {
             // Do not place Spark Avro jars as it is not built-in.
           } else if (jar.getName.contains("spark-connect-jdbc")) {
-            Files.copy(jar.toPath(), destJar.toPath())
+            // Do not place Spark Connect JDBC driver jar as it is not built-in.
           } else if (jar.getName.contains("spark-connect")) {
             Files.copy(fid.toPath, destJar.toPath)
           } else if (jar.getName.contains("spark-protobuf")) {
@@ -1693,6 +1697,37 @@ object CopyDependencies {
               }
             }
           }.dependsOn(LocalProject("connect-client-jvm") / assembly)
+        } else {
+          Def.task {}
+        }
+      }.value
+
+      Def.taskDyn {
+        if (moduleName.value.contains("assembly")) {
+          Def.task {
+            val replClasspathes = (LocalProject("connect-jdbc") / Compile / dependencyClasspath)
+              .value.map(_.data).filter(_.isFile())
+            val scalaBinaryVer = SbtPomKeys.effectivePom.value.getProperties.get(
+              "scala.binary.version").asInstanceOf[String]
+            val sparkVer = SbtPomKeys.effectivePom.value.getProperties.get(
+              "spark.version").asInstanceOf[String]
+            val dest = destPath.value
+            val destDir = new File(dest, "connect-repl").toPath
+            Files.createDirectories(destDir)
+
+            val sourceAssemblyJar = Paths.get(
+              BuildCommons.sparkHome.getAbsolutePath, "sql", "connect", "client",
+              "jdbc", "target", s"scala-$scalaBinaryVer", s"spark-connect-jdbc-assembly-$sparkVer.jar")
+            val destAssemblyJar = Paths.get(destDir.toString, s"spark-connect-jdbc-assembly-$sparkVer.jar")
+            Files.copy(sourceAssemblyJar, destAssemblyJar, StandardCopyOption.REPLACE_EXISTING)
+
+            replClasspathes.foreach { f =>
+              val destFile = Paths.get(destDir.toString, f.getName)
+              if (!f.getName.startsWith("spark-")) {
+                Files.copy(f.toPath, destFile, StandardCopyOption.REPLACE_EXISTING)
+              }
+            }
+          }.dependsOn(LocalProject("connect-jdbc") / assembly)
         } else {
           Def.task {}
         }
