@@ -66,8 +66,30 @@ class SparkSqlParser extends AbstractSqlParser {
     // Step 2: Apply existing variable substitution
     val variableSubstituted = substitutor.substitute(paramSubstituted)
 
-    // Step 3: Continue with normal parsing
-    super.parse(variableSubstituted)(toResult)
+    // Step 3: Continue with normal parsing, but catch ParseException to enhance with context
+    try {
+      super.parse(variableSubstituted)(toResult)
+    } catch {
+      case pe: org.apache.spark.sql.catalyst.parser.ParseException
+          if paramSubstituted != command && pe.getQueryContext.isEmpty =>
+        // If parameter substitution occurred and ParseException has no context,
+        // enhance it with context that references the substituted SQL
+        val enhancedContext = org.apache.spark.sql.catalyst.trees.SQLQueryContext(
+          line = None,
+          startPosition = None,
+          originStartIndex = Some(0),
+          originStopIndex = Some(math.max(0, variableSubstituted.length - 1)),
+          sqlText = Some(variableSubstituted),
+          originObjectType = None,
+          originObjectName = None)
+
+        throw new org.apache.spark.sql.catalyst.parser.ParseException(
+          command = pe.command.orElse(Some(variableSubstituted)),
+          start = pe.start,
+          errorClass = pe.getCondition,
+          messageParameters = pe.getMessageParameters.asScala.toMap,
+          queryContext = Array(enhancedContext))
+    }
   }
 
 
