@@ -248,12 +248,38 @@ class SubstituteExecuteImmediate(
       return queryString  // No parameters to substitute
     }
 
-    // Convert expressions to parameter values
+    // Check for mixed parameters before substitution
+    if (hasPositional && hasNamed) {
+      throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
+    }
+
+    // Always resolve expressions first
+    val resolvedExprs = resolveArguments(expressions)
+
+    // Convert expressions to parameter values based on what the SQL query needs
     if (hasNamed) {
-      // Handle named parameters
-      val namedParams = expressions.collect {
-        case Alias(expr, name) => (name, expressionToSqlValue(foldToLiteral(expr)))
-            }.toMap
+      // For named parameters, extract names from resolved expressions
+      val namedParamsBuilder = scala.collection.mutable.Map[String, String]()
+      val unnamedExprs = scala.collection.mutable.ListBuffer[Expression]()
+
+      resolvedExprs.foreach {
+        case Alias(child, name) =>
+          // Explicit alias provides the name
+          namedParamsBuilder(name) = expressionToSqlValue(foldToLiteral(child))
+        case vr: VariableReference =>
+          // Variable reference provides name from variable identifier
+          namedParamsBuilder(vr.identifier.name()) = expressionToSqlValue(foldToLiteral(vr))
+        case other =>
+          // Expression that can't provide a name for named parameters
+          unnamedExprs += other
+      }
+
+      // If we have unnamed expressions for named parameters, error
+      if (unnamedExprs.nonEmpty) {
+        throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedExprs.toSeq)
+      }
+
+      val namedParams = namedParamsBuilder.toMap
 
       val (substituted, _) = paramSubstitutor.substitute(
         queryString,
@@ -261,8 +287,8 @@ class SubstituteExecuteImmediate(
         namedParams = namedParams)
       substituted
     } else {
-      // Handle positional parameters
-            val positionalParams = expressions.map(expr =>
+      // For positional parameters, process all resolved expressions positionally
+      val positionalParams = resolvedExprs.map(expr =>
         expressionToSqlValue(foldToLiteral(expr))).toList
 
       val (substituted, _) = paramSubstitutor.substitute(

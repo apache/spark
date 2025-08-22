@@ -760,7 +760,7 @@ CreateVariable defaultvalueexpression(10, 10), false
 EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :p' USING p
 -- !query analysis
 Project [id#x]
-+- Filter (id#x = variablereference(system.session.p=10))
++- Filter (id#x = 10)
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]

@@ -1898,35 +1898,63 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
 /**
  * Utility classes for testing parameter preprocessing during SQL parsing.
- * These classes provide a clean API similar to NameParameterizedQuery while documenting
- * the intent to test the full SQL text to analyzed plan path with parameter preprocessing.
+ * These classes provide a clean API similar to NameParameterizedQuery while implementing
+ * the new text-level parameter substitution approach using SubstituteParamsParser.
  *
- * NOTE: These currently use the existing NameParameterizedQuery/PosParameterizedQuery
- * implementation since adding SparkSqlParser dependency would create a cyclic dependency.
- * For full end-to-end testing of parameter preprocessing, use tests in sql-core module.
+ * This approach replaces parameter markers in SQL text before parsing, rather than
+ * binding them at the logical plan level, which matches the new parameter preprocessing
+ * implementation in SparkSqlParser.
  */
 case class PreprocessedNamedQuery(sql: String, args: Map[String, Literal]) {
   def parsePlan: LogicalPlan = {
-    // Uses CatalystSqlParser (without parameter preprocessing) for now
-    // To test full preprocessing, move tests to sql-core module or use SparkSession.sql()
-    org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan(sql)
+    // Use text-level parameter substitution with SubstituteParamsParser
+    val substitutedSql = substituteParameters()
+    org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan(substitutedSql)
   }
 
   def analyze: LogicalPlan = {
-    // This maintains the same API but uses the existing parameter binding approach
-    NameParameterizedQuery(child = parsePlan, args = args).analyze
+    // Parse with substituted parameters and analyze
+    parsePlan.analyze
+  }
+
+  private def substituteParameters(): String = {
+    val paramSubstitutor = new org.apache.spark.sql.catalyst.parser.SubstituteParamsParser()
+
+    // Convert Literal args to String values for substitution
+    val namedParams = args.map { case (name, literal) =>
+      name -> literal.sql
+    }
+
+    val (substituted, _) = paramSubstitutor.substitute(
+      sql,
+      org.apache.spark.sql.catalyst.parser.SubstitutionRule.Query,
+      namedParams = namedParams)
+    substituted
   }
 }
 
 case class PreprocessedPositionalQuery(sql: String, args: Seq[Literal]) {
   def parsePlan: LogicalPlan = {
-    // Uses CatalystSqlParser (without parameter preprocessing) for now
-    // To test full preprocessing, move tests to sql-core module or use SparkSession.sql()
-    org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan(sql)
+    // Use text-level parameter substitution with SubstituteParamsParser
+    val substitutedSql = substituteParameters()
+    org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan(substitutedSql)
   }
 
   def analyze: LogicalPlan = {
-    // This maintains the same API but uses the existing parameter binding approach
-    PosParameterizedQuery(child = parsePlan, args = args).analyze
+    // Parse with substituted parameters and analyze
+    parsePlan.analyze
+  }
+
+  private def substituteParameters(): String = {
+    val paramSubstitutor = new org.apache.spark.sql.catalyst.parser.SubstituteParamsParser()
+
+    // Convert Literal args to String values for substitution
+    val positionalParams = args.map(_.sql).toList
+
+    val (substituted, _) = paramSubstitutor.substitute(
+      sql,
+      org.apache.spark.sql.catalyst.parser.SubstitutionRule.Query,
+      positionalParams = positionalParams)
+    substituted
   }
 }
