@@ -29,6 +29,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.common.FlowStatus
 import org.apache.spark.sql.pipelines.logging.{FlowProgress, PipelineEvent, RunProgress}
 import org.apache.spark.util.ThreadUtils
@@ -45,7 +46,7 @@ class PipelineEventSender(
 
   private final val queueCapacity: Int =
     sessionHolder.session.conf
-      .get("spark.sql.connect.pipeline.event.queue.capacity", "1000")
+      .get(SQLConf.PIPELINES_EVENT_QUEUE_CAPACITY.key)
       .toInt
 
   // ExecutorService for background event processing
