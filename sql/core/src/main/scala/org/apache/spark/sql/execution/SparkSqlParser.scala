@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
-import org.apache.spark.sql.catalyst.parser.UnifiedParameterHandler
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
@@ -52,7 +51,7 @@ class SparkSqlParser extends AbstractSqlParser {
   val astBuilder = new SparkSqlAstBuilder()
 
   private val substitutor = new VariableSubstitution()
-  private val parameterHandler = new UnifiedParameterHandler()
+  private val parameterHandler = new ParameterHandler()
 
     protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     // Step 1: Check if we have a parameterized query context and substitute parameters

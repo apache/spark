@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.{Either, Left, Right}
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Literal, VariableReference}
-import org.apache.spark.sql.catalyst.parser.{ParseException, UnifiedParameterHandler}
+import org.apache.spark.sql.catalyst.parser.{ParameterHandler, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
@@ -53,7 +53,7 @@ class SubstituteExecuteImmediate(
     checkAnalysis: LogicalPlan => Unit)
   extends Rule[LogicalPlan] with ColumnResolutionHelper {
 
-  private val parameterHandler = new UnifiedParameterHandler()
+  private val parameterHandler = new ParameterHandler()
 
   def resolveVariable(e: Expression): Expression = {
 

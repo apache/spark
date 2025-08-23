@@ -49,7 +49,7 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, Expr
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils, UnifiedParameterHandler}
+import org.apache.spark.sql.catalyst.parser.{ParameterHandler, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, CompoundBody, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
@@ -106,7 +106,7 @@ class SparkConnectPlanner(
   import sessionHolder.session.toRichColumn
 
   private[connect] def parser = session.sessionState.sqlParser
-  private val parameterHandler = new UnifiedParameterHandler()
+  private val parameterHandler = new ParameterHandler()
 
   private[connect] def userId: String = sessionHolder.userId
 
