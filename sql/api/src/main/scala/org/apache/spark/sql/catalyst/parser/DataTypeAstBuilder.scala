@@ -82,6 +82,29 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       "Parameter substitution should have occurred before reaching this point.")
   }
 
+  override def visitNamedParameterIntegerValue(ctx: NamedParameterIntegerValueContext): Token = {
+    // For namedParameterIntegerValue in data type contexts, this shouldn't normally occur
+    // This indicates that parameter substitution failed or wasn't applied
+    throw new IllegalStateException(
+      s"Parameter marker '${ctx.getText}' found in data type context. " +
+      "Parameter substitution should have occurred before reaching this point.")
+  }
+
+  override def visitPositionalParameterIntegerValue(
+      ctx: PositionalParameterIntegerValueContext): Token = {
+    // For positionalParameterIntegerValue in data type contexts, this shouldn't normally occur
+    // This indicates that parameter substitution failed or wasn't applied
+    throw new IllegalStateException(
+      s"Parameter marker '${ctx.getText}' found in data type context. " +
+      "Parameter substitution should have occurred before reaching this point.")
+  }
+
+  override def visitPositionalParameterValue(ctx: PositionalParameterValueContext): Token = {
+    throw new IllegalStateException(
+      s"Parameter marker '${ctx.getText}' found in data type context. " +
+      "Parameter substitution should have occurred before reaching this point.")
+  }
+
   /**
    * Create a multi-part identifier.
    */

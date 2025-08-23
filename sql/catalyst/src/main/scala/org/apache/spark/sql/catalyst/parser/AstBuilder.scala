@@ -6366,13 +6366,11 @@ class AstBuilder extends DataTypeAstBuilder
     NamedParameter(ctx.namedParameterMarker().identifier().getText)
   }
 
-  /**
-   * Create a named parameter in integer value context.
-   * */
-  override def visitNamedParameterIntegerValue(
-      ctx: NamedParameterIntegerValueContext): Expression = withOrigin(ctx) {
-    NamedParameter(ctx.namedParameterMarker().identifier().getText)
-  }
+
+
+
+
+
 
   /**
    * Create a positional parameter which represents a literal

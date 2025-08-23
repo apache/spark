@@ -415,6 +415,51 @@ class SparkConnectPlanner(
       // scalastyle:on caselocale
       case DateType => s"DATE '${value.toString}'"
       case TimestampType => s"TIMESTAMP '${value.toString}'"
+      case ArrayType(elementType, _) =>
+        // Handle array literals
+        if (value == null) "NULL"
+        else {
+          // Handle both Scala collections and Spark's GenericArrayData
+          val arraySeq = value match {
+            case gad: org.apache.spark.sql.catalyst.util.GenericArrayData =>
+              gad.array.toSeq
+            case seq: scala.collection.Seq[Any] =>
+              seq
+            case arr: Array[Any] =>
+              arr.toSeq
+            case other =>
+              // Fallback: try to convert to array and then to sequence
+              Array(other).toSeq
+          }
+          val elementStrs = arraySeq.map { elem =>
+            expressionToSqlValue(Literal.create(elem, elementType))
+          }
+          s"ARRAY(${elementStrs.mkString(", ")})"
+        }
+      case MapType(keyType, valueType, _) =>
+        // Handle map literals
+        if (value == null) "NULL"
+        else {
+          // Handle both Scala collections and Spark's ArrayBasedMapData
+          val mapValue = value match {
+            case abmd: org.apache.spark.sql.catalyst.util.ArrayBasedMapData =>
+              // Convert ArrayBasedMapData to a Map
+              val keys = abmd.keyArray.array
+              val values = abmd.valueArray.array
+              keys.zip(values).toMap
+            case map: scala.collection.Map[Any, Any] @unchecked =>
+              map
+            case other =>
+              // Fallback for unexpected types
+              Map.empty[Any, Any]
+          }
+          val entryStrs = mapValue.map { case (k, v) =>
+            val keyStr = expressionToSqlValue(Literal.create(k, keyType))
+            val valueStr = expressionToSqlValue(Literal.create(v, valueType))
+            s"$keyStr, $valueStr"
+          }
+          s"MAP(${entryStrs.mkString(", ")})"
+        }
       case _ => s"'${value.toString.replace("'", "''")}'"
     }
     case other =>
@@ -423,8 +468,50 @@ class SparkConnectPlanner(
         val evaluated = other.eval()
         expressionToSqlValue(Literal.create(evaluated, other.dataType))
       } else {
-        throw new IllegalArgumentException(
-          s"Cannot convert non-literal expression to SQL value: $other")
+        // Handle specific expression types that might not be marked as foldable
+        // but can still be converted to SQL
+        other match {
+          case CreateArray(children, _) if children.forall(_.foldable) =>
+            // Handle array construction with foldable children
+            val evaluatedChildren = children.map { child =>
+              if (child.foldable) child.eval() else child
+            }
+            val arrayType = ArrayType(other.dataType.asInstanceOf[ArrayType].elementType)
+            val evaluatedArray = evaluatedChildren.toArray
+            expressionToSqlValue(Literal.create(evaluatedArray, arrayType))
+          case CreateMap(children, _) if children.forall(_.foldable) =>
+            // Handle map construction with foldable children
+            val evaluatedChildren = children.map { child =>
+              if (child.foldable) child.eval() else child
+            }
+            val mapType = other.dataType.asInstanceOf[MapType]
+            val keyValues = evaluatedChildren.grouped(2).map {
+              case Seq(k, v) => (k, v)
+            }.toMap
+            expressionToSqlValue(Literal.create(keyValues, mapType))
+          case UnresolvedFunction(Seq("array"), children, _, _, _, _, _)
+              if children.forall(_.foldable) =>
+            // Handle unresolved array function with foldable children
+            val evaluatedChildren = children.map(_.eval())
+            val elementType = if (children.nonEmpty) children.head.dataType else IntegerType
+            val arrayType = ArrayType(elementType)
+            expressionToSqlValue(Literal.create(evaluatedChildren.toArray, arrayType))
+          case UnresolvedFunction(Seq("map"), children, _, _, _, _, _)
+              if children.forall(_.foldable) =>
+            // Handle unresolved map function with foldable children
+            val evaluatedChildren = children.map(_.eval())
+            val keyType = if (children.nonEmpty) children.head.dataType else StringType
+            val valueType = if (children.length > 1) children(1).dataType else StringType
+            val mapType = MapType(keyType, valueType)
+            val keyValues = evaluatedChildren.grouped(2).map {
+              case Seq(k, v) => (k, v)
+            }.toMap
+            expressionToSqlValue(Literal.create(keyValues, mapType))
+          case _ =>
+            throw new IllegalArgumentException(
+              s"Cannot convert non-literal expression to SQL value: $other " +
+              s"(class: ${other.getClass.getSimpleName}, foldable: ${other.foldable})")
+        }
       }
   }
 

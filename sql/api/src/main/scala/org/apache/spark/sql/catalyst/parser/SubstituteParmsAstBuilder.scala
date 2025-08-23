@@ -125,6 +125,36 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   }
 
   /**
+   * Handle positional parameter markers in integer value contexts (e.g., VARCHAR(?)).
+   * This handles the QUESTION case added to the integerValue grammar rule.
+   */
+  override def visitPositionalParameterIntegerValue(
+      ctx: PositionalParameterIntegerValueContext): String = withOrigin(ctx) {
+    val paramIndex = positionalParams.size
+    positionalParams += paramIndex
+
+    // Calculate the location of the parameter marker
+    val startIndex = ctx.getStart.getStartIndex
+    val stopIndex = ctx.getStop.getStopIndex + 1
+    positionalParamLocations += ParameterLocation(startIndex, stopIndex)
+
+    s"?$paramIndex"
+  }
+
+  override def visitPositionalParameterValue(
+      ctx: PositionalParameterValueContext): String = withOrigin(ctx) {
+    val paramIndex = positionalParams.size
+    positionalParams += paramIndex
+
+    // Calculate the location of the parameter marker
+    val startIndex = ctx.getStart.getStartIndex
+    val stopIndex = ctx.getStop.getStopIndex + 1
+    positionalParamLocations += ParameterLocation(startIndex, stopIndex)
+
+    s"?$paramIndex"
+  }
+
+  /**
    * Override visit to ensure we traverse all children to find parameters.
    */
   override def visit(tree: ParseTree): AnyRef = {
@@ -140,6 +170,10 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
         visitNamedParameterValue(ctx)
       case ctx: NamedParameterIntegerValueContext =>
         visitNamedParameterIntegerValue(ctx)
+      case ctx: PositionalParameterIntegerValueContext =>
+        visitPositionalParameterIntegerValue(ctx)
+      case ctx: PositionalParameterValueContext =>
+        visitPositionalParameterValue(ctx)
       case ctx: StringLiteralInContextContext =>
         // For string literals in context, continue traversing to find any nested parameters
         visitChildren(ctx)

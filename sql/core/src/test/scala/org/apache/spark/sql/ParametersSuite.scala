@@ -21,12 +21,19 @@ import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.Limit
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{CharType, DecimalType, VarcharType}
+import org.apache.spark.sql.types.{CharType, DataType, DecimalType, StructField, VarcharType}
 
 class ParametersSuite extends QueryTest with SharedSparkSession {
+
+  // Helper function to check CHAR/VARCHAR types (similar to CharVarcharTestSuite)
+  private def checkColType(f: StructField, dt: DataType): Unit = {
+    assert(f.dataType == CharVarcharUtils.replaceCharVarcharWithString(dt))
+    assert(CharVarcharUtils.getRawType(f.metadata) == Some(dt))
+  }
 
   test("bind named parameters") {
     val sqlText =
@@ -800,7 +807,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       spark.sql("CREATE TABLE ddl_datatype_named (name VARCHAR(:length)) USING PARQUET",
                 Map("length" -> 100))
       val schema = spark.table("ddl_datatype_named").schema
-      assert(schema("name").dataType == VarcharType(100))
+      checkColType(schema("name"), VarcharType(100))
     }
 
     withTable("ddl_decimal_named") {
@@ -817,25 +824,38 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       spark.sql("CREATE TABLE ddl_char_named (code CHAR(:length)) USING PARQUET",
                 Map("length" -> 5))
       val schema = spark.table("ddl_char_named").schema
-      assert(schema("code").dataType == CharType(5))
+      checkColType(schema("code"), CharType(5))
     }
   }
 
   test("positional parameters in DDL data type specifications") {
     withTable("ddl_datatype_pos") {
       // Test VARCHAR length parameter
-      spark.sql("CREATE TABLE ddl_datatype_pos (name VARCHAR(?)) USING PARQUET", Array(50))
+      spark.sql("CREATE TABLE ddl_datatype_pos (name VARCHAR(?)) USING PARQUET",
+                Array(150))
       val schema = spark.table("ddl_datatype_pos").schema
-      assert(schema("name").dataType == VarcharType(50))
+      checkColType(schema("name"), VarcharType(150))
     }
 
     withTable("ddl_decimal_pos") {
       // Test DECIMAL precision and scale parameters
-      spark.sql("CREATE TABLE ddl_decimal_pos (amount DECIMAL(?, ?)) USING PARQUET", Array(8, 3))
+      spark.sql(
+        "CREATE TABLE ddl_decimal_pos (amount DECIMAL(?, ?)) USING PARQUET",
+        Array(12, 3))
       val schema = spark.table("ddl_decimal_pos").schema
-      assert(schema("amount").dataType == DecimalType(8, 3))
+      assert(schema("amount").dataType == DecimalType(12, 3))
+    }
+
+    withTable("ddl_char_pos") {
+      // Test CHAR length parameter
+      spark.sql("CREATE TABLE ddl_char_pos (code CHAR(?)) USING PARQUET",
+                Array(8))
+      val schema = spark.table("ddl_char_pos").schema
+      checkColType(schema("code"), CharType(8))
     }
   }
+
+
 
   test("named parameters in DDL comments and properties") {
     withTable("ddl_comments_named") {

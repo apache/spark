@@ -1612,6 +1612,7 @@ number
 integerValue
     : INTEGER_VALUE                                                                          #integerVal
     | namedParameterMarker                                                                   #namedParameterIntegerValue
+    | QUESTION                                                                               #positionalParameterIntegerValue
     ;
 
 columnConstraintDefinition
@@ -1695,6 +1696,7 @@ stringLitWithoutMarker
 stringLit
     : stringLitWithoutMarker                                                                   #stringLiteralInContext
     | namedParameterMarker                                                                     #namedParameterValue
+    | QUESTION                                                                                 #positionalParameterValue
     ;
 
 comment
