@@ -27,6 +27,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.sql.classic.{RuntimeConfig, SparkSession}
 import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.common.FlowStatus
 import org.apache.spark.sql.pipelines.common.RunState.{COMPLETED, RUNNING}
 import org.apache.spark.sql.pipelines.logging.{EventDetails, EventLevel, FlowProgress, PipelineEvent, PipelineEventOrigin, RunProgress}
@@ -43,7 +44,7 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
     val mockConf = mock[RuntimeConfig]
     when(mockSessionHolder.session).thenReturn(mockSession)
     when(mockSession.conf).thenReturn(mockConf)
-    when(mockConf.get("spark.sql.connect.pipeline.event.queue.capacity", "1000"))
+    when(mockConf.get(SQLConf.PIPELINES_EVENT_QUEUE_CAPACITY.key))
       .thenReturn(queueSize)
     (mockObserver, mockSessionHolder)
   }
