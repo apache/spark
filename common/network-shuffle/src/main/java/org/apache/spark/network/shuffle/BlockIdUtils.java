@@ -69,7 +69,7 @@ public class BlockIdUtils {
    * Returns the name of the ShuffleChecksumBlockId. This should be in sync with
    *  IndexShuffleBlockResolver.getChecksumFile
    */
-  static public String getChecksumFileName(String blockId, String algorithm) {
+  public static String getChecksumFileName(String blockId, String algorithm) {
     String[] blockIdParts = blockId.split("_");
     if (blockIdParts.length <  4) {
       throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockId);

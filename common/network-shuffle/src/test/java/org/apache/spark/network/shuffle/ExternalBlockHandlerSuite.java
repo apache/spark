@@ -226,8 +226,10 @@ public class ExternalBlockHandlerSuite {
 
   @Test
   public void testFetchShuffleBlocks() {
-    when(blockResolver.getContinuousBlocksData("app0", "exec1", 0, 0, 0, 1)).thenReturn(blockMarkers[0]);
-    when(blockResolver.getContinuousBlocksData("app0", "exec1", 0, 0, 1, 2)).thenReturn(blockMarkers[1]);
+    when(blockResolver.getContinuousBlocksData("app0", "exec1", 0, 0, 0, 1))
+      .thenReturn(blockMarkers[0]);
+    when(blockResolver.getContinuousBlocksData("app0", "exec1", 0, 0, 1, 2))
+      .thenReturn(blockMarkers[1]);
 
     FetchShuffleBlocks fetchShuffleBlocks = new FetchShuffleBlocks(
       "app0", "exec1", 0, new long[] { 0 }, new int[][] {{ 0, 1 }}, false);
