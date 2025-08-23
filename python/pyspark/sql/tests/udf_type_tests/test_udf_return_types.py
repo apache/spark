@@ -9,7 +9,7 @@
 #    http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
-# distributed under the Apache License is distributed on an "AS IS" BASIS,
+# distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
@@ -45,7 +45,7 @@ from pyspark.sql.types import (
     TimestampType,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from .type_table_utils import generate_word_diff, format_type_table
+from .type_table_utils import generate_table_diff, format_type_table
 
 
 # Note: The values of 'SQL Type' are DDL formatted strings, which can be used as `returnType`s.
@@ -53,13 +53,13 @@ from .type_table_utils import generate_word_diff, format_type_table
 # during the conversion.
 # Note: Python 3.11.9, Pandas 2.2.3 and PyArrow 17.0.0 are used.
 # Note: 'X' means it throws an exception during the conversion.
-class UDFTypeTests(ReusedSQLTestCase):
+class UDFReturnTypeTests(ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(UDFTypeTests, cls).setUpClass()
+        super(UDFReturnTypeTests, cls).setUpClass()
 
     def setUp(self):
-        super(UDFTypeTests, self).setUp()
+        super(UDFReturnTypeTests, self).setUp()
         self.test_data = [
             None,
             True,
@@ -185,7 +185,7 @@ class UDFTypeTests(ReusedSQLTestCase):
                 expected_output = f.read()
 
             if actual_output != expected_output:
-                diff_output = generate_word_diff(actual_output, expected_output)
+                diff_output = generate_table_diff(actual_output, expected_output)
                 self.fail(
                     f"""
                     Results don't match golden file for \:{test_name}\".\n

@@ -1,4 +1,20 @@
 #!/usr/bin/env python3
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
 import os
 import sys
@@ -86,6 +102,7 @@ def format_table_diff(
     expected_rows: List[List[str]],
     actual_rows: List[List[str]],
     use_colors: bool = True,
+    cell_width: int = CELL_WIDTH,
 ) -> str:
     """Format a table diff with cell-level highlighting."""
     output_lines = []
@@ -96,7 +113,7 @@ def format_table_diff(
     )
     output_lines.append("=" * len(title))
 
-    col_widths = [CELL_WIDTH] * len(header)
+    col_widths = [cell_width] * len(header)
 
     def format_row(cells: List[str], prefix: str = "", color: str = "") -> str:
         """Format a single row with proper alignment."""
@@ -171,7 +188,7 @@ def format_table_diff(
                 if expected_cell != actual_cell:
                     row_has_changes = True
                     diff_cell = highlight_cell_diff(
-                        expected_cell, actual_cell, use_colors, CELL_WIDTH
+                        expected_cell, actual_cell, use_colors, cell_width
                     )
                     diff_row.append(diff_cell)
                 else:
@@ -205,15 +222,16 @@ def format_table_diff(
     return "\n".join(output_lines)
 
 
-def generate_word_diff(actual, expected):
+def generate_table_diff(actual, expected, cell_width=CELL_WIDTH):
     """Generate a table-aware diff between actual and expected output."""
     try:
         expected_header, expected_rows = parse_table_content(expected)
         actual_header, actual_rows = parse_table_content(actual)
 
         if expected_header and actual_header:
-            use_colors = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
-            return format_table_diff(expected_header, expected_rows, actual_rows, use_colors)
+            return format_table_diff(
+                expected_header, expected_rows, actual_rows, True, cell_width
+            )
     except Exception:
         pass
 
@@ -257,7 +275,7 @@ def format_type_table(results, header, column_width=30):
     return "\n".join(output_lines)
 
 
-def compare_files(file1_path, file2_path):
+def compare_files(file1_path, file2_path, cell_width=CELL_WIDTH):
     """Compare two files and show the differences."""
     if not os.path.exists(file1_path):
         print(f"Error: File '{file1_path}' does not exist")
@@ -287,7 +305,7 @@ def compare_files(file1_path, file2_path):
         print("Files differ. Generating word-wise diff...")
         print()
 
-        diff_output = generate_word_diff(content2, content1)
+        diff_output = generate_table_diff(content2, content1, cell_width)
         print(diff_output)
         return False
 
@@ -296,10 +314,16 @@ def main():
     parser = argparse.ArgumentParser(description="Compare two table files using word-wise diff")
     parser.add_argument("file1", help="First file (expected)")
     parser.add_argument("file2", help="Second file (actual)")
+    parser.add_argument(
+        "--cell-width",
+        type=int,
+        default=CELL_WIDTH,
+        help=f"Width of each table cell (default: {CELL_WIDTH})",
+    )
 
     args = parser.parse_args()
 
-    success = compare_files(args.file1, args.file2)
+    success = compare_files(args.file1, args.file2, args.cell_width)
     sys.exit(0 if success else 1)
 
 
