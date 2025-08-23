@@ -2368,6 +2368,10 @@
             <groupId>com.github.joshelser</groupId>
             <artifactId>dropwizard-metrics-hadoop-metrics2-reporter</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>sqlline</groupId>
+            <artifactId>sqlline</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
