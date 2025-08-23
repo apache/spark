@@ -690,7 +690,7 @@ private[sql] class RocksDBStateStoreProvider
 
       rocksDB.load(
         version,
-        stateStoreCkptId = uniqueId,
+        stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
         readOnly = readOnly)
 
       // Create or reuse store instance
