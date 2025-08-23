@@ -508,7 +508,7 @@ class SparkConnectPlanner(
             }.toMap
             expressionToSqlValue(Literal.create(keyValues, mapType))
           case _ =>
-            throw new IllegalArgumentException(
+            throw SparkException.internalError(
               s"Cannot convert non-literal expression to SQL value: $other " +
               s"(class: ${other.getClass.getSimpleName}, foldable: ${other.foldable})")
         }

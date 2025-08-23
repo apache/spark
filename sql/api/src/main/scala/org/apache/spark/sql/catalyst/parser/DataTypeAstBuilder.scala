@@ -77,7 +77,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   override def visitNamedParameterValue(ctx: NamedParameterValueContext): Token = {
     // For namedParameterValue in data type contexts, this shouldn't normally occur
     // This indicates that parameter substitution failed or wasn't applied
-    throw new IllegalStateException(
+    throw SparkException.internalError(
       s"Parameter marker '${ctx.getText}' found in data type context. " +
       "Parameter substitution should have occurred before reaching this point.")
   }
@@ -85,7 +85,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   override def visitNamedParameterIntegerValue(ctx: NamedParameterIntegerValueContext): Token = {
     // For namedParameterIntegerValue in data type contexts, this shouldn't normally occur
     // This indicates that parameter substitution failed or wasn't applied
-    throw new IllegalStateException(
+    throw SparkException.internalError(
       s"Parameter marker '${ctx.getText}' found in data type context. " +
       "Parameter substitution should have occurred before reaching this point.")
   }
@@ -94,13 +94,13 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       ctx: PositionalParameterIntegerValueContext): Token = {
     // For positionalParameterIntegerValue in data type contexts, this shouldn't normally occur
     // This indicates that parameter substitution failed or wasn't applied
-    throw new IllegalStateException(
+    throw SparkException.internalError(
       s"Parameter marker '${ctx.getText}' found in data type context. " +
       "Parameter substitution should have occurred before reaching this point.")
   }
 
   override def visitPositionalParameterValue(ctx: PositionalParameterValueContext): Token = {
-    throw new IllegalStateException(
+    throw SparkException.internalError(
       s"Parameter marker '${ctx.getText}' found in data type context. " +
       "Parameter substitution should have occurred before reaching this point.")
   }
