@@ -34,8 +34,9 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
+import org.apache.spark.sql.catalyst.parser.SqlKeywords
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.DateTimeConstants
+import org.apache.spark.sql.catalyst.util.{DateTimeConstants, ExpressionToSqlConverter}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
@@ -102,7 +103,7 @@ class SparkSqlParser extends AbstractSqlParser {
 
     // Choose the appropriate substitution rule based on SQL content
     // scalastyle:off caselocale
-    val substitutionRule = if (command.trim.toUpperCase.startsWith("BEGIN")) {
+    val substitutionRule = if (command.trim.toUpperCase.startsWith(SqlKeywords.BEGIN)) {
       org.apache.spark.sql.catalyst.parser.SubstitutionRule.CompoundOrSingleStatement
     } else {
       org.apache.spark.sql.catalyst.parser.SubstitutionRule.Statement
@@ -123,14 +124,14 @@ class SparkSqlParser extends AbstractSqlParser {
       context match {
         case org.apache.spark.sql.catalyst.parser.NamedParameterContext(params) =>
           val paramValues = params.map { case (name, expr) =>
-            (name, expressionToSqlValue(expr))
+            (name, ExpressionToSqlConverter.convert(expr))
           }
           val (substituted, _) = paramSubstitutor.substitute(
             command, substitutionRule, paramValues)
           substituted
 
         case org.apache.spark.sql.catalyst.parser.PositionalParameterContext(params) =>
-          val paramValues = params.map(expressionToSqlValue).toList
+          val paramValues = params.map(ExpressionToSqlConverter.convert).toList
           val (substituted, _) = paramSubstitutor.substitute(
             command, substitutionRule,
             positionalParams = paramValues)
@@ -144,27 +145,7 @@ class SparkSqlParser extends AbstractSqlParser {
     }
   }
 
-  private def expressionToSqlValue(expr: Expression): String = expr match {
-    case lit: org.apache.spark.sql.catalyst.expressions.Literal => lit.sql
-    case _ =>
-      try {
-        expr.sql
-      } catch {
-        case _: Exception =>
-          // Only fall back to constant folding if SQL generation fails and expression is foldable
-          if (expr.foldable) {
-            try {
-              val literal = org.apache.spark.sql.catalyst.expressions.Literal.create(
-                expr.eval(), expr.dataType)
-              literal.sql
-            } catch {
-              case _: Exception => expr.toString
-            }
-          } else {
-            expr.toString
-          }
-      }
-  }
+
 }
 
 /**

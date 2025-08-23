@@ -24,6 +24,7 @@ import org.antlr.v4.runtime.Token
 import org.antlr.v4.runtime.tree.ParseTree
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.parser.ParameterErrorUtils
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
@@ -77,32 +78,24 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   override def visitNamedParameterValue(ctx: NamedParameterValueContext): Token = {
     // For namedParameterValue in data type contexts, this shouldn't normally occur
     // This indicates that parameter substitution failed or wasn't applied
-    throw SparkException.internalError(
-      s"Parameter marker '${ctx.getText}' found in data type context. " +
-      "Parameter substitution should have occurred before reaching this point.")
+    ParameterErrorUtils.parameterMarkerInDataTypeError(ctx)
   }
 
   override def visitNamedParameterIntegerValue(ctx: NamedParameterIntegerValueContext): Token = {
     // For namedParameterIntegerValue in data type contexts, this shouldn't normally occur
     // This indicates that parameter substitution failed or wasn't applied
-    throw SparkException.internalError(
-      s"Parameter marker '${ctx.getText}' found in data type context. " +
-      "Parameter substitution should have occurred before reaching this point.")
+    ParameterErrorUtils.parameterMarkerInDataTypeError(ctx)
   }
 
   override def visitPositionalParameterIntegerValue(
       ctx: PositionalParameterIntegerValueContext): Token = {
     // For positionalParameterIntegerValue in data type contexts, this shouldn't normally occur
     // This indicates that parameter substitution failed or wasn't applied
-    throw SparkException.internalError(
-      s"Parameter marker '${ctx.getText}' found in data type context. " +
-      "Parameter substitution should have occurred before reaching this point.")
+    ParameterErrorUtils.parameterMarkerInDataTypeError(ctx)
   }
 
   override def visitPositionalParameterValue(ctx: PositionalParameterValueContext): Token = {
-    throw SparkException.internalError(
-      s"Parameter marker '${ctx.getText}' found in data type context. " +
-      "Parameter substitution should have occurred before reaching this point.")
+    ParameterErrorUtils.parameterMarkerInDataTypeError(ctx)
   }
 
   /**
