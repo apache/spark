@@ -49,8 +49,7 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, Expr
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
-import org.apache.spark.sql.catalyst.util.ExpressionToSqlConverter
+import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils, UnifiedParameterHandler}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, CompoundBody, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
@@ -107,6 +106,7 @@ class SparkConnectPlanner(
   import sessionHolder.session.toRichColumn
 
   private[connect] def parser = session.sessionState.sqlParser
+  private val parameterHandler = new UnifiedParameterHandler()
 
   private[connect] def userId: String = sessionHolder.userId
 
@@ -351,55 +351,21 @@ class SparkConnectPlanner(
   }
 
   /**
-   * Substitute named parameters in SQL text using our parameter substitution infrastructure.
+   * Substitute named parameters in SQL text using unified parameter handler.
    */
   private def substituteNamedParameters(
       queryText: String,
       paramMap: Map[String, Expression]): String = {
-    val paramSubstitutor = new org.apache.spark.sql.catalyst.parser.SubstituteParamsParser()
-
-    // Convert expressions to SQL string values
-    val paramValues = paramMap.map { case (name, expr) =>
-      (name, ExpressionToSqlConverter.convert(expr))
-    }
-
-    try {
-      val (substituted, _) = paramSubstitutor.substitute(
-        queryText,
-        org.apache.spark.sql.catalyst.parser.SubstitutionRule.Statement,
-        namedParams = paramValues)
-      substituted
-    } catch {
-      case _: org.apache.spark.sql.catalyst.parser.ParseException =>
-        // If parameter substitution fails due to syntax errors, return original query
-        // and let the main parser handle the error
-        queryText
-    }
+    parameterHandler.substituteNamedParameters(queryText, paramMap)
   }
 
   /**
-   * Substitute positional parameters in SQL text using our parameter substitution infrastructure.
+   * Substitute positional parameters in SQL text using unified parameter handler.
    */
   private def substitutePositionalParameters(
       queryText: String,
       paramList: Seq[Expression]): String = {
-    val paramSubstitutor = new org.apache.spark.sql.catalyst.parser.SubstituteParamsParser()
-
-    // Convert expressions to SQL string values
-    val paramValues = paramList.map(ExpressionToSqlConverter.convert).toList
-
-    try {
-      val (substituted, _) = paramSubstitutor.substitute(
-        queryText,
-        org.apache.spark.sql.catalyst.parser.SubstitutionRule.Statement,
-        positionalParams = paramValues)
-      substituted
-    } catch {
-      case _: org.apache.spark.sql.catalyst.parser.ParseException =>
-        // If parameter substitution fails due to syntax errors, return original query
-        // and let the main parser handle the error
-        queryText
-    }
+    parameterHandler.substitutePositionalParameters(queryText, paramList)
   }
 
 

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.{Either, Left, Right}
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Literal, VariableReference}
-import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.parser.{ParseException, UnifiedParameterHandler}
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
@@ -52,6 +52,8 @@ class SubstituteExecuteImmediate(
     resolveChild: LogicalPlan => LogicalPlan,
     checkAnalysis: LogicalPlan => Unit)
   extends Rule[LogicalPlan] with ColumnResolutionHelper {
+
+  private val parameterHandler = new UnifiedParameterHandler()
 
   def resolveVariable(e: Expression): Expression = {
 
@@ -231,19 +233,8 @@ class SubstituteExecuteImmediate(
       return queryString  // No parameter markers possible
     }
 
-    // Check if the query string has any parameter markers
-    val paramSubstitutor = new org.apache.spark.sql.catalyst.parser.SubstituteParamsParser()
-    // Always try parameter detection, but gracefully handle syntax errors
-    val (hasPositional, hasNamed) = try {
-      paramSubstitutor.detectParameters(
-        queryString, org.apache.spark.sql.catalyst.parser.SubstitutionRule.Statement)
-    } catch {
-      case _: org.apache.spark.sql.catalyst.parser.ParseException =>
-        // If parameter detection fails due to syntax errors, return original query
-        // and let the main parser handle the error
-        return queryString
-    }
-
+    // Detect parameter types and validate consistency
+    val (hasPositional, hasNamed) = parameterHandler.detectParameters(queryString)
     if (!hasPositional && !hasNamed) {
       return queryString  // No parameters to substitute
     }
@@ -259,16 +250,16 @@ class SubstituteExecuteImmediate(
     // Convert expressions to parameter values based on what the SQL query needs
     if (hasNamed) {
       // For named parameters, extract names from resolved expressions
-      val namedParamsBuilder = scala.collection.mutable.Map[String, String]()
+      val namedParamsBuilder = scala.collection.mutable.Map[String, Expression]()
       val unnamedExprs = scala.collection.mutable.ListBuffer[Expression]()
 
       resolvedExprs.foreach {
         case Alias(child, name) =>
           // Explicit alias provides the name
-          namedParamsBuilder(name) = expressionToSqlValue(foldToLiteral(child))
+          namedParamsBuilder(name) = foldToLiteral(child)
         case vr: VariableReference =>
           // Variable reference provides name from variable identifier
-          namedParamsBuilder(vr.identifier.name()) = expressionToSqlValue(foldToLiteral(vr))
+          namedParamsBuilder(vr.identifier.name()) = foldToLiteral(vr)
         case other =>
           // Expression that can't provide a name for named parameters
           unnamedExprs += other
@@ -279,23 +270,11 @@ class SubstituteExecuteImmediate(
         throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedExprs.toSeq)
       }
 
-      val namedParams = namedParamsBuilder.toMap
-
-      val (substituted, _) = paramSubstitutor.substitute(
-        queryString,
-        org.apache.spark.sql.catalyst.parser.SubstitutionRule.Statement,
-        namedParams = namedParams)
-      substituted
+      parameterHandler.substituteNamedParameters(queryString, namedParamsBuilder.toMap)
     } else {
       // For positional parameters, process all resolved expressions positionally
-      val positionalParams = resolvedExprs.map(expr =>
-        expressionToSqlValue(foldToLiteral(expr))).toList
-
-      val (substituted, _) = paramSubstitutor.substitute(
-        queryString,
-        org.apache.spark.sql.catalyst.parser.SubstitutionRule.Statement,
-        positionalParams = positionalParams)
-      substituted
+      val positionalParams = resolvedExprs.map(foldToLiteral)
+      parameterHandler.substitutePositionalParameters(queryString, positionalParams)
     }
   }
 
