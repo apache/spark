@@ -266,6 +266,45 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
     )
   }
 
+  test("MV/ST with partition columns works") {
+    val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
+      sqlText = """
+                  |CREATE MATERIALIZED VIEW mv
+                  |PARTITIONED BY (id_mod)
+                  |AS
+                  |SELECT
+                  |  id,
+                  |  id % 2 AS id_mod
+                  |FROM range(3);
+                  |
+                  |CREATE STREAMING TABLE st
+                  |PARTITIONED BY (id_mod)
+                  |AS
+                  |SELECT * FROM STREAM(mv);
+                  |""".stripMargin
+    )
+    startPipelineAndWaitForCompletion(unresolvedDataflowGraph)
+    val expected = Seq(
+      Row(0, 0),
+      Row(1, 1),
+      Row(2, 0)
+    )
+
+    Seq("mv", "st").foreach { tableName =>
+      // check table partition columns
+      val tableMeta = spark.sessionState.catalog.getTableMetadata(
+        fullyQualifiedIdentifier(tableName)
+      )
+      assert(tableMeta.partitionColumnNames == Seq("id_mod"))
+
+      // check table data
+      checkAnswer(
+        spark.sql(s"SELECT * FROM ${fullyQualifiedIdentifier(tableName)}"),
+        expected
+      )
+    }
+  }
+
   test("Exception is thrown when non-identity partition columns are used") {
     val graphRegistrationContext = new TestGraphRegistrationContext(spark)
     val sqlGraphRegistrationContext = new SqlGraphRegistrationContext(graphRegistrationContext)
