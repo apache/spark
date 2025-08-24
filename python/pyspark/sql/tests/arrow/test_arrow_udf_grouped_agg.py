@@ -818,7 +818,8 @@ class GroupedAggArrowUDFTestsMixin:
         with self.quiet():
             with self.assertRaisesRegex(
                 NotImplementedError,
-                "Invalid return type with grouped aggregate Arrow UDFs.*ArrayType.*YearMonthIntervalType",
+                "Invalid return type with grouped aggregate "
+                "Arrow UDFs.*ArrayType.*YearMonthIntervalType",
             ):
                 arrow_udf(
                     lambda x: x,
@@ -828,7 +829,8 @@ class GroupedAggArrowUDFTestsMixin:
 
             with self.assertRaisesRegex(
                 NotImplementedError,
-                "Invalid return type with grouped aggregate Arrow UDFs.*ArrayType.*YearMonthIntervalType",
+                "Invalid return type with grouped aggregate "
+                "Arrow UDFs.*ArrayType.*YearMonthIntervalType",
             ):
 
                 @arrow_udf(ArrayType(ArrayType(YearMonthIntervalType())), ArrowUDFType.GROUPED_AGG)
