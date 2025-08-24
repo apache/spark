@@ -254,7 +254,9 @@ def run(
     spec = load_pipeline_spec(spec_path)
 
     log_with_curr_timestamp("Creating Spark session...")
-    spark_builder = SparkSession.builder
+    spark_builder = SparkSession.builder.config(
+        "spark.sql.connect.serverStacktrace.enabled", "false"
+    )
     for key, value in spec.configuration.items():
         spark_builder = spark_builder.config(key, value)
 
