@@ -1816,8 +1816,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       ).as("raw_proto"))
 
     checkWithFileAndClassName("WellKnownWrapperTypes") { case (name, descFilePathOpt) =>
-      // With the option as false, ensure that deserialization works, and the
-      // value can be round-tripped.
+      // We now verify that we are able to deserialize false value
+      // And also differentiate them with null value
       List(Map.empty[String, String], Map("unwrap.primitive.wrapper.types" -> "false"))
         .foreach(opts => {
           val parsedTrue = messageWithBoolTrue
