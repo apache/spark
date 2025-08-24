@@ -43,6 +43,7 @@ from pyspark.sql.types import (
     Row,
     MapType,
     BinaryType,
+    YearMonthIntervalType,
 )
 from pyspark.errors import AnalysisException, PythonException
 from pyspark.testing.sqlutils import (
@@ -1021,6 +1022,26 @@ class ScalarArrowUDFTestsMixin:
             # pyarrow.lib.ArrowInvalid:
             # Integer value 2147483652 not in range: -2147483648 to 2147483647
             result3.collect()
+
+    def test_unsupported_return_types(self):
+        import pyarrow as pa
+
+        with self.quiet():
+            for udf_type in [ArrowUDFType.SCALAR, ArrowUDFType.SCALAR_ITER]:
+                with self.assertRaisesRegex(
+                    NotImplementedError,
+                    "Invalid return type.*scalar Arrow UDF.*ArrayType.*YearMonthIntervalType",
+                ):
+                    arrow_udf(lambda x: x, ArrayType(YearMonthIntervalType()), udf_type)
+
+                with self.assertRaisesRegex(
+                    NotImplementedError,
+                    "Invalid return type.*scalar Arrow UDF.*ArrayType.*YearMonthIntervalType",
+                ):
+
+                    @arrow_udf(ArrayType(YearMonthIntervalType()))
+                    def func_a(a: pa.Array) -> pa.Array:
+                        return a
 
 
 class ScalarArrowUDFTests(ScalarArrowUDFTestsMixin, ReusedSQLTestCase):
