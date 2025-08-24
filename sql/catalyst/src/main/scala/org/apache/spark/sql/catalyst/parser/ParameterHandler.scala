@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.util.ExpressionToSqlConverter
 
 /**
  * Handler for parameter substitution across different Spark SQL contexts.
@@ -55,7 +56,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  * val result2 = handler.substituteParametersWithAutoRule("BEGIN SELECT :param1; END", context)
  * }}}
  *
- * @see [[ParameterSubstitutionStrategy]] for the underlying strategy pattern
+ * @see [[SubstituteParamsParser]] for the underlying parameter substitution logic
  * @see [[SubstituteParamsParser]] for the low-level parameter substitution
  * @since 4.0.0
  */
@@ -74,10 +75,21 @@ class ParameterHandler {
       context: ParameterContext,
       rule: SubstitutionRule = SubstitutionRule.Statement): String = {
 
-    val strategy = ParameterSubstitutionStrategy.fromContext(context)
     val substitutor = new SubstituteParamsParser()
 
-    strategy.substitute(sqlText, rule, substitutor)
+    context match {
+      case NamedParameterContext(params) =>
+        val paramValues = params.map { case (name, expr) =>
+          (name, ExpressionToSqlConverter.convert(expr))
+        }
+        val (substituted, _) = substitutor.substitute(sqlText, rule, namedParams = paramValues)
+        substituted
+
+      case PositionalParameterContext(params) =>
+        val paramValues = params.map(ExpressionToSqlConverter.convert).toList
+        val (substituted, _) = substitutor.substitute(sqlText, rule, positionalParams = paramValues)
+        substituted
+    }
   }
 
   /**
@@ -113,10 +125,14 @@ class ParameterHandler {
       paramMap: Map[String, Expression],
       rule: SubstitutionRule = SubstitutionRule.Statement): String = {
 
-    val strategy = ParameterSubstitutionStrategy.named(paramMap)
-    val substitutor = new SubstituteParamsParser()
+    if (paramMap.isEmpty) return sqlText
 
-    strategy.substitute(sqlText, rule, substitutor)
+    val substitutor = new SubstituteParamsParser()
+    val paramValues = paramMap.map { case (name, expr) =>
+      (name, ExpressionToSqlConverter.convert(expr))
+    }
+    val (substituted, _) = substitutor.substitute(sqlText, rule, namedParams = paramValues)
+    substituted
   }
 
   /**
@@ -132,10 +148,12 @@ class ParameterHandler {
       paramList: Seq[Expression],
       rule: SubstitutionRule = SubstitutionRule.Statement): String = {
 
-    val strategy = ParameterSubstitutionStrategy.positional(paramList)
-    val substitutor = new SubstituteParamsParser()
+    if (paramList.isEmpty) return sqlText
 
-    strategy.substitute(sqlText, rule, substitutor)
+    val substitutor = new SubstituteParamsParser()
+    val paramValues = paramList.map(ExpressionToSqlConverter.convert).toList
+    val (substituted, _) = substitutor.substitute(sqlText, rule, positionalParams = paramValues)
+    substituted
   }
 
   /**

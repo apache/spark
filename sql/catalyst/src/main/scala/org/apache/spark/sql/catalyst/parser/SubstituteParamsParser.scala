@@ -21,6 +21,7 @@ import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Enumeration for the types of SQL rules that can be parsed for parameter substitution.
@@ -72,8 +73,15 @@ class SubstituteParamsParser extends Logging {
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
+    // Match main parser configuration for consistent error messages
+    parser.addParseListener(PostProcessor)
+    parser.addParseListener(UnclosedCommentProcessor(sqlText, tokenStream))
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
+    parser.legacy_setops_precedence_enabled = SQLConf.get.setOpsPrecedenceEnforced
+    parser.legacy_exponent_literal_as_decimal_enabled = SQLConf.get.exponentLiteralAsDecimalEnabled
+    parser.SQL_standard_keyword_behavior = SQLConf.get.enforceReservedKeywords
+    parser.double_quoted_identifiers = SQLConf.get.doubleQuotedIdentifiers
 
     val astBuilder = new SubstituteParmsAstBuilder()
 
@@ -109,8 +117,15 @@ class SubstituteParamsParser extends Logging {
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
+    // Match main parser configuration for consistent error messages
+    parser.addParseListener(PostProcessor)
+    parser.addParseListener(UnclosedCommentProcessor(sqlText, tokenStream))
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
+    parser.legacy_setops_precedence_enabled = SQLConf.get.setOpsPrecedenceEnforced
+    parser.legacy_exponent_literal_as_decimal_enabled = SQLConf.get.exponentLiteralAsDecimalEnabled
+    parser.SQL_standard_keyword_behavior = SQLConf.get.enforceReservedKeywords
+    parser.double_quoted_identifiers = SQLConf.get.doubleQuotedIdentifiers
 
     val astBuilder = new SubstituteParmsAstBuilder()
 

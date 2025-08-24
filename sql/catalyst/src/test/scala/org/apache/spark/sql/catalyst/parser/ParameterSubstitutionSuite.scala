@@ -67,36 +67,28 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
     assert(!hasPos3 && !hasNamed3)
   }
 
-  test("ParameterSubstitutionStrategy - named strategy") {
-    val strategy = ParameterSubstitutionStrategy.named(Map("param1" -> Literal(42)))
-    val substitutor = new SubstituteParamsParser()
+  test("ParameterHandler - named parameters direct") {
+    val handler = new ParameterHandler()
 
-    val result = strategy.substitute("SELECT :param1", SubstitutionRule.Statement, substitutor)
+    val result = handler.substituteNamedParameters("SELECT :param1", Map("param1" -> Literal(42)))
     assert(result === "SELECT 42")
-
-    assert(strategy.canHandle("SELECT :param1", SubstitutionRule.Statement, substitutor))
-    assert(!strategy.canHandle("SELECT ?", SubstitutionRule.Statement, substitutor))
   }
 
-  test("ParameterSubstitutionStrategy - positional strategy") {
-    val strategy = ParameterSubstitutionStrategy.positional(Seq(Literal(42)))
-    val substitutor = new SubstituteParamsParser()
+  test("ParameterHandler - positional parameters direct") {
+    val handler = new ParameterHandler()
 
-    val result = strategy.substitute("SELECT ?", SubstitutionRule.Statement, substitutor)
+    val result = handler.substitutePositionalParameters("SELECT ?", Seq(Literal(42)))
     assert(result === "SELECT 42")
-
-    assert(strategy.canHandle("SELECT ?", SubstitutionRule.Statement, substitutor))
-    assert(!strategy.canHandle("SELECT :param1", SubstitutionRule.Statement, substitutor))
   }
 
-  test("ParameterSubstitutionStrategy - no parameter strategy") {
-    val strategy = NoParameterStrategy
-    val substitutor = new SubstituteParamsParser()
+  test("ParameterHandler - empty parameters") {
+    val handler = new ParameterHandler()
 
-    val result = strategy.substitute("SELECT 1", SubstitutionRule.Statement, substitutor)
-    assert(result === "SELECT 1")
+    val result1 = handler.substituteNamedParameters("SELECT 1", Map.empty)
+    assert(result1 === "SELECT 1")
 
-    assert(strategy.canHandle("SELECT 1", SubstitutionRule.Statement, substitutor))
+    val result2 = handler.substitutePositionalParameters("SELECT 1", Seq.empty)
+    assert(result2 === "SELECT 1")
   }
 
   test("ExpressionToSqlConverter - basic literals") {
