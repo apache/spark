@@ -209,7 +209,7 @@ case class ShuffleQueryStageExec(
   def this(
       id: Int,
       plan: SparkPlan,
-      _canonicalized: SparkPlan) = this(id, plan, _canonicalized, Some(false))
+      _canonicalized: SparkPlan) = this(id, plan, _canonicalized, None)
 
   @transient val shuffle = plan match {
     case s: ShuffleExchangeLike => s

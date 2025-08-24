@@ -928,7 +928,7 @@ object SQLConf {
 
   val REBALANCE_ADVISORY_PARTITION_SIZE_IN_BYTES =
     buildConf("spark.sql.adaptive.rebalance.advisoryPartitionSizeInBytes")
-      .doc("The advisory size in bytes of the shuffle partition during rebalance hints " +
+      .doc("The advisory size in bytes of the shuffle partition converted from REBALANCE hint " +
         s"(when ${ADAPTIVE_EXECUTION_ENABLED.key} is true). It takes effect when Spark " +
         "coalesces small shuffle partitions or splits skewed shuffle partition " +
         "in RebalancePartitions.")

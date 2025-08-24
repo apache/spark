@@ -3281,16 +3281,16 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-53298: make an isolation to control Shuffle partitionSizeInBytes " +
+  test("SPARK-53298: Make an isolation to control Shuffle partitionSizeInBytes " +
     "converted from `REBALANCE` hint") {
-    withTempView("tmpview") {
+    withTempView("tmp_view") {
       withSQLConf(
         SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "true",
         SQLConf.SHUFFLE_PARTITIONS.key -> "3") {
-        // block size: [291, 72, 0]
+        // block sizes array is [291, 72, 0]
         spark.sparkContext.parallelize(
             (1 to 10).map(i => TestData(if (i > 3) 3 else i, i.toString)), 3)
-          .toDF("c1", "c2").createOrReplaceTempView("tmpview")
+          .toDF("c1", "c2").createOrReplaceTempView("tmp_view")
 
         def checkAQEShuffleReadExists(query: String, expectNum: Int): Unit = {
           val (_, adaptive) = runAdaptiveAndVerifyResult(query)
@@ -3303,16 +3303,16 @@ class AdaptiveQueryExecSuite
 
         withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "200") {
           withSQLConf(SQLConf.REBALANCE_ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "200") {
-            // block size: [291, 72, 0] -> [291 (88 + 97 + 106), 72] -> [291 (185 + 106), 72]
-            checkAQEShuffleReadExists("SELECT /*+ REBALANCE(c1) */ * FROM tmpview", 2)
+            // block sizes array change: [291, 72, 0] -> [291 (88 + 97 + 106), 72] -> [291 (185 + 106), 72]
+            checkAQEShuffleReadExists("SELECT /*+ REBALANCE(c1) */ * FROM tmp_view", 2)
           }
           withSQLConf(SQLConf.REBALANCE_ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "30") {
-            // block size: [291, 72, 0] -> [291 (88 + 97 + 106), 72] -> [291 (88 + 97 + 106), 72]
-            checkAQEShuffleReadExists("SELECT /*+ REBALANCE(c1) */ * FROM tmpview", 3)
+            // block sizes array change: [291, 72, 0] -> [291 (88 + 97 + 106), 72] -> [291 (88 + 97 + 106), 72]
+            checkAQEShuffleReadExists("SELECT /*+ REBALANCE(c1) */ * FROM tmp_view", 3)
           }
           withSQLConf(SQLConf.REBALANCE_ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "500") {
-            // block size: [291, 72, 0] -> [291, 72]
-            checkAQEShuffleReadExists("SELECT /*+ REBALANCE(c1) */ * FROM tmpview", 0)
+            // block sizes array change: [291, 72, 0] -> [291, 72]
+            checkAQEShuffleReadExists("SELECT /*+ REBALANCE(c1) */ * FROM tmp_view", 0)
           }
         }
       }
