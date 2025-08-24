@@ -1794,6 +1794,51 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
+  test("SPARK-53347 Protobuf deserializer should correctly handle false boolean values") {
+    val messageWithBoolTrue = spark.range(1).select(
+      lit(WellKnownWrapperTypes
+        .newBuilder()
+        .setBoolVal(BoolValue.of(true))
+        .build().toByteArray
+      ).as("raw_proto"))
+
+    val messageWithBoolFalse = spark.range(1).select(
+      lit(WellKnownWrapperTypes
+        .newBuilder()
+        .setBoolVal(BoolValue.of(false))
+        .build().toByteArray
+      ).as("raw_proto"))
+
+    val messageWithBoolNull = spark.range(1).select(
+      lit(WellKnownWrapperTypes
+        .newBuilder()
+        .build().toByteArray
+      ).as("raw_proto"))
+
+    checkWithFileAndClassName("WellKnownWrapperTypes") { case (name, descFilePathOpt) =>
+      // With the option as false, ensure that deserialization works, and the
+      // value can be round-tripped.
+      List(Map.empty[String, String], Map("unwrap.primitive.wrapper.types" -> "false"))
+        .foreach(opts => {
+          val parsedTrue = messageWithBoolTrue
+            .select(from_protobuf_wrapper($"raw_proto", name, descFilePathOpt, opts).as("parsed"))
+            .select("parsed.bool_val.value")
+
+          val parsedFalse = messageWithBoolFalse
+            .select(from_protobuf_wrapper($"raw_proto", name, descFilePathOpt, opts).as("parsed"))
+            .select("parsed.bool_val.value")
+
+          val parsedNull = messageWithBoolNull
+            .select(from_protobuf_wrapper($"raw_proto", name, descFilePathOpt, opts).as("parsed"))
+            .select("parsed.bool_val.value")
+
+          checkAnswer(parsedTrue, Row(true))
+          checkAnswer(parsedFalse, Row(false))
+          checkAnswer(parsedNull, Row(null))
+        })
+    }
+  }
+
 
   test("well known types deserialization and round trip") {
     val message = spark.range(1).select(
