@@ -228,6 +228,14 @@ case class UnionLoopExec(
           }
       }
 
+      // The optimizer might have removed the UnionLoopRef in the recursion node (for example as a
+      // result of an empty join). In this case, prevPlan is null and needs to be set to the anchor
+      // result manually.
+      if (prevPlan == null) {
+        prevPlan = LogicalRDD.fromDataset(prevDF.queryExecution.toRdd, prevDF,
+          prevDF.isStreaming).newInstance()
+      }
+
       if (levelLimit != -1 && currentLevel > levelLimit) {
         throw new SparkException(
           errorClass = "RECURSION_LEVEL_LIMIT_EXCEEDED",
