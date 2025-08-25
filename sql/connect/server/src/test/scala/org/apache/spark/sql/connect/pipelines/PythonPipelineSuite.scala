@@ -498,11 +498,11 @@ class PythonPipelineSuite
     val graph = buildGraph("""
            |from pyspark.sql.functions import col
            |
-           |@sdp.materialized_view(partition_cols = ["id_mod"])
+           |@dp.materialized_view(partition_cols = ["id_mod"])
            |def mv():
            |  return spark.range(5).withColumn("id_mod", col("id") % 2)
            |
-           |@sdp.table(partition_cols = ["id_mod"])
+           |@dp.table(partition_cols = ["id_mod"])
            |def st():
            |  return spark.readStream.table("mv")
            |""".stripMargin)
