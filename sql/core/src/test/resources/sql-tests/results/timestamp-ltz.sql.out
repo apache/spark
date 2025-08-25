@@ -34,7 +34,7 @@ NULL	2016-12-31 00:12:00
 -- !query
 SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 45.678)
 -- !query schema
-struct<make_timestamp_ltz(2021, 7, 11, 6, 30, 45.678):timestamp>
+struct<make_timestamp(2021, 7, 11, 6, 30, 45.678):timestamp>
 -- !query output
 2021-07-11 06:30:45.678
 
@@ -42,7 +42,7 @@ struct<make_timestamp_ltz(2021, 7, 11, 6, 30, 45.678):timestamp>
 -- !query
 SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 45.678, 'CET')
 -- !query schema
-struct<make_timestamp_ltz(2021, 7, 11, 6, 30, 45.678, CET):timestamp>
+struct<make_timestamp(2021, 7, 11, 6, 30, 45.678, CET):timestamp>
 -- !query output
 2021-07-10 21:30:45.678
 
@@ -65,7 +65,7 @@ org.apache.spark.SparkDateTimeException
 -- !query
 SELECT make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678))
 -- !query schema
-struct<make_timestamp_ltz(make_date(2021, 7, 11), make_time(6, 30, 45.678)):timestamp_ntz>
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678)):timestamp_ntz>
 -- !query output
 2021-07-11 06:30:45.678
 
@@ -73,7 +73,7 @@ struct<make_timestamp_ltz(make_date(2021, 7, 11), make_time(6, 30, 45.678)):time
 -- !query
 SELECT make_timestamp_ltz(NULL, TIME'00:00:00')
 -- !query schema
-struct<make_timestamp_ltz(NULL, TIME '00:00:00'):timestamp_ntz>
+struct<make_timestamp(NULL, TIME '00:00:00'):timestamp_ntz>
 -- !query output
 NULL
 
@@ -81,7 +81,7 @@ NULL
 -- !query
 SELECT make_timestamp_ltz(DATE'1970-01-01', NULL)
 -- !query schema
-struct<make_timestamp_ltz(DATE '1970-01-01', NULL):timestamp_ntz>
+struct<make_timestamp(DATE '1970-01-01', NULL):timestamp_ntz>
 -- !query output
 NULL
 
@@ -141,7 +141,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'PST')
 -- !query schema
-struct<make_timestamp_ltz(make_date(2021, 7, 11), make_time(6, 30, 45.678), PST):timestamp_ntz>
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), PST):timestamp_ntz>
 -- !query output
 2021-07-11 06:30:45.678
 
@@ -149,7 +149,7 @@ struct<make_timestamp_ltz(make_date(2021, 7, 11), make_time(6, 30, 45.678), PST)
 -- !query
 SELECT make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'CET')
 -- !query schema
-struct<make_timestamp_ltz(make_date(2021, 7, 11), make_time(6, 30, 45.678), CET):timestamp_ntz>
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), CET):timestamp_ntz>
 -- !query output
 2021-07-11 06:30:45.678
 
