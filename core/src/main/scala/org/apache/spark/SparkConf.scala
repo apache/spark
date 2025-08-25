@@ -24,6 +24,7 @@ import scala.collection.mutable.LinkedHashSet
 import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{Schema, SchemaNormalization}
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
@@ -345,7 +346,7 @@ class SparkConf(loadDefaults: Boolean)
 
   /** Set a name for your application. Shown in the Spark web UI. */
   def setAppName(name: String): SparkConf = {
-    set("spark.app.name", name)
+    set("spark.app.name", StringEscapeUtils.escapeHtml4(name))
   }
 
   /** Set JAR files to distribute to the cluster. */
