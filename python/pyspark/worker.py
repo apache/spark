@@ -1340,8 +1340,11 @@ def read_udtf(pickleSer, infile, eval_type):
             v = utf8_deserializer.loads(infile)
             runner_conf[k] = v
         prefers_large_var_types = use_large_var_types(runner_conf)
-        # Use PyArrow-native serializer for Arrow UDTFs
-        ser = ArrowStreamArrowUDTFSerializer()
+        # Read the table argument offsets
+        num_table_arg_offsets = read_int(infile)
+        table_arg_offsets = [read_int(infile) for _ in range(num_table_arg_offsets)]
+        # Use PyArrow-native serializer for Arrow UDTFs with potential UDT support
+        ser = ArrowStreamArrowUDTFSerializer(table_arg_offsets=table_arg_offsets)
     else:
         # Each row is a group so do not batch but send one by one.
         ser = BatchedSerializer(CPickleSerializer(), 1)
@@ -1956,39 +1959,16 @@ def read_udtf(pickleSer, infile, eval_type):
             return_type_size = len(return_type)
 
             def verify_result(result):
-                if not isinstance(result, (pa.Table, pa.RecordBatch)):
-                    raise PySparkTypeError(
-                        errorClass="INVALID_ARROW_UDTF_RETURN_TYPE",
+                # Validate the output schema when the result has columns
+                if result.num_columns != return_type_size:
+                    raise PySparkRuntimeError(
+                        errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
                         messageParameters={
-                            "return_type": type(result).__name__,
-                            "value": str(result),
+                            "expected": str(return_type_size),
+                            "actual": str(result.num_columns),
                             "func": f.__name__,
                         },
                     )
-
-                if isinstance(result, pa.Table):
-                    if result.num_rows == 0:
-                        return pa.RecordBatch.from_pylist(
-                            [], schema=pa.schema(list(arrow_return_type))
-                        )
-                    else:
-                        result = (
-                            result.to_batches()[0]
-                            if result.to_batches()
-                            else pa.RecordBatch.from_pylist([], schema=result.schema)
-                        )
-
-                # Validate the output schema when the result has columns
-                if result.num_columns > 0:
-                    if result.num_columns != return_type_size:
-                        raise PySparkRuntimeError(
-                            errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
-                            messageParameters={
-                                "expected": str(return_type_size),
-                                "actual": str(result.num_columns),
-                                "func": f.__name__,
-                            },
-                        )
 
                 # Verify the type and the schema of the result.
                 verify_arrow_result(
@@ -2023,63 +2003,35 @@ def read_udtf(pickleSer, infile, eval_type):
                                 "func": f.__name__,
                             },
                         )
-                    if check_output_row_against_schema is not None:
-                        # For PyArrow UDTFs, we need to convert the result to rows for validation
-                        if isinstance(res, (pa.Table, pa.RecordBatch)):
-                            table = (
-                                res if isinstance(res, pa.Table) else pa.Table.from_batches([res])
-                            )
-                            for batch in table.to_batches():
-                                for row_idx in range(batch.num_rows):
-                                    row_data = tuple(
-                                        batch.column(i)[row_idx].as_py()
-                                        for i in range(batch.num_columns)
-                                    )
-                                    check_output_row_against_schema(row_data)
-                        else:
-                            for row in res:
-                                if row is not None:
-                                    check_output_row_against_schema(row)
-                            yield from res
-                            return
-
-                    yield from res
+                    return res
+                else:
+                    return iter([])
 
             def convert_to_arrow(data: Iterable):
-                data_list = list(check_return_value(data))
-                if len(data_list) == 0:
-                    return [
-                        pa.RecordBatch.from_pylist([], schema=pa.schema(list(arrow_return_type)))
-                    ]
+                data_iter = check_return_value(data)
 
                 # Handle PyArrow Tables/RecordBatches directly
-                batches = []
-                for item in data_list:
+                is_empty = True
+                for item in data_iter:
+                    is_empty = False
                     if isinstance(item, pa.Table):
-                        batches.extend(item.to_batches())
+                        yield from item.to_batches()
                     elif isinstance(item, pa.RecordBatch):
-                        batches.append(item)
+                        yield item
                     else:
                         # Arrow UDTF should only return Arrow types (RecordBatch/Table)
                         raise PySparkRuntimeError(
                             errorClass="UDTF_ARROW_TYPE_CONVERSION_ERROR",
-                            messageParameters={
-                                "data": str(item),
-                                "schema": return_type.simpleString(),
-                                "arrow_schema": str(arrow_return_type),
-                            },
+                            messageParameters={},
                         )
-                return batches
+
+                if is_empty:
+                    yield pa.RecordBatch.from_pylist([], schema=pa.schema(list(arrow_return_type)))
 
             def evaluate(*args: pa.RecordBatch):
-                if len(args) == 0:
-                    for batch in convert_to_arrow(func()):
-                        yield verify_result(batch), arrow_return_type
-                else:
-                    # For Arrow UDTFs, unpack the RecordBatches and pass them to the function
-                    # TODO(SPARK-52981): support table arguments
-                    for batch in convert_to_arrow(func(*args)):
-                        yield verify_result(batch), arrow_return_type
+                # For Arrow UDTFs, unpack the RecordBatches and pass them to the function
+                for batch in convert_to_arrow(func(*args)):
+                    yield verify_result(batch), arrow_return_type
 
             return evaluate
 

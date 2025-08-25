@@ -25,8 +25,9 @@ import java.util.Map;
 import java.util.Objects;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-import com.google.common.base.Preconditions;
 import org.iq80.leveldb.WriteBatch;
+
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * Holds metadata about app-specific types stored in LevelDB. Serves as a cache for data collected
@@ -164,7 +165,7 @@ class LevelDBTypeInfo {
 
   Index index(String name) {
     Index i = indices.get(name);
-    Preconditions.checkArgument(i != null, "Index %s does not exist for type %s.", name,
+    JavaUtils.checkArgument(i != null, "Index %s does not exist for type %s.", name,
       type.getName());
     return i;
   }
@@ -253,7 +254,7 @@ class LevelDBTypeInfo {
      * same parent index exist.
      */
     byte[] childPrefix(Object value) {
-      Preconditions.checkState(parent == null, "Not a parent index.");
+      JavaUtils.checkState(parent == null, "Not a parent index.");
       return buildKey(name, toParentKey(value));
     }
 
@@ -268,9 +269,9 @@ class LevelDBTypeInfo {
 
     private void checkParent(byte[] prefix) {
       if (prefix != null) {
-        Preconditions.checkState(parent != null, "Parent prefix provided for parent index.");
+        JavaUtils.checkState(parent != null, "Parent prefix provided for parent index.");
       } else {
-        Preconditions.checkState(parent == null, "Parent prefix missing for child index.");
+        JavaUtils.checkState(parent == null, "Parent prefix missing for child index.");
       }
     }
 

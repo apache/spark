@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect.client
+package org.apache.spark.repl
 
-/**
- * Represents an exception which was considered retriable but has exceeded retry limits.
- *
- * The actual exceptions incurred can be retrieved with getSuppressed()
- */
-class RetriesExceeded extends Throwable
+import org.apache.spark.sql.api.java.UDF2
+
+class IntSumUdf extends UDF2[Long, Long, Long] {
+  override def call(t1: Long, t2: Long): Long = t1 + t2
+}

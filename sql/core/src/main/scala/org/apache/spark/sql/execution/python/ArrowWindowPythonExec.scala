@@ -28,6 +28,12 @@ import org.apache.spark.sql.execution.window._
 
 /**
  * This class calculates and outputs windowed aggregates over the rows in a single partition.
+ * Following eval types are supported:
+ *
+ * <ul>
+ *   <li> SQL_WINDOW_AGG_ARROW_UDF for Arrow UDF
+ *   <li> SQL_WINDOW_AGG_PANDAS_UDF for Pandas UDF
+ * </ul>
  *
  * This is similar to [[WindowExec]]. The main difference is that this node does not compute
  * any window aggregation values. Instead, it computes the lower and upper bound for each window

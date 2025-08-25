@@ -640,16 +640,23 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
       case u: Union =>
         var first = true
         plan.mapChildren { child =>
-          if (first) {
-            first = false
-            // `Union` inherits its first child's outputs. We don't remove those aliases from the
-            // first child's tree that prevent aliased attributes to appear multiple times in the
-            // `Union`'s output. A parent projection node on the top of an `Union` with non-unique
-            // output attributes could return incorrect result.
-            removeRedundantAliases(child, excluded ++ child.outputSet)
+          if (!conf.unionIsResolvedWhenDuplicatesPerChildResolved || shouldRemoveAliasesUnderUnion(
+            child
+          )) {
+            if (first) {
+              first = false
+              // `Union` inherits its first child's outputs. We don't remove those aliases from the
+              // first child's tree that prevent aliased attributes to appear multiple times in the
+              // `Union`'s output. A parent projection node on the top of an `Union` with
+              // non-unique output attributes could return incorrect result.
+              removeRedundantAliases(child, excluded ++ child.outputSet)
+            } else {
+              // We don't need to exclude those attributes that `Union` inherits from its first
+              // child.
+              removeRedundantAliases(child, excluded -- u.children.head.outputSet)
+            }
           } else {
-            // We don't need to exclude those attributes that `Union` inherits from its first child.
-            removeRedundantAliases(child, excluded -- u.children.head.outputSet)
+            child
           }
         }
 
@@ -691,6 +698,44 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
             case a: Attribute => mapping.get(a).map(_.withName(a.name)).getOrElse(a)
           })
         }
+    }
+  }
+
+  /**
+   * In case a [[Project]], [[Aggregate]] or [[Window]] is a child of [[Union]], we don't remove an
+   * [[Alias]] in case it is on top of an [[Attribute]] which exists in the output set of the
+   * operator. This is needed because otherwise, we end up having an operator with duplicates in
+   * its output. When that happens, [[Union]] is not resolved, and we fail (but we shouldn't).
+   * In this example:
+   *
+   * {{{ SELECT col1 FROM values(1) WHERE 100 IN (SELECT col1 UNION SELECT col1); }}}
+   *
+   * Without `shouldRemoveAliasesUnderUnion` check, we would remove the [[Alias]] introduced in
+   * [[DeduplicateRelations]] rule (in a [[Project]] tagged as
+   * `PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION`), the result is unresolved [[Union]] which causes the
+   * failure. With the check, [[Alias]] stays, and we resolve the plan properly.
+   */
+  private def shouldRemoveAliasesUnderUnion(operator: LogicalPlan): Boolean = {
+    operator match {
+      case project: Project =>
+        project.projectList.forall {
+          case Alias(attribute: Attribute, _) =>
+            !project.outputSet.contains(attribute)
+          case _ => true
+        }
+      case aggregate: Aggregate =>
+        aggregate.aggregateExpressions.forall {
+          case Alias(attribute: Attribute, _) =>
+            !aggregate.outputSet.contains(attribute)
+          case _ => true
+        }
+      case window: Window =>
+        window.windowExpressions.forall {
+          case Alias(attribute: Attribute, _) =>
+            !window.outputSet.contains(attribute)
+          case _ => true
+        }
+      case other => true
     }
   }
 
@@ -2584,6 +2629,28 @@ object GenerateOptimization extends Rule[LogicalPlan] {
             val updatedGenerate = rewrittenG.copy(generatorOutput = updatedGeneratorOutput)
             p.withNewChildren(Seq(updatedGenerate))
           case _ => p
+        }
+
+      case p @ Project(_, g: Generate) if g.generator.isInstanceOf[JsonTuple] =>
+        val generatorOutput = g.generatorOutput
+        val usedOutputs =
+          AttributeSet(generatorOutput).intersect(AttributeSet(p.projectList.flatMap(_.references)))
+
+        usedOutputs.size match {
+          case 0 =>
+            p.withNewChildren(g.children)
+          case n if n < generatorOutput.size =>
+            val originJsonTuple = g.generator.asInstanceOf[JsonTuple]
+            val (newJsonExpressions, newGeneratorOutput) =
+              generatorOutput.zipWithIndex.collect {
+                case (attr, i) if usedOutputs.contains(attr) =>
+                  (originJsonTuple.children(i + 1), attr)
+              }.unzip
+            p.withNewChildren(Seq(g.copy(
+              generator = JsonTuple(originJsonTuple.children.head +: newJsonExpressions),
+              generatorOutput = newGeneratorOutput)))
+          case _ =>
+            p
         }
     }
 }

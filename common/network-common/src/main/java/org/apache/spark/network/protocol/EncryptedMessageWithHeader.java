@@ -21,7 +21,6 @@ import java.io.EOFException;
 import java.io.InputStream;
 import javax.annotation.Nullable;
 
-import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
@@ -29,6 +28,7 @@ import io.netty.handler.stream.ChunkedStream;
 import io.netty.handler.stream.ChunkedInput;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * A wrapper message that holds two separate pieces (a header and a body).
@@ -60,7 +60,7 @@ public class EncryptedMessageWithHeader implements ChunkedInput<ByteBuf> {
 
   public EncryptedMessageWithHeader(
       @Nullable ManagedBuffer managedBuffer, ByteBuf header, Object body, long bodyLength) {
-    Preconditions.checkArgument(body instanceof InputStream || body instanceof ChunkedStream,
+    JavaUtils.checkArgument(body instanceof InputStream || body instanceof ChunkedStream,
       "Body must be an InputStream or a ChunkedStream.");
     this.managedBuffer = managedBuffer;
     this.header = header;

@@ -24,9 +24,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
-import com.google.common.base.Preconditions;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.WriteBatch;
+
+import org.apache.spark.network.util.JavaUtils;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -166,7 +167,7 @@ class RocksDBTypeInfo {
 
   Index index(String name) {
     Index i = indices.get(name);
-    Preconditions.checkArgument(i != null, "Index %s does not exist for type %s.", name,
+    JavaUtils.checkArgument(i != null, "Index %s does not exist for type %s.", name,
       type.getName());
     return i;
   }
@@ -255,7 +256,7 @@ class RocksDBTypeInfo {
      * same parent index exist.
      */
     byte[] childPrefix(Object value) {
-      Preconditions.checkState(parent == null, "Not a parent index.");
+      JavaUtils.checkState(parent == null, "Not a parent index.");
       return buildKey(name, toParentKey(value));
     }
 
@@ -270,9 +271,9 @@ class RocksDBTypeInfo {
 
     private void checkParent(byte[] prefix) {
       if (prefix != null) {
-        Preconditions.checkState(parent != null, "Parent prefix provided for parent index.");
+        JavaUtils.checkState(parent != null, "Parent prefix provided for parent index.");
       } else {
-        Preconditions.checkState(parent == null, "Parent prefix missing for child index.");
+        JavaUtils.checkState(parent == null, "Parent prefix missing for child index.");
       }
     }
 

@@ -86,7 +86,7 @@ def arrow_udf(f=None, returnType=None, functionType=None):
 
     >>> from pyspark.sql.functions import ArrowUDFType
     >>> from pyspark.sql.types import IntegerType
-    >>> @arrow_udf(IntegerType())
+    >>> @arrow_udf(IntegerType(), ArrowUDFType.SCALAR)
     ... def slen(v: pa.Array) -> pa.Array:
     ...     return pa.compute.utf8_length(v)
 
@@ -221,7 +221,7 @@ def arrow_udf(f=None, returnType=None, functionType=None):
 
         The function takes `pyarrow.Array` and returns a scalar value. The returned scalar
         can be a python primitive type, (e.g., int or float), a numpy data type (e.g.,
-        numpy.int64 or numpy.float64), or a pyarrow.Scalar instance which supports complex
+        numpy.int64 or numpy.float64), or a `pyarrow.Scalar` instance which supports complex
         return types.
         `Any` should ideally be a specific scalar type accordingly.
 
@@ -240,6 +240,7 @@ def arrow_udf(f=None, returnType=None, functionType=None):
         +---+-----------+
 
         The retun type can also be a complex type such as struct, list, or map.
+
         >>> @arrow_udf("struct<m1: double, m2: double>")
         ... def min_max_udf(v: pa.Array) -> pa.Scalar:
         ...     m1 = pa.compute.min(v)
@@ -806,7 +807,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
             type_hints = get_type_hints(f)
         except NameError:
             type_hints = {}
-        evalType = infer_eval_type(signature(f), type_hints)
+        evalType = infer_eval_type(signature(f), type_hints, kind)
         assert evalType is not None
 
     if evalType is None:
@@ -823,6 +824,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
             evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
             or evalType == PythonEvalType.SQL_SCALAR_ARROW_UDF
             or evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
+            or evalType == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
         )
         and len(argspec.args) == 0
         and argspec.varargs is None
@@ -831,7 +833,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
             errorClass="INVALID_PANDAS_UDF",
             messageParameters={
                 "detail": f"0-arg {kind_str} are not supported. "
-                "Instead, create a 1-arg pandas_udf and ignore the arg in your function.",
+                f"Instead, create a 1-arg {kind_str} and ignore the arg in your function.",
             },
         )
 
