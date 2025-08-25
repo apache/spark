@@ -1670,9 +1670,6 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                 input_data_pandas = pd.DataFrame([d for _, d in input_data_iterator])
                 init_state_pandas = pd.DataFrame([d for _, d in init_state_iterator])
 
-                # print(f"@@@ input_data_pandas: {input_data_pandas}")
-                # print(f"@@@ init_state_pandas: {init_state_pandas}")
-
                 yield (batch_key,
                        [input_data_pandas[col] for col in input_data_pandas.columns],
                        [init_state_pandas[col] for col in init_state_pandas.columns])
@@ -1824,18 +1821,17 @@ class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySp
                 table = pa.Table.from_arrays(data_field_arrays, names=data_field_names)
 
                 if table.num_rows == 0:
-                    return (None, iter([]))
+                    return iter([])
                 else:
-                    batch_key = tuple(table.column(o)[0].as_py() for o in key_offsets)
+                    def row_iter():
+                        for row_idx in range(table.num_rows):
+                            batch_key = tuple(table.column(o)[row_idx].as_py() for o in key_offsets)
+                            row = DataRow(
+                                *(table.column(i)[row_idx].as_py() for i in range(table.num_columns))
+                            )
+                            yield (batch_key, row)
 
-                    rows = []
-                    for row_idx in range(table.num_rows):
-                        row = DataRow(
-                            *(table.column(i)[row_idx].as_py() for i in range(table.num_columns))
-                        )
-                        rows.append(row)
-
-                    return (batch_key, iter(rows))
+                    return row_iter()
 
             """
             The arrow batch is written in the schema:
@@ -1846,22 +1842,17 @@ class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySp
              data generator. All rows in the same batch have the same grouping key.
             """
             for batch in batches:
-                (input_batch_key, input_data_iter) = extract_rows(
+                input_data_iter = extract_rows(
                     batch, "inputData", self.key_offsets
                 )
-                (init_batch_key, init_state_iter) = extract_rows(
+                init_state_iter = extract_rows(
                     batch, "initState", self.init_key_offsets
                 )
 
-                if input_batch_key is None:
-                    batch_key = init_batch_key
-                else:
-                    batch_key = input_batch_key
-
-                for init_state_row in init_state_iter:
+                for batch_key, init_state_row in init_state_iter:
                     yield (batch_key, None, init_state_row)
 
-                for input_data_row in input_data_iter:
+                for batch_key, input_data_row in input_data_iter:
                     yield (batch_key, input_data_row, None)
 
         _batches = super(ArrowStreamUDFSerializer, self).load_stream(stream)
