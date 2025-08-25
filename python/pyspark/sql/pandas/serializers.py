@@ -1539,8 +1539,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
 
             def row_stream():
                 for batch in batches:
-                    data_pandas = pa.Table.from_batches([batch]).to_pandas()
-                    for row in data_pandas.itertuples(index=False):
+                    for _, row in batch.to_pandas().iterrows():
                         batch_keys = tuple(row[s] for s in self.key_offsets)
                         yield (batch_keys, row)
 
@@ -1603,7 +1602,6 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
         self.init_key_offsets = None
 
     def load_stream(self, stream):
-        import pyarrow as pa
         from pyspark.sql.streaming.stateful_processor_util import (
             TransformWithStateInPandasFuncMode,
         )
@@ -1621,19 +1619,6 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
             """
 
             import pandas as pd
-            def flatten_columns(cur_batch, col_name):
-                state_column = cur_batch.column(cur_batch.schema.get_field_index(col_name))
-                state_field_names = [
-                    state_column.type[i].name for i in range(state_column.type.num_fields)
-                ]
-                state_field_arrays = [
-                    state_column.field(i) for i in range(state_column.type.num_fields)
-                ]
-                table_from_fields = pa.Table.from_arrays(
-                    state_field_arrays, names=state_field_names
-                )
-                return table_from_fields
-
             """
             The arrow batch is written in the schema:
             schema: StructType = new StructType()
@@ -1644,21 +1629,26 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
             """
             def row_stream():
                 for batch in batches:
-                    flatten_data_pd = flatten_columns(batch, "inputData").to_pandas()
-                    flatten_init_pd = flatten_columns(batch, "initState").to_pandas()
-                    for row_data, row_init in zip(
-                            flatten_data_pd.itertuples(index=False),
-                            flatten_init_pd.itertuples(index=False)):
-                        if len(row_data) == 0:
-                            # If row is empty, assign batch_key using row_init
-                            batch_keys = tuple(row_init[s] for s in self.key_offsets)
+                    for _, row in batch.to_pandas().iterrows():
+                        input_data = row["inputData"]
+                        init_state = row["initState"]
+
+                        key_series = [list(input_data.values())[o] for o in self.key_offsets]
+                        init_key_series = [list(init_state.values())[o] for o in self.init_key_offsets]
+
+                        if any(s is None for s in key_series):
+                            # If any row is empty, assign batch_key using init_key_series
+                            batch_keys = tuple(s for s in init_key_series)
                         else:
-                            batch_keys = tuple(row_data[s] for s in self.key_offsets)
-                        yield (batch_keys, row_data, row_init)
+                            batch_keys = tuple(s for s in key_series)
+
+                        yield batch_keys, input_data, init_state
 
             for batch_keys, group_rows in groupby(row_stream(), key=lambda x: x[0]):
-                data_pandas = pd.DataFrame([row_data for _, row_data, _ in group_rows])
-                init_data_pandas = pd.DataFrame([row_init for _, _, row_init in group_rows])
+                data_pairs = [(d, i) for _, d, i in group_rows]
+                data_pandas = pd.DataFrame([d for d, _ in data_pairs]).dropna(how="all")
+                init_data_pandas = pd.DataFrame([i for _, i in data_pairs]).dropna(how="all")
+
                 yield (batch_keys,
                        [data_pandas[col] for col in data_pandas.columns],
                        [init_data_pandas[col] for col in init_data_pandas.columns])
