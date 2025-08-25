@@ -4486,13 +4486,49 @@ udf.__doc__ = pysparkfuncs.udf.__doc__
 
 
 def udtf(
-    cls: Optional[Type] = None,
+    cls: Optional[Union[Type, StructType, str]] = None,
     *,
     returnType: Optional[Union[StructType, str]] = None,
     useArrow: Optional[bool] = None,
 ) -> Union["UserDefinedTableFunction", Callable[[Type], "UserDefinedTableFunction"]]:
-    if cls is None:
-        return functools.partial(_create_py_udtf, returnType=returnType, useArrow=useArrow)
+    # check for conflicting returnType arguments
+    if cls is not None and isinstance(cls, (str, StructType)) and returnType is not None:
+        raise PySparkTypeError(
+            errorClass="VALUE_NOT_ALLOWED", 
+            messageParameters={
+                "arg_name": "returnType",
+                "allowed_values": "either positional or keyword, not both"
+            }
+        )
+    
+    # check for invalid positional argument types
+    if cls is not None and not isinstance(cls, (str, StructType, type)):
+        raise PySparkTypeError(
+            errorClass="NOT_COLUMN_OR_STR", 
+            messageParameters={
+                "arg_name": "first positional argument",
+                "arg_type": type(cls).__name__
+            }
+        )
+    
+    # check for non-StructType DataType
+    if isinstance(cls, DataType) and not isinstance(cls, StructType):
+        raise PySparkTypeError(
+            errorClass="NOT_COLUMN_OR_STR", 
+            messageParameters={
+                "arg_name": "returnType", 
+                "arg_type": type(cls).__name__
+            }
+        )
+    
+    # Handle positional returnType argument
+    if cls is None or isinstance(cls, (str, StructType)):
+        return_type = cls or returnType
+        return functools.partial(
+            _create_py_udtf,
+            returnType=return_type,
+            useArrow=useArrow,
+        )
     else:
         return _create_py_udtf(cls=cls, returnType=returnType, useArrow=useArrow)
 

@@ -27088,9 +27088,36 @@ def udf(
         return _create_py_udf(f=f, returnType=returnType, useArrow=useArrow)
 
 
+@overload
+def udtf(
+    cls: Type,
+    *,
+    useArrow: Optional[bool] = None,
+) -> "UserDefinedTableFunction":
+    ...
+
+
+@overload
+def udtf(
+    *,
+    returnType: Optional[Union[StructType, str]] = None,
+    useArrow: Optional[bool] = None,
+) -> Callable[[Type], "UserDefinedTableFunction"]:
+    ...
+
+
+@overload
+def udtf(
+    returnType: Union[StructType, str],
+    *,
+    useArrow: Optional[bool] = None,
+) -> Callable[[Type], "UserDefinedTableFunction"]:
+    ...
+
+
 @_try_remote_functions
 def udtf(
-    cls: Optional[Type] = None,
+    cls: Optional[Union[Type, StructType, str]] = None,
     *,
     returnType: Optional[Union[StructType, str]] = None,
     useArrow: Optional[bool] = None,
@@ -27251,9 +27278,48 @@ def udtf(
 
     User-defined table functions do not accept keyword arguments on the calling side.
     """
-    if cls is None:
-        return functools.partial(_create_py_udtf, returnType=returnType, useArrow=useArrow)
+    # Validation: check for conflicting returnType arguments
+    if cls is not None and isinstance(cls, (str, StructType)) and returnType is not None:
+        raise PySparkTypeError(
+            errorClass="VALUE_NOT_ALLOWED", 
+            messageParameters={
+                "arg_name": "returnType",
+                "allowed_values": "either positional or keyword, not both"
+            }
+        )
+    
+    # Validation: check for invalid positional argument types
+    if cls is not None and not isinstance(cls, (str, StructType, type)):
+        raise PySparkTypeError(
+            errorClass="NOT_COLUMN_OR_STR", 
+            messageParameters={
+                "arg_name": "first positional argument",
+                "arg_type": type(cls).__name__
+            }
+        )
+    
+    # Validation: check for non-StructType DataType
+    if isinstance(cls, DataType) and not isinstance(cls, StructType):
+        raise PySparkTypeError(
+            errorClass="NOT_COLUMN_OR_STR", 
+            messageParameters={
+                "arg_name": "returnType", 
+                "arg_type": type(cls).__name__
+            }
+        )
+    
+    # Handle positional returnType argument (similar to UDF)
+    if cls is None or isinstance(cls, (str, StructType)):
+        # If StructType or string has been passed as a positional argument
+        # for decorator use it as a returnType
+        return_type = cls or returnType
+        return functools.partial(
+            _create_py_udtf,
+            returnType=return_type,
+            useArrow=useArrow,
+        )
     else:
+        # cls is a class type
         return _create_py_udtf(cls=cls, returnType=returnType, useArrow=useArrow)
 
 

@@ -126,6 +126,66 @@ class BaseUDTFTestsMixin:
 
         assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=1, b=2)])
 
+    def test_udtf_decorator_positional_string_schema(self):
+        @udtf("a: int, b: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a, a + 1
+
+        assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=1, b=2)])
+
+    def test_udtf_decorator_positional_struct_type(self):
+        schema = StructType([
+            StructField("a", IntegerType(), True),
+            StructField("b", IntegerType(), True)
+        ])
+        @udtf(schema)
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a, a + 1
+
+        assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=1, b=2)])
+
+    def test_udtf_decorator_bare(self):
+        @udtf
+        class TestUDTF:
+            @staticmethod
+            def analyze() -> AnalyzeResult:
+                return AnalyzeResult(StructType().add("c1", StringType()).add("c2", StringType()))
+            
+            def eval(self):
+                yield "hello", "world"
+
+        assertDataFrameEqual(TestUDTF(), [Row(c1="hello", c2="world")])
+
+    def test_udtf_decorator_empty_parens(self):
+        @udtf()
+        class TestUDTF:
+            @staticmethod
+            def analyze() -> AnalyzeResult:
+                return AnalyzeResult(StructType().add("c1", StringType()).add("c2", StringType()))
+            
+            def eval(self):
+                yield "hello", "world"
+
+        assertDataFrameEqual(TestUDTF(), [Row(c1="hello", c2="world")])
+
+    def test_udtf_decorator_keyword_schema(self):
+        @udtf(returnType="a: int, b: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a, a + 1
+
+        assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=1, b=2)])
+
+    def test_udtf_decorator_mixed_args(self):
+        @udtf("a: int, b: int", useArrow=True)
+        class TestUDTF:
+            def eval(self, a: int):
+                yield a, a + 1
+
+        assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=1, b=2)])
+
     def test_udtf_registration(self):
         class TestUDTF:
             def eval(self, a: int, b: int):
@@ -2922,6 +2982,51 @@ class BaseUDTFTestsMixin:
                     "Python worker exited unexpectedly",
                     err_type=Exception,
                 )
+
+    def test_udtf_decorator_invalid_both_positional_and_keyword_return_type(self):
+        with self.assertRaises(PySparkTypeError) as context:
+            @udtf("a: int, b: int", returnType="c: string")
+            class TestUDTF:
+                def eval(self, a: int):
+                    yield a, a + 1
+        
+        self.assertIn("either positional or keyword, not both", str(context.exception))
+
+    def test_udtf_decorator_invalid_non_schema_positional(self):
+        with self.assertRaises(PySparkTypeError):
+            @udtf(123)  # Invalid type
+            class TestUDTF:
+                def eval(self, a: int):
+                    yield a, a + 1
+
+        with self.assertRaises(PySparkTypeError):
+            @udtf(lambda x: x)  # Function is not allowed
+            class TestUDTF:
+                def eval(self, a: int):
+                    yield a, a + 1
+
+    def test_udtf_decorator_invalid_schema_string(self):
+        with self.assertRaises(AnalysisException):
+            @udtf("invalid schema string")
+            class TestUDTF:
+                def eval(self, a: int):
+                    yield a, a + 1
+            TestUDTF(lit(1)).collect()
+
+    def test_udtf_decorator_invalid_struct_type(self):
+        with self.assertRaises(PySparkTypeError):
+            @udtf(IntegerType())  # Should be StructType, not IntegerType
+            class TestUDTF:
+                def eval(self, a: int):
+                    yield a, a + 1
+
+    def test_udtf_decorator_missing_return_type_no_analyze(self):
+        with self.assertRaises(PySparkTypeError):
+            @udtf
+            class TestUDTF:  # No analyze method and no returnType
+                def eval(self, a: int):
+                    yield a, a + 1
+            TestUDTF(lit(1)).collect()
 
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
