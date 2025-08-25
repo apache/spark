@@ -1540,12 +1540,12 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
             def row_stream():
                 for batch in batches:
                     for row in batch.to_pandas().itertuples(index=False):
-                        batch_keys = tuple(row[s] for s in self.key_offsets)
-                        yield (batch_keys, row)
+                        batch_key = tuple(row[s] for s in self.key_offsets)
+                        yield (batch_key, row)
 
-            for batch_keys, group_rows in groupby(row_stream(), key=lambda x: x[0]):
+            for batch_key, group_rows in groupby(row_stream(), key=lambda x: x[0]):
                 df = pd.DataFrame([row for _, row in group_rows])
-                yield (batch_keys, [df[col] for col in df.columns])
+                yield (batch_key, [df[col] for col in df.columns])
 
         _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)
@@ -1631,35 +1631,28 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
             """
 
             batches_gent_1, batches_gent_2 = tee(batches)
+            columns_map: dict[str, Optional[list[str]]] = {"inputData": None, "initState": None}
 
-            def input_data_stream():
-                for batch in batches_gent_1:
-                    input_data_df = pd.DataFrame(
+            def data_stream(batch_iter, field_name, key_offsets):
+                nonlocal columns_map
+                for batch in batch_iter:
+                    if columns_map[field_name] is None:
+                        columns_map[field_name] = [
+                            f.name
+                            for f in batch.column(batch.schema.get_field_index(field_name)).type
+                        ]
+
+                    data_df = pd.DataFrame(
                         {
-                            f.name: batch.column(batch.schema.get_field_index("inputData"))
+                            f.name: batch.column(batch.schema.get_field_index(field_name))
                             .field(f.name)
                             .to_pandas()
-                            for f in batch.column(batch.schema.get_field_index("inputData")).type
+                            for f in batch.column(batch.schema.get_field_index(field_name)).type
                         }
                     )
 
-                    for row in input_data_df.itertuples(index=False):
-                        batch_key = [row[o] for o in self.key_offsets]
-                        yield batch_key, row
-
-            def init_state_stream():
-                for batch in batches_gent_2:
-                    init_state_df = pd.DataFrame(
-                        {
-                            f.name: batch.column(batch.schema.get_field_index("initState"))
-                            .field(f.name)
-                            .to_pandas()
-                            for f in batch.column(batch.schema.get_field_index("initState")).type
-                        }
-                    )
-
-                    for row in init_state_df.itertuples(index=False):
-                        batch_key = [row[o] for o in self.init_key_offsets]
+                    for row in data_df.itertuples(index=False):
+                        batch_key = tuple(row[o] for o in key_offsets)
                         yield batch_key, row
 
             def groupby_pair(gen1, gen2, keyfunc):
@@ -1679,10 +1672,16 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                         k2, grp2 = next(g2, (None, iter(())))
 
             for batch_key, input_data_iterator, init_state_iterator in groupby_pair(
-                input_data_stream(), init_state_stream(), keyfunc=lambda x: x[0]
+                data_stream(batches_gent_1, "inputData", self.key_offsets),
+                data_stream(batches_gent_2, "initState", self.init_key_offsets),
+                keyfunc=lambda x: x[0],
             ):
-                input_data_pandas = pd.DataFrame([d for _, d in input_data_iterator])
-                init_state_pandas = pd.DataFrame([d for _, d in init_state_iterator])
+                input_data_pandas = pd.DataFrame(
+                    [d for _, d in input_data_iterator], columns=columns_map["inputData"]
+                )
+                init_state_pandas = pd.DataFrame(
+                    [d for _, d in init_state_iterator], columns=columns_map["initState"]
+                )
 
                 yield (
                     batch_key,
