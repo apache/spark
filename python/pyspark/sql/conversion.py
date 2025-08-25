@@ -93,13 +93,19 @@ class LocalDataToArrowConversion:
 
     @overload
     @staticmethod
-    def _create_converter(dataType: DataType, nullable: bool = True) -> Callable:
+    def _create_converter(
+        dataType: DataType, nullable: bool = True, *, int_to_decimal_coercion_enabled: bool = False
+    ) -> Callable:
         pass
 
     @overload
     @staticmethod
     def _create_converter(
-        dataType: DataType, nullable: bool = True, *, none_on_identity: bool = True
+        dataType: DataType,
+        nullable: bool = True,
+        *,
+        none_on_identity: bool = True,
+        int_to_decimal_coercion_enabled: bool = False,
     ) -> Optional[Callable]:
         pass
 
@@ -109,6 +115,7 @@ class LocalDataToArrowConversion:
         nullable: bool = True,
         *,
         none_on_identity: bool = False,
+        int_to_decimal_coercion_enabled: bool = False,
     ) -> Optional[Callable]:
         assert dataType is not None and isinstance(dataType, DataType)
         assert isinstance(nullable, bool)
@@ -135,7 +142,10 @@ class LocalDataToArrowConversion:
 
             field_convs = [
                 LocalDataToArrowConversion._create_converter(
-                    field.dataType, field.nullable, none_on_identity=True
+                    field.dataType,
+                    field.nullable,
+                    none_on_identity=True,
+                    int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
                 )
                 for field in dataType.fields
             ]
@@ -189,7 +199,10 @@ class LocalDataToArrowConversion:
 
         elif isinstance(dataType, ArrayType):
             element_conv = LocalDataToArrowConversion._create_converter(
-                dataType.elementType, dataType.containsNull, none_on_identity=True
+                dataType.elementType,
+                dataType.containsNull,
+                none_on_identity=True,
+                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )
 
             if element_conv is None:
@@ -218,10 +231,15 @@ class LocalDataToArrowConversion:
 
         elif isinstance(dataType, MapType):
             key_conv = LocalDataToArrowConversion._create_converter(
-                dataType.keyType, nullable=False
+                dataType.keyType,
+                nullable=False,
+                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )
             value_conv = LocalDataToArrowConversion._create_converter(
-                dataType.valueType, dataType.valueContainsNull, none_on_identity=True
+                dataType.valueType,
+                dataType.valueContainsNull,
+                none_on_identity=True,
+                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )
 
             if value_conv is None:
@@ -295,6 +313,9 @@ class LocalDataToArrowConversion:
                         raise PySparkValueError(f"input for {dataType} must not be None")
                     return None
                 else:
+                    if int_to_decimal_coercion_enabled and isinstance(value, int):
+                        value = decimal.Decimal(value)
+
                     assert isinstance(value, decimal.Decimal)
                     if value.is_nan():
                         if not nullable:
@@ -325,7 +346,10 @@ class LocalDataToArrowConversion:
             udt: UserDefinedType = dataType
 
             conv = LocalDataToArrowConversion._create_converter(
-                udt.sqlType(), nullable=nullable, none_on_identity=True
+                udt.sqlType(),
+                nullable=nullable,
+                none_on_identity=True,
+                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )
 
             if conv is None:
@@ -426,7 +450,10 @@ class LocalDataToArrowConversion:
         if len_column_names > 0:
             column_convs = [
                 LocalDataToArrowConversion._create_converter(
-                    field.dataType, field.nullable, none_on_identity=True
+                    field.dataType,
+                    field.nullable,
+                    none_on_identity=True,
+                    int_to_decimal_coercion_enabled=False,  # Default to False for general data conversion
                 )
                 for field in schema.fields
             ]
