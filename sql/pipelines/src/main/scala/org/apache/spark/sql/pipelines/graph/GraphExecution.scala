@@ -49,7 +49,10 @@ abstract class GraphExecution(
 
   /** Increments flow execution retry count for `flow`. */
   private def incrementFlowToNumConsecutiveFailure(flowIdentifier: TableIdentifier): Unit = {
-    flowToNumConsecutiveFailure.put(flowIdentifier, flowToNumConsecutiveFailure(flowIdentifier) + 1)
+    flowToNumConsecutiveFailure.updateWith(flowIdentifier) {
+      case Some(count) => Some(count + 1)
+      case None => Some(1)
+    }
   }
 
   /**
