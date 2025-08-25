@@ -374,7 +374,7 @@ jobs:
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
         # SPARK-46283: should delete the following env replacement after SPARK 3.x EOL
-        if [[ "$MODULES_TO_TEST" == *"streaming-kinesis-asl"* ]] && [[ "${{ inputs.branch }}" =~ ^branch-3 ]]; then 
+        if [[ "$MODULES_TO_TEST" == *"streaming-kinesis-asl"* ]] && [[ "${{ inputs.branch }}" =~ ^branch-3 ]]; then
           MODULES_TO_TEST=${MODULES_TO_TEST//streaming-kinesis-asl, /}
         fi
         export SERIAL_SBT_TESTS=1
@@ -509,7 +509,7 @@ jobs:
           - ${{ inputs.java }}
         modules:
           - >-
-            pyspark-sql, pyspark-resource, pyspark-testing
+            pyspark-sql, pyspark-resource, pyspark-testing, pyspark-types
           - >-
             pyspark-core, pyspark-errors, pyspark-streaming, pyspark-logger
           - >-
@@ -528,7 +528,7 @@ jobs:
           # Always run if pyspark == 'true', even infra-image is skip (such as non-master job)
           # In practice, the build will run in individual PR, but not against the individual commit
           # in Apache Spark repository.
-          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-sql, pyspark-resource, pyspark-testing' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-sql, pyspark-resource, pyspark-testing, pyspark-types' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-core, pyspark-errors, pyspark-streaming, pyspark-logger' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-mllib, pyspark-ml, pyspark-ml-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-connect' }}
