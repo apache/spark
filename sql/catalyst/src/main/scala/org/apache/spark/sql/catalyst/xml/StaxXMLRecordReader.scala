@@ -108,6 +108,7 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
   }
 
   override def close(): Unit = {
+    hasMoreRecord = false
     try {
       in1.close()
       in2.foreach(_.close())
