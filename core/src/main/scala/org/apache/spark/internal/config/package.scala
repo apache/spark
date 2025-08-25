@@ -351,6 +351,11 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("10s")
 
+  private[spark] val DRIVER_HEARTBEAT_INTERVAL =
+    ConfigBuilder("spark.driver.heartbeatInterval")
+      .version("4.1.0")
+      .fallbackConf(EXECUTOR_HEARTBEAT_INTERVAL)
+
   private[spark] val EXECUTOR_HEARTBEAT_MAX_FAILURES =
     ConfigBuilder("spark.executor.heartbeat.maxFailures")
       .internal()
