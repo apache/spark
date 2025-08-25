@@ -14,9 +14,12 @@
     "expressions": [{
       "literal": {
         "array": {
-          "elementType": {
-            "double": {
-            }
+          "dataType": {
+            "elementType": {
+              "double": {
+              }
+            },
+            "containsNull": true
           }
         }
       },
@@ -40,46 +43,58 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "array": {
-              "elementType": {
-                "integer": {
-                }
-              },
-              "containsNull": true
-            }
-          },
           "elements": [{
             "array": {
-              "elementType": {
-                "integer": {
-                }
-              },
               "elements": [{
                 "integer": 1
-              }]
+              }],
+              "dataType": {
+                "elementType": {
+                  "integer": {
+                  }
+                },
+                "containsNull": true
+              }
             }
           }, {
             "array": {
-              "elementType": {
-                "integer": {
-                }
-              },
               "elements": [{
                 "integer": 2
-              }]
+              }],
+              "dataType": {
+                "elementType": {
+                  "integer": {
+                  }
+                },
+                "containsNull": true
+              }
             }
           }, {
             "array": {
-              "elementType": {
-                "integer": {
-                }
-              },
               "elements": [{
                 "integer": 3
-              }]
+              }],
+              "dataType": {
+                "elementType": {
+                  "integer": {
+                  }
+                },
+                "containsNull": true
+              }
             }
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "array": {
+                "elementType": {
+                  "integer": {
+                  }
+                },
+                "containsNull": true
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -102,90 +117,111 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "array": {
-              "elementType": {
-                "array": {
-                  "elementType": {
-                    "integer": {
-                    }
-                  },
-                  "containsNull": true
-                }
-              },
-              "containsNull": true
-            }
-          },
           "elements": [{
             "array": {
-              "elementType": {
-                "array": {
-                  "elementType": {
-                    "integer": {
-                    }
-                  },
-                  "containsNull": true
-                }
-              },
               "elements": [{
                 "array": {
-                  "elementType": {
-                    "integer": {
-                    }
-                  },
                   "elements": [{
                     "integer": 1
-                  }]
+                  }],
+                  "dataType": {
+                    "elementType": {
+                      "integer": {
+                      }
+                    },
+                    "containsNull": true
+                  }
                 }
-              }]
+              }],
+              "dataType": {
+                "elementType": {
+                  "array": {
+                    "elementType": {
+                      "integer": {
+                      }
+                    },
+                    "containsNull": true
+                  }
+                },
+                "containsNull": true
+              }
             }
           }, {
             "array": {
-              "elementType": {
-                "array": {
-                  "elementType": {
-                    "integer": {
-                    }
-                  },
-                  "containsNull": true
-                }
-              },
               "elements": [{
                 "array": {
-                  "elementType": {
-                    "integer": {
-                    }
-                  },
                   "elements": [{
                     "integer": 2
-                  }]
+                  }],
+                  "dataType": {
+                    "elementType": {
+                      "integer": {
+                      }
+                    },
+                    "containsNull": true
+                  }
                 }
-              }]
+              }],
+              "dataType": {
+                "elementType": {
+                  "array": {
+                    "elementType": {
+                      "integer": {
+                      }
+                    },
+                    "containsNull": true
+                  }
+                },
+                "containsNull": true
+              }
             }
           }, {
             "array": {
-              "elementType": {
-                "array": {
-                  "elementType": {
-                    "integer": {
-                    }
-                  },
-                  "containsNull": true
-                }
-              },
               "elements": [{
                 "array": {
-                  "elementType": {
-                    "integer": {
-                    }
-                  },
                   "elements": [{
                     "integer": 3
-                  }]
+                  }],
+                  "dataType": {
+                    "elementType": {
+                      "integer": {
+                      }
+                    },
+                    "containsNull": true
+                  }
                 }
-              }]
+              }],
+              "dataType": {
+                "elementType": {
+                  "array": {
+                    "elementType": {
+                      "integer": {
+                      }
+                    },
+                    "containsNull": true
+                  }
+                },
+                "containsNull": true
+              }
             }
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "array": {
+                "elementType": {
+                  "array": {
+                    "elementType": {
+                      "integer": {
+                      }
+                    },
+                    "containsNull": true
+                  }
+                },
+                "containsNull": true
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -208,15 +244,18 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "boolean": {
-            }
-          },
           "elements": [{
             "boolean": true
           }, {
             "boolean": false
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "boolean": {
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -260,17 +299,20 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "short": {
-            }
-          },
           "elements": [{
             "short": 9872
           }, {
             "short": 9873
           }, {
             "short": 9874
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "short": {
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -293,17 +335,20 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "integer": {
-            }
-          },
           "elements": [{
             "integer": -8726532
           }, {
             "integer": 8726532
           }, {
             "integer": -8726533
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "integer": {
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -326,17 +371,20 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "long": {
-            }
-          },
           "elements": [{
             "long": "7834609328726531"
           }, {
             "long": "7834609328726532"
           }, {
             "long": "7834609328726533"
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "long": {
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -359,17 +407,20 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "double": {
-            }
-          },
           "elements": [{
             "double": 2.718281828459045
           }, {
             "double": 1.0
           }, {
             "double": 2.0
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "double": {
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -392,17 +443,20 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "float": {
-            }
-          },
           "elements": [{
             "float": -0.8
           }, {
             "float": -0.7
           }, {
             "float": -0.9
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "float": {
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -425,12 +479,6 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "decimal": {
-              "scale": 18,
-              "precision": 38
-            }
-          },
           "elements": [{
             "decimal": {
               "value": "89.97620",
@@ -443,7 +491,16 @@
               "precision": 7,
               "scale": 5
             }
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "decimal": {
+                "scale": 18,
+                "precision": 38
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -466,12 +523,6 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "decimal": {
-              "scale": 18,
-              "precision": 38
-            }
-          },
           "elements": [{
             "decimal": {
               "value": "89889.7667231",
@@ -484,7 +535,16 @@
               "precision": 12,
               "scale": 7
             }
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "decimal": {
+                "scale": 18,
+                "precision": 38
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -507,16 +567,19 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "string": {
-              "collation": "UTF8_BINARY"
-            }
-          },
           "elements": [{
             "string": "connect!"
           }, {
             "string": "disconnect!"
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "string": {
+                "collation": "UTF8_BINARY"
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -560,16 +623,19 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "string": {
-              "collation": "UTF8_BINARY"
-            }
-          },
           "elements": [{
             "string": "ABCDEFGHIJ"
           }, {
             "string": "BCDEFGHIJK"
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "string": {
+                "collation": "UTF8_BINARY"
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -592,15 +658,18 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "date": {
-            }
-          },
           "elements": [{
             "date": 18545
           }, {
             "date": 18546
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "date": {
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -623,15 +692,18 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "timestamp": {
-            }
-          },
           "elements": [{
             "timestamp": "1677155519808000"
           }, {
             "timestamp": "1677155519809000"
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "timestamp": {
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -654,15 +726,18 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "timestamp": {
-            }
-          },
           "elements": [{
             "timestamp": "12345000"
           }, {
             "timestamp": "23456000"
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "timestamp": {
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -685,15 +760,18 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "timestampNtz": {
-            }
-          },
           "elements": [{
             "timestampNtz": "1677184560000000"
           }, {
             "timestampNtz": "1677188160000000"
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "timestampNtz": {
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -716,15 +794,18 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "date": {
-            }
-          },
           "elements": [{
             "date": 19411
           }, {
             "date": 19417
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "date": {
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -747,17 +828,20 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "dayTimeInterval": {
-              "startField": 0,
-              "endField": 3
-            }
-          },
           "elements": [{
             "dayTimeInterval": "100000000"
           }, {
             "dayTimeInterval": "200000000"
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "dayTimeInterval": {
+                "startField": 0,
+                "endField": 3
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -780,17 +864,20 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "yearMonthInterval": {
-              "startField": 0,
-              "endField": 1
-            }
-          },
           "elements": [{
             "yearMonthInterval": 0
           }, {
             "yearMonthInterval": 0
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "yearMonthInterval": {
+                "startField": 0,
+                "endField": 1
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
@@ -813,10 +900,6 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "calendarInterval": {
-            }
-          },
           "elements": [{
             "calendarInterval": {
               "months": 2,
@@ -829,7 +912,14 @@
               "days": 21,
               "microseconds": "200"
             }
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "calendarInterval": {
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {
