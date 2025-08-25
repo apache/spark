@@ -66,6 +66,7 @@ class TransformWithStateInPySparkPythonRunner(
 
   private var pandasWriter: BaseStreamingArrowWriter = _
 
+  // Grouping multiple keys into one arrow batch
   override protected def writeNextBatchToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
@@ -75,8 +76,9 @@ class TransformWithStateInPySparkPythonRunner(
       pandasWriter = new BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch)
     }
 
-    if (inputIterator.hasNext) {
-      val startData = dataOut.size()
+    // Sending all rows to Python as arrow batch with mixed keys
+    val startData = dataOut.size()
+    while (inputIterator.hasNext) {
       val next = inputIterator.next()
       val dataIter = next._2
 
@@ -84,14 +86,13 @@ class TransformWithStateInPySparkPythonRunner(
         val dataRow = dataIter.next()
         pandasWriter.writeRow(dataRow)
       }
-      pandasWriter.finalizeCurrentArrowBatch()
-      val deltaData = dataOut.size() - startData
-      pythonMetrics("pythonDataSent") += deltaData
-      true
-    } else {
-      super[PythonArrowInput].close()
-      false
     }
+
+    pandasWriter.finalizeCurrentArrowBatch()
+    val deltaData = dataOut.size() - startData
+    pythonMetrics("pythonDataSent") += deltaData
+    super[PythonArrowInput].close()
+    false
   }
 }
 
@@ -125,6 +126,7 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
 
   private var pandasWriter: BaseStreamingArrowWriter = _
 
+  // Grouping multiple keys into one arrow batch
   override protected def writeNextBatchToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
@@ -134,8 +136,9 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
       pandasWriter = new BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch)
     }
 
-    if (inputIterator.hasNext) {
-      val startData = dataOut.size()
+    // Sending all rows to Python as arrow batch with mixed keys
+    val startData = dataOut.size()
+    while (inputIterator.hasNext) {
       // a new grouping key with data & init state iter
       val next = inputIterator.next()
       val dataIter = next._2
@@ -150,14 +153,13 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
           else InternalRow.empty
         pandasWriter.writeRow(InternalRow(dataRow, initRow))
       }
-      pandasWriter.finalizeCurrentArrowBatch()
-      val deltaData = dataOut.size() - startData
-      pythonMetrics("pythonDataSent") += deltaData
-      true
-    } else {
-      super[PythonArrowInput].close()
-      false
     }
+
+    pandasWriter.finalizeCurrentArrowBatch()
+    val deltaData = dataOut.size() - startData
+    pythonMetrics("pythonDataSent") += deltaData
+    super[PythonArrowInput].close()
+    false
   }
 }
 

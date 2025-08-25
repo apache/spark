@@ -1535,14 +1535,17 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
             This function must avoid materializing multiple Arrow RecordBatches into memory at the
             same time. And data chunks from the same grouping key should appear sequentially.
             """
-            for batch in batches:
-                data_pandas = [
-                    self.arrow_to_pandas(c, i)
-                    for i, c in enumerate(pa.Table.from_batches([batch]).itercolumns())
-                ]
-                key_series = [data_pandas[o] for o in self.key_offsets]
-                batch_key = tuple(s[0] for s in key_series)
-                yield (batch_key, data_pandas)
+            import pandas as pd
+
+            def row_stream():
+                for batch in batches:
+                    for _, row in batch.to_pandas().iterrows():
+                        batch_keys = tuple(row[s] for s in self.key_offsets)
+                        yield (batch_keys, row)
+
+            for batch_keys, group_rows in groupby(row_stream(), key=lambda x: x[0]):
+                df = pd.DataFrame([row for _, row in group_rows])
+                yield (batch_keys, [df[col] for col in df.columns])
 
         _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)
@@ -1599,7 +1602,6 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
         self.init_key_offsets = None
 
     def load_stream(self, stream):
-        import pyarrow as pa
         from pyspark.sql.streaming.stateful_processor_util import (
             TransformWithStateInPandasFuncMode,
         )
@@ -1616,49 +1618,40 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
              into the data generator.
             """
 
-            def flatten_columns(cur_batch, col_name):
-                state_column = cur_batch.column(cur_batch.schema.get_field_index(col_name))
-                state_field_names = [
-                    state_column.type[i].name for i in range(state_column.type.num_fields)
-                ]
-                state_field_arrays = [
-                    state_column.field(i) for i in range(state_column.type.num_fields)
-                ]
-                table_from_fields = pa.Table.from_arrays(
-                    state_field_arrays, names=state_field_names
-                )
-                return table_from_fields
-
+            import pandas as pd
             """
             The arrow batch is written in the schema:
             schema: StructType = new StructType()
                 .add("inputData", dataSchema)
                 .add("initState", initStateSchema)
             We'll parse batch into Tuples of (key, inputData, initState) and pass into the Python
-             data generator. All rows in the same batch have the same grouping key.
+             data generator. Rows in the same batch may have diiferent grouping keys.
             """
-            for batch in batches:
-                flatten_state_table = flatten_columns(batch, "inputData")
-                data_pandas = [
-                    self.arrow_to_pandas(c, i)
-                    for i, c in enumerate(flatten_state_table.itercolumns())
-                ]
+            def row_stream():
+                for batch in batches:
+                    for _, row in batch.to_pandas().iterrows():
+                        input_data = row["inputData"]
+                        init_state = row["initState"]
 
-                flatten_init_table = flatten_columns(batch, "initState")
-                init_data_pandas = [
-                    self.arrow_to_pandas(c, i)
-                    for i, c in enumerate(flatten_init_table.itercolumns())
-                ]
-                key_series = [data_pandas[o] for o in self.key_offsets]
-                init_key_series = [init_data_pandas[o] for o in self.init_key_offsets]
+                        key_series = [list(input_data.values())[o] for o in self.key_offsets]
+                        init_key_series = [list(init_state.values())[o] for o in self.init_key_offsets]
 
-                if any(s.empty for s in key_series):
-                    # If any row is empty, assign batch_key using init_key_series
-                    batch_key = tuple(s[0] for s in init_key_series)
-                else:
-                    # If all rows are non-empty, create batch_key from key_series
-                    batch_key = tuple(s[0] for s in key_series)
-                yield (batch_key, data_pandas, init_data_pandas)
+                        if any(s is None for s in key_series):
+                            # If any row is empty, assign batch_key using init_key_series
+                            batch_keys = tuple(s for s in init_key_series)
+                        else:
+                            batch_keys = tuple(s for s in key_series)
+
+                        yield batch_keys, input_data, init_state
+
+            for batch_keys, group_rows in groupby(row_stream(), key=lambda x: x[0]):
+                data_pairs = [(d, i) for _, d, i in group_rows]
+                data_pandas = pd.DataFrame([d for d, _ in data_pairs]).dropna(how="all")
+                init_data_pandas = pd.DataFrame([i for _, i in data_pairs]).dropna(how="all")
+
+                yield (batch_keys,
+                       [data_pandas[col] for col in data_pandas.columns],
+                       [init_data_pandas[col] for col in init_data_pandas.columns])
 
         _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)
