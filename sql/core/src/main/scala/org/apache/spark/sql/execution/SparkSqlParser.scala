@@ -27,7 +27,9 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView, LocalTempView, PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
+import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView, LocalTempView,
+  PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution,
+  UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -49,10 +51,38 @@ class SparkSqlParser extends AbstractSqlParser {
   val astBuilder = new SparkSqlAstBuilder()
 
   private val substitutor = new VariableSubstitution()
+  private[execution] val parameterHandler = new ParameterHandler()
 
-  protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
-    super.parse(substitutor.substitute(command))(toResult)
+    protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
+    // Step 1: Check if we have a parameterized query context and substitute parameters
+    val paramSubstituted =
+      org.apache.spark.sql.catalyst.parser.ThreadLocalParameterContext.get() match {
+      case Some(context) =>
+        substituteParametersIfNeeded(command, context)
+      case None =>
+        command  // No parameters to substitute
+    }
+
+    // Step 2: Apply existing variable substitution
+    val variableSubstituted = substitutor.substitute(paramSubstituted)
+
+    // Step 3: Continue with normal parsing
+    // Note: Error position translation now happens in SQLExecution.withNewExecutionId
+    super.parse(variableSubstituted)(toResult)
   }
+
+
+
+
+
+  private def substituteParametersIfNeeded(
+      command: String,
+      context: org.apache.spark.sql.catalyst.parser.ParameterContext): String = {
+
+    parameterHandler.substituteParametersWithAutoRule(command, context)
+  }
+
+
 }
 
 /**

@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.util.{Either, Left, Right}
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, VariableReference}
-import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Literal, VariableReference}
+import org.apache.spark.sql.catalyst.parser.{ParameterHandler, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
@@ -52,6 +52,8 @@ class SubstituteExecuteImmediate(
     resolveChild: LogicalPlan => LogicalPlan,
     checkAnalysis: LogicalPlan => Unit)
   extends Rule[LogicalPlan] with ColumnResolutionHelper {
+
+  private val parameterHandler = new ParameterHandler()
 
   def resolveVariable(e: Expression): Expression = {
 
@@ -106,6 +108,50 @@ class SubstituteExecuteImmediate(
     }
   }
 
+  /**
+   * Performs constant folding on expressions to convert foldable expressions to literals.
+   * Uses the same approach as the ConstantFolding optimizer rule and tryEvalExpr pattern.
+   */
+  private def foldToLiteral(expr: Expression): Expression = {
+    expr match {
+      case alias: Alias =>
+        if (alias.child.foldable) {
+          Literal.create(alias.child.eval(), alias.child.dataType)
+        } else {
+          alias.child
+        }
+      case e if e.foldable =>
+          Literal.create(e.eval(), e.dataType)
+      case other => other
+    }
+  }
+
+
+
+  /**
+   * Convert an expression to its SQL string representation.
+   */
+  private def expressionToSqlValue(expr: Expression): String = expr match {
+    case lit: Literal => lit.sql
+    case _ =>
+      try {
+        expr.sql
+      } catch {
+        case _: Exception =>
+          // Fall back to constant folding if SQL generation fails and expression is foldable
+          if (expr.foldable) {
+            try {
+              val literal = Literal.create(expr.eval(), expr.dataType)
+              literal.sql
+            } catch {
+              case _: Exception => expr.toString
+            }
+          } else {
+            expr.toString
+          }
+      }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
       case e @ ExecuteImmediateQuery(expressions, _, _) if expressions.exists(!_.resolved) =>
@@ -115,7 +161,9 @@ class SubstituteExecuteImmediate(
         if expressions.forall(_.resolved) =>
 
         val queryString = extractQueryString(query)
-        val plan = parseStatement(queryString, targetVariables)
+        // Apply parameter substitution to the query string before parsing
+        val substitutedQueryString = applyParameterSubstitution(queryString, expressions)
+        val plan = parseStatement(substitutedQueryString, targetVariables)
 
         val posNodes = plan.collect { case p: LogicalPlan =>
           p.expressions.flatMap(_.collect { case n: PosParameter => n })
@@ -130,7 +178,9 @@ class SubstituteExecuteImmediate(
           throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
         } else {
           if (posNodes.nonEmpty) {
-            PosParameterizedQuery(plan, expressions)
+            // Apply constant folding to positional parameters
+            val foldedArgs = expressions.map(foldToLiteral)
+            PosParameterizedQuery(plan, foldedArgs)
           } else {
             val aliases = expressions.collect {
               case e: Alias => e
@@ -144,13 +194,18 @@ class SubstituteExecuteImmediate(
               throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(nonAliases)
             }
 
+            // Extract names before folding
+            val names = aliases.map(_.name)
+            // Apply constant folding to named parameters
+            val values = aliases.map(foldToLiteral)
+
             NameParameterizedQuery(
               plan,
-              aliases.map(_.name),
+              names,
               // We need to resolve arguments before Resolution batch to make sure
               // that some rule does not accidentally resolve our parameters.
               // We do not want this as they can resolve some unsupported parameters.
-              aliases)
+              values)
           }
         }
 
@@ -165,6 +220,65 @@ class SubstituteExecuteImmediate(
           SetVariable(targetVariables, finalPlan)
         } else { finalPlan }
     }
+
+  /**
+   * Apply parameter substitution to a query string using the provided expressions.
+   */
+  private def applyParameterSubstitution(
+      queryString: String,
+      expressions: Seq[Expression]): String = {
+
+    // Quick pre-check: if there are no parameter markers in the text, skip parsing entirely
+    if (!queryString.contains("?") && !queryString.contains(":")) {
+      return queryString  // No parameter markers possible
+    }
+
+    // Detect parameter types and validate consistency
+    val (hasPositional, hasNamed) = parameterHandler.detectParameters(queryString)
+    if (!hasPositional && !hasNamed) {
+      return queryString  // No parameters to substitute
+    }
+
+    // Check for mixed parameters before substitution
+    if (hasPositional && hasNamed) {
+      throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
+    }
+
+    // Always resolve expressions first
+    val resolvedExprs = resolveArguments(expressions)
+
+    // Convert expressions to parameter values based on what the SQL query needs
+    if (hasNamed) {
+      // For named parameters, extract names from resolved expressions
+      val namedParamsBuilder = scala.collection.mutable.Map[String, Expression]()
+      val unnamedExprs = scala.collection.mutable.ListBuffer[Expression]()
+
+      resolvedExprs.foreach {
+        case Alias(child, name) =>
+          // Explicit alias provides the name
+          namedParamsBuilder(name) = foldToLiteral(child)
+        case vr: VariableReference =>
+          // Variable reference provides name from variable identifier
+          namedParamsBuilder(vr.identifier.name()) = foldToLiteral(vr)
+        case other =>
+          // Expression that can't provide a name for named parameters
+          unnamedExprs += other
+      }
+
+      // If we have unnamed expressions for named parameters, error
+      if (unnamedExprs.nonEmpty) {
+        throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedExprs.toSeq)
+      }
+
+      parameterHandler.substituteNamedParameters(queryString, namedParamsBuilder.toMap)
+    } else {
+      // For positional parameters, process all resolved expressions positionally
+      val positionalParams = resolvedExprs.map(foldToLiteral)
+      parameterHandler.substitutePositionalParameters(queryString, positionalParams)
+    }
+  }
+
+
 
   private def parseStatement(
       queryString: String,

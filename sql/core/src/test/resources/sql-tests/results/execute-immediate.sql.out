@@ -417,7 +417,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "INVALID_STATEMENT_FOR_EXECUTE_INTO",
   "sqlState" : "07501",
   "messageParameters" : {
-    "sqlString" : "INSERT INTO X VALUES (?)"
+    "sqlString" : "INSERT INTO X VALUES (1)"
   }
 }
 

@@ -2918,9 +2918,9 @@ class DataSourceV2SQLSuiteV1Filter
         "statement" -> "SET CATALOG"
       ),
       context = ExpectedContext(
-        fragment = sqlText,
+        fragment = "SET CATALOG IDENTIFIER('testcat.ns1')",
         start = 0,
-        stop = 29)
+        stop = 36)
     )
   }
 

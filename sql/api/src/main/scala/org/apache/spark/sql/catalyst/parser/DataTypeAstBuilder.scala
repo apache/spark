@@ -24,6 +24,7 @@ import org.antlr.v4.runtime.Token
 import org.antlr.v4.runtime.tree.ParseTree
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.parser.ParameterErrorUtils
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
@@ -45,16 +46,56 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
     withOrigin(ctx)(StructType(visitColTypeList(ctx.colTypeList)))
   }
 
-  override def visitStringLit(ctx: StringLitContext): Token = {
+  override def visitStringLiteralValue(ctx: StringLiteralValueContext): Token = {
     if (ctx != null) {
-      if (ctx.STRING_LITERAL != null) {
-        ctx.STRING_LITERAL.getSymbol
-      } else {
-        ctx.DOUBLEQUOTED_STRING.getSymbol
-      }
+      ctx.STRING_LITERAL.getSymbol
     } else {
       null
     }
+  }
+
+  override def visitDoubleQuotedStringLiteralValue(
+      ctx: DoubleQuotedStringLiteralValueContext): Token = {
+    if (ctx != null) {
+      ctx.DOUBLEQUOTED_STRING.getSymbol
+    } else {
+      null
+    }
+  }
+
+  override def visitIntegerVal(ctx: IntegerValContext): Token = {
+    if (ctx != null) {
+      ctx.INTEGER_VALUE.getSymbol
+    } else {
+      null
+    }
+  }
+
+  override def visitStringLiteralInContext(ctx: StringLiteralInContextContext): Token = {
+    visit(ctx.stringLitWithoutMarker).asInstanceOf[Token]
+  }
+
+  override def visitNamedParameterValue(ctx: NamedParameterValueContext): Token = {
+    // For namedParameterValue in data type contexts, this shouldn't normally occur
+    // This indicates that parameter substitution failed or wasn't applied
+    ParameterErrorUtils.parameterMarkerInDataTypeError(ctx)
+  }
+
+  override def visitNamedParameterIntegerValue(ctx: NamedParameterIntegerValueContext): Token = {
+    // For namedParameterIntegerValue in data type contexts, this shouldn't normally occur
+    // This indicates that parameter substitution failed or wasn't applied
+    ParameterErrorUtils.parameterMarkerInDataTypeError(ctx)
+  }
+
+  override def visitPositionalParameterIntegerValue(
+      ctx: PositionalParameterIntegerValueContext): Token = {
+    // For positionalParameterIntegerValue in data type contexts, this shouldn't normally occur
+    // This indicates that parameter substitution failed or wasn't applied
+    ParameterErrorUtils.parameterMarkerInDataTypeError(ctx)
+  }
+
+  override def visitPositionalParameterValue(ctx: PositionalParameterValueContext): Token = {
+    ParameterErrorUtils.parameterMarkerInDataTypeError(ctx)
   }
 
   /**
@@ -138,7 +179,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       }
     } else {
       val badType = typeCtx.unsupportedType.getText
-      val params = typeCtx.INTEGER_VALUE().asScala.toList
+      val params = typeCtx.integerValue().asScala.map(_.getText).toList
       val dtStr =
         if (params.nonEmpty) s"$badType(${params.mkString(",")})"
         else badType
@@ -258,7 +299,18 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
    * Create a comment string.
    */
   override def visitCommentSpec(ctx: CommentSpecContext): String = withOrigin(ctx) {
-    string(visitStringLit(ctx.stringLit))
+    string(visit(ctx.stringLit).asInstanceOf[Token])
+  }
+
+  /**
+   * Visit a stringLit context by delegating to the appropriate labeled visitor.
+   */
+  def visitStringLit(ctx: StringLitContext): Token = {
+    if (ctx == null) {
+      null
+    } else {
+      visit(ctx).asInstanceOf[Token]
+    }
   }
 
   /**
