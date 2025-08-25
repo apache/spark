@@ -807,7 +807,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
             type_hints = get_type_hints(f)
         except NameError:
             type_hints = {}
-        evalType = infer_eval_type(signature(f), type_hints)
+        evalType = infer_eval_type(signature(f), type_hints, kind)
         assert evalType is not None
 
     if evalType is None:
@@ -824,6 +824,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
             evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
             or evalType == PythonEvalType.SQL_SCALAR_ARROW_UDF
             or evalType == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
+            or evalType == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
         )
         and len(argspec.args) == 0
         and argspec.varargs is None
@@ -832,7 +833,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
             errorClass="INVALID_PANDAS_UDF",
             messageParameters={
                 "detail": f"0-arg {kind_str} are not supported. "
-                "Instead, create a 1-arg pandas_udf and ignore the arg in your function.",
+                f"Instead, create a 1-arg {kind_str} and ignore the arg in your function.",
             },
         )
 

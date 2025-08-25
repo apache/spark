@@ -579,6 +579,7 @@ object CatalystTypeConverters {
       new DecimalConverter(DecimalType(Math.max(d.precision, d.scale), d.scale)).toCatalyst(d)
     case d: JavaBigDecimal =>
       new DecimalConverter(DecimalType(Math.max(d.precision, d.scale), d.scale)).toCatalyst(d)
+    case seq: scala.collection.mutable.ArraySeq[_] => convertToCatalyst(seq.array)
     case seq: Seq[Any] => new GenericArrayData(seq.map(convertToCatalyst).toArray)
     case r: Row => InternalRow(r.toSeq.map(convertToCatalyst): _*)
     case arr: Array[Byte] => arr

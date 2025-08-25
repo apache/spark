@@ -474,7 +474,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
    *   casted_col.cast(df.schema["col"].dataType)
    * }}}
    */
-  case class TestPythonUDF(name: String, returnType: Option[DataType] = None) extends TestUDF {
+  case class TestPythonUDF(name: String, returnType: Option[DataType] = None,
+      deterministic: Boolean = true) extends TestUDF {
     private[IntegratedUDFTestUtils] lazy val udf = new UserDefinedPythonFunction(
       name = name,
       func = SimplePythonFunction(
@@ -487,7 +488,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
         accumulator = null),
       dataType = StringType,
       pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
-      udfDeterministic = true) {
+      udfDeterministic = deterministic) {
 
       override def builder(e: Seq[Expression]): Expression = {
         assert(e.length == 1, "Defined UDF only has one column")

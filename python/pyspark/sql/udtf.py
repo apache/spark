@@ -278,6 +278,7 @@ def _validate_arrow_udtf_handler(cls: Any, returnType: Optional[Union[StructType
     _validate_udtf_handler(cls, returnType)
 
     # Block analyze method usage in arrow UDTFs
+    # TODO(SPARK-53286): Support analyze method for Arrow UDTFs to enable dynamic return types
     has_analyze = hasattr(cls, "analyze")
     if has_analyze:
         raise PySparkAttributeError(

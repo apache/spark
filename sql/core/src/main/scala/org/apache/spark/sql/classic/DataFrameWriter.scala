@@ -111,10 +111,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
    * @since 1.4.0
    */
   def save(path: String): Unit = {
-    if (!df.sparkSession.sessionState.conf.legacyPathOptionBehavior &&
-        extraOptions.contains("path")) {
-      throw QueryCompilationErrors.pathOptionNotSetCorrectlyWhenWritingError()
-    }
     runCommand(df.sparkSession) {
       saveCommand(Some(path))
     }
@@ -132,6 +128,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
   }
 
   private[sql] def saveCommand(path: Option[String]): LogicalPlan = {
+    if (path.isDefined && !df.sparkSession.sessionState.conf.legacyPathOptionBehavior &&
+        extraOptions.contains("path")) {
+      throw QueryCompilationErrors.pathOptionNotSetCorrectlyWhenWritingError()
+    }
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw QueryCompilationErrors.cannotOperateOnHiveDataSourceFilesError("write")
     }

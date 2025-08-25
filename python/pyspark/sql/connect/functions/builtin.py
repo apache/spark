@@ -60,7 +60,7 @@ from pyspark.sql.connect.expressions import (
 )
 from pyspark.sql.connect.udf import _create_py_udf
 from pyspark.sql.connect.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
-from pyspark.sql.connect.udtf import _create_py_udtf
+from pyspark.sql.connect.udtf import _create_py_udtf, _create_pyarrow_udtf
 from pyspark.sql import functions as pysparkfuncs
 from pyspark.sql.types import (
     _from_numpy_type,
@@ -4498,6 +4498,20 @@ def udtf(
 
 
 udtf.__doc__ = pysparkfuncs.udtf.__doc__
+
+
+def arrow_udtf(
+    cls: Optional[Type] = None,
+    *,
+    returnType: Optional[Union[StructType, str]] = None,
+) -> Union["UserDefinedTableFunction", Callable[[Type], "UserDefinedTableFunction"]]:
+    if cls is None:
+        return functools.partial(_create_pyarrow_udtf, returnType=returnType)
+    else:
+        return _create_pyarrow_udtf(cls=cls, returnType=returnType)
+
+
+arrow_udtf.__doc__ = pysparkfuncs.arrow_udtf.__doc__
 
 
 def call_function(funcName: str, *cols: "ColumnOrName") -> Column:

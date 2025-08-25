@@ -230,6 +230,19 @@ class UserDefinedFunction:
                     },
                 )
         elif (
+            evalType == PythonEvalType.SQL_SCALAR_ARROW_UDF
+            or evalType == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
+        ):
+            try:
+                to_arrow_type(returnType)
+            except TypeError:
+                raise PySparkNotImplementedError(
+                    errorClass="NOT_IMPLEMENTED",
+                    messageParameters={
+                        "feature": f"Invalid return type with scalar Arrow UDFs: " f"{returnType}"
+                    },
+                )
+        elif (
             evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
             or evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE
         ):
@@ -352,6 +365,18 @@ class UserDefinedFunction:
                     errorClass="NOT_IMPLEMENTED",
                     messageParameters={
                         "feature": f"Invalid return type with grouped aggregate Pandas UDFs: "
+                        f"{returnType}"
+                    },
+                )
+        elif evalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF:
+            try:
+                # Different from SQL_GROUPED_AGG_PANDAS_UDF, StructType is allowed here
+                to_arrow_type(returnType)
+            except TypeError:
+                raise PySparkNotImplementedError(
+                    errorClass="NOT_IMPLEMENTED",
+                    messageParameters={
+                        "feature": f"Invalid return type with grouped aggregate Arrow UDFs: "
                         f"{returnType}"
                     },
                 )

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.pipelines
+package org.apache.spark.sql.pipelines.graph
 
 object QueryOriginType extends Enumeration {
   type QueryOriginType = Value

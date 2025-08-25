@@ -222,11 +222,19 @@ class PandasUDFTestsMixin:
 
         with self.assertRaisesRegex(ValueError, "0-arg pandas_udfs.*not.*supported"):
             pandas_udf(lambda: 1, LongType(), PandasUDFType.SCALAR)
+
         with self.assertRaisesRegex(ValueError, "0-arg pandas_udfs.*not.*supported"):
 
             @pandas_udf(LongType(), PandasUDFType.SCALAR)
             def zero_with_type():
                 return 1
+
+        with self.assertRaisesRegex(ValueError, "0-arg pandas_udfs.*not.*supported"):
+
+            @pandas_udf(LongType(), PandasUDFType.SCALAR_ITER)
+            def zero_with_type():
+                yield 1
+                yield 2
 
         with self.assertRaises(PySparkTypeError) as pe:
 

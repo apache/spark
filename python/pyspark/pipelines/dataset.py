@@ -64,7 +64,7 @@ class MaterializedView(Table):
 
 @dataclass(frozen=True)
 class StreamingTable(Table):
-    """Definition of a materialized view in a pipeline dataflow graph. A streaming table is a
+    """Definition of a streaming table in a pipeline dataflow graph. A streaming table is a
     table whose contents are produced by one or more streaming flows."""
 
 

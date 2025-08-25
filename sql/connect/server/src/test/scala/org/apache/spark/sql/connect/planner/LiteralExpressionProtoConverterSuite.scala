@@ -99,7 +99,8 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
       .addElements(LiteralValueProtoConverter.toLiteralProto("test"))
       .build()
 
-    val (result, resultType) = LiteralValueProtoConverter.toCatalystStruct(structProto)
+    val result = LiteralValueProtoConverter.toCatalystStruct(structProto)
+    val resultType = LiteralValueProtoConverter.getProtoStructType(structProto)
 
     // Verify the result is a tuple with correct values
     assert(result.isInstanceOf[Product])
@@ -156,7 +157,7 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     assert(!structFields.get(1).getNullable)
     assert(!structFields.get(1).hasMetadata)
 
-    val (_, structTypeProto) = LiteralValueProtoConverter.toCatalystStruct(literalProto.getStruct)
+    val structTypeProto = LiteralValueProtoConverter.getProtoStructType(literalProto.getStruct)
     assert(structTypeProto.getFieldsList.get(0).getNullable)
     assert(structTypeProto.getFieldsList.get(0).hasMetadata)
     assert(structTypeProto.getFieldsList.get(0).getMetadata == """{"key":"value"}""")

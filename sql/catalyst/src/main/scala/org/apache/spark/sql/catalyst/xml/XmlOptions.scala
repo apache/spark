@@ -170,6 +170,12 @@ class XmlOptions(
   // E.g. spark.read.format("xml").option("singleVariantColumn", "colName")
   val singleVariantColumn = parameters.get(SINGLE_VARIANT_COLUMN)
 
+  // When set to true, use the legacy XML parser for parsing XML files.
+  // Compared to the default parser, the legacy parser has less stringent validation checks for
+  // malformed content, but it's less memory-efficient
+  val useLegacyXMLParser: Boolean = parameters.get(USE_LEGACY_XML_PARSER).map(_.toBoolean)
+    .getOrElse(SQLConf.get.getConf(SQLConf.LEGACY_XML_PARSER_ENABLED))
+
   def buildXmlFactory(): XMLInputFactory = {
     XMLInputFactory.newInstance()
   }
@@ -214,6 +220,7 @@ object XmlOptions extends DataSourceOptions {
   val PREFERS_DECIMAL = newOption("prefersDecimal")
   val VALIDATE_NAME = newOption("validateName")
   val SINGLE_VARIANT_COLUMN = newOption("singleVariantColumn")
+  val USE_LEGACY_XML_PARSER = newOption("useLegacyXMLParser")
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"

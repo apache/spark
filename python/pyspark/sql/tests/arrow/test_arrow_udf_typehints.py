@@ -20,6 +20,8 @@ from typing import Union, Iterator, Tuple, get_type_hints
 
 from pyspark.sql import functions as sf
 from pyspark.testing.utils import (
+    have_pandas,
+    pandas_requirement_message,
     have_pyarrow,
     pyarrow_requirement_message,
     have_numpy,
@@ -322,6 +324,19 @@ class ArrowUDFTypeHintsTests(ReusedSQLTestCase):
         self.assertEqual(
             infer_eval_type(signature(func), get_type_hints(func)), ArrowUDFType.SCALAR
         )
+
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    def test_negative_with_pandas_udf(self):
+        import pandas as pd
+
+        with self.assertRaisesRegex(
+            Exception,
+            "Unsupported signature:.*pandas.core.series.Series.",
+        ):
+
+            @arrow_udf("long")
+            def multiply_pandas(a: pd.Series, b: pd.Series) -> pd.Series:
+                return a * b
 
 
 if __name__ == "__main__":

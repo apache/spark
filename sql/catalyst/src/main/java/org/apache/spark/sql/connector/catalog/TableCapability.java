@@ -94,6 +94,12 @@ public enum TableCapability {
   ACCEPT_ANY_SCHEMA,
 
   /**
+   * Signals that table supports Spark altering the schema if necessary
+   * as part of an operation.
+   */
+  AUTOMATIC_SCHEMA_EVOLUTION,
+
+  /**
    * Signals that the table supports append writes using the V1 InsertableRelation interface.
    * <p>
    * Tables that return this capability must create a V1Write and may also support additional

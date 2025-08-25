@@ -4182,7 +4182,10 @@ class DataFrame:
         |  2| 12|   1.2|
         +---+---+------+
 
-        >>> df.unpivot("id", ["int", "double"], "var", "val").show()
+        >>> from pyspark.sql import functions as sf
+        >>> df.unpivot(
+        ...     "id", ["int", "double"], "var", "val"
+        ... ).sort("id", sf.desc("var")).show()
         +---+------+----+
         | id|   var| val|
         +---+------+----+
