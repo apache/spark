@@ -34,7 +34,7 @@ import org.apache.spark.{SparkClassNotFoundException, SparkEnv, SparkException, 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{CheckpointCommand, CreateResourceProfileCommand, ExecutePlanResponse, SqlCommand, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
+import org.apache.spark.connect.proto.{CheckpointCommand, ExecutePlanResponse, SqlCommand, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
@@ -62,6 +62,7 @@ import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
+import org.apache.spark.sql.connect.execution.command.{ConnectLeafRunnableCommand, CreateResourceProfileCommand}
 import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.pipelines.PipelinesHandler
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
@@ -2654,6 +2655,8 @@ class SparkConnectPlanner(
         Some(transformMergeIntoTableCommand(command.getMergeIntoTableCommand))
       case proto.Command.CommandTypeCase.CREATE_DATAFRAME_VIEW =>
         Some(_ => transformCreateViewCommand(command.getCreateDataframeView))
+      case proto.Command.CommandTypeCase.CREATE_RESOURCE_PROFILE_COMMAND =>
+        Some(_ => transformCreateResourceProfileCommand(command.getCreateResourceProfileCommand))
       case _ =>
         None
     }
@@ -2664,7 +2667,7 @@ class SparkConnectPlanner(
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val transformerOpt = transformCommand(command)
     if (transformerOpt.isDefined) {
-      transformAndRunCommand(transformerOpt.get)
+      transformAndRunCommand(transformerOpt.get, responseObserver)
       return
     }
     command.getCommandTypeCase match {
@@ -2693,10 +2696,6 @@ class SparkConnectPlanner(
           responseObserver)
       case proto.Command.CommandTypeCase.GET_RESOURCES_COMMAND =>
         handleGetResourcesCommand(responseObserver)
-      case proto.Command.CommandTypeCase.CREATE_RESOURCE_PROFILE_COMMAND =>
-        handleCreateResourceProfileCommand(
-          command.getCreateResourceProfileCommand,
-          responseObserver)
       case proto.Command.CommandTypeCase.CHECKPOINT_COMMAND =>
         handleCheckpointCommand(command.getCheckpointCommand, responseObserver)
       case proto.Command.CommandTypeCase.REMOVE_CACHED_REMOTE_RELATION_COMMAND =>
@@ -3153,11 +3152,22 @@ class SparkConnectPlanner(
     }
   }
 
-  private def transformAndRunCommand(transformer: QueryPlanningTracker => LogicalPlan): Unit = {
+  private def transformAndRunCommand(
+      transformer: QueryPlanningTracker => LogicalPlan,
+      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val qe = new QueryExecution(session, transformer(tracker), tracker)
     qe.assertCommandExecuted()
     executeHolder.eventsManager.postFinished()
+    qe.logical match {
+      case connectCommand: ConnectLeafRunnableCommand =>
+        connectCommand.handleConnectResponse(
+          responseObserver,
+          sessionId,
+          sessionHolder.serverSessionId)
+      case _ =>
+      // Do nothing
+    }
   }
 
   /**
@@ -3674,9 +3684,8 @@ class SparkConnectPlanner(
         .build())
   }
 
-  private def handleCreateResourceProfileCommand(
-      createResourceProfileCommand: CreateResourceProfileCommand,
-      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+  private def transformCreateResourceProfileCommand(
+      createResourceProfileCommand: proto.CreateResourceProfileCommand): LogicalPlan = {
     val rp = createResourceProfileCommand.getProfile
     val ereqs = rp.getExecutorResourcesMap.asScala.map { case (name, res) =>
       name -> new ExecutorResourceRequest(
@@ -3695,20 +3704,7 @@ class SparkConnectPlanner(
     } else {
       new ResourceProfile(ereqs, treqs)
     }
-    session.sparkContext.resourceProfileManager.addResourceProfile(profile)
-
-    executeHolder.eventsManager.postFinished()
-    responseObserver.onNext(
-      proto.ExecutePlanResponse
-        .newBuilder()
-        .setSessionId(sessionId)
-        .setServerSideSessionId(sessionHolder.serverSessionId)
-        .setCreateResourceProfileCommandResult(
-          proto.CreateResourceProfileCommandResult
-            .newBuilder()
-            .setProfileId(profile.id)
-            .build())
-        .build())
+    CreateResourceProfileCommand(profile)
   }
 
   private def handleCheckpointCommand(
