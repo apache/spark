@@ -286,7 +286,7 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
       (null, null, null)
     ).toDF("unit", "start", "end")
     val nullResult = Seq[Integer](
-      null, null, null, null, null, null, null,
+      null, null, null, null, null, null, null
     ).toDF("diff").select(col("diff"))
     checkAnswer(
       nullInputDF.select(time_diff(col("unit"), col("start"), col("end"))),
