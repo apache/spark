@@ -1728,15 +1728,15 @@ class TransformWithStateInPySparkRowSerializer(ArrowStreamUDFSerializer):
             same time. And data chunks from the same grouping key should appear sequentially.
             """
             for batch in batches:
-                DataRow = Row(*(batch.schema.names))
+                DataRow = Row(*batch.schema.names)
 
-                # This is supposed to be the same.
-                batch_key = tuple(batch[o][0].as_py() for o in self.key_offsets)
+                # Iterate row by row without converting the whole batch
+                num_cols = batch.num_columns
                 for row_idx in range(batch.num_rows):
-                    row = DataRow(
-                        *(batch.column(i)[row_idx].as_py() for i in range(batch.num_columns))
-                    )
-                    yield (batch_key, row)
+                    # build the key for this row
+                    row_key = tuple(batch[o][row_idx].as_py() for o in self.key_offsets)
+                    row = DataRow(*(batch.column(i)[row_idx].as_py() for i in range(num_cols)))
+                    yield row_key, row
 
         _batches = super(ArrowStreamUDFSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)
