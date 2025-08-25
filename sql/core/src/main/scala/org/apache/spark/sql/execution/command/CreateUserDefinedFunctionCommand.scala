@@ -19,12 +19,9 @@ package org.apache.spark.sql.execution.command
 
 import java.util.Locale
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.{CapturesConfig, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{LanguageSQL, RoutineLanguage, UserDefinedFunctionErrors}
-import org.apache.spark.sql.catalyst.catalog.UserDefinedFunction._
 import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -33,7 +30,7 @@ import org.apache.spark.sql.types.StructType
  * The base class for CreateUserDefinedFunctionCommand
  */
 abstract class CreateUserDefinedFunctionCommand
-  extends LeafRunnableCommand with IgnoreCachedData
+  extends LeafRunnableCommand with IgnoreCachedData with CapturesConfig
 
 
 object CreateUserDefinedFunctionCommand {
@@ -81,33 +78,6 @@ object CreateUserDefinedFunctionCommand {
       case other =>
         throw UserDefinedFunctionErrors.unsupportedUserDefinedFunction(other)
     }
-  }
-
-  /**
-   * Convert SQL configs to properties by prefixing all configs with a key.
-   * When converting a function to [[org.apache.spark.sql.catalyst.catalog.CatalogFunction]] or
-   * [[org.apache.spark.sql.catalyst.expressions.ExpressionInfo]], all SQL configs and other
-   * function properties (such as the function parameters and the function return type)
-   * are saved together in a property map.
-   *
-   * Here we only capture the SQL configs that are modifiable and should be captured, i.e. not in
-   * the denyList and in the allowList. Besides mentioned ones we also capture `ANSI_ENABLED`.
-   *
-   * We need to always capture them to make sure we apply the same configs when querying the
-   * function.
-   */
-  def sqlConfigsToProps(conf: SQLConf): Map[String, String] = {
-    val modifiedConfs = ViewHelper.getModifiedConf(conf)
-
-    val alwaysCaptured = Seq(SQLConf.ANSI_ENABLED)
-      .filter(c => !modifiedConfs.contains(c.key))
-      .map(c => (c.key, conf.getConf(c).toString))
-
-    val props = new mutable.HashMap[String, String]
-    for ((key, value) <- modifiedConfs ++ alwaysCaptured) {
-      props.put(s"$SQL_CONFIG_PREFIX$key", value)
-    }
-    props.toMap
   }
 
   /**

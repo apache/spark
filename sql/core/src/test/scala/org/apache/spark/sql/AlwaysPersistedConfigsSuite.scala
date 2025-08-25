@@ -20,7 +20,12 @@ package org.apache.spark.sql
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.SQLScalarFunction
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SQLFunction}
+import org.apache.spark.sql.catalyst.catalog.{
+  CatalogStorageFormat,
+  CatalogTable,
+  CatalogTableType,
+  SQLFunction
+}
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project, View}
 import org.apache.spark.sql.internal.SQLConf
@@ -28,10 +33,10 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
 /**
- * This suite tests if default ANSI value is persisted for views and functions if not explicitly
- * set.
+ * This suite tests if configs which values should always be stored are stored when creating a view
+ * or a UDF.
  */
-class DefaultANSIValueSuite extends QueryTest with SharedSparkSession {
+class AlwaysPersistedConfigsSuite extends QueryTest with SharedSparkSession {
 
   protected override def sparkConf: SparkConf = {
     super.sparkConf
@@ -43,40 +48,98 @@ class DefaultANSIValueSuite extends QueryTest with SharedSparkSession {
 
   test("Default ANSI value is stored for views") {
     withView(testViewName) {
-      testView(expectedAnsiValue = true)
+      testView(confName = "view.sqlConfig.spark.sql.ansi.enabled", expectedValue = "true")
     }
   }
 
   test("Explicitly set ANSI value is respected over default one for views") {
     withView(testViewName) {
       withSQLConf("spark.sql.ansi.enabled" -> "false") {
-        testView(expectedAnsiValue = false)
+        testView(confName = "view.sqlConfig.spark.sql.ansi.enabled", expectedValue = "false")
       }
     }
 
     withView(testViewName) {
       withSQLConf("spark.sql.ansi.enabled" -> "true") {
-        testView(expectedAnsiValue = true)
+        testView(confName = "view.sqlConfig.spark.sql.ansi.enabled", expectedValue = "true")
       }
     }
   }
 
   test("Default ANSI value is stored for functions") {
     withUserDefinedFunction(testFunctionName -> false) {
-      testFunction(expectedAnsiValue = true)
+      testFunction(confName = "sqlConfig.spark.sql.ansi.enabled", expectedValue = "true")
     }
   }
 
   test("Explicitly set ANSI value is respected over default one for functions") {
     withUserDefinedFunction(testFunctionName -> false) {
       withSQLConf("spark.sql.ansi.enabled" -> "false") {
-        testFunction(expectedAnsiValue = false)
+        testFunction(confName = "sqlConfig.spark.sql.ansi.enabled", expectedValue = "false")
       }
     }
 
     withUserDefinedFunction(testFunctionName -> false) {
       withSQLConf("spark.sql.ansi.enabled" -> "true") {
-        testFunction(expectedAnsiValue = true)
+        testFunction(confName = "sqlConfig.spark.sql.ansi.enabled", expectedValue = "true")
+      }
+    }
+  }
+
+  test("Default session local timezone value is stored for views") {
+    withView(testViewName) {
+      testView(
+        confName = "view.sqlConfig.spark.sql.session.timeZone",
+        expectedValue = "America/Los_Angeles"
+      )
+    }
+  }
+
+  test("Explicitly set session local timezone value is respected over default one for views") {
+    withView(testViewName) {
+      withSQLConf("spark.sql.session.timeZone" -> "America/New_York") {
+        testView(
+          confName = "view.sqlConfig.spark.sql.session.timeZone",
+          expectedValue = "America/New_York"
+        )
+      }
+    }
+
+    withView(testViewName) {
+      withSQLConf("spark.sql.session.timeZone" -> "America/Los_Angeles") {
+        testView(
+          confName = "view.sqlConfig.spark.sql.session.timeZone",
+          expectedValue = "America/Los_Angeles"
+        )
+      }
+    }
+  }
+
+  test("Default session local timezone value is stored for functions") {
+    withUserDefinedFunction(testFunctionName -> false) {
+      testFunction(
+        confName = "sqlConfig.spark.sql.session.timeZone",
+        expectedValue = "America/Los_Angeles"
+      )
+    }
+  }
+
+  test("Explicitly set session local timezone value is respected over default one for functions") {
+    withUserDefinedFunction(testFunctionName -> false) {
+      withSQLConf("spark.sql.session.timeZone" -> "America/New_York") {
+        testFunction(
+          confName = "sqlConfig.spark.sql.session.timeZone",
+          expectedValue = "America/New_York"
+        )
+      }
+    }
+
+    withUserDefinedFunction(testFunctionName -> false) {
+      withSQLConf("spark.sql.session.timeZone" -> "America/Los_Angeles") {
+        testFunction(
+          confName = "sqlConfig.spark.sql.session.timeZone",
+          expectedValue = "America/Los_Angeles"
+        )
       }
     }
   }
@@ -96,19 +159,18 @@ class DefaultANSIValueSuite extends QueryTest with SharedSparkSession {
     assert(sqlConf.settings.get("spark.sql.ansi.enabled") == "false")
   }
 
-  private def testView(expectedAnsiValue: Boolean): Unit = {
+  private def testView(confName: String, expectedValue: String): Unit = {
     sql(s"CREATE VIEW $testViewName AS SELECT CAST('string' AS BIGINT) AS alias")
 
     val viewMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(testViewName))
 
     assert(
-      viewMetadata.properties("view.sqlConfig.spark.sql.ansi.enabled") == expectedAnsiValue.toString
+      viewMetadata.properties(confName) == expectedValue
     )
   }
 
-  private def testFunction(expectedAnsiValue: Boolean): Unit = {
-    sql(
-      s"""
+  private def testFunction(confName: String, expectedValue: String): Unit = {
+    sql(s"""
          |CREATE OR REPLACE FUNCTION $testFunctionName()
          |RETURN SELECT CAST('string' AS BIGINT) AS alias
          |""".stripMargin)
@@ -116,11 +178,18 @@ class DefaultANSIValueSuite extends QueryTest with SharedSparkSession {
     val df = sql(s"select $testFunctionName()")
 
     assert(
-      df.queryExecution.analyzed.asInstanceOf[Project]
-        .projectList.head.asInstanceOf[Alias]
-        .child.asInstanceOf[SQLScalarFunction]
-        .function.asInstanceOf[SQLFunction]
-        .properties.get("sqlConfig.spark.sql.ansi.enabled").get == expectedAnsiValue.toString
+      df.queryExecution.analyzed
+        .asInstanceOf[Project]
+        .projectList
+        .head
+        .asInstanceOf[Alias]
+        .child
+        .asInstanceOf[SQLScalarFunction]
+        .function
+        .asInstanceOf[SQLFunction]
+        .properties
+        .get(confName)
+        .get == expectedValue
     )
   }
 }
