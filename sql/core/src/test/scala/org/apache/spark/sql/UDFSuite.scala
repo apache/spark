@@ -53,6 +53,17 @@ private case class FunctionResult(f1: String, f2: String)
 private case class LocalDateInstantType(date: LocalDate, instant: Instant)
 private case class TimestampInstantType(t: Timestamp, instant: Instant)
 
+private case class KryoEncodedBuf(value: Long)
+private case class KryoBufAggregator() extends Aggregator[Long, KryoEncodedBuf, Long] {
+  override def zero: KryoEncodedBuf = KryoEncodedBuf(0)
+  override def reduce(b: KryoEncodedBuf, a: Long): KryoEncodedBuf = KryoEncodedBuf(b.value + a)
+  override def merge(b1: KryoEncodedBuf, b2: KryoEncodedBuf): KryoEncodedBuf =
+    KryoEncodedBuf(b1.value + b2.value)
+  override def finish(reduction: KryoEncodedBuf): Long = reduction.value
+  override def bufferEncoder: Encoder[KryoEncodedBuf] = Encoders.kryo[KryoEncodedBuf]
+  override def outputEncoder: Encoder[Long] = Encoders.scalaLong
+}
+
 class UDFSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
@@ -1248,5 +1259,12 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val df = Seq(Some(1), None).toDF("c")
       .select(f($"c").as("f"), f($"f"))
     checkAnswer(df, Seq(Row(2, 3), Row(null, null)))
+  }
+
+  test("SPARK-52819: Support using Kryo to encode BUF in Aggregator") {
+    val kryoBufUDAF = udaf(KryoBufAggregator())
+    val input = Seq(1L, 2L, 3L).toDF("value")
+    val result = input.select(kryoBufUDAF($"value").as("sum"))
+    checkAnswer(result, Row(6L) :: Nil)
   }
 }
