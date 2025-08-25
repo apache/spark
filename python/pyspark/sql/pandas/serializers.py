@@ -1656,20 +1656,25 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                         yield batch_key, row
 
             def groupby_pair(gen1, gen2, keyfunc):
-                g1, g2 = groupby(gen1, key=keyfunc), groupby(gen2, key=keyfunc)
-                next1 = next(g1, (None, iter(())))
-                next2 = next(g2, (None, iter(())))
+                """
+                Iterate over two sorted generators in parallel, grouped by the same key.
+                Yields (key, group1, group2), where groups are iterators (empty if no items for the key).
+                """
 
-                k1, grp1 = next1
-                k2, grp2 = next2
+                def safe_next(group_iter):
+                    return next(group_iter, (None, iter(())))
+
+                g1, g2 = groupby(gen1, key=keyfunc), groupby(gen2, key=keyfunc)
+                k1, grp1 = safe_next(g1)
+                k2, grp2 = safe_next(g2)
 
                 while k1 is not None or k2 is not None:
                     key = min(k for k in (k1, k2) if k is not None)
                     yield key, grp1 if k1 == key else iter(()), grp2 if k2 == key else iter(())
                     if k1 == key:
-                        k1, grp1 = next(g1, (None, iter(())))
+                        k1, grp1 = safe_next(g1)
                     if k2 == key:
-                        k2, grp2 = next(g2, (None, iter(())))
+                        k2, grp2 = safe_next(g2)
 
             for batch_key, input_data_iterator, init_state_iterator in groupby_pair(
                 data_stream(batches_gent_1, "inputData", self.key_offsets),
