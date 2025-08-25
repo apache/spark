@@ -99,6 +99,8 @@ object PythonRunner {
     } else {
       sparkConf.getOption("spark.remote").foreach(url => env.put("SPARK_REMOTE", url))
     }
+    // add TMPDIR environment variable with the value of java.io.tmpdir
+    env.put("TMPDIR", System.getProperty("java.io.tmpdir"))
     env.put("PYTHONPATH", pythonPath)
     // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
     env.put("PYTHONUNBUFFERED", "YES") // value is needed to be set to a non-empty string
