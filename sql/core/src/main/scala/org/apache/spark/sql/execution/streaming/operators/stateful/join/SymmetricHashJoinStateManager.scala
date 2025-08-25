@@ -1135,17 +1135,17 @@ object SymmetricHashJoinStateManager {
     val ckptIds = joinCkptInfo.left.keyToNumValues.stateStoreCkptId.map(
       Array(
         _,
-        joinCkptInfo.left.valueToNumKeys.stateStoreCkptId.get,
+        joinCkptInfo.left.keyWithIndexToValue.stateStoreCkptId.get,
         joinCkptInfo.right.keyToNumValues.stateStoreCkptId.get,
-        joinCkptInfo.right.valueToNumKeys.stateStoreCkptId.get
+        joinCkptInfo.right.keyWithIndexToValue.stateStoreCkptId.get
       )
     )
     val baseCkptIds = joinCkptInfo.left.keyToNumValues.baseStateStoreCkptId.map(
       Array(
         _,
-        joinCkptInfo.left.valueToNumKeys.baseStateStoreCkptId.get,
+        joinCkptInfo.left.keyWithIndexToValue.baseStateStoreCkptId.get,
         joinCkptInfo.right.keyToNumValues.baseStateStoreCkptId.get,
-        joinCkptInfo.right.valueToNumKeys.baseStateStoreCkptId.get
+        joinCkptInfo.right.keyWithIndexToValue.baseStateStoreCkptId.get
       )
     )
 
@@ -1162,31 +1162,68 @@ object SymmetricHashJoinStateManager {
    * mergeStateStoreCheckpointInfo(). This function is used to read it back into individual state
    * store checkpoint IDs.
    * @param partitionId
-   * @param stateInfo
+   * @param stateStoreCkptIds
+   * @param useColumnFamiliesForJoins
    * @return
    */
   def getStateStoreCheckpointIds(
       partitionId: Int,
-      stateInfo: StatefulOperatorStateInfo,
+      stateStoreCkptIds: Option[Array[Array[String]]],
       useColumnFamiliesForJoins: Boolean): JoinStateStoreCheckpointId = {
     if (useColumnFamiliesForJoins) {
-      val ckpt = stateInfo.stateStoreCkptIds.map(_(partitionId)).map(_.head)
+      val ckpt = stateStoreCkptIds.map(_(partitionId)).map(_.head)
       JoinStateStoreCheckpointId(
-        left = JoinerStateStoreCheckpointId(keyToNumValues = ckpt, valueToNumKeys = ckpt),
-        right = JoinerStateStoreCheckpointId(keyToNumValues = ckpt, valueToNumKeys = ckpt)
+        left = JoinerStateStoreCheckpointId(keyToNumValues = ckpt, keyWithIndexToValue = ckpt),
+        right = JoinerStateStoreCheckpointId(keyToNumValues = ckpt, keyWithIndexToValue = ckpt)
       )
     } else {
-      val stateStoreCkptIds = stateInfo.stateStoreCkptIds
+      val stateStoreCkptIdsOpt = stateStoreCkptIds
         .map(_(partitionId))
         .map(_.map(Option(_)))
         .getOrElse(Array.fill[Option[String]](4)(None))
       JoinStateStoreCheckpointId(
         left = JoinerStateStoreCheckpointId(
-          keyToNumValues = stateStoreCkptIds(0),
-          valueToNumKeys = stateStoreCkptIds(1)),
+          keyToNumValues = stateStoreCkptIdsOpt(0),
+          keyWithIndexToValue = stateStoreCkptIdsOpt(1)),
         right = JoinerStateStoreCheckpointId(
-          keyToNumValues = stateStoreCkptIds(2),
-          valueToNumKeys = stateStoreCkptIds(3)))
+          keyToNumValues = stateStoreCkptIdsOpt(2),
+          keyWithIndexToValue = stateStoreCkptIdsOpt(3)))
+    }
+  }
+
+  /**
+   * Stream-stream join has 4 state stores instead of one. So it will generate 4 different
+   * checkpoint IDs when not using virtual column families.
+   * This function is used to get the checkpoint ID for a specific state store
+   * by the name of the store, partition ID and the checkpoint IDs array.
+   * @param storeName
+   * @param partitionId
+   * @param stateStoreCkptIds
+   * @param useColumnFamiliesForJoins
+   * @return
+   */
+  def getStateStoreCheckpointId(
+      storeName: String,
+      partitionId: Int,
+      stateStoreCkptIds: Option[Array[Array[String]]],
+      useColumnFamiliesForJoins: Boolean = false) : Option[String] = {
+    if (useColumnFamiliesForJoins || storeName == StateStoreId.DEFAULT_STORE_NAME) {
+      stateStoreCkptIds.map(_(partitionId)).map(_.head)
+    } else {
+      val joinStateStoreCkptIds = getStateStoreCheckpointIds(
+        partitionId, stateStoreCkptIds, useColumnFamiliesForJoins)
+
+      if (storeName == getStateStoreName(LeftSide, KeyToNumValuesType)) {
+        joinStateStoreCkptIds.left.keyToNumValues
+      } else if (storeName == getStateStoreName(RightSide, KeyToNumValuesType)) {
+        joinStateStoreCkptIds.right.keyToNumValues
+      } else if (storeName == getStateStoreName(LeftSide, KeyWithIndexToValueType)) {
+        joinStateStoreCkptIds.left.keyWithIndexToValue
+      } else if (storeName == getStateStoreName(RightSide, KeyWithIndexToValueType)) {
+        joinStateStoreCkptIds.right.keyWithIndexToValue
+      } else {
+        None
+      }
     }
   }
 
