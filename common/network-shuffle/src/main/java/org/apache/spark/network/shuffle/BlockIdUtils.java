@@ -36,8 +36,6 @@ public class BlockIdUtils {
   }
 
   public static Boolean isShuffleChunk(String blockId) {
-    // Shuffle chunk block is not supported by Aether, and we don't need to check for wrapped
-    // Aether blocks.
     return blockId.startsWith(SHUFFLE_CHUNK_PREFIX);
   }
 
