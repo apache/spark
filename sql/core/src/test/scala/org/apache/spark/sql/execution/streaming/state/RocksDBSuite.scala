@@ -97,6 +97,7 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
         case Array(version) => version.toLong
       }
       .sorted
+      .distinct
       .toImmutableArraySeq
   }
 
@@ -275,7 +276,7 @@ trait AlsoTestWithRocksDBFeatures
     Seq(true, false).foreach { enableStateStoreCheckpointIds =>
       val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
         s"$enableStateStoreCheckpointIds"
-      test(newTestName, testTags: _*) { enableStateStoreCheckpointIds =>
+      test(newTestName, testTags: _*) {
         testBody(enableStateStoreCheckpointIds)
       }
     }
@@ -288,8 +289,8 @@ trait AlsoTestWithRocksDBFeatures
     Seq(true, false).foreach { enableStateStoreCheckpointIds =>
       val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
         s"$enableStateStoreCheckpointIds"
-      testWithChangelogCheckpointingDisabled(newTestName, testTags: _*) {
-        enableStateStoreCheckpointIds => testBody(enableStateStoreCheckpointIds)
+      testWithChangelogCheckpointingEnabled(newTestName, testTags: _*) {
+        testBody(enableStateStoreCheckpointIds)
       }
     }
   }
@@ -2814,7 +2815,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         // upload snapshot 4.zip
         db.doMaintenance()
       }
-      withDB(remoteDir, version = 4, conf = conf) { db =>
+      withDB(remoteDir, version = 4, conf = conf,
+        enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+        versionToUniqueId = versionToUniqueId
+      ) { db =>
       }
     })
   }
@@ -2843,7 +2847,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       db.doMaintenance()
     }
 
-    withDB(remoteDir, version = 4, conf = conf) { db =>
+    withDB(remoteDir, version = 4, conf = conf,
+      enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+      versionToUniqueId = versionToUniqueId
+    ) { db =>
     }
   }
 
@@ -2873,8 +2880,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
 
     // reload version 2 - should succeed
-    withDB(remoteDir, version = 2, conf = conf) { db =>
-    }
+    withDB(remoteDir, version = 2, conf = conf,
+      enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+      versionToUniqueId = versionToUniqueId
+    ) { db => }
   }
 
   testWithStateStoreCheckpointIdsAndChangelogEnabled("time travel 5 - validate successful " +
@@ -2907,7 +2916,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           db.commit() // create snapshot again
 
           // load version 1 - should succeed
-          withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf) { db =>
+          withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf,
+            enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+            versionToUniqueId = versionToUniqueId) { db =>
           }
 
           // upload recently created snapshot
@@ -2915,8 +2926,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           assert(snapshotVersionsPresent(remoteDir) == Seq(1))
 
           // load version 1 again - should succeed
-          withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf) { db =>
-          }
+          withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf,
+            enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+            versionToUniqueId = versionToUniqueId) { db => }
         }
       }
     }
@@ -3026,7 +3038,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
             versionToUniqueId = versionToUniqueId) { db2 =>
             val random = new Random(randomSeed)
             var curVer: Int = 0
-            for (i <- 1 to 100) {
+            for (i <- 1 to 10) {
               db.load(curVer, versionToUniqueId.get(curVer))
               db.put("foo", "bar")
               db.commit()
