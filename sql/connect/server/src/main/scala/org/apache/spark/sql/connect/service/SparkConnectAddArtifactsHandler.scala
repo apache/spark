@@ -26,6 +26,7 @@ import scala.util.control.NonFatal
 import com.google.common.io.CountingOutputStream
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
@@ -112,19 +113,34 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
    * @return
    */
   protected def flushStagedArtifacts(): Seq[ArtifactSummary] = {
+    val failedArtifactExceptions = mutable.ListBuffer[SparkRuntimeException]()
+
     // Non-lazy transformation when using Buffer.
-    stagedArtifacts.map { artifact =>
-      // We do not store artifacts that fail the CRC. The failure is reported in the artifact
-      // summary and it is up to the client to decide whether to retry sending the artifact.
-      if (artifact.getCrcStatus.contains(true)) {
-        if (artifact.path.startsWith(ArtifactManager.forwardToFSPrefix + File.separator)) {
-          holder.artifactManager.uploadArtifactToFs(artifact.path, artifact.stagedPath)
-        } else {
-          addStagedArtifactToArtifactManager(artifact)
+    val summaries = stagedArtifacts.map { artifact =>
+      try {
+        // We do not store artifacts that fail the CRC. The failure is reported in the artifact
+        // summary and it is up to the client to decide whether to retry sending the artifact.
+        if (artifact.getCrcStatus.contains(true)) {
+          if (artifact.path.startsWith(ArtifactManager.forwardToFSPrefix + File.separator)) {
+            holder.artifactManager.uploadArtifactToFs(artifact.path, artifact.stagedPath)
+          } else {
+            addStagedArtifactToArtifactManager(artifact)
+          }
         }
+      } catch {
+        case e: SparkRuntimeException if e.getCondition == "ARTIFACT_ALREADY_EXISTS" =>
+          failedArtifactExceptions += e
       }
       artifact.summary()
     }.toSeq
+
+    if (failedArtifactExceptions.nonEmpty) {
+      val exception = failedArtifactExceptions.head
+      failedArtifactExceptions.drop(1).foreach(exception.addSuppressed(_))
+      throw exception
+    }
+
+    summaries
   }
 
   protected def cleanUpStagedArtifacts(): Unit = Utils.deleteRecursively(stagingDir.toFile)
@@ -216,6 +232,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
     private val fileOut = Files.newOutputStream(stagedPath)
     private val countingOut = new CountingOutputStream(fileOut)
     private val checksumOut = new CheckedOutputStream(countingOut, new CRC32)
+    private val overallChecksum = new CRC32()
 
     private val builder = ArtifactSummary.newBuilder().setName(name)
     private var artifactSummary: ArtifactSummary = _
@@ -227,6 +244,8 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
 
     def getCrcStatus: Option[Boolean] = Option(isCrcSuccess)
 
+    def getCrc: Long = overallChecksum.getValue
+
     def write(dataChunk: proto.AddArtifactsRequest.ArtifactChunk): Unit = {
       try dataChunk.getData.writeTo(checksumOut)
       catch {
@@ -234,6 +253,8 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
           close()
           throw e
       }
+
+      overallChecksum.update(dataChunk.getData.toByteArray)
       updateCrc(checksumOut.getChecksum.getValue == dataChunk.getCrc)
       checksumOut.getChecksum.reset()
     }
