@@ -118,7 +118,7 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
      'mllib', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-ml-connect', 'pyspark-mllib',
      'pyspark-pandas', 'pyspark-pandas-connect-part0', 'pyspark-pandas-connect-part1',
      'pyspark-pandas-connect-part2', 'pyspark-pandas-connect-part3', 'pyspark-pandas-slow',
-     'pyspark-pipelines', 'pyspark-sql', 'pyspark-testing', 'repl', 'sparkr', 'sql',
+     'pyspark-pipelines', 'pyspark-sql', 'pyspark-testing', 'pyspark-types', 'repl', 'sparkr', 'sql',
      'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sparkr, modules.sql], deduplicated=False)])
@@ -127,7 +127,7 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
      'mllib', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-ml-connect', 'pyspark-mllib',
      'pyspark-pandas', 'pyspark-pandas-connect-part0', 'pyspark-pandas-connect-part1',
      'pyspark-pandas-connect-part2', 'pyspark-pandas-connect-part3', 'pyspark-pandas-slow',
-     'pyspark-pipelines', 'pyspark-sql', 'pyspark-testing', 'repl', 'sparkr', 'sql',
+     'pyspark-pipelines', 'pyspark-sql', 'pyspark-testing', 'pyspark-types', 'repl', 'sparkr', 'sql',
      'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sql, modules.core], deduplicated=False)])
@@ -137,7 +137,7 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
      'pyspark-core', 'pyspark-ml', 'pyspark-ml-connect', 'pyspark-mllib', 'pyspark-pandas',
      'pyspark-pandas-connect-part0', 'pyspark-pandas-connect-part1', 'pyspark-pandas-connect-part2',
      'pyspark-pandas-connect-part3', 'pyspark-pandas-slow', 'pyspark-pipelines', 'pyspark-resource',
-     'pyspark-sql', 'pyspark-streaming', 'pyspark-testing', 'repl', 'root', 'sparkr', 'sql',
+     'pyspark-sql', 'pyspark-streaming', 'pyspark-testing', 'pyspark-types', 'repl', 'root', 'sparkr', 'sql',
      'sql-kafka-0-10', 'streaming', 'streaming-kafka-0-10', 'streaming-kinesis-asl']
     """
     modules_to_test = set()
