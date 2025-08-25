@@ -1645,6 +1645,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     notSupportedForV2TablesError("ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
   }
 
+  def alterTableUnsetSerDePropertiesNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("ALTER TABLE ... UNSET SERDEPROPERTIES")
+  }
+
   def describeAsJsonNotSupportedForV2TablesError(): Throwable = {
     notSupportedForV2TablesError("DESCRIBE TABLE AS JSON")
   }
@@ -2860,6 +2864,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.ALTER_TABLE_SERDE_FOR_DATASOURCE_TABLE",
       messageParameters = Map("tableName" -> toSQLId(tableName)))
+  }
+
+  def alterTableUnsetSerdePropertiesNotSupportedError(tableName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.ALTER_TABLE_UNSET_SERDE_PROPERTIES_FOR_DATASOURCE_TABLE",
+      messageParameters = Map("tableName" -> toSQLId(tableName))
+    )
   }
 
   def cmdOnlyWorksOnPartitionedTablesError(
