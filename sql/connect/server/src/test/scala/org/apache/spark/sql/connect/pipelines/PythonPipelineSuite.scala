@@ -30,7 +30,7 @@ import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connect.service.SparkConnectService
-import org.apache.spark.sql.pipelines.graph.DataflowGraph
+import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl}
 import org.apache.spark.sql.pipelines.utils.{EventVerificationTestHelpers, TestPipelineUpdateContextMixin}
 
 /**
@@ -432,6 +432,34 @@ class PythonPipelineSuite
       graph
         .flowsTo(graphIdentifier("a"))
         .map(_.identifier) == Seq(graphIdentifier("a"), graphIdentifier("something")))
+  }
+
+  test("MV/ST with partition columns works") {
+    val graph = buildGraph("""
+           |from pyspark.sql.functions import col
+           |
+           |@dp.materialized_view(partition_cols = ["id_mod"])
+           |def mv():
+           |  return spark.range(5).withColumn("id_mod", col("id") % 2)
+           |
+           |@dp.table(partition_cols = ["id_mod"])
+           |def st():
+           |  return spark.readStream.table("mv")
+           |""".stripMargin)
+
+    val updateContext = new PipelineUpdateContextImpl(graph, eventCallback = _ => ())
+    updateContext.pipelineExecution.runPipeline()
+    updateContext.pipelineExecution.awaitCompletion()
+
+    // check table is created with correct partitioning
+    Seq("mv", "st").foreach { tableName =>
+      val table = spark.sessionState.catalog.getTableMetadata(graphIdentifier(tableName))
+      assert(table.partitionColumnNames == Seq("id_mod"))
+
+      val rows = spark.table(tableName).collect().map(r => (r.getLong(0), r.getLong(1))).toSet
+      val expected = (0 until 5).map(id => (id.toLong, (id % 2).toLong)).toSet
+      assert(rows == expected)
+    }
   }
 
   test("create pipeline without table will throw RUN_EMPTY_PIPELINE exception") {
