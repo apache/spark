@@ -1943,14 +1943,16 @@ class PlanParserSuite extends AnalysisTest {
     // Test error cases - invalid parameter syntax should be caught by SubstituteParamsParser
     checkError(
       exception = intercept[org.apache.spark.sql.catalyst.parser.ParseException] {
-        substitutor.substitute("SELECT :-", SubstitutionRule.Statement)
+        val (substituted, _, _) = substitutor.substitute("SELECT :-", SubstitutionRule.Statement)
+        substituted
       },
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "no viable alternative at input ':-'", "hint" -> ""))
 
     checkError(
       exception = intercept[org.apache.spark.sql.catalyst.parser.ParseException] {
-        substitutor.substitute("SELECT :", SubstitutionRule.Statement)
+        val (substituted, _, _) = substitutor.substitute("SELECT :", SubstitutionRule.Statement)
+        substituted
       },
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "no viable alternative at input ':'", "hint" -> ""))

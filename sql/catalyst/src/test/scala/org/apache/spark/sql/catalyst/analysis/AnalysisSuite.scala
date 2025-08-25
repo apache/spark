@@ -1925,7 +1925,7 @@ case class PreprocessedNamedQuery(sql: String, args: Map[String, Literal]) {
       name -> literal.sql
     }
 
-    val (substituted, _) = paramSubstitutor.substitute(
+    val (substituted, _, _) = paramSubstitutor.substitute(
       sql,
       org.apache.spark.sql.catalyst.parser.SubstitutionRule.Query,
       namedParams = namedParams)
@@ -1951,7 +1951,7 @@ case class PreprocessedPositionalQuery(sql: String, args: Seq[Literal]) {
     // Convert Literal args to String values for substitution
     val positionalParams = args.map(_.sql).toList
 
-    val (substituted, _) = paramSubstitutor.substitute(
+    val (substituted, _, _) = paramSubstitutor.substitute(
       sql,
       org.apache.spark.sql.catalyst.parser.SubstitutionRule.Query,
       positionalParams = positionalParams)
