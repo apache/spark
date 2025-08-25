@@ -227,7 +227,9 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    * callback functions.
    */
   private def runCommand(command: LogicalPlan): Unit = {
-    val qe = new QueryExecution(sparkSession, command, df.queryExecution.tracker)
+    val qe = new QueryExecution(sparkSession, command, df.queryExecution.tracker,
+      shuffleCleanupMode =
+        QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf))
     qe.assertCommandExecuted()
   }
 
