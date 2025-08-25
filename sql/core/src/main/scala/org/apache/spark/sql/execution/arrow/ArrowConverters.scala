@@ -347,7 +347,15 @@ private[sql] object ArrowConverters extends Logging {
     }
 
     override def hasNext: Boolean = {
-      rowIterator.hasNext || loadNextBatch()
+      if (rowIterator.hasNext) {
+        true
+      } else {
+        if (!loadNextBatch()) {
+          false
+        } else {
+          hasNext
+        }
+      }
     }
 
     override def next(): InternalRow = {
