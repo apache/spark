@@ -273,7 +273,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           case _: AccessControlException | _: BlockMissingException =>
             parser.close()
             throw e
-          case _: IOException | _: RuntimeException | _: InternalError
+          case _: IOException | _: RuntimeException | _: InternalError | _: AssertionError
               if options.ignoreCorruptFiles =>
             logWarning("Skipped the rest of the content in the corrupted file", e)
             parser.close()
