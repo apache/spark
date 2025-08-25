@@ -27,7 +27,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
-import org.apache.spark.sql.types.{ArrayType, DataType, DayTimeIntervalType, MapType, StructType, UserDefinedType}
+import org.apache.spark.sql.types.{StructType, UserDefinedType}
 import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
 
 /**
@@ -124,41 +124,6 @@ class ArrowEvalPythonEvaluatorFactory(
     profiler: Option[String])
   extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
 
-  private def typesEqual(
-      expectedTypes: Seq[DataType],
-      actualTypes: Seq[DataType]): Boolean = {
-    expectedTypes.length == actualTypes.length &&
-    expectedTypes.zip(actualTypes).forall { case (expected, actual) =>
-      typesEqualRecursive(expected, actual)
-    }
-  }
-
-  private def typesEqualRecursive(expected: DataType, actual: DataType): Boolean = {
-    (expected, actual) match {
-      case (expected: DayTimeIntervalType, actual: DayTimeIntervalType) =>
-        // Use lenient type checking that treats DayTimeIntervalType variants as compatible
-        // Arrow always returns the broadest range, so as long as we're not losing information,
-        // we can consider the types equal.
-        actual.startField <= expected.startField && expected.endField <= actual.endField
-
-      case (expected: ArrayType, actual: ArrayType) =>
-        typesEqualRecursive(expected.elementType, actual.elementType)
-
-      case (expected: MapType, actual: MapType) =>
-        typesEqualRecursive(expected.keyType, actual.keyType) &&
-        typesEqualRecursive(expected.valueType, actual.valueType)
-
-      case (expected: StructType, actual: StructType) =>
-        expected.fields.length == actual.fields.length &&
-        expected.fields.zip(actual.fields).forall { case (expectedField, actualField) =>
-          expectedField.name == actualField.name &&
-          typesEqualRecursive(expectedField.dataType, actualField.dataType)
-        }
-
-      case _ => equalsIgnoreCompatibleCollation(expected, actual)
-    }
-  }
-
   override def evaluate(
       funcs: Seq[(ChainedPythonFunctions, Long)],
       argMetas: Array[Array[ArgumentMetadata]],
@@ -187,12 +152,10 @@ class ArrowEvalPythonEvaluatorFactory(
 
     columnarBatchIter.flatMap { batch =>
       val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
-
-      if (!typesEqual(outputTypes, actualDataTypes)) {
+      if (!equalsIgnoreCompatibleCollation(outputTypes, actualDataTypes)) {
         throw QueryExecutionErrors.arrowDataTypeMismatchError(
           "pandas_udf()", outputTypes, actualDataTypes)
       }
-
       batch.rowIterator.asScala
     }
   }

@@ -458,6 +458,7 @@ object DataType {
     def transform: PartialFunction[DataType, DataType] = {
       case dt @ (_: CharType | _: VarcharType) => dt
       case _: StringType => StringType
+      case _: DayTimeIntervalType => DayTimeIntervalType
     }
 
     if (checkComplexTypes) {
@@ -465,6 +466,8 @@ object DataType {
     } else {
       (from, to) match {
         case (a: StringType, b: StringType) => a.constraint == b.constraint
+        case (x: DayTimeIntervalType, y: DayTimeIntervalType) =>
+          x.startField <= y.startField && y.endField <= x.endField
 
         case (fromDataType, toDataType) => fromDataType == toDataType
       }
