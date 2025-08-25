@@ -89,15 +89,15 @@ class UDFInputTypeTests(ReusedSQLTestCase):
             test_name="UDF input types - Arrow enabled",
         )
 
-
     def _run_udf_input_type_coercion_test(self, config, use_arrow, golden_file, test_name):
         with self.sql_conf(config):
             results = self._generate_udf_input_type_coercion_results(use_arrow)
             actual_output = format_type_table(
-                results, ["Test Case", "Spark Type", "Spark Value", "Python Type", "Python Value"], column_width=85
+                results,
+                ["Test Case", "Spark Type", "Spark Value", "Python Type", "Python Value"],
+                column_width=85,
             )
             self._compare_or_create_golden_file(actual_output, golden_file, test_name)
-
 
     def _generate_udf_input_type_coercion_results(self, use_arrow):
         results = []
@@ -152,14 +152,13 @@ class UDFInputTypeTests(ReusedSQLTestCase):
 
         return results
 
-
     def test_pandas_udf_input(self):
-        golden_file = os.path.join(
-            os.path.dirname(__file__), "golden_pandas_udf_input_types.txt"
-        )
+        golden_file = os.path.join(os.path.dirname(__file__), "golden_pandas_udf_input_types.txt")
         results = self._generate_pandas_udf_input_type_coercion_results()
         actual_output = format_type_table(
-            results, ["Test Case", "Spark Type", "Spark Value", "Python Type", "Python Value"], column_width=85
+            results,
+            ["Test Case", "Spark Type", "Spark Value", "Python Type", "Python Value"],
+            column_width=85,
         )
         self._compare_or_create_golden_file(actual_output, golden_file, "Pandas UDF input types")
 
@@ -173,8 +172,9 @@ class UDFInputTypeTests(ReusedSQLTestCase):
             result_row = [test_name, spark_type.simpleString(), str(input_data)]
 
             try:
+
                 def type_pandas_udf(data):
-                    if hasattr(data, 'dtype'):
+                    if hasattr(data, "dtype"):
                         # Series case
                         return pd.Series([str(data.dtype)] * len(data))
                     else:
@@ -244,10 +244,12 @@ class UDFInputTypeTests(ReusedSQLTestCase):
         def df(args):
             def create_df(data_type):
                 # For StructType where the data contains Row objects (not wrapped in tuples)
-                if (isinstance(data_type, StructType) and
-                    len(args) > 0 and
-                    args[0][0] is not None and
-                    hasattr(args[0][0], '_fields')):
+                if (
+                    isinstance(data_type, StructType)
+                    and len(args) > 0
+                    and args[0][0] is not None
+                    and hasattr(args[0][0], "_fields")
+                ):
                     schema = data_type
                 else:
                     # For all other types, wrap in a "value" column

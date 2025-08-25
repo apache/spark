@@ -229,9 +229,7 @@ def generate_table_diff(actual, expected, cell_width=CELL_WIDTH):
         actual_header, actual_rows = parse_table_content(actual)
 
         if expected_header and actual_header:
-            return format_table_diff(
-                expected_header, expected_rows, actual_rows, True, cell_width
-            )
+            return format_table_diff(expected_header, expected_rows, actual_rows, True, cell_width)
     except Exception:
         pass
 
