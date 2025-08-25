@@ -24,6 +24,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{
   CatalogV2Util,
   Identifier,
@@ -142,13 +143,7 @@ object DatasetManager extends Logging {
       context: PipelineUpdateContext
   ): Table = {
     logInfo(log"Materializing metadata for table ${MDC(LogKeys.TABLE_NAME, table.identifier)}.")
-    val catalogManager = context.spark.sessionState.catalogManager
-    val catalog = (table.identifier.catalog match {
-      case Some(catalogName) =>
-        catalogManager.catalog(catalogName)
-      case None =>
-        catalogManager.currentCatalog
-    }).asInstanceOf[TableCatalog]
+    val catalog = getTableCatalogForTable(context.spark, table.identifier)
 
     val identifier =
       Identifier.of(Array(table.identifier.database.get), table.identifier.identifier)
@@ -179,7 +174,7 @@ object DatasetManager extends Logging {
     }
 
     // Wipe the data if we need to
-    if ((isFullRefresh || !table.isStreamingTable) && existingTableOpt.isDefined) {
+    if (!table.isStreamingTable && existingTableOpt.isDefined) {
       context.spark.sql(s"TRUNCATE TABLE ${table.identifier.quotedString}")
     }
 
@@ -291,5 +286,17 @@ object DatasetManager extends Logging {
     val refreshTableIdentsSet = refreshTablesSet.map(_.identifier)
     val fullRefreshTableIdentsSet = fullRefreshTablesSet.map(_.identifier)
     (allRefreshTables, refreshTableIdentsSet, fullRefreshTableIdentsSet)
+  }
+
+  def getTableCatalogForTable(
+      spark: SparkSession,
+      tableIdentifier: TableIdentifier): TableCatalog = {
+    val catalogManager = spark.sessionState.catalogManager
+    (tableIdentifier.catalog match {
+      case Some(catalogName) =>
+        catalogManager.catalog(catalogName)
+      case None =>
+        catalogManager.currentCatalog
+    }).asInstanceOf[TableCatalog]
   }
 }

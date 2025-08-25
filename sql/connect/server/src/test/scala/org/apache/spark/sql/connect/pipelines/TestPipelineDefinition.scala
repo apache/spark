@@ -29,6 +29,8 @@ class TestPipelineDefinition(graphId: String) {
     new scala.collection.mutable.ArrayBuffer[sc.PipelineCommand.DefineDataset]()
   private[connect] val viewDefs =
     new scala.collection.mutable.ArrayBuffer[sc.PipelineCommand.DefineDataset]()
+  private[connect] val sinkDefs =
+    new scala.collection.mutable.ArrayBuffer[sc.PipelineCommand.DefineSink]()
   private[connect] val flowDefs =
     new scala.collection.mutable.ArrayBuffer[sc.PipelineCommand.DefineFlow]()
 
@@ -71,11 +73,24 @@ class TestPipelineDefinition(graphId: String) {
     createTable(
       name,
       datasetType,
-      query = sql.map(s =>
-        sc.Relation
-          .newBuilder()
-          .setSql(sc.SQL.newBuilder().setQuery(s).build())
-          .build()))
+      query = sql.map(
+        s =>
+          sc.Relation
+            .newBuilder()
+            .setSql(sc.SQL.newBuilder().setQuery(s).build())
+            .build()
+      )
+    )
+  }
+
+  protected def createSink(name: String, format: String, options: Map[String, String]): Unit = {
+    tableDefs += sc.PipelineCommand.DefineDataset
+      .newBuilder()
+      .setDataflowGraphId(graphId)
+      .setDatasetName(name)
+      .setFormat(format)
+      .putAllOptions(options.asJava)
+      .build()
   }
 
   protected def createView(
@@ -109,7 +124,8 @@ class TestPipelineDefinition(graphId: String) {
       query = sc.Relation
         .newBuilder()
         .setSql(sc.SQL.newBuilder().setQuery(sql).build())
-        .build())
+        .build()
+    )
   }
 
   protected def createFlow(

@@ -31,7 +31,10 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connect.service.SparkConnectService
 import org.apache.spark.sql.pipelines.graph.DataflowGraph
-import org.apache.spark.sql.pipelines.utils.{EventVerificationTestHelpers, TestPipelineUpdateContextMixin}
+import org.apache.spark.sql.pipelines.utils.{
+  EventVerificationTestHelpers,
+  TestPipelineUpdateContextMixin
+}
 
 /**
  * Test suite that starts a Spark Connect server and executes Spark Declarative Pipelines Python
@@ -81,7 +84,8 @@ class PythonPipelineSuite
 
     if (exitCode != 0) {
       throw new RuntimeException(
-        s"Python process failed with exit code $exitCode. Output: ${output.mkString("\n")}")
+        s"Python process failed with exit code $exitCode. Output: ${output.mkString("\n")}"
+      )
     }
     val activeSessions = SparkConnectService.sessionManager.listActiveSessions
 
@@ -155,7 +159,9 @@ class PythonPipelineSuite
     assert(
       graph.flowsTo(graphIdentifier("a")).map(_.identifier).toSet == Set(
         graphIdentifier("a"),
-        graphIdentifier("supplement")))
+        graphIdentifier("supplement")
+      )
+    )
   }
 
   test("referencing internal datasets") {
@@ -174,10 +180,8 @@ class PythonPipelineSuite
       |""".stripMargin).resolve().validate()
 
     assert(
-      graph.table.keySet == Set(
-        graphIdentifier("src"),
-        graphIdentifier("a"),
-        graphIdentifier("b")))
+      graph.table.keySet == Set(graphIdentifier("src"), graphIdentifier("a"), graphIdentifier("b"))
+    )
     Seq("a", "b").foreach { flowName =>
       // dependency is properly tracked
       assert(graph.resolvedFlow(graphIdentifier(flowName)).inputs == Set(graphIdentifier("src")))
@@ -205,10 +209,10 @@ class PythonPipelineSuite
         |""".stripMargin).resolve().validate()
 
     assert(
-      graph.tables.map(_.identifier).toSet == Set(
-        graphIdentifier("a"),
-        graphIdentifier("b"),
-        graphIdentifier("c")))
+      graph.tables
+        .map(_.identifier)
+        .toSet == Set(graphIdentifier("a"), graphIdentifier("b"), graphIdentifier("c"))
+    )
     // dependency is not tracked
     assert(graph.resolvedFlows.forall(_.inputs.isEmpty))
     val (streamingFlows, batchFlows) = graph.resolvedFlows.partition(_.df.isStreaming)
@@ -297,37 +301,49 @@ class PythonPipelineSuite
         TableIdentifier(
           catalog = Option("spark_catalog"),
           database = Option("default"),
-          table = "mv_1"),
+          table = "mv_1"
+        ),
         TableIdentifier(
           catalog = Option("spark_catalog"),
           database = Option("schema_a"),
-          table = "mv_2"),
+          table = "mv_2"
+        ),
         TableIdentifier(
           catalog = Option("spark_catalog"),
           database = Option("default"),
-          table = "st_1"),
+          table = "st_1"
+        ),
         TableIdentifier(
           catalog = Option("spark_catalog"),
           database = Option("schema_b"),
-          table = "st_2")))
+          table = "st_2"
+        )
+      )
+    )
     assert(
       graph.flows.map(_.identifier).toSet == Set(
         TableIdentifier(
           catalog = Option("spark_catalog"),
           database = Option("default"),
-          table = "mv_1"),
+          table = "mv_1"
+        ),
         TableIdentifier(
           catalog = Option("spark_catalog"),
           database = Option("schema_a"),
-          table = "mv_2"),
+          table = "mv_2"
+        ),
         TableIdentifier(
           catalog = Option("spark_catalog"),
           database = Option("default"),
-          table = "st_1"),
+          table = "st_1"
+        ),
         TableIdentifier(
           catalog = Option("spark_catalog"),
           database = Option("schema_b"),
-          table = "st_2")))
+          table = "st_2"
+        )
+      )
+    )
   }
 
   test("create datasets with three part names") {
@@ -346,11 +362,15 @@ class PythonPipelineSuite
     assert(
       graphTry.get.tables.map(_.identifier).toSet == Set(
         TableIdentifier("mv", Some("some_schema"), Some("some_catalog")),
-        TableIdentifier("st", Some("some_schema"), Some("some_catalog"))))
+        TableIdentifier("st", Some("some_schema"), Some("some_catalog"))
+      )
+    )
     assert(
       graphTry.get.flows.map(_.identifier).toSet == Set(
         TableIdentifier("mv", Some("some_schema"), Some("some_catalog")),
-        TableIdentifier("st", Some("some_schema"), Some("some_catalog"))))
+        TableIdentifier("st", Some("some_schema"), Some("some_catalog"))
+      )
+    )
   }
 
   test("temporary views works") {
@@ -373,13 +393,11 @@ class PythonPipelineSuite
          |""".stripMargin).resolve()
     // views are temporary views, so they're not fully qualified.
     assert(
-      Set("view_1", "view_2", "view_3").subsetOf(
-        graph.flows.map(_.identifier.unquotedString).toSet))
+      Set("view_1", "view_2", "view_3").subsetOf(graph.flows.map(_.identifier.unquotedString).toSet)
+    )
     // dependencies are correctly resolved view_2 reading from view_1
-    assert(
-      graph.resolvedFlow(TableIdentifier("view_2")).inputs.contains(TableIdentifier("view_1")))
-    assert(
-      graph.resolvedFlow(TableIdentifier("view_3")).inputs.contains(TableIdentifier("view_1")))
+    assert(graph.resolvedFlow(TableIdentifier("view_2")).inputs.contains(TableIdentifier("view_1")))
+    assert(graph.resolvedFlow(TableIdentifier("view_3")).inputs.contains(TableIdentifier("view_1")))
   }
 
   test("create named flow with multipart name will fail") {
@@ -413,7 +431,8 @@ class PythonPipelineSuite
       graph
         .flowsTo(graphIdentifier("a"))
         .map(_.identifier)
-        .toSet == Set(graphIdentifier("a"), graphIdentifier("supplement")))
+        .toSet == Set(graphIdentifier("a"), graphIdentifier("supplement"))
+    )
   }
 
   test("create named flow with multipart target succeeds") {
@@ -431,7 +450,8 @@ class PythonPipelineSuite
     assert(
       graph
         .flowsTo(graphIdentifier("a"))
-        .map(_.identifier) == Seq(graphIdentifier("a"), graphIdentifier("something")))
+        .map(_.identifier) == Seq(graphIdentifier("a"), graphIdentifier("something"))
+    )
   }
 
   test("create pipeline without table will throw RUN_EMPTY_PIPELINE exception") {
@@ -442,7 +462,8 @@ class PythonPipelineSuite
             |""".stripMargin)
       },
       condition = "RUN_EMPTY_PIPELINE",
-      parameters = Map.empty)
+      parameters = Map.empty
+    )
   }
 
   test("create pipeline with only temp view will throw RUN_EMPTY_PIPELINE exception") {
@@ -455,7 +476,8 @@ class PythonPipelineSuite
             |""".stripMargin)
       },
       condition = "RUN_EMPTY_PIPELINE",
-      parameters = Map.empty)
+      parameters = Map.empty
+    )
   }
 
   test("create pipeline with only flow will throw RUN_EMPTY_PIPELINE exception") {
@@ -468,7 +490,32 @@ class PythonPipelineSuite
             |""".stripMargin)
       },
       condition = "RUN_EMPTY_PIPELINE",
-      parameters = Map.empty)
+      parameters = Map.empty
+    )
+  }
+
+  test("external sink") {
+    val graph = buildGraph("""
+           |sdp.create_sink(
+           |  "myKafkaSink",
+           |  format = "kafka",
+           |  options = {"kafka.bootstrap.servers": "host1:port1,host2:port2"}
+           |)
+           |
+           |@sdp.append_flow(
+           |  target = "myKafkaSink"
+           |)
+           |def mySinkFlow():
+           |  return spark.readStream.format("rate").load()
+           |""".stripMargin)
+
+    assert(graph.sinks.map(_.identifier) == Seq(graphIdentifier("myKafkaSink")))
+    assert(
+      graph
+        .flowsTo(graphIdentifier("myKafkaSink"))
+        .map(_.identifier) == Seq(graphIdentifier("mySinkFlow")
+      )
+    )
   }
 
   /**
@@ -490,7 +537,8 @@ class PythonPipelineSuite
     val pythonPath = PythonUtils.mergePythonPaths(
       sourcePath.toString,
       py4jPath.toString,
-      sys.env.getOrElse("PYTHONPATH", ""))
+      sys.env.getOrElse("PYTHONPATH", "")
+    )
 
     val pb = new ProcessBuilder(pythonExec, "-c", pythonCode)
     pb.redirectErrorStream(true)
@@ -500,7 +548,8 @@ class PythonPipelineSuite
 
     // Read the output
     val reader = new BufferedReader(
-      new InputStreamReader(process.getInputStream, StandardCharsets.UTF_8))
+      new InputStreamReader(process.getInputStream, StandardCharsets.UTF_8)
+    )
     val output = new ArrayBuffer[String]()
     var line: String = null
     while ({ line = reader.readLine(); line != null }) {
