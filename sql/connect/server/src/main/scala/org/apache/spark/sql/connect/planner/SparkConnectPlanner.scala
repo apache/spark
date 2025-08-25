@@ -62,6 +62,7 @@ import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
+import org.apache.spark.sql.connect.execution.command.RegisterPythonTableFunctionCommand
 import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.pipelines.PipelinesHandler
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
@@ -2654,6 +2655,8 @@ class SparkConnectPlanner(
         Some(transformMergeIntoTableCommand(command.getMergeIntoTableCommand))
       case proto.Command.CommandTypeCase.CREATE_DATAFRAME_VIEW =>
         Some(_ => transformCreateViewCommand(command.getCreateDataframeView))
+      case proto.Command.CommandTypeCase.REGISTER_TABLE_FUNCTION =>
+        Some(_ => transformRegisterUserDefinedTableFunction(command.getRegisterTableFunction))
       case _ =>
         None
     }
@@ -2670,8 +2673,6 @@ class SparkConnectPlanner(
     command.getCommandTypeCase match {
       case proto.Command.CommandTypeCase.REGISTER_FUNCTION =>
         handleRegisterUserDefinedFunction(command.getRegisterFunction)
-      case proto.Command.CommandTypeCase.REGISTER_TABLE_FUNCTION =>
-        handleRegisterUserDefinedTableFunction(command.getRegisterTableFunction)
       case proto.Command.CommandTypeCase.REGISTER_DATA_SOURCE =>
         handleRegisterUserDefinedDataSource(command.getRegisterDataSource)
       case proto.Command.CommandTypeCase.EXTENSION =>
@@ -2979,16 +2980,14 @@ class SparkConnectPlanner(
     executeHolder.eventsManager.postFinished()
   }
 
-  private def handleRegisterUserDefinedTableFunction(
-      fun: proto.CommonInlineUserDefinedTableFunction): Unit = {
+  private def transformRegisterUserDefinedTableFunction(
+      fun: proto.CommonInlineUserDefinedTableFunction): LogicalPlan = {
     fun.getFunctionCase match {
       case proto.CommonInlineUserDefinedTableFunction.FunctionCase.PYTHON_UDTF =>
-        val function = createPythonUserDefinedTableFunction(fun)
-        session.udtf.registerPython(fun.getFunctionName, function)
+        RegisterPythonTableFunctionCommand(createPythonUserDefinedTableFunction(fun))
       case other =>
         throw InvalidInputErrors.invalidOneOfField(other, fun.getDescriptorForType)
     }
-    executeHolder.eventsManager.postFinished()
   }
 
   private def handleRegisterUserDefinedDataSource(
