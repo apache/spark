@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.ExpressionToSqlConverter
 
 /**
@@ -57,13 +58,14 @@ import org.apache.spark.sql.catalyst.util.ExpressionToSqlConverter
  * }}}
  *
  * @see [[SubstituteParamsParser]] for the underlying parameter substitution logic
- * @see [[SubstituteParamsParser]] for the low-level parameter substitution
  * @since 4.0.0
  */
 class ParameterHandler {
 
-  // Store the most recent position mapper for error context translation
-  @volatile private var lastPositionMapper: Option[PositionMapper] = None
+  // Thread-local storage for position mapper to ensure thread safety
+  private val positionMapperStorage = new ThreadLocal[Option[PositionMapper]]() {
+    override def initialValue(): Option[PositionMapper] = None
+  }
 
   /**
    * Get the current position mapper for translating error positions.
@@ -71,7 +73,28 @@ class ParameterHandler {
    *
    * @return The current position mapper, if available
    */
-  def getPositionMapper: Option[PositionMapper] = lastPositionMapper
+  def getPositionMapper: Option[PositionMapper] = positionMapperStorage.get()
+
+  /**
+   * Helper method to perform parameter substitution and store position mapper.
+   *
+   * @param sqlText The SQL text containing parameter markers
+   * @param rule The substitution rule to use
+   * @param namedParams Optional named parameters map
+   * @param positionalParams Optional positional parameters list
+   * @return The SQL text with parameters substituted
+   */
+  private def performSubstitution(
+      sqlText: String,
+      rule: SubstitutionRule,
+      namedParams: Map[String, String] = Map.empty,
+      positionalParams: List[String] = List.empty): String = {
+    val substitutor = new SubstituteParamsParser()
+    val (substituted, _, positionMapper) = substitutor.substitute(sqlText, rule,
+      namedParams = namedParams, positionalParams = positionalParams)
+    positionMapperStorage.set(Some(positionMapper))
+    substituted
+  }
 
   /**
    * Translate error context from substituted text positions to original text positions.
@@ -79,10 +102,8 @@ class ParameterHandler {
    * @param context The error context with positions in substituted text
    * @return The error context with positions mapped to original text
    */
-  def translateErrorContext(
-      context: org.apache.spark.sql.catalyst.trees.SQLQueryContext):
-      org.apache.spark.sql.catalyst.trees.SQLQueryContext = {
-    lastPositionMapper match {
+  def translateErrorContext(context: SQLQueryContext): SQLQueryContext = {
+    positionMapperStorage.get() match {
       case Some(mapper) =>
         val translatedStartIndex = context.originStartIndex.map(mapper.mapToOriginal)
         val translatedStopIndex = context.originStopIndex.map(mapper.mapToOriginal)
@@ -110,24 +131,15 @@ class ParameterHandler {
       context: ParameterContext,
       rule: SubstitutionRule = SubstitutionRule.Statement): String = {
 
-    val substitutor = new SubstituteParamsParser()
-
     context match {
       case NamedParameterContext(params) =>
-        val paramValues = params.map { case (name, expr) =>
+        performSubstitution(sqlText, rule, namedParams = params.map { case (name, expr) =>
           (name, ExpressionToSqlConverter.convert(expr))
-        }
-        val (substituted, _, positionMapper) = substitutor.substitute(sqlText, rule,
-          namedParams = paramValues)
-        lastPositionMapper = Some(positionMapper)
-        substituted
+        })
 
       case PositionalParameterContext(params) =>
-        val paramValues = params.map(ExpressionToSqlConverter.convert).toList
-        val (substituted, _, positionMapper) = substitutor.substitute(sqlText, rule,
-          positionalParams = paramValues)
-        lastPositionMapper = Some(positionMapper)
-        substituted
+        performSubstitution(sqlText, rule,
+          positionalParams = params.map(ExpressionToSqlConverter.convert).toList)
     }
   }
 
@@ -166,14 +178,10 @@ class ParameterHandler {
 
     if (paramMap.isEmpty) return sqlText
 
-    val substitutor = new SubstituteParamsParser()
     val paramValues = paramMap.map { case (name, expr) =>
       (name, ExpressionToSqlConverter.convert(expr))
     }
-    val (substituted, _, positionMapper) = substitutor.substitute(sqlText, rule,
-      namedParams = paramValues)
-    lastPositionMapper = Some(positionMapper)
-    substituted
+    performSubstitution(sqlText, rule, namedParams = paramValues)
   }
 
   /**
@@ -191,12 +199,8 @@ class ParameterHandler {
 
     if (paramList.isEmpty) return sqlText
 
-    val substitutor = new SubstituteParamsParser()
     val paramValues = paramList.map(ExpressionToSqlConverter.convert).toList
-    val (substituted, _, positionMapper) = substitutor.substitute(sqlText, rule,
-      positionalParams = paramValues)
-    lastPositionMapper = Some(positionMapper)
-    substituted
+    performSubstitution(sqlText, rule, positionalParams = paramValues)
   }
 
   /**
@@ -206,13 +210,12 @@ class ParameterHandler {
    * @return The appropriate substitution rule
    */
   def determineSubstitutionRule(sqlText: String): SubstitutionRule = {
-    // scalastyle:off caselocale
-    if (sqlText.trim.toUpperCase.startsWith("BEGIN")) {
+    val trimmed = sqlText.trim
+    if (trimmed.length >= 5 && trimmed.regionMatches(true, 0, "BEGIN", 0, 5)) {
       SubstitutionRule.CompoundOrSingleStatement
     } else {
       SubstitutionRule.Statement
     }
-    // scalastyle:on caselocale
   }
 
   /**

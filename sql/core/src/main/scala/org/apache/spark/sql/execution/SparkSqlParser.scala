@@ -33,8 +33,10 @@ import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView,
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
+import org.apache.spark.sql.catalyst.parser.{PositionMapper, SqlBaseParser}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
@@ -66,9 +68,30 @@ class SparkSqlParser extends AbstractSqlParser {
     // Step 2: Apply existing variable substitution
     val variableSubstituted = substitutor.substitute(paramSubstituted)
 
-    // Step 3: Continue with normal parsing
-    // Note: Error position translation now happens in SQLExecution.withNewExecutionId
-    super.parse(variableSubstituted)(toResult)
+    // Step 3: Continue with normal parsing and handle position translation for parse errors
+    try {
+      super.parse(variableSubstituted)(toResult)
+    } catch {
+      case e: Throwable with org.apache.spark.sql.catalyst.trees.WithOrigin =>
+        // Apply position mapping if we have parameter substitution
+        val translatedError = parameterHandler.getPositionMapper match {
+          case Some(positionMapper) =>
+            e.updateQueryContext { contexts =>
+              contexts.map { context =>
+                context match {
+                  case sqlContext: org.apache.spark.sql.catalyst.trees.SQLQueryContext =>
+                    translateSqlContext(sqlContext, positionMapper)
+                  case _ => context
+                }
+              }
+            }.asInstanceOf[Throwable]
+          case None => e
+        }
+        throw translatedError
+      case e: Throwable =>
+        // No WithOrigin trait, throw as-is
+        throw e
+    }
   }
 
 
@@ -80,6 +103,21 @@ class SparkSqlParser extends AbstractSqlParser {
       context: org.apache.spark.sql.catalyst.parser.ParameterContext): String = {
 
     parameterHandler.substituteParametersWithAutoRule(command, context)
+  }
+
+  private def translateSqlContext(context: SQLQueryContext,
+      mapper: PositionMapper): SQLQueryContext = {
+    val translatedStartIndex = context.originStartIndex.map(mapper.mapToOriginal(_))
+    val translatedStopIndex = context.originStopIndex.map(mapper.mapToOriginal(_))
+    SQLQueryContext(
+      line = context.line,
+      startPosition = context.startPosition,
+      originStartIndex = translatedStartIndex,
+      originStopIndex = translatedStopIndex,
+      sqlText = Some(mapper.originalText),
+      originObjectType = context.originObjectType,
+      originObjectName = context.originObjectName
+    )
   }
 
 

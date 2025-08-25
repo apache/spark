@@ -28,6 +28,8 @@ import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
 import org.apache.spark.internal.config.Tests.IS_TESTING
+import org.apache.spark.sql.catalyst.parser.{PositionMapper, ThreadLocalParameterContext}
+import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
@@ -54,6 +56,29 @@ object SQLExecution extends Logging {
   private val testing = sys.props.contains(IS_TESTING.key)
 
   /**
+   * Translate SQLQueryContext positions using the provided position mapper.
+   *
+   * @param context The SQL query context to translate
+   * @param mapper The position mapper for translation
+   * @return The context with translated positions
+   */
+  private def translateSqlContext(
+      context: SQLQueryContext,
+      mapper: PositionMapper): SQLQueryContext = {
+    val translatedStartIndex = context.originStartIndex.map(mapper.mapToOriginal(_))
+    val translatedStopIndex = context.originStopIndex.map(mapper.mapToOriginal(_))
+    SQLQueryContext(
+      line = context.line,
+      startPosition = context.startPosition,
+      originStartIndex = translatedStartIndex,
+      originStopIndex = translatedStopIndex,
+      sqlText = Some(mapper.originalText),
+      originObjectType = context.originObjectType,
+      originObjectName = context.originObjectName
+    )
+  }
+
+  /**
    * Translates error positions from substituted SQL back to original SQL if parameter
    * substitution occurred. This ensures that error messages show positions relative
    * to the SQL text that the user originally submitted.
@@ -65,8 +90,7 @@ object SQLExecution extends Logging {
   private def translateParameterPositions(error: Throwable,
       queryExecution: QueryExecution): Throwable = {
     // Check if this query execution involved parameter substitution
-    val positionMapperOpt =
-      org.apache.spark.sql.catalyst.parser.ThreadLocalParameterContext.get() match {
+    val positionMapperOpt = ThreadLocalParameterContext.get() match {
       case Some(_) =>
         // Parameter substitution occurred, try to get the position mapper
         queryExecution.sparkSession.sessionState.sqlParser match {
@@ -79,71 +103,20 @@ object SQLExecution extends Logging {
 
     positionMapperOpt match {
       case Some(positionMapper) =>
+        // Simply check if the error has WithOrigin and update its context
         error match {
-          case pe: org.apache.spark.sql.catalyst.parser.ParseException =>
-            // Translate parse exception contexts
-            val translatedContexts = pe.getQueryContext.map { context =>
-              context match {
-                case sqlContext: org.apache.spark.sql.catalyst.trees.SQLQueryContext =>
-                  val translatedStartIndex =
-                    sqlContext.originStartIndex.map(positionMapper.mapToOriginal(_))
-                  val translatedStopIndex =
-                    sqlContext.originStopIndex.map(positionMapper.mapToOriginal(_))
-                  org.apache.spark.sql.catalyst.trees.SQLQueryContext(
-                    line = sqlContext.line,
-                    startPosition = sqlContext.startPosition,
-                    originStartIndex = translatedStartIndex,
-                    originStopIndex = translatedStopIndex,
-                    sqlText = Some(positionMapper.originalText),
-                    originObjectType = sqlContext.originObjectType,
-                    originObjectName = sqlContext.originObjectName
-                  )
-                case _ =>
-                  // For non-SQL contexts, return as-is
-                  context
+          case e: Throwable with org.apache.spark.sql.catalyst.trees.WithOrigin =>
+            e.updateQueryContext { contexts =>
+              contexts.map { context =>
+                context match {
+                  case sqlContext: SQLQueryContext =>
+                    translateSqlContext(sqlContext, positionMapper)
+                  case _ => context
+                }
               }
-            }
-            new org.apache.spark.sql.catalyst.parser.ParseException(
-              command = pe.command.orElse(Some(positionMapper.originalText)),
-              start = pe.start,
-              errorClass = pe.getCondition,
-              messageParameters = pe.getMessageParameters.asScala.toMap,
-              queryContext = translatedContexts
-            )
-
-          case ae: org.apache.spark.sql.AnalysisException =>
-            // Translate analysis exception contexts
-            val translatedContexts = ae.context.map { context =>
-              context match {
-                case sqlContext: org.apache.spark.sql.catalyst.trees.SQLQueryContext =>
-                  val translatedStartIndex =
-                    sqlContext.originStartIndex.map(positionMapper.mapToOriginal(_))
-                  val translatedStopIndex =
-                    sqlContext.originStopIndex.map(positionMapper.mapToOriginal(_))
-                  org.apache.spark.sql.catalyst.trees.SQLQueryContext(
-                    line = sqlContext.line,
-                    startPosition = sqlContext.startPosition,
-                    originStartIndex = translatedStartIndex,
-                    originStopIndex = translatedStopIndex,
-                    sqlText = Some(positionMapper.originalText),
-                    originObjectType = sqlContext.originObjectType,
-                    originObjectName = sqlContext.originObjectName
-                  )
-                case _ =>
-                  // For non-SQL contexts, return as-is
-                  context
-              }
-            }
-            new org.apache.spark.sql.AnalysisException(
-              errorClass = ae.getCondition,
-              messageParameters = ae.messageParameters,
-              context = translatedContexts,
-              cause = Option(ae.getCause)
-            )
-
+            }.asInstanceOf[Throwable]
           case _ =>
-            // For other exception types, return as-is
-            // Future: Could extend to handle runtime exceptions with position info
+            // No WithOrigin trait, return as-is
             error
         }
       case None =>

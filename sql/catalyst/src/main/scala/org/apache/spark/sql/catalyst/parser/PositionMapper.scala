@@ -48,12 +48,12 @@ class PositionMapper(
   /**
    * Map a range in the substituted text back to the original text.
    *
-   * @param substitutedStart Start position in substituted text
-   * @param substitutedEnd End position in substituted text
+   * @param startPos Start position in substituted text
+   * @param endPos End position in substituted text
    * @return (originalStart, originalEnd) tuple
    */
-  def mapRangeToOriginal(substitutedStart: Int, substitutedEnd: Int): (Int, Int) = {
-    (mapToOriginal(substitutedStart), mapToOriginal(substitutedEnd))
+  def mapRangeToOriginal(startPos: Int, endPos: Int): (Int, Int) = {
+    (mapToOriginal(startPos), mapToOriginal(endPos))
   }
 
   /**
