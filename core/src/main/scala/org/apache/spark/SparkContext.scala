@@ -2940,8 +2940,7 @@ class SparkContext(config: SparkConf) extends Logging {
       _heartbeater.doReportHeartbeat()
     } catch {
       case t: Throwable =>
-        logError("Error while reporting heartbeat metrics for the driver " +
-          "during application shutdown.", t);
+        logInfo("Unable to report driver heartbeat metrics when stopping spark context", t);
     }
     listenerBus.post(SparkListenerApplicationEnd(System.currentTimeMillis, Some(exitCode)))
   }
