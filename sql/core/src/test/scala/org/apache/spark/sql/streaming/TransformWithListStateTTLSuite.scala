@@ -750,42 +750,47 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-      val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(10))
-      val inputStream = MemoryStream[String]
-      val result = inputStream.toDS()
-        .groupByKey(x => x)
-        .transformWithState(
-          new MultiStatefulVariableTTLProcessor(ttlConfig),
-          TimeMode.ProcessingTime(),
-          OutputMode.Append())
-      val clock = new StreamManualClock
+      withTempDir { checkpointLocation =>
+        val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(10))
+        val inputStream = MemoryStream[String]
+        val result = inputStream.toDS()
+          .groupByKey(x => x)
+          .transformWithState(
+            new MultiStatefulVariableTTLProcessor(ttlConfig),
+            TimeMode.ProcessingTime(),
+            OutputMode.Append())
+        val clock = new StreamManualClock
 
-      testStream(result)(
-        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        testStream(result)(
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
+            checkpointLocation = checkpointLocation.getAbsolutePath),
 
-        AddData(inputStream, "k1"),
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(("k1", 1)),
-        assertNumStateRows(total = 3, updated = 3),
+          AddData(inputStream, "k1"),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("k1", 1)),
+          assertNumStateRows(total = 3, updated = 3),
 
-        StopStream,
-        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+          StopStream,
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
+            checkpointLocation = checkpointLocation.getAbsolutePath),
 
-        AddData(inputStream, "k1"),
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(("k1", 2)),
-        assertNumStateRows(total = 4, updated = 3),
+          AddData(inputStream, "k1"),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("k1", 2)),
+          assertNumStateRows(total = 4, updated = 3),
 
-        StopStream,
-        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+          StopStream,
+          StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock,
+            checkpointLocation = checkpointLocation.getAbsolutePath),
 
-        AddData(inputStream, "k1"),
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(("k1", 3)),
-        assertNumStateRows(total = 5, updated = 3),
+          AddData(inputStream, "k1"),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("k1", 3)),
+          assertNumStateRows(total = 5, updated = 3),
 
-        StopStream
-      )
+          StopStream
+        )
+      }
     }
   }
 }

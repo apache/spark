@@ -165,6 +165,13 @@ class ArrowUDFTestsMixin:
                 def zero_with_type():
                     return 1
 
+            with self.assertRaisesRegex(ValueError, "0-arg arrow_udfs.*not.*supported"):
+
+                @arrow_udf(LongType(), ArrowUDFType.SCALAR_ITER)
+                def zero_with_type():
+                    yield 1
+                    yield 2
+
     def test_arrow_udf_timestamp_ntz(self):
         import pyarrow as pa
 
