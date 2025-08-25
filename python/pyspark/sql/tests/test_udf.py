@@ -1402,6 +1402,53 @@ class BaseUDFTestsMixin(object):
             result_type = df_result.schema["result"].dataType
             self.assertEqual(result_type, StringType("fr"))
 
+    def test_udf_with_char_varchar_return_type(self):
+        char_type = "char(10)"
+        varchar_type = "varchar(8)"
+        array_with_char_type = "array<char(5)>"
+        array_with_varchar_type = "array<varchar(12)>"
+        map_type = f"map<{char_type}, {varchar_type}>"
+        struct_type = f"struct<f1: {char_type}, f2: {varchar_type}>"
+
+        pairs = [
+            (char_type, "a"),
+            (varchar_type, "a"),
+            (array_with_char_type, ["abc", "xyz"]),
+            (array_with_varchar_type, ["hello", "world"]),
+            (map_type, {"abc": "hello"}),
+            (struct_type, {"f1": "abc", "f2": "xyz"}),
+            (
+                f"struct<f1: {array_with_char_type}, f2: {array_with_varchar_type}, f3: {map_type}>",
+                {
+                    "f1": ["foo", "bar"],
+                    "f2": ["baz", "qux"],
+                    "f3": {"key": "val"}
+                }
+            ),
+            (
+                f"map<{array_with_char_type}, {array_with_varchar_type}>",
+                {("aaa", "bbb"): ["xx", "yy"]}
+            ),
+            (
+                f"array<{struct_type}>",
+                [
+                    {"f1": "abc", "f2": "def"},
+                    {"f1": "ghi", "f2": "jkl"}
+                ]
+            ),
+        ]
+
+        for return_type, return_value in pairs:
+            @udf(return_type)
+            def my_udf():
+                return return_value
+
+            df_result = self.spark.range(1).select(my_udf().alias("result"))
+            with self.assertRaisesRegex(
+                    AnalysisException, "Please use a different output data type for your UDF or DataFrame"
+            ):
+                df_result.show()
+
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     @classmethod
