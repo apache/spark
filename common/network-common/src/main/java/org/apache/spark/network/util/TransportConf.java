@@ -21,7 +21,6 @@ import java.io.File;
 import java.util.Locale;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
-import com.google.common.base.Preconditions;
 import io.netty.util.NettyRuntime;
 
 /**
@@ -503,7 +502,7 @@ public class TransportConf {
     if (!this.getModuleName().equalsIgnoreCase("shuffle")) {
       return 0;
     }
-    Preconditions.checkArgument(separateFinalizeShuffleMerge(),
+    JavaUtils.checkArgument(separateFinalizeShuffleMerge(),
         "Please set spark.shuffle.server.finalizeShuffleMergeThreadsPercent to a positive value");
     int finalizeShuffleMergeThreadsPercent =
         Integer.parseInt(conf.get("spark.shuffle.server.finalizeShuffleMergeThreadsPercent"));

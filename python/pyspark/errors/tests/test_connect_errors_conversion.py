@@ -18,7 +18,7 @@
 
 import unittest
 
-from pyspark.testing import should_test_connect, connect_requirement_message
+from pyspark.testing.utils import should_test_connect, connect_requirement_message
 
 if should_test_connect:
     from pyspark.errors.exceptions.connect import (

@@ -2,45 +2,45 @@
 Dataset Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 back-to-back map long:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-RDD                                                6520           6520           1         15.3          65.2       1.0X
-DataFrame                                          1192           1241          68         83.9          11.9       5.5X
-Dataset                                            1640           1705          92         61.0          16.4       4.0X
+RDD                                                6456           6516          85         15.5          64.6       1.0X
+DataFrame                                          1215           1262          67         82.3          12.1       5.3X
+Dataset                                            1722           1726           6         58.1          17.2       3.7X
 
-OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 back-to-back map:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-RDD                                                7453           7459           9         13.4          74.5       1.0X
-DataFrame                                          2922           2940          25         34.2          29.2       2.6X
-Dataset                                            7021           7024           4         14.2          70.2       1.1X
+RDD                                                7533           7547          20         13.3          75.3       1.0X
+DataFrame                                          2802           2841          55         35.7          28.0       2.7X
+Dataset                                            7391           7397           8         13.5          73.9       1.0X
 
-OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 back-to-back filter Long:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-RDD                                                4428           4492          90         22.6          44.3       1.0X
-DataFrame                                           728            736          10        137.5           7.3       6.1X
-Dataset                                            1638           1654          23         61.1          16.4       2.7X
+RDD                                                4352           4379          38         23.0          43.5       1.0X
+DataFrame                                           714            730          20        140.1           7.1       6.1X
+Dataset                                            2404           2407           4         41.6          24.0       1.8X
 
-OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 back-to-back filter:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-RDD                                                2086           2095          12         47.9          20.9       1.0X
-DataFrame                                           110            122          10        912.5           1.1      19.0X
-Dataset                                            2367           2398          45         42.3          23.7       0.9X
+RDD                                                2082           2116          47         48.0          20.8       1.0X
+DataFrame                                           112            125          16        896.6           1.1      18.7X
+Dataset                                            2342           2375          46         42.7          23.4       0.9X
 
-OpenJDK 64-Bit Server VM 21.0.6+7-LTS on Linux 6.8.0-1020-azure
+OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 aggregate:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-RDD sum                                            1404           1408           5         71.2          14.0       1.0X
-DataFrame sum                                        57             70          10       1767.9           0.6      24.8X
-Dataset sum using Aggregator                       1944           2023         111         51.4          19.4       0.7X
-Dataset complex Aggregator                         4838           4881          60         20.7          48.4       0.3X
+RDD sum                                            1402           1412          14         71.3          14.0       1.0X
+DataFrame sum                                        68             83          11       1470.1           0.7      20.6X
+Dataset sum using Aggregator                       1946           2009          89         51.4          19.5       0.7X
+Dataset complex Aggregator                         5018           5103         119         19.9          50.2       0.3X
 
 

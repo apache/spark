@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.sql.{Dataset, Encoders, Row, SparkSession}
 import org.apache.spark.sql.LocalSparkSession.withSparkSession
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.SlowSQLTest

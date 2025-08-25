@@ -252,8 +252,8 @@ class CLIUtilityTests(unittest.TestCase):
                 f.write(
                     textwrap.dedent(
                         """
-                        from pyspark import pipelines as sdp
-                        @sdp.materialized_view
+                        from pyspark import pipelines as dp
+                        @dp.materialized_view
                         def mv1():
                             raise NotImplementedError()
                     """
@@ -264,7 +264,7 @@ class CLIUtilityTests(unittest.TestCase):
                 f.write(
                     textwrap.dedent(
                         """
-                        from pyspark import pipelines as sdp
+                        from pyspark import pipelines as dp
                         def mv2():
                             raise NotImplementedError()
                     """

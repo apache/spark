@@ -2148,7 +2148,7 @@ _type_mappings = {
     decimal.Decimal: DecimalType,
     datetime.date: DateType,
     datetime.datetime: TimestampType,  # can be TimestampNTZType
-    datetime.time: TimestampType,  # can be TimestampNTZType
+    datetime.time: TimeType,
     datetime.timedelta: DayTimeIntervalType,
     bytes: BinaryType,
 }
