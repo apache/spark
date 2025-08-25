@@ -199,11 +199,11 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
   // Resolves `UnresolvedAttribute` to `OuterReference`.
   protected def resolveOuterRef(e: Expression): Expression = {
-    val outerPlan = AnalysisContext.get.outerPlan
+    val outerPlan = AnalysisContext.get.outerPlans
     if (outerPlan.isEmpty) return e
 
     def resolve(nameParts: Seq[String]): Option[Expression] = try {
-      outerPlan.get match {
+      outerPlan.head match {
         // Subqueries in UnresolvedHaving can host grouping expressions and aggregate functions.
         // We should resolve columns with `agg.output` and the rule `ResolveAggregateFunctions` will
         // push them down to Aggregate later. This is similar to what we do in `resolveColumns`.
