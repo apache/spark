@@ -30,7 +30,7 @@ import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connect.service.SparkConnectService
-import org.apache.spark.sql.pipelines.graph.DataflowGraph
+import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl}
 import org.apache.spark.sql.pipelines.utils.{EventVerificationTestHelpers, TestPipelineUpdateContextMixin}
 
 /**
@@ -432,6 +432,47 @@ class PythonPipelineSuite
       graph
         .flowsTo(graphIdentifier("a"))
         .map(_.identifier) == Seq(graphIdentifier("a"), graphIdentifier("something")))
+  }
+
+  test("groupby and rollup works with internal datasets") {
+    val graph = buildGraph("""
+        from pyspark.sql.functions import col, sum, count
+
+        @dp.materialized_view
+        def src():
+          return spark.range(3)
+
+        @dp.materialized_view
+        def groupby_result():
+          return spark.read.table("src").groupBy(col("id")).agg(
+            sum("id").alias("sum_id"),
+            count("*").alias("cnt")
+          )
+
+        @dp.materialized_view
+        def rollup_result():
+          return spark.read.table("src").rollup(col("id")).agg(
+            sum("id").alias("sum_id"),
+            count("*").alias("cnt")
+          )
+      """)
+
+    val updateContext = new PipelineUpdateContextImpl(graph, _ => ())
+    updateContext.pipelineExecution.runPipeline()
+    updateContext.pipelineExecution.awaitCompletion()
+
+    val groupbyDf = spark.table("groupby_result")
+    val rollupDf = spark.table("rollup_result")
+
+    // groupBy should have exactly one row per id [0,1,2]
+    assert(groupbyDf.select("id").collect().map(_.getLong(0)).toSet == Set(0L, 1L, 2L))
+
+    // rollup should have all groupBy rows + one extra (the total row)
+    assert(rollupDf.count() == groupbyDf.count() + 1)
+
+    // verify the rollup total row: id IS NULL, sum_id=3, cnt=3
+    val totalRow = rollupDf.filter("id IS NULL").collect().head
+    assert(totalRow.getLong(1) == 3L && totalRow.getLong(2) == 3L)
   }
 
   test("create pipeline without table will throw RUN_EMPTY_PIPELINE exception") {
