@@ -1915,14 +1915,14 @@ class PlanParserSuite extends AnalysisTest {
 
     // Test named parameters
     val sql1 = "SELECT :param_1"
-    val (substituted1, _) = substitutor.substitute(
+    val (substituted1, _, _) = substitutor.substitute(
       sql1, SubstitutionRule.Statement, Map("param_1" -> "42"))
     comparePlans(
       parsePlan(substituted1),
       Project(UnresolvedAlias(Literal(42), None) :: Nil, OneRowRelation()))
 
     val sql2 = "SELECT abs(:1Abc)"
-    val (substituted2, _) = substitutor.substitute(
+    val (substituted2, _, _) = substitutor.substitute(
       sql2, SubstitutionRule.Statement, Map("1Abc" -> "123"))
     comparePlans(
       parsePlan(substituted2),
@@ -1934,7 +1934,7 @@ class PlanParserSuite extends AnalysisTest {
         OneRowRelation()))
 
     val sql3 = "SELECT * FROM a LIMIT :limitA"
-    val (substituted3, _) = substitutor.substitute(
+    val (substituted3, _, _) = substitutor.substitute(
       sql3, SubstitutionRule.Statement, Map("limitA" -> "10"))
     comparePlans(
       parsePlan(substituted3),
@@ -1982,14 +1982,14 @@ class PlanParserSuite extends AnalysisTest {
 
     // Test positional parameters
     val sql1 = "SELECT ?"
-    val (substituted1, _) = substitutor.substitute(
+    val (substituted1, _, _) = substitutor.substitute(
       sql1, SubstitutionRule.Statement, positionalParams = List("42"))
     comparePlans(
       parsePlan(substituted1),
       Project(UnresolvedAlias(Literal(42), None) :: Nil, OneRowRelation()))
 
     val sql2 = "SELECT abs(?)"
-    val (substituted2, _) = substitutor.substitute(
+    val (substituted2, _, _) = substitutor.substitute(
       sql2, SubstitutionRule.Statement, positionalParams = List("123"))
     comparePlans(
       parsePlan(substituted2),
@@ -2001,7 +2001,7 @@ class PlanParserSuite extends AnalysisTest {
         OneRowRelation()))
 
     val sql3 = "SELECT * FROM a LIMIT ?"
-    val (substituted3, _) = substitutor.substitute(
+    val (substituted3, _, _) = substitutor.substitute(
       sql3, SubstitutionRule.Statement, positionalParams = List("10"))
     comparePlans(
       parsePlan(substituted3),

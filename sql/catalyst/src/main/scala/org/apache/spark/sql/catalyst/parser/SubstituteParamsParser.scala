@@ -66,7 +66,7 @@ class SubstituteParamsParser extends Logging {
                   sqlText: String,
                   rule: SubstitutionRule,
                   namedParams: Map[String, String] = Map.empty,
-                  positionalParams: List[String] = List.empty): (String, Int) = {
+                  positionalParams: List[String] = List.empty): (String, Int, PositionMapper) = {
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(sqlText)))
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
@@ -96,11 +96,14 @@ class SubstituteParamsParser extends Logging {
     val parameterLocations = astBuilder.extractParameterLocations(ctx)
 
     // Substitute parameters in the original text
-    val substitutedSql = substituteAtLocations(sqlText, parameterLocations, namedParams,
-      positionalParams)
+    val (substitutedSql, appliedSubstitutions) = substituteAtLocations(sqlText, parameterLocations,
+      namedParams, positionalParams)
     val consumedPositionalParams = parameterLocations.positionalParameterLocations.length
 
-    (substitutedSql, consumedPositionalParams)
+    // Create position mapper for error context translation
+    val positionMapper = PositionMapper(sqlText, substitutedSql, appliedSubstitutions)
+
+    (substitutedSql, consumedPositionalParams, positionMapper)
   }
 
   /**
@@ -147,12 +150,13 @@ class SubstituteParamsParser extends Logging {
 
   /**
    * Apply substitutions to the original SQL text at specified locations.
+   * Returns both the substituted text and the list of substitutions applied.
    */
   private def substituteAtLocations(
-                                     sqlText: String,
-                                     locations: ParameterLocationInfo,
-                                     namedParams: Map[String, String],
-                                     positionalParams: List[String]): String = {
+      sqlText: String,
+      locations: ParameterLocationInfo,
+      namedParams: Map[String, String],
+      positionalParams: List[String]): (String, List[Substitution]) = {
 
     val substitutions = scala.collection.mutable.ListBuffer[Substitution]()
 
@@ -208,7 +212,8 @@ class SubstituteParamsParser extends Logging {
         substitutions += Substitution(location.start, location.end, value)
     }
 
-    applySubstitutions(sqlText, substitutions.toList)
+    val substitutedText = applySubstitutions(sqlText, substitutions.toList)
+    (substitutedText, substitutions.toList)
   }
 
   /**
@@ -241,7 +246,7 @@ object SubstituteParamsParser {
       sqlText: String,
       rule: SubstitutionRule,
       namedParams: Map[String, String] = Map.empty,
-      positionalParams: List[String] = List.empty): (String, Int) =
+      positionalParams: List[String] = List.empty): (String, Int, PositionMapper) =
     instance.substitute(sqlText, rule, namedParams, positionalParams)
 }
 
