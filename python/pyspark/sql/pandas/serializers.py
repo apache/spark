@@ -1539,7 +1539,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
 
             def row_stream():
                 for batch in batches:
-                    for _, row in batch.to_pandas().iterrows():
+                    for row in batch.to_pandas().itertuples(index=False):
                         batch_keys = tuple(row[s] for s in self.key_offsets)
                         yield (batch_keys, row)
 
@@ -1619,39 +1619,63 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
             """
 
             import pandas as pd
+            from itertools import tee
             """
             The arrow batch is written in the schema:
             schema: StructType = new StructType()
                 .add("inputData", dataSchema)
                 .add("initState", initStateSchema)
             We'll parse batch into Tuples of (key, inputData, initState) and pass into the Python
-             data generator. Rows in the same batch may have diiferent grouping keys.
+             data generator. Rows in the same batch may have different grouping keys.
             """
-            def row_stream():
-                for batch in batches:
-                    for _, row in batch.to_pandas().iterrows():
-                        input_data = row["inputData"]
-                        init_state = row["initState"]
 
-                        key_series = [list(input_data.values())[o] for o in self.key_offsets]
-                        init_key_series = [list(init_state.values())[o] for o in self.init_key_offsets]
+            batches_gent_1, batches_gent_2 = tee(batches)
+            def input_data_stream():
+                for batch in batches_gent_1:
+                    input_data_df = pd.DataFrame(
+                        {f.name: batch.column(batch.schema.get_field_index("inputData")).field(f.name).to_pandas()
+                         for f in batch.column(batch.schema.get_field_index("inputData")).type})
 
-                        if any(s is None for s in key_series):
-                            # If any row is empty, assign batch_key using init_key_series
-                            batch_keys = tuple(s for s in init_key_series)
-                        else:
-                            batch_keys = tuple(s for s in key_series)
+                    for row in input_data_df.itertuples(index=False):
+                        batch_key = [row[o] for o in self.key_offsets]
+                        yield batch_key, row
 
-                        yield batch_keys, input_data, init_state
+            def init_state_stream():
+                for batch in batches_gent_2:
+                    init_state_df = pd.DataFrame(
+                        {f.name: batch.column(batch.schema.get_field_index("initState")).field(f.name).to_pandas()
+                         for f in batch.column(batch.schema.get_field_index("initState")).type})
 
-            for batch_keys, group_rows in groupby(row_stream(), key=lambda x: x[0]):
-                data_pairs = [(d, i) for _, d, i in group_rows]
-                data_pandas = pd.DataFrame([d for d, _ in data_pairs]).dropna(how="all")
-                init_data_pandas = pd.DataFrame([i for _, i in data_pairs]).dropna(how="all")
+                    for row in init_state_df.itertuples(index=False):
+                        batch_key = [row[o] for o in self.init_key_offsets]
+                        yield batch_key, row
 
-                yield (batch_keys,
-                       [data_pandas[col] for col in data_pandas.columns],
-                       [init_data_pandas[col] for col in init_data_pandas.columns])
+            def groupby_pair(gen1, gen2, keyfunc):
+                g1, g2 = groupby(gen1, key=keyfunc), groupby(gen2, key=keyfunc)
+                next1 = next(g1, (None, iter(())))
+                next2 = next(g2, (None, iter(())))
+
+                k1, grp1 = next1
+                k2, grp2 = next2
+
+                while k1 is not None or k2 is not None:
+                    key = min(k for k in (k1, k2) if k is not None)
+                    yield key, grp1 if k1 == key else iter(()), grp2 if k2 == key else iter(())
+                    if k1 == key: k1, grp1 = next(g1, (None, iter(())))
+                    if k2 == key: k2, grp2 = next(g2, (None, iter(())))
+
+            for batch_key, input_data_iterator, init_state_iterator in groupby_pair(input_data_stream(),
+                                                                                    init_state_stream(),
+                                                                                    keyfunc=lambda x: x[0]):
+                input_data_pandas = pd.DataFrame([d for _, d in input_data_iterator])
+                init_state_pandas = pd.DataFrame([d for _, d in init_state_iterator])
+
+                # print(f"@@@ input_data_pandas: {input_data_pandas}")
+                # print(f"@@@ init_state_pandas: {init_state_pandas}")
+
+                yield (batch_key,
+                       [input_data_pandas[col] for col in input_data_pandas.columns],
+                       [init_state_pandas[col] for col in init_state_pandas.columns])
 
         _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)

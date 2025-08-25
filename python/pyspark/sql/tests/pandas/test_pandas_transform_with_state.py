@@ -1913,6 +1913,8 @@ class TransformWithStateInPandasTestsMixin(TransformWithStateTestsMixin):
         cfg.set("spark.sql.session.timeZone", "UTC")
         # TODO SPARK-49046 this config is to stop query from FEB sink gracefully
         cfg.set("spark.sql.streaming.noDataMicroBatches.enabled", "false")
+        # cfg.set("spark.sql.execution.pyspark.udf.faulthandler.enabled", "true")
+        # cfg.set("spark.python.worker.faulthandler.enabled", "true")
         return cfg
 
 
