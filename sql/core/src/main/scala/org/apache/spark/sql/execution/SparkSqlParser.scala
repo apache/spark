@@ -57,8 +57,8 @@ class SparkSqlParser extends AbstractSqlParser {
     protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     // Step 1: Check if parameter substitution is enabled and we have a parameterized query context
     val paramSubstituted =
-      if (SQLConf.get.legacyDisableParameterSubstitution) {
-        // Legacy mode: parameter substitution is disabled, skip it entirely
+      if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
+        // Legacy mode: parameter substitution limited to constants only, skip full substitution
         command
       } else {
         // Modern mode: check if we have a parameterized query context and substitute parameters
@@ -79,7 +79,7 @@ class SparkSqlParser extends AbstractSqlParser {
     } catch {
       case e: Throwable with org.apache.spark.sql.catalyst.trees.WithOrigin =>
         // Apply position mapping only if parameter substitution is enabled and we have a mapper
-        val translatedError = if (!SQLConf.get.legacyDisableParameterSubstitution) {
+        val translatedError = if (!SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
           parameterHandler.getPositionMapper match {
             case Some(positionMapper) =>
               e.updateQueryContext { contexts =>
@@ -111,8 +111,8 @@ class SparkSqlParser extends AbstractSqlParser {
       command: String,
       context: org.apache.spark.sql.catalyst.parser.ParameterContext): String = {
 
-    // Check legacy configuration - if parameter substitution is disabled, return original command
-    if (SQLConf.get.legacyDisableParameterSubstitution) {
+    // Check legacy config - if parameter substitution limited to constants only, return original
+    if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
       command
     } else {
       parameterHandler.substituteParametersWithAutoRule(command, context)

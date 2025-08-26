@@ -1947,15 +1947,14 @@ class PlanParserSuite extends AnalysisTest {
         substituted
       },
       condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "no viable alternative at input ':-'", "hint" -> ""))
-
+      parameters = Map("error" -> "'-'", "hint" -> ""))
     checkError(
       exception = intercept[org.apache.spark.sql.catalyst.parser.ParseException] {
         val (substituted, _, _) = substitutor.substitute("SELECT :", SubstitutionRule.Statement)
         substituted
       },
       condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "no viable alternative at input ':'", "hint" -> ""))
+      parameters = Map("error" -> "end of input", "hint" -> ""))
   }
 
   test("SPARK-42553: NonReserved keyword 'interval' can be column name") {

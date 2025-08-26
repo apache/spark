@@ -68,6 +68,12 @@ class SubstituteParamsParser extends Logging {
                   rule: SubstitutionRule,
                   namedParams: Map[String, String] = Map.empty,
                   positionalParams: List[String] = List.empty): (String, Int, PositionMapper) = {
+
+    // Quick pre-check: if there are no parameter markers in the text, skip parsing entirely
+    if (!sqlText.contains("?") && !sqlText.contains(":")) {
+      return (sqlText, 0, PositionMapper.identity(sqlText))
+    }
+
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(sqlText)))
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
@@ -119,6 +125,11 @@ class SubstituteParamsParser extends Logging {
    * @return A tuple of (hasPositionalParameters, hasNamedParameters)
    */
   def detectParameters(sqlText: String, rule: SubstitutionRule): (Boolean, Boolean) = {
+    // Quick pre-check: if there are no parameter markers in the text, skip parsing entirely
+    if (!sqlText.contains("?") && !sqlText.contains(":")) {
+      return (false, false)
+    }
+
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(sqlText)))
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)

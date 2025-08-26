@@ -5116,13 +5116,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_DISABLE_PARAMETER_SUBSTITUTION =
-    buildConf("spark.sql.legacy.disableParameterSubstitution")
-      .doc("When true, disables parameter substitution for SQL queries with ? or :param markers. " +
-        "This restores the legacy behavior where parameter markers would cause parse errors " +
-        "instead of being substituted with provided parameter values. When false (default), " +
-        "parameter substitution is enabled and parameter markers are replaced with their " +
-        "corresponding values during query parsing.")
+  val LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY =
+    buildConf("spark.sql.legacy.parameterSubstitution.constantsOnly")
+      .doc("When true, limits parameter substitution to constants in DML/queries only, " +
+        "restoring the legacy behavior where parameter markers (? or :param) are only allowed " +
+        "in contexts where constant literals are expected. When false (default), " +
+        "parameter substitution is enabled everywhere a literal is supported, " +
+        "allowing parameter markers in any literal context throughout SQL parsing.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
@@ -7320,8 +7320,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyOutputSchema: Boolean = getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)
 
-  def legacyDisableParameterSubstitution: Boolean =
-    getConf(SQLConf.LEGACY_DISABLE_PARAMETER_SUBSTITUTION)
+  def legacyParameterSubstitutionConstantsOnly: Boolean =
+    getConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY)
 
   def streamStatePollingInterval: Long = getConf(SQLConf.PIPELINES_STREAM_STATE_POLLING_INTERVAL)
 

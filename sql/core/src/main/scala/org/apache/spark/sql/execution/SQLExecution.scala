@@ -69,8 +69,8 @@ object SQLExecution extends Logging {
   private def translateParameterPositions(error: Throwable,
       queryExecution: QueryExecution): Throwable = {
     // Check if parameter substitution is enabled and this query execution involved it
-    if (queryExecution.sparkSession.sessionState.conf.legacyDisableParameterSubstitution) {
-      // Legacy mode: parameter substitution is disabled, no position translation needed
+    if (queryExecution.sparkSession.sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
+      // Legacy mode: parameter substitution limited to constants only, no translation needed
       return error
     }
 

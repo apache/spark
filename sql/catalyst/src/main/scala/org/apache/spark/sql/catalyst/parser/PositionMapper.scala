@@ -120,4 +120,15 @@ object PositionMapper {
       substitutions: List[Substitution]): PositionMapper = {
     new PositionMapper(originalText, substitutedText, substitutions)
   }
+
+  /**
+   * Create an identity PositionMapper for when no substitutions occurred.
+   * This is used as an optimization when no parameter markers are present.
+   *
+   * @param text The SQL text (both original and substituted are the same)
+   * @return A PositionMapper that maps positions to themselves
+   */
+  def identity(text: String): PositionMapper = {
+    new PositionMapper(text, text, List.empty)
+  }
 }

@@ -89,6 +89,13 @@ class ParameterHandler {
       rule: SubstitutionRule,
       namedParams: Map[String, String] = Map.empty,
       positionalParams: List[String] = List.empty): String = {
+
+    // Quick pre-check: if there are no parameter markers in the text, skip parsing entirely
+    if (!sqlText.contains("?") && !sqlText.contains(":")) {
+      positionMapperStorage.set(Some(PositionMapper.identity(sqlText)))
+      return sqlText
+    }
+
     val substitutor = new SubstituteParamsParser()
     val (substituted, _, positionMapper) = substitutor.substitute(sqlText, rule,
       namedParams = namedParams, positionalParams = positionalParams)

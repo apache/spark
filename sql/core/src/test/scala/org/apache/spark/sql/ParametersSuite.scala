@@ -1208,8 +1208,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
   }
 
   test("legacy parameter substitution configuration - basic functionality") {
-    // When legacy mode is disabled (default), parameter substitution should work
-    withSQLConf("spark.sql.legacy.disableParameterSubstitution" -> "false") {
+    // When legacy mode is disabled (default), parameter substitution should work everywhere
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "false") {
       val result1 = spark.sql("SELECT ?", Array(42)).collect()
       assert(result1(0).getInt(0) == 42)
 
@@ -1217,9 +1217,9 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       assert(result2(0).getInt(0) == 42)
     }
 
-    // When legacy mode is enabled, parameter substitution should be disabled
-    // Parameter markers should remain unbound and cause errors
-    withSQLConf("spark.sql.legacy.disableParameterSubstitution" -> "true") {
+    // When legacy mode is enabled, parameter substitution is limited to constants only
+    // Parameter markers should remain unbound in general contexts and cause errors
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
       // Test that positional parameters cause errors in legacy mode
       val exception1 = intercept[ExtendedAnalysisException] {
         spark.sql("SELECT ?", Array(42)).collect()
@@ -1238,8 +1238,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
   }
 
   test("legacy parameter substitution configuration - integration with existing tests") {
-    // Ensure that existing parameter functionality is preserved when config is false
-    withSQLConf("spark.sql.legacy.disableParameterSubstitution" -> "false") {
+    // Ensure existing param functionality preserved when config is false (params work everywhere)
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "false") {
       // Test some of the existing parameter functionality
       checkAnswer(spark.sql("SELECT ?", Array(1)), Row(1))
       checkAnswer(spark.sql("SELECT :param", Map("param" -> "test")), Row("test"))
@@ -1254,8 +1254,8 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       )
     }
 
-    // Ensure that when config is true, parameter substitution is disabled and causes errors
-    withSQLConf("spark.sql.legacy.disableParameterSubstitution" -> "true") {
+    // Ensure when config is true, param substitution is limited to constants and causes errors
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
       // In legacy mode, parameter markers should remain unbound and cause errors
       val exception1 = intercept[ExtendedAnalysisException] {
         spark.sql("SELECT ?", Array(1)).collect()
