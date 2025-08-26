@@ -55,12 +55,22 @@ case class ThetaSketchEstimate(child: Expression)
 
   override def nullSafeEval(input: Any): Any = {
     val buffer = input.asInstanceOf[Array[Byte]]
-    try {
-      Math.round(CompactSketch.wrap(Memory.wrap(buffer)).getEstimate)
+
+    val memory = try {
+      Memory.wrap(buffer)
     } catch {
-      case _: SketchesArgumentException | _: java.lang.Error =>
+      case _: IllegalArgumentException | _: IndexOutOfBoundsException =>
         throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
+
+    val sketch = try {
+      CompactSketch.wrap(memory)
+    } catch {
+      case _: SketchesArgumentException =>
+        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+
+    Math.round(sketch.getEstimate)
   }
 }
 
@@ -106,22 +116,37 @@ case class ThetaUnion(first: Expression, second: Expression, third: Expression)
   override def dataType: DataType = BinaryType
 
   override def nullSafeEval(value1: Any, value2: Any, value3: Any): Any = {
-    val sketch1 =
-      try {
-        CompactSketch.wrap(Memory.wrap(value1.asInstanceOf[Array[Byte]]))
-      } catch {
-        case _: SketchesArgumentException | _: java.lang.Error =>
-          throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-      }
-    val sketch2 =
-      try {
-        CompactSketch.wrap(Memory.wrap(value2.asInstanceOf[Array[Byte]]))
-      } catch {
-        case _: SketchesArgumentException | _: java.lang.Error =>
-          throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-      }
     val logNominalEntries = value3.asInstanceOf[Int]
     ThetaSketchUtils.checkLgNomLongs(logNominalEntries)
+
+    val memory1 = try {
+      Memory.wrap(value1.asInstanceOf[Array[Byte]])
+    } catch {
+      case _: IllegalArgumentException | _: IndexOutOfBoundsException =>
+        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+
+    val sketch1 = try {
+      CompactSketch.wrap(memory1)
+    } catch {
+      case _: SketchesArgumentException =>
+        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+
+    val memory2 = try {
+      Memory.wrap(value2.asInstanceOf[Array[Byte]])
+    } catch {
+      case _: IllegalArgumentException | _: IndexOutOfBoundsException =>
+        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+
+    val sketch2 = try {
+      CompactSketch.wrap(memory2)
+    } catch {
+      case _: SketchesArgumentException =>
+        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+
     val union = SetOperation.builder
       .setLogNominalEntries(logNominalEntries)
       .buildUnion
@@ -173,22 +198,37 @@ case class ThetaDifference(first: Expression, second: Expression, third: Express
   override def dataType: DataType = BinaryType
 
   override def nullSafeEval(value1: Any, value2: Any, value3: Any): Any = {
-    val sketch1 =
-      try {
-        CompactSketch.wrap(Memory.wrap(value1.asInstanceOf[Array[Byte]]))
-      } catch {
-        case _: SketchesArgumentException | _: java.lang.Error =>
-          throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-      }
-    val sketch2 =
-      try {
-        CompactSketch.wrap(Memory.wrap(value2.asInstanceOf[Array[Byte]]))
-      } catch {
-        case _: SketchesArgumentException | _: java.lang.Error =>
-          throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-      }
     val logNominalEntries = value3.asInstanceOf[Int]
     ThetaSketchUtils.checkLgNomLongs(logNominalEntries)
+
+    val memory1 = try {
+      Memory.wrap(value1.asInstanceOf[Array[Byte]])
+    } catch {
+      case _: IllegalArgumentException | _: IndexOutOfBoundsException =>
+        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+
+    val sketch1 = try {
+      CompactSketch.wrap(memory1)
+    } catch {
+      case _: SketchesArgumentException =>
+        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+
+    val memory2 = try {
+      Memory.wrap(value2.asInstanceOf[Array[Byte]])
+    } catch {
+      case _: IllegalArgumentException | _: IndexOutOfBoundsException =>
+        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+
+    val sketch2 = try {
+      CompactSketch.wrap(memory2)
+    } catch {
+      case _: SketchesArgumentException =>
+        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+
     val difference = SetOperation.builder
       .setLogNominalEntries(logNominalEntries)
       .buildANotB
@@ -240,22 +280,37 @@ case class ThetaIntersection(first: Expression, second: Expression, third: Expre
   override def dataType: DataType = BinaryType
 
   override def nullSafeEval(value1: Any, value2: Any, value3: Any): Any = {
-    val sketch1 =
-      try {
-        CompactSketch.wrap(Memory.wrap(value1.asInstanceOf[Array[Byte]]))
-      } catch {
-        case _: SketchesArgumentException | _: java.lang.Error =>
-          throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-      }
-    val sketch2 =
-      try {
-        CompactSketch.wrap(Memory.wrap(value2.asInstanceOf[Array[Byte]]))
-      } catch {
-        case _: SketchesArgumentException | _: java.lang.Error =>
-          throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-      }
     val logNominalEntries = value3.asInstanceOf[Int]
     ThetaSketchUtils.checkLgNomLongs(logNominalEntries)
+
+    val memory1 = try {
+      Memory.wrap(value1.asInstanceOf[Array[Byte]])
+    } catch {
+      case _: IllegalArgumentException | _: IndexOutOfBoundsException =>
+        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+
+    val sketch1 = try {
+      CompactSketch.wrap(memory1)
+    } catch {
+      case _: SketchesArgumentException =>
+        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+
+    val memory2 = try {
+      Memory.wrap(value2.asInstanceOf[Array[Byte]])
+    } catch {
+      case _: IllegalArgumentException | _: IndexOutOfBoundsException =>
+        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+
+    val sketch2 = try {
+      CompactSketch.wrap(memory2)
+    } catch {
+      case _: SketchesArgumentException =>
+        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+
     val intersection = SetOperation.builder
       .setLogNominalEntries(logNominalEntries)
       .buildIntersection

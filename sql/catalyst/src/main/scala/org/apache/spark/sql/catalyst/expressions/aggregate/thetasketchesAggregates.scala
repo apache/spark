@@ -64,6 +64,10 @@ case class FinalizedSketch(sketch: CompactSketch) extends ThetaSketchState {
  *   child expression against which unique counting will occur
  * @param right
  *   the log-base-2 of nomEntries decides the number of buckets for the sketch
+ * @param mutableAggBufferOffset
+ *   offset for mutable aggregation buffer
+ * @param inputAggBufferOffset
+ *   offset for input aggregation buffer
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -82,8 +86,8 @@ case class FinalizedSketch(sketch: CompactSketch) extends ThetaSketchState {
 case class ThetaSketchAgg(
     left: Expression,
     right: Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
+    override val mutableAggBufferOffset: Int,
+    override val inputAggBufferOffset: Int)
     extends TypedImperativeAggregate[ThetaSketchState]
     with BinaryLike[Expression]
     with ExpectsInputTypes {
@@ -170,36 +174,38 @@ case class ThetaSketchAgg(
     updateBuffer match {
       case UpdatableSketchBuffer(sketch) =>
         val v = left.eval(input)
-        if (v != null) {
-          left.dataType match {
-            case IntegerType =>
-              sketch.update(v.asInstanceOf[Int].toLong) // Promote to long
-            case LongType =>
-              sketch.update(v.asInstanceOf[Long])
-            case DoubleType =>
-              sketch.update(v.asInstanceOf[Double])
-            case FloatType =>
-              sketch.update(v.asInstanceOf[Float].toDouble) // Promote to double
-            case st: StringType =>
-              val cKey =
-                CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
-              sketch.update(cKey.toString)
-            case BinaryType =>
-              val bytes = v.asInstanceOf[Array[Byte]]
-              if (bytes.nonEmpty) sketch.update(bytes)
-            case ArrayType(IntegerType, _) =>
-              val arr = v.asInstanceOf[ArrayData].toIntArray()
-              if (arr.nonEmpty) sketch.update(arr)
-            case ArrayType(LongType, _) =>
-              val arr = v.asInstanceOf[ArrayData].toLongArray()
-              if (arr.nonEmpty) sketch.update(arr)
-            case _ =>
-              throw new SparkUnsupportedOperationException(
-                errorClass = "_LEGACY_ERROR_TEMP_3121",
-                messageParameters = Map("dataType" -> left.dataType.toString))
-          }
+        v match {
+          case null => UpdatableSketchBuffer(sketch)
+          case _ =>
+            left.dataType match {
+              case IntegerType =>
+                sketch.update(v.asInstanceOf[Int].toLong) // Promote to long
+              case LongType =>
+                sketch.update(v.asInstanceOf[Long])
+              case DoubleType =>
+                sketch.update(v.asInstanceOf[Double])
+              case FloatType =>
+                sketch.update(v.asInstanceOf[Float].toDouble) // Promote to double
+              case st: StringType =>
+                val cKey =
+                  CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
+                sketch.update(cKey.toString)
+              case BinaryType =>
+                val bytes = v.asInstanceOf[Array[Byte]]
+                if (bytes.nonEmpty) sketch.update(bytes)
+              case ArrayType(IntegerType, _) =>
+                val arr = v.asInstanceOf[ArrayData].toIntArray()
+                if (arr.nonEmpty) sketch.update(arr)
+              case ArrayType(LongType, _) =>
+                val arr = v.asInstanceOf[ArrayData].toLongArray()
+                if (arr.nonEmpty) sketch.update(arr)
+              case _ =>
+                throw new SparkUnsupportedOperationException(
+                  errorClass = "_LEGACY_ERROR_TEMP_3121",
+                  messageParameters = Map("dataType" -> left.dataType.toString))
+            }
+            UpdatableSketchBuffer(sketch) // Return updated sketch wrapped again
         }
-        UpdatableSketchBuffer(sketch) // Return updated sketch wrapped again
       case _ =>
         updateBuffer
     }
@@ -286,6 +292,10 @@ case class ThetaSketchAgg(
  *   Child expression against which unique counting will occur
  * @param right
  *   the log-base-2 of nomEntries decides the number of buckets for the sketch
+ * @param mutableAggBufferOffset
+ *   offset for mutable aggregation buffer
+ * @param inputAggBufferOffset
+ *   offset for input aggregation buffer
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -304,8 +314,8 @@ case class ThetaSketchAgg(
 case class ThetaUnionAgg(
     left: Expression,
     right: Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
+    override val mutableAggBufferOffset: Int,
+    override val inputAggBufferOffset: Int)
     extends TypedImperativeAggregate[ThetaSketchState]
     with BinaryLike[Expression]
     with ExpectsInputTypes {
@@ -378,26 +388,34 @@ case class ThetaUnionAgg(
    */
   override def update(unionBuffer: ThetaSketchState, input: InternalRow): ThetaSketchState = {
     val v = left.eval(input)
-    if (v != null) {
-      left.dataType match {
-        case BinaryType =>
-          try {
-            val inputSketch = CompactSketch.wrap(Memory.wrap(v.asInstanceOf[Array[Byte]]))
+    v match {
+      case null => unionBuffer // Input is null, return buffer unchanged
+      case _ =>
+        left.dataType match {
+          case BinaryType =>
+            val memory = try {
+              Memory.wrap(v.asInstanceOf[Array[Byte]])
+            } catch {
+              case _: IllegalArgumentException | _: IndexOutOfBoundsException =>
+                throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+            }
+
+            val inputSketch = try {
+              CompactSketch.wrap(memory)
+            } catch {
+              case _: SketchesArgumentException =>
+                throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+            }
+
             val union = unionBuffer match {
               case UnionAggregationBuffer(existingUnionBuffer) => existingUnionBuffer
               case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
             }
             union.union(inputSketch)
             UnionAggregationBuffer(union)
-          } catch {
-            case _: SketchesArgumentException | _: java.lang.Error =>
-              throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-          }
-        case _ =>
-          throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-      }
-    } else {
-      unionBuffer // Input is null, return buffer unchanged
+          case _ =>
+            throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+        }
     }
   }
 
@@ -469,6 +487,10 @@ case class ThetaUnionAgg(
  *   Child expression against which unique counting will occur
  * @param right
  *   the log-base-2 of nomEntries decides the number of buckets for the sketch
+ * @param mutableAggBufferOffset
+ *   offset for mutable aggregation buffer
+ * @param inputAggBufferOffset
+ *   offset for input aggregation buffer
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -487,8 +509,8 @@ case class ThetaUnionAgg(
 case class ThetaIntersectionAgg(
     left: Expression,
     right: Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
+    override val mutableAggBufferOffset: Int,
+    override val inputAggBufferOffset: Int)
     extends TypedImperativeAggregate[ThetaSketchState]
     with BinaryLike[Expression]
     with ExpectsInputTypes {
@@ -564,26 +586,34 @@ case class ThetaIntersectionAgg(
       intersectionBuffer: ThetaSketchState,
       input: InternalRow): ThetaSketchState = {
     val v = left.eval(input)
-    if (v != null) {
-      left.dataType match {
-        case BinaryType =>
-          try {
-            val inputSketch = CompactSketch.wrap(Memory.wrap(v.asInstanceOf[Array[Byte]]))
+    v match {
+      case null => intersectionBuffer // Input is null, return buffer unchanged
+      case _ =>
+        left.dataType match {
+          case BinaryType =>
+            val memory = try {
+              Memory.wrap(v.asInstanceOf[Array[Byte]])
+            } catch {
+              case _: IllegalArgumentException | _: IndexOutOfBoundsException =>
+                throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+            }
+
+            val inputSketch = try {
+              CompactSketch.wrap(memory)
+            } catch {
+              case _: SketchesArgumentException =>
+                throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+            }
+
             val intersection = intersectionBuffer match {
               case IntersectionAggregationBuffer(existingIntersection) => existingIntersection
               case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
             }
             intersection.intersect(inputSketch)
             IntersectionAggregationBuffer(intersection)
-          } catch {
-            case _: SketchesArgumentException | _: java.lang.Error =>
-              throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-          }
-        case _ =>
-          throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-      }
-    } else {
-      intersectionBuffer // Input is null, return buffer unchanged
+          case _ =>
+            throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+        }
     }
   }
 

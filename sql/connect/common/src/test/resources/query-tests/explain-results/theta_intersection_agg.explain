@@ -1,2 +1,0 @@
-Aggregate [theta_intersection_agg(bytes#0, 12, 0, 0) AS theta_intersection_agg(bytes, 12)#0]
-+- LocalRelation <empty>, [id#0L, bytes#0]

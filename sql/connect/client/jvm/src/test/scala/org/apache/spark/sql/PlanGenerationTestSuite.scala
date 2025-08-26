@@ -3193,66 +3193,6 @@ class PlanGenerationTestSuite
     binary.select(fn.hll_union_agg("bytes"))
   }
 
-  test("theta_sketch_agg with column lgNomEntries") {
-    binary.select(fn.theta_sketch_agg(fn.col("bytes"), lit(0)))
-  }
-
-  test("theta_sketch_agg with column lgNomEntries_int") {
-    binary.select(fn.theta_sketch_agg(fn.col("bytes"), 0))
-  }
-
-  test("theta_sketch_agg with columnName lgNomEntries_int") {
-    binary.select(fn.theta_sketch_agg("bytes", 0))
-  }
-
-  test("theta_sketch_agg") {
-    binary.select(fn.theta_sketch_agg(fn.col("bytes")))
-  }
-
-  test("theta_sketch_agg with columnName") {
-    binary.select(fn.theta_sketch_agg("bytes"))
-  }
-
-  test("theta_union_agg with column lgNomEntries") {
-    binary.select(fn.theta_union_agg(fn.col("bytes"), lit(0)))
-  }
-
-  test("theta_union_agg with column lgNomEntries_int") {
-    binary.select(fn.theta_union_agg(fn.col("bytes"), 0))
-  }
-
-  test("theta_union_agg with columnName lgNomEntries_int") {
-    binary.select(fn.theta_union_agg("bytes", 0))
-  }
-
-  test("theta_union_agg") {
-    binary.select(fn.theta_union_agg(fn.col("bytes")))
-  }
-
-  test("theta_union_agg with columnName") {
-    binary.select(fn.theta_union_agg("bytes"))
-  }
-
-  test("theta_intersection_agg with column lgNomEntries") {
-    binary.select(fn.theta_intersection_agg(fn.col("bytes"), lit(0)))
-  }
-
-  test("theta_intersection_agg with column lgNomEntries_int") {
-    binary.select(fn.theta_intersection_agg(fn.col("bytes"), 0))
-  }
-
-  test("theta_intersection_agg with columnName lgNomEntries_int") {
-    binary.select(fn.theta_intersection_agg("bytes", 0))
-  }
-
-  test("theta_intersection_agg") {
-    binary.select(fn.theta_intersection_agg(fn.col("bytes")))
-  }
-
-  test("theta_intersection_agg with columnName") {
-    binary.select(fn.theta_intersection_agg("bytes"))
-  }
-
   test("groupby agg") {
     simple
       .groupBy(Column("id"))

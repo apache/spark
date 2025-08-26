@@ -20,7 +20,14 @@ package org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
 object ThetaSketchUtils {
-  // Bounds copied from DataSketches' ThetaUtil
+  /*
+   * Bounds copied from DataSketches' ThetaUtil. These define the valid range for lgNomEntries,
+   * which is the log-base-2 of the nominal number of entries that determines the sketch size.
+   * The actual number of buckets in the sketch = 2^lgNomEntries.
+   * MIN_LG_NOM_LONGS = 4 means minimum 16 buckets (2^4), MAX_LG_NOM_LONGS = 26 means maximum
+   * ~67 million buckets (2^26). These bounds ensure reasonable memory usage while maintaining
+   * sketch accuracy for cardinality estimation.
+  */
   final val MIN_LG_NOM_LONGS = 4
   final val MAX_LG_NOM_LONGS = 26
   final val DEFAULT_LG_NOM_LONGS = 12

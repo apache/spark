@@ -91,12 +91,16 @@ SELECT theta_sketch_estimate(theta_difference(
     (3, 5) AS tab(col1, col2);
 
 -- Negative test cases
+
+-- lgNomEntries value of 2 is out of range (too low, minimum is 4)
 SELECT theta_sketch_agg(col, 2)
 FROM VALUES (50), (60), (60) tab(col);
 
+-- lgNomEntries value of 40 is out of range (too high, maximum is 26)
 SELECT theta_sketch_agg(col, 40)
 FROM VALUES (50), (60), (60) tab(col);
 
+-- lgNomEntries value of 3 is out of range (too low, minimum is 4)
 SELECT theta_union_agg(sketch, 3)
 FROM (SELECT theta_sketch_agg(col, 12) as sketch
         FROM VALUES (1) AS tab(col)
@@ -104,6 +108,7 @@ FROM (SELECT theta_sketch_agg(col, 12) as sketch
       SELECT theta_sketch_agg(col, 20) as sketch
         FROM VALUES (1) AS tab(col));
 
+-- lgNomEntries value of 27 is out of range (too high, maximum is 26)
 SELECT theta_union_agg(sketch, 27)
 FROM (SELECT theta_sketch_agg(col, 12) as sketch
         FROM VALUES (1) AS tab(col)
@@ -111,6 +116,7 @@ FROM (SELECT theta_sketch_agg(col, 12) as sketch
       SELECT theta_sketch_agg(col, 20) as sketch
         FROM VALUES (1) AS tab(col));
 
+-- lgNomEntries value of 3 is out of range (too low, minimum is 4)
 SELECT theta_intersection_agg(sketch, 3)
 FROM (SELECT theta_sketch_agg(col, 12) as sketch
         FROM VALUES (1) AS tab(col)
@@ -118,24 +124,28 @@ FROM (SELECT theta_sketch_agg(col, 12) as sketch
       SELECT theta_sketch_agg(col, 20) as sketch
         FROM VALUES (1) AS tab(col));
 
+-- Passing integers (1, 2) instead of binary sketch data
 SELECT theta_union(1, 2)
   FROM VALUES
     (1, 4),
     (2, 5),
     (3, 6) AS tab(col1, col2);
 
+-- Passing integers (1, 2) instead of binary sketch data
 SELECT theta_intersection(1, 2)
   FROM VALUES
     (1, 4),
     (2, 5),
     (3, 6) AS tab(col1, col2);
 
+-- Passing integers (1, 2) instead of binary sketch data
 SELECT theta_difference(1, 2)
   FROM VALUES
     (1, 4),
     (2, 5),
     (3, 6) AS tab(col1, col2);
 
+-- Passing string 'invalid' instead of integer for lgNomEntries parameter
 SELECT theta_union(
     theta_sketch_agg(col1),
     theta_sketch_agg(col2), 'invalid')
@@ -144,6 +154,7 @@ SELECT theta_union(
     (2, 5),
     (3, 6) AS tab(col1, col2);
 
+-- Passing string 'invalid_sketch' instead of binary sketch data
 SELECT theta_intersection(
     theta_sketch_agg(col1),
     'invalid_sketch')
@@ -152,22 +163,28 @@ SELECT theta_intersection(
     (2, 5),
     (3, 6) AS tab(col1, col2);
 
+-- Passing string 'invalid' instead of integer for lgNomEntries parameter
 SELECT theta_intersection_agg(sketch, 'invalid')
 FROM (SELECT theta_sketch_agg(col) as sketch
         FROM VALUES (1) AS tab(col));
 
--- The theta functions receive invalid buffers as inputs.
+-- Passing invalid binary data ('abc') that is not a valid theta sketch
 SELECT theta_sketch_estimate(CAST('abc' AS BINARY));
 
+-- Passing invalid binary data ('abc', 'def') that are not valid theta sketches
 SELECT theta_union(CAST('abc' AS BINARY), CAST('def' AS BINARY));
 
+-- Passing invalid binary data ('abc', 'def') that are not valid theta sketches
 SELECT theta_intersection(CAST('abc' AS BINARY), CAST('def' AS BINARY));
 
+-- Passing invalid binary data ('abc', 'def') that are not valid theta sketches
 SELECT theta_difference(CAST('abc' AS BINARY), CAST('def' AS BINARY));
 
+-- Passing invalid binary data ('abc') that is not a valid theta sketch
 SELECT theta_union_agg(buffer, 15)
 FROM (SELECT CAST('abc' AS BINARY) AS buffer);
 
+-- Passing invalid binary data ('abc') that is not a valid theta sketch
 SELECT theta_intersection_agg(buffer, 15)
 FROM (SELECT CAST('abc' AS BINARY) AS buffer);
 
