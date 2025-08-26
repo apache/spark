@@ -2762,6 +2762,10 @@ object TryMakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
        2019-07-01 00:00:00
       > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
        NULL
+      > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887');
+       2014-12-28 06:30:45.887
+      > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887', 'CET');
+       2014-12-27 21:30:45.887
   """,
   group = "datetime_funcs",
   since = "3.4.0")
