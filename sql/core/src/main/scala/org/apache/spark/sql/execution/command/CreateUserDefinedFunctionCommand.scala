@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.command
 
 import java.util.Locale
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.catalog.{LanguageSQL, RoutineLanguage, UserDefinedFunctionErrors}
@@ -89,25 +87,10 @@ object CreateUserDefinedFunctionCommand {
    * [[org.apache.spark.sql.catalyst.expressions.ExpressionInfo]], all SQL configs and other
    * function properties (such as the function parameters and the function return type)
    * are saved together in a property map.
-   *
-   * Here we only capture the SQL configs that are modifiable and should be captured, i.e. not in
-   * the denyList and in the allowList. Besides mentioned ones we also capture `ANSI_ENABLED`.
-   *
-   * We need to always capture them to make sure we apply the same configs when querying the
-   * function.
    */
   def sqlConfigsToProps(conf: SQLConf): Map[String, String] = {
     val modifiedConfs = ViewHelper.getModifiedConf(conf)
-
-    val alwaysCaptured = Seq(SQLConf.ANSI_ENABLED)
-      .filter(c => !modifiedConfs.contains(c.key))
-      .map(c => (c.key, conf.getConf(c).toString))
-
-    val props = new mutable.HashMap[String, String]
-    for ((key, value) <- modifiedConfs ++ alwaysCaptured) {
-      props.put(s"$SQL_CONFIG_PREFIX$key", value)
-    }
-    props.toMap
+    modifiedConfs.map { case (key, value) => s"$SQL_CONFIG_PREFIX$key" -> value }
   }
 
   /**

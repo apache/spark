@@ -41,13 +41,7 @@ object ViewResolution {
           view
         )
       }
-      SQLConf.withExistingConf(
-        View.effectiveSQLConf(
-          configs = view.desc.viewSQLConfigs,
-          isTempView = view.isTempView,
-          createSparkVersion = view.desc.createVersion
-        )
-      ) {
+      SQLConf.withExistingConf(View.effectiveSQLConf(view.desc.viewSQLConfigs, view.isTempView)) {
         resolveChild(view.child)
       }
     }
