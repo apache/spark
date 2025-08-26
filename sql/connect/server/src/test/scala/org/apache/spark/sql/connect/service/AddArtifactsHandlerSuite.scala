@@ -39,7 +39,7 @@ import org.apache.spark.sql.connect.ResourceHelper
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.ThreadUtils
 
-class AddArtifactsHandlerSuite extends SharedSparkSession  with ResourceHelper {
+class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
   private val CHUNK_SIZE: Int = 32 * 1024
 
