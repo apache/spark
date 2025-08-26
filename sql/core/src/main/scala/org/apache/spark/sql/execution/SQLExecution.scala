@@ -28,7 +28,7 @@ import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
 import org.apache.spark.internal.config.Tests.IS_TESTING
-import org.apache.spark.sql.catalyst.parser.{PositionMapper, ThreadLocalParameterContext}
+import org.apache.spark.sql.catalyst.parser.{PositionTranslationUtils, ThreadLocalParameterContext}
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
@@ -55,28 +55,7 @@ object SQLExecution extends Logging {
 
   private val testing = sys.props.contains(IS_TESTING.key)
 
-  /**
-   * Translate SQLQueryContext positions using the provided position mapper.
-   *
-   * @param context The SQL query context to translate
-   * @param mapper The position mapper for translation
-   * @return The context with translated positions
-   */
-  private def translateSqlContext(
-      context: SQLQueryContext,
-      mapper: PositionMapper): SQLQueryContext = {
-    val translatedStartIndex = context.originStartIndex.map(mapper.mapToOriginal(_))
-    val translatedStopIndex = context.originStopIndex.map(mapper.mapToOriginal(_))
-    SQLQueryContext(
-      line = context.line,
-      startPosition = context.startPosition,
-      originStartIndex = translatedStartIndex,
-      originStopIndex = translatedStopIndex,
-      sqlText = Some(mapper.originalText),
-      originObjectType = context.originObjectType,
-      originObjectName = context.originObjectName
-    )
-  }
+
 
   /**
    * Translates error positions from substituted SQL back to original SQL if parameter
@@ -110,7 +89,7 @@ object SQLExecution extends Logging {
               contexts.map { context =>
                 context match {
                   case sqlContext: SQLQueryContext =>
-                    translateSqlContext(sqlContext, positionMapper)
+                    PositionTranslationUtils.translateSqlContext(sqlContext, positionMapper)
                   case _ => context
                 }
               }

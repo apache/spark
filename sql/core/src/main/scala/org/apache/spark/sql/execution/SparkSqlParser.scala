@@ -33,10 +33,9 @@ import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView,
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
-import org.apache.spark.sql.catalyst.parser.{PositionMapper, SqlBaseParser}
+import org.apache.spark.sql.catalyst.parser.{PositionTranslationUtils, SqlBaseParser}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
@@ -80,7 +79,7 @@ class SparkSqlParser extends AbstractSqlParser {
               contexts.map { context =>
                 context match {
                   case sqlContext: org.apache.spark.sql.catalyst.trees.SQLQueryContext =>
-                    translateSqlContext(sqlContext, positionMapper)
+                    PositionTranslationUtils.translateSqlContext(sqlContext, positionMapper)
                   case _ => context
                 }
               }
@@ -105,20 +104,7 @@ class SparkSqlParser extends AbstractSqlParser {
     parameterHandler.substituteParametersWithAutoRule(command, context)
   }
 
-  private def translateSqlContext(context: SQLQueryContext,
-      mapper: PositionMapper): SQLQueryContext = {
-    val translatedStartIndex = context.originStartIndex.map(mapper.mapToOriginal(_))
-    val translatedStopIndex = context.originStopIndex.map(mapper.mapToOriginal(_))
-    SQLQueryContext(
-      line = context.line,
-      startPosition = context.startPosition,
-      originStartIndex = translatedStartIndex,
-      originStopIndex = translatedStopIndex,
-      sqlText = Some(mapper.originalText),
-      originObjectType = context.originObjectType,
-      originObjectName = context.originObjectName
-    )
-  }
+
 
 
 }
