@@ -206,7 +206,9 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             with self.sql_conf(
                 {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
             ):
-                with self.assertRaisesRegex(PythonException, "An exception was thrown from the Python worker"):
+                with self.assertRaisesRegex(
+                    PythonException, "An exception was thrown from the Python worker"
+                ):
                     df.select(int_to_decimal_udf("id").alias("decimal_val")).collect()
 
             @udf(returnType="decimal(25,1)", useArrow=True)
@@ -228,7 +230,9 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             with self.sql_conf(
                 {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
             ):
-                with self.assertRaisesRegex(PythonException, "An exception was thrown from the Python worker"):
+                with self.assertRaisesRegex(
+                    PythonException, "An exception was thrown from the Python worker"
+                ):
                     df.select(high_precision_udf("id").alias("decimal_val")).collect()
 
     def test_err_return_type(self):
