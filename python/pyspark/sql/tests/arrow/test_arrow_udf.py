@@ -155,7 +155,7 @@ class ArrowUDFTestsMixin:
                         check_value(t)
                         yield batch
 
-                result2 = df.mapInArrow(identity2, df.schema)
+                result2 = df.mapInArrow(identity2, "ts timestamp")
                 self.assertEqual(expected, result2.collect())
 
     def test_arrow_udf_wrong_arg(self):
