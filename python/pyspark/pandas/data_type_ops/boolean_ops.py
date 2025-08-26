@@ -19,10 +19,11 @@ import numbers
 from typing import Any, Union
 
 import pandas as pd
-from pandas.api.types import CategoricalDtype
+from pandas.api.types import CategoricalDtype, is_integer_dtype
 from pandas.core.dtypes.common import is_numeric_dtype
 
 from pyspark.pandas.base import column_op, IndexOpsMixin
+from pyspark.pandas.config import get_option
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
@@ -38,7 +39,7 @@ from pyspark.pandas.data_type_ops.base import (
 from pyspark.pandas.typedef.typehints import as_spark_type, extension_dtypes, pandas_on_spark_type
 from pyspark.pandas.utils import is_ansi_mode_enabled
 from pyspark.sql import functions as F, Column as PySparkColumn
-from pyspark.sql.types import BooleanType, StringType
+from pyspark.sql.types import BooleanType, StringType, IntegerType
 from pyspark.errors import PySparkValueError
 
 
@@ -321,6 +322,13 @@ class BooleanOps(DataTypeOps):
                 ),
             )
         else:
+            is_ansi = is_ansi_mode_enabled(index_ops._internal.spark_frame.sparkSession)
+            if is_ansi and get_option("compute.eager_check"):
+                if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+                    if index_ops.hasnans:
+                        raise ValueError(
+                            "Cannot convert %s with missing values to integer" % self.pretty_name
+                        )
             return _as_other_type(index_ops, dtype, spark_type)
 
     def neg(self, operand: IndexOpsLike) -> IndexOpsLike:

@@ -22,6 +22,7 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.testing.utils import is_ansi_mode_test
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
     extension_float_dtypes_available,
@@ -66,10 +67,12 @@ class SeriesAsTypeMixin:
         # bools
         pser = pd.Series([True, False, None], name="x")
         psser = ps.Series(pser)
-        # TODO: raise TypeError to follow native Pandas
-        self.assert_eq(psser.astype(int), ps.Series([1.0, 0.0, np.nan], name="x"))
         self.assert_eq(psser.astype(bool), pser.astype(bool))
         self.assert_eq(psser.astype(str), pser.astype(str))
+
+        if is_ansi_mode_test:
+            with self.assertRaisesRegex(ValueError, "with missing values to integer"):
+                self.assert_eq(psser.astype(int))
 
         if extension_object_dtypes_available:
             from pandas import BooleanDtype, StringDtype
