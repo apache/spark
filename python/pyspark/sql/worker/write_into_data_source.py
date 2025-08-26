@@ -36,6 +36,8 @@ from pyspark.sql.datasource import (
     DataSourceArrowWriter,
     WriterCommitMessage,
     CaseInsensitiveDict,
+    DataSourceStreamWriter,
+    DataSourceStreamArrowWriter,
 )
 from pyspark.sql.types import (
     _parse_datatype_json_string,
@@ -176,6 +178,17 @@ def main(infile: IO, outfile: IO) -> None:
         if is_streaming:
             # Instantiate the streaming data source writer.
             writer = data_source.streamWriter(schema, overwrite)
+            if not isinstance(writer, (DataSourceStreamWriter, DataSourceStreamArrowWriter)):
+                raise PySparkAssertionError(
+                    errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                    messageParameters={
+                        "expected": (
+                            "an instance of DataSourceStreamWriter or "
+                            "DataSourceStreamArrowWriter"
+                        ),
+                        "actual": f"'{type(writer).__name__}'",
+                    },
+                )
         else:
             # Instantiate the data source writer.
             writer = data_source.writer(schema, overwrite)  # type: ignore[assignment]
@@ -208,6 +221,8 @@ def main(infile: IO, outfile: IO) -> None:
 
             if isinstance(writer, DataSourceArrowWriter):
                 res = writer.write(iterator)
+            elif isinstance(writer, DataSourceStreamArrowWriter):
+                res = writer.write(iterator)  # type: ignore[arg-type]
             else:
                 res = writer.write(batch_to_rows())
 

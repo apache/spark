@@ -27257,6 +27257,7 @@ def udtf(
         return _create_py_udtf(cls=cls, returnType=returnType, useArrow=useArrow)
 
 
+@_try_remote_functions
 def arrow_udtf(
     cls: Optional[Type] = None,
     *,
