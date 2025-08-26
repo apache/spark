@@ -453,7 +453,8 @@ class LocalDataToArrowConversion:
                     field.dataType,
                     field.nullable,
                     none_on_identity=True,
-                    int_to_decimal_coercion_enabled=False,  # Default to False for general data conversion
+                    # Default to False for general data conversion
+                    int_to_decimal_coercion_enabled=False,
                 )
                 for field in schema.fields
             ]
