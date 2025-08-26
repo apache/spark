@@ -48,9 +48,15 @@ Project [make_timestamp_ltz(2021, 7, 11, 6, 30, cast(60.007 as decimal(16,6)), N
 
 
 -- !query
+SELECT convert_timezone('Europe/Brussels', timestamp_ltz'2022-03-23 00:00:00 America/Los_Angeles')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
 SELECT try_make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678))
 -- !query analysis
-Project [try_make_timestamp_ltz(make_date(2021, 7, 11, true), make_time(6, 30, cast(45.678 as decimal(16,6)))) AS try_make_timestamp_ltz(make_date(2021, 7, 11), make_time(6, 30, 45.678))#x]
+Project [make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), None, Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678))#x]
 +- OneRowRelation
 
 
@@ -78,12 +84,12 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"TIMESTAMP_NTZ\"",
     "paramIndex" : "first",
     "requiredType" : "\"DATE\"",
-    "sqlExpr" : "\"try_make_timestamp_ltz(TIMESTAMP_NTZ '2018-11-17 13:33:33', TIME '00:00:00')\""
+    "sqlExpr" : "\"make_timestamp(TIMESTAMP_NTZ '2018-11-17 13:33:33', TIME '00:00:00')\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 12,
+    "startIndex" : 8,
     "stopIndex" : 78,
     "fragment" : "try_make_timestamp_ltz(timestamp_ntz'2018-11-17 13:33:33', TIME'0:0:0')"
   } ]
@@ -102,13 +108,13 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"TIMESTAMP_NTZ\"",
     "paramIndex" : "second",
     "requiredType" : "\"TIME\"",
-    "sqlExpr" : "\"try_make_timestamp_ltz(DATE '2025-06-20', TIMESTAMP_NTZ '2018-11-17 13:33:33')\""
+    "sqlExpr" : "\"make_timestamp(DATE '2025-06-20', TIMESTAMP_NTZ '2018-11-17 13:33:33')\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 12,
-    "stopIndex" : 78,
+    "startIndex" : 8,
+    "stopIndex" : 83,
     "fragment" : "try_make_timestamp_ltz(DATE'2025-06-20', timestamp_ntz'2018-11-17 13:33:33')"
   } ]
 }
@@ -117,18 +123,12 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT try_make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'PST')
 -- !query analysis
-Project [try_make_timestamp_ltz(make_date(2021, 7, 11, true), make_time(6, 30, cast(45.678 as decimal(16,6))), Some(PST)) AS try_make_timestamp_ltz(make_date(2021, 7, 11), make_time(6, 30, 45.678))#x]
+Project [make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(PST), Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), PST)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT try_make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'CET')
 -- !query analysis
-Project [try_make_timestamp_ltz(make_date(2021, 7, 11, true), make_time(6, 30, cast(45.678 as decimal(16,6))), Some(CET)) AS try_make_timestamp_ltz(make_date(2021, 7, 11), make_time(6, 30, 45.678))#x]
+Project [make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(CET), Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), CET)#x]
 +- OneRowRelation
-
-
--- !query
-SELECT convert_timezone('Europe/Brussels', timestamp_ltz'2022-03-23 00:00:00 America/Los_Angeles')
--- !query analysis
-[Analyzer test output redacted due to nondeterminism]

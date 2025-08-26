@@ -63,9 +63,17 @@ org.apache.spark.SparkDateTimeException
 
 
 -- !query
+SELECT convert_timezone('Europe/Brussels', timestamp_ltz'2022-03-23 00:00:00 America/Los_Angeles')
+-- !query schema
+struct<convert_timezone(current_timezone(), Europe/Brussels, TIMESTAMP '2022-03-23 00:00:00'):timestamp_ntz>
+-- !query output
+2022-03-23 08:00:00
+
+
+-- !query
 SELECT try_make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678))
 -- !query schema
-struct<try_make_timestamp_ltz(make_date(2021, 7, 11), make_time(6, 30, 45.678)):timestamp_ntz>
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678)):timestamp>
 -- !query output
 2021-07-11 06:30:45.678
 
@@ -73,7 +81,7 @@ struct<try_make_timestamp_ltz(make_date(2021, 7, 11), make_time(6, 30, 45.678)):
 -- !query
 SELECT try_make_timestamp_ltz(NULL, TIME'00:00:00')
 -- !query schema
-struct<try_make_timestamp_ltz(NULL, TIME '00:00:00'):timestamp_ntz>
+struct<make_timestamp(NULL, TIME '00:00:00'):timestamp>
 -- !query output
 NULL
 
@@ -81,7 +89,7 @@ NULL
 -- !query
 SELECT try_make_timestamp_ltz(DATE'1970-01-01', NULL)
 -- !query schema
-struct<try_make_timestamp_ltz(DATE '1970-01-01', NULL):timestamp_ntz>
+struct<make_timestamp(DATE '1970-01-01', NULL):timestamp>
 -- !query output
 NULL
 
@@ -100,12 +108,12 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"TIMESTAMP_NTZ\"",
     "paramIndex" : "first",
     "requiredType" : "\"DATE\"",
-    "sqlExpr" : "\"try_make_timestamp_ltz(TIMESTAMP_NTZ '2018-11-17 13:33:33', TIME '00:00:00')\""
+    "sqlExpr" : "\"make_timestamp(TIMESTAMP_NTZ '2018-11-17 13:33:33', TIME '00:00:00')\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 12,
+    "startIndex" : 8,
     "stopIndex" : 78,
     "fragment" : "try_make_timestamp_ltz(timestamp_ntz'2018-11-17 13:33:33', TIME'0:0:0')"
   } ]
@@ -126,13 +134,13 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"TIMESTAMP_NTZ\"",
     "paramIndex" : "second",
     "requiredType" : "\"TIME\"",
-    "sqlExpr" : "\"try_make_timestamp_ltz(DATE '2025-06-20', TIMESTAMP_NTZ '2018-11-17 13:33:33')\""
+    "sqlExpr" : "\"make_timestamp(DATE '2025-06-20', TIMESTAMP_NTZ '2018-11-17 13:33:33')\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 12,
-    "stopIndex" : 78,
+    "startIndex" : 8,
+    "stopIndex" : 83,
     "fragment" : "try_make_timestamp_ltz(DATE'2025-06-20', timestamp_ntz'2018-11-17 13:33:33')"
   } ]
 }
@@ -141,7 +149,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT try_make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'PST')
 -- !query schema
-struct<try_make_timestamp_ltz(make_date(2021, 7, 11), make_time(6, 30, 45.678), PST):timestamp_ntz>
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), PST):timestamp>
 -- !query output
 2021-07-11 06:30:45.678
 
@@ -149,14 +157,6 @@ struct<try_make_timestamp_ltz(make_date(2021, 7, 11), make_time(6, 30, 45.678), 
 -- !query
 SELECT try_make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'CET')
 -- !query schema
-struct<try_make_timestamp_ltz(make_date(2021, 7, 11), make_time(6, 30, 45.678), CET):timestamp_ntz>
+struct<make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), CET):timestamp>
 -- !query output
-2021-07-11 06:30:45.678
-
-
--- !query
-SELECT convert_timezone('Europe/Brussels', timestamp_ltz'2022-03-23 00:00:00 America/Los_Angeles')
--- !query schema
-struct<convert_timezone(current_timezone(), Europe/Brussels, TIMESTAMP '2022-03-23 00:00:00'):timestamp_ntz>
--- !query output
-2022-03-23 08:00:00
+2021-07-10 21:30:45.678
