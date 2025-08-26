@@ -1048,7 +1048,7 @@ private[spark] class SparkSubmit extends Logging {
       if (sparkConf.get(SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT)) {
         logInfo(
           log"Calling System.exit() with exit code ${MDC(LogKeys.EXIT_CODE, exitCode)} " +
-          log"because main ${MDC(LogKeys.CONFIG, SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT.key)}=true")
+          log"because ${MDC(LogKeys.CONFIG, SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT.key)}=true")
         exitFn(exitCode)
       }
     }
