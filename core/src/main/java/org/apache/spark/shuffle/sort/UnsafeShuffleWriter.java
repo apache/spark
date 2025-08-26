@@ -64,7 +64,7 @@ import org.apache.spark.shuffle.checksum.RowBasedChecksum;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.util.MyByteArrayOutputStream;
+import org.apache.spark.util.ExposedBufferByteArrayOutputStream;
 import org.apache.spark.util.Utils;
 
 @Private
@@ -96,7 +96,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @Nullable private long[] partitionLengths;
   private long peakMemoryUsedBytes = 0;
 
-  private MyByteArrayOutputStream serBuffer;
+  private ExposedBufferByteArrayOutputStream serBuffer;
   private SerializationStream serOutputStream;
 
   /**
@@ -167,10 +167,13 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     return peakMemoryUsedBytes;
   }
 
-  public RowBasedChecksum[] getRowBasedChecksums() {
+  @VisibleForTesting
+  RowBasedChecksum[] getRowBasedChecksums() {
     return rowBasedChecksums;
   }
-  public long getAggregatedChecksumValue() {
+
+  @VisibleForTesting
+  long getAggregatedChecksumValue() {
     return RowBasedChecksum.getAggregatedChecksumValue(rowBasedChecksums);
   }
 
@@ -222,7 +225,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       partitioner.numPartitions(),
       sparkConf,
       writeMetrics);
-    serBuffer = new MyByteArrayOutputStream(DEFAULT_INITIAL_SER_BUFFER_SIZE);
+    serBuffer = new ExposedBufferByteArrayOutputStream(DEFAULT_INITIAL_SER_BUFFER_SIZE);
     serOutputStream = serializer.serializeStream(serBuffer);
   }
 
@@ -344,8 +347,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         logger.debug("Using slow merge");
         mergeSpillsWithFileStream(spills, mapWriter, compressionCodec);
       }
-      partitionLengths =
-          mapWriter.commitAllPartitions(sorter.getChecksums()).getPartitionLengths();
+      partitionLengths = mapWriter.commitAllPartitions(sorter.getChecksums()).getPartitionLengths();
     } catch (Exception e) {
       try {
         mapWriter.abort(e);

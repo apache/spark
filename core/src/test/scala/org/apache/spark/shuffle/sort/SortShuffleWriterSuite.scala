@@ -88,8 +88,7 @@ class SortShuffleWriterSuite
     val checksumSize =
       if (conf.get(config.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED)) numMaps else 0
     val checksumAlgorithm = conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
-    val rowBasedChecksums = RowBasedChecksum.createPartitionRowBasedChecksums(
-      checksumSize, checksumAlgorithm)
+    val rowBasedChecksums = createPartitionRowBasedChecksums(checksumSize, checksumAlgorithm)
     when(dependency.rowBasedChecksums).thenReturn(rowBasedChecksums)
   }
 
@@ -203,7 +202,7 @@ class SortShuffleWriterSuite
           if (conf.get(config.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED)) numMaps else 0
         val checksumAlgorithm = conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
         val rowBasedChecksums: Array[RowBasedChecksum] =
-          RowBasedChecksum.createPartitionRowBasedChecksums(checksumSize, checksumAlgorithm)
+          createPartitionRowBasedChecksums(checksumSize, checksumAlgorithm)
         when(dependency.rowBasedChecksums).thenReturn(rowBasedChecksums)
         new BaseShuffleHandle[Int, Int, Int](shuffleId, dependency)
       }

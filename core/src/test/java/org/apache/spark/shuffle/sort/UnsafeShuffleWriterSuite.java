@@ -187,7 +187,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
         (boolean) conf.get(package$.MODULE$.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED()) ? NUM_PARTITIONS : 0;
     final String checksumAlgorithm = conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM());
     final RowBasedChecksum[] rowBasedChecksums =
-        RowBasedChecksum.createPartitionRowBasedChecksums(checksumSize, checksumAlgorithm);
+        createPartitionRowBasedChecksums(checksumSize, checksumAlgorithm);
     when(shuffleDep.rowBasedChecksums()).thenReturn(rowBasedChecksums);
   }
 

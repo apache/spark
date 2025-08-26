@@ -48,10 +48,6 @@ class UnsafeRowChecksum extends RowBasedChecksum() {
 
 object UnsafeRowChecksum {
   def createUnsafeRowChecksums(numPartitions: Int): Array[RowBasedChecksum] = {
-    val rowBasedChecksums: Array[RowBasedChecksum] = new Array[RowBasedChecksum](numPartitions)
-    for (i <- 0 until numPartitions) {
-      rowBasedChecksums(i) = new UnsafeRowChecksum()
-    }
-    rowBasedChecksums
+    Array.tabulate(numPartitions)(_ => new UnsafeRowChecksum())
   }
 }

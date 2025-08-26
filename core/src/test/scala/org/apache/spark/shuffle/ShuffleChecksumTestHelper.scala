@@ -19,7 +19,7 @@ package org.apache.spark.shuffle
 
 import java.io.File
 
-import org.apache.spark.shuffle.checksum.RowBasedChecksum
+import org.apache.spark.shuffle.checksum.{OutputStreamRowBasedChecksum, RowBasedChecksum}
 
 trait ShuffleChecksumTestHelper {
 
@@ -46,5 +46,11 @@ trait ShuffleChecksumTestHelper {
     } else {
       rowBasedChecksums.map(_.getValue)
     }
+  }
+
+  def createPartitionRowBasedChecksums(
+      numPartitions: Int,
+      checksumAlgorithm: String): Array[RowBasedChecksum] = {
+    Array.tabulate(numPartitions)(_ => new OutputStreamRowBasedChecksum(checksumAlgorithm))
   }
 }

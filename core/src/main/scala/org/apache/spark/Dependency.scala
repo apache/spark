@@ -61,7 +61,7 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
 }
 
 object ShuffleDependency {
-  private val EmptyRowBasedChecksums: Array[RowBasedChecksum] = Array.empty
+  private val EMPTY_ROW_BASED_CHECKSUMS: Array[RowBasedChecksum] = Array.empty
 }
 
 /**
@@ -89,7 +89,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     val aggregator: Option[Aggregator[K, V, C]] = None,
     val mapSideCombine: Boolean = false,
     val shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor,
-    val rowBasedChecksums: Array[RowBasedChecksum] = ShuffleDependency.EmptyRowBasedChecksums)
+    val rowBasedChecksums: Array[RowBasedChecksum] = ShuffleDependency.EMPTY_ROW_BASED_CHECKSUMS)
   extends Dependency[Product2[K, V]] with Logging {
 
   def this(

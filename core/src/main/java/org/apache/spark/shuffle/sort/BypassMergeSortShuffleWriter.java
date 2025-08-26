@@ -32,6 +32,7 @@ import scala.Product2;
 import scala.Tuple2;
 import scala.collection.Iterator;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Closeables;
 
 import org.apache.spark.internal.SparkLogger;
@@ -112,7 +113,6 @@ final class BypassMergeSortShuffleWriter<K, V>
    * output data or not.
    */
   private final RowBasedChecksum[] rowBasedChecksums;
-  private final SparkConf conf;
 
   /**
    * Are we in the process of stopping? Because map tasks can call stop() with success = true
@@ -142,7 +142,6 @@ final class BypassMergeSortShuffleWriter<K, V>
     this.shuffleExecutorComponents = shuffleExecutorComponents;
     this.partitionChecksums = createPartitionChecksums(numPartitions, conf);
     this.rowBasedChecksums = dep.rowBasedChecksums();
-    this.conf = conf;
   }
 
   @Override
@@ -214,11 +213,13 @@ final class BypassMergeSortShuffleWriter<K, V>
     return partitionLengths;
   }
 
-  public RowBasedChecksum[] getRowBasedChecksums() {
+  @VisibleForTesting
+  RowBasedChecksum[] getRowBasedChecksums() {
     return rowBasedChecksums;
   }
 
-  public long getAggregatedChecksumValue() {
+  @VisibleForTesting
+  long getAggregatedChecksumValue() {
     return RowBasedChecksum.getAggregatedChecksumValue(rowBasedChecksums);
   }
 

@@ -38,7 +38,6 @@ import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleChecksumTestHelper}
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
-import org.apache.spark.shuffle.checksum.RowBasedChecksum
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
@@ -154,8 +153,7 @@ class BypassMergeSortShuffleWriterSuite
     val checksumSize =
       if (sc.get(config.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED)) numPartitions else 0
     val checksumAlgorithm = conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
-    val rowBasedChecksums =
-      RowBasedChecksum.createPartitionRowBasedChecksums(checksumSize, checksumAlgorithm)
+    val rowBasedChecksums = createPartitionRowBasedChecksums(checksumSize, checksumAlgorithm)
     when(dependency.rowBasedChecksums).thenReturn(rowBasedChecksums)
   }
 

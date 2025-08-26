@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper
-import org.apache.spark.util.MyByteArrayOutputStream
+import org.apache.spark.util.ExposedBufferByteArrayOutputStream
 
 /**
  * A class for computing checksum for input (key, value) pairs. The checksum is independent of
@@ -75,7 +75,7 @@ class OutputStreamRowBasedChecksum(checksumAlgorithm: String)
   private val DEFAULT_INITIAL_SER_BUFFER_SIZE = 32 * 1024
 
   @transient private lazy val serBuffer =
-    new MyByteArrayOutputStream(DEFAULT_INITIAL_SER_BUFFER_SIZE)
+    new ExposedBufferByteArrayOutputStream(DEFAULT_INITIAL_SER_BUFFER_SIZE)
   @transient private lazy val objOut = new ObjectOutputStream(serBuffer)
 
   @transient
@@ -100,12 +100,6 @@ class OutputStreamRowBasedChecksum(checksumAlgorithm: String)
 }
 
 object RowBasedChecksum {
-  def createPartitionRowBasedChecksums(
-      numPartitions: Int,
-      checksumAlgorithm: String): Array[RowBasedChecksum] = {
-    Array.tabulate(numPartitions)(_ => new OutputStreamRowBasedChecksum(checksumAlgorithm))
-  }
-
   def getAggregatedChecksumValue(rowBasedChecksums: Array[RowBasedChecksum]): Long = {
     Option(rowBasedChecksums)
       .map(_.foldLeft(0L)((acc, c) => acc * 31L + c.getValue))
