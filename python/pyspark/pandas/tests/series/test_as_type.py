@@ -31,6 +31,7 @@ from pyspark.pandas.typedef.typehints import (
 
 class SeriesAsTypeMixin:
     def test_astype(self):
+        # numeric
         psers = [pd.Series([10, 20, 15, 30, 45], name="x")]
 
         if extension_dtypes_available:
@@ -41,12 +42,14 @@ class SeriesAsTypeMixin:
         for pser in psers:
             self._test_numeric_astype(pser)
 
+        # numeric with nulls
         pser = pd.Series([10, 20, 15, 30, 45, None, np.nan], name="x")
         psser = ps.Series(pser)
 
         self.assert_eq(psser.astype(bool), pser.astype(bool))
         self.assert_eq(psser.astype(str), pser.astype(str))
 
+        # strings
         pser = pd.Series(["hi", "hi ", " ", " \t", "", None], name="x")
         psser = ps.Series(pser)
 
@@ -60,9 +63,11 @@ class SeriesAsTypeMixin:
             self._check_extension(psser.astype("string"), pser.astype("string"))
             self._check_extension(psser.astype(StringDtype()), pser.astype(StringDtype()))
 
+        # bools
         pser = pd.Series([True, False, None], name="x")
         psser = ps.Series(pser)
-
+        # TODO: raise TypeError to follow native Pandas
+        self.assert_eq(psser.astype(int), ps.Series([1.0, 0.0, np.nan], name="x"))
         self.assert_eq(psser.astype(bool), pser.astype(bool))
         self.assert_eq(psser.astype(str), pser.astype(str))
 
@@ -74,6 +79,7 @@ class SeriesAsTypeMixin:
             self._check_extension(psser.astype("string"), pser.astype("string"))
             self._check_extension(psser.astype(StringDtype()), pser.astype(StringDtype()))
 
+        # datetimes
         pser = pd.Series(["2020-10-27 00:00:01", None], name="x")
         psser = ps.Series(pser)
 
