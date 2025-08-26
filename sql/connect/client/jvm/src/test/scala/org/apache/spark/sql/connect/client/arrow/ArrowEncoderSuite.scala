@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, JavaTypeInfere
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec, OuterScopes}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, NullEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, RowEncoder, ScalaDecimalEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder.{encoderFor => toRowEncoder}
-import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkStringUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
@@ -46,6 +46,7 @@ import org.apache.spark.sql.connect.client.arrow.FooEnum.FooEnum
 import org.apache.spark.sql.connect.test.ConnectFunSuite
 import org.apache.spark.sql.types.{ArrayType, DataType, DayTimeIntervalType, Decimal, DecimalType, IntegerType, Metadata, SQLUserDefinedType, StringType, StructType, UserDefinedType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.VariantVal
+import org.apache.spark.util.SparkStringUtils
 
 /**
  * Tests for encoding external data to and from arrow.
@@ -99,40 +100,49 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     val serializerAllocator = newAllocator("serialization")
     val deserializerAllocator = newAllocator("deserialization")
 
-    val arrowIterator = ArrowSerializer.serialize(
-      input = iterator,
-      enc = inputEncoder,
-      allocator = serializerAllocator,
-      maxRecordsPerBatch = maxRecordsPerBatch,
-      maxBatchSize = maxBatchSize,
-      batchSizeCheckInterval = batchSizeCheckInterval,
-      timeZoneId = "UTC",
-      largeVarTypes = false)
+    try {
+      val arrowIterator = ArrowSerializer.serialize(
+        input = iterator,
+        enc = inputEncoder,
+        allocator = serializerAllocator,
+        maxRecordsPerBatch = maxRecordsPerBatch,
+        maxBatchSize = maxBatchSize,
+        batchSizeCheckInterval = batchSizeCheckInterval,
+        timeZoneId = "UTC",
+        largeVarTypes = false)
 
-    val inspectedIterator = if (inspectBatch != null) {
-      arrowIterator.map { batch =>
-        inspectBatch(batch)
-        batch
+      val inspectedIterator = if (inspectBatch != null) {
+        arrowIterator.map { batch =>
+          inspectBatch(batch)
+          batch
+        }
+      } else {
+        arrowIterator
       }
-    } else {
-      arrowIterator
-    }
 
-    val resultIterator =
-      ArrowDeserializers.deserializeFromArrow(
-        inspectedIterator,
-        outputEncoder,
-        deserializerAllocator,
-        timeZoneId = "UTC")
-    new CloseableIterator[O] {
-      override def close(): Unit = {
-        arrowIterator.close()
-        resultIterator.close()
+      val resultIterator =
+        ArrowDeserializers.deserializeFromArrow(
+          inspectedIterator,
+          outputEncoder,
+          deserializerAllocator,
+          timeZoneId = "UTC")
+      new CloseableIterator[O] {
+        override def close(): Unit = {
+          arrowIterator.close()
+          resultIterator.close()
+          serializerAllocator.close()
+          deserializerAllocator.close()
+        }
+
+        override def hasNext: Boolean = resultIterator.hasNext
+
+        override def next(): O = resultIterator.next()
+      }
+    } catch {
+      case e: Throwable =>
         serializerAllocator.close()
         deserializerAllocator.close()
-      }
-      override def hasNext: Boolean = resultIterator.hasNext
-      override def next(): O = resultIterator.next()
+        throw e
     }
   }
 

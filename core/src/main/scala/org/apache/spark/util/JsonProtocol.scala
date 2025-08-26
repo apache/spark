@@ -22,7 +22,7 @@ import java.util.{Properties, UUID}
 import scala.collection.Map
 import scala.jdk.CollectionConverters._
 
-import com.fasterxml.jackson.core.JsonGenerator
+import com.fasterxml.jackson.core.{JsonGenerator, StreamReadConstraints}
 import com.fasterxml.jackson.databind.JsonNode
 import org.json4s.jackson.JsonMethods.compact
 
@@ -65,6 +65,11 @@ private[spark] class JsonProtocolOptions(conf: SparkConf) {
  */
 private[spark] object JsonProtocol extends JsonUtils {
   // TODO: Remove this file and put JSON serialization into each individual class.
+
+  // SPARK-49872: Remove jackson JSON string length limitation.
+  mapper.getFactory.setStreamReadConstraints(
+    StreamReadConstraints.builder().maxStringLength(Int.MaxValue).build()
+  )
 
   private[util]
   val defaultOptions: JsonProtocolOptions = new JsonProtocolOptions(new SparkConf(false))
@@ -488,7 +493,10 @@ private[spark] object JsonProtocol extends JsonUtils {
     g.writeEndObject()
   }
 
-  private[util] val accumulableExcludeList = Set(InternalAccumulator.UPDATED_BLOCK_STATUSES)
+  private[util] val accumulableExcludeList = Set(
+    InternalAccumulator.UPDATED_BLOCK_STATUSES,
+    InternalAccumulator.COLLECT_METRICS_ACCUMULATOR
+  )
 
   private[this] val taskMetricAccumulableNames = TaskMetrics.empty.nameToAccums.keySet.toSet
 
@@ -954,8 +962,14 @@ private[spark] object JsonProtocol extends JsonUtils {
       case `stageExecutorMetrics` => stageExecutorMetricsFromJson(json)
       case `blockUpdate` => blockUpdateFromJson(json)
       case `resourceProfileAdded` => resourceProfileAddedFromJson(json)
-      case other => mapper.readValue(json.toString, Utils.classForName(other))
-        .asInstanceOf[SparkListenerEvent]
+      case other =>
+        val otherClass = Utils.classForName(other)
+        if (classOf[SparkListenerEvent].isAssignableFrom(otherClass)) {
+          mapper.readValue(json.toString, otherClass)
+            .asInstanceOf[SparkListenerEvent]
+        } else {
+          throw new SparkException(s"Unknown event type: $other")
+        }
     }
   }
 
@@ -1058,14 +1072,14 @@ private[spark] object JsonProtocol extends JsonUtils {
   }
 
   def taskResourceRequestMapFromJson(json: JsonNode): Map[String, TaskResourceRequest] = {
-    json.fields().asScala.collect { case field =>
+    json.properties().asScala.collect { case field =>
       val req = taskResourceRequestFromJson(field.getValue)
       (field.getKey, req)
     }.toMap
   }
 
   def executorResourceRequestMapFromJson(json: JsonNode): Map[String, ExecutorResourceRequest] = {
-    json.fields().asScala.collect { case field =>
+    json.properties().asScala.collect { case field =>
       val req = executorResourceRequestFromJson(field.getValue)
       (field.getKey, req)
     }.toMap
@@ -1333,12 +1347,12 @@ private[spark] object JsonProtocol extends JsonUtils {
         jsonOption(readJson.get("Total Records Read")).map(_.extractLong).getOrElse(0L))
       readMetrics.incRemoteReqsDuration(jsonOption(readJson.get("Remote Requests Duration"))
         .map(_.extractLong).getOrElse(0L))
-      jsonOption(readJson.get("Shuffle Push Read Metrics")).foreach { shufflePushReadJson =>
+      jsonOption(readJson.get("Push Based Shuffle")).foreach { shufflePushReadJson =>
         readMetrics.incCorruptMergedBlockChunks(jsonOption(
           shufflePushReadJson.get("Corrupt Merged Block Chunks"))
             .map(_.extractLong).getOrElse(0L))
         readMetrics.incMergedFetchFallbackCount(jsonOption(
-          shufflePushReadJson.get("Merged Fallback Count")).map(_.extractLong).getOrElse(0L))
+          shufflePushReadJson.get("Merged Fetch Fallback Count")).map(_.extractLong).getOrElse(0L))
         readMetrics.incRemoteMergedBlocksFetched(jsonOption(shufflePushReadJson
           .get("Merged Remote Blocks Fetched")).map(_.extractLong).getOrElse(0L))
         readMetrics.incLocalMergedBlocksFetched(jsonOption(shufflePushReadJson
@@ -1595,7 +1609,7 @@ private[spark] object JsonProtocol extends JsonUtils {
 
   def resourcesMapFromJson(json: JsonNode): Map[String, ResourceInformation] = {
     assert(json.isObject, s"expected object, got ${json.getNodeType}")
-    json.fields.asScala.map { field =>
+    json.properties.asScala.map { field =>
       val resourceInfo = ResourceInformation.parseJson(field.getValue.toString)
       (field.getKey, resourceInfo)
     }.toMap
@@ -1607,7 +1621,7 @@ private[spark] object JsonProtocol extends JsonUtils {
 
   def mapFromJson(json: JsonNode): Map[String, String] = {
     assert(json.isObject, s"expected object, got ${json.getNodeType}")
-    json.fields.asScala.map { field =>
+    json.properties.asScala.map { field =>
       (field.getKey, field.getValue.extractString)
     }.toMap
   }

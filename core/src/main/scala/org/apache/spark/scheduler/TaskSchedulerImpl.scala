@@ -33,7 +33,7 @@ import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorMetrics
-import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
+import org.apache.spark.internal.{config, Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
@@ -181,15 +181,7 @@ private[spark] class TaskSchedulerImpl(
 
   private var schedulableBuilder: SchedulableBuilder = null
   // default scheduler is FIFO
-  private val schedulingModeConf = conf.get(SCHEDULER_MODE)
-  val schedulingMode: SchedulingMode =
-    try {
-      SchedulingMode.withName(schedulingModeConf)
-    } catch {
-      case e: java.util.NoSuchElementException =>
-        throw SparkCoreErrors.unrecognizedSchedulerModePropertyError(SCHEDULER_MODE_PROPERTY,
-          schedulingModeConf)
-    }
+  val schedulingMode: SchedulingMode = conf.get(SCHEDULER_MODE)
 
   val rootPool: Pool = new Pool("", schedulingMode, 0, 0)
 

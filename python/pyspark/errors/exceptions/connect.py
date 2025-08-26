@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import pyspark.sql.connect.proto as pb2
+import grpc
 import json
+from grpc import StatusCode
 from typing import Dict, List, Optional, TYPE_CHECKING
 
 from pyspark.errors.exceptions.base import (
@@ -43,6 +44,7 @@ from pyspark.errors.exceptions.base import (
 )
 
 if TYPE_CHECKING:
+    import pyspark.sql.connect.proto as pb2
     from google.rpc.error_details_pb2 import ErrorInfo
 
 
@@ -55,19 +57,25 @@ class SparkConnectException(PySparkException):
 def convert_exception(
     info: "ErrorInfo",
     truncated_message: str,
-    resp: Optional[pb2.FetchErrorDetailsResponse],
+    resp: Optional["pb2.FetchErrorDetailsResponse"],
     display_server_stacktrace: bool = False,
+    grpc_status_code: grpc.StatusCode = StatusCode.UNKNOWN,
 ) -> SparkConnectException:
-    converted = _convert_exception(info, truncated_message, resp, display_server_stacktrace)
+    converted = _convert_exception(
+        info, truncated_message, resp, display_server_stacktrace, grpc_status_code
+    )
     return recover_python_exception(converted)
 
 
 def _convert_exception(
     info: "ErrorInfo",
     truncated_message: str,
-    resp: Optional[pb2.FetchErrorDetailsResponse],
+    resp: Optional["pb2.FetchErrorDetailsResponse"],
     display_server_stacktrace: bool = False,
+    grpc_status_code: grpc.StatusCode = StatusCode.UNKNOWN,
 ) -> SparkConnectException:
+    import pyspark.sql.connect.proto as pb2
+
     raw_classes = info.metadata.get("classes")
     classes: List[str] = json.loads(raw_classes) if raw_classes else []
     sql_state = info.metadata.get("sqlState")
@@ -100,8 +108,9 @@ def _convert_exception(
 
     if "org.apache.spark.api.python.PythonException" in classes:
         return PythonException(
-            "\n  An exception was thrown from the Python worker. "
-            "Please see the stack trace below.\n%s" % message
+            message="\n  An exception was thrown from the Python worker. "
+            "Please see the stack trace below.\n%s" % message,
+            grpc_status_code=grpc_status_code,
         )
 
     # Return exception based on class mapping
@@ -124,6 +133,7 @@ def _convert_exception(
                 server_stacktrace=stacktrace,
                 display_server_stacktrace=display_server_stacktrace,
                 contexts=contexts,
+                grpc_status_code=grpc_status_code,
             )
 
     # Return UnknownException if there is no matched exception class
@@ -136,16 +146,17 @@ def _convert_exception(
         server_stacktrace=stacktrace,
         display_server_stacktrace=display_server_stacktrace,
         contexts=contexts,
+        grpc_status_code=grpc_status_code,
     )
 
 
-def _extract_jvm_stacktrace(resp: pb2.FetchErrorDetailsResponse) -> str:
+def _extract_jvm_stacktrace(resp: "pb2.FetchErrorDetailsResponse") -> str:
     if len(resp.errors[resp.root_error_idx].stack_trace) == 0:
         return ""
 
     lines: List[str] = []
 
-    def format_stacktrace(error: pb2.FetchErrorDetailsResponse.Error) -> None:
+    def format_stacktrace(error: "pb2.FetchErrorDetailsResponse.Error") -> None:
         message = f"{error.error_type_hierarchy[0]}: {error.message}"
         if len(lines) == 0:
             lines.append(error.error_type_hierarchy[0])
@@ -181,6 +192,7 @@ class SparkConnectGrpcException(SparkConnectException):
         server_stacktrace: Optional[str] = None,
         display_server_stacktrace: bool = False,
         contexts: Optional[List[BaseQueryContext]] = None,
+        grpc_status_code: grpc.StatusCode = StatusCode.UNKNOWN,
     ) -> None:
         if contexts is None:
             contexts = []
@@ -208,6 +220,7 @@ class SparkConnectGrpcException(SparkConnectException):
         self._stacktrace: Optional[str] = server_stacktrace
         self._display_stacktrace: bool = display_server_stacktrace
         self._contexts: List[BaseQueryContext] = contexts
+        self._grpc_status_code = grpc_status_code
         self._log_exception()
 
     def getSqlState(self) -> Optional[str]:
@@ -224,6 +237,9 @@ class SparkConnectGrpcException(SparkConnectException):
         if self._display_stacktrace:
             desc += "\n\nJVM stacktrace:\n%s" % self._stacktrace
         return desc
+
+    def getGrpcStatusCode(self) -> grpc.StatusCode:
+        return self._grpc_status_code
 
     def __str__(self) -> str:
         return self.getMessage()
@@ -246,6 +262,7 @@ class UnknownException(SparkConnectGrpcException, BaseUnknownException):
         server_stacktrace: Optional[str] = None,
         display_server_stacktrace: bool = False,
         contexts: Optional[List[BaseQueryContext]] = None,
+        grpc_status_code: grpc.StatusCode = StatusCode.UNKNOWN,
     ) -> None:
         super().__init__(
             message=message,
@@ -256,6 +273,7 @@ class UnknownException(SparkConnectGrpcException, BaseUnknownException):
             server_stacktrace=server_stacktrace,
             display_server_stacktrace=display_server_stacktrace,
             contexts=contexts,
+            grpc_status_code=grpc_status_code,
         )
 
 
@@ -353,12 +371,6 @@ class InvalidPlanInput(SparkConnectGrpcException):
     """
 
 
-class InvalidCommandInput(SparkConnectGrpcException):
-    """
-    Error thrown when a connect command is not valid.
-    """
-
-
 class StreamingPythonRunnerInitializationException(
     SparkConnectGrpcException, BaseStreamingPythonRunnerInitException
 ):
@@ -393,7 +405,6 @@ EXCEPTION_CLASS_MAPPING = {
     "org.apache.spark.SparkNoSuchElementException": SparkNoSuchElementException,
     "org.apache.spark.SparkException": SparkException,
     "org.apache.spark.sql.connect.common.InvalidPlanInput": InvalidPlanInput,
-    "org.apache.spark.sql.connect.common.InvalidCommandInput": InvalidCommandInput,
     "org.apache.spark.api.python.StreamingPythonRunner"
     "$StreamingPythonRunnerInitializationException": StreamingPythonRunnerInitializationException,
 }
@@ -404,7 +415,7 @@ THIRD_PARTY_EXCEPTION_CLASS_MAPPING = {
 
 
 class SQLQueryContext(BaseQueryContext):
-    def __init__(self, q: pb2.FetchErrorDetailsResponse.QueryContext):
+    def __init__(self, q: "pb2.FetchErrorDetailsResponse.QueryContext"):
         self._q = q
 
     def contextType(self) -> QueryContextType:
@@ -441,7 +452,7 @@ class SQLQueryContext(BaseQueryContext):
 
 
 class DataFrameQueryContext(BaseQueryContext):
-    def __init__(self, q: pb2.FetchErrorDetailsResponse.QueryContext):
+    def __init__(self, q: "pb2.FetchErrorDetailsResponse.QueryContext"):
         self._q = q
 
     def contextType(self) -> QueryContextType:

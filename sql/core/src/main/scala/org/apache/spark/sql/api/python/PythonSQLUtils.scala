@@ -18,13 +18,12 @@
 package org.apache.spark.sql.api.python
 
 import java.io.InputStream
-import java.net.Socket
-import java.nio.channels.Channels
+import java.nio.channels.{Channels, SocketChannel}
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 
 import org.apache.spark.api.python.DechunkedInputStream
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_LOADER
 import org.apache.spark.security.SocketAuthServer
 import org.apache.spark.sql.{internal, Column, DataFrame, Row, SparkSession}
@@ -197,8 +196,8 @@ private[sql] object PythonSQLUtils extends Logging {
 private[spark] class ArrowIteratorServer
   extends SocketAuthServer[Iterator[Array[Byte]]]("pyspark-arrow-batches-server") {
 
-  def handleConnection(sock: Socket): Iterator[Array[Byte]] = {
-    val in = sock.getInputStream()
+  def handleConnection(sock: SocketChannel): Iterator[Array[Byte]] = {
+    val in = Channels.newInputStream(sock)
     val dechunkedInput: InputStream = new DechunkedInputStream(in)
     // Create array to consume iterator so that we can safely close the file
     ArrowConverters.getBatchesFromStream(Channels.newChannel(dechunkedInput)).toArray.iterator

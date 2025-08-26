@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.internal.{LogEntry, Logging, MDC}
+import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
@@ -125,6 +125,11 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       storageLevel: StorageLevel): Unit = {
     if (storageLevel == StorageLevel.NONE) {
       // Do nothing for StorageLevel.NONE since it will not actually cache any data.
+    } else if (unnormalizedPlan.isInstanceOf[IgnoreCachedData]) {
+      logWarning(
+        log"Asked to cache a plan that is inapplicable for caching: " +
+        log"${MDC(LOGICAL_PLAN, unnormalizedPlan)}"
+      )
     } else if (lookupCachedDataInternal(normalizedPlan).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
@@ -227,8 +232,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
         isSameName(v2Ident.toQualifiedNameParts(catalog))
 
-      case View(catalogTable, _, _) =>
-        isSameName(catalogTable.identifier.nameParts)
+      case v: View =>
+        isSameName(v.desc.identifier.nameParts)
 
       case HiveTableRelation(catalogTable, _, _, _, _) =>
         isSameName(catalogTable.identifier.nameParts)
@@ -485,14 +490,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 }
 
 object CacheManager extends Logging {
-  def logCacheOperation(f: => LogEntry): Unit = {
-    SQLConf.get.dataframeCacheLogLevel match {
-      case "TRACE" => logTrace(f)
-      case "DEBUG" => logDebug(f)
-      case "INFO" => logInfo(f)
-      case "WARN" => logWarning(f)
-      case "ERROR" => logError(f)
-      case _ => logTrace(f)
-    }
+  def logCacheOperation(f: => MessageWithContext): Unit = {
+    logBasedOnLevel(SQLConf.get.dataframeCacheLogLevel)(f)
   }
 }

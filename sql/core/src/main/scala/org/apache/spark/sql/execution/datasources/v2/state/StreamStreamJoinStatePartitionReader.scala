@@ -23,9 +23,10 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
-import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{JoinSide, LeftSide, RightSide}
-import org.apache.spark.sql.execution.streaming.state.{StateStoreConf, SymmetricHashJoinStateManager}
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.{JoinStateManagerStoreGenerator, SymmetricHashJoinStateManager}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinSide, LeftSide, RightSide}
+import org.apache.spark.sql.execution.streaming.state.StateStoreConf
 import org.apache.spark.sql.types.{BooleanType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
@@ -80,8 +81,18 @@ class StreamStreamJoinStatePartitionReader(
   private val (inputAttributes, formatVersion) = {
     val maybeMatchedColumn = valueSchema.last
     val (fields, version) = {
+      // If there is a matched column, version is either 2 or 3. We need to drop the matched
+      // column from the value schema to get the actual fields.
       if (maybeMatchedColumn.name == "matched" && maybeMatchedColumn.dataType == BooleanType) {
-        (valueSchema.dropRight(1), 2)
+        // If checkpoint is using one store and virtual column families, version is 3
+        if (StreamStreamJoinStateHelper.usesVirtualColumnFamilies(
+          hadoopConf.value,
+          partition.sourceOptions.stateCheckpointLocation.toString,
+          partition.sourceOptions.operatorId)) {
+          (valueSchema.dropRight(1), 3)
+        } else {
+          (valueSchema.dropRight(1), 2)
+        }
       } else {
         (valueSchema, 1)
       }
@@ -111,7 +122,7 @@ class StreamStreamJoinStatePartitionReader(
         partition.sourceOptions.stateCheckpointLocation.toString,
         partition.queryId, partition.sourceOptions.operatorId,
         partition.sourceOptions.batchId + 1, -1, None)
-      joinStateManager = new SymmetricHashJoinStateManager(
+      joinStateManager = SymmetricHashJoinStateManager(
         joinSide,
         inputAttributes,
         joinKeys = DataTypeUtils.toAttributes(keySchema),
@@ -125,7 +136,8 @@ class StreamStreamJoinStatePartitionReader(
         skippedNullValueCount = None,
         useStateStoreCoordinator = false,
         snapshotStartVersion =
-          partition.sourceOptions.fromSnapshotOptions.map(_.snapshotStartBatchId + 1)
+          partition.sourceOptions.fromSnapshotOptions.map(_.snapshotStartBatchId + 1),
+        joinStoreGenerator = new JoinStateManagerStoreGenerator()
       )
     }
 
@@ -136,7 +148,7 @@ class StreamStreamJoinStatePartitionReader(
       inputAttributes)
 
     joinStateManager.iterator.map { pair =>
-      if (formatVersion == 2) {
+      if (formatVersion >= 2) {
         val row = valueWithMatchedRowGenerator(pair.value)
         row.setBoolean(indexOrdinalInValueWithMatchedRow, pair.matched)
         unifyStateRowPair(pair.key, row)

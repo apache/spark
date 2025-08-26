@@ -37,7 +37,7 @@ import org.apache.spark.ml.param.Params
 import org.apache.spark.ml.recommendation._
 import org.apache.spark.ml.regression._
 import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
-import org.apache.spark.ml.util.{ConnectHelper, HasTrainingSummary, Identifiable, MLWritable}
+import org.apache.spark.ml.util.{ConnectHelper, HasTrainingSummary, Identifiable, MLReader, MLWritable}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
@@ -56,7 +56,7 @@ private[ml] object MLUtils {
    * @return
    *   a Map with name and class
    */
-  private def loadOperators(mlCls: Class[_]): Map[String, Class[_]] = {
+  private[spark] def loadOperators(mlCls: Class[_]): Map[String, Class[_]] = {
     val loader = Utils.getContextOrSparkClassLoader
     val serviceLoader = ServiceLoader.load(mlCls, loader)
     // Instead of using the iterator, we use the "stream()" method that allows
@@ -157,9 +157,22 @@ private[ml] object MLUtils {
           }
 
         case _ =>
-          reconcileParam(
-            p.paramValueClassTag.runtimeClass,
-            LiteralValueProtoConverter.toCatalystValue(literal))
+          val paramValue = LiteralValueProtoConverter.toCatalystValue(literal)
+          val paramType: Class[_] = if (p.dataClass == null) {
+            if (paramValue.isInstanceOf[String]) {
+              classOf[String]
+            } else if (paramValue.isInstanceOf[Boolean]) {
+              classOf[Boolean]
+            } else {
+              throw MlUnsupportedException(
+                "Spark Connect ML requires the customized ML Param class setting 'dataClass' " +
+                  "parameter if the param value type is not String or Boolean type, " +
+                  s"but the param $name does not have the required dataClass.")
+            }
+          } else {
+            p.dataClass
+          }
+          reconcileParam(paramType, paramValue)
       }
       instance.set(p, value)
     }
@@ -287,7 +300,7 @@ private[ml] object MLUtils {
   /**
    * Replace the operator with the value provided by the backend.
    */
-  private def replaceOperator(sessionHolder: SessionHolder, name: String): String = {
+  private[spark] def replaceOperator(sessionHolder: SessionHolder, name: String): String = {
     SparkConnectPluginRegistry
       .mlBackendRegistry(sessionHolder.session.sessionState.conf)
       .view
@@ -410,17 +423,24 @@ private[ml] object MLUtils {
       sessionHolder: SessionHolder,
       className: String,
       path: String,
-      operatorClass: Class[T]): T = {
+      operatorClass: Class[T],
+      loadFromLocal: Boolean = false): T = {
     val name = replaceOperator(sessionHolder, className)
     val operators = loadOperators(operatorClass)
     if (operators.isEmpty || !operators.contains(name)) {
       throw MlUnsupportedException(s"Unsupported read for $name")
     }
     try {
-      operators(name)
-        .getMethod("load", classOf[String])
-        .invoke(null, path)
-        .asInstanceOf[T]
+      val clazz = operators(name)
+      val loaded = if (loadFromLocal) {
+        val loader = clazz.getMethod("read").invoke(null).asInstanceOf[MLReader[T]]
+        loader.loadFromLocal(path)
+      } else {
+        clazz
+          .getMethod("load", classOf[String])
+          .invoke(null, path)
+      }
+      loaded.asInstanceOf[T]
     } catch {
       case e: InvocationTargetException if e.getCause != null =>
         throw e.getCause
@@ -443,8 +463,14 @@ private[ml] object MLUtils {
   def loadTransformer(
       sessionHolder: SessionHolder,
       className: String,
-      path: String): Transformer = {
-    loadOperator(sessionHolder, className, path, classOf[Transformer])
+      path: String,
+      loadFromLocal: Boolean = false): Transformer = {
+    loadOperator(
+      sessionHolder,
+      className,
+      path,
+      classOf[Transformer],
+      loadFromLocal = loadFromLocal)
   }
 
   /**

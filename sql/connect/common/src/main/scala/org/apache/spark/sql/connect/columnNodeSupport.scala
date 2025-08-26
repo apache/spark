@@ -27,10 +27,11 @@ import org.apache.spark.connect.proto.Expression.Window.WindowFrame.{FrameBounda
 import org.apache.spark.sql.{functions, Column, Encoder}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
-import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProtoBuilder
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.{toLiteralProtoBuilderWithOptions, ToLiteralProtoOptions}
 import org.apache.spark.sql.expressions.{Aggregator, UserDefinedAggregateFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal.{Alias, CaseWhenOtherwise, Cast, ColumnNode, ColumnNodeLike, InvokeInlineUserDefinedFunction, LambdaFunction, LazyExpression, Literal, SortOrder, SqlExpression, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedNamedLambdaVariable, UnresolvedRegex, UnresolvedStar, UpdateFields, Window, WindowFrame}
+import org.apache.spark.sql.internal.{Alias, CaseWhenOtherwise, Cast, ColumnNode, ColumnNodeLike, InvokeInlineUserDefinedFunction, LambdaFunction, LazyExpression, Literal, SortOrder, SqlExpression, SubqueryExpression, SubqueryType, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedNamedLambdaVariable, UnresolvedRegex, UnresolvedStar, UpdateFields, Window, WindowFrame}
 
 /**
  * Converter for [[ColumnNode]] to [[proto.Expression]] conversions.
@@ -64,11 +65,12 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
     val builder = proto.Expression.newBuilder()
     val n = additionalTransformation.map(_(node)).getOrElse(node)
     n match {
-      case Literal(value, None, _) =>
-        builder.setLiteral(toLiteralProtoBuilder(value))
-
-      case Literal(value, Some(dataType), _) =>
-        builder.setLiteral(toLiteralProtoBuilder(value, dataType))
+      case Literal(value, dataTypeOpt, _) =>
+        builder.setLiteral(
+          toLiteralProtoBuilderWithOptions(
+            value,
+            dataTypeOpt,
+            ToLiteralProtoOptions(useDeprecatedDataTypeFields = false)))
 
       case u @ UnresolvedAttribute(unparsedIdentifier, planId, isMetadataColumn, _) =>
         val escapedName = u.sql
@@ -218,11 +220,15 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
       case LazyExpression(child, _) =>
         return apply(child, e)
 
-      case SubqueryExpressionNode(relation, subqueryType, _) =>
+      case SubqueryExpression(ds, subqueryType, _) =>
+        val relation = ds.plan.getRoot
         val b = builder.getSubqueryExpressionBuilder
         b.setSubqueryType(subqueryType match {
           case SubqueryType.SCALAR => proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_SCALAR
           case SubqueryType.EXISTS => proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_EXISTS
+          case SubqueryType.IN(values) =>
+            b.addAllInSubqueryValues(values.map(value => apply(value, e)).asJava)
+            proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_IN
         })
         assert(relation.hasCommon && relation.getCommon.hasPlanId)
         b.setPlanId(relation.getCommon.getPlanId)
@@ -309,24 +315,5 @@ case class ProtoColumnNode(
     override val origin: Origin = CurrentOrigin.get)
     extends ColumnNode {
   override def sql: String = expr.toString
-  override def children: Seq[ColumnNodeLike] = Seq.empty
-}
-
-sealed trait SubqueryType
-
-object SubqueryType {
-  case object SCALAR extends SubqueryType
-  case object EXISTS extends SubqueryType
-}
-
-case class SubqueryExpressionNode(
-    relation: proto.Relation,
-    subqueryType: SubqueryType,
-    override val origin: Origin = CurrentOrigin.get)
-    extends ColumnNode {
-  override def sql: String = subqueryType match {
-    case SubqueryType.SCALAR => s"($relation)"
-    case _ => s"$subqueryType ($relation)"
-  }
   override def children: Seq[ColumnNodeLike] = Seq.empty
 }

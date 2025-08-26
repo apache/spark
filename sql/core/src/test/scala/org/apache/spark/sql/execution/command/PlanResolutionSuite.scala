@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -1391,7 +1391,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                   None,
                   None,
                   None,
-                  None))) =>
+                  None,
+                  false))) =>
               assert(column.name == Seq("i"))
             case _ => fail("expect AlterColumns")
           }
@@ -1405,7 +1406,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                   None,
                   Some("new comment"),
                   None,
-                  None))) =>
+                  None,
+                  false))) =>
               assert(column.name == Seq("i"))
             case _ => fail("expect AlterColumns")
           }
@@ -1421,14 +1423,16 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                     None,
                     None,
                     None,
-                    None),
+                    None,
+                    false),
                   AlterColumnSpec(
                     column2: ResolvedFieldName,
                     None,
                     None,
                     None,
                     None,
-                    Some("'value'")))) =>
+                    Some(DefaultValueExpression(_, _, _)),
+                    false))) =>
               assert(column1.name == Seq("i"))
               assert(column2.name == Seq("s"))
             case _ => fail("expect AlterColumns")
@@ -1515,7 +1519,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               None,
               Some(comment),
               None,
-              None))) =>
+              None,
+              false))) =>
           assert(comment == "an index")
         case _ => fail("expect AlterTableAlterColumn with comment change only")
       }
@@ -1529,7 +1534,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               None,
               Some(comment),
               None,
-              None))) =>
+              None,
+              false))) =>
           assert(comment == "an index")
           assert(dataType == LongType)
         case _ => fail("expect AlterTableAlterColumn with type and comment changes")
@@ -2309,11 +2315,24 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
          |USING testcat.tab2
          |ON 1 = 1
          |WHEN MATCHED THEN UPDATE SET *""".stripMargin
-    checkError(
-      exception = intercept[AnalysisException](parseAndResolve(sql2)),
-      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      parameters = Map("objectName" -> "`s`", "proposal" -> "`i`, `x`"),
-      context = ExpectedContext(fragment = sql2, start = 0, stop = 80))
+    val parsed2 = parseAndResolve(sql2)
+    parsed2 match {
+      case MergeIntoTable(
+          AsDataSourceV2Relation(target),
+          AsDataSourceV2Relation(source),
+          EqualTo(IntegerLiteral(1), IntegerLiteral(1)),
+          Seq(UpdateAction(None, updateAssigns)), // Matched actions
+          Seq(), // Not matched actions
+          Seq(), // Not matched by source actions
+          withSchemaEvolution) =>
+        val ti = target.output.find(_.name == "i").get
+        val si = source.output.find(_.name == "i").get
+        assert(updateAssigns.size == 1)
+        assert(updateAssigns.head.key.asInstanceOf[AttributeReference].sameRef(ti))
+        assert(updateAssigns.head.value.asInstanceOf[AttributeReference].sameRef(si))
+        assert(withSchemaEvolution === false)
+      case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
+    }
 
     // INSERT * with incompatible schema between source and target tables.
     val sql3 =
@@ -2321,11 +2340,24 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         |USING testcat.tab2
         |ON 1 = 1
         |WHEN NOT MATCHED THEN INSERT *""".stripMargin
-    checkError(
-      exception = intercept[AnalysisException](parseAndResolve(sql3)),
-      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      parameters = Map("objectName" -> "`s`", "proposal" -> "`i`, `x`"),
-      context = ExpectedContext(fragment = sql3, start = 0, stop = 80))
+    val parsed3 = parseAndResolve(sql3)
+    parsed3 match {
+      case MergeIntoTable(
+          AsDataSourceV2Relation(target),
+          AsDataSourceV2Relation(source),
+          EqualTo(IntegerLiteral(1), IntegerLiteral(1)),
+          Seq(), // Matched action
+          Seq(InsertAction(None, insertAssigns)), // Not matched actions
+          Seq(), // Not matched by source actions
+          withSchemaEvolution) =>
+        val ti = target.output.find(_.name == "i").get
+        val si = source.output.find(_.name == "i").get
+        assert(insertAssigns.size == 1)
+        assert(insertAssigns.head.key.asInstanceOf[AttributeReference].sameRef(ti))
+        assert(insertAssigns.head.value.asInstanceOf[AttributeReference].sameRef(si))
+        assert(withSchemaEvolution === false)
+      case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
+    }
 
     val sql4 =
       """

@@ -18,9 +18,10 @@ import unittest
 
 from pyspark.pandas.tests.test_typedef import TypeHintTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class TypeHintParityTests(TypeHintTestsMixin, ReusedConnectTestCase):
+class TypeHintParityTests(TypeHintTestsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
     pass
 
 

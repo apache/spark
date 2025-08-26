@@ -39,7 +39,7 @@ import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
@@ -104,8 +104,7 @@ class NewHadoopRDD[K, V](
 
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
-  private val confBroadcast = sc.broadcast(new SerializableConfiguration(_conf))
-  // private val serializableConf = new SerializableWritable(_conf)
+  private val confBroadcast = SerializableConfiguration.broadcast(sc, _conf)
 
   private val jobTrackerId: String = {
     val dateTimeFormatter =

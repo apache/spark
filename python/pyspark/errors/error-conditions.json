@@ -14,6 +14,11 @@
       "Arrow legacy IPC format is not supported in PySpark, please unset ARROW_PRE_0_15_IPC_FORMAT."
     ]
   },
+  "ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION": {
+    "message": [
+      "Operations that trigger DataFrame analysis or execution are not allowed in pipeline query functions. Move code outside of the pipeline query function."
+    ]
+  },
   "ATTRIBUTE_NOT_CALLABLE": {
     "message": [
       "Attribute `<attr_name>` in provided object `<obj_name>` is not callable."
@@ -169,6 +174,13 @@
       "`<func_name>` does not allow a Column in a list."
     ]
   },
+  "CONFLICTING_PIPELINE_REFRESH_OPTIONS" : {
+    "message" : [
+      "--full-refresh-all option conflicts with <conflicting_option>",
+      "The --full-refresh-all option performs a full refresh of all datasets, ",
+      "so specifying individual datasets with <conflicting_option> is not allowed."
+    ]
+  },
   "CONNECT_URL_ALREADY_DEFINED": {
     "message": [
       "Only one Spark Connect client URL can be set; however, got a different URL [<new_url>] from the existing [<existing_url>]."
@@ -217,6 +229,11 @@
   "DATA_SOURCE_UNSUPPORTED_FILTER": {
     "message": [
       "Unexpected filter <name>."
+    ]
+  },
+  "DECORATOR_ARGUMENT_NOT_CALLABLE": {
+    "message": [
+      "The first positional argument passed to @<decorator_name> must be callable. Either add @<decorator_name> with no parameters to your function, or pass options to @<decorator_name> using keyword arguments (e.g. <example_usage>)."
     ]
   },
   "DIFFERENT_PANDAS_DATAFRAME": {
@@ -336,6 +353,11 @@
       "<field_name>: <obj> is not an instance of type <data_type>."
     ]
   },
+  "GRAPH_ELEMENT_DEFINED_OUTSIDE_OF_DECLARATIVE_PIPELINE": {
+    "message": [
+      "APIs that define elements of a declarative pipeline can only be invoked within the context of defining a pipeline."
+    ]
+  },
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN": {
     "message": [
       "Function `<func_name>` should return Column, got <return_type>."
@@ -360,6 +382,11 @@
   "INVALID_ARROW_UDTF_RETURN_TYPE": {
     "message": [
       "The return type of the arrow-optimized Python UDTF should be of type 'pandas.DataFrame', but the '<func>' method returned a value of type <return_type> with value: <value>."
+    ]
+  },
+  "INVALID_ARROW_UDTF_WITH_ANALYZE": {
+    "message": [
+      "The arrow UDTF '<name>' is invalid. Arrow UDTFs do not support the 'analyze' method. Please remove the 'analyze' method from '<name>' and specify a returnType instead."
     ]
   },
   "INVALID_BROADCAST_OPERATION": {
@@ -550,6 +577,11 @@
   "MIXED_TYPE_REPLACEMENT": {
     "message": [
       "Mixed type replacements are not supported."
+    ]
+  },
+  "MULTIPLE_PIPELINE_SPEC_FILES_FOUND": {
+    "message": [
+      "Multiple pipeline spec files found in the directory `<dir_path>`. Please remove one or choose a particular one with the --spec argument."
     ]
   },
   "NEGATIVE_VALUE": {
@@ -827,9 +859,56 @@
       "<package_name> >= <minimum_version> must be installed; however, it was not found."
     ]
   },
+  "PANDAS_API_ON_SPARK_FAIL_ON_ANSI_MODE": {
+    "message": [
+      "Pandas API on Spark does not properly work on ANSI mode.",
+      "Please set a Spark config 'spark.sql.ansi.enabled' to `false`.",
+      "Alternatively set a pandas-on-spark option 'compute.fail_on_ansi_mode' to `False` to force it to work, although it can cause unexpected behavior."
+    ]
+  },
   "PANDAS_UDF_OUTPUT_EXCEEDS_INPUT_ROWS": {
     "message": [
       "The Pandas SCALAR_ITER UDF outputs more rows than input rows."
+    ]
+  },
+  "PIPELINE_SPEC_DICT_KEY_NOT_STRING": {
+    "message": [
+      "For pipeline spec field `<field_name>`, key should be a string, got <key_type>."
+    ]
+  },
+  "PIPELINE_SPEC_DICT_VALUE_NOT_STRING": {
+    "message": [
+      "For pipeline spec field `<field_name>`, value for key `<key_name>` should be a string, got <value_type>."
+    ]
+  },
+  "PIPELINE_SPEC_FIELD_NOT_DICT": {
+    "message": [
+      "Pipeline spec field `<field_name>` should be a dict, got <field_type>."
+    ]
+  },
+  "PIPELINE_SPEC_FILE_DOES_NOT_EXIST": {
+    "message": [
+      "The pipeline spec file `<spec_path>` does not exist."
+    ]
+  },
+  "PIPELINE_SPEC_FILE_NOT_FOUND": {
+    "message": [
+      "No pipeline.yaml or pipeline.yml file provided in arguments or found in directory `<dir_path>` or readable ancestor directories."
+    ]
+  },
+  "PIPELINE_SPEC_MISSING_REQUIRED_FIELD": {
+    "message": [
+      "Pipeline spec missing required field `<field_name>`."
+    ]
+  },
+  "PIPELINE_SPEC_UNEXPECTED_FIELD": {
+    "message": [
+      "Pipeline spec field `<field_name>` is unexpected."
+    ]
+  },
+  "PIPELINE_UNSUPPORTED_DEFINITIONS_FILE_EXTENSION": {
+    "message": [
+      "Pipeline definitions file `<file_path>` has an unsupported extension. Supported extensions are `.py` and `.sql`."
     ]
   },
   "PIPE_FUNCTION_EXITED": {
@@ -908,14 +987,14 @@
       "Columns do not match in their data type: <mismatch>."
     ]
   },
-  "RETRIES_EXCEEDED": {
-    "message": [
-      "The maximum number of retries has been exceeded."
-    ]
-  },
   "REUSE_OBSERVATION": {
     "message": [
       "An Observation can be used with a DataFrame only once."
+    ]
+  },
+  "SCHEMA_MISMATCH_FOR_ARROW_PYTHON_UDF": {
+    "message": [
+      "Result vector from <udf_type> was not the required length: expected <expected>, got <actual>."
     ]
   },
   "SCHEMA_MISMATCH_FOR_PANDAS_UDF": {
@@ -927,6 +1006,73 @@
     "message": [
       "Cannot start a remote Spark session because there is a regular Spark session already running."
     ]
+  },
+  "SESSION_MUTATION_IN_DECLARATIVE_PIPELINE": {
+    "message": [
+      "Session mutation <method> is not allowed in declarative pipelines."
+    ],
+    "sub_class": {
+      "SET_RUNTIME_CONF": {
+        "message": [
+          "Instead set configuration via the pipeline spec or use the 'spark_conf' argument in various decorators."
+        ]
+      },
+      "SET_CURRENT_CATALOG": {
+        "message": [
+          "Instead set catalog via the pipeline spec or the 'name' argument on the dataset decorators."
+        ]
+      },
+      "SET_CURRENT_DATABASE": {
+        "message": [
+          "Instead set database via the pipeline spec or the 'name' argument on the dataset decorators."
+        ]
+      },
+      "DROP_TEMP_VIEW": {
+        "message": [
+          "Instead remove the temporary view definition directly."
+        ]
+      },
+      "DROP_GLOBAL_TEMP_VIEW": {
+        "message": [
+          "Instead remove the temporary view definition directly."
+        ]
+      },
+      "CREATE_TEMP_VIEW": {
+        "message": [
+          "Instead use the @temporary_view decorator to define temporary views."
+        ]
+      },
+      "CREATE_OR_REPLACE_TEMP_VIEW": {
+        "message": [
+          "Instead use the @temporary_view decorator to define temporary views."
+        ]
+      },
+      "CREATE_GLOBAL_TEMP_VIEW": {
+        "message": [
+          "Instead use the @temporary_view decorator to define temporary views."
+        ]
+      },
+      "CREATE_OR_REPLACE_GLOBAL_TEMP_VIEW": {
+        "message": [
+          "Instead use the @temporary_view decorator to define temporary views."
+        ]
+      },
+      "REGISTER_UDF": {
+        "message": [
+          ""
+        ]
+      },
+      "REGISTER_JAVA_UDF": {
+        "message": [
+          ""
+        ]
+      },
+      "REGISTER_JAVA_UDAF": {
+        "message": [
+          ""
+        ]
+      }
+    }
   },
   "SESSION_NEED_CONN_STR_OR_BUILDER": {
     "message": [
@@ -996,6 +1142,11 @@
   "UDTF_ARROW_TYPE_CAST_ERROR": {
     "message": [
       "Cannot convert the output value of the column '<col_name>' with type '<col_type>' to the specified return type of the column: '<arrow_type>'. Please check if the data types match and try again."
+    ]
+  },
+  "UDTF_ARROW_TYPE_CONVERSION_ERROR": {
+    "message": [
+      "PyArrow UDTF must return an iterator of pyarrow.Table or pyarrow.RecordBatch objects."
     ]
   },
   "UDTF_CONSTRUCTOR_INVALID_IMPLEMENTS_ANALYZE_METHOD": {
@@ -1133,6 +1284,11 @@
       "Pie plot requires either a `y` column or `subplots=True`."
     ]
   },
+  "UNSUPPORTED_PIPELINES_DATASET_TYPE": {
+    "message": [
+      "Unsupported pipelines dataset type: <dataset_type>."
+    ]
+  },
   "UNSUPPORTED_PLOT_BACKEND": {
     "message": [
       "`<backend>` is not supported, it should be one of the values from <supported_backends>"
@@ -1141,6 +1297,11 @@
   "UNSUPPORTED_PLOT_BACKEND_PARAM": {
     "message": [
       "`<backend>` does not support `<param>` set to <value>, it should be one of the values from <supported_values>"
+    ]
+  },
+  "UNSUPPORTED_PLOT_KIND": {
+    "message": [
+      "`<plot_type>` is not supported, it should be one of the values from <supported_plot_types>"
     ]
   },
   "UNSUPPORTED_SIGNATURE": {

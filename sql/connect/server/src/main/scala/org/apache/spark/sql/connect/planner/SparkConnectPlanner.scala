@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.connect.planner
 
-import java.util.Properties
-import java.util.UUID
+import java.util.{HashMap, Properties, UUID}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -26,13 +25,12 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.google.common.base.Throwables
-import com.google.common.collect.{Lists, Maps}
+import com.google.common.collect.Lists
 import com.google.protobuf.{Any => ProtoAny, ByteString}
 import io.grpc.{Context, Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
-import org.apache.commons.lang3.exception.ExceptionUtils
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{SparkClassNotFoundException, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
@@ -41,12 +39,12 @@ import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Column, Encoders, ForeachWriter, Observation, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
@@ -54,17 +52,18 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, CompoundBody, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
-import org.apache.spark.sql.classic.{Catalog, Dataset, MergeIntoWriter, RelationalGroupedDataset, SparkSession, TypedAggUtils, UserDefinedFunctionUtils}
+import org.apache.spark.sql.classic.{Catalog, DataFrameWriter, Dataset, MergeIntoWriter, RelationalGroupedDataset, SparkSession, TypedAggUtils, UserDefinedFunctionUtils}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidCommandInput, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.ml.MLHandler
+import org.apache.spark.sql.connect.pipelines.PipelinesHandler
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectService}
 import org.apache.spark.sql.connect.utils.MetricGenerator
@@ -78,8 +77,8 @@ import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDat
 import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.execution.python.streaming.PythonForeachWriter
 import org.apache.spark.sql.execution.stat.StatFunctions
-import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
-import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
+import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl.groupStateTimeoutFromString
+import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
@@ -98,7 +97,7 @@ class SparkConnectPlanner(
   }
 
   if (!executeHolderOpt.forall { e => e.sessionHolder == sessionHolder }) {
-    throw new IllegalArgumentException("executeHolder does not belong to sessionHolder")
+    throw SparkException.internalError("executeHolder does not belong to sessionHolder")
   }
 
   @Since("4.0.0")
@@ -113,7 +112,7 @@ class SparkConnectPlanner(
   private[connect] def sessionId: String = sessionHolder.sessionId
 
   private lazy val executeHolder = executeHolderOpt.getOrElse {
-    throw new IllegalArgumentException("executeHolder is not set")
+    throw SparkException.internalError("executeHolder is not set")
   }
 
   private lazy val pythonExec =
@@ -220,8 +219,6 @@ class SparkConnectPlanner(
         case proto.Relation.RelTypeCase.COLLECT_METRICS =>
           transformCollectMetrics(rel.getCollectMetrics, rel.getCommon.getPlanId)
         case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
-        case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
-          throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
 
         // Catalog API (internal-only)
         case proto.Relation.RelTypeCase.CATALOG => transformCatalog(rel.getCatalog)
@@ -233,7 +230,9 @@ class SparkConnectPlanner(
         // Handle plugins for Spark Connect Relation types.
         case proto.Relation.RelTypeCase.EXTENSION =>
           transformRelationPlugin(rel.getExtension)
-        case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
+
+        case other =>
+          throw InvalidInputErrors.invalidOneOfField(other, rel.getDescriptorForType)
       }
       if (rel.hasCommon && rel.getCommon.hasPlanId) {
         plan.setTagValue(LogicalPlan.PLAN_ID_TAG, rel.getCommon.getPlanId)
@@ -250,7 +249,7 @@ class SparkConnectPlanner(
       .map(p => p.transform(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
       .find(_.isPresent)
-      .getOrElse(throw InvalidPlanInput("No handler found for extension"))
+      .getOrElse(throw InvalidInputErrors.noHandlerFoundForExtension())
       .get()
   }
 
@@ -297,7 +296,8 @@ class SparkConnectPlanner(
         transformSetCurrentCatalog(catalog.getSetCurrentCatalog)
       case proto.Catalog.CatTypeCase.LIST_CATALOGS =>
         transformListCatalogs(catalog.getListCatalogs)
-      case other => throw InvalidPlanInput(s"$other not supported.")
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, catalog.getDescriptorForType)
     }
   }
 
@@ -344,7 +344,7 @@ class SparkConnectPlanner(
 
   private def transformSqlWithRefs(query: proto.WithRelations): LogicalPlan = {
     if (!isValidSQLWithRefs(query)) {
-      throw InvalidPlanInput(s"$query is not a valid relation for SQL with references")
+      throw InvalidInputErrors.invalidSQLWithReferences(query)
     }
     executeSQLWithRefs(query).logicalPlan
   }
@@ -413,12 +413,10 @@ class SparkConnectPlanner(
 
   private def transformNAFill(rel: proto.NAFill): LogicalPlan = {
     if (rel.getValuesCount == 0) {
-      throw InvalidPlanInput(s"values must contains at least 1 item!")
+      throw InvalidInputErrors.naFillValuesEmpty()
     }
     if (rel.getValuesCount > 1 && rel.getValuesCount != rel.getColsCount) {
-      throw InvalidPlanInput(
-        s"When values contains more than 1 items, " +
-          s"values and cols should have the same length!")
+      throw InvalidInputErrors.naFillValuesLengthMismatch()
     }
 
     val dataset = Dataset.ofRows(session, transformRelation(rel.getInput))
@@ -610,12 +608,10 @@ class SparkConnectPlanner(
               isBarrier,
               profile)
           case _ =>
-            throw InvalidPlanInput(
-              s"Function with EvalType: ${pythonUdf.evalType} is not supported")
+            throw InvalidInputErrors.functionEvalTypeNotSupported(pythonUdf.evalType)
         }
-      case _ =>
-        throw InvalidPlanInput(
-          s"Function with ID: ${commonUdf.getFunctionCase.getNumber} is not supported")
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, commonUdf.getDescriptorForType)
     }
   }
 
@@ -661,16 +657,18 @@ class SparkConnectPlanner(
 
           case PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF |
               PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF =>
-            transformTransformWithStateInPandas(pythonUdf, group, rel)
+            transformTransformWithStateInPySpark(pythonUdf, group, rel, usePandas = true)
+
+          case PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF |
+              PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF =>
+            transformTransformWithStateInPySpark(pythonUdf, group, rel, usePandas = false)
 
           case _ =>
-            throw InvalidPlanInput(
-              s"Function with EvalType: ${pythonUdf.evalType} is not supported")
+            throw InvalidInputErrors.functionEvalTypeNotSupported(pythonUdf.evalType)
         }
 
-      case _ =>
-        throw InvalidPlanInput(
-          s"Function with ID: ${commonUdf.getFunctionCase.getNumber} is not supported")
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, commonUdf.getDescriptorForType)
     }
   }
 
@@ -775,8 +773,7 @@ class SparkConnectPlanner(
       val stateSchema = DataTypeProtoConverter.toCatalystType(rel.getStateSchema) match {
         case s: StructType => s
         case other =>
-          throw InvalidPlanInput(
-            s"Invalid state schema dataType $other for flatMapGroupsWithState")
+          throw InvalidInputErrors.invalidSchemaTypeNonStruct(other)
       }
       val stateEncoder = TypedScalaUdf.encoderFor(
         // the state agnostic encoder is the second element in the input encoders.
@@ -871,13 +868,11 @@ class SparkConnectPlanner(
             input.flatMapCoGroupsInArrow(other, Column(pythonUdf)).logicalPlan
 
           case _ =>
-            throw InvalidPlanInput(
-              s"Function with EvalType: ${pythonUdf.evalType} is not supported")
+            throw InvalidInputErrors.functionEvalTypeNotSupported(pythonUdf.evalType)
         }
 
-      case _ =>
-        throw InvalidPlanInput(
-          s"Function with ID: ${commonUdf.getFunctionCase.getNumber} is not supported")
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, commonUdf.getDescriptorForType)
     }
   }
 
@@ -954,8 +949,7 @@ class SparkConnectPlanner(
       } else if (groupingExprs.size() > 1) {
         createFromRelationalDataset(logicalPlan, groupingExprs, sortOrder)
       } else {
-        throw InvalidPlanInput(
-          "The grouping expression cannot be absent for KeyValueGroupedDataset")
+        throw InvalidInputErrors.groupingExpressionAbsentForKeyValueGroupedDataset()
       }
     }
 
@@ -1031,7 +1025,7 @@ class SparkConnectPlanner(
         && expr.getCommonInlineUserDefinedFunction.hasScalarScalaUdf) {
         apply(expr.getCommonInlineUserDefinedFunction, inputAttrs)
       } else {
-        throw InvalidPlanInput(s"Expecting a Scala UDF, but get ${expr.getExprTypeCase}")
+        throw InvalidInputErrors.expectingScalaUdfButGot(expr.getExprTypeCase)
       }
     }
 
@@ -1061,8 +1055,7 @@ class SparkConnectPlanner(
           .map(attrs =>
             ExpressionEncoder(RowEncoder.encoderFor(StructType(attrs.map(a =>
               StructField(a.name, a.dataType, a.nullable))))))
-          .getOrElse(
-            throw InvalidPlanInput(s"Row is not a supported $errorType type for this UDF."))
+          .getOrElse(throw InvalidInputErrors.rowNotSupportedForUdf(errorType))
       } else {
         // Nested unbound row encoders
         val unboundTransformed = encoder match {
@@ -1102,18 +1095,17 @@ class SparkConnectPlanner(
       .logicalPlan
   }
 
-  private def transformTransformWithStateInPandas(
+  private def transformTransformWithStateInPySpark(
       pythonUdf: PythonUDF,
       groupedDs: RelationalGroupedDataset,
-      rel: proto.GroupMap): LogicalPlan = {
+      rel: proto.GroupMap,
+      usePandas: Boolean): LogicalPlan = {
     val twsInfo = rel.getTransformWithStateInfo
     val outputSchema: StructType = {
       transformDataType(twsInfo.getOutputSchema) match {
         case s: StructType => s
         case dt =>
-          throw InvalidPlanInput(
-            "Invalid user-defined output schema type for TransformWithStateInPandas. " +
-              s"Expect a struct type, but got ${dt.typeName}.")
+          throw InvalidInputErrors.invalidSchemaTypeNonStruct(dt)
       }
     }
 
@@ -1131,25 +1123,52 @@ class SparkConnectPlanner(
         .builder(groupedDs.df.logicalPlan.output)
         .asInstanceOf[PythonUDF]
 
-      groupedDs
-        .transformWithStateInPandas(
-          Column(resolvedPythonUDF),
-          outputSchema,
-          rel.getOutputMode,
-          twsInfo.getTimeMode,
-          initialStateDs,
-          twsInfo.getEventTimeColumnName)
-        .logicalPlan
+      if (usePandas) {
+        groupedDs
+          .transformWithStateInPandas(
+            Column(resolvedPythonUDF),
+            outputSchema,
+            rel.getOutputMode,
+            twsInfo.getTimeMode,
+            initialStateDs,
+            twsInfo.getEventTimeColumnName)
+          .logicalPlan
+      } else {
+        // use Row
+        groupedDs
+          .transformWithStateInPySpark(
+            Column(resolvedPythonUDF),
+            outputSchema,
+            rel.getOutputMode,
+            twsInfo.getTimeMode,
+            initialStateDs,
+            twsInfo.getEventTimeColumnName)
+          .logicalPlan
+      }
+
     } else {
-      groupedDs
-        .transformWithStateInPandas(
-          Column(pythonUdf),
-          outputSchema,
-          rel.getOutputMode,
-          twsInfo.getTimeMode,
-          null,
-          twsInfo.getEventTimeColumnName)
-        .logicalPlan
+      if (usePandas) {
+        groupedDs
+          .transformWithStateInPandas(
+            Column(pythonUdf),
+            outputSchema,
+            rel.getOutputMode,
+            twsInfo.getTimeMode,
+            null,
+            twsInfo.getEventTimeColumnName)
+          .logicalPlan
+      } else {
+        // use Row
+        groupedDs
+          .transformWithStateInPySpark(
+            Column(pythonUdf),
+            outputSchema,
+            rel.getOutputMode,
+            twsInfo.getTimeMode,
+            null,
+            twsInfo.getEventTimeColumnName)
+          .logicalPlan
+      }
     }
   }
 
@@ -1161,9 +1180,8 @@ class SparkConnectPlanner(
         function.builder(
           fun.getArgumentsList.asScala.map(transformExpression).toSeq,
           session.sessionState.sqlParser)
-      case _ =>
-        throw InvalidPlanInput(
-          s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, fun.getDescriptorForType)
     }
   }
 
@@ -1171,7 +1189,7 @@ class SparkConnectPlanner(
     SimplePythonFunction(
       command = fun.getCommand.toByteArray.toImmutableArraySeq,
       // Empty environment variables
-      envVars = Maps.newHashMap(),
+      envVars = new HashMap[String, String](),
       pythonIncludes = sessionHolder.artifactManager.getPythonIncludes.asJava,
       pythonExec = pythonExec,
       pythonVer = fun.getPythonVer,
@@ -1185,7 +1203,7 @@ class SparkConnectPlanner(
     SimplePythonFunction(
       command = ds.getCommand.toByteArray.toImmutableArraySeq,
       // Empty environment variables
-      envVars = Maps.newHashMap(),
+      envVars = new HashMap[String, String](),
       pythonIncludes = sessionHolder.artifactManager.getPythonIncludes.asJava,
       pythonExec = pythonExec,
       pythonVer = ds.getPythonVer,
@@ -1219,8 +1237,7 @@ class SparkConnectPlanner(
     val (colNames, exprs, metadata) =
       rel.getAliasesList.asScala.toSeq.map { alias =>
         if (alias.getNameCount != 1) {
-          throw InvalidPlanInput(s"""WithColumns require column name only contains one name part,
-             |but got ${alias.getNameList.toString}""".stripMargin)
+          throw InvalidInputErrors.withColumnsRequireSingleNamePart(alias.getNameList.toString)
         }
 
         val metadata = if (alias.hasMetadata && alias.getMetadata.nonEmpty) {
@@ -1266,9 +1283,7 @@ class SparkConnectPlanner(
         }
       }
       .getOrElse {
-        throw InvalidPlanInput(
-          s"Not found any cached local relation with the hash: ${blockId.hash} in " +
-            s"the session with sessionUUID ${blockId.sessionUUID}.")
+        throw InvalidInputErrors.notFoundCachedLocalRelation(blockId.hash, blockId.sessionUUID)
       }
   }
 
@@ -1355,14 +1370,13 @@ class SparkConnectPlanner(
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
     if (!rel.hasInput) {
-      throw InvalidPlanInput("Deduplicate needs a plan input")
+      throw InvalidInputErrors.deduplicateNeedsInput()
     }
     if (rel.getAllColumnsAsKeys && rel.getColumnNamesCount > 0) {
-      throw InvalidPlanInput("Cannot deduplicate on both all columns and a subset of columns")
+      throw InvalidInputErrors.deduplicateAllColumnsAndSubset()
     }
     if (!rel.getAllColumnsAsKeys && rel.getColumnNamesCount == 0) {
-      throw InvalidPlanInput(
-        "Deduplicate requires to either deduplicate on all columns or a subset of columns")
+      throw InvalidInputErrors.deduplicateRequiresColumnsOrAll()
     }
     val queryExecution = new QueryExecution(session, transformRelation(rel.getInput))
     val resolver = session.sessionState.analyzer.resolver
@@ -1377,7 +1391,7 @@ class SparkConnectPlanner(
         // so we call filter instead of find.
         val cols = allColumns.filter(col => resolver(col.name, colName))
         if (cols.isEmpty) {
-          throw InvalidPlanInput(s"Invalid deduplicate column ${colName}")
+          throw InvalidInputErrors.invalidDeduplicateColumn(colName)
         }
         cols
       }
@@ -1431,7 +1445,7 @@ class SparkConnectPlanner(
         Iterator(rel.getData.toByteArray),
         TaskContext.get())
       if (structType == null) {
-        throw InvalidPlanInput(s"Input data for LocalRelation does not produce a schema.")
+        throw InvalidInputErrors.inputDataForLocalRelationNoSchema()
       }
       val attributes = DataTypeUtils.toAttributes(structType)
       val proj = UnsafeProjection.create(attributes, attributes)
@@ -1474,8 +1488,7 @@ class SparkConnectPlanner(
       }
     } else {
       if (schema == null) {
-        throw InvalidPlanInput(
-          s"Schema for LocalRelation is required when the input data is not provided.")
+        throw InvalidInputErrors.schemaRequiredForLocalRelation()
       }
       LocalRelation(schema)
     }
@@ -1488,7 +1501,7 @@ class SparkConnectPlanner(
       StructType.fromDDL,
       fallbackParser = DataType.fromJson) match {
       case s: StructType => s
-      case other => throw InvalidPlanInput(s"Invalid schema $other")
+      case other => throw InvalidInputErrors.invalidSchemaStringNonStructType(schema, other)
     }
   }
 
@@ -1503,20 +1516,20 @@ class SparkConnectPlanner(
 
       case proto.Read.ReadTypeCase.DATA_SOURCE if !rel.getIsStreaming =>
         val reader = session.read
+        val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
         if (rel.getDataSource.getFormat == "jdbc" && rel.getDataSource.getPredicatesCount > 0) {
-          if (!rel.getDataSource.getOptionsMap.containsKey(JDBCOptions.JDBC_URL) ||
-            !rel.getDataSource.getOptionsMap.containsKey(JDBCOptions.JDBC_TABLE_NAME)) {
-            throw InvalidPlanInput(s"Invalid jdbc params, please specify jdbc url and table.")
+          if (!localMap.contains(JDBCOptions.JDBC_URL) ||
+            !localMap.contains(JDBCOptions.JDBC_TABLE_NAME)) {
+            throw InvalidInputErrors.invalidJdbcParams()
           }
 
-          val url = rel.getDataSource.getOptionsMap.get(JDBCOptions.JDBC_URL)
-          val table = rel.getDataSource.getOptionsMap.get(JDBCOptions.JDBC_TABLE_NAME)
+          val url = localMap.get(JDBCOptions.JDBC_URL).get
+          val table = localMap.get(JDBCOptions.JDBC_TABLE_NAME).get
           val predicates = rel.getDataSource.getPredicatesList.asScala.toArray
           val properties = new Properties()
           properties.putAll(rel.getDataSource.getOptionsMap)
           reader.jdbc(url, table, predicates, properties).queryExecution.analyzed
         } else if (rel.getDataSource.getPredicatesCount == 0) {
-          val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
           if (rel.getDataSource.hasFormat) {
             reader.format(rel.getDataSource.getFormat)
           }
@@ -1532,8 +1545,8 @@ class SparkConnectPlanner(
             reader.load(rel.getDataSource.getPathsList.asScala.toSeq: _*).queryExecution.analyzed
           }
         } else {
-          throw InvalidPlanInput(
-            s"Predicates are not supported for ${rel.getDataSource.getFormat} data sources.")
+          throw InvalidInputErrors.predicatesNotSupportedForDataSource(
+            rel.getDataSource.getFormat)
         }
 
       case proto.Read.ReadTypeCase.DATA_SOURCE if rel.getIsStreaming =>
@@ -1550,12 +1563,13 @@ class SparkConnectPlanner(
           case 0 => reader.load()
           case 1 => reader.load(streamSource.getPaths(0))
           case _ =>
-            throw InvalidPlanInput(s"Multiple paths are not supported for streaming source")
+            throw InvalidInputErrors.multiplePathsNotSupportedForStreamingSource()
         }
 
         streamDF.queryExecution.analyzed
 
-      case _ => throw InvalidPlanInput(s"Does not support ${rel.getReadTypeCase.name()}")
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, rel.getDescriptorForType)
     }
   }
 
@@ -1566,7 +1580,7 @@ class SparkConnectPlanner(
       if (rel.hasSchema) {
         DataTypeProtoConverter.toCatalystType(rel.getSchema) match {
           case s: StructType => reader.schema(s)
-          case other => throw InvalidPlanInput(s"Invalid schema dataType $other")
+          case other => throw InvalidInputErrors.invalidSchemaTypeNonStruct(other)
         }
       }
       localMap.foreach { case (key, value) => reader.option(key, value) }
@@ -1579,7 +1593,7 @@ class SparkConnectPlanner(
         dataFrameReader.csv(ds).queryExecution.analyzed
       case ParseFormat.PARSE_FORMAT_JSON =>
         dataFrameReader.json(ds).queryExecution.analyzed
-      case _ => throw InvalidPlanInput("Does not support " + rel.getFormat.name())
+      case other => throw InvalidInputErrors.invalidEnum(other)
     }
   }
 
@@ -1760,9 +1774,8 @@ class SparkConnectPlanner(
         transformTypedAggregateExpression(exp.getTypedAggregateExpression, baseRelationOpt)
       case proto.Expression.ExprTypeCase.SUBQUERY_EXPRESSION =>
         transformSubqueryExpression(exp.getSubqueryExpression)
-      case _ =>
-        throw InvalidPlanInput(
-          s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, exp.getDescriptorForType)
     }
   }
 
@@ -1791,7 +1804,7 @@ class SparkConnectPlanner(
       .map(p => p.transform(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
       .find(_.isPresent)
-      .getOrElse(throw InvalidPlanInput("No handler found for extension"))
+      .getOrElse(throw InvalidInputErrors.noHandlerFoundForExtension())
       .get
   }
 
@@ -1868,9 +1881,8 @@ class SparkConnectPlanner(
         transformPythonFuncExpression(fun)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
         transformScalaUDF(fun)
-      case _ =>
-        throw InvalidPlanInput(
-          s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, fun.getDescriptorForType)
     }
   }
 
@@ -1911,16 +1923,20 @@ class SparkConnectPlanner(
       case t: Throwable =>
         Throwables.getRootCause(t) match {
           case nsm: NoSuchMethodException =>
-            throw new ClassNotFoundException(
-              s"Failed to load class correctly due to $nsm. " +
-                "Make sure the artifact where the class is defined is installed by calling" +
-                " session.addArtifact.")
+            throw new SparkClassNotFoundException(
+              "INTERNAL_ERROR",
+              Map[String, String](
+                "message" -> (s"Failed to load class correctly due to $nsm. " +
+                  "Make sure the artifact where the class is defined is installed by calling" +
+                  " session.addArtifact.")))
           case cnf: ClassNotFoundException =>
-            throw new ClassNotFoundException(
-              s"Failed to load class: ${cnf.getMessage}. " +
-                "Make sure the artifact where the class is defined is installed by calling" +
-                " session.addArtifact.")
-          case _ => throw t
+            throw new SparkClassNotFoundException(
+              "INTERNAL_ERROR",
+              Map[String, String](
+                "message" -> (s"Failed to load class: ${cnf.getMessage}. " +
+                  "Make sure the artifact where the class is defined is installed by calling" +
+                  " session.addArtifact.")))
+          case _ => throw SparkException.internalError("Failed to unpack scala udf.", t)
         }
     }
   }
@@ -1942,8 +1958,7 @@ class SparkConnectPlanner(
       case uda: UserDefinedAggregator[_, _, _] =>
         ScalaAggregator(uda, children).toAggregateExpression(fun.getIsDistinct)
       case other =>
-        throw InvalidPlanInput(
-          s"Unsupported UserDefinedFunction implementation: ${other.getClass}")
+        throw InvalidInputErrors.unsupportedUserDefinedFunctionImplementation(other.getClass)
     }
   }
 
@@ -2017,7 +2032,7 @@ class SparkConnectPlanner(
     SimplePythonFunction(
       command = fun.getCommand.toByteArray.toImmutableArraySeq,
       // Empty environment variables
-      envVars = Maps.newHashMap(),
+      envVars = new HashMap[String, String](),
       pythonExec = pythonExec,
       // Merge the user specified includes with the includes managed by the artifact manager.
       pythonIncludes = (fun.getAdditionalIncludesList.asScala.toSeq ++
@@ -2034,9 +2049,7 @@ class SparkConnectPlanner(
    */
   private def transformLambdaFunction(lambda: proto.Expression.LambdaFunction): LambdaFunction = {
     if (lambda.getArgumentsCount == 0 || lambda.getArgumentsCount > 3) {
-      throw InvalidPlanInput(
-        "LambdaFunction requires 1 ~ 3 arguments, " +
-          s"but got ${lambda.getArgumentsCount} ones!")
+      throw InvalidInputErrors.lambdaFunctionArgumentCountInvalid(lambda.getArgumentsCount)
     }
 
     LambdaFunction(
@@ -2048,7 +2061,7 @@ class SparkConnectPlanner(
   private def transformUnresolvedNamedLambdaVariable(
       variable: proto.Expression.UnresolvedNamedLambdaVariable): UnresolvedNamedLambdaVariable = {
     if (variable.getNamePartsCount == 0) {
-      throw InvalidPlanInput("UnresolvedNamedLambdaVariable requires at least one name part!")
+      throw InvalidInputErrors.unresolvedNamedLambdaVariableRequiresNamePart()
     }
 
     UnresolvedNamedLambdaVariable(variable.getNamePartsList.asScala.toSeq)
@@ -2064,8 +2077,7 @@ class SparkConnectPlanner(
       Alias(transformExpression(alias.getExpr), alias.getName(0))(explicitMetadata = metadata)
     } else {
       if (alias.hasMetadata) {
-        throw InvalidPlanInput(
-          "Alias expressions with more than 1 identifier must not use optional metadata.")
+        throw InvalidInputErrors.aliasWithMultipleIdentifiersAndMetadata()
       }
       MultiAlias(transformExpression(alias.getExpr), alias.getNameList.asScala.toSeq)
     }
@@ -2085,8 +2097,7 @@ class SparkConnectPlanner(
         // functions.col("s.*")
         val target = star.getUnparsedTarget
         if (!target.endsWith(".*")) {
-          throw InvalidPlanInput(
-            s"UnresolvedStar requires a unparsed target ending with '.*', but got $target.")
+          throw InvalidInputErrors.unresolvedStarTargetInvalid(target)
         }
         val parts = UnresolvedAttribute.parseAttributeName(target.dropRight(2))
         UnresolvedStar(Some(parts))
@@ -2096,7 +2107,7 @@ class SparkConnectPlanner(
         UnresolvedDataFrameStar(star.getPlanId)
 
       case _ =>
-        throw InvalidPlanInput("UnresolvedStar with both target and plan id is not supported.")
+        throw InvalidInputErrors.unresolvedStarWithBothTargetAndPlanId()
     }
   }
 
@@ -2160,7 +2171,7 @@ class SparkConnectPlanner(
 
   private def transformWindowExpression(window: proto.Expression.Window) = {
     if (!window.hasWindowFunction) {
-      throw InvalidPlanInput(s"WindowFunction is required in WindowExpression")
+      throw InvalidInputErrors.windowFunctionRequired()
     }
 
     val frameSpec = if (window.hasFrameSpec) {
@@ -2171,11 +2182,11 @@ class SparkConnectPlanner(
 
         case proto.Expression.Window.WindowFrame.FrameType.FRAME_TYPE_RANGE => RangeFrame
 
-        case other => throw InvalidPlanInput(s"Unknown FrameType $other")
+        case other => throw InvalidInputErrors.invalidEnum(other)
       }
 
       if (!protoFrameSpec.hasLower) {
-        throw InvalidPlanInput(s"LowerBound is required in WindowFrame")
+        throw InvalidInputErrors.lowerBoundRequiredInWindowFrame()
       }
       val lower = protoFrameSpec.getLower.getBoundaryCase match {
         case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.CURRENT_ROW =>
@@ -2187,11 +2198,14 @@ class SparkConnectPlanner(
         case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.VALUE =>
           transformExpression(protoFrameSpec.getLower.getValue)
 
-        case other => throw InvalidPlanInput(s"Unknown FrameBoundary $other")
+        case other =>
+          throw InvalidInputErrors.invalidOneOfField(
+            other,
+            protoFrameSpec.getLower.getDescriptorForType)
       }
 
       if (!protoFrameSpec.hasUpper) {
-        throw InvalidPlanInput(s"UpperBound is required in WindowFrame")
+        throw InvalidInputErrors.upperBoundRequiredInWindowFrame()
       }
       val upper = protoFrameSpec.getUpper.getBoundaryCase match {
         case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.CURRENT_ROW =>
@@ -2203,7 +2217,10 @@ class SparkConnectPlanner(
         case proto.Expression.Window.WindowFrame.FrameBoundary.BoundaryCase.VALUE =>
           transformExpression(protoFrameSpec.getUpper.getValue)
 
-        case other => throw InvalidPlanInput(s"Unknown FrameBoundary $other")
+        case other =>
+          throw InvalidInputErrors.invalidOneOfField(
+            other,
+            protoFrameSpec.getUpper.getDescriptorForType)
       }
 
       SpecifiedWindowFrame(frameType = frameType, lower = lower, upper = upper)
@@ -2224,7 +2241,7 @@ class SparkConnectPlanner(
 
   private def transformSetOperation(u: proto.SetOperation): LogicalPlan = {
     if (!u.hasLeftInput || !u.hasRightInput) {
-      throw InvalidPlanInput("Set operation must have 2 inputs")
+      throw InvalidInputErrors.setOperationMustHaveTwoInputs()
     }
     val leftPlan = transformRelation(u.getLeftInput)
     val rightPlan = transformRelation(u.getRightInput)
@@ -2233,18 +2250,17 @@ class SparkConnectPlanner(
     u.getSetOpType match {
       case proto.SetOperation.SetOpType.SET_OP_TYPE_EXCEPT =>
         if (u.getByName) {
-          throw InvalidPlanInput("Except does not support union_by_name")
+          throw InvalidInputErrors.exceptDoesNotSupportUnionByName()
         }
         Except(leftPlan, rightPlan, isAll)
       case proto.SetOperation.SetOpType.SET_OP_TYPE_INTERSECT =>
         if (u.getByName) {
-          throw InvalidPlanInput("Intersect does not support union_by_name")
+          throw InvalidInputErrors.intersectDoesNotSupportUnionByName()
         }
         Intersect(leftPlan, rightPlan, isAll)
       case proto.SetOperation.SetOpType.SET_OP_TYPE_UNION =>
         if (!u.getByName && u.getAllowMissingColumns) {
-          throw InvalidPlanInput(
-            "UnionByName `allowMissingCol` can be true only if `byName` is true.")
+          throw InvalidInputErrors.unionByNameAllowMissingColRequiresByName()
         }
         val union = Union(Seq(leftPlan, rightPlan), u.getByName, u.getAllowMissingColumns)
         if (isAll) {
@@ -2253,8 +2269,8 @@ class SparkConnectPlanner(
           logical.Distinct(union)
         }
 
-      case _ =>
-        throw InvalidPlanInput(s"Unsupported set operation ${u.getSetOpTypeValue}")
+      case other =>
+        throw InvalidInputErrors.invalidEnum(other)
     }
   }
 
@@ -2281,8 +2297,7 @@ class SparkConnectPlanner(
   private def transformJoin(rel: proto.Join): LogicalPlan = {
     assertPlan(rel.hasLeft && rel.hasRight, "Both join sides must be present")
     if (rel.hasJoinCondition && rel.getUsingColumnsCount > 0) {
-      throw InvalidPlanInput(
-        s"Using columns or join conditions cannot be set at the same time in Join")
+      throw InvalidInputErrors.usingColumnsOrJoinConditionSetInJoin()
     }
     val joinCondition =
       if (rel.hasJoinCondition) Some(transformExpression(rel.getJoinCondition)) else None
@@ -2310,7 +2325,7 @@ class SparkConnectPlanner(
       case proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER => RightOuter
       case proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI => LeftSemi
       case proto.Join.JoinType.JOIN_TYPE_CROSS => Cross
-      case _ => throw InvalidPlanInput(s"Join type ${t} is not supported")
+      case other => throw InvalidInputErrors.invalidEnum(other)
     }
   }
 
@@ -2373,7 +2388,7 @@ class SparkConnectPlanner(
 
   private def transformSortOrder(order: proto.Expression.SortOrder) = {
     expressions.SortOrder(
-      child = transformExpression(order.getChild),
+      child = transformSortOrderAndReplaceOrdinals(order.getChild),
       direction = order.getDirection match {
         case proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING =>
           expressions.Ascending
@@ -2385,6 +2400,19 @@ class SparkConnectPlanner(
         case _ => expressions.NullsLast
       },
       sameOrderExpressions = Seq.empty)
+  }
+
+  /**
+   * Transforms an input protobuf sort order expression into the Catalyst expression and converts
+   * top-level integer [[Literal]]s to [[UnresolvedOrdinal]]s, if `orderByOrdinal` is enabled.
+   */
+  private def transformSortOrderAndReplaceOrdinals(sortItem: proto.Expression) = {
+    val transformedSortItem = transformExpression(sortItem)
+    if (session.sessionState.conf.orderByOrdinal) {
+      replaceIntegerLiteralWithOrdinal(transformedSortItem)
+    } else {
+      transformedSortItem
+    }
   }
 
   private def transformDrop(rel: proto.Drop): LogicalPlan = {
@@ -2427,7 +2455,7 @@ class SparkConnectPlanner(
 
   private def transformRelationalGroupedAggregate(rel: proto.Aggregate): LogicalPlan = {
     if (!rel.hasInput) {
-      throw InvalidPlanInput("Aggregate needs a plan input")
+      throw InvalidInputErrors.aggregateNeedsPlanInput()
     }
     val input = transformRelation(rel.getInput)
 
@@ -2439,33 +2467,36 @@ class SparkConnectPlanner(
         input
       }
 
-    val groupingExprs = rel.getGroupingExpressionsList.asScala.toSeq.map(transformExpression)
+    val groupingExpressions =
+      rel.getGroupingExpressionsList.asScala.toSeq.map(transformExpression)
+    val groupingExpressionsWithOrdinals =
+      groupingExpressions.map(replaceOrdinalsInGroupingExpressions)
     val aggExprs = rel.getAggregateExpressionsList.asScala.toSeq
       .map(expr => transformExpressionWithTypedReduceExpression(expr, logicalPlan))
-    val aliasedAgg = (groupingExprs ++ aggExprs).map(toNamedExpression)
+    val aliasedAgg = (groupingExpressions ++ aggExprs).map(toNamedExpression)
 
     rel.getGroupType match {
       case proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY =>
         logical.Aggregate(
-          groupingExpressions = groupingExprs,
+          groupingExpressions = groupingExpressionsWithOrdinals,
           aggregateExpressions = aliasedAgg,
           child = logicalPlan)
 
       case proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP =>
         logical.Aggregate(
-          groupingExpressions = Seq(Rollup(groupingExprs.map(Seq(_)))),
+          groupingExpressions = Seq(Rollup(groupingExpressionsWithOrdinals.map(Seq(_)))),
           aggregateExpressions = aliasedAgg,
           child = logicalPlan)
 
       case proto.Aggregate.GroupType.GROUP_TYPE_CUBE =>
         logical.Aggregate(
-          groupingExpressions = Seq(Cube(groupingExprs.map(Seq(_)))),
+          groupingExpressions = Seq(Cube(groupingExpressionsWithOrdinals.map(Seq(_)))),
           aggregateExpressions = aliasedAgg,
           child = logicalPlan)
 
       case proto.Aggregate.GroupType.GROUP_TYPE_PIVOT =>
         if (!rel.hasPivot) {
-          throw InvalidPlanInput("Aggregate with GROUP_TYPE_PIVOT requires a Pivot")
+          throw InvalidInputErrors.aggregateWithPivotRequiresPivot()
         }
 
         val pivotExpr = transformExpression(rel.getPivot.getCol)
@@ -2477,27 +2508,43 @@ class SparkConnectPlanner(
             .map(expressions.Literal.apply)
         }
         logical.Pivot(
-          groupByExprsOpt = Some(groupingExprs.map(toNamedExpression)),
+          groupByExprsOpt = Some(groupingExpressionsWithOrdinals.map(toNamedExpression)),
           pivotColumn = pivotExpr,
           pivotValues = valueExprs,
           aggregates = aggExprs,
           child = logicalPlan)
 
       case proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS =>
-        val groupingSetsExprs = rel.getGroupingSetsList.asScala.toSeq.map { getGroupingSets =>
-          getGroupingSets.getGroupingSetList.asScala.toSeq.map(transformExpression)
-        }
+        val groupingSetsExpressionsWithOrdinals =
+          rel.getGroupingSetsList.asScala.toSeq.map { getGroupingSets =>
+            getGroupingSets.getGroupingSetList.asScala.toSeq
+              .map(groupingExpressions => {
+                val transformedGroupingExpression = transformExpression(groupingExpressions)
+                replaceOrdinalsInGroupingExpressions(transformedGroupingExpression)
+              })
+          }
         logical.Aggregate(
           groupingExpressions = Seq(
             GroupingSets(
-              groupingSets = groupingSetsExprs,
-              userGivenGroupByExprs = groupingExprs)),
+              groupingSets = groupingSetsExpressionsWithOrdinals,
+              userGivenGroupByExprs = groupingExpressionsWithOrdinals)),
           aggregateExpressions = aliasedAgg,
           child = logicalPlan)
 
-      case other => throw InvalidPlanInput(s"Unknown Group Type $other")
+      case other => throw InvalidInputErrors.invalidEnum(other)
     }
   }
+
+  /**
+   * Replaces top-level integer [[Literal]]s to [[UnresolvedOrdinal]]s, if `groupByOrdinal` is
+   * enabled.
+   */
+  private def replaceOrdinalsInGroupingExpressions(groupingExpression: Expression) =
+    if (session.sessionState.conf.groupByOrdinal) {
+      replaceIntegerLiteralWithOrdinal(groupingExpression)
+    } else {
+      groupingExpression
+    }
 
   @deprecated("TypedReduce is now implemented using a normal UDAF aggregator.", "4.0.0")
   private def transformTypedReduceExpression(
@@ -2511,7 +2558,7 @@ class SparkConnectPlanner(
             e.getCommonInlineUserDefinedFunction.hasScalarScalaUdf =>
         unpackUdf(e.getCommonInlineUserDefinedFunction)
       case other =>
-        throw InvalidPlanInput(s"reduce should carry a scalar scala udf, but got $other")
+        throw InvalidInputErrors.reduceShouldCarryScalarScalaUdf(other)
     }
     val encoder = udf.outputEncoder
     val reduce = ReduceAggregator(udf.function)(encoder).toColumn.expr
@@ -2583,8 +2630,8 @@ class SparkConnectPlanner(
       case proto.MergeAction.ActionType.ACTION_TYPE_UPDATE_STAR =>
         assertPlan(assignments.isEmpty, "UpdateStar action should not have assignment.")
         UpdateStarAction(condition)
-      case _ =>
-        throw InvalidPlanInput(s"Unsupported merge action type ${action.getActionType}.")
+      case other =>
+        throw InvalidInputErrors.invalidEnum(other)
     }
   }
 
@@ -2597,9 +2644,29 @@ class SparkConnectPlanner(
     process(command, new MockObserver())
   }
 
+  def transformCommand(command: proto.Command): Option[QueryPlanningTracker => LogicalPlan] = {
+    command.getCommandTypeCase match {
+      case proto.Command.CommandTypeCase.WRITE_OPERATION =>
+        Some(transformWriteOperation(command.getWriteOperation))
+      case proto.Command.CommandTypeCase.WRITE_OPERATION_V2 =>
+        Some(transformWriteOperationV2(command.getWriteOperationV2))
+      case proto.Command.CommandTypeCase.MERGE_INTO_TABLE_COMMAND =>
+        Some(transformMergeIntoTableCommand(command.getMergeIntoTableCommand))
+      case proto.Command.CommandTypeCase.CREATE_DATAFRAME_VIEW =>
+        Some(_ => transformCreateViewCommand(command.getCreateDataframeView))
+      case _ =>
+        None
+    }
+  }
+
   def process(
       command: proto.Command,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+    val transformerOpt = transformCommand(command)
+    if (transformerOpt.isDefined) {
+      transformAndRunCommand(transformerOpt.get)
+      return
+    }
     command.getCommandTypeCase match {
       case proto.Command.CommandTypeCase.REGISTER_FUNCTION =>
         handleRegisterUserDefinedFunction(command.getRegisterFunction)
@@ -2607,12 +2674,6 @@ class SparkConnectPlanner(
         handleRegisterUserDefinedTableFunction(command.getRegisterTableFunction)
       case proto.Command.CommandTypeCase.REGISTER_DATA_SOURCE =>
         handleRegisterUserDefinedDataSource(command.getRegisterDataSource)
-      case proto.Command.CommandTypeCase.WRITE_OPERATION =>
-        handleWriteOperation(command.getWriteOperation)
-      case proto.Command.CommandTypeCase.CREATE_DATAFRAME_VIEW =>
-        handleCreateViewCommand(command.getCreateDataframeView)
-      case proto.Command.CommandTypeCase.WRITE_OPERATION_V2 =>
-        handleWriteOperationV2(command.getWriteOperationV2)
       case proto.Command.CommandTypeCase.EXTENSION =>
         handleCommandPlugin(command.getExtension)
       case proto.Command.CommandTypeCase.SQL_COMMAND =>
@@ -2640,14 +2701,15 @@ class SparkConnectPlanner(
         handleCheckpointCommand(command.getCheckpointCommand, responseObserver)
       case proto.Command.CommandTypeCase.REMOVE_CACHED_REMOTE_RELATION_COMMAND =>
         handleRemoveCachedRemoteRelationCommand(command.getRemoveCachedRemoteRelationCommand)
-      case proto.Command.CommandTypeCase.MERGE_INTO_TABLE_COMMAND =>
-        handleMergeIntoTableCommand(command.getMergeIntoTableCommand)
       case proto.Command.CommandTypeCase.ML_COMMAND =>
         handleMlCommand(command.getMlCommand, responseObserver)
+      case proto.Command.CommandTypeCase.PIPELINE_COMMAND =>
+        handlePipelineCommand(command.getPipelineCommand, responseObserver)
       case proto.Command.CommandTypeCase.EXECUTE_EXTERNAL_COMMAND =>
         handleExecuteExternalCommand(command.getExecuteExternalCommand, responseObserver)
 
-      case _ => throw new UnsupportedOperationException(s"$command not supported.")
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, command.getDescriptorForType)
     }
   }
 
@@ -2665,14 +2727,32 @@ class SparkConnectPlanner(
         .build())
   }
 
+  private def handlePipelineCommand(
+      command: proto.PipelineCommand,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    val res = PipelinesHandler.handlePipelinesCommand(
+      sessionHolder,
+      command,
+      responseObserver,
+      transformRelation)
+    executeHolder.eventsManager.postFinished()
+    responseObserver.onNext(
+      proto.ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setServerSideSessionId(sessionHolder.serverSessionId)
+        .setPipelineCommandResult(res)
+        .build())
+  }
+
   private def handleExecuteExternalCommand(
       command: proto.ExecuteExternalCommand,
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     if (command.getRunner.isEmpty) {
-      throw InvalidPlanInput("runner cannot be empty in executeExternalCommand")
+      throw InvalidInputErrors.cannotBeEmpty("runner", command.getDescriptorForType)
     }
     if (command.getCommand.isEmpty) {
-      throw InvalidPlanInput("command cannot be empty in executeExternalCommand")
+      throw InvalidInputErrors.cannotBeEmpty("command", command.getDescriptorForType)
     }
     val executor = ExternalCommandExecutor(
       session,
@@ -2729,12 +2809,12 @@ class SparkConnectPlanner(
       case proto.Relation.RelTypeCase.WITH_RELATIONS =>
         executeSQLWithRefs(relation.getWithRelations, tracker)
       case other =>
-        throw InvalidPlanInput(
-          s"SQL command expects either a SQL or a WithRelations, but got $other")
+        throw InvalidInputErrors.sqlCommandExpectsSqlOrWithRelations(other)
     }
 
-    // Check if commands have been executed.
+    // Check if command or SQL Script has been executed.
     val isCommand = df.queryExecution.commandExecuted.isInstanceOf[CommandResult]
+    val isSqlScript = df.queryExecution.logical.isInstanceOf[CompoundBody]
     val rows = df.logicalPlan match {
       case lr: LocalRelation => lr.data
       case cr: CommandResult => cr.rows
@@ -2746,7 +2826,7 @@ class SparkConnectPlanner(
     val result = SqlCommandResult.newBuilder()
     // Only filled when isCommand
     val metrics = ExecutePlanResponse.Metrics.newBuilder()
-    if (isCommand) {
+    if (isCommand || isSqlScript) {
       // Convert the results to Arrow.
       val schema = df.schema
       val maxBatchSize = (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong
@@ -2832,7 +2912,7 @@ class SparkConnectPlanner(
       query: proto.WithRelations,
       tracker: QueryPlanningTracker = new QueryPlanningTracker) = {
     if (!isValidSQLWithRefs(query)) {
-      throw InvalidPlanInput(s"$query is not a valid relation for SQL with references")
+      throw InvalidInputErrors.invalidSQLWithReferences(query)
     }
 
     // Eagerly execute commands of the provided SQL string, with given references.
@@ -2893,9 +2973,8 @@ class SparkConnectPlanner(
         handleRegisterJavaUDF(fun)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
         handleRegisterScalaUDF(fun)
-      case _ =>
-        throw InvalidPlanInput(
-          s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, fun.getDescriptorForType)
     }
     executeHolder.eventsManager.postFinished()
   }
@@ -2906,9 +2985,8 @@ class SparkConnectPlanner(
       case proto.CommonInlineUserDefinedTableFunction.FunctionCase.PYTHON_UDTF =>
         val function = createPythonUserDefinedTableFunction(fun)
         session.udtf.registerPython(fun.getFunctionName, function)
-      case _ =>
-        throw InvalidPlanInput(
-          s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, fun.getDescriptorForType)
     }
     executeHolder.eventsManager.postFinished()
   }
@@ -2920,9 +2998,8 @@ class SparkConnectPlanner(
         val ds = fun.getPythonDataSource
         val dataSource = UserDefinedPythonDataSource(transformPythonDataSource(ds))
         session.dataSource.registerPython(fun.getName, dataSource)
-      case _ =>
-        throw InvalidPlanInput(
-          s"Data source with ID: ${fun.getDataSourceCase.getNumber} is not supported")
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, fun.getDescriptorForType)
     }
     executeHolder.eventsManager.postFinished()
   }
@@ -2933,10 +3010,7 @@ class SparkConnectPlanner(
     val returnType = if (udtf.hasReturnType) {
       transformDataType(udtf.getReturnType) match {
         case s: StructType => Some(s)
-        case dt =>
-          throw InvalidPlanInput(
-            "Invalid Python user-defined table function return type. " +
-              s"Expect a struct type, but got ${dt.typeName}.")
+        case dt => throw InvalidInputErrors.invalidSchemaTypeNonStruct(dt)
       }
     } else {
       None
@@ -2982,11 +3056,12 @@ class SparkConnectPlanner(
       .map(p => p.process(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
       .find(_ == true)
-      .getOrElse(throw InvalidPlanInput("No handler found for extension"))
+      .getOrElse(throw InvalidInputErrors.noHandlerFoundForExtension())
     executeHolder.eventsManager.postFinished()
   }
 
-  private def handleCreateViewCommand(createView: proto.CreateDataFrameViewCommand): Unit = {
+  private def transformCreateViewCommand(
+      createView: proto.CreateDataFrameViewCommand): LogicalPlan = {
     val viewType = if (createView.getIsGlobal) GlobalTempView else LocalTempView
 
     val tableIdentifier =
@@ -2997,7 +3072,7 @@ class SparkConnectPlanner(
           throw QueryCompilationErrors.invalidViewNameError(createView.getName)
       }
 
-    val plan = CreateViewCommand(
+    CreateViewCommand(
       name = tableIdentifier,
       userSpecifiedColumns = Nil,
       comment = None,
@@ -3008,14 +3083,10 @@ class SparkConnectPlanner(
       allowExisting = false,
       replace = createView.getReplace,
       viewType = viewType)
-
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
-    Dataset.ofRows(session, plan, tracker).queryExecution.commandExecuted
-    executeHolder.eventsManager.postFinished()
   }
 
   /**
-   * Transforms the write operation and executes it.
+   * Transforms the write operation.
    *
    * The input write operation contains a reference to the input plan and transforms it to the
    * corresponding logical plan. Afterwards, creates the DataFrameWriter and translates the
@@ -3023,14 +3094,14 @@ class SparkConnectPlanner(
    *
    * @param writeOperation
    */
-  private def handleWriteOperation(writeOperation: proto.WriteOperation): Unit = {
+  private def transformWriteOperation(writeOperation: proto.WriteOperation)(
+      tracker: QueryPlanningTracker): LogicalPlan = {
     // Transform the input plan into the logical plan.
     val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val dataset = Dataset.ofRows(session, plan, tracker)
 
-    val w = dataset.write
+    val w = dataset.write.asInstanceOf[DataFrameWriter[_]]
     if (writeOperation.getMode != proto.WriteOperation.SaveMode.SAVE_MODE_UNSPECIFIED) {
       w.mode(SaveModeConverter.toSaveMode(writeOperation.getMode))
     }
@@ -3047,10 +3118,6 @@ class SparkConnectPlanner(
     if (writeOperation.hasBucketBy) {
       val op = writeOperation.getBucketBy
       val cols = op.getBucketColumnNamesList.asScala
-      if (op.getNumBuckets <= 0) {
-        throw InvalidCommandInput(
-          s"BucketBy must specify a bucket count > 0, received ${op.getNumBuckets} instead.")
-      }
       w.bucketBy(op.getNumBuckets, cols.head, cols.tail.toSeq: _*)
     }
 
@@ -3069,30 +3136,32 @@ class SparkConnectPlanner(
     }
 
     writeOperation.getSaveTypeCase match {
-      case proto.WriteOperation.SaveTypeCase.SAVETYPE_NOT_SET => w.save()
-      case proto.WriteOperation.SaveTypeCase.PATH => w.save(writeOperation.getPath)
+      case proto.WriteOperation.SaveTypeCase.SAVETYPE_NOT_SET => w.saveCommand(None)
+      case proto.WriteOperation.SaveTypeCase.PATH =>
+        w.saveCommand(Some(writeOperation.getPath))
       case proto.WriteOperation.SaveTypeCase.TABLE =>
         val tableName = writeOperation.getTable.getTableName
         writeOperation.getTable.getSaveMethod match {
           case proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE_AS_TABLE =>
-            w.saveAsTable(tableName)
+            w.saveAsTableCommand(tableName)
           case proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO =>
-            w.insertInto(tableName)
-          case _ =>
-            throw new UnsupportedOperationException(
-              "WriteOperation:SaveTable:TableSaveMethod not supported "
-                + s"${writeOperation.getTable.getSaveMethodValue}")
+            w.insertIntoCommand(tableName)
+          case other => throw InvalidInputErrors.invalidEnum(other)
         }
-      case _ =>
-        throw new UnsupportedOperationException(
-          "WriteOperation:SaveTypeCase not supported "
-            + s"${writeOperation.getSaveTypeCase.getNumber}")
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, writeOperation.getDescriptorForType)
     }
+  }
+
+  private def transformAndRunCommand(transformer: QueryPlanningTracker => LogicalPlan): Unit = {
+    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
+    val qe = new QueryExecution(session, transformer(tracker), tracker)
+    qe.assertCommandExecuted()
     executeHolder.eventsManager.postFinished()
   }
 
   /**
-   * Transforms the write operation and executes it.
+   * Transforms the write operation.
    *
    * The input write operation contains a reference to the input plan and transforms it to the
    * corresponding logical plan. Afterwards, creates the DataFrameWriter and translates the
@@ -3100,11 +3169,11 @@ class SparkConnectPlanner(
    *
    * @param writeOperation
    */
-  private def handleWriteOperationV2(writeOperation: proto.WriteOperationV2): Unit = {
+  private def transformWriteOperationV2(writeOperation: proto.WriteOperationV2)(
+      tracker: QueryPlanningTracker): LogicalPlan = {
     // Transform the input plan into the logical plan.
     val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val dataset = Dataset.ofRows(session, plan, tracker)
 
     val w = dataset.writeTo(table = writeOperation.getTableName)
@@ -3135,33 +3204,28 @@ class SparkConnectPlanner(
     writeOperation.getMode match {
       case proto.WriteOperationV2.Mode.MODE_CREATE =>
         if (writeOperation.hasProvider) {
-          w.using(writeOperation.getProvider).create()
-        } else {
-          w.create()
+          w.using(writeOperation.getProvider)
         }
+        w.createCommand()
       case proto.WriteOperationV2.Mode.MODE_OVERWRITE =>
-        w.overwrite(Column(transformExpression(writeOperation.getOverwriteCondition)))
+        w.overwriteCommand(Column(transformExpression(writeOperation.getOverwriteCondition)))
       case proto.WriteOperationV2.Mode.MODE_OVERWRITE_PARTITIONS =>
-        w.overwritePartitions()
+        w.overwritePartitionsCommand()
       case proto.WriteOperationV2.Mode.MODE_APPEND =>
-        w.append()
+        w.appendCommand()
       case proto.WriteOperationV2.Mode.MODE_REPLACE =>
         if (writeOperation.hasProvider) {
-          w.using(writeOperation.getProvider).replace()
-        } else {
-          w.replace()
+          w.using(writeOperation.getProvider)
         }
+        w.replaceCommand(orCreate = false)
       case proto.WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE =>
         if (writeOperation.hasProvider) {
-          w.using(writeOperation.getProvider).createOrReplace()
-        } else {
-          w.createOrReplace()
+          w.using(writeOperation.getProvider)
         }
-      case _ =>
-        throw new UnsupportedOperationException(
-          s"WriteOperationV2:ModeValue not supported ${writeOperation.getModeValue}")
+        w.replaceCommand(orCreate = true)
+      case other =>
+        throw InvalidInputErrors.invalidEnum(other)
     }
-    executeHolder.eventsManager.postFinished()
   }
 
   private def handleWriteStreamOperationStart(
@@ -3242,8 +3306,10 @@ class SparkConnectPlanner(
             writeOp.getForeachBatch.getScalaFunction.getPayload.toByteArray,
             sessionHolder)
 
-        case StreamingForeachFunction.FunctionCase.FUNCTION_NOT_SET =>
-          throw InvalidPlanInput("Unexpected foreachBatch function") // Unreachable
+        case other =>
+          throw InvalidInputErrors.invalidOneOfField(
+            other,
+            writeOp.getForeachBatch.getDescriptorForType)
       }
 
       writer.foreachBatch(foreachBatchFn)
@@ -3347,11 +3413,9 @@ class SparkConnectPlanner(
       case Some(query) if query.runId.toString == runId =>
         query
       case Some(query) =>
-        throw new IllegalArgumentException(
-          s"Run id mismatch for query id $id. Run id in the request $runId " +
-            s"does not match one on the server ${query.runId}. The query might have restarted.")
+        throw InvalidInputErrors.streamingQueryRunIdMismatch(id, runId, query.runId.toString)
       case None =>
-        throw new IllegalArgumentException(s"Streaming query $id is not found")
+        throw InvalidInputErrors.streamingQueryNotFound(id)
     }
 
     command.getCommandCase match {
@@ -3394,7 +3458,7 @@ class SparkConnectPlanner(
           case q: StreamingQueryWrapper =>
             q.streamingQuery.explainInternal(command.getExplain.getExtended)
           case _ =>
-            throw new IllegalStateException(s"Unexpected type for streaming query: $query")
+            throw SparkException.internalError(s"Unexpected type for streaming query: $query")
         }
         val explain = StreamingQueryCommandResult.ExplainResult
           .newBuilder()
@@ -3418,7 +3482,7 @@ class SparkConnectPlanner(
             .setExceptionMessage(e.toString())
             .setErrorClass(e.getCondition)
 
-          val stackTrace = Option(ExceptionUtils.getStackTrace(e))
+          val stackTrace = Option(Utils.stackTraceToString(e))
           stackTrace.foreach { s =>
             exception_builder.setStackTrace(s)
           }
@@ -3434,8 +3498,8 @@ class SparkConnectPlanner(
         val terminated = handleStreamingAwaitTermination(query, timeout)
         respBuilder.getAwaitTerminationBuilder.setTerminated(terminated)
 
-      case StreamingQueryCommand.CommandCase.COMMAND_NOT_SET =>
-        throw new IllegalArgumentException("Missing command in StreamingQueryCommand")
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, command.getDescriptorForType)
     }
 
     executeHolder.eventsManager.postFinished()
@@ -3572,8 +3636,8 @@ class SparkConnectPlanner(
         respBuilder.getListListenersBuilder
           .addAllListenerIds(sessionHolder.listListenerIds().asJava)
 
-      case StreamingQueryManagerCommand.CommandCase.COMMAND_NOT_SET =>
-        throw new IllegalArgumentException("Missing command in StreamingQueryManagerCommand")
+      case other =>
+        throw InvalidInputErrors.invalidOneOfField(other, command.getDescriptorForType)
     }
 
     executeHolder.eventsManager.postFinished()
@@ -3691,7 +3755,8 @@ class SparkConnectPlanner(
     executeHolder.eventsManager.postFinished()
   }
 
-  private def handleMergeIntoTableCommand(cmd: proto.MergeIntoTableCommand): Unit = {
+  private def transformMergeIntoTableCommand(cmd: proto.MergeIntoTableCommand)(
+      tracker: QueryPlanningTracker): LogicalPlan = {
     def transformActions(actions: java.util.List[proto.Expression]): Seq[MergeAction] =
       actions.asScala.map(transformExpression).map(_.asInstanceOf[MergeAction]).toSeq
 
@@ -3699,7 +3764,7 @@ class SparkConnectPlanner(
     val notMatchedActions = transformActions(cmd.getNotMatchedActionsList)
     val notMatchedBySourceActions = transformActions(cmd.getNotMatchedBySourceActionsList)
 
-    val sourceDs = Dataset.ofRows(session, transformRelation(cmd.getSourceTablePlan))
+    val sourceDs = Dataset.ofRows(session, transformRelation(cmd.getSourceTablePlan), tracker)
     val mergeInto = sourceDs
       .mergeInto(cmd.getTargetTableName, Column(transformExpression(cmd.getMergeCondition)))
       .asInstanceOf[MergeIntoWriter[Row]]
@@ -3709,8 +3774,7 @@ class SparkConnectPlanner(
     if (cmd.getWithSchemaEvolution) {
       mergeInto.withSchemaEvolution()
     }
-    mergeInto.merge()
-    executeHolder.eventsManager.postFinished()
+    mergeInto.mergeCommand()
   }
 
   private val emptyLocalRelation = LocalRelation(
@@ -4025,7 +4089,13 @@ class SparkConnectPlanner(
         } else {
           UnresolvedTableArgPlanId(planId)
         }
-      case other => throw InvalidPlanInput(s"Unknown SubqueryType $other")
+      case proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_IN =>
+        UnresolvedInSubqueryPlanId(
+          getSubqueryExpression.getInSubqueryValuesList.asScala.map { value =>
+            transformExpression(value)
+          }.toSeq,
+          planId)
+      case other => throw InvalidInputErrors.invalidEnum(other)
     }
   }
 
@@ -4042,7 +4112,7 @@ class SparkConnectPlanner(
           val plan = transformRelation(ref)
           planId -> plan
         } else {
-          throw InvalidPlanInput("Invalid WithRelation reference")
+          throw InvalidInputErrors.invalidWithRelationReference()
         }
       }.toMap
 
@@ -4066,7 +4136,18 @@ class SparkConnectPlanner(
     }
   }
 
+  /**
+   * Replaces a top-level integer [[Literal]] in a grouping expression with [[UnresolvedOrdinal]]
+   * that has the same index.
+   */
+  private def replaceIntegerLiteralWithOrdinal(groupingExpression: Expression) =
+    groupingExpression match {
+      case literal @ Literal(value: Int, IntegerType) =>
+        CurrentOrigin.withOrigin(literal.origin) { UnresolvedOrdinal(value) }
+      case other => other
+    }
+
   private def assertPlan(assertion: Boolean, message: => String = ""): Unit = {
-    if (!assertion) throw InvalidPlanInput(message)
+    if (!assertion) throw InvalidInputErrors.assertionFailure(message)
   }
 }

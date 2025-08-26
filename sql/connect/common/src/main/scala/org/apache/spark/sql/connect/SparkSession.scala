@@ -40,7 +40,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.ExecutePlanResponse.ObservedMetrics
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CONFIG, PATH}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql
@@ -49,10 +49,11 @@ import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BoxedLongEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.toLiteral
+import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
-import org.apache.spark.sql.internal.{SessionState, SharedState, SqlApiConf}
+import org.apache.spark.sql.internal.{SessionState, SharedState, SqlApiConf, SubqueryExpression}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -420,8 +421,8 @@ class SparkSession private[sql] (
   @DeveloperApi
   def newDataset[T](encoder: AgnosticEncoder[T], cols: Seq[Column])(
       f: proto.Relation.Builder => Unit): Dataset[T] = {
-    val references = cols.flatMap(_.node.collect { case n: SubqueryExpressionNode =>
-      n.relation
+    val references: Seq[proto.Relation] = cols.flatMap(_.node.collect {
+      case n: SubqueryExpression => n.ds.plan.getRoot
     })
 
     val builder = proto.Relation.newBuilder()

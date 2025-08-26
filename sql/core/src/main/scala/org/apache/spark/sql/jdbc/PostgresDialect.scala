@@ -27,7 +27,6 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.LogKeys.COLUMN_NAME
-import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -53,6 +52,12 @@ private case class PostgresDialect()
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
+
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getSQLState == "42P01" ||
+      e.getSQLState == "3F000" ||
+      e.getSQLState == "42704"
+  }
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
@@ -237,6 +242,11 @@ private case class PostgresDialect()
       s" $indexType (${columnList.mkString(", ")}) $indexProperties"
   }
 
+  // See https://www.postgresql.org/docs/current/errcodes-appendix.html
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    Option(exception.getSQLState).exists(_.startsWith("42"))
+  }
+
   // SHOW INDEX syntax
   // https://www.postgresql.org/docs/14/view-pg-indexes.html
   override def indexExists(
@@ -351,6 +361,8 @@ private case class PostgresDialect()
   override def supportsOffset: Boolean = true
 
   override def supportsTableSample: Boolean = true
+
+  override def supportsJoin: Boolean = true
 
   override def getTableSample(sample: TableSampleInfo): String = {
     // hard-coded to BERNOULLI for now because Spark doesn't have a way to specify sample

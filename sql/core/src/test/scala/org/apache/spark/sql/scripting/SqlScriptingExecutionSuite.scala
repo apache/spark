@@ -50,7 +50,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val compoundBody = spark.sessionState.sqlParser.parsePlan(sqlText).asInstanceOf[CompoundBody]
 
     val sse = new SqlScriptingExecution(compoundBody, spark, args)
-    sse.withLocalVariableManager {
+    sse.withContextManager {
       val result: ListBuffer[Array[Row]] = ListBuffer.empty
 
       var df = sse.getNextResult
@@ -80,14 +80,14 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       """
         |BEGIN
         |  DECLARE duplicate_condition CONDITION FOR SQLSTATE '12345';
-        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE flag INT = -1;
         |  DECLARE EXIT HANDLER FOR duplicate_condition
         |  BEGIN
-        |    SET VAR flag = 1;
+        |    SET flag = 1;
         |  END;
         |  DECLARE EXIT HANDLER FOR duplicate_condition
         |  BEGIN
-        |    SET VAR flag = 2;
+        |    SET flag = 2;
         |  END;
         |  SELECT 1/0;
         |  SELECT flag;
@@ -105,14 +105,14 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE flag INT = -1;
         |  DECLARE EXIT HANDLER FOR SQLSTATE '12345'
         |  BEGIN
-        |    SET VAR flag = 1;
+        |    SET flag = 1;
         |  END;
         |  DECLARE EXIT HANDLER FOR SQLSTATE '12345'
         |  BEGIN
-        |    SET VAR flag = 2;
+        |    SET flag = 2;
         |  END;
         |  SELECT 1/0;
         |  SELECT flag;
@@ -130,17 +130,17 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE flag INT = -1;
         |  BEGIN
         |    DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
         |    BEGIN
         |      SELECT flag;
-        |      SET VAR flag = 1;
+        |      SET flag = 1;
         |    END;
         |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
         |    BEGIN
         |      SELECT flag;
-        |      SET VAR flag = 2;
+        |      SET flag = 2;
         |    END;
         |    SELECT 1/0;
         |  END;
@@ -158,17 +158,17 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE flag INT = -1;
         |  DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
         |  BEGIN
         |    SELECT flag;
-        |    SET VAR flag = 1;
+        |    SET flag = 1;
         |  END;
         |  BEGIN
         |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
         |    BEGIN
         |      SELECT flag;
-        |      SET VAR flag = 2;
+        |      SET flag = 2;
         |    END;
         |    SELECT 1/0;
         |  END;
@@ -186,12 +186,12 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |  DECLARE OR REPLACE VARIABLE flag INT = -1;
+        |  DECLARE VARIABLE flag INT = -1;
         |  scope_to_exit: BEGIN
         |    DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
         |    BEGIN
         |      SELECT flag;
-        |      SET VAR flag = 1;
+        |      SET flag = 1;
         |    END;
         |    SELECT 2;
         |    SELECT 3;
@@ -215,12 +215,12 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |  DECLARE OR REPLACE VARIABLE flag INT = -1;
+        |  DECLARE VARIABLE flag INT = -1;
         |  scope_to_exit: BEGIN
         |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
         |    BEGIN
         |      SELECT flag;
-        |      SET VAR flag = 1;
+        |      SET flag = 1;
         |    END;
         |    SELECT 2;
         |    SELECT 3;
@@ -246,12 +246,12 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |  DECLARE OR REPLACE VARIABLE flag INT = -1;
+        |  DECLARE VARIABLE flag INT = -1;
         |  l1: BEGIN
         |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
         |    BEGIN
         |      SELECT flag;
-        |      SET VAR flag = 1;
+        |      SET flag = 1;
         |    END;
         |    SELECT 2;
         |    SELECT 3;
@@ -279,18 +279,18 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |  DECLARE OR REPLACE VARIABLE flag INT = -1;
+        |  DECLARE VARIABLE flag INT = -1;
         |  l1: BEGIN
         |    DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN.WITHOUT_SUGGESTION
         |    BEGIN
         |      SELECT flag;
-        |      SET VAR flag = 2;
+        |      SET flag = 2;
         |    END;
         |    l2: BEGIN
         |      DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
         |      BEGIN
         |        SELECT flag;
-        |        SET VAR flag = 1;
+        |        SET flag = 1;
         |        select X; -- select non existing variable
         |        SELECT 2;
         |      END;
@@ -316,18 +316,18 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |  DECLARE OR REPLACE VARIABLE flag INT = -1;
+        |  DECLARE VARIABLE flag INT = -1;
         |  l1: BEGIN
         |    DECLARE EXIT HANDLER FOR SQLEXCEPTION
         |    BEGIN
         |      SELECT flag;
-        |      SET VAR flag = 2;
+        |      SET flag = 2;
         |    END;
         |    l2: BEGIN
         |      DECLARE EXIT HANDLER FOR SQLEXCEPTION
         |      BEGIN
         |        SELECT flag;
-        |        SET VAR flag = 1;
+        |        SET flag = 1;
         |        SELECT 1/0;
         |        SELECT 2;
         |      END;
@@ -353,18 +353,18 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |  DECLARE OR REPLACE VARIABLE flag INT = -1;
+        |  DECLARE VARIABLE flag INT = -1;
         |  l1: BEGIN
         |    DECLARE EXIT HANDLER FOR SQLEXCEPTION
         |    BEGIN
         |      SELECT flag;
-        |      SET VAR flag = 3;
+        |      SET flag = 3;
         |    END;
         |    l2: BEGIN
         |      DECLARE EXIT HANDLER FOR SQLEXCEPTION
         |      BEGIN
         |        SELECT flag;
-        |        SET VAR flag = 2;
+        |        SET flag = 2;
         |        SELECT 1/0;
         |        SELECT 2;
         |      END;
@@ -373,7 +373,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |        DECLARE EXIT HANDLER FOR SQLEXCEPTION
         |        BEGIN
         |          SELECT flag;
-        |          SET VAR flag = 1;
+        |          SET flag = 1;
         |          SELECT 1/0;
         |          SELECT 2;
         |        END;
@@ -402,18 +402,18 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |  DECLARE OR REPLACE VARIABLE flag INT = -1;
+        |  DECLARE VARIABLE flag INT = -1;
         |  lbl_0: BEGIN
         |    DECLARE EXIT HANDLER FOR SQLEXCEPTION
         |      lbl_1: BEGIN
         |        DECLARE EXIT HANDLER FOR SQLEXCEPTION
         |        lbl_2: BEGIN
         |          SELECT flag;
-        |          SET VAR flag = 2;
+        |          SET flag = 2;
         |        END;
         |
         |        SELECT flag;
-        |        SET VAR flag = 1;
+        |        SET flag = 1;
         |        SELECT 1/0;
         |        SELECT 2;
         |      END;
@@ -438,7 +438,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |  DECLARE OR REPLACE VARIABLE flag INT = -1;
+        |  DECLARE VARIABLE flag INT = -1;
         |  lbl_0: BEGIN
         |    DECLARE EXIT HANDLER FOR SQLEXCEPTION
         |    lbl_1: BEGIN
@@ -447,17 +447,17 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |        DECLARE EXIT HANDLER FOR SQLEXCEPTION
         |        lbl_3: BEGIN
         |          SELECT flag; -- third select flag (2)
-        |          SET VAR flag = 3;
+        |          SET flag = 3;
         |        END;
         |
         |        SELECT flag; -- second select flag (1)
-        |        SET VAR flag = 2;
+        |        SET flag = 2;
         |        SELECT 1/0; -- third error will be thrown here
         |        SELECT 2;
         |      END;
         |
         |      SELECT flag; -- first select flag (-1)
-        |      SET VAR flag = 1;
+        |      SET flag = 1;
         |      SELECT 1/0; -- second error will be thrown here
         |      SELECT 2;
         |    END;
@@ -483,12 +483,12 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE flag INT = -1;
         |  l1: BEGIN
         |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
         |    BEGIN
         |      SELECT flag;
-        |      SET VAR flag = 1;
+        |      SET flag = 1;
         |    END;
         |    SELECT 2;
         |    SELECT 3;
@@ -496,7 +496,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |      DECLARE EXIT HANDLER FOR SQLEXCEPTION
         |      BEGIN
         |        SELECT flag;
-        |        SET VAR flag = 2;
+        |        SET flag = 2;
         |      END;
         |      SELECT 4;
         |      SELECT 1/0;
@@ -525,11 +525,11 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript1 =
       """
         |BEGIN
-        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE flag INT = -1;
         |  DECLARE `22012` CONDITION FOR SQLSTATE '12345';
         |  DECLARE EXIT HANDLER FOR `22012`
         |  BEGIN
-        |    SET VAR flag = 1;
+        |    SET flag = 1;
         |  END;
         |  SELECT 1/0;
         |  SELECT flag;
@@ -541,22 +541,22 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       },
       condition = "DIVIDE_BY_ZERO",
       parameters = Map("config" -> "\"spark.sql.ansi.enabled\""),
-      queryContext = Array(ExpectedContext("", "", 174, 176, "1/0")))
+      queryContext = Array(ExpectedContext("", "", 159, 161, "1/0")))
 
     val sqlScript2 =
       """
         |BEGIN
-        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE flag INT = -1;
         |  BEGIN
         |    DECLARE `22012` CONDITION FOR SQLSTATE '12345';
         |    DECLARE EXIT HANDLER FOR `22012`
         |    BEGIN
-        |      SET VAR flag = 1;
+        |      SET flag = 1;
         |    END;
         |
         |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
         |    BEGIN
-        |      SET VAR flag = 2;
+        |      SET flag = 2;
         |    END;
         |
         |    SELECT 1/0;
@@ -570,12 +570,12 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript3 =
       """
         |BEGIN
-        |  DECLARE OR REPLACE flag INT = -1;
+        |  DECLARE flag INT = -1;
         |  BEGIN
         |    DECLARE `22012` CONDITION FOR SQLSTATE '12345';
         |    DECLARE EXIT HANDLER FOR `22012`, SQLSTATE '22012'
         |    BEGIN
-        |      SET VAR flag = 1;
+        |      SET flag = 1;
         |    END;
         |
         |    SELECT 1/0;
@@ -625,6 +625,264 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       parameters = Map("sqlState" -> "X22012"))
   }
 
+  test("handler - correct handler is chosen based on the full error condition") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN.WITHOUT_SUGGESTION
+        |  BEGIN
+        |    SELECT 2;
+        |  END;
+        |  DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN.WITH_SUGGESTION
+        |  BEGIN
+        |    SELECT 3;
+        |  END;
+        |  SELECT X;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2)) // select
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("handler - full condition takes precedence before main error class") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          |  DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN
+          |  BEGIN
+          |    SELECT 1;
+          |  END;
+          |  DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN.WITH_SUGGESTION
+          |  BEGIN
+          |    SELECT 2;
+          |  END;
+          |  CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          |  SELECT d FROM t;
+          |END
+          |""".stripMargin
+      val expected = Seq(
+        Seq(Row(2)) // select
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  test("handler - catch the main error class without subclass") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          |  DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN
+          |  BEGIN
+          |    SELECT 1;
+          |  END;
+          |  CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          |  SELECT d FROM t;
+          |END
+          |""".stripMargin
+      val expected = Seq(
+        Seq(Row(1)) // select
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  test("handler - exit resolve when if condition fails") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  scope_to_exit: BEGIN
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    IF 1 > 1/0 THEN
+        |      SELECT 10;
+        |    END IF;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler - exit resolve when simple case variable computation fails") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  scope_to_exit: BEGIN
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    CASE 1/0
+        |      WHEN flag THEN SELECT 10;
+        |    END CASE;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler - exit resolve when simple case condition computation fails") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  scope_to_exit: BEGIN
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    CASE flag
+        |      WHEN 1/0 THEN SELECT 10;
+        |    END CASE;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler - exit resolve when simple case condition types are mismatch") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  scope_to_exit: BEGIN
+        |    DECLARE EXIT HANDLER FOR CAST_INVALID_INPUT
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    CASE flag
+        |      WHEN 'teststr' THEN SELECT 10;
+        |    END CASE;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler - exit resolve when searched case condition fails") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  scope_to_exit: BEGIN
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    CASE
+        |      WHEN flag = 1/0 THEN SELECT 10;
+        |    END CASE;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler - exit resolve when while condition fails") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  scope_to_exit: BEGIN
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    WHILE 1 > 1/0 DO
+        |      SELECT 10;
+        |    END WHILE;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("handler - exit resolve when select fails in FOR statement") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  scope_to_exit: BEGIN
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22012'
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 1;
+        |    END;
+        |    FOR iter AS (SELECT 1/0) DO
+        |      SELECT 10;
+        |    END FOR;
+        |    SELECT 4;
+        |    SELECT 5;
+        |  END;
+        |  SELECT flag;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(-1)),   // select flag
+      Seq(Row(1))     // select flag from the outer body
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
   // Tests
   test("multi statement - simple") {
     withTable("t") {
@@ -665,19 +923,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("session vars - set and read (SET VAR)") {
-    val sqlScript =
-      """
-        |BEGIN
-        |DECLARE var = 1;
-        |SET VAR var = var + 1;
-        |SELECT var;
-        |END
-        |""".stripMargin
-    val expected = Seq(Seq(Row(2)))
-    verifySqlScriptResult(sqlScript, expected)
-  }
-
   test("session vars - set and read (SET)") {
     val sqlScript =
       """
@@ -705,7 +950,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         | END;
         | BEGIN
         |   DECLARE var = 3;
-        |   SET VAR var = var + 1;
+        |   SET var = var + 1;
         |   SELECT var;
         | END;
         |END
@@ -1146,7 +1391,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         | DECLARE i = 0;
         | WHILE i < 3 DO
         |   SELECT i;
-        |   SET VAR i = i + 1;
+        |   SET i = i + 1;
         | END WHILE;
         |END
         |""".stripMargin
@@ -1165,7 +1410,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         | DECLARE i = 3;
         | WHILE i < 3 DO
         |   SELECT i;
-        |   SET VAR i = i + 1;
+        |   SET i = i + 1;
         | END WHILE;
         |END
         |""".stripMargin
@@ -1180,12 +1425,12 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         | DECLARE i = 0;
         | DECLARE j = 0;
         | WHILE i < 2 DO
-        |   SET VAR j = 0;
+        |   SET j = 0;
         |   WHILE j < 2 DO
         |     SELECT i, j;
-        |     SET VAR j = j + 1;
+        |     SET j = j + 1;
         |   END WHILE;
-        |   SET VAR i = i + 1;
+        |   SET i = i + 1;
         | END WHILE;
         |END
         |""".stripMargin
@@ -1225,7 +1470,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         | DECLARE i = 0;
         | REPEAT
         |   SELECT i;
-        |   SET VAR i = i + 1;
+        |   SET i = i + 1;
         | UNTIL
         |   i = 3
         | END REPEAT;
@@ -1246,7 +1491,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         | DECLARE i = 3;
         | REPEAT
         |   SELECT i;
-        |   SET VAR i = i + 1;
+        |   SET i = i + 1;
         | UNTIL
         |   1 = 1
         | END REPEAT;
@@ -1264,13 +1509,13 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         | DECLARE i = 0;
         | DECLARE j = 0;
         | REPEAT
-        |   SET VAR j = 0;
+        |   SET j = 0;
         |   REPEAT
         |     SELECT i, j;
-        |     SET VAR j = j + 1;
+        |     SET j = j + 1;
         |   UNTIL j >= 2
         |   END REPEAT;
-        |   SET VAR i = i + 1;
+        |   SET i = i + 1;
         | UNTIL i >= 2
         | END REPEAT;
         |END
@@ -1524,15 +1769,15 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         | DECLARE x = 0;
         | DECLARE y = 0;
         | lbl1: LOOP
-        |   SET VAR y = 0;
+        |   SET y = 0;
         |   lbl2: LOOP
         |     SELECT x, y;
-        |     SET VAR y = y + 1;
+        |     SET y = y + 1;
         |     IF y >= 2 THEN
         |       LEAVE lbl2;
         |     END IF;
         |   END LOOP;
-        |   SET VAR x = x + 1;
+        |   SET x = x + 1;
         |   IF x >= 2 THEN
         |     LEAVE lbl1;
         |   END IF;
@@ -1958,8 +2203,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  // TODO [SPARK-50785]: Unignore this when For Statement starts properly using local vars.
-  ignore("local variable - declare - declare or replace") {
+  test("local variable - declare - declare or replace") {
       val sqlScript =
         """
           |BEGIN
@@ -2449,16 +2693,16 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val sqlScript =
       """
         |BEGIN
-        |  DECLARE OR REPLACE VARIABLE varOuter INT = 0;
+        |  DECLARE VARIABLE varOuter INT = 0;
         |  l1: BEGIN
-        |    DECLARE OR REPLACE VARIABLE varL1 INT = 1;
+        |    DECLARE VARIABLE varL1 INT = 1;
         |    DECLARE EXIT HANDLER FOR SQLEXCEPTION
         |    BEGIN
         |      SELECT varOuter;
         |      SELECT varL1;
         |    END;
         |    l2: BEGIN
-        |      DECLARE OR REPLACE VARIABLE varL2 = 2;
+        |      DECLARE VARIABLE varL2 = 2;
         |      DECLARE EXIT HANDLER FOR SQLEXCEPTION
         |      BEGIN
         |        SELECT varOuter;
@@ -2467,7 +2711,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |        SELECT 1/0;
         |      END;
         |      l3: BEGIN
-        |        DECLARE OR REPLACE VARIABLE varL3 = 3;
+        |        DECLARE VARIABLE varL3 = 3;
         |        DECLARE EXIT HANDLER FOR SQLEXCEPTION
         |        BEGIN
         |          SELECT varOuter;
@@ -2476,7 +2720,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |          SELECT varL3;
         |          SELECT 1/0;
         |        END;
-
         |        SELECT 5;
         |        SELECT 1/0;
         |        SELECT 6;
@@ -2498,5 +2741,368 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1))
     )
     verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("local variable - multiple variables declared at once") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  lbl1: BEGIN
+        |    DECLARE localVar1, localVar2, localVar3, localVar4 = 1;
+        |    SELECT localVar1;
+        |    SELECT lbl1.localVar1;
+        |    SELECT localVar2;
+        |    SELECT lbl1.localVar2;
+        |    SELECT localVar3;
+        |    SELECT lbl1.localVar3;
+        |    SELECT localVar4;
+        |    SELECT lbl1.localVar4;
+        |  END;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1)), // select localVar1
+      Seq(Row(1)), // select lbl1.localVar1
+      Seq(Row(1)), // select localVar2
+      Seq(Row(1)), // select lbl1.localVar2
+      Seq(Row(1)), // select localVar3
+      Seq(Row(1)), // select lbl1.localVar3
+      Seq(Row(1)), // select localVar4
+      Seq(Row(1)) // select lbl1.localVar4
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("local variable - same variable declared twice within same DECLARE statement") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  lbl1: BEGIN
+        |    DECLARE var1, vAr1 = 23;
+        |  END;
+        |END
+        |""".stripMargin
+
+    val e = intercept[AnalysisException] {
+      verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+    }
+    checkError(
+      exception = e,
+      condition = "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE",
+      parameters = Map("variableName" -> toSQLId("lbl1.var1"))
+    )
+  }
+
+  test("local variable - same variable declared twice within same DECLARE OR REPLACE statement") {
+    val sqlScript =
+      """
+        |DECLARE OR REPLACE var1, vAr1 = 23
+        |""".stripMargin
+
+    val e = intercept[AnalysisException] {
+      spark.sql(sqlScript)
+    }
+    checkError(
+      exception = e,
+      condition = "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE",
+      parameters = Map("variableName" -> toSQLId("system.session.var1"))
+    )
+  }
+
+  test("local variable - variable declared via IDENTIFIER construct," +
+    "as well as a regular variable within the same DECLARE") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  lbl1: BEGIN
+        |    DECLARE proxy = "var1";
+        |    DECLARE IDENTIFIER(proxy), var2 = 3;
+        |    SELECT proxy;
+        |    SELECT lbl1.proxy;
+        |    SELECT var1;
+        |    SELECT lbl1.var1;
+        |    SELECT var2;
+        |    SELECT lbl1.var2;
+        |  END;
+        |END
+        |""".stripMargin
+
+    val expected = Seq(
+      Seq(Row("var1")), // select proxy
+      Seq(Row("var1")), // select lbl1.proxy
+      Seq(Row(3)), // select var1
+      Seq(Row(3)), // select lbl1.var1
+      Seq(Row(3)), // select var2
+      Seq(Row(3)) // select lbl1.var2
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("Exception handler in a FOR loop - with condition") {
+    withTable("t") {
+      withView("v") {
+        val sqlScript =
+          """
+            |BEGIN
+            |  DECLARE cnt = 0;
+            |  CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+            |  CREATE VIEW v AS SELECT a, b FROM t WHERE c > 0;
+            |  FOR tables AS (SELECT * FROM VALUES ('v'), ('v') AS tbl(name)) DO
+            |    lbl: BEGIN
+            |      DECLARE EXIT HANDLER FOR EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE
+            |         BEGIN SET cnt = cnt + 1; END;
+            |      ALTER TABLE IDENTIFIER(tables.name) DEFAULT COLLATION UTF8_LCASE;
+            |    END;
+            |  END FOR;
+            |  SELECT cnt;
+            |END
+            |""".stripMargin
+        val expected = Seq(
+          Seq(Row(2)) // select cnt
+        )
+        verifySqlScriptResult(sqlScript, expected)
+      }
+    }
+  }
+
+  test("Exception handler in a FOR loop - with SQL state") {
+    withTable("t") {
+      withView("v") {
+        val sqlScript =
+          """
+            |BEGIN
+            |  DECLARE cnt = 0;
+            |  CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+            |  CREATE VIEW v AS SELECT a, b FROM t WHERE c > 0;
+            |  FOR tables AS (SELECT * FROM VALUES ('v'), ('v') AS tbl(name)) DO
+            |    BEGIN
+            |      DECLARE EXIT HANDLER FOR SQLSTATE '42809'
+            |         BEGIN SET cnt = cnt + 1; END;
+            |      ALTER TABLE IDENTIFIER(tables.name) DEFAULT COLLATION UTF8_LCASE;
+            |    END;
+            |  END FOR;
+            |  SELECT cnt;
+            |END
+            |""".stripMargin
+        val expected = Seq(
+          Seq(Row(2)) // select cnt
+        )
+        verifySqlScriptResult(sqlScript, expected)
+      }
+    }
+  }
+
+  test("Exception in a last statement in if/else") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  IF true THEN
+        |    SELECT 1/0;
+        |  END IF;
+        |  SELECT 2;
+        |END;
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1))     // select 1
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("Exception in a last statement in simple case") {
+    val commands =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  CASE 1
+        |    WHEN 1 THEN
+        |      SELECT 1/0;
+        |  END CASE;
+        |  SELECT 2;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(1)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("Exception in a last statement in searched case") {
+    val commands =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  CASE
+        |    WHEN 1=1 THEN
+        |      SELECT 1/0;
+        |  END CASE;
+        |  SELECT 2;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(1)))
+    verifySqlScriptResult(commands, expected)
+  }
+
+  test("Exception in a last statement in - while") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE i INT DEFAULT 0;
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  WHILE i < 2 DO
+        |    SELECT 1/0;
+        |  END WHILE;
+        |  SELECT 2;
+        |END;
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1))     // select 1
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("Exception in a last statement in - repeat") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE i INT DEFAULT 0;
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  REPEAT
+        |    SELECT 1/0;
+        |  UNTIL i = 2
+        |  END REPEAT;
+        |  SELECT 2;
+        |END;
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1))     // select 1
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("Exception in a last statement in loop") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  LOOP
+        |    SELECT 1/0;
+        |  END LOOP;
+        |  SELECT 2;
+        |END;
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1))     // select 1
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("Exception in a last statement in for") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE i INT DEFAULT 0;
+        |  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |  BEGIN
+        |    SELECT 1;
+        |  END;
+        |  FOR row AS (SELECT * FROM VALUES (1), (2), (3) AS tbl(i)) DO
+        |    SELECT 1/0;
+        |  END FOR;
+        |  SELECT 2;
+        |END;
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1))     // select 1
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("Integer literal column in FOR query") {
+    val sqlScript1 =
+      """
+        |BEGIN
+        |  FOR SELECT 1 DO
+        |    SELECT 2;
+        |  END FOR;
+        |END
+        |""".stripMargin
+    verifySqlScriptResult(sqlScript1, Seq(Seq(Row(2))))
+
+    val sqlScript2 =
+      """
+        |BEGIN
+        |  FOR x AS SELECT 1 DO
+        |    SELECT x.`1`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+    verifySqlScriptResult(sqlScript2, Seq(Seq(Row(1))))
+  }
+
+  test("Column with space in FOR query") {
+    val sqlScript1 =
+      """
+        |BEGIN
+        |  FOR SELECT 1 AS `Space Column` DO
+        |    SELECT `Space Column`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(1)))
+    verifySqlScriptResult(sqlScript1, expected)
+
+    val sqlScript2 =
+      """
+        |BEGIN
+        |  FOR x AS SELECT 1 AS `Space Column` DO
+        |    SELECT x.`Space Column`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+    verifySqlScriptResult(sqlScript2, expected)
+  }
+
+  test("FOR query referencing table with space") {
+    withTable("test_tbl") {
+      sql("CREATE TABLE test_tbl (`Space Column` INT) USING parquet")
+      sql("INSERT INTO test_tbl VALUES (1)")
+      val sqlScript1 =
+      """
+        |BEGIN
+        |  FOR SELECT * FROM test_tbl DO
+        |    SELECT `Space Column`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+      val expected = Seq(Seq(Row(1)))
+      verifySqlScriptResult(sqlScript1, expected)
+
+      val sqlScript2 =
+      """
+        |BEGIN
+        |  FOR x AS SELECT * FROM test_tbl DO
+        |    SELECT x.`Space Column`;
+        |  END FOR;
+        |END
+        |""".stripMargin
+      verifySqlScriptResult(sqlScript2, expected)
+    }
   }
 }

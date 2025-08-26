@@ -918,6 +918,20 @@ class QueryCompilationErrorsSuite
     }
   }
 
+  test("SPARK-52219: the schema level collations feature is unsupported") {
+    // TODO: when schema level collations are supported, change this test to set the flag to false
+    Seq(
+      "CREATE SCHEMA test_schema DEFAULT COLLATION UNICODE",
+      "ALTER SCHEMA test_schema DEFAULT COLLATION UNICODE"
+    ).foreach {
+      sqlText =>
+        checkError(
+          exception = intercept[AnalysisException](sql(sqlText)),
+          condition = "UNSUPPORTED_FEATURE.SCHEMA_LEVEL_COLLATIONS"
+        )
+    }
+  }
+
   test("UNSUPPORTED_CALL: call the unsupported method update()") {
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
@@ -940,7 +954,7 @@ class QueryCompilationErrorsSuite
     }
     checkError(
       exception = intercept[AnalysisException] {
-        converter.convertField(StructField("test", dummyDataType))
+        converter.convertField(StructField("test", dummyDataType), inShredded = false)
       },
       condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "Cannot convert Spark data type \"DUMMY\" to any Parquet type.")

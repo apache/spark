@@ -54,6 +54,7 @@ from pyspark.pandas.typedef import (
     pandas_on_spark_type,
 )
 from pyspark import pandas as ps
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class TypeHintTestsMixin:
@@ -312,7 +313,6 @@ class TypeHintTestsMixin:
     def test_as_spark_type_pandas_on_spark_dtype(self):
         type_mapper = {
             # binary
-            np.character: (np.character, BinaryType()),
             np.bytes_: (np.bytes_, BinaryType()),
             bytes: (np.bytes_, BinaryType()),
             # integer
@@ -346,6 +346,9 @@ class TypeHintTestsMixin:
                 LongType(),
             ),
         }
+        if LooseVersion(np.__version__) < LooseVersion("2.3"):
+            # binary
+            type_mapper.update({np.character: (np.character, BinaryType())})
 
         for numpy_or_python_type, (dtype, spark_type) in type_mapper.items():
             self.assertEqual(as_spark_type(numpy_or_python_type), spark_type)
@@ -431,7 +434,7 @@ class TypeHintTestsMixin:
             self.assertEqual(pandas_on_spark_type(extension_dtype), (extension_dtype, spark_type))
 
 
-class TypeHintTests(TypeHintTestsMixin, unittest.TestCase):
+class TypeHintTests(TypeHintTestsMixin, PandasOnSparkTestCase):
     pass
 
 

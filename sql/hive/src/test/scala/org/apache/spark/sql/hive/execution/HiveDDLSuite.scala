@@ -19,10 +19,15 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
+import java.time.LocalDateTime
 import java.util.Locale
+
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{spy, times, verify}
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
@@ -31,12 +36,13 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, TableChange, TableInfo}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, ParquetFooterReader}
+import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
@@ -608,6 +614,19 @@ class HiveDDLSuite
       parameters = Map(
         "details" -> "The spec ([partCol1=]) contains an empty partition column value")
     )
+  }
+
+  test("SPARK-51840: Restore Partition columns in HiveExternalCatalog#alterTable") {
+    withTable("t") {
+      sql(
+        """
+          |CREATE TABLE t USING json
+          |  PARTITIONED BY (A) AS
+          |    SELECT 'APACHE' A, TIMESTAMP_NTZ '2018-11-17 13:33:33' B
+          |""".stripMargin)
+      sql("MSCK REPAIR TABLE t")
+      checkAnswer(spark.table("t"), Row(LocalDateTime.of(2018, 11, 17, 13, 33, 33), "APACHE"))
+    }
   }
 
   test("add/drop partitions - external table") {
@@ -2631,7 +2650,7 @@ class HiveDDLSuite
   }
 
   test("SPARK-21216: join with a streaming DataFrame") {
-    import org.apache.spark.sql.execution.streaming.MemoryStream
+    import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
     import testImplicits._
 
     implicit val _sqlContext = spark.sqlContext
@@ -3361,6 +3380,56 @@ class HiveDDLSuite
     withTable(tbl) {
       sql("CREATE TABLE t1 STORED AS parquet SELECT id as `a,b` FROM range(1)")
       checkAnswer(sql("SELECT * FROM t1"), Row(0))
+    }
+  }
+
+  test("create table - partition column duplicates EMPTY_DATA_SCHEMA") {
+    withTable("t") {
+      val e = intercept[AnalysisException] {
+        sql("CREATE TABLE t (col int, b TIMESTAMP_NTZ) USING PARQUET PARTITIONED BY (col)")
+      }
+      checkError(
+        exception = e,
+        condition = "CONFLICTING_PARTITION_COLUMN_NAME_WITH_RESERVED",
+        parameters = Map(
+          "tableName" -> "spark_catalog.default.t",
+          "partitionColumnName" -> "col")
+      )
+    }
+  }
+
+  test("SPARK-52272: V2SessionCatalog does not alter schema on Hive Catalog") {
+    val spyCatalog = spy(spark.sessionState.catalog.externalCatalog)
+    val v1SessionCatalog = new SessionCatalog(spyCatalog)
+    val v2SessionCatalog = new V2SessionCatalog(v1SessionCatalog)
+    withTable("t1") {
+      val identifier = Identifier.of(Array("default"), "t1")
+      val outputSchema = new StructType().add("a", IntegerType, true, "comment1")
+      v2SessionCatalog.createTable(
+        identifier,
+        new TableInfo.Builder()
+          .withProperties(Map.empty.asJava)
+          .withColumns(CatalogV2Util.structTypeToV2Columns(outputSchema))
+          .withPartitions(Array.empty)
+          .build()
+      )
+      v2SessionCatalog.alterTable(identifier, TableChange.setProperty("foo", "bar"))
+      val loaded = v2SessionCatalog.loadTable(identifier)
+      assert(loaded.properties().get("foo") == "bar")
+
+      verify(spyCatalog, times(1)).alterTable(any[CatalogTable])
+      verify(spyCatalog, times(0)).alterTableSchema(
+        any[String], any[String], any[StructType])
+
+      v2SessionCatalog.alterTable(identifier,
+        TableChange.updateColumnComment(Array("a"), "comment2"))
+      val loaded2 = v2SessionCatalog.loadTable(identifier)
+      assert(loaded2.columns().length == 1)
+      assert(loaded2.columns.head.comment() == "comment2")
+
+      verify(spyCatalog, times(1)).alterTable(any[CatalogTable])
+      verify(spyCatalog, times(1)).alterTableSchema(
+        any[String], any[String], any[StructType])
     }
   }
 }

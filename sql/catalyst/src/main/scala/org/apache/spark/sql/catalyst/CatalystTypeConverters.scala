@@ -375,14 +375,14 @@ object CatalystTypeConverters {
 
   private object TimeConverter extends CatalystTypeConverter[LocalTime, LocalTime, Any] {
     override def toCatalystImpl(scalaValue: LocalTime): Long = {
-      DateTimeUtils.localTimeToMicros(scalaValue)
+      DateTimeUtils.localTimeToNanos(scalaValue)
     }
     override def toScala(catalystValue: Any): LocalTime = {
       if (catalystValue == null) null
-      else DateTimeUtils.microsToLocalTime(catalystValue.asInstanceOf[Long])
+      else DateTimeUtils.nanosToLocalTime(catalystValue.asInstanceOf[Long])
     }
     override def toScalaImpl(row: InternalRow, column: Int): LocalTime =
-      DateTimeUtils.microsToLocalTime(row.getLong(column))
+      DateTimeUtils.nanosToLocalTime(row.getLong(column))
   }
 
   private object TimestampConverter extends CatalystTypeConverter[Any, Timestamp, Any] {
@@ -575,8 +575,11 @@ object CatalystTypeConverters {
     case t: Timestamp => TimestampConverter.toCatalyst(t)
     case i: Instant => InstantConverter.toCatalyst(i)
     case l: LocalDateTime => TimestampNTZConverter.toCatalyst(l)
-    case d: BigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
-    case d: JavaBigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
+    case d: BigDecimal =>
+      new DecimalConverter(DecimalType(Math.max(d.precision, d.scale), d.scale)).toCatalyst(d)
+    case d: JavaBigDecimal =>
+      new DecimalConverter(DecimalType(Math.max(d.precision, d.scale), d.scale)).toCatalyst(d)
+    case seq: scala.collection.mutable.ArraySeq[_] => convertToCatalyst(seq.array)
     case seq: Seq[Any] => new GenericArrayData(seq.map(convertToCatalyst).toArray)
     case r: Row => InternalRow(r.toSeq.map(convertToCatalyst): _*)
     case arr: Array[Byte] => arr

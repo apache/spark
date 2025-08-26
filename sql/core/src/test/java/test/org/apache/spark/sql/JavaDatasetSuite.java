@@ -33,7 +33,6 @@ import scala.Tuple3;
 import scala.Tuple4;
 import scala.Tuple5;
 
-import com.google.common.base.Objects;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -63,6 +62,9 @@ public class JavaDatasetSuite implements Serializable {
     spark = new TestSparkSession();
     jsc = new JavaSparkContext(spark.sparkContext());
     spark.loadTestData();
+
+    // Initialize state store coordinator endpoint
+    spark.streams().stateStoreCoordinator();
   }
 
   @AfterEach
@@ -809,6 +811,26 @@ public class JavaDatasetSuite implements Serializable {
     Assertions.assertEquals(data, ds.collectAsList());
   }
 
+  @Test
+  public void testLocalTimeFilter() {
+    Encoder<LocalTime> encoder = Encoders.LOCALTIME();
+    List<LocalTime> data = Arrays.asList(
+      LocalTime.of(9, 30, 45),
+      LocalTime.of(14, 10, 10),
+      LocalTime.of(22, 10, 10)
+    );
+    Dataset<LocalTime> ds = spark.createDataset(data, encoder);
+
+    Dataset<LocalTime> filtered = ds.filter(
+      (FilterFunction<LocalTime>) time -> time.isAfter(LocalTime.of(12, 0, 0))
+    );
+    List<LocalTime> expectedFiltered = Arrays.asList(
+      LocalTime.of(14, 10, 10),
+      LocalTime.of(22, 10, 10)
+    );
+    Assertions.assertEquals(expectedFiltered, filtered.collectAsList());
+  }
+
   public static class KryoSerializable {
     String value;
 
@@ -1189,12 +1211,12 @@ public class JavaDatasetSuite implements Serializable {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       SmallBean smallBean = (SmallBean) o;
-      return b == smallBean.b && com.google.common.base.Objects.equal(a, smallBean.a);
+      return b == smallBean.b && Objects.equals(a, smallBean.a);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(a, b);
+      return Objects.hash(a, b);
     }
   }
 
@@ -1214,7 +1236,7 @@ public class JavaDatasetSuite implements Serializable {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       NestedSmallBean that = (NestedSmallBean) o;
-      return Objects.equal(f, that.f);
+      return Objects.equals(f, that.f);
     }
 
     @Override
@@ -1256,13 +1278,13 @@ public class JavaDatasetSuite implements Serializable {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       NestedSmallBeanWithNonNullField that = (NestedSmallBeanWithNonNullField) o;
-      return Objects.equal(nullable_f, that.nullable_f) &&
-        Objects.equal(nonNull_f, that.nonNull_f) && Objects.equal(childMap, that.childMap);
+      return Objects.equals(nullable_f, that.nullable_f) &&
+        Objects.equals(nonNull_f, that.nonNull_f) && Objects.equals(childMap, that.childMap);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(nullable_f, nonNull_f, childMap);
+      return Objects.hash(nullable_f, nonNull_f, childMap);
     }
   }
 
@@ -1283,7 +1305,7 @@ public class JavaDatasetSuite implements Serializable {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       NestedSmallBean2 that = (NestedSmallBean2) o;
-      return Objects.equal(f, that.f);
+      return Objects.equals(f, that.f);
     }
 
     @Override
@@ -1825,7 +1847,7 @@ public class JavaDatasetSuite implements Serializable {
     }
 
     public int hashCode() {
-      return Objects.hashCode(enumField, regularField);
+      return Objects.hash(enumField, regularField);
     }
 
     public boolean equals(Object other) {
@@ -2082,7 +2104,7 @@ public class JavaDatasetSuite implements Serializable {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       BeanWithSet that = (BeanWithSet) o;
-      return Objects.equal(fields, that.fields);
+      return Objects.equals(fields, that.fields);
     }
 
     @Override
@@ -2125,14 +2147,14 @@ public class JavaDatasetSuite implements Serializable {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       SpecificListsBean that = (SpecificListsBean) o;
-      return Objects.equal(arrayList, that.arrayList) &&
-        Objects.equal(linkedList, that.linkedList) &&
-        Objects.equal(list, that.list);
+      return Objects.equals(arrayList, that.arrayList) &&
+        Objects.equals(linkedList, that.linkedList) &&
+        Objects.equals(list, that.list);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(arrayList, linkedList, list);
+      return Objects.hash(arrayList, linkedList, list);
     }
   }
 }

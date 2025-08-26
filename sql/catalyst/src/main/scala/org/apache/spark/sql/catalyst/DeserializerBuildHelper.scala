@@ -160,7 +160,7 @@ object DeserializerBuildHelper {
     StaticInvoke(
       DateTimeUtils.getClass,
       ObjectType(classOf[java.time.LocalTime]),
-      "microsToLocalTime",
+      "nanosToLocalTime",
       path :: Nil,
       returnNullable = false)
   }

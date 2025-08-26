@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import java.util
+import java.{lang, util}
+import java.time.Instant
+
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
@@ -35,8 +39,15 @@ class InMemoryRowLevelOperationTable(
     name: String,
     schema: StructType,
     partitioning: Array[Transform],
-    properties: util.Map[String, String])
-  extends InMemoryTable(name, schema, partitioning, properties) with SupportsRowLevelOperations {
+    properties: util.Map[String, String],
+    constraints: Array[Constraint] = Array.empty)
+  extends InMemoryTable(
+    name,
+    CatalogV2Util.structTypeToV2Columns(schema),
+    partitioning,
+    properties,
+    constraints)
+  with SupportsRowLevelOperations {
 
   private final val PARTITION_COLUMN_REF = FieldReference(PartitionKeyColumn.name)
   private final val INDEX_COLUMN_REF = FieldReference(IndexColumn.name)
@@ -103,7 +114,21 @@ class InMemoryRowLevelOperationTable(
     override def description(): String = "InMemoryPartitionReplaceOperation"
   }
 
-  private case class PartitionBasedReplaceData(scan: InMemoryBatchScan) extends TestBatchWrite {
+  abstract class RowLevelOperationBatchWrite extends TestBatchWrite {
+
+    override def commit(messages: Array[WriterCommitMessage],
+                                            metrics: util.Map[String, lang.Long]): Unit = {
+      metrics.asScala.map {
+        case (key, value) => commitProperties += key -> String.valueOf(value)
+      }
+      commit(messages)
+      commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
+      commitProperties.clear()
+    }
+  }
+
+  private case class PartitionBasedReplaceData(scan: InMemoryBatchScan)
+    extends RowLevelOperationBatchWrite {
 
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
@@ -157,7 +182,7 @@ class InMemoryRowLevelOperationTable(
     }
   }
 
-  private object TestDeltaBatchWrite extends DeltaBatchWrite {
+  private object TestDeltaBatchWrite extends RowLevelOperationBatchWrite with DeltaBatchWrite{
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DeltaWriterFactory = {
       DeltaBufferedRowsWriterFactory
     }

@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, perio
 import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand, ShowViewsCommand}
 import org.apache.spark.sql.execution.datasources.v2.{DescribeTableExec, ShowTablesExec}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
@@ -52,7 +53,7 @@ object HiveResult extends SQLConfHelper {
   def getBinaryFormatter: BinaryFormatter = {
     if (conf.getConf(SQLConf.BINARY_OUTPUT_STYLE).isEmpty) {
       // Keep the legacy behavior for compatibility.
-      conf.setConf(SQLConf.BINARY_OUTPUT_STYLE, Some("UTF-8"))
+      conf.setConf(SQLConf.BINARY_OUTPUT_STYLE, Some(BinaryOutputStyle.UTF8))
     }
     ToStringBase.getBinaryFormatter(_).toString
   }
@@ -148,6 +149,6 @@ object HiveResult extends SQLConfHelper {
         startField,
         endField)
     case (v: VariantVal, VariantType) => v.toString
-    case (other, _: UserDefinedType[_]) => other.toString
+    case (other, u: UserDefinedType[_]) => u.stringifyValue(other)
   }
 }

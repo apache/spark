@@ -14,10 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import unittest
 
 from pyspark.testing.connectutils import should_test_connect
-from pyspark.sql.tests.test_udtf import BaseUDTFTestsMixin, UDTFArrowTestsMixin
+from pyspark.sql.tests.test_udtf import (
+    BaseUDTFTestsMixin,
+    UDTFArrowTestsMixin,
+    LegacyUDTFArrowTestsMixin,
+)
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 if should_test_connect:
@@ -55,9 +60,7 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
             def eval(self, a: int):
                 yield a + 1,
 
-        with self.assertRaisesRegex(
-            InvalidPlanInput, "Invalid Python user-defined table function return type."
-        ):
+        with self.assertRaisesRegex(InvalidPlanInput, "Invalid.*type"):
             TestUDTF(lit(1)).collect()
 
     @unittest.skip("Spark Connect does not support broadcast but the test depends on it.")
@@ -88,16 +91,54 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
         self.spark.addArtifacts(path, file=True)
 
 
-class ArrowUDTFParityTests(UDTFArrowTestsMixin, UDTFParityTests):
+class LegacyArrowUDTFParityTests(LegacyUDTFArrowTestsMixin, UDTFParityTests):
     @classmethod
     def setUpClass(cls):
-        super(ArrowUDTFParityTests, cls).setUpClass()
+        super(LegacyArrowUDTFParityTests, cls).setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "true")
+        cls.spark.conf.set(
+            "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "true"
+        )
 
     @classmethod
     def tearDownClass(cls):
         try:
             cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
+            cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled")
+        finally:
+            super(LegacyArrowUDTFParityTests, cls).tearDownClass()
+
+    def test_udtf_access_spark_session_connect(self):
+        df = self.spark.range(10)
+
+        @udtf(returnType="x: int")
+        class TestUDTF:
+            def eval(self):
+                df.collect()
+                yield 1,
+
+        with self.assertRaisesRegex(PythonException, "NO_ACTIVE_SESSION"):
+            TestUDTF().collect()
+
+
+@unittest.skipIf(
+    os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1",
+    "Python UDTF with Arrow is still under development.",
+)
+class ArrowUDTFParityTests(UDTFArrowTestsMixin, UDTFParityTests):
+    @classmethod
+    def setUpClass(cls):
+        super(ArrowUDTFParityTests, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "true")
+        cls.spark.conf.set(
+            "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "false"
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
+            cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled")
         finally:
             super(ArrowUDTFParityTests, cls).tearDownClass()
 

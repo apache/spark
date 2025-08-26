@@ -26,13 +26,8 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
 abstract class ConstraintParseSuiteBase extends AnalysisTest with SharedSparkSession {
   protected def validConstraintCharacteristics = Seq(
     ("", "", ConstraintCharacteristic(enforced = None, rely = None)),
-    ("NOT ENFORCED", "", ConstraintCharacteristic(enforced = Some(false), rely = None)),
     ("", "RELY", ConstraintCharacteristic(enforced = None, rely = Some(true))),
-    ("", "NORELY", ConstraintCharacteristic(enforced = None, rely = Some(false))),
-    ("NOT ENFORCED", "RELY",
-      ConstraintCharacteristic(enforced = Some(false), rely = Some(true))),
-    ("NOT ENFORCED", "NORELY",
-      ConstraintCharacteristic(enforced = Some(false), rely = Some(false)))
+    ("", "NORELY", ConstraintCharacteristic(enforced = None, rely = Some(false)))
   )
 
   protected def enforcedConstraintCharacteristics = Seq(
@@ -41,6 +36,19 @@ abstract class ConstraintParseSuiteBase extends AnalysisTest with SharedSparkSes
     ("ENFORCED", "NORELY", ConstraintCharacteristic(enforced = Some(true), rely = Some(false))),
     ("RELY", "ENFORCED", ConstraintCharacteristic(enforced = Some(true), rely = Some(true))),
     ("NORELY", "ENFORCED", ConstraintCharacteristic(enforced = Some(true), rely = Some(false)))
+  )
+
+  protected def notEnforcedConstraintCharacteristics = Seq(
+    ("NOT ENFORCED", "RELY",
+      ConstraintCharacteristic(enforced = Some(false), rely = Some(true))),
+    ("NOT ENFORCED", "NORELY",
+      ConstraintCharacteristic(enforced = Some(false), rely = Some(false))),
+    ("RELY", "NOT ENFORCED",
+      ConstraintCharacteristic(enforced = Some(false), rely = Some(true))),
+    ("NORELY", "NOT ENFORCED",
+      ConstraintCharacteristic(enforced = Some(false), rely = Some(false))),
+    ("NOT ENFORCED", "",
+      ConstraintCharacteristic(enforced = Some(false), rely = None))
   )
 
   protected val invalidConstraintCharacteristics = Seq(
@@ -56,12 +64,12 @@ abstract class ConstraintParseSuiteBase extends AnalysisTest with SharedSparkSes
 
   protected def createExpectedPlan(
       columns: Seq[ColumnDefinition],
-      constraints: Seq[TableConstraint],
+      tableConstraints: Seq[TableConstraint],
       isCreateTable: Boolean = true): LogicalPlan = {
     val tableId = UnresolvedIdentifier(Seq("t"))
     val tableSpec = UnresolvedTableSpec(
       Map.empty[String, String], Some("parquet"), OptionList(Seq.empty),
-      None, None, None, None, false, constraints)
+      None, None, None, None, false, tableConstraints)
     if (isCreateTable) {
       CreateTable(tableId, columns, Seq.empty, tableSpec, false)
     } else {
@@ -72,14 +80,16 @@ abstract class ConstraintParseSuiteBase extends AnalysisTest with SharedSparkSes
   protected def verifyConstraints(
       sql: String,
       constraints: Seq[TableConstraint],
-      isCreateTable: Boolean = true): Unit = {
+      isCreateTable: Boolean = true,
+      columnANullable: Boolean = true,
+      columnBNullable: Boolean = true): Unit = {
     val parsed = parsePlan(sql)
     val columns = Seq(
-      ColumnDefinition("a", IntegerType),
-      ColumnDefinition("b", StringType)
+      ColumnDefinition("a", IntegerType, nullable = columnANullable),
+      ColumnDefinition("b", StringType, nullable = columnBNullable)
     )
     val expected = createExpectedPlan(
-      columns = columns, constraints = constraints, isCreateTable = isCreateTable)
+      columns = columns, tableConstraints = constraints, isCreateTable = isCreateTable)
     comparePlans(parsed, expected)
   }
 }

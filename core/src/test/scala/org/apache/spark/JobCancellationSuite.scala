@@ -59,7 +59,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
   }
 
   test("local mode, FIFO scheduler") {
-    val conf = new SparkConf().set(SCHEDULER_MODE, "FIFO")
+    val conf = new SparkConf().set(SCHEDULER_MODE.key, "FIFO")
     sc = new SparkContext("local[2]", "test", conf)
     testCount()
     testTake()
@@ -68,7 +68,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
   }
 
   test("local mode, fair scheduler") {
-    val conf = new SparkConf().set(SCHEDULER_MODE, "FAIR")
+    val conf = new SparkConf().set(SCHEDULER_MODE.key, "FAIR")
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
     conf.set(SCHEDULER_ALLOCATION_FILE, xmlPath)
     sc = new SparkContext("local[2]", "test", conf)
@@ -79,7 +79,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
   }
 
   test("cluster mode, FIFO scheduler") {
-    val conf = new SparkConf().set(SCHEDULER_MODE, "FIFO")
+    val conf = new SparkConf().set(SCHEDULER_MODE.key, "FIFO")
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
     testCount()
     testTake()
@@ -88,7 +88,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
   }
 
   test("cluster mode, fair scheduler") {
-    val conf = new SparkConf().set(SCHEDULER_MODE, "FAIR")
+    val conf = new SparkConf().set(SCHEDULER_MODE.key, "FAIR")
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
     conf.set(SCHEDULER_ALLOCATION_FILE, xmlPath)
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)

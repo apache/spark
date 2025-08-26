@@ -24,16 +24,12 @@ from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import (
     StructType,
-    TYPE_CHECKING,
     Row,
 )
 from pyspark.sql.pandas.types import convert_pandas_using_numpy_type
 from pyspark.serializers import CPickleSerializer
 from pyspark.errors import PySparkRuntimeError
 import uuid
-
-if TYPE_CHECKING:
-    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
 
 __all__ = ["StatefulProcessorApiClient", "StatefulProcessorHandleState"]
 
@@ -49,22 +45,26 @@ class StatefulProcessorHandleState(Enum):
 
 class StatefulProcessorApiClient:
     def __init__(
-        self, state_server_port: int, key_schema: StructType, is_driver: bool = False
+        self, state_server_port: Union[int, str], key_schema: StructType, is_driver: bool = False
     ) -> None:
         self.key_schema = key_schema
-        self._client_socket = socket.socket()
-        self._client_socket.connect(("localhost", state_server_port))
+        if isinstance(state_server_port, str):
+            self._client_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self._client_socket.connect(state_server_port)
+        else:
+            self._client_socket = socket.socket()
+            self._client_socket.connect(("localhost", state_server_port))
 
-        # SPARK-51667: We have a pattern of sending messages continuously from one side
-        # (Python -> JVM, and vice versa) before getting response from other side. Since most
-        # messages we are sending are small, this triggers the bad combination of Nagle's algorithm
-        # and delayed ACKs, which can cause a significant delay on the latency.
-        # See SPARK-51667 for more details on how this can be a problem.
-        #
-        # Disabling either would work, but it's more common to disable Nagle's algorithm; there is
-        # lot less reference to disabling delayed ACKs, while there are lots of resources to
-        # disable Nagle's algorithm.
-        self._client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            # SPARK-51667: We have a pattern of sending messages continuously from one side
+            # (Python -> JVM, and vice versa) before getting response from other side. Since most
+            # messages we are sending are small, this triggers the bad combination of Nagle's
+            # algorithm and delayed ACKs, which can cause a significant delay on the latency.
+            # See SPARK-51667 for more details on how this can be a problem.
+            #
+            # Disabling either would work, but it's more common to disable Nagle's algorithm; there
+            # is lot less reference to disabling delayed ACKs, while there are lots of resources to
+            # disable Nagle's algorithm.
+            self._client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
         self.sockfile = self._client_socket.makefile(
             "rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536))
@@ -76,9 +76,11 @@ class StatefulProcessorApiClient:
         self.utf8_deserializer = UTF8Deserializer()
         self.pickleSer = CPickleSerializer()
         self.serializer = ArrowStreamSerializer()
-        # Dictionaries to store the mapping between iterator id and a tuple of pandas DataFrame
+        # Dictionaries to store the mapping between iterator id and a tuple of data batch
         # and the index of the last row that was read.
-        self.list_timer_iterator_cursors: Dict[str, Tuple["PandasDataFrameLike", int]] = {}
+        self.list_timer_iterator_cursors: Dict[str, Tuple[Any, int, bool]] = {}
+        self.expiry_timer_iterator_cursors: Dict[str, Tuple[Any, int, bool]] = {}
+
         # statefulProcessorApiClient is initialized per batch per partition,
         # so we will have new timestamps for a new batch
         self._batch_timestamp = -1
@@ -218,12 +220,12 @@ class StatefulProcessorApiClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error deleting timer: " f"{response_message[1]}")
 
-    def get_list_timer_row(self, iterator_id: str) -> int:
+    def get_list_timer_row(self, iterator_id: str) -> Tuple[int, bool]:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if iterator_id in self.list_timer_iterator_cursors:
             # if the iterator is already in the dictionary, return the next row
-            pandas_df, index = self.list_timer_iterator_cursors[iterator_id]
+            data_batch, index, require_next_fetch = self.list_timer_iterator_cursors[iterator_id]
         else:
             list_call = stateMessage.ListTimers(iteratorId=iterator_id)
             state_call_command = stateMessage.TimerStateCallCommand(list=list_call)
@@ -231,63 +233,80 @@ class StatefulProcessorApiClient:
             message = stateMessage.StateRequest(statefulProcessorCall=call)
 
             self._send_proto_message(message.SerializeToString())
-            response_message = self._receive_proto_message()
+            response_message = self._receive_proto_message_with_timers()
             status = response_message[0]
             if status == 0:
-                iterator = self._read_arrow_state()
-                # We need to exhaust the iterator here to make sure all the arrow batches are read,
-                # even though there is only one batch in the iterator. Otherwise, the stream might
-                # block further reads since it thinks there might still be some arrow batches left.
-                # We only need to read the first batch in the iterator because it's guaranteed that
-                # there would only be one batch sent from the JVM side.
-                data_batch = None
-                for batch in iterator:
-                    if data_batch is None:
-                        data_batch = batch
-                if data_batch is None:
-                    # TODO(SPARK-49233): Classify user facing errors.
-                    raise PySparkRuntimeError("Error getting map state entry.")
-                pandas_df = data_batch.to_pandas()
+                data_batch = list(map(lambda x: x.timestampMs, response_message[2]))
+                require_next_fetch = response_message[3]
                 index = 0
             else:
                 raise StopIteration()
+
+        is_last_row = False
         new_index = index + 1
-        if new_index < len(pandas_df):
+        if new_index < len(data_batch):
             # Update the index in the dictionary.
-            self.list_timer_iterator_cursors[iterator_id] = (pandas_df, new_index)
+            self.list_timer_iterator_cursors[iterator_id] = (
+                data_batch,
+                new_index,
+                require_next_fetch,
+            )
         else:
-            # If the index is at the end of the DataFrame, remove the state from the dictionary.
+            # If the index is at the end of the data batch, remove the state from the dictionary.
             self.list_timer_iterator_cursors.pop(iterator_id, None)
-        return pandas_df.at[index, "timestamp"].item()
+            is_last_row = True
+
+        is_last_row_from_iterator = is_last_row and not require_next_fetch
+        timestamp = data_batch[index]
+        return (timestamp, is_last_row_from_iterator)
 
     def get_expiry_timers_iterator(
-        self, expiry_timestamp: int
-    ) -> Iterator[list[Tuple[Tuple, int]]]:
+        self, iterator_id: str, expiry_timestamp: int
+    ) -> Tuple[Tuple, int, bool]:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
-        while True:
-            expiry_timer_call = stateMessage.ExpiryTimerRequest(expiryTimestampMs=expiry_timestamp)
+        if iterator_id in self.expiry_timer_iterator_cursors:
+            # If the state is already in the dictionary, return the next row.
+            data_batch, index, require_next_fetch = self.expiry_timer_iterator_cursors[iterator_id]
+        else:
+            expiry_timer_call = stateMessage.ExpiryTimerRequest(
+                expiryTimestampMs=expiry_timestamp, iteratorId=iterator_id
+            )
             timer_request = stateMessage.TimerRequest(expiryTimerRequest=expiry_timer_call)
             message = stateMessage.StateRequest(timerRequest=timer_request)
 
             self._send_proto_message(message.SerializeToString())
-            response_message = self._receive_proto_message()
+            response_message = self._receive_proto_message_with_timers()
             status = response_message[0]
-            if status == 1:
-                break
-            elif status == 0:
-                result_list = []
-                iterator = self._read_arrow_state()
-                for batch in iterator:
-                    batch_df = batch.to_pandas()
-                    for i in range(batch.num_rows):
-                        deserialized_key = self.pickleSer.loads(batch_df.at[i, "key"])
-                        timestamp = batch_df.at[i, "timestamp"].item()
-                        result_list.append((tuple(deserialized_key), timestamp))
-                yield result_list
+            if status == 0:
+                data_batch = list(
+                    map(
+                        lambda x: (self._deserialize_from_bytes(x.key), x.timestampMs),
+                        response_message[2],
+                    )
+                )
+                require_next_fetch = response_message[3]
+                index = 0
             else:
-                # TODO(SPARK-49233): Classify user facing errors.
-                raise PySparkRuntimeError(f"Error getting expiry timers: " f"{response_message[1]}")
+                raise StopIteration()
+
+        is_last_row = False
+        new_index = index + 1
+        if new_index < len(data_batch):
+            # Update the index in the dictionary.
+            self.expiry_timer_iterator_cursors[iterator_id] = (
+                data_batch,
+                new_index,
+                require_next_fetch,
+            )
+        else:
+            # If the index is at the end of the data batch, remove the state from the dictionary.
+            self.expiry_timer_iterator_cursors.pop(iterator_id, None)
+            is_last_row = True
+
+        is_last_row_from_iterator = is_last_row and not require_next_fetch
+        key, timestamp = data_batch[index]
+        return (key, timestamp, is_last_row_from_iterator)
 
     def get_timestamps(self, time_mode: str) -> Tuple[int, int]:
         if time_mode.lower() == "none":
@@ -421,32 +440,88 @@ class StatefulProcessorApiClient:
         message.ParseFromString(bytes)
         return message.statusCode, message.errorMessage, message.value
 
+    # The third return type is RepeatedScalarFieldContainer[bytes], which is protobuf's container
+    # type. We simplify it to Any here to avoid unnecessary complexity.
+    def _receive_proto_message_with_list_get(self) -> Tuple[int, str, Any, bool]:
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
+
+        length = read_int(self.sockfile)
+        bytes = self.sockfile.read(length)
+        message = stateMessage.StateResponseWithListGet()
+        message.ParseFromString(bytes)
+
+        return message.statusCode, message.errorMessage, message.value, message.requireNextFetch
+
+    # The third return type is RepeatedScalarFieldContainer[bytes], which is protobuf's container
+    # type. We simplify it to Any here to avoid unnecessary complexity.
+    def _receive_proto_message_with_map_keys_values(self) -> Tuple[int, str, Any, bool]:
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
+
+        length = read_int(self.sockfile)
+        bytes = self.sockfile.read(length)
+        message = stateMessage.StateResponseWithMapKeysOrValues()
+        message.ParseFromString(bytes)
+
+        return message.statusCode, message.errorMessage, message.value, message.requireNextFetch
+
+    # The third return type is RepeatedScalarFieldContainer[KeyAndValuePair], which is protobuf's
+    # container type. We simplify it to Any here to avoid unnecessary complexity.
+    def _receive_proto_message_with_map_pairs(self) -> Tuple[int, str, Any, bool]:
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
+
+        length = read_int(self.sockfile)
+        bytes = self.sockfile.read(length)
+        message = stateMessage.StateResponseWithMapIterator()
+        message.ParseFromString(bytes)
+
+        return message.statusCode, message.errorMessage, message.kvPair, message.requireNextFetch
+
+    # The third return type is RepeatedScalarFieldContainer[TimerInfo], which is protobuf's
+    # container type. We simplify it to Any here to avoid unnecessary complexity.
+    def _receive_proto_message_with_timers(self) -> Tuple[int, str, Any, bool]:
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
+
+        length = read_int(self.sockfile)
+        bytes = self.sockfile.read(length)
+        message = stateMessage.StateResponseWithTimer()
+        message.ParseFromString(bytes)
+
+        return message.statusCode, message.errorMessage, message.timer, message.requireNextFetch
+
     def _receive_str(self) -> str:
         return self.utf8_deserializer.loads(self.sockfile)
 
     def _serialize_to_bytes(self, schema: StructType, data: Tuple) -> bytes:
         from pyspark.testing.utils import have_numpy
 
-        converted = []
-
         if have_numpy:
             import numpy as np
 
-            # In order to convert NumPy types to Python primitive types.
-            for v in data:
+            def normalize_value(v: Any) -> Any:
+                # Convert NumPy types to Python primitive types.
                 if isinstance(v, np.generic):
-                    converted.append(v.tolist())
+                    return v.tolist()
+                # List / tuple: recursively normalize each element
+                if isinstance(v, (list, tuple)):
+                    return type(v)(normalize_value(e) for e in v)
+                # Dict: normalize both keys and values
+                if isinstance(v, dict):
+                    return {normalize_value(k): normalize_value(val) for k, val in v.items()}
                 # Address a couple of pandas dtypes too.
                 elif hasattr(v, "to_pytimedelta"):
-                    converted.append(v.to_pytimedelta())
+                    return v.to_pytimedelta()
                 elif hasattr(v, "to_pydatetime"):
-                    converted.append(v.to_pydatetime())
+                    return v.to_pydatetime()
                 else:
-                    converted.append(v)
+                    return v
+
+            converted = [normalize_value(v) for v in data]
         else:
             converted = list(data)
 
-        row_value = Row(*converted)
+        field_names = [f.name for f in schema.fields]
+        row_value = Row(**dict(zip(field_names, converted)))
+
         return self.pickleSer.dumps(schema.toInternal(row_value))
 
     def _deserialize_from_bytes(self, value: bytes) -> Any:
@@ -512,9 +587,44 @@ class ListTimerIterator:
         # same partition won't interfere with each other
         self.iterator_id = str(uuid.uuid4())
         self.stateful_processor_api_client = stateful_processor_api_client
+        self.iterator_fully_consumed = False
 
     def __iter__(self) -> Iterator[int]:
         return self
 
     def __next__(self) -> int:
-        return self.stateful_processor_api_client.get_list_timer_row(self.iterator_id)
+        if self.iterator_fully_consumed:
+            raise StopIteration()
+
+        ts, is_last_row = self.stateful_processor_api_client.get_list_timer_row(self.iterator_id)
+        if is_last_row:
+            self.iterator_fully_consumed = True
+
+        return ts
+
+
+class ExpiredTimerIterator:
+    def __init__(
+        self, stateful_processor_api_client: StatefulProcessorApiClient, expiry_timestamp: int
+    ):
+        # Generate a unique identifier for the iterator to make sure iterators on the
+        # same partition won't interfere with each other
+        self.iterator_id = str(uuid.uuid4())
+        self.stateful_processor_api_client = stateful_processor_api_client
+        self.expiry_timestamp = expiry_timestamp
+        self.iterator_fully_consumed = False
+
+    def __iter__(self) -> Iterator[Tuple[Tuple, int]]:
+        return self
+
+    def __next__(self) -> Tuple[Tuple, int]:
+        if self.iterator_fully_consumed:
+            raise StopIteration()
+
+        key, ts, is_last_row = self.stateful_processor_api_client.get_expiry_timers_iterator(
+            self.iterator_id, self.expiry_timestamp
+        )
+        if is_last_row:
+            self.iterator_fully_consumed = True
+
+        return (key, ts)

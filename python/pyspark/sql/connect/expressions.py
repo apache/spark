@@ -54,6 +54,7 @@ from pyspark.sql.types import (
     DecimalType,
     StringType,
     DataType,
+    TimeType,
     TimestampType,
     TimestampNTZType,
     DayTimeIntervalType,
@@ -248,6 +249,7 @@ class LiteralExpression(Expression):
                 DecimalType,
                 StringType,
                 DateType,
+                TimeType,
                 TimestampType,
                 TimestampNTZType,
                 DayTimeIntervalType,
@@ -298,6 +300,9 @@ class LiteralExpression(Expression):
                     value = DateType().toInternal(value)
                 else:
                     value = DateType().toInternal(value.date())
+            elif isinstance(dataType, TimeType):
+                assert isinstance(value, datetime.time)
+                value = TimeType().toInternal(value)
             elif isinstance(dataType, TimestampType):
                 assert isinstance(value, datetime.datetime)
                 value = TimestampType().toInternal(value)
@@ -352,6 +357,8 @@ class LiteralExpression(Expression):
             return TimestampNTZType() if is_timestamp_ntz_preferred() else TimestampType()
         elif isinstance(value, datetime.date):
             return DateType()
+        elif isinstance(value, datetime.time):
+            return TimeType()
         elif isinstance(value, datetime.timedelta):
             return DayTimeIntervalType()
         elif isinstance(value, np.generic):
@@ -416,6 +423,9 @@ class LiteralExpression(Expression):
         elif literal.HasField("date"):
             assert dataType is None or isinstance(dataType, DataType)
             return DateType().fromInternal(literal.date)
+        elif literal.HasField("time"):
+            assert dataType is None or isinstance(dataType, TimeType)
+            return TimeType().fromInternal(literal.time.nano)
         elif literal.HasField("timestamp"):
             assert dataType is None or isinstance(dataType, TimestampType)
             return TimestampType().fromInternal(literal.timestamp)
@@ -468,6 +478,9 @@ class LiteralExpression(Expression):
             expr.literal.string = str(self._value)
         elif isinstance(self._dataType, DateType):
             expr.literal.date = int(self._value)
+        elif isinstance(self._dataType, TimeType):
+            expr.literal.time.precision = self._dataType.precision
+            expr.literal.time.nano = int(self._value)
         elif isinstance(self._dataType, TimestampType):
             expr.literal.timestamp = int(self._value)
         elif isinstance(self._dataType, TimestampNTZType):
@@ -496,6 +509,10 @@ class LiteralExpression(Expression):
             dt = DateType().fromInternal(self._value)
             if dt is not None and isinstance(dt, datetime.date):
                 return dt.strftime("%Y-%m-%d")
+        elif isinstance(self._dataType, TimeType):
+            t = TimeType().fromInternal(self._value)
+            if t is not None and isinstance(t, datetime.time):
+                return t.strftime("%H:%M:%S.%f")
         elif isinstance(self._dataType, TimestampType):
             ts = TimestampType().fromInternal(self._value)
             if ts is not None and isinstance(ts, datetime.datetime):
@@ -1241,9 +1258,10 @@ class SubqueryExpression(Expression):
         partition_spec: Optional[Sequence["Expression"]] = None,
         order_spec: Optional[Sequence["SortOrder"]] = None,
         with_single_partition: Optional[bool] = None,
+        in_subquery_values: Optional[Sequence["Expression"]] = None,
     ) -> None:
         assert isinstance(subquery_type, str)
-        assert subquery_type in ("scalar", "exists", "table_arg")
+        assert subquery_type in ("scalar", "exists", "table_arg", "in")
 
         super().__init__()
         self._plan = plan
@@ -1251,6 +1269,7 @@ class SubqueryExpression(Expression):
         self._partition_spec = partition_spec or []
         self._order_spec = order_spec or []
         self._with_single_partition = with_single_partition
+        self._in_subquery_values = in_subquery_values or []
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         expr = self._create_proto_expression()
@@ -1276,17 +1295,25 @@ class SubqueryExpression(Expression):
                 )
             if self._with_single_partition is not None:
                 table_arg_options.with_single_partition = self._with_single_partition
+        elif self._subquery_type == "in":
+            expr.subquery_expression.subquery_type = proto.SubqueryExpression.SUBQUERY_TYPE_IN
+            expr.subquery_expression.in_subquery_values.extend(
+                [expr.to_plan(session) for expr in self._in_subquery_values]
+            )
 
         return expr
 
     def __repr__(self) -> str:
         repr_parts = [f"plan={self._plan}", f"type={self._subquery_type}"]
 
-        if self._partition_spec:
-            repr_parts.append(f"partition_spec={self._partition_spec}")
-        if self._order_spec:
-            repr_parts.append(f"order_spec={self._order_spec}")
-        if self._with_single_partition is not None:
-            repr_parts.append(f"with_single_partition={self._with_single_partition}")
+        if self._subquery_type == "table_arg":
+            if self._partition_spec:
+                repr_parts.append(f"partition_spec={self._partition_spec}")
+            if self._order_spec:
+                repr_parts.append(f"order_spec={self._order_spec}")
+            if self._with_single_partition is not None:
+                repr_parts.append(f"with_single_partition={self._with_single_partition}")
+        elif self._subquery_type == "in":
+            repr_parts.append(f"values={self._in_subquery_values}")
 
         return f"SubqueryExpression({', '.join(repr_parts)})"

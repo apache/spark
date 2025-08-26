@@ -18,7 +18,11 @@
 package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, CleanupAliases}
+import org.apache.spark.sql.catalyst.analysis.{
+  AnalysisContext,
+  CleanupAliases,
+  PullOutNondeterministic
+}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -30,7 +34,8 @@ import org.apache.spark.sql.internal.SQLConf
  */
 class ResolverRunner(
     resolver: Resolver,
-    extendedResolutionChecks: Seq[LogicalPlan => Unit] = Seq.empty
+    extendedResolutionChecks: Seq[LogicalPlan => Unit] = Seq.empty,
+    extendedRewriteRules: Seq[Rule[LogicalPlan]] = Seq.empty
 ) extends ResolverMetricTracker
     with SQLConfHelper {
 
@@ -40,14 +45,20 @@ class ResolverRunner(
    */
   private val planRewriteRules: Seq[Rule[LogicalPlan]] = Seq(
     PruneMetadataColumns,
-    CleanupAliases
+    CleanupAliases,
+    PullOutNondeterministic
   )
 
   /**
    * `planRewriter` is used to rewrite the plan and the subqueries inside by applying
    * `planRewriteRules`.
    */
-  private val planRewriter = new PlanRewriter(planRewriteRules)
+  private val planRewriter = new PlanRewriter(planRewriteRules, extendedRewriteRules)
+
+  /**
+   * `resolutionCheckRunner` is used to run `extendedResolutionChecks` on the resolved plan.
+   */
+  private val resolutionCheckRunner = new ResolutionCheckRunner(extendedResolutionChecks)
 
   /**
    * Entry point for the resolver. This method performs following 4 steps:
@@ -59,23 +70,26 @@ class ResolverRunner(
   def resolve(
       plan: LogicalPlan,
       analyzerBridgeState: Option[AnalyzerBridgeState] = None,
-      tracker: QueryPlanningTracker = new QueryPlanningTracker): LogicalPlan =
-    recordMetrics(tracker) {
+      tracker: QueryPlanningTracker = new QueryPlanningTracker): LogicalPlan = {
+    recordTopLevelMetrics(tracker) {
       AnalysisContext.withNewAnalysisContext {
         val resolvedPlan = resolver.lookupMetadataAndResolve(plan, analyzerBridgeState)
 
         val rewrittenPlan = planRewriter.rewriteWithSubqueries(resolvedPlan)
 
-        if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED)) {
-          val validator = new ResolutionValidator
-          validator.validatePlan(rewrittenPlan)
-        }
+        runValidator(rewrittenPlan)
 
-        for (rule <- extendedResolutionChecks) {
-          rule(rewrittenPlan)
-        }
+        resolutionCheckRunner.runWithSubqueries(rewrittenPlan)
 
         rewrittenPlan
       }
     }
+  }
+
+  private def runValidator(plan: LogicalPlan): Unit = {
+    if (conf.getConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED)) {
+      val validator = new ResolutionValidator
+      validator.validatePlan(plan)
+    }
+  }
 }

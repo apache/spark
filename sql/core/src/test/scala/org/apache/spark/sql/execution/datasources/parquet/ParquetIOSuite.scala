@@ -41,8 +41,8 @@ import org.apache.spark.{SPARK_VERSION_SHORT, SparkException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
+import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.localTime
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1307,6 +1307,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
+  test("explode nested lists crossing a rowgroup boundary") {
+    withAllParquetReaders {
+      checkAnswer(
+        readResourceParquetFile("test-data/packed-list-vectorized.parquet")
+          .selectExpr("explode(DIStatus.command_status.actions_status)")
+          .selectExpr("col.result"),
+        List.fill(4992)(Row("SUCCESS")))
+    }
+  }
+
   test("read dictionary encoded decimals written as INT64") {
     withAllParquetReaders {
       checkAnswer(
@@ -1613,7 +1623,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
         (0 until numRecords).foreach { i =>
           val record = new SimpleGroup(schema)
-          record.add(0, localTime(23, 59, 59, 123456))
+          record.add(0, localTime(23, 59, 59, 123456) / DateTimeConstants.NANOS_PER_MICROS)
           writer.write(record)
         }
         writer.close

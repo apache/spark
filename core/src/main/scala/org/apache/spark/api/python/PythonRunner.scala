@@ -20,9 +20,9 @@ package org.apache.spark.api.python
 import java.io._
 import java.net._
 import java.nio.ByteBuffer
-import java.nio.channels.SelectionKey
-import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.channels.{AsynchronousCloseException, Channels, SelectionKey, ServerSocketChannel, SocketChannel}
 import java.nio.file.{Files => JavaFiles, Path}
+import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -32,7 +32,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
-import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, LogKeys, MessageWithContext}
 import org.apache.spark.internal.LogKeys.TASK_NAME
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
 import org.apache.spark.internal.config.Python._
@@ -64,9 +64,18 @@ private[spark] object PythonEvalType {
   val SQL_COGROUPED_MAP_ARROW_UDF = 210
   val SQL_TRANSFORM_WITH_STATE_PANDAS_UDF = 211
   val SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF = 212
+  val SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF = 213
+  val SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF = 214
+
+  // Arrow UDFs
+  val SQL_SCALAR_ARROW_UDF = 250
+  val SQL_SCALAR_ARROW_ITER_UDF = 251
+  val SQL_GROUPED_AGG_ARROW_UDF = 252
+  val SQL_WINDOW_AGG_ARROW_UDF = 253
 
   val SQL_TABLE_UDF = 300
   val SQL_ARROW_TABLE_UDF = 301
+  val SQL_ARROW_UDTF = 302
 
   def toString(pythonEvalType: Int): String = pythonEvalType match {
     case NON_UDF => "NON_UDF"
@@ -85,9 +94,19 @@ private[spark] object PythonEvalType {
     case SQL_COGROUPED_MAP_ARROW_UDF => "SQL_COGROUPED_MAP_ARROW_UDF"
     case SQL_TABLE_UDF => "SQL_TABLE_UDF"
     case SQL_ARROW_TABLE_UDF => "SQL_ARROW_TABLE_UDF"
+    case SQL_ARROW_UDTF => "SQL_ARROW_UDTF"
     case SQL_TRANSFORM_WITH_STATE_PANDAS_UDF => "SQL_TRANSFORM_WITH_STATE_PANDAS_UDF"
     case SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF =>
       "SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF"
+    case SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF => "SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF"
+    case SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF =>
+      "SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF"
+
+    // Arrow UDFs
+    case SQL_SCALAR_ARROW_UDF => "SQL_SCALAR_ARROW_UDF"
+    case SQL_SCALAR_ARROW_ITER_UDF => "SQL_SCALAR_ARROW_ITER_UDF"
+    case SQL_GROUPED_AGG_ARROW_UDF => "SQL_GROUPED_AGG_ARROW_UDF"
+    case SQL_WINDOW_AGG_ARROW_UDF => "SQL_WINDOW_AGG_ARROW_UDF"
   }
 }
 
@@ -157,6 +176,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   protected val faultHandlerEnabled: Boolean = conf.get(PYTHON_WORKER_FAULTHANLDER_ENABLED)
   protected val idleTimeoutSeconds: Long = conf.get(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS)
   protected val killOnIdleTimeout: Boolean = conf.get(PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT)
+  protected val tracebackDumpIntervalSeconds: Long =
+    conf.get(PYTHON_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS)
   protected val hideTraceback: Boolean = false
   protected val simplifiedTraceback: Boolean = false
 
@@ -201,9 +222,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   // Python accumulator is always set in production except in tests. See SPARK-27893
   private val maybeAccumulator: Option[PythonAccumulator] = Option(accumulator)
 
-  // Expose a ServerSocket to support method calls via socket from Python side. Only relevant for
-  // for tasks that are a part of barrier stage, refer [[BarrierTaskContext]] for details.
-  private[spark] var serverSocket: Option[ServerSocket] = None
+  // Expose a ServerSocketChannel to support method calls via socket from Python side.
+  // Only relevant for tasks that are a part of barrier stage, refer
+  // `BarrierTaskContext` for details.
+  private[spark] var serverSocketChannel: Option[ServerSocketChannel] = None
 
   // Authentication helper used when serving method calls via socket from Python side.
   private lazy val authHelper = new SocketAuthHelper(conf)
@@ -252,6 +274,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
     if (faultHandlerEnabled) {
       envVars.put("PYTHON_FAULTHANDLER_DIR", faultHandlerLogDir.toString)
+    }
+    if (tracebackDumpIntervalSeconds > 0L) {
+      envVars.put("PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", tracebackDumpIntervalSeconds.toString)
     }
     // allow the user to set the batch size for the BatchedSerializer on UDFs
     envVars.put("PYTHON_UDF_BATCH_SIZE", batchSizeForPythonUDF.toString)
@@ -347,6 +372,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     def writeNextInputToStream(dataOut: DataOutputStream): Boolean
 
     def open(dataOut: DataOutputStream): Unit = Utils.logUncaughtExceptions {
+      val isUnixDomainSock = authHelper.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED)
+      lazy val sockPath = new File(
+        authHelper.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_DIR)
+          .getOrElse(System.getProperty("java.io.tmpdir")),
+        s".${UUID.randomUUID()}.sock")
       try {
         // Partition index
         dataOut.writeInt(partitionIndex)
@@ -356,27 +386,34 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         // Init a ServerSocket to accept method calls from Python side.
         val isBarrier = context.isInstanceOf[BarrierTaskContext]
         if (isBarrier) {
-          serverSocket = Some(new ServerSocket(/* port */ 0,
-            /* backlog */ 1,
-            InetAddress.getByName("localhost")))
-          // A call to accept() for ServerSocket shall block infinitely.
-          serverSocket.foreach(_.setSoTimeout(0))
+          if (isUnixDomainSock) {
+            serverSocketChannel = Some(ServerSocketChannel.open(StandardProtocolFamily.UNIX))
+            sockPath.deleteOnExit()
+            serverSocketChannel.get.bind(UnixDomainSocketAddress.of(sockPath.getPath))
+          } else {
+            serverSocketChannel = Some(ServerSocketChannel.open())
+            serverSocketChannel.foreach(_.bind(
+              new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 1))
+            // A call to accept() for ServerSocket shall block infinitely.
+            serverSocketChannel.foreach(_.socket().setSoTimeout(0))
+          }
+
           new Thread("accept-connections") {
             setDaemon(true)
 
             override def run(): Unit = {
-              while (!serverSocket.get.isClosed()) {
-                var sock: Socket = null
+              while (serverSocketChannel.get.isOpen()) {
+                var sock: SocketChannel = null
                 try {
-                  sock = serverSocket.get.accept()
+                  sock = serverSocketChannel.get.accept()
                   // Wait for function call from python side.
-                  sock.setSoTimeout(10000)
+                  if (!isUnixDomainSock) sock.socket().setSoTimeout(10000)
                   authHelper.authClient(sock)
-                  val input = new DataInputStream(sock.getInputStream())
+                  val input = new DataInputStream(Channels.newInputStream(sock))
                   val requestMethod = input.readInt()
                   // The BarrierTaskContext function may wait infinitely, socket shall not timeout
                   // before the function finishes.
-                  sock.setSoTimeout(0)
+                  if (!isUnixDomainSock) sock.socket().setSoTimeout(0)
                   requestMethod match {
                     case BarrierTaskContextMessageProtocol.BARRIER_FUNCTION =>
                       barrierAndServe(requestMethod, sock)
@@ -385,13 +422,14 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
                       barrierAndServe(requestMethod, sock, message)
                     case _ =>
                       val out = new DataOutputStream(new BufferedOutputStream(
-                        sock.getOutputStream))
+                        Channels.newOutputStream(sock)))
                       writeUTF(BarrierTaskContextMessageProtocol.ERROR_UNRECOGNIZED_FUNCTION, out)
                   }
                 } catch {
-                  case e: SocketException if e.getMessage.contains("Socket closed") =>
-                    // It is possible that the ServerSocket is not closed, but the native socket
-                    // has already been closed, we shall catch and silently ignore this case.
+                  case _: AsynchronousCloseException =>
+                    // Ignore to make less noisy. These will be closed when tasks
+                    // are finished by listeners.
+                    if (isUnixDomainSock) sockPath.delete()
                 } finally {
                   if (sock != null) {
                     sock.close()
@@ -401,33 +439,35 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             }
           }.start()
         }
-        val secret = if (isBarrier) {
-          authHelper.secret
-        } else {
-          ""
-        }
         if (isBarrier) {
           // Close ServerSocket on task completion.
-          serverSocket.foreach { server =>
-            context.addTaskCompletionListener[Unit](_ => server.close())
+          serverSocketChannel.foreach { server =>
+            context.addTaskCompletionListener[Unit] { _ =>
+              server.close()
+              if (isUnixDomainSock) sockPath.delete()
+            }
           }
-          val boundPort: Int = serverSocket.map(_.getLocalPort).getOrElse(0)
-          if (boundPort == -1) {
-            val message = "ServerSocket failed to bind to Java side."
-            logError(message)
-            throw new SparkException(message)
+          if (isUnixDomainSock) {
+            logDebug(s"Started ServerSocket on with Unix Domain Socket $sockPath.")
+            dataOut.writeBoolean(/* isBarrier = */true)
+            dataOut.writeInt(-1)
+            PythonRDD.writeUTF(sockPath.getPath, dataOut)
+          } else {
+            val boundPort: Int = serverSocketChannel.map(_.socket().getLocalPort).getOrElse(-1)
+            if (boundPort == -1) {
+              val message = "ServerSocket failed to bind to Java side."
+              logError(message)
+              throw new SparkException(message)
+            }
+            logDebug(s"Started ServerSocket on port $boundPort.")
+            dataOut.writeBoolean(/* isBarrier = */true)
+            dataOut.writeInt(boundPort)
+            PythonRDD.writeUTF(authHelper.secret, dataOut)
           }
-          logDebug(s"Started ServerSocket on port $boundPort.")
-          dataOut.writeBoolean(/* isBarrier = */true)
-          dataOut.writeInt(boundPort)
         } else {
           dataOut.writeBoolean(/* isBarrier = */false)
-          dataOut.writeInt(0)
         }
         // Write out the TaskContextInfo
-        val secretBytes = secret.getBytes(UTF_8)
-        dataOut.writeInt(secretBytes.length)
-        dataOut.write(secretBytes, 0, secretBytes.length)
         dataOut.writeInt(context.stageId())
         dataOut.writeInt(context.partitionId())
         dataOut.writeInt(context.attemptNumber())
@@ -485,12 +525,12 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     /**
      * Gateway to call BarrierTaskContext methods.
      */
-    def barrierAndServe(requestMethod: Int, sock: Socket, message: String = ""): Unit = {
+    def barrierAndServe(requestMethod: Int, sock: SocketChannel, message: String = ""): Unit = {
       require(
-        serverSocket.isDefined,
+        serverSocketChannel.isDefined,
         "No available ServerSocket to redirect the BarrierTaskContext method call."
       )
-      val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
+      val out = new DataOutputStream(new BufferedOutputStream(Channels.newOutputStream(sock)))
       try {
         val messages = requestMethod match {
           case BarrierTaskContextMessageProtocol.BARRIER_FUNCTION =>

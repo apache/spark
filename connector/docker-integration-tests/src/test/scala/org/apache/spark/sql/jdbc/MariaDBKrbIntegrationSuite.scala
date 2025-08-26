@@ -33,7 +33,8 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class MariaDBKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
+class MariaDBKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite
+  with SharedJDBCIntegrationTests {
   override protected val userName = s"mariadb/$dockerIp"
   override protected val keytabFileName = "mariadb.keytab"
 

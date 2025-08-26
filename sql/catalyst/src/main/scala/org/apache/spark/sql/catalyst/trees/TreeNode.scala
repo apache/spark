@@ -49,8 +49,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.{BestEffortLazyVal, Utils}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
@@ -95,6 +95,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    */
   protected def getDefaultTreePatternBits: BitSet = {
     val bits: BitSet = new BitSet(TreePattern.maxId)
+    validateNodePatterns()
     // Propagate node pattern bits
     val nodePatternIterator = nodePatterns.iterator
     while (nodePatternIterator.hasNext) {
@@ -109,10 +110,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
   }
 
   /**
+   * For child classes to validate `nodePatterns`.
+   */
+  protected def validateNodePatterns(): Unit = {}
+
+  /**
    * A BitSet of tree patterns for this TreeNode and its subtree. If this TreeNode and its
    * subtree contains a pattern `P`, the corresponding bit for `P.id` is set in this BitSet.
    */
-  override lazy val treePatternBits: BitSet = getDefaultTreePatternBits
+  private val _treePatternBits = new BestEffortLazyVal[BitSet](() => getDefaultTreePatternBits)
+  override def treePatternBits: BitSet = _treePatternBits()
 
   /**
    * A BitSet of rule ids to record ineffective rules for this TreeNode and its subtree.
@@ -198,12 +205,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    */
   def children: Seq[BaseType]
 
-  lazy val containsChild: Set[TreeNode[_]] = children.toSet
+  private val _containsChild = new BestEffortLazyVal[Set[TreeNode[_]]](() => children.toSet)
+  def containsChild: Set[TreeNode[_]] = _containsChild()
 
-  lazy val height: Int = children.map(_.height).reduceOption(_ max _).getOrElse(0) + 1
+  private val _height = new BestEffortLazyVal[Integer](() =>
+    children.map(_.height).reduceOption(_ max _).getOrElse(0) + 1)
+  def height: Int = _height()
 
-  private lazy val _hashCode: Int = MurmurHash3.productHash(this)
-  override def hashCode(): Int = _hashCode
+  private val _hashCode = new BestEffortLazyVal[Integer](() => MurmurHash3.productHash(this))
+  override def hashCode(): Int = _hashCode()
 
   /**
    * Faster version of equality which short-circuits when two treeNodes are the same instance.
@@ -841,13 +851,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    */
   protected def stringArgs: Iterator[Any] = productIterator
 
-  private lazy val allChildren: IdentityHashMap[TreeNode[_], Any] = {
+  private val _allChildren = new BestEffortLazyVal[IdentityHashMap[TreeNode[_], Any]](() => {
     val set = new IdentityHashMap[TreeNode[_], Any]()
     (children ++ innerChildren).foreach {
       set.put(_, null)
     }
     set
-  }
+  })
+  private def allChildren = _allChildren()
 
   private def redactMapString[K, V](map: Map[K, V], maxFields: Int): List[String] = {
     // For security reason, redact the map value if the key is in certain patterns
@@ -941,9 +952,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       verbose: Boolean,
       addSuffix: Boolean = false,
       maxFields: Int = SQLConf.get.maxToStringFields,
-      printOperatorId: Boolean = false): String = {
+      printOperatorId: Boolean = false,
+      printOutputColumns: Boolean = false): String = {
     val concat = new PlanStringConcat()
-    treeString(concat.append, verbose, addSuffix, maxFields, printOperatorId)
+    treeString(concat.append, verbose, addSuffix, maxFields, printOperatorId, printOutputColumns)
     concat.toString
   }
 
@@ -952,9 +964,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       verbose: Boolean,
       addSuffix: Boolean,
       maxFields: Int,
-      printOperatorId: Boolean): Unit = {
+      printOperatorId: Boolean,
+      printOutputColumns: Boolean): Unit = {
     generateTreeString(0, new java.util.ArrayList(), append, verbose, "", addSuffix, maxFields,
-      printOperatorId, 0)
+      printOperatorId, printOutputColumns, 0)
   }
 
   /**
@@ -1005,6 +1018,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
    */
   def innerChildren: Seq[TreeNode[_]] = Seq.empty
 
+  def nodeWithOutputColumnsString(maxColumns: Int): String = simpleString(maxColumns)
+
   /**
    * Appends the string representation of this node and its children to the given Writer.
    *
@@ -1023,6 +1038,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       addSuffix: Boolean = false,
       maxFields: Int,
       printNodeId: Boolean,
+      printOutputColumns: Boolean,
       indent: Int = 0): Unit = {
     (0 until indent).foreach(_ => append("   "))
     if (depth > 0) {
@@ -1038,6 +1054,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       if (addSuffix) verboseStringWithSuffix(maxFields) else verboseString(maxFields)
     } else if (printNodeId) {
       simpleStringWithNodeId()
+    } else if (printOutputColumns) {
+      nodeWithOutputColumnsString(maxFields)
     } else {
       simpleString(maxFields)
     }
@@ -1051,7 +1069,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       lastChildren.add(false)
       innerChildrenLocal.init.foreach(_.generateTreeString(
         depth + 2, lastChildren, append, verbose,
-        addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent))
+        addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId,
+        printOutputColumns = printOutputColumns, indent = indent))
       lastChildren.remove(lastChildren.size() - 1)
       lastChildren.remove(lastChildren.size() - 1)
 
@@ -1059,7 +1078,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       lastChildren.add(true)
       innerChildrenLocal.last.generateTreeString(
         depth + 2, lastChildren, append, verbose,
-        addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent)
+        addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId,
+        printOutputColumns = printOutputColumns, indent = indent)
       lastChildren.remove(lastChildren.size() - 1)
       lastChildren.remove(lastChildren.size() - 1)
     }
@@ -1068,14 +1088,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       lastChildren.add(false)
       children.init.foreach(_.generateTreeString(
         depth + 1, lastChildren, append, verbose, prefix, addSuffix,
-        maxFields, printNodeId = printNodeId, indent = indent)
+        maxFields, printNodeId = printNodeId, printOutputColumns = printOutputColumns,
+        indent = indent)
       )
       lastChildren.remove(lastChildren.size() - 1)
 
       lastChildren.add(true)
       children.last.generateTreeString(
         depth + 1, lastChildren, append, verbose, prefix,
-        addSuffix, maxFields, printNodeId = printNodeId, indent = indent)
+        addSuffix, maxFields, printNodeId = printNodeId, printOutputColumns = printOutputColumns,
+        indent = indent)
       lastChildren.remove(lastChildren.size() - 1)
     }
   }

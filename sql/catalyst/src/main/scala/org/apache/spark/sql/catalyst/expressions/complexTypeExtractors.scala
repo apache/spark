@@ -20,10 +20,11 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTRACT_VALUE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -35,6 +36,27 @@ import org.apache.spark.sql.types._
 
 object ExtractValue {
   /**
+   * Returns the resolved `ExtractValue` using the `extractValue` method call. In case the method
+   * returns `None`, it throws.
+   *
+   * See `extractValue` doc for more info.
+   */
+  def apply(
+      child: Expression,
+      extraction: Expression,
+      resolver: Resolver): Expression = {
+    extractValue(child, extraction, resolver) match {
+      case Some(expression) => expression
+      case None =>
+        throw QueryCompilationErrors.dataTypeUnsupportedByExtractValueError(
+          child.dataType,
+          extraction,
+          child
+        )
+    }
+  }
+
+  /**
    * Returns the resolved `ExtractValue`. It will return one kind of concrete `ExtractValue`,
    * depend on the type of `child` and `extraction`.
    *
@@ -45,31 +67,50 @@ object ExtractValue {
    *    Array       |   Integral type    |         GetArrayItem
    *     Map        |   map key type     |         GetMapValue
    */
-  def apply(
+  def extractValue(
       child: Expression,
       extraction: Expression,
-      resolver: Resolver): Expression = {
-
+      resolver: Resolver): Option[Expression] = {
     (child.dataType, extraction) match {
       case (StructType(fields), NonNullLiteral(v, _: StringType)) =>
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
-        GetStructField(child, ordinal, Some(fieldName))
+        Some(GetStructField(child, ordinal, Some(fieldName)))
 
       case (ArrayType(StructType(fields), containsNull), NonNullLiteral(v, _: StringType)) =>
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
-        GetArrayStructFields(child, fields(ordinal).copy(name = fieldName),
-          ordinal, fields.length, containsNull || fields(ordinal).nullable)
+        Some(
+          GetArrayStructFields(
+            child,
+            fields(ordinal).copy(name = fieldName),
+            ordinal,
+            fields.length,
+            containsNull || fields(ordinal).nullable
+          )
+        )
 
-      case (_: ArrayType, _) => GetArrayItem(child, extraction)
+      case (_: ArrayType, _) => Some(GetArrayItem(child, extraction))
 
-      case (MapType(_, _, _), _) => GetMapValue(child, extraction)
+      case (MapType(_, _, _), _) => Some(GetMapValue(child, extraction))
 
-      case (otherType, _) =>
-        throw QueryCompilationErrors.dataTypeUnsupportedByExtractValueError(
-          otherType, extraction, child)
+      case (otherType, _) => None
     }
+  }
+
+  /**
+   * Check that [[attribute]] can be fully extracted using the given [[nestedFields]].
+   */
+  def isExtractable(
+      attribute: Attribute, nestedFields: Seq[String], resolver: Resolver): Boolean = {
+    nestedFields
+      .foldLeft(Some(attribute): Option[Expression]) {
+        case (Some(expression), field) =>
+          ExtractValue.extractValue(expression, Literal(field), resolver)
+        case _ =>
+          None
+      }
+      .isDefined
   }
 
   /**
@@ -90,7 +131,7 @@ object ExtractValue {
   }
 }
 
-trait ExtractValue extends Expression {
+trait ExtractValue extends Expression with QueryErrorsBase {
   override def nullIntolerant: Boolean = true
   final override val nodePatterns: Seq[TreePattern] = Seq(EXTRACT_VALUE)
   val child: Expression
@@ -312,6 +353,30 @@ case class GetArrayItem(
         }
       """
     })
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (_: ArrayType, e2) if !e2.isInstanceOf[IntegralType] =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(1),
+            "requiredType" -> toSQLType(IntegralType),
+            "inputSql" -> toSQLExpr(right),
+            "inputType" -> toSQLType(right.dataType))
+        )
+      case (e1, _) if !e1.isInstanceOf[ArrayType] =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(0),
+            "requiredType" -> toSQLType(TypeCollection(ArrayType)),
+            "inputSql" -> toSQLExpr(left),
+            "inputType" -> toSQLType(left.dataType))
+        )
+      case _ => TypeCheckResult.TypeCheckSuccess
+    }
   }
 
   override protected def withNewChildrenInternal(

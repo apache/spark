@@ -17,11 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.SparkException
 import org.apache.spark.internal.LogKeys.CONFIG
-import org.apache.spark.internal.MDC
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec}
@@ -40,6 +37,7 @@ import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.{MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkStringUtils
 
 /**
  * Converts resolved v2 commands to v1 if the catalog is the session catalog. Since the v2 commands
@@ -105,7 +103,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           }
       }
       // Add the current default column value string (if any) to the column metadata.
-      s.newDefaultExpression.map { c => builder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, c) }
+      s.newDefaultExpression.map { c => builder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+        c.originalSQL) }
+      if (s.dropDefault) {
+        // for legacy reasons, "" means clearing default value
+        builder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, "")
+      }
       val newColumn = StructField(
         colName,
         dataType,
@@ -144,7 +147,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       AlterDatabasePropertiesCommand(db, properties)
 
     case SetNamespaceLocation(ResolvedV1Database(db), location) if conf.useV1Command =>
-      if (StringUtils.isEmpty(location)) {
+      if (SparkStringUtils.isEmpty(location)) {
         throw QueryExecutionErrors.invalidEmptyLocationError(location)
       }
       AlterDatabaseSetLocationCommand(db, location)
@@ -699,7 +702,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     val builder = new MetadataBuilder
     col.comment.foreach(builder.putString("comment", _))
     col.default.map {
-      value: String => builder.putString(DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, value)
+      value: DefaultValueExpression => builder.putString(
+        DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, value.originalSQL)
     }
     StructField(col.name.head, col.dataType, nullable = true, builder.build())
   }

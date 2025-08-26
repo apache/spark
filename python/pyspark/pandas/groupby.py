@@ -21,7 +21,7 @@ A wrapper for GroupedData to behave like pandas GroupBy.
 from abc import ABCMeta, abstractmethod
 import inspect
 from collections import defaultdict, namedtuple
-from functools import partial
+from functools import partial, wraps
 from itertools import product
 from typing import (
     Any,
@@ -36,6 +36,7 @@ from typing import (
     Set,
     Tuple,
     Type,
+    TypeVar,
     Union,
     cast,
     TYPE_CHECKING,
@@ -85,6 +86,7 @@ from pyspark.pandas.correlation import (
 )
 from pyspark.pandas.utils import (
     align_diff_frames,
+    ansi_mode_context,
     is_name_like_tuple,
     is_name_like_value,
     name_like_string,
@@ -98,6 +100,18 @@ from pyspark.pandas.exceptions import DataError
 
 if TYPE_CHECKING:
     from pyspark.pandas.window import RollingGroupby, ExpandingGroupby, ExponentialMovingGroupby
+
+
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
+
+
+def with_ansi_mode_context(f: FuncT) -> FuncT:
+    @wraps(f)
+    def _with_ansi_mode_context(self: "GroupBy", *args: Any, **kwargs: Any) -> Any:
+        with ansi_mode_context(self._psdf._internal.spark_frame.sparkSession):
+            return f(self, *args, **kwargs)
+
+    return cast(FuncT, _with_ansi_mode_context)
 
 
 # to keep it the same as pandas
@@ -2976,7 +2990,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             When the given function has the return type annotated, the original index of the
             GroupBy object will be lost, and a default index will be attached to the result.
             Please be careful about configuring the default index. See also `Default Index Type
-            <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/options.html#default-index-type>`_.
+            <https://spark.apache.org/docs/latest/api/python/tutorial/pandas_on_spark/options.html#default-index-type>`_.
 
         .. note:: the series within ``func`` is actually a pandas series. Therefore,
             any pandas API within this function is allowed.
@@ -3940,6 +3954,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
         # Cast columns to ``"float64"`` to match `pandas.DataFrame.groupby`.
         return DataFrame(internal).astype("float64")
 
+    @with_ansi_mode_context
     def corr(
         self,
         method: str = "pearson",
@@ -4601,6 +4616,7 @@ def _test() -> None:
     globs = pyspark.pandas.groupby.__dict__.copy()
     globs["np"] = numpy
     globs["ps"] = pyspark.pandas
+
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.pandas.groupby tests")

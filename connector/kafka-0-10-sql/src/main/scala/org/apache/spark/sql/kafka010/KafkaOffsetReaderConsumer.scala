@@ -27,7 +27,7 @@ import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, OffsetAndTim
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{NUM_RETRY, OFFSETS, TOPIC_PARTITION_OFFSET}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -450,6 +450,14 @@ private[kafka010] class KafkaOffsetReaderConsumer(
         // fromPartitionOffsets
         throw new IllegalStateException(s"$tp doesn't have a from offset"))
       val untilOffset = untilPartitionOffsets(tp)
+
+      KafkaSourceProvider.checkStartOffsetNotGreaterThanEndOffset(
+        fromOffset,
+        untilOffset,
+        tp,
+        KafkaExceptions.resolvedStartOffsetGreaterThanEndOffset
+      )
+
       KafkaOffsetRange(tp, fromOffset, untilOffset, None)
     }.toSeq
 
@@ -553,7 +561,9 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       if (untilOffset < fromOffset) {
         reportDataLoss(
           s"Partition $tp's offset was changed from " +
-            s"$fromOffset to $untilOffset, some data may have been missed",
+            s"$fromOffset to $untilOffset. This could be either 1) a user error that the start " +
+            "offset is set beyond available offset when starting query, or 2) the kafka " +
+            "topic-partition is deleted and re-created.",
           () =>
             KafkaExceptions.partitionOffsetChanged(tp, fromOffset, untilOffset))
       }

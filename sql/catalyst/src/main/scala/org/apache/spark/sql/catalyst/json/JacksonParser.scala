@@ -108,6 +108,9 @@ class JacksonParser(
    */
   private def makeRootConverter(dt: DataType): JsonParser => Iterable[InternalRow] = {
     dt match {
+      case _: VariantType => (parser: JsonParser) => {
+        Some(InternalRow(parseVariant(parser)))
+      }
       case _: StructType if options.singleVariantColumn.isDefined => (parser: JsonParser) => {
         Some(InternalRow(parseVariant(parser)))
       }

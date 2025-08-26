@@ -25,11 +25,11 @@ import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
 import org.apache.spark.unsafe.types.UTF8String
 
 sealed trait TimeFormatter extends Serializable {
-  def parse(s: String): Long // returns microseconds since midnight
+  def parse(s: String): Long // returns nanoseconds since midnight
 
   def format(localTime: LocalTime): String
-  // Converts microseconds since the midnight to time string
-  def format(micros: Long): String
+  // Converts nanoseconds since the midnight to time string
+  def format(nanos: Long): String
 
   def validatePatternString(): Unit
 }
@@ -47,15 +47,15 @@ class Iso8601TimeFormatter(pattern: String, locale: Locale, isParsing: Boolean)
 
   override def parse(s: String): Long = {
     val localTime = toLocalTime(formatter.parse(s))
-    localTimeToMicros(localTime)
+    localTimeToNanos(localTime)
   }
 
   override def format(localTime: LocalTime): String = {
     localTime.format(formatter)
   }
 
-  override def format(micros: Long): String = {
-    format(microsToLocalTime(micros))
+  override def format(nanos: Long): String = {
+    format(nanosToLocalTime(nanos))
   }
 
   override def validatePatternString(): Unit = {
@@ -134,5 +134,9 @@ object TimeFormatter {
 
   def apply(isParsing: Boolean): TimeFormatter = {
     getFormatter(None, defaultLocale, isParsing)
+  }
+
+  def getFractionFormatter(): TimeFormatter = {
+    new FractionTimeFormatter()
   }
 }

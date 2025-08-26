@@ -53,6 +53,7 @@ select from_xml(
 
 -- infer schema of xml literal with options
 select schema_of_xml(null);
+select schema_of_xml(42);
 CREATE TEMPORARY VIEW xmlTable(xmlField, a) AS SELECT * FROM VALUES ('<p><a>1</a><b>"2"</b></p>', 'a');
 SELECT schema_of_xml(xmlField) FROM xmlTable;
 

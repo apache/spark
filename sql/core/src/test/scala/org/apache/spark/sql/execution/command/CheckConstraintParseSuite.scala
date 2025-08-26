@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{AddConstraint, ColumnDefinition, CreateTable, ReplaceTable, UnresolvedTableSpec}
+import org.apache.spark.sql.catalyst.plans.logical.{AddCheckConstraint, ColumnDefinition, CreateTable, Filter, ReplaceTable, UnresolvedTableSpec}
 import org.apache.spark.sql.types.StringType
 
 class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
@@ -31,11 +31,15 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
   val constraint1 = CheckConstraint(
     child = GreaterThan(UnresolvedAttribute("a"), Literal(0)),
     condition = "a > 0",
-    name = "c1")
+    userProvidedName = "c1",
+    tableName = "t")
   val constraint2 = CheckConstraint(
     child = EqualTo(UnresolvedAttribute("b"), Literal("foo")),
     condition = "b = 'foo'",
-    name = "c2")
+    userProvidedName = "c2",
+    tableName = "t")
+
+  val unnamedConstraint = constraint1.withUserProvidedName(null)
 
   test("Create table with one check constraint - table level") {
     val sql = "CREATE TABLE t (a INT, b STRING, CONSTRAINT c1 CHECK (a > 0)) USING parquet"
@@ -54,7 +58,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
       case (enforcedStr, relyStr, characteristic) =>
         val sql = s"CREATE TABLE t (a INT, b STRING, CONSTRAINT c1 CHECK (a > 0) " +
           s"$enforcedStr $relyStr) USING parquet"
-        val constraint = constraint1.withName("c1").withCharacteristic(characteristic, null)
+        val constraint = constraint1.withUserProvidedCharacteristic(characteristic)
         verifyConstraints(sql, Seq(constraint))
     }
   }
@@ -99,7 +103,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
       case (enforcedStr, relyStr, characteristic) =>
         val sql = s"CREATE TABLE t (a INT CONSTRAINT c1 CHECK (a > 0)" +
           s" $enforcedStr $relyStr, b STRING) USING parquet"
-        val constraint = constraint1.withName("c1").withCharacteristic(characteristic, null)
+        val constraint = constraint1.withUserProvidedCharacteristic(characteristic)
         verifyConstraints(sql, Seq(constraint))
     }
   }
@@ -147,7 +151,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
       case (enforcedStr, relyStr, characteristic) =>
         val sql = s"REPLACE TABLE t (a INT, b STRING, CONSTRAINT c1 CHECK (a > 0) " +
           s"$enforcedStr $relyStr) USING parquet"
-        val constraint = constraint1.withName("c1").withCharacteristic(characteristic, null)
+        val constraint = constraint1.withUserProvidedCharacteristic(characteristic)
         verifyConstraints(sql, Seq(constraint), isCreateTable = false)
     }
   }
@@ -180,21 +184,23 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
   test("Add check constraint") {
     val sql =
       """
-        |ALTER TABLE a.b.c ADD CONSTRAINT c1 CHECK (a > 0)
+        |ALTER TABLE a.b.t ADD CONSTRAINT c1 CHECK (a > 0)
         |""".stripMargin
     val parsed = parsePlan(sql)
-    val expected = AddConstraint(
-      UnresolvedTable(
-        Seq("a", "b", "c"),
-        "ALTER TABLE ... ADD CONSTRAINT"),
-      constraint1)
+    val expected = AddCheckConstraint(
+      Filter(
+        Not(GreaterThan(UnresolvedAttribute("a"), Literal(0))),
+        UnresolvedRelation(Seq("a", "b", "t"))
+      ),
+      constraint1
+    )
     comparePlans(parsed, expected)
   }
 
   test("Add invalid check constraint name") {
     val sql =
       """
-        |ALTER TABLE a.b.c ADD CONSTRAINT c1-c3 CHECK (d > 0)
+        |ALTER TABLE a.b.t ADD CONSTRAINT c1-c3 CHECK (d > 0)
         |""".stripMargin
     val e = intercept[ParseException] {
       parsePlan(sql)
@@ -205,7 +211,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
   test("Add invalid check constraint expression") {
     val sql =
       """
-        |ALTER TABLE a.b.c ADD CONSTRAINT c1 CHECK (d >)
+        |ALTER TABLE a.b.t ADD CONSTRAINT c1 CHECK (d >)
         |""".stripMargin
     val msg = intercept[ParseException] {
       parsePlan(sql)
@@ -217,19 +223,23 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
     validConstraintCharacteristics.foreach { case (enforcedStr, relyStr, characteristic) =>
       val sql =
         s"""
-           |ALTER TABLE a.b.c ADD CONSTRAINT c1 CHECK (d > 0) $enforcedStr $relyStr
+           |ALTER TABLE a.b.t ADD CONSTRAINT c1 CHECK (d > 0) $enforcedStr $relyStr
            |""".stripMargin
       val parsed = parsePlan(sql)
-      val expected = AddConstraint(
-        UnresolvedTable(
-          Seq("a", "b", "c"),
-          "ALTER TABLE ... ADD CONSTRAINT"),
-        CheckConstraint(
-          child = GreaterThan(UnresolvedAttribute("d"), Literal(0)),
-          condition = "d > 0",
-          name = "c1",
-          characteristic = characteristic
-        ))
+      val expectedConstraint = CheckConstraint(
+        child = GreaterThan(UnresolvedAttribute("d"), Literal(0)),
+        condition = "d > 0",
+        userProvidedName = "c1",
+        tableName = "t",
+        userProvidedCharacteristic = characteristic
+      )
+      val expected = AddCheckConstraint(
+        Filter(
+          Not(GreaterThan(UnresolvedAttribute("d"), Literal(0))),
+          UnresolvedRelation(Seq("a", "b", "t"))
+        ),
+        expectedConstraint
+      )
       comparePlans(parsed, expected)
     }
   }
@@ -237,7 +247,7 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
   test("Add check constraint with invalid characteristic") {
     invalidConstraintCharacteristics.foreach { case (characteristic1, characteristic2) =>
       val sql =
-        s"ALTER TABLE a.b.c ADD CONSTRAINT c1 CHECK (d > 0) $characteristic1 $characteristic2"
+        s"ALTER TABLE a.b.t ADD CONSTRAINT c1 CHECK (d > 0) $characteristic1 $characteristic2"
 
       val e = intercept[ParseException] {
         parsePlan(sql)
@@ -257,15 +267,15 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
 
   test("Create table with unnamed check constraint") {
     Seq(
-      "CREATE TABLE t (a INT, b STRING, CHECK (a > 0))",
-      "CREATE TABLE t (a INT CHECK (a > 0), b STRING)"
+      "CREATE TABLE a.b.t (a INT, b STRING, CHECK (a > 0))",
+      "CREATE TABLE a.b.t (a INT CHECK (a > 0), b STRING)"
     ).foreach { sql =>
       val plan = parsePlan(sql)
       plan match {
         case c: CreateTable =>
           val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
           assert(tableSpec.constraints.size == 1)
-          assert(tableSpec.constraints.head.isInstanceOf[CheckConstraint])
+          assert(tableSpec.constraints.head == unnamedConstraint)
           assert(tableSpec.constraints.head.name.matches("t_chk_[0-9a-f]{7}"))
 
         case other =>
@@ -276,15 +286,15 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
 
   test("Replace table with unnamed check constraint") {
     Seq(
-      "REPLACE TABLE t (a INT, b STRING, CHECK (a < 0))",
-      "REPLACE TABLE t (a INT CHECK (a < 0), b STRING)"
+      "REPLACE TABLE t (a INT, b STRING, CHECK (a > 0))",
+      "REPLACE TABLE t (a INT CHECK (a > 0), b STRING)"
     ).foreach { sql =>
       val plan = parsePlan(sql)
       plan match {
         case c: ReplaceTable =>
           val tableSpec = c.tableSpec.asInstanceOf[UnresolvedTableSpec]
           assert(tableSpec.constraints.size == 1)
-          assert(tableSpec.constraints.head.isInstanceOf[CheckConstraint])
+          assert(tableSpec.constraints.head == unnamedConstraint)
           assert(tableSpec.constraints.head.name.matches("t_chk_[0-9a-f]{7}"))
 
         case other =>
@@ -296,19 +306,103 @@ class CheckConstraintParseSuite extends ConstraintParseSuiteBase {
   test("Add unnamed check constraint") {
     val sql =
       """
-        |ALTER TABLE a.b.c ADD CHECK (d != 0)
+        |ALTER TABLE a.b.t ADD CHECK (a > 0)
         |""".stripMargin
     val plan = parsePlan(sql)
     plan match {
-      case a: AddConstraint =>
-        val table = a.table.asInstanceOf[UnresolvedTable]
-        assert(table.multipartIdentifier == Seq("a", "b", "c"))
-        assert(a.tableConstraint.isInstanceOf[CheckConstraint])
-        assert(a.tableConstraint.name.matches("c_chk_[0-9a-f]{7}"))
+      case a: AddCheckConstraint =>
+        comparePlans(a.child, Filter(
+          Not(GreaterThan(UnresolvedAttribute("a"), Literal(0))),
+          UnresolvedRelation(Seq("a", "b", "t"))))
+        assert(a.checkConstraint == unnamedConstraint)
+        assert(a.checkConstraint.name.matches("t_chk_[0-9a-f]{7}"))
 
       case other =>
         fail(s"Expected AddConstraint, but got: $other")
     }
   }
 
+  test("NOT ENFORCED is not supported for CHECK -- table level") {
+    notEnforcedConstraintCharacteristics.foreach { case (c1, c2, _) =>
+      val characteristic = if (c2.isEmpty) {
+        c1
+      } else {
+        s"$c1 $c2"
+      }
+      val sql =
+        s"""
+           |CREATE TABLE a.b.t (a INT, b STRING, CONSTRAINT C1 CHECK (a > 0) $characteristic)
+           |""".stripMargin
+
+      val expectedContext = ExpectedContext(
+        fragment = s"CONSTRAINT C1 CHECK (a > 0) $characteristic"
+      )
+
+      checkError(
+        exception = intercept[ParseException] {
+          parsePlan(sql)
+        },
+        condition = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
+        parameters = Map(
+          "characteristic" -> "NOT ENFORCED",
+          "constraintType" -> "CHECK"),
+        queryContext = Array(expectedContext))
+    }
+  }
+
+  test("NOT ENFORCED is not supported for CHECK -- column level") {
+    notEnforcedConstraintCharacteristics.foreach { case (c1, c2, _) =>
+      val characteristic = if (c2.isEmpty) {
+        c1
+      } else {
+        s"$c1 $c2"
+      }
+      val sql =
+        s"""
+           |CREATE TABLE a.b.t (a INT CHECK (a > 0) $characteristic, b STRING)
+           |""".stripMargin
+
+      val expectedContext = ExpectedContext(
+        fragment = s"CHECK (a > 0) $characteristic"
+      )
+
+      checkError(
+        exception = intercept[ParseException] {
+          parsePlan(sql)
+        },
+        condition = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
+        parameters = Map(
+          "characteristic" -> "NOT ENFORCED",
+          "constraintType" -> "CHECK"),
+        queryContext = Array(expectedContext))
+    }
+  }
+
+  test("NOT ENFORCED is not supported for CHECK -- ALTER TABLE") {
+    notEnforcedConstraintCharacteristics.foreach { case (c1, c2, _) =>
+      val characteristic = if (c2.isEmpty) {
+        c1
+      } else {
+        s"$c1 $c2"
+      }
+      val sql =
+        s"""
+           |ALTER TABLE a.b.t ADD CONSTRAINT C1 CHECK (a > 0) $characteristic
+           |""".stripMargin
+
+      val expectedContext = ExpectedContext(
+        fragment = s"CONSTRAINT C1 CHECK (a > 0) $characteristic"
+      )
+
+      checkError(
+        exception = intercept[ParseException] {
+          parsePlan(sql)
+        },
+        condition = "UNSUPPORTED_CONSTRAINT_CHARACTERISTIC",
+        parameters = Map(
+          "characteristic" -> "NOT ENFORCED",
+          "constraintType" -> "CHECK"),
+        queryContext = Array(expectedContext))
+    }
+  }
 }

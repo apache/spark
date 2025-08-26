@@ -38,8 +38,10 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -56,7 +58,11 @@ trait KeepAnalyzedQuery extends Command {
 /**
  * Base trait for DataSourceV2 write commands
  */
-trait V2WriteCommand extends UnaryCommand with KeepAnalyzedQuery with CTEInChildren {
+trait V2WriteCommand
+    extends UnaryCommand
+    with KeepAnalyzedQuery
+    with CTEInChildren
+    with IgnoreCachedData {
   def table: NamedRelation
   def query: LogicalPlan
   def isByName: Boolean
@@ -536,6 +542,110 @@ case class CreateTableAsSelect(
 }
 
 /**
+ * The base command representation for a statement that can be part of a Declarative Pipeline to
+ * define a pipeline dataset (MV or ST).
+ */
+
+trait CreatePipelineDataset extends Command {
+  // The name of the dataset.
+  val name: LogicalPlan
+
+  // The user specified columns for the dataset.
+  val columns: Seq[ColumnDefinition]
+
+  // The user specified column-based partitioning for the dataset.
+  val partitioning: Seq[Transform]
+
+  // Additional table specs for the dataset.
+  val tableSpec: TableSpecBase
+
+  // Whether the dataset should only be created if it doesn't already exist.
+  val ifNotExists: Boolean
+}
+
+/**
+ * An extension of the base command representation that represents a CTAS style CREATE statement.
+ */
+trait CreatePipelineDatasetAsSelect extends BinaryCommand
+  with CreatePipelineDataset
+  with CTEInChildren {
+
+  // The logical plan of the CTAS subquery for the pipeline dataset.
+  val query: LogicalPlan
+
+  // The text representation of the CTAS subquery for the dataset.
+  val originalText: String
+
+  override def left: LogicalPlan = name
+  override def right: LogicalPlan = query
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    withNewChildren(Seq(name, WithCTE(query, cteDefs)))
+  }
+}
+
+/**
+ * Command parsed from `CREATE MATERIALIZED VIEW ... AS ...` SQL syntax. This command serves as a
+ * logical representation of the matching SQL syntax and cannot be executed. Instead, it is
+ * interpreted by the pipeline submodule during a pipeline execution.
+ */
+case class CreateMaterializedViewAsSelect(
+    name: LogicalPlan,
+    columns: Seq[ColumnDefinition],
+    partitioning: Seq[Transform],
+    tableSpec: TableSpecBase,
+    query: LogicalPlan,
+    originalText: String,
+    ifNotExists: Boolean)
+  extends CreatePipelineDatasetAsSelect {
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
+    copy(name = newLeft, query = newRight)
+}
+
+/**
+ * Command parsed from `CREATE STREAMING TABLE ... AS ...` SQL syntax. This command serves as a
+ * logical representation of the matching SQL syntax and cannot be executed. Instead, it is
+ * interpreted by the pipeline submodule during a pipeline execution.
+ */
+case class CreateStreamingTableAsSelect(
+    name: LogicalPlan,
+    columns: Seq[ColumnDefinition],
+    partitioning: Seq[Transform],
+    tableSpec: TableSpecBase,
+    query: LogicalPlan,
+    originalText: String,
+    ifNotExists: Boolean)
+  extends CreatePipelineDatasetAsSelect {
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
+    copy(name = newLeft, query = newRight)
+}
+
+/**
+ * Command parsed from `CREATE STREAMING TABLE ...` SQL syntax. This command serves as a logical
+ * representation of the matching SQL syntac and cannot be executed. It is instead interpreted by
+ * the pipeline submodule during a pipeline execution.
+ *
+ * Differs from [[CreateStreamingTableAsSelect]] in that the AS [subquery] clause is not provided
+ * in this statement. This is allowed for streaming tables, where it is valid for a streaming table
+ * to be defined without a subquery, and populated by standalone pipeline flows instead. This
+ * behavior is not applicable or materialized views.
+ */
+case class CreateStreamingTable(
+    name: LogicalPlan,
+    columns: Seq[ColumnDefinition],
+    partitioning: Seq[Transform],
+    tableSpec: TableSpecBase,
+    ifNotExists: Boolean
+) extends UnaryCommand with CreatePipelineDataset {
+  override def child: LogicalPlan = name
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(name = newChild)
+}
+
+/**
  * Replace a table with a v2 catalog.
  *
  * If the table does not exist, and orCreate is true, then it will be created.
@@ -786,6 +896,17 @@ case class MergeIntoTable(
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): MergeIntoTable =
     copy(targetTable = newLeft, sourceTable = newRight)
+
+  def needSchemaEvolution: Boolean =
+    schemaEvolutionEnabled &&
+      MergeIntoTable.schemaChanges(targetTable.schema, sourceTable.schema).nonEmpty
+
+  private def schemaEvolutionEnabled: Boolean = withSchemaEvolution && {
+    EliminateSubqueryAliases(targetTable) match {
+      case r: DataSourceV2Relation if r.autoSchemaEvolution() => true
+      case _ => false
+    }
+  }
 }
 
 object MergeIntoTable {
@@ -800,6 +921,69 @@ object MergeIntoTable {
       case _: InsertAction | _: InsertStarAction => privileges.add(TableWritePrivilege.INSERT)
     }
     privileges.toSeq
+  }
+
+  def schemaChanges(
+      originalTarget: StructType,
+      originalSource: StructType,
+      fieldPath: Array[String] = Array()): Array[TableChange] = {
+    schemaChanges(originalTarget, originalSource, originalTarget, originalSource, fieldPath)
+  }
+
+  private def schemaChanges(
+      current: DataType,
+      newType: DataType,
+      originalTarget: StructType,
+      originalSource: StructType,
+      fieldPath: Array[String]): Array[TableChange] = {
+    (current, newType) match {
+      case (StructType(currentFields), StructType(newFields)) =>
+        val newFieldMap = toFieldMap(newFields)
+
+        // Update existing field types
+        val updates = {
+          currentFields collect {
+            case currentField: StructField if newFieldMap.contains(currentField.name) =>
+              schemaChanges(currentField.dataType, newFieldMap(currentField.name).dataType,
+                originalTarget, originalSource, fieldPath ++ Seq(currentField.name))
+          }}.flatten
+
+        // Identify the newly added fields and append to the end
+        val currentFieldMap = toFieldMap(currentFields)
+        val adds = newFields.filterNot (f => currentFieldMap.contains (f.name))
+          .map(f => TableChange.addColumn(fieldPath ++ Set(f.name), f.dataType))
+
+        updates ++ adds
+
+      case (ArrayType(currentElementType, _), ArrayType(newElementType, _)) =>
+        schemaChanges(currentElementType, newElementType,
+          originalTarget, originalSource, fieldPath ++ Seq("element"))
+
+      case (MapType(currentKeyType, currentElementType, _),
+      MapType(updateKeyType, updateElementType, _)) =>
+        schemaChanges(currentKeyType, updateKeyType, originalTarget, originalSource,
+          fieldPath ++ Seq("key")) ++
+          schemaChanges(currentElementType, updateElementType,
+            originalTarget, originalSource, fieldPath ++ Seq("value"))
+
+      case (currentType, newType) if currentType == newType =>
+        // No change needed
+        Array.empty[TableChange]
+
+      case _ =>
+        // For now do not support type widening
+        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
+          originalTarget, originalSource, null)
+    }
+  }
+
+  def toFieldMap(fields: Array[StructField]): Map[String, StructField] = {
+    val fieldMap = fields.map(field => field.name -> field).toMap
+    if (SQLConf.get.caseSensitiveAnalysis) {
+      fieldMap
+    } else {
+      CaseInsensitiveMap(fieldMap)
+    }
   }
 }
 
@@ -1360,6 +1544,13 @@ case class CreateView(
 }
 
 /**
+ * Used to apply ApplyDefaultCollationToStringType to CreateViewCommand
+ */
+trait CreateTempView {
+  val collation: Option[String]
+}
+
+/**
  * The logical plan of the ALTER VIEW ... SET TBLPROPERTIES command.
  */
 case class SetViewProperties(
@@ -1505,18 +1696,24 @@ case class UnresolvedTableSpec(
     serde: Option[SerdeInfo],
     external: Boolean,
     constraints: Seq[TableConstraint])
-  extends UnaryExpression with Unevaluable with TableSpecBase {
+  extends Expression with Unevaluable with TableSpecBase {
 
   override def dataType: DataType =
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3113")
 
-  override def child: Expression = optionExpression
-
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    this.copy(optionExpression = newChild.asInstanceOf[OptionList])
-
   override def simpleString(maxFields: Int): String = {
     this.copy(properties = Utils.redact(properties).toMap).toString
+  }
+
+  override def nullable: Boolean = true
+
+  override def children: Seq[Expression] = optionExpression +: constraints
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    copy(
+      optionExpression = newChildren.head.asInstanceOf[OptionList],
+      constraints = newChildren.tail.asInstanceOf[Seq[TableConstraint]])
   }
 }
 
@@ -1563,12 +1760,14 @@ case class TableSpec(
  * The logical plan of the DECLARE [OR REPLACE] TEMPORARY VARIABLE command.
  */
 case class CreateVariable(
-    name: LogicalPlan,
+    names: Seq[LogicalPlan],
     defaultExpr: DefaultValueExpression,
-    replace: Boolean) extends UnaryCommand with SupportsSubquery {
-  override def child: LogicalPlan = name
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(name = newChild)
+    replace: Boolean) extends Command with SupportsSubquery {
+  override def children: Seq[LogicalPlan] = names
+  override def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    assert(newChildren.size == names.size, "Incorrect number of children")
+    copy(names = newChildren)
+  }
 }
 
 /**
@@ -1650,4 +1849,26 @@ case class Call(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Call =
     copy(procedure = newChild)
+}
+
+/**
+ * Command parsed from `CREATE FLOW ...` SQL syntax. This command serves as a logical
+ * representation of the matching SQL syntax and cannot be executed. Instead, it is interpreted by
+ * the pipelines submodule during a pipeline execution
+ *
+ * @param name  the name of this flow
+ * @param flowOperation the logical plan of the actual transformation this flow should execute
+ * @param comment an optional comment describing this flow
+ */
+case class CreateFlowCommand(
+    name: LogicalPlan,
+    flowOperation: LogicalPlan,
+    comment: Option[String]
+) extends BinaryCommand {
+  override def left: LogicalPlan = name
+  override def right: LogicalPlan = flowOperation
+
+  override protected def withNewChildrenInternal(
+     newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
+    copy(name = newLeft, flowOperation = newRight)
 }

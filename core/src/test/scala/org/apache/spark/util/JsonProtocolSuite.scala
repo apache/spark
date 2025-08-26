@@ -348,6 +348,18 @@ class JsonProtocolSuite extends SparkFunSuite {
     assert(newMetrics.shuffleWriteMetrics.recordsWritten == 0)
   }
 
+  test("SPARK-43100: Push Based Shuffle metrics should be read correctly") {
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0,
+      hasHadoopInput = false, hasOutput = true, hasRecords = false)
+    val expectedTaskMetricsJson =
+      JsonProtocol.toJsonString(JsonProtocol.taskMetricsToJson(metrics, _))
+    val foundTaskMetrics = JsonProtocol.taskMetricsFromJson(parse(expectedTaskMetricsJson))
+    val foundTaskMetricsJson = JsonProtocol.toJsonString(
+      JsonProtocol.taskMetricsToJson(foundTaskMetrics, _))
+    assert(expectedTaskMetricsJson.equals(foundTaskMetricsJson),
+      s"Expected: $expectedTaskMetricsJson, Found: $foundTaskMetricsJson")
+  }
+
   test("OutputMetrics backward compatibility") {
     // OutputMetrics were added after 1.1
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0, hasHadoopInput = false, hasOutput = true)
@@ -995,6 +1007,36 @@ class JsonProtocolSuite extends SparkFunSuite {
     // stages that have completed even before the job start event is emitted.
     testEvent(jobStart, sparkEventToJsonString(jobStart))
   }
+
+  test("SPARK-52381: handle class not found") {
+    val unknownJson =
+      """{
+        |  "Event" : "com.example.UnknownEvent",
+        |  "foo" : "foo"
+        |}""".stripMargin
+    try {
+      JsonProtocol.sparkEventFromJson(unknownJson)
+      fail("Expected ClassNotFoundException for unknown event type")
+    } catch {
+      case e: ClassNotFoundException =>
+    }
+  }
+
+  test("SPARK-52381: only read classes that extend SparkListenerEvent") {
+    val unknownJson =
+      """{
+        |  "Event" : "org.apache.spark.SparkException",
+        |  "foo" : "foo"
+        |}""".stripMargin
+    try {
+      JsonProtocol.sparkEventFromJson(unknownJson)
+      fail("Expected SparkException for unknown event type")
+    } catch {
+      case e: SparkException =>
+        assert(e.getMessage.startsWith("Unknown event type"))
+    }
+  }
+
 }
 
 
@@ -1329,7 +1371,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       case ((key1, values1: scala.collection.Seq[(String, String)]),
         (key2, values2: scala.collection.Seq[(String, String)])) =>
         assert(key1 === key2)
-        values1.zip(values2).foreach { case (v1, v2) => assert(v1 === v2) }
+        assert(values1.toMap == values2.toMap)
     }
   }
 

@@ -16,18 +16,19 @@
 #
 
 import unittest
-from pyspark.testing.connectutils import should_test_connect
-from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
+from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 if should_test_connect:
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
 
 
-class SparkConnectCollectionTests(SparkConnectSQLTestCase):
+class SparkConnectCollectionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
     def test_collect(self):
-        cdf = self.connect.read.table(self.tbl_name)
-        sdf = self.spark.read.table(self.tbl_name)
+        query = "SELECT id, CAST(id AS STRING) AS name FROM RANGE(100)"
+        cdf = self.connect.sql(query)
+        sdf = self.spark.sql(query)
 
         data = cdf.limit(10).collect()
         self.assertEqual(len(data), 10)
@@ -73,25 +74,25 @@ class SparkConnectCollectionTests(SparkConnectSQLTestCase):
 
     def test_head(self):
         # SPARK-41002: test `head` API in Python Client
-        df = self.connect.read.table(self.tbl_name)
+        df = self.connect.sql("SELECT id, CAST(id AS STRING) AS name FROM RANGE(100)")
         self.assertIsNotNone(len(df.head()))
         self.assertIsNotNone(len(df.head(1)))
         self.assertIsNotNone(len(df.head(5)))
-        df2 = self.connect.read.table(self.tbl_name_empty)
+        df2 = self.connect.sql("SELECT '' AS x LIMIT 0")
         self.assertIsNone(df2.head())
 
     def test_first(self):
         # SPARK-41002: test `first` API in Python Client
-        df = self.connect.read.table(self.tbl_name)
+        df = self.connect.sql("SELECT id, CAST(id AS STRING) AS name FROM RANGE(100)")
         self.assertIsNotNone(len(df.first()))
-        df2 = self.connect.read.table(self.tbl_name_empty)
+        df2 = self.connect.sql("SELECT '' AS x LIMIT 0")
         self.assertIsNone(df2.first())
 
     def test_take(self) -> None:
         # SPARK-41002: test `take` API in Python Client
-        df = self.connect.read.table(self.tbl_name)
+        df = self.connect.sql("SELECT id, CAST(id AS STRING) AS name FROM RANGE(100)")
         self.assertEqual(5, len(df.take(5)))
-        df2 = self.connect.read.table(self.tbl_name_empty)
+        df2 = self.connect.sql("SELECT '' AS x LIMIT 0")
         self.assertEqual(0, len(df2.take(5)))
 
     def test_to_pandas(self):

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.MapHasAsScala
 
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
@@ -351,6 +351,84 @@ class StateStoreInstanceMetricSuite extends StreamTest with AlsoTestWithRocksDBF
           }
         }
       }
+  }
+
+  testWithChangelogCheckpointingEnabled(
+    "SPARK-51779 Verify snapshot lag metrics are updated correctly for join " +
+    "using virtual column families with RocksDB"
+  ) {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBSkipMaintenanceOnCertainPartitionsProvider].getName,
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+      SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10",
+      SQLConf.STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT.key -> "3",
+      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+      SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT.key -> "4",
+      SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3"
+    ) {
+      withTempDir { checkpointDir =>
+        val input1 = MemoryStream[Int]
+        val input2 = MemoryStream[Int]
+
+        val df1 = input1.toDF().select($"value" as "leftKey", ($"value" * 2) as "leftValue")
+        val df2 = input2
+          .toDF()
+          .select($"value" as "rightKey", ($"value" * 3) as "rightValue")
+        val joined = df1.join(df2, expr("leftKey = rightKey"))
+
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(input1, 1, 5),
+          ProcessAllAvailable(),
+          AddData(input2, 1, 5, 10),
+          ProcessAllAvailable(),
+          AddData(input1, 2, 3),
+          ProcessAllAvailable(),
+          CheckNewAnswer((1, 2, 1, 3), (5, 10, 5, 15)),
+          AddData(input1, 2),
+          ProcessAllAvailable(),
+          AddData(input2, 3),
+          ProcessAllAvailable(),
+          AddData(input1, 4),
+          ProcessAllAvailable(),
+          Execute { q =>
+            eventually(timeout(10.seconds)) {
+              // Make sure only smallest K active metrics are published.
+              // There are 5 metrics in total, but only 4 are published.
+              val allInstanceMetrics = q.lastProgress
+                .stateOperators(0)
+                .customMetrics
+                .asScala
+                .filter(_._1.startsWith(SNAPSHOT_LAG_METRIC_PREFIX))
+              val badInstanceMetrics = allInstanceMetrics.filter {
+                case (key, _) =>
+                  key.startsWith(snapshotLagMetricName(0, "")) ||
+                    key.startsWith(snapshotLagMetricName(1, ""))
+              }
+              // Determined by STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT
+              assert(
+                allInstanceMetrics.size == q.sparkSession.conf
+                  .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
+              )
+              // However, creating a family column forces a snapshot regardless of maintenance
+              // Thus, the version will be 1 for this case.
+              // Since join queries only use one state store now, the number of instance metrics
+              // is equal to the number of shuffle partitions as well.
+              // Two partition ids are blocked, making two lagging stores in total instead
+              // of 2 * 4 = 8 like previously.
+              assert(badInstanceMetrics.count(_._2 == 1) == 2)
+              // The rest should have uploaded a version greater than 1
+              assert(
+                allInstanceMetrics.count(_._2 >= 2) == q.sparkSession.conf
+                  .get(SQLConf.STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT) - 2
+              )
+            }
+          },
+          StopStream
+        )
+      }
+    }
   }
 
   Seq(

@@ -30,5 +30,34 @@ SELECT * FROM testData ORDER BY (SELECT * FROM testData ORDER BY (SELECT a FROM 
 -- Fails because correlation is not allowed in ORDER BY
 SELECT * FROM testData ORDER BY (SELECT a FROM VALUES (1));
 
+-- Nondeterministic expression + Aggregate expression in ORDER BY
+SELECT col1 FROM VALUES (1, 2) GROUP BY col1 ORDER BY MAX(col2), RAND();
+
+-- Order by table column and alias with the same name
+SELECT 1 AS col1, col1 FROM VALUES (10) ORDER BY col1;
+
+-- Order by non-orderable expressions should fail
+SELECT 'a' ORDER BY CAST('a' AS VARIANT);
+SELECT a, b FROM testData ORDER BY CAST(a + b AS VARIANT);
+SELECT a FROM testData ORDER BY CAST(CAST(a AS VARIANT) AS VARIANT);
+SELECT a FROM testData GROUP BY a ORDER BY CAST(CAST(a AS STRING) AS VARIANT);
+SELECT * FROM testData ORDER BY CAST(null AS VARIANT);
+SELECT a FROM testData ORDER BY ARRAY(CAST(true AS VARIANT));
+SELECT a FROM testData ORDER BY CAST(ARRAY('a') AS VARIANT);
+SELECT a FROM testData ORDER BY CAST(ARRAY(CAST(true AS VARIANT)) AS VARIANT);
+
+-- ORDER BY expression is resolved as a semantically equivalent to one in the SELECT list
+SELECT SUM(a) + 1 FROM testData ORDER BY SUM(a) + 1;
+SELECT 1 + SUM(b) FROM testData ORDER BY SUM(b) + 1;
+SELECT SUM(a) + 1 FROM testData ORDER BY 1 + SUM(a);
+SELECT MAX(a) + SUM(b) FROM testData ORDER BY SUM(b) + MAX(a);
+SELECT SUM(a) + 1 + MIN(a) FROM testData ORDER BY 1 + 1 + 1 + MIN(a) + 1 + SUM(a);
+SELECT SUM(b) + 1 FROM testData HAVING SUM(b) + 1 > 0 ORDER BY SUM(b) + 1;
+
+-- Missing attribute (col2) in ORDER BY is added only once
+
+SELECT col1 FROM VALUES(1,2) GROUP BY col1, col2 ORDER BY col2, col2;
+SELECT col1 AS a, a AS b FROM VALUES(1,2) GROUP BY col1, col2 ORDER BY col2, col2;
+
 -- Clean up
 DROP VIEW IF EXISTS testData;

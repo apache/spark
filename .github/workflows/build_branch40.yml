@@ -40,7 +40,7 @@ jobs:
           "SCALA_PROFILE": "scala2.13",
           "PYSPARK_IMAGE_TO_TEST": "",
           "PYTHON_TO_TEST": "",
-          "ORACLE_DOCKER_IMAGE_NAME": "gvenzl/oracle-free:23.6-slim"
+          "ORACLE_DOCKER_IMAGE_NAME": "gvenzl/oracle-free:23.7-slim"
         }
       jobs: >-
         {

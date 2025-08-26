@@ -23,7 +23,7 @@ import scala.collection.immutable.TreeSet
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedPlanId}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.expressions.Cast._
@@ -32,11 +32,11 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{CollationFactory, TypeUtils}
-import org.apache.spark.sql.catalyst.util.SparkStringUtils.truncatedString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkStringUtils.truncatedString
 
 /**
  * A base class for generated/interpreted predicate
@@ -67,6 +67,8 @@ case class InterpretedPredicate(expression: Expression) extends BasePredicate {
  */
 trait Predicate extends Expression {
   override def dataType: DataType = BooleanType
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 }
 
 /**
@@ -319,6 +321,8 @@ case class Not(child: Expression)
   extends UnaryExpression with Predicate with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
 
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
   override def toString: String = s"NOT $child"
 
   override def inputTypes: Seq[DataType] = Seq(BooleanType)
@@ -419,6 +423,13 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
     copy(values = newChildren.dropRight(1), query = newChildren.last.asInstanceOf[ListQuery])
 }
 
+case class UnresolvedInSubqueryPlanId(values: Seq[Expression], planId: Long)
+  extends UnresolvedPlanId {
+
+  override def withPlan(plan: LogicalPlan): Expression = {
+    InSubquery(values, ListQuery(plan))
+  }
+}
 
 /**
  * Evaluates to `true` if `list` contains `value`.
@@ -474,6 +485,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(IN)
   private val legacyNullInEmptyBehavior =
@@ -611,6 +623,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with Predicate {
 
   require(hset != null, "hset could not be null")
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   override def simpleString(maxFields: Int): String = {
     if (!child.resolved) {

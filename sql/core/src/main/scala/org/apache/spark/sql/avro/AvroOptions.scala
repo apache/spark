@@ -18,6 +18,7 @@
 package org.apache.spark.sql.avro
 
 import java.net.URI
+import java.util.HashMap
 
 import org.apache.avro.Schema
 import org.apache.hadoop.conf.Configuration
@@ -130,7 +131,7 @@ private[sql] class AvroOptions(
    */
   val datetimeRebaseModeInRead: String = parameters
     .get(DATETIME_REBASE_MODE)
-    .getOrElse(SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_READ))
+    .getOrElse(SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_READ).toString)
 
   val useStableIdForUnionType: Boolean =
     parameters.get(STABLE_ID_FOR_UNION_TYPE).map(_.toBoolean).getOrElse(false)
@@ -145,6 +146,37 @@ private[sql] class AvroOptions(
     throw QueryCompilationErrors.avroOptionsException(
       RECURSIVE_FIELD_MAX_DEPTH,
       s"Should not be greater than $RECURSIVE_FIELD_MAX_DEPTH_LIMIT.")
+  }
+
+  /**
+   * [[hadoop.conf.Configuration]] is not comparable so we turn it into a map for [[equals]] and
+   * [[hashCode]].
+   */
+  @transient private lazy val comparableConf = {
+    val iter = conf.iterator()
+    val result = new HashMap[String, String]
+    while (iter.hasNext()) {
+      val entry = iter.next()
+      result.put(entry.getKey(), entry.getValue())
+    }
+    result
+  }
+
+  override def equals(other: Any): Boolean = {
+    other match {
+      case that: AvroOptions =>
+        this.parameters == that.parameters &&
+        this.comparableConf == that.comparableConf
+      case _ => false
+    }
+  }
+
+  override def hashCode(): Int = {
+    val prime = 31
+    var result = 1
+    result = prime * result + parameters.hashCode
+    result = prime * result + comparableConf.hashCode
+    result
   }
 }
 

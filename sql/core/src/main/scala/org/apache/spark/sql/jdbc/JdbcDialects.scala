@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, Driver, ResultSetMetaData, Statement, Timestamp}
+import java.sql.{Connection, Date, Driver, ResultSetMetaData, SQLException, Statement, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
 import java.util.ServiceLoader
@@ -25,8 +25,6 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
-
-import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.annotation.{DeveloperApi, Since}
@@ -244,7 +242,9 @@ abstract class JdbcDialect extends Serializable with Logging {
    * name is a reserved keyword, or in case it contains characters that require quotes (e.g. space).
    */
   def quoteIdentifier(colName: String): String = {
-    s""""$colName""""
+    // By ANSI standard, quotes are escaped with another quotes.
+    val escapedColName = colName.replace("\"", "\"\"")
+    s""""$escapedColName""""
   }
 
   /**
@@ -352,7 +352,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   @Since("2.3.0")
   protected[jdbc] def escapeSql(value: String): String =
-    if (value == null) null else StringUtils.replace(value, "'", "''")
+    if (value == null) null else value.replace("'", "''")
 
   /**
    * Converts value to SQL expression.
@@ -579,6 +579,19 @@ abstract class JdbcDialect extends Serializable with Logging {
   def isCascadingTruncateTable(): Option[Boolean] = None
 
   /**
+   * Attempts to determine if the given SQLException is a SQL syntax error.
+   *
+   * This check is best-effort: it may not detect all syntax errors across all JDBC dialects.
+   * However, if this method returns true, the exception is guaranteed to be a syntax error.
+   *
+   * This is used to decide whether to wrap the exception in a more appropriate Spark exception.
+   *
+   * @return true if the exception is confidently identified as a syntax error; false otherwise.
+   */
+  @Since("4.1.0")
+  def isSyntaxErrorBestEffort(exception: java.sql.SQLException): Boolean = false
+
+  /**
    * Rename an existing table.
    *
    * @param oldTable The existing table.
@@ -758,6 +771,9 @@ abstract class JdbcDialect extends Serializable with Logging {
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3182")
   }
 
+  @Since("4.1.0")
+  def isObjectNotFoundException(e: SQLException): Boolean = true
+
   /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
    * @param e The dialect specific exception.
@@ -838,6 +854,11 @@ abstract class JdbcDialect extends Serializable with Logging {
   def supportsHint: Boolean = false
 
   /**
+   * Returns true if dialect supports JOIN operator.
+   */
+  def supportsJoin: Boolean = false
+
+  /**
    * Return the DB-specific quoted and fully qualified table name
    */
   @Since("3.5.0")
@@ -871,7 +892,7 @@ abstract class JdbcDialect extends Serializable with Logging {
 /**
  * Make the `classifyException` method throw out the original exception
  */
-trait NoLegacyJDBCError extends JdbcDialect {
+private[sql] trait NoLegacyJDBCError extends JdbcDialect {
 
   override def classifyException(
       e: Throwable,

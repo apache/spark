@@ -799,7 +799,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisErrorCondition(parsePlan("SELECT 'length' (a)"),
       "MULTI_ALIAS_WITHOUT_GENERATOR",
       Map("expr" -> "\"length\"", "names" -> "a"),
-      Array(ExpectedContext("SELECT 'length' (a)", 0, 18))
+      Array(ExpectedContext("'length' (a)", 7, 18))
     )
   }
 
@@ -818,6 +818,25 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       checkAnalysis(input, expected)
     }
   }
+
+  test("CURRENT_TIME should be case insensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val input = Project(Seq(
+        // The user references "current_time" or "CURRENT_TIME" in the query
+        UnresolvedAttribute("current_time"),
+        UnresolvedAttribute("CURRENT_TIME")
+      ), testRelation)
+
+      // The analyzer should resolve both to the same expression: CurrentTime()
+      val expected = Project(Seq(
+        Alias(CurrentTime(), toPrettySQL(CurrentTime()))(),
+        Alias(CurrentTime(), toPrettySQL(CurrentTime()))()
+      ), testRelation).analyze
+
+      checkAnalysis(input, expected)
+    }
+  }
+
 
   test("CTE with non-existing column alias") {
     assertAnalysisErrorCondition(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
@@ -1015,51 +1034,53 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-30886 Deprecate two-parameter TRIM/LTRIM/RTRIM") {
     Seq("trim", "ltrim", "rtrim").foreach { f =>
-      val logAppender = new LogAppender("deprecated two-parameter TRIM/LTRIM/RTRIM functions")
-      def check(count: Int): Unit = {
-        val message = "Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated."
-        assert(logAppender.loggingEvents.size == count)
-        assert(logAppender.loggingEvents.exists(
-          e => e.getLevel == Level.WARN &&
-            e.getMessage.getFormattedMessage.contains(message)))
-      }
+      withSQLConf(SQLConf.MANAGE_PARSER_CACHES.key -> "false") { // Avoid additional logging
+        val logAppender = new LogAppender("deprecated two-parameter TRIM/LTRIM/RTRIM functions")
+        def check(count: Int): Unit = {
+          val message = "Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated."
+          assert(logAppender.loggingEvents.size == count)
+          assert(logAppender.loggingEvents.exists(
+            e => e.getLevel == Level.WARN &&
+              e.getMessage.getFormattedMessage.contains(message)))
+        }
 
-      withLogAppender(logAppender) {
-        val testAnalyzer1 = new Analyzer(
-          new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
+        withLogAppender(logAppender) {
+          val testAnalyzer1 = new Analyzer(
+            new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
 
-        val plan1 = testRelation2.select(
-          UnresolvedFunction(f, $"a" :: Nil, isDistinct = false))
-        testAnalyzer1.execute(plan1)
-        // One-parameter is not deprecated.
-        assert(logAppender.loggingEvents.isEmpty)
+          val plan1 = testRelation2.select(
+            UnresolvedFunction(f, $"a" :: Nil, isDistinct = false))
+          testAnalyzer1.execute(plan1)
+          // One-parameter is not deprecated.
+          assert(logAppender.loggingEvents.isEmpty)
 
-        val plan2 = testRelation2.select(
-          UnresolvedFunction(f, $"a" :: $"b" :: Nil, isDistinct = false))
-        testAnalyzer1.execute(plan2)
-        // Deprecation warning is printed out once.
-        check(1)
+          val plan2 = testRelation2.select(
+            UnresolvedFunction(f, $"a" :: $"b" :: Nil, isDistinct = false))
+          testAnalyzer1.execute(plan2)
+          // Deprecation warning is printed out once.
+          check(1)
 
-        val plan3 = testRelation2.select(
-          UnresolvedFunction(f, $"b" :: $"a" :: Nil, isDistinct = false))
-        testAnalyzer1.execute(plan3)
-        // There is no change in the log.
-        check(1)
+          val plan3 = testRelation2.select(
+            UnresolvedFunction(f, $"b" :: $"a" :: Nil, isDistinct = false))
+          testAnalyzer1.execute(plan3)
+          // There is no change in the log.
+          check(1)
 
-        // New analyzer from new SessionState
-        val testAnalyzer2 = new Analyzer(
-          new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
-        val plan4 = testRelation2.select(
-          UnresolvedFunction(f, $"c" :: $"d" :: Nil, isDistinct = false))
-        testAnalyzer2.execute(plan4)
-        // Additional deprecation warning from new analyzer
-        check(2)
+          // New analyzer from new SessionState
+          val testAnalyzer2 = new Analyzer(
+            new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
+          val plan4 = testRelation2.select(
+            UnresolvedFunction(f, $"c" :: $"d" :: Nil, isDistinct = false))
+          testAnalyzer2.execute(plan4)
+          // Additional deprecation warning from new analyzer
+          check(2)
 
-        val plan5 = testRelation2.select(
-          UnresolvedFunction(f, $"c" :: $"d" :: Nil, isDistinct = false))
-        testAnalyzer2.execute(plan5)
-        // There is no change in the log.
-        check(2)
+          val plan5 = testRelation2.select(
+            UnresolvedFunction(f, $"c" :: $"d" :: Nil, isDistinct = false))
+          testAnalyzer2.execute(plan5)
+          // There is no change in the log.
+          check(2)
+        }
       }
     }
   }
@@ -1187,7 +1208,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
               Seq(Literal(3)),
               Project(testRelation.output, testRelation)
             )
-          )
+          ),
+          None
         )
       )
     )

@@ -14,61 +14,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import os
 import unittest
 
 from pyspark.util import is_remote_only
-from pyspark.sql import SparkSession as PySparkSession
 from pyspark.ml import functions as SF
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.connectutils import (
     should_test_connect,
-    ReusedConnectTestCase,
+    ReusedMixedTestCase,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 if should_test_connect:
-    from pyspark.sql.connect.dataframe import DataFrame as CDF
     from pyspark.ml.connect import functions as CF
 
 
 @unittest.skipIf(is_remote_only(), "Requires JVM access")
-class SparkConnectMLFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, SQLTestUtils):
+class SparkConnectMLFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
     """These test cases exercise the interface to the proto plan
     generation but do not call Spark."""
-
-    @classmethod
-    def setUpClass(cls):
-        super(SparkConnectMLFunctionTests, cls).setUpClass()
-        # Disable the shared namespace so pyspark.sql.functions, etc point the regular
-        # PySpark libraries.
-        os.environ["PYSPARK_NO_NAMESPACE_SHARE"] = "1"
-        cls.connect = cls.spark  # Switch Spark Connect session and regular PySpark session.
-        cls.spark = PySparkSession._instantiatedSession
-        assert cls.spark is not None
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.spark = cls.connect  # Stopping Spark Connect closes the session in JVM at the server.
-        super(SparkConnectMLFunctionTests, cls).tearDownClass()
-        del os.environ["PYSPARK_NO_NAMESPACE_SHARE"]
-
-    def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
-        from pyspark.sql.classic.dataframe import DataFrame as SDF
-
-        assert isinstance(df1, (SDF, CDF))
-        if isinstance(df1, SDF):
-            str1 = df1._jdf.showString(n, truncate, False)
-        else:
-            str1 = df1._show_string(n, truncate, False)
-
-        assert isinstance(df2, (SDF, CDF))
-        if isinstance(df2, SDF):
-            str2 = df2._jdf.showString(n, truncate, False)
-        else:
-            str2 = df2._show_string(n, truncate, False)
-
-        self.assertEqual(str1, str2)
 
     def test_array_vector_conversion(self):
         query = """

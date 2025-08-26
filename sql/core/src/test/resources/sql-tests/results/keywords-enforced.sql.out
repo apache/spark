@@ -20,6 +20,7 @@ ARRAY	false
 AS	true
 ASC	false
 AT	false
+ATOMIC	false
 AUTHORIZATION	true
 BEGIN	false
 BETWEEN	false
@@ -131,6 +132,7 @@ FILEFORMAT	false
 FILTER	true
 FIRST	false
 FLOAT	false
+FLOW	false
 FOLLOWING	false
 FOR	true
 FOREIGN	true
@@ -187,6 +189,7 @@ LAZY	false
 LEADING	true
 LEAVE	false
 LEFT	true
+LEVEL	false
 LIKE	false
 LIMIT	false
 LINES	false
@@ -202,6 +205,8 @@ LOOP	false
 MACRO	false
 MAP	false
 MATCHED	false
+MATERIALIZED	false
+MAX	false
 MERGE	false
 MICROSECOND	false
 MICROSECONDS	false
@@ -252,6 +257,7 @@ POSITION	false
 PRECEDING	false
 PRIMARY	true
 PRINCIPALS	false
+PROCEDURE	false
 PROCEDURES	false
 PROPERTIES	false
 PURGE	false
@@ -263,6 +269,7 @@ REAL	false
 RECORDREADER	false
 RECORDWRITER	false
 RECOVER	false
+RECURSION	false
 RECURSIVE	true
 REDUCE	false
 REFERENCES	true
@@ -316,6 +323,8 @@ START	false
 STATISTICS	false
 STORED	false
 STRATIFY	false
+STREAM	false
+STREAMING	false
 STRING	false
 STRUCT	false
 SUBSTR	false
@@ -381,6 +390,7 @@ WHILE	false
 WINDOW	false
 WITH	true
 WITHIN	true
+WITHOUT	false
 X	false
 YEAR	false
 YEARS	false

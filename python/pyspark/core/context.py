@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import uuid
 import os
 import shutil
 import signal
@@ -305,11 +306,29 @@ class SparkContext:
         # they will be passed back to us through a TCP server
         assert self._gateway is not None
         auth_token = self._gateway.gateway_parameters.auth_token
+        is_unix_domain_sock = (
+            self._conf.get(
+                "spark.python.unix.domain.socket.enabled",
+                os.environ.get("PYSPARK_UDS_MODE", "false"),
+            ).lower()
+            == "true"
+        )
+        socket_path = None
+        if is_unix_domain_sock:
+            socket_dir = self._conf.get("spark.python.unix.domain.socket.dir")
+            if socket_dir is None:
+                socket_dir = getattr(self._jvm, "java.lang.System").getProperty("java.io.tmpdir")
+            socket_path = os.path.join(socket_dir, f".{uuid.uuid4()}.sock")
         start_update_server = accumulators._start_update_server
-        self._accumulatorServer = start_update_server(auth_token)
-        (host, port) = self._accumulatorServer.server_address
+        self._accumulatorServer = start_update_server(auth_token, is_unix_domain_sock, socket_path)
         assert self._jvm is not None
-        self._javaAccumulator = self._jvm.PythonAccumulatorV2(host, port, auth_token)
+        if is_unix_domain_sock:
+            self._javaAccumulator = self._jvm.PythonAccumulatorV2(
+                self._accumulatorServer.server_address
+            )
+        else:
+            (host, port) = self._accumulatorServer.server_address  # type: ignore[misc]
+            self._javaAccumulator = self._jvm.PythonAccumulatorV2(host, port, auth_token)
         self._jsc.sc().register(self._javaAccumulator)
 
         # If encryption is enabled, we need to setup a server in the jvm to read broadcast
@@ -880,7 +899,7 @@ class SparkContext:
         if self._encryption_enabled:
             # with encryption, we open a server in java and send the data directly
             server = server_func()
-            (sock_file, _) = local_connect_and_auth(server.port(), server.secret())
+            (sock_file, _) = local_connect_and_auth(server.connInfo(), server.secret())
             chunked_out = ChunkedStream(sock_file, 8192)
             serializer.dump_stream(data, chunked_out)
             chunked_out.close()

@@ -18,7 +18,7 @@
 package org.apache.spark.ml.recommendation
 
 import java.{util => ju}
-import java.io.IOException
+import java.io.{DataInputStream, DataOutputStream, IOException}
 import java.util.Locale
 
 import scala.collection.mutable
@@ -33,7 +33,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.{Partitioner, SparkException}
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.BLAS
@@ -540,10 +540,30 @@ class ALSModel private[ml] (
     }
   }
 
+  override def estimatedSize: Long = {
+    val userCount = userFactors.count()
+    val itemCount = itemFactors.count()
+    (userCount + itemCount) * (rank + 1) * 4
+  }
 }
+
+private[ml] case class FeatureData(id: Int, features: Array[Float])
 
 @Since("1.6.0")
 object ALSModel extends MLReadable[ALSModel] {
+
+  private[ml] def serializeData(data: FeatureData, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    dos.writeInt(data.id)
+    serializeFloatArray(data.features, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): FeatureData = {
+    import ReadWriteUtils._
+    val id = dis.readInt()
+    val features = deserializeFloatArray(dis)
+    FeatureData(id, features)
+  }
 
   private val NaN = "nan"
   private val Drop = "drop"
@@ -564,9 +584,21 @@ object ALSModel extends MLReadable[ALSModel] {
       val extraMetadata = "rank" -> instance.rank
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession, Some(extraMetadata))
       val userPath = new Path(path, "userFactors").toString
-      instance.userFactors.write.format("parquet").save(userPath)
       val itemPath = new Path(path, "itemFactors").toString
-      instance.itemFactors.write.format("parquet").save(itemPath)
+
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        // Import implicits for Dataset Encoder
+        val sparkSession = super.sparkSession
+        import sparkSession.implicits._
+
+        val userFactorsData = instance.userFactors.as[FeatureData].collect()
+        ReadWriteUtils.saveArray(userPath, userFactorsData, sparkSession, serializeData)
+        val itemFactorsData = instance.itemFactors.as[FeatureData].collect()
+        ReadWriteUtils.saveArray(itemPath, itemFactorsData, sparkSession, serializeData)
+      } else {
+        instance.userFactors.write.format("parquet").save(userPath)
+        instance.itemFactors.write.format("parquet").save(itemPath)
+      }
     }
   }
 
@@ -580,9 +612,24 @@ object ALSModel extends MLReadable[ALSModel] {
       implicit val format = DefaultFormats
       val rank = (metadata.metadata \ "rank").extract[Int]
       val userPath = new Path(path, "userFactors").toString
-      val userFactors = sparkSession.read.format("parquet").load(userPath)
       val itemPath = new Path(path, "itemFactors").toString
-      val itemFactors = sparkSession.read.format("parquet").load(itemPath)
+
+      val (userFactors, itemFactors) = if (ReadWriteUtils.localSavingModeState.get()) {
+        import org.apache.spark.util.ArrayImplicits._
+        val userFactorsData = ReadWriteUtils.loadArray[FeatureData](
+          userPath, sparkSession, deserializeData
+        )
+        val userFactors = sparkSession.createDataFrame(userFactorsData.toImmutableArraySeq)
+        val itemFactorsData = ReadWriteUtils.loadArray[FeatureData](
+          itemPath, sparkSession, deserializeData
+        )
+        val itemFactors = sparkSession.createDataFrame(itemFactorsData.toImmutableArraySeq)
+        (userFactors, itemFactors)
+      } else {
+        val userFactors = sparkSession.read.format("parquet").load(userPath)
+        val itemFactors = sparkSession.read.format("parquet").load(itemPath)
+        (userFactors, itemFactors)
+      }
 
       val model = new ALSModel(metadata.uid, rank, userFactors, itemFactors)
 
@@ -771,6 +818,13 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): ALS = defaultCopy(extra)
+
+  override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val Row(userCount: Long, itemCount: Long) =
+      dataset.select(count_distinct(col(getUserCol)), count_distinct(col(getItemCol))).head()
+    val rank = getRank
+    (userCount + itemCount) * (rank + 1) * 4
+  }
 }
 
 

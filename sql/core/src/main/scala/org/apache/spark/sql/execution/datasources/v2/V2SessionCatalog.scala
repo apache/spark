@@ -302,10 +302,15 @@ class V2SessionCatalog(catalog: SessionCatalog)
 
     val finalProperties = CatalogV2Util.applyClusterByChanges(properties, schema, changes)
     try {
-      catalog.alterTable(
-        catalogTable.copy(
-          properties = finalProperties, schema = schema, owner = owner, comment = comment,
-          collation = collation, storage = storage))
+      if (changes.exists(!_.isInstanceOf[TableChange.ColumnChange])) {
+        catalog.alterTable(
+          catalogTable.copy(
+            properties = finalProperties, schema = schema, owner = owner, comment = comment,
+            collation = collation, storage = storage))
+      }
+      if (changes.exists(_.isInstanceOf[TableChange.ColumnChange])) {
+        catalog.alterTableSchema(ident.asTableIdentifier, schema)
+      }
     } catch {
       case _: NoSuchTableException =>
         throw QueryCompilationErrors.noSuchTableError(ident)

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{HASH_JOIN_KEYS, JOIN_CONDITION}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -293,19 +293,23 @@ trait JoinSelectionHelper extends Logging {
       join: Join,
       hintOnly: Boolean,
       conf: SQLConf): Option[BuildSide] = {
-    val buildLeft = if (hintOnly) {
-      hintToBroadcastLeft(join.hint)
-    } else {
-      canBroadcastBySize(join.left, conf) && !hintToNotBroadcastLeft(join.hint)
+    def shouldBuildLeft(): Boolean = {
+      if (hintOnly) {
+        hintToBroadcastLeft(join.hint)
+      } else {
+        canBroadcastBySize(join.left, conf) && !hintToNotBroadcastLeft(join.hint)
+      }
     }
-    val buildRight = if (hintOnly) {
-      hintToBroadcastRight(join.hint)
-    } else {
-      canBroadcastBySize(join.right, conf) && !hintToNotBroadcastRight(join.hint)
+    def shouldBuildRight(): Boolean = {
+      if (hintOnly) {
+        hintToBroadcastRight(join.hint)
+      } else {
+        canBroadcastBySize(join.right, conf) && !hintToNotBroadcastRight(join.hint)
+      }
     }
     getBuildSide(
-      buildLeft && canBuildBroadcastLeft(join.joinType),
-      buildRight && canBuildBroadcastRight(join.joinType),
+      canBuildBroadcastLeft(join.joinType) && shouldBuildLeft(),
+      canBuildBroadcastRight(join.joinType) && shouldBuildRight(),
       join.left,
       join.right
     )
@@ -315,25 +319,29 @@ trait JoinSelectionHelper extends Logging {
       join: Join,
       hintOnly: Boolean,
       conf: SQLConf): Option[BuildSide] = {
-    val buildLeft = if (hintOnly) {
-      hintToShuffleHashJoinLeft(join.hint)
-    } else {
-      hintToPreferShuffleHashJoinLeft(join.hint) ||
-        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.left, conf) &&
-          muchSmaller(join.left, join.right, conf)) ||
-        forceApplyShuffledHashJoin(conf)
+    def shouldBuildLeft(): Boolean = {
+      if (hintOnly) {
+        hintToShuffleHashJoinLeft(join.hint)
+      } else {
+        hintToPreferShuffleHashJoinLeft(join.hint) ||
+          (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.left, conf) &&
+            muchSmaller(join.left, join.right, conf)) ||
+          forceApplyShuffledHashJoin(conf)
+      }
     }
-    val buildRight = if (hintOnly) {
-      hintToShuffleHashJoinRight(join.hint)
-    } else {
-      hintToPreferShuffleHashJoinRight(join.hint) ||
-        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.right, conf) &&
-          muchSmaller(join.right, join.left, conf)) ||
-        forceApplyShuffledHashJoin(conf)
+    def shouldBuildRight(): Boolean = {
+      if (hintOnly) {
+        hintToShuffleHashJoinRight(join.hint)
+      } else {
+        hintToPreferShuffleHashJoinRight(join.hint) ||
+          (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.right, conf) &&
+            muchSmaller(join.right, join.left, conf)) ||
+          forceApplyShuffledHashJoin(conf)
+      }
     }
     getBuildSide(
-      buildLeft && canBuildShuffledHashJoinLeft(join.joinType),
-      buildRight && canBuildShuffledHashJoinRight(join.joinType),
+      canBuildShuffledHashJoinLeft(join.joinType) && shouldBuildLeft(),
+      canBuildShuffledHashJoinRight(join.joinType) && shouldBuildRight(),
       join.left,
       join.right
     )

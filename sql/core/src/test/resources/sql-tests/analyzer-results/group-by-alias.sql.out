@@ -332,6 +332,140 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT MAX(col1), 3 as abc FROM VALUES(1),(2),(3),(4) GROUP BY col1 % abc
+-- !query analysis
+Aggregate [(col1#x % 3)], [max(col1#x) AS max(col1)#x, 3 AS abc#x]
++- LocalRelation [col1#x]
+
+
+-- !query
+SELECT 1 AS a FROM testData GROUP BY `a`
+-- !query analysis
+Aggregate [a#x], [1 AS a#x]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT (
+  WITH cte AS (SELECT 1)
+  SELECT * FROM cte
+) AS subq1
+FROM
+  VALUES (1)
+GROUP BY
+  subq1
+-- !query analysis
+Aggregate [scalar-subquery#x []], [scalar-subquery#x [] AS subq1#x]
+:  :- WithCTE
+:  :  :- CTERelationDef xxxx, false
+:  :  :  +- SubqueryAlias cte
+:  :  :     +- Project [1 AS 1#x]
+:  :  :        +- OneRowRelation
+:  :  +- Project [1#x]
+:  :     +- SubqueryAlias cte
+:  :        +- CTERelationRef xxxx, true, [1#x], false, false, 1
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias cte
+:     :     +- Project [1 AS 1#x]
+:     :        +- OneRowRelation
+:     +- Project [1#x]
+:        +- SubqueryAlias cte
+:           +- CTERelationRef xxxx, true, [1#x], false, false, 1
++- LocalRelation [col1#x]
+
+
+-- !query
+SELECT (
+  SELECT a FROM testData LIMIT 1
+) AS subq1
+FROM
+  VALUES (1)
+GROUP BY
+  subq1
+-- !query analysis
+Aggregate [scalar-subquery#x []], [scalar-subquery#x [] AS subq1#x]
+:  :- GlobalLimit 1
+:  :  +- LocalLimit 1
+:  :     +- Project [a#x]
+:  :        +- SubqueryAlias testdata
+:  :           +- View (`testData`, [a#x, b#x])
+:  :              +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+:  :                 +- Project [a#x, b#x]
+:  :                    +- SubqueryAlias testData
+:  :                       +- LocalRelation [a#x, b#x]
+:  +- GlobalLimit 1
+:     +- LocalLimit 1
+:        +- Project [a#x]
+:           +- SubqueryAlias testdata
+:              +- View (`testData`, [a#x, b#x])
+:                 +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+:                    +- Project [a#x, b#x]
+:                       +- SubqueryAlias testData
+:                          +- LocalRelation [a#x, b#x]
++- LocalRelation [col1#x]
+
+
+-- !query
+SELECT 111 AS abc GROUP BY 'a', abc
+-- !query analysis
+Aggregate [a, 111], [111 AS abc#x]
++- OneRowRelation
+
+
+-- !query
+SELECT *, 111 AS abc FROM VALUES ('a', 'b', 'c') GROUP BY col1, col2, col3, abc
+-- !query analysis
+Aggregate [col1#x, col2#x, col3#x, 111], [col1#x, col2#x, col3#x, 111 AS abc#x]
++- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT col1 as a, col2 AS a FROM values('a','b') GROUP BY col2, a
+-- !query analysis
+Aggregate [col2#x, col1#x], [col1#x AS a#x, col2#x AS a#x]
++- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT 1 AS a, 2 AS a FROM VALUES (1) t (a) GROUP BY a HAVING a > 1 ORDER BY a
+-- !query analysis
+Project [a#x, a#x]
++- Sort [a#x ASC NULLS FIRST], true
+   +- Project [a#x, a#x, a#x]
+      +- Filter (a#x > a#x)
+         +- Aggregate [a#x], [1 AS a#x, 2 AS a#x, a#x]
+            +- SubqueryAlias t
+               +- LocalRelation [a#x]
+
+
+-- !query
+SELECT 1 AS a, 2 AS a FROM VALUES (1) t (col1) GROUP BY a HAVING a > 1 ORDER BY a
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`a`",
+    "referenceNames" : "[`a`, `a`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 66,
+    "stopIndex" : 66,
+    "fragment" : "a"
+  } ]
+}
+
+
+-- !query
 set spark.sql.groupByAliases=false
 -- !query analysis
 SetCommand (spark.sql.groupByAliases,Some(false))

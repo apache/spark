@@ -37,14 +37,13 @@ from typing import (
     ValuesView,
     cast,
 )
-import random
+import random as py_random
 import sys
 
 import numpy as np
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import _with_origin
-from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 from pyspark.sql import Column
 from pyspark.sql.connect.expressions import (
     CaseWhen,
@@ -61,7 +60,7 @@ from pyspark.sql.connect.expressions import (
 )
 from pyspark.sql.connect.udf import _create_py_udf
 from pyspark.sql.connect.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
-from pyspark.sql.connect.udtf import _create_py_udtf
+from pyspark.sql.connect.udtf import _create_py_udtf, _create_pyarrow_udtf
 from pyspark.sql import functions as pysparkfuncs
 from pyspark.sql.types import (
     _from_numpy_type,
@@ -74,7 +73,7 @@ from pyspark.sql.utils import enum_to_value as _enum_to_value
 
 # The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
 # for code reuse.
-from pyspark.sql.functions import pandas_udf  # noqa: F401
+from pyspark.sql.functions import arrow_udf, pandas_udf  # noqa: F401
 
 
 if TYPE_CHECKING:
@@ -83,6 +82,7 @@ if TYPE_CHECKING:
         DataTypeOrString,
         UserDefinedFunctionLike,
     )
+    from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.connect.udtf import UserDefinedTableFunction
 
 
@@ -318,7 +318,7 @@ def getbit(col: "ColumnOrName", pos: "ColumnOrName") -> Column:
 getbit.__doc__ = pysparkfuncs.getbit.__doc__
 
 
-def broadcast(df: "ParentDataFrame") -> "ParentDataFrame":
+def broadcast(df: "DataFrame") -> "DataFrame":
     from pyspark.sql.connect.dataframe import DataFrame
 
     if not isinstance(df, DataFrame):
@@ -411,17 +411,20 @@ def rand(seed: Optional[int] = None) -> Column:
     if seed is not None:
         return _invoke_function("rand", lit(seed))
     else:
-        return _invoke_function("rand", lit(random.randint(0, sys.maxsize)))
+        return _invoke_function("rand", lit(py_random.randint(0, sys.maxsize)))
 
 
 rand.__doc__ = pysparkfuncs.rand.__doc__
+
+
+random = rand
 
 
 def randn(seed: Optional[int] = None) -> Column:
     if seed is not None:
         return _invoke_function("randn", lit(seed))
     else:
-        return _invoke_function("randn", lit(random.randint(0, sys.maxsize)))
+        return _invoke_function("randn", lit(py_random.randint(0, sys.maxsize)))
 
 
 randn.__doc__ = pysparkfuncs.randn.__doc__
@@ -1009,7 +1012,7 @@ def uniform(
 ) -> Column:
     if seed is None:
         return _invoke_function_over_columns(
-            "uniform", lit(min), lit(max), lit(random.randint(0, sys.maxsize))
+            "uniform", lit(min), lit(max), lit(py_random.randint(0, sys.maxsize))
         )
     else:
         return _invoke_function_over_columns("uniform", lit(min), lit(max), lit(seed))
@@ -1198,7 +1201,7 @@ def count_min_sketch(
     confidence: Union[Column, float],
     seed: Optional[Union[Column, int]] = None,
 ) -> Column:
-    _seed = lit(random.randint(0, sys.maxsize)) if seed is None else lit(seed)
+    _seed = lit(py_random.randint(0, sys.maxsize)) if seed is None else lit(seed)
     return _invoke_function_over_columns("count_min_sketch", col, lit(eps), lit(confidence), _seed)
 
 
@@ -1270,7 +1273,7 @@ mode.__doc__ = pysparkfuncs.mode.__doc__
 
 def percentile(
     col: "ColumnOrName",
-    percentage: Union[Column, float, Sequence[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
     frequency: Union[Column, int] = 1,
 ) -> Column:
     if not isinstance(frequency, (int, Column)):
@@ -1291,7 +1294,7 @@ percentile.__doc__ = pysparkfuncs.percentile.__doc__
 
 def percentile_approx(
     col: "ColumnOrName",
-    percentage: Union[Column, float, Sequence[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
     accuracy: Union[Column, int] = 10000,
 ) -> Column:
     percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
@@ -1303,7 +1306,7 @@ percentile_approx.__doc__ = pysparkfuncs.percentile_approx.__doc__
 
 def approx_percentile(
     col: "ColumnOrName",
-    percentage: Union[Column, float, Sequence[float], Tuple[float]],
+    percentage: Union[Column, float, Sequence[float], Tuple[float, ...]],
     accuracy: Union[Column, int] = 10000,
 ) -> Column:
     percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
@@ -2282,7 +2285,7 @@ schema_of_xml.__doc__ = pysparkfuncs.schema_of_xml.__doc__
 
 
 def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> Column:
-    _seed = lit(random.randint(0, sys.maxsize)) if seed is None else lit(seed)
+    _seed = lit(py_random.randint(0, sys.maxsize)) if seed is None else lit(seed)
     return _invoke_function("shuffle", _to_col(col), _seed)
 
 
@@ -2706,7 +2709,7 @@ regexp_like.__doc__ = pysparkfuncs.regexp_like.__doc__
 def randstr(length: Union[Column, int], seed: Optional[Union[Column, int]] = None) -> Column:
     if seed is None:
         return _invoke_function_over_columns(
-            "randstr", lit(length), lit(random.randint(0, sys.maxsize))
+            "randstr", lit(length), lit(py_random.randint(0, sys.maxsize))
         )
     else:
         return _invoke_function_over_columns("randstr", lit(length), lit(seed))
@@ -2999,6 +3002,13 @@ def character_length(str: "ColumnOrName") -> Column:
 character_length.__doc__ = pysparkfuncs.character_length.__doc__
 
 
+def chr(n: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("chr", n)
+
+
+chr.__doc__ = pysparkfuncs.chr.__doc__
+
+
 def contains(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("contains", left, right)
 
@@ -3128,6 +3138,26 @@ def current_date() -> Column:
 
 
 current_date.__doc__ = pysparkfuncs.current_date.__doc__
+
+
+@overload
+def current_time() -> Column:
+    ...
+
+
+@overload
+def current_time(precision: int) -> Column:
+    ...
+
+
+def current_time(precision: Optional[int] = None) -> Column:
+    if precision is None:
+        return _invoke_function("current_time")
+    else:
+        return _invoke_function("current_time", lit(precision))
+
+
+current_time.__doc__ = pysparkfuncs.current_time.__doc__
 
 
 def current_timestamp() -> Column:
@@ -3365,6 +3395,16 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 to_date.__doc__ = pysparkfuncs.to_date.__doc__
 
 
+def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
+    if format is None:
+        return _invoke_function_over_columns("try_to_date", col)
+    else:
+        return _invoke_function("try_to_date", _to_col(col), lit(format))
+
+
+try_to_date.__doc__ = pysparkfuncs.try_to_date.__doc__
+
+
 def unix_date(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("unix_date", col)
 
@@ -3394,6 +3434,26 @@ unix_seconds.__doc__ = pysparkfuncs.unix_seconds.__doc__
 
 
 @overload
+def to_time(str: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column:
+    ...
+
+
+def to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
+    if format is None:
+        return _invoke_function_over_columns("to_time", str)
+    else:
+        return _invoke_function_over_columns("to_time", str, format)
+
+
+to_time.__doc__ = pysparkfuncs.to_time.__doc__
+
+
+@overload
 def to_timestamp(col: "ColumnOrName") -> Column:
     ...
 
@@ -3411,6 +3471,26 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
 
 to_timestamp.__doc__ = pysparkfuncs.to_timestamp.__doc__
+
+
+@overload
+def try_to_time(str: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def try_to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column:
+    ...
+
+
+def try_to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
+    if format is None:
+        return _invoke_function_over_columns("try_to_time", str)
+    else:
+        return _invoke_function_over_columns("try_to_time", str, format)
+
+
+try_to_time.__doc__ = pysparkfuncs.try_to_time.__doc__
 
 
 def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
@@ -3561,6 +3641,13 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
 
 
 timestamp_seconds.__doc__ = pysparkfuncs.timestamp_seconds.__doc__
+
+
+def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_trunc", unit, time)
+
+
+time_trunc.__doc__ = pysparkfuncs.time_trunc.__doc__
 
 
 def timestamp_millis(col: "ColumnOrName") -> Column:
@@ -3837,6 +3924,13 @@ def make_interval(
 make_interval.__doc__ = pysparkfuncs.make_interval.__doc__
 
 
+def make_time(hour: "ColumnOrName", minute: "ColumnOrName", second: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("make_time", hour, minute, second)
+
+
+make_time.__doc__ = pysparkfuncs.make_time.__doc__
+
+
 def make_timestamp(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -4011,6 +4105,10 @@ def session_user() -> Column:
 
 
 session_user.__doc__ = pysparkfuncs.session_user.__doc__
+
+
+def uuid() -> Column:
+    return _invoke_function("uuid", lit(py_random.randint(0, sys.maxsize)))
 
 
 def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None) -> Column:
@@ -4400,6 +4498,20 @@ def udtf(
 
 
 udtf.__doc__ = pysparkfuncs.udtf.__doc__
+
+
+def arrow_udtf(
+    cls: Optional[Type] = None,
+    *,
+    returnType: Optional[Union[StructType, str]] = None,
+) -> Union["UserDefinedTableFunction", Callable[[Type], "UserDefinedTableFunction"]]:
+    if cls is None:
+        return functools.partial(_create_pyarrow_udtf, returnType=returnType)
+    else:
+        return _create_pyarrow_udtf(cls=cls, returnType=returnType)
+
+
+arrow_udtf.__doc__ = pysparkfuncs.arrow_udtf.__doc__
 
 
 def call_function(funcName: str, *cols: "ColumnOrName") -> Column:

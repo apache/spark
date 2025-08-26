@@ -23,11 +23,15 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, ListStateImplWithTTL, MapStateImplWithTTL, MemoryStream, ValueStateImpl, ValueStateImplWithTTL}
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statevariables.ValueStateImpl
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.ttl.ValueStateImplWithTTL
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowSQLTest
 
 object TTLInputProcessFunction {
   def processRow(
@@ -90,14 +94,13 @@ class ValueStateTTLProcessor(ttlConfig: TTLConfig)
   extends StatefulProcessor[String, InputEvent, OutputEvent]
   with Logging {
 
-  @transient private var _valueState: ValueStateImplWithTTL[Int] = _
+  @transient private var _valueState: ValueState[Int] = _
 
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _valueState = getHandle
       .getValueState("valueState", Encoders.scalaInt, ttlConfig)
-      .asInstanceOf[ValueStateImplWithTTL[Int]]
   }
 
   override def handleInputRows(
@@ -107,7 +110,8 @@ class ValueStateTTLProcessor(ttlConfig: TTLConfig)
     var results = List[OutputEvent]()
 
     inputRows.foreach { row =>
-      val resultIter = TTLInputProcessFunction.processRow(row, _valueState)
+      val resultIter = TTLInputProcessFunction.processRow(row,
+        _valueState.asInstanceOf[ValueStateImplWithTTL[Int]])
       resultIter.foreach { r =>
         results = r :: results
       }
@@ -124,18 +128,16 @@ class MultipleValueStatesTTLProcessor(
   extends StatefulProcessor[String, InputEvent, OutputEvent]
     with Logging {
 
-  @transient var _valueStateWithTTL: ValueStateImplWithTTL[Int] = _
-  @transient var _valueStateWithoutTTL: ValueStateImpl[Int] = _
+  @transient var _valueStateWithTTL: ValueState[Int] = _
+  @transient var _valueStateWithoutTTL: ValueState[Int] = _
 
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _valueStateWithTTL = getHandle
       .getValueState("valueStateTTL", Encoders.scalaInt, ttlConfig)
-      .asInstanceOf[ValueStateImplWithTTL[Int]]
     _valueStateWithoutTTL = getHandle
       .getValueState[Int]("valueState", Encoders.scalaInt, TTLConfig.NONE)
-      .asInstanceOf[ValueStateImpl[Int]]
   }
 
   override def handleInputRows(
@@ -146,7 +148,8 @@ class MultipleValueStatesTTLProcessor(
 
     if (key == ttlKey) {
       inputRows.foreach { row =>
-        val resultIterator = TTLInputProcessFunction.processRow(row, _valueStateWithTTL)
+        val resultIterator = TTLInputProcessFunction.processRow(row,
+          _valueStateWithTTL.asInstanceOf[ValueStateImplWithTTL[Int]])
         resultIterator.foreach { r =>
           results = r :: results
         }
@@ -154,7 +157,7 @@ class MultipleValueStatesTTLProcessor(
     } else {
       inputRows.foreach { row =>
         val resultIterator = TTLInputProcessFunction.processNonTTLStateRow(row,
-          _valueStateWithoutTTL)
+          _valueStateWithoutTTL.asInstanceOf[ValueStateImpl[Int]])
         resultIterator.foreach { r =>
           results = r :: results
         }
@@ -171,8 +174,8 @@ class TTLProcessorWithCompositeTypes(
     noTtlKey: String,
     ttlConfig: TTLConfig)
   extends MultipleValueStatesTTLProcessor(ttlKey, noTtlKey, ttlConfig) {
-  @transient private var _listStateWithTTL: ListStateImplWithTTL[TestClass] = _
-  @transient private var _mapStateWithTTL: MapStateImplWithTTL[POJOTestClass, String] = _
+  @transient private var _listStateWithTTL: ListState[TestClass] = _
+  @transient private var _mapStateWithTTL: MapState[POJOTestClass, String] = _
 
   override def init(
       outputMode: OutputMode,
@@ -180,14 +183,13 @@ class TTLProcessorWithCompositeTypes(
     super.init(outputMode, timeMode)
     _listStateWithTTL = getHandle
       .getListState("listState", Encoders.product[TestClass], ttlConfig)
-      .asInstanceOf[ListStateImplWithTTL[TestClass]]
     _mapStateWithTTL = getHandle
       .getMapState("mapState", Encoders.bean(classOf[POJOTestClass]),
         Encoders.STRING, ttlConfig)
-      .asInstanceOf[MapStateImplWithTTL[POJOTestClass, String]]
   }
 }
 
+@SlowSQLTest
 class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
 
   import testImplicits._
@@ -221,6 +223,8 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         // advance clock to trigger processing
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
+        assertNumStateRows(total = 2, updated = 2),
+
         // get both state values, and make sure we get unexpired value
         AddData(inputStream, InputEvent(ttlKey, "get", -1)),
         AddData(inputStream, InputEvent(noTtlKey, "get", -1)),
@@ -229,15 +233,21 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           OutputEvent(ttlKey, 1, isTTLValue = false, -1),
           OutputEvent(noTtlKey, 2, isTTLValue = false, -1)
         ),
+        assertNumStateRows(total = 2, updated = 0),
+
         // ensure ttl values were added correctly, and noTtlKey has no ttl values
         AddData(inputStream, InputEvent(ttlKey, "get_ttl_value_from_state", -1)),
         AddData(inputStream, InputEvent(noTtlKey, "get_ttl_value_from_state", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(OutputEvent(ttlKey, 1, isTTLValue = true, 61000)),
+        assertNumStateRows(total = 2, updated = 0),
+
         AddData(inputStream, InputEvent(ttlKey, "get_values_in_ttl_state", -1)),
         AddData(inputStream, InputEvent(noTtlKey, "get_values_in_ttl_state", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(OutputEvent(ttlKey, -1, isTTLValue = true, 61000)),
+        assertNumStateRows(total = 2, updated = 0),
+
         // advance clock after expiry
         AdvanceManualClock(60 * 1000),
         AddData(inputStream, InputEvent(ttlKey, "get", -1)),
@@ -246,19 +256,27 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         AdvanceManualClock(1 * 1000),
         // validate ttlKey is expired, bot noTtlKey is still present
         CheckNewAnswer(OutputEvent(noTtlKey, 2, isTTLValue = false, -1)),
+        assertNumStateRows(total = 1, updated = 0),
+
         // validate ttl value is removed in the value state column family
         AddData(inputStream, InputEvent(ttlKey, "get_ttl_value_from_state", -1)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
+        assertNumStateRows(total = 1, updated = 0),
+
         AddData(inputStream, InputEvent(ttlKey, "put", 3)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(),
+        assertNumStateRows(total = 2, updated = 1),
+
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
         },
         AddData(inputStream, InputEvent(noTtlKey, "get", -1)),
         AdvanceManualClock(60 * 1000),
         CheckNewAnswer(OutputEvent(noTtlKey, 2, isTTLValue = false, -1)),
+        assertNumStateRows(total = 1, updated = 0),
+
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
         }
@@ -472,6 +490,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           AddData(inputStream, InputEvent(noTtlKey, "put", 2)),
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
+          assertNumStateRows(total = 2, updated = 2),
           Execute { q =>
             val schemaFilePath = fm.list(stateSchemaPath).toSeq.head.getPath
             val providerId = StateStoreProviderId(

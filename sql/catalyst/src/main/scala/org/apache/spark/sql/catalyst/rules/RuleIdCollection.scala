@@ -112,6 +112,8 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.expressions.EliminatePipeOperators" ::
       "org.apache.spark.sql.catalyst.expressions.ValidateAndStripPipeExpressions" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveUnresolvedHaving" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveTableConstraints" ::
+      "org.apache.spark.sql.catalyst.expressions.ExtractSemiStructuredFields" ::
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseProject" ::

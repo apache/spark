@@ -26,7 +26,6 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.{sql, TaskContext}
@@ -44,12 +43,12 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder, StructEncoder}
-import org.apache.spark.sql.catalyst.expressions.{ScalarSubquery => ScalarSubqueryExpr, _}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.{TreeNodeTag, TreePattern}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNodeTag, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -396,15 +395,15 @@ class Dataset[T] private[sql](
       val paddedRows = rows.map { row =>
         row.zipWithIndex.map { case (cell, i) =>
           if (truncate > 0) {
-            StringUtils.leftPad(cell, colWidths(i) - Utils.stringHalfWidth(cell) + cell.length)
+            Utils.leftPad(cell, colWidths(i) - Utils.stringHalfWidth(cell) + cell.length)
           } else {
-            StringUtils.rightPad(cell, colWidths(i) - Utils.stringHalfWidth(cell) + cell.length)
+            Utils.rightPad(cell, colWidths(i) - Utils.stringHalfWidth(cell) + cell.length)
           }
         }
       }
 
       // Create SeparateLine
-      val sep: String = colWidths.map("-" * _).addString(sb, "+", "+", "+\n").toString()
+      val sep: String = colWidths.map("-".repeat(_)).addString(sb, "+", "+", "+\n").toString()
 
       // column names
       paddedRows.head.addString(sb, "|", "|", "|\n")
@@ -428,13 +427,13 @@ class Dataset[T] private[sql](
 
       dataRows.zipWithIndex.foreach { case (row, i) =>
         // "+ 5" in size means a character length except for padded names and data
-        val rowHeader = StringUtils.rightPad(
+        val rowHeader = Utils.rightPad(
           s"-RECORD $i", fieldNameColWidth + dataColWidth + 5, "-")
         sb.append(rowHeader).append("\n")
         row.zipWithIndex.map { case (cell, j) =>
-          val fieldName = StringUtils.rightPad(fieldNames(j),
+          val fieldName = Utils.rightPad(fieldNames(j),
             fieldNameColWidth - Utils.stringHalfWidth(fieldNames(j)) + fieldNames(j).length)
-          val data = StringUtils.rightPad(cell,
+          val data = Utils.rightPad(cell,
             dataColWidth - Utils.stringHalfWidth(cell) + cell.length)
           s" $fieldName | $data "
         }.addString(sb, "", "\n", "\n")
@@ -929,7 +928,19 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   @scala.annotation.varargs
   def groupBy(cols: Column*): RelationalGroupedDataset = {
-    RelationalGroupedDataset(toDF(), cols.map(_.expr), RelationalGroupedDataset.GroupByType)
+    // Replace top-level integer literals in grouping expressions with ordinals, if
+    // `groupByOrdinal` is enabled.
+    val groupingExpressionsWithOrdinals = cols.map { col => col.expr match {
+      case literal @ Literal(value: Int, IntegerType)
+          if sparkSession.sessionState.conf.groupByOrdinal =>
+        CurrentOrigin.withOrigin(literal.origin) { UnresolvedOrdinal(value) }
+      case other => other
+    }}
+    RelationalGroupedDataset(
+      df = toDF(),
+      groupingExprs = groupingExpressionsWithOrdinals,
+      groupType = RelationalGroupedDataset.GroupByType
+    )
   }
 
   /** @inheritdoc */
@@ -1060,16 +1071,6 @@ class Dataset[T] private[sql](
       FunctionTableSubqueryArgumentExpression(plan = logicalPlan),
       sparkSession
     )
-  }
-
-  /** @inheritdoc */
-  def scalar(): Column = {
-    Column(ExpressionColumnNode(ScalarSubqueryExpr(logicalPlan)))
-  }
-
-  /** @inheritdoc */
-  def exists(): Column = {
-    Column(ExpressionColumnNode(Exists(logicalPlan)))
   }
 
   /** @inheritdoc */
@@ -2245,8 +2246,20 @@ class Dataset[T] private[sql](
   protected def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {
     val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
       col.expr match {
+        case sortOrderWithOrdinal @ SortOrder(literal @ Literal(value: Int, IntegerType), _, _, _)
+            if sparkSession.sessionState.conf.orderByOrdinal =>
+          // Replace top-level integer literals with UnresolvedOrdinal, if `orderByOrdinal` is
+          // enabled.
+          val ordinal = CurrentOrigin.withOrigin(literal.origin) { UnresolvedOrdinal(value) }
+          sortOrderWithOrdinal.withNewChildren(newChildren = Seq(ordinal)).asInstanceOf[SortOrder]
         case expr: SortOrder =>
           expr
+        case literal @ Literal(value: Int, IntegerType)
+            if sparkSession.sessionState.conf.orderByOrdinal =>
+          // Replace top-level integer literals with UnresolvedOrdinal, if `orderByOrdinal` is
+          // enabled.
+          val ordinal = CurrentOrigin.withOrigin(literal.origin) { UnresolvedOrdinal(value) }
+          SortOrder(ordinal, Ascending)
         case expr: Expression =>
           SortOrder(expr, Ascending)
       }

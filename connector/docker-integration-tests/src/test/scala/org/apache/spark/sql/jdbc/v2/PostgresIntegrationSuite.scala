@@ -38,6 +38,22 @@ import org.apache.spark.tags.DockerTest
 class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override val catalogName: String = "postgresql"
   override val db = new PostgresDatabaseOnDocker
+
+  object JdbcClientTypes {
+    val INTEGER = "int4"
+    val STRING = "text"
+  }
+
+  override def defaultMetadata(
+      dataType: DataType = StringType,
+      jdbcClientType: String = JdbcClientTypes.STRING): Metadata =
+    new MetadataBuilder()
+      .putLong("scale", 0)
+      .putBoolean("isTimestampNTZ", false)
+      .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
+      .putString("jdbcClientType", jdbcClientType)
+      .build()
+
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.postgresql", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.postgresql.url", db.getJdbcUrl(dockerIp, externalPort))
@@ -193,7 +209,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
     var expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, JdbcClientTypes.INTEGER))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
@@ -222,7 +238,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       s" TBLPROPERTIES('TABLESPACE'='pg_default')")
     val t = spark.table(tbl)
     val expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, JdbcClientTypes.INTEGER))
     assert(t.schema === expectedSchema)
   }
 

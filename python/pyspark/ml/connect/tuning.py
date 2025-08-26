@@ -434,7 +434,7 @@ class CrossValidator(
 
             tasks = _parallelFitTasks(est, train, eva, validation, epm)
             if not is_remote():
-                tasks = list(map(inheritable_thread_target, tasks))
+                tasks = list(map(inheritable_thread_target(dataset.sparkSession), tasks))
 
             for j, metric in pool.imap_unordered(lambda f: f(), tasks):
                 metrics_all[i][j] = metric

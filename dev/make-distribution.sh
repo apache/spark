@@ -133,7 +133,7 @@ if [ $(command -v git) ]; then
     unset GITREV
 fi
 
-if [ "$SBT_ENABLED" == "true" && ! "$(command -v "$SBT")" ]; then
+if [ "$SBT_ENABLED" == "true" ] && [ ! "$(command -v "$SBT")" ]; then
   echo -e "Could not locate SBT command: '$SBT'."
   echo -e "Specify the SBT command with the --sbt flag"
   exit -1;
@@ -148,18 +148,9 @@ if [ "$SBT_ENABLED" == "true" ]; then
   SCALA_VERSION=$("$SBT" -no-colors "show scalaBinaryVersion" | awk '/\[info\]/{ver=$2} END{print ver}')
   SPARK_HADOOP_VERSION=$("$SBT" -no-colors "show hadoopVersion" | awk '/\[info\]/{ver=$2} END{print ver}')
 else
-  VERSION=$("$MVN" help:evaluate -Dexpression=project.version $@ \
-      | grep -v "INFO"\
-      | grep -v "WARNING"\
-      | tail -n 1)
-  SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version $@ \
-      | grep -v "INFO"\
-      | grep -v "WARNING"\
-      | tail -n 1)
-  SPARK_HADOOP_VERSION=$("$MVN" help:evaluate -Dexpression=hadoop.version $@ \
-      | grep -v "INFO"\
-      | grep -v "WARNING"\
-      | tail -n 1)
+  VERSION=$("$MVN" help:evaluate -Dexpression=project.version "$@" -q -DforceStdout)
+  SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version "$@" -q -DforceStdout)
+  SPARK_HADOOP_VERSION=$("$MVN" help:evaluate -Dexpression=hadoop.version "$@" -q -DforceStdout)
 fi
 
 if [ "$NAME" == "none" ]; then
@@ -212,14 +203,6 @@ echo "Build flags: $@" >> "$DISTDIR/RELEASE"
 
 # Copy jars
 cp -r "$SPARK_HOME"/assembly/target/scala*/jars/* "$DISTDIR/jars/"
-
-# Only create the hive-jackson directory if they exist.
-if [ -f "$DISTDIR"/jars/jackson-core-asl-1.9.13.jar ]; then
-  for f in "$DISTDIR"/jars/jackson-*-asl-*.jar; do
-    mkdir -p "$DISTDIR"/hive-jackson
-    mv $f "$DISTDIR"/hive-jackson/
-  done
-fi
 
 # Only create the yarn directory if the yarn artifacts were built.
 if [ -f "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar ]; then
@@ -334,7 +317,7 @@ if [ "$MAKE_TGZ" == "true" ]; then
   $TAR -czf "spark-$VERSION-bin-$NAME.tgz" -C "$SPARK_HOME" "$TARDIR_NAME"
   rm -rf "$TARDIR"
   if [[ "$MAKE_SPARK_CONNECT" == "true" ]]; then
-    TARDIR_NAME=spark-$VERSION-bin-$NAME-spark-connect
+    TARDIR_NAME=spark-$VERSION-bin-$NAME-connect
     TARDIR="$SPARK_HOME/$TARDIR_NAME"
     rm -rf "$TARDIR"
     cp -r "$DISTDIR" "$TARDIR"

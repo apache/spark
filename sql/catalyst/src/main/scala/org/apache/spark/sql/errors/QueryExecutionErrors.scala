@@ -24,6 +24,8 @@ import java.time.DateTimeException
 import java.util.Locale
 import java.util.concurrent.TimeoutException
 
+import scala.jdk.CollectionConverters._
+
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FileStatus, Path}
 import org.apache.hadoop.fs.permission.FsPermission
@@ -42,7 +44,7 @@ import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
-import org.apache.spark.sql.catalyst.util.{sideBySide, CharsetProvider, DateTimeUtils, FailFastMode, MapData}
+import org.apache.spark.sql.catalyst.util.{sideBySide, CharsetProvider, DateTimeUtils, FailFastMode, IntervalUtils, MapData}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
@@ -79,7 +81,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "value" -> toSQLValue(t, from),
         "sourceType" -> toSQLType(from),
-        "targetType" -> toSQLType(to)),
+        "targetType" -> toSQLType(to),
+        "ansiConfig" -> toSQLConf("spark.sql.ansi.enabled")),
       context = Array.empty,
       summary = "")
   }
@@ -123,7 +126,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "expression" -> toSQLValue(s, StringType),
         "sourceType" -> toSQLType(StringType),
-        "targetType" -> toSQLType(BooleanType)),
+        "targetType" -> toSQLType(BooleanType),
+        "ansiConfig" -> toSQLConf("spark.sql.ansi.enabled")),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -137,7 +141,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "expression" -> toSQLValue(s, StringType),
         "sourceType" -> toSQLType(StringType),
-        "targetType" -> toSQLType(to)),
+        "targetType" -> toSQLType(to),
+        "ansiConfig" -> toSQLConf("spark.sql.ansi.enabled")),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
@@ -291,12 +296,22 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def ansiDateTimeArgumentOutOfRange(e: Exception): SparkDateTimeException = {
     new SparkDateTimeException(
-      errorClass = "DATETIME_FIELD_OUT_OF_BOUNDS",
+      errorClass = "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
       messageParameters = Map(
         "rangeMessage" -> e.getMessage,
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
       context = Array.empty,
-      summary = "")
+      summary = "",
+      cause = Some(e))
+  }
+
+  def ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e: Throwable): SparkDateTimeException = {
+    new SparkDateTimeException(
+      errorClass = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+      messageParameters = Map("rangeMessage" -> e.getMessage),
+      context = Array.empty,
+      summary = "",
+      cause = Some(e))
   }
 
   def invalidIntervalWithMicrosecondsAdditionError(): SparkIllegalArgumentException = {
@@ -348,15 +363,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def orderedOperationUnsupportedByDataTypeError(
       dataType: DataType): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2005",
-      messageParameters = Map("dataType" -> dataType.toString()))
+    return orderedOperationUnsupportedByDataTypeError(dataType.toString())
   }
 
   def orderedOperationUnsupportedByDataTypeError(
       dataType: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2005",
+      errorClass = "DATATYPE_CANNOT_ORDER",
       messageParameters = Map("dataType" -> dataType))
   }
 
@@ -1955,11 +1968,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "message" -> e.getMessage))
   }
 
-  def multiFailuresInStageMaterializationError(error: Throwable): Throwable = {
+  def multiFailuresInStageMaterializationError(errors: Seq[Throwable]): Throwable = {
+    val failureDetails = errors.zipWithIndex.map { case (error, index) =>
+      s"\n  ${index + 1}. ${error.getClass.getSimpleName}: ${error.getMessage}"
+    }.mkString("")
+
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2235",
-      messageParameters = Map.empty,
-      cause = error)
+      errorClass = "STAGE_MATERIALIZATION_MULTIPLE_FAILURES",
+      messageParameters = Map(
+        "failureCount" -> errors.size.toString,
+        "failureDetails" -> failureDetails
+      ),
+      cause = errors.head)
   }
 
   def unrecognizedCompressionSchemaTypeIDError(typeId: Int): SparkUnsupportedOperationException = {
@@ -2086,9 +2106,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       oe: OutOfMemoryError, tables: Seq[TableIdentifier]): Throwable = {
     val analyzeTblMsg = if (tables.nonEmpty) {
       " or analyze these tables through: " +
-        s"${tables.map(t => s"ANALYZE TABLE $t COMPUTE STATISTICS;").mkString(" ")}."
+        s"`${tables.map(t => s"ANALYZE TABLE $t COMPUTE STATISTICS;").mkString(" ")}`"
     } else {
-      "."
+      ""
     }
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2250",
@@ -2514,6 +2534,21 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def timeAddIntervalOverflowError(
+      time: Long,
+      timePrecision: Int,
+      interval: Long,
+      intervalEndField: Byte): ArithmeticException = {
+    val i = toSQLValue(IntervalUtils.microsToDuration(interval),
+      DayTimeIntervalType(intervalEndField))
+    val t = toSQLValue(DateTimeUtils.nanosToLocalTime(time), TimeType(timePrecision))
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map("operation" -> s"add $i to the time value $t"),
+      context = Array.empty,
+      summary = "")
+  }
+
   def invalidBucketFile(path: String): Throwable = {
     new SparkException(
       errorClass = "INVALID_BUCKET_FILE",
@@ -2749,6 +2784,36 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "function" -> toSQLId(function)))
   }
 
+  def approxTopKNonPositiveValue(argName: String, argValue: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "APPROX_TOP_K_NON_POSITIVE_ARG",
+      messageParameters = Map(
+        "argName" -> toSQLId(argName),
+        "argValue" -> toSQLValue(argValue, IntegerType)))
+  }
+
+  def approxTopKNullArg(argName: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "APPROX_TOP_K_NULL_ARG",
+      messageParameters = Map("argName" -> toSQLId(argName)))
+  }
+
+  def approxTopKMaxItemsTrackedLessThanK(maxItemsTracked: Int, k: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K",
+      messageParameters = Map(
+        "maxItemsTracked" -> toSQLValue(maxItemsTracked, IntegerType),
+        "k" -> toSQLValue(k, IntegerType)))
+  }
+
+  def approxTopKMaxItemsTrackedExceedsLimit(maxItemsTracked: Int, limit: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "APPROX_TOP_K_MAX_ITEMS_TRACKED_EXCEEDS_LIMIT",
+      messageParameters = Map(
+        "maxItemsTracked" -> toSQLValue(maxItemsTracked, IntegerType),
+        "limit" -> toSQLValue(limit, IntegerType)))
+  }
+
   def mergeCardinalityViolationError(): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "MERGE_CARDINALITY_VIOLATION",
@@ -2979,5 +3044,61 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def notAbsolutePathError(path: Path): SparkException = {
     SparkException.internalError(s"$path is not absolute path.")
+  }
+
+  // Throws a SparkRuntimeException when a CHECK constraint is violated, including details of the
+  // violation.
+  def checkViolation(
+      constraintName: String,
+      sqlStr: String,
+      values: Map[String, Any]): SparkRuntimeException = {
+    // Sort by the column name to generate consistent error messages in Scala 2.12 and 2.13.
+    val valueLines = values.toSeq.sortBy(_._1).map {
+      case (column, value) =>
+        s" - $column : $value"
+    }.mkString("\n")
+    new SparkRuntimeException(
+      errorClass = "CHECK_CONSTRAINT_VIOLATION",
+      messageParameters = Map(
+        "constraintName" -> constraintName,
+        "expression" -> sqlStr,
+        "values" -> valueLines
+      )
+    )
+  }
+
+  // Throws a SparkIllegalArgumentException when an invalid time unit is specified.
+  // Note that the supported units are: HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND.
+  def invalidTimeUnitError(
+      functionName: String,
+      invalidValue: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE.TIME_UNIT",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "parameter" -> toSQLId("unit"),
+        "invalidValue" -> toSQLValue(invalidValue)
+      )
+    )
+  }
+
+  // Throws a SparkRuntimeException when a CHECK constraint is violated, including details of the
+  // violation. This is a Java-friendly version of the above method.
+  def checkViolationJava(
+      constraintName: String,
+      sqlStr: String,
+      columns: java.util.List[String],
+      values: java.util.List[Any]): SparkRuntimeException = {
+    checkViolation(constraintName, sqlStr, columns.asScala.zip(values.asScala).toMap)
+  }
+
+  def newCheckViolation(sqlStr: String, tableName: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "NEW_CHECK_CONSTRAINT_VIOLATION",
+      messageParameters = Map(
+        "expression" -> sqlStr,
+        "tableName" -> tableName
+      )
+    )
   }
 }

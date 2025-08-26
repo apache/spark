@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.io.File
+import java.util.UUID
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -26,12 +27,14 @@ import org.scalatest.Tag
 import org.apache.spark.{SparkContext, SparkException, TaskContext}
 import org.apache.spark.sql.{DataFrame, ForeachWriter}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.streaming.{CommitLog, MemoryStream}
+import org.apache.spark.sql.execution.streaming.checkpointing.CommitLog
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
+import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorSuite.withCoordinatorRef
 import org.apache.spark.sql.execution.streaming.state.StateStoreTestsHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
-import org.apache.spark.sql.streaming.OutputMode.Update
+import org.apache.spark.sql.streaming.OutputMode.{Append, Update}
 import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.sql.types.StructType
 
@@ -75,16 +78,20 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
 
   override def prefixScan(
       prefixKey: UnsafeRow,
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair] = {
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
+    : StateStoreIterator[UnsafeRowPair] = {
     innerStore.prefixScan(prefixKey, colFamilyName)
   }
 
   override def iterator(
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair] = {
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
+    : StateStoreIterator[UnsafeRowPair] = {
     innerStore.iterator(colFamilyName)
   }
 
   override def abort(): Unit = innerStore.abort()
+
+  override def release(): Unit = {}
 
   // Implement methods from StateStore (current trait)
 
@@ -176,11 +183,38 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
   }
 
   override def getReadStore(version: Long, uniqueId: Option[String] = None): ReadStateStore = {
-    new WrappedReadStateStore(
-      CkptIdCollectingStateStoreWrapper(innerProvider.getReadStore(version, uniqueId)))
+    // Don't wrap the read store with WrappedReadStateStore since it makes upgrading difficult
+    // Just return the wrapped store directly
+    CkptIdCollectingStateStoreWrapper(innerProvider.getReadStore(version, uniqueId))
   }
 
-  override def doMaintenance(): Unit = innerProvider.doMaintenance()
+  override def upgradeReadStoreToWriteStore(
+      readStore: ReadStateStore,
+      version: Long,
+      uniqueId: Option[String] = None): StateStore = {
+    // Following the pattern from RocksDBStateStoreProvider, we verify version and id match
+    assert(version == readStore.version,
+      s"Can only upgrade readStore to writeStore with the same version," +
+        s" readStoreVersion: ${readStore.version}, writeStoreVersion: ${version}")
+    assert(this.stateStoreId == readStore.id, "Can only upgrade readStore to writeStore with" +
+      " the same stateStoreId")
+
+    // Extract the inner store from our wrapper
+    val innerReadStore = readStore match {
+      case wrapper: CkptIdCollectingStateStoreWrapper => wrapper.innerStore
+      case _ =>
+        throw new IllegalStateException(
+          s"Expected CkptIdCollectingStateStoreWrapper" +
+            s" but got ${readStore.getClass}")
+    }
+
+    // Delegate to inner provider to upgrade the store
+    val upgradedStore = innerProvider.upgradeReadStoreToWriteStore(
+      innerReadStore, version, uniqueId)
+
+    // Wrap the upgraded store with CkptIdCollectingStateStoreWrapper
+    CkptIdCollectingStateStoreWrapper(upgradedStore)
+  }
 
   override def supportedCustomMetrics: Seq[StateStoreCustomMetric] =
     innerProvider.supportedCustomMetrics
@@ -572,6 +606,29 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     assert(checkpointInfoList.count(_.partitionId == 1) == numBatches * numStateStores)
     for (i <- 1 to numBatches) {
       assert(checkpointInfoList.count(_.batchVersion == i) == numStateStores * 2)
+    }
+    validateBaseCheckpointInfo()
+  }
+
+  def validateCheckpointInfoGlobalLimit(
+      numBatches: Int,
+      numStateStores: Int,
+      batchVersionSet: Set[Long]): Unit = {
+    val checkpointInfoList = CkptIdCollectingStateStoreWrapper.getStateStoreCheckpointInfos
+    // We have 6 batches, 1 partitions (since global limit), and 1 state store per batch
+    assert(checkpointInfoList.size == numBatches * numStateStores * 1)
+    checkpointInfoList.foreach { l =>
+      assert(l.stateStoreCkptId.isDefined)
+      if (batchVersionSet.contains(l.batchVersion)) {
+        assert(l.baseStateStoreCkptId.isDefined)
+      }
+    }
+    assert(checkpointInfoList.count(_.partitionId == 0) == numBatches * numStateStores)
+    // Since we use global limit, there should be no partition 1
+    assert(checkpointInfoList.count(_.partitionId == 1) == 0)
+    for (i <- 1 to numBatches) {
+      // Since we use global limit, there should be only one store per batch
+      assert(checkpointInfoList.count(_.batchVersion == i) == numStateStores * 1)
     }
     validateBaseCheckpointInfo()
   }
@@ -1138,6 +1195,54 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     validateCheckpointInfo(6, 1, Set(2, 4, 6))
   }
 
+
+  // No matter the number of shuffle partitions, global limit should always use one partition
+  Seq(1, 2, 10, 200).foreach { shufflePartitions =>
+    testWithCheckpointInfoTracked(
+      s"checkpointFormatVersion2 validate StreamingGlobalLimit with " +
+      s"shufflePartitions = $shufflePartitions") {
+      withTempDir { checkpointDir =>
+        withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, shufflePartitions.toString)) {
+          val inputData = MemoryStream[Int]
+          val aggregated = inputData
+            .toDF()
+            .limit(10)
+
+          testStream(aggregated, Append)(
+            StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+            AddData(inputData, 3),
+            CheckLastBatch(3),
+            AddData(inputData, 3, 2),
+            CheckLastBatch(3, 2),
+            StopStream
+          )
+
+          // Test recovery
+          testStream(aggregated, Append)(
+            StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+            AddData(inputData, 4, 1, 3),
+            CheckLastBatch(4, 1, 3),
+            AddData(inputData, 5, 4, 4),
+            CheckLastBatch(5, 4, 4),
+            StopStream
+          )
+
+          // crash recovery again
+          testStream(aggregated, Append)(
+            StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+            AddData(inputData, 4, 7),
+            CheckLastBatch(4),
+            AddData(inputData, 5),
+            CheckLastBatch(),
+            StopStream
+          )
+
+          validateCheckpointInfoGlobalLimit(6, 1, Set(2, 3, 4, 5, 6))
+        }
+      }
+    }
+  }
+
   test("checkpointFormatVersion2 validate transformWithState") {
     withTempDir { checkpointDir =>
       val inputData = MemoryStream[String]
@@ -1172,28 +1277,30 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
   test("checkpointFormatVersion2 racing commits don't return incorrect checkpointInfo") {
     val sqlConf = new SQLConf()
     sqlConf.setConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 2)
-
-    withTempDir { checkpointDir =>
-      val provider = new CkptIdCollectingStateStoreProviderWrapper()
-      provider.init(
-        StateStoreId(checkpointDir.toString, 0, 0),
-        StateStoreTestsHelper.keySchema,
-        StateStoreTestsHelper.valueSchema,
-        PrefixKeyScanStateEncoderSpec(StateStoreTestsHelper.keySchema, 1),
-        useColumnFamilies = false,
-        new StateStoreConf(sqlConf),
-        new Configuration
-      )
-
-      val store1 = provider.getStore(0)
-      val store1NewVersion = store1.commit()
-      val store2 = provider.getStore(1)
-      val store2NewVersion = store2.commit()
-      val store1CheckpointInfo = store1.getStateStoreCheckpointInfo()
-      val store2CheckpointInfo = store2.getStateStoreCheckpointInfo()
-
-      assert(store1CheckpointInfo.batchVersion == store1NewVersion)
-      assert(store2CheckpointInfo.batchVersion == store2NewVersion)
+    val sc = spark.sparkContext
+    withCoordinatorRef(sc) { _ =>
+      withTempDir { checkpointDir =>
+        val hadoopConf = new Configuration()
+        hadoopConf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
+        val provider = new CkptIdCollectingStateStoreProviderWrapper()
+        provider.init(
+          StateStoreId(checkpointDir.toString, 0, 0),
+          StateStoreTestsHelper.keySchema,
+          StateStoreTestsHelper.valueSchema,
+          PrefixKeyScanStateEncoderSpec(StateStoreTestsHelper.keySchema, 1),
+          useColumnFamilies = false,
+          new StateStoreConf(sqlConf),
+          hadoopConf
+        )
+        val store1 = provider.getStore(0)
+        val store1NewVersion = store1.commit()
+        val store2 = provider.getStore(1)
+        val store2NewVersion = store2.commit()
+        val store1CheckpointInfo = store1.getStateStoreCheckpointInfo()
+        val store2CheckpointInfo = store2.getStateStoreCheckpointInfo()
+        assert(store1CheckpointInfo.batchVersion == store1NewVersion)
+        assert(store2CheckpointInfo.batchVersion == store2NewVersion)
+      }
     }
   }
 }

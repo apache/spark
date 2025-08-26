@@ -17,11 +17,8 @@
 
 package org.apache.spark.sql
 
-import java.util.Collections
-
 import org.apache.spark.{SparkConf, SparkRuntimeException}
-import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, Identifier, InMemoryTableCatalog}
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, Identifier, InMemoryTableCatalog, TableInfo}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, StructType}
@@ -208,13 +205,15 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
   private def checkNullableArrayWithNotNullElement(byName: Boolean): Unit = {
     withTable("t") {
       val structType = new StructType().add("x", "int").add("y", "int")
+      val tableInfo = new TableInfo.Builder()
+        .withColumns(Array(
+          ColumnV2.create("i", IntegerType),
+          ColumnV2.create("arr", ArrayType(structType, containsNull = false))))
+        .build()
+
       catalog.createTable(
         ident = Identifier.of(Array(), "t"),
-        columns = Array(
-          ColumnV2.create("i", IntegerType),
-          ColumnV2.create("arr", ArrayType(structType, containsNull = false))),
-        partitions = Array.empty[Transform],
-        properties = Collections.emptyMap[String, String])
+        tableInfo = tableInfo)
 
       if (byName) {
         val inputDF = sql("SELECT 1 AS i, null AS arr")
@@ -255,13 +254,14 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
   private def checkNotNullFieldsInsideNullableArray(byName: Boolean): Unit = {
     withTable("t") {
       val structType = new StructType().add("x", "int", nullable = false).add("y", "int")
+      val tableInfo = new TableInfo.Builder()
+        .withColumns(Array(
+          ColumnV2.create("i", IntegerType),
+          ColumnV2.create("arr", ArrayType(structType, containsNull = true))))
+        .build()
       catalog.createTable(
         ident = Identifier.of(Array(), "t"),
-        columns = Array(
-          ColumnV2.create("i", IntegerType),
-          ColumnV2.create("arr", ArrayType(structType, containsNull = true))),
-        partitions = Array.empty[Transform],
-        properties = Collections.emptyMap[String, String])
+        tableInfo = tableInfo)
 
       if (byName) {
         val inputDF = sql(
@@ -309,13 +309,14 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
 
   private def checkNullableMapWithNonNullValues(byName: Boolean): Unit = {
     withTable("t") {
+      val tableInfo = new TableInfo.Builder()
+        .withColumns(Array(
+          ColumnV2.create("i", IntegerType),
+          ColumnV2.create("m", MapType(IntegerType, IntegerType, valueContainsNull = false))))
+        .build()
       catalog.createTable(
         ident = Identifier.of(Array(), "t"),
-        columns = Array(
-          ColumnV2.create("i", IntegerType),
-          ColumnV2.create("m", MapType(IntegerType, IntegerType, valueContainsNull = false))),
-        partitions = Array.empty[Transform],
-        properties = Collections.emptyMap[String, String])
+        tableInfo = tableInfo)
 
       if (byName) {
         val inputDF = sql("SELECT 1 AS i, null AS m")
@@ -348,13 +349,14 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
   private def checkNotNullFieldsInsideNullableMap(byName: Boolean): Unit = {
     withTable("t") {
       val structType = new StructType().add("x", "int", nullable = false).add("y", "int")
+      val tableInfo = new TableInfo.Builder()
+        .withColumns(Array(
+          ColumnV2.create("i", IntegerType),
+          ColumnV2.create("m", MapType(structType, structType, valueContainsNull = true))))
+        .build()
       catalog.createTable(
         ident = Identifier.of(Array(), "t"),
-        columns = Array(
-          ColumnV2.create("i", IntegerType),
-          ColumnV2.create("m", MapType(structType, structType, valueContainsNull = true))),
-        partitions = Array.empty[Transform],
-        properties = Collections.emptyMap[String, String])
+        tableInfo = tableInfo)
 
       if (byName) {
         val inputDF = sql("SELECT 1 AS i, map(named_struct('x', 1, 'y', 1), null) AS m")

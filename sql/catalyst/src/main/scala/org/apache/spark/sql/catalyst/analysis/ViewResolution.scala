@@ -20,10 +20,12 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, View}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object ViewResolution {
   def resolve(
       view: View,
+      options: CaseInsensitiveStringMap,
       resolveChild: LogicalPlan => LogicalPlan,
       checkAnalysis: LogicalPlan => Unit): View = {
     // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
@@ -41,7 +43,13 @@ object ViewResolution {
           view
         )
       }
-      SQLConf.withExistingConf(View.effectiveSQLConf(view.desc.viewSQLConfigs, view.isTempView)) {
+      SQLConf.withExistingConf(
+        View.effectiveSQLConf(
+          configs = view.desc.viewSQLConfigs,
+          isTempView = view.isTempView,
+          createSparkVersion = view.desc.createVersion
+        )
+      ) {
         resolveChild(view.child)
       }
     }
@@ -50,6 +58,6 @@ object ViewResolution {
     // inside a view maybe resolved incorrectly.
     checkAnalysis(newChild)
 
-    view.copy(child = newChild)
+    view.copy(child = newChild, options = options)
   }
 }

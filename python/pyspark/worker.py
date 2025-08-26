@@ -45,10 +45,10 @@ from pyspark.serializers import (
     write_long,
     read_int,
     SpecialLengths,
-    UTF8Deserializer,
     CPickleSerializer,
     BatchedSerializer,
 )
+from pyspark.sql.conversion import LocalDataToArrowConversion, ArrowTableToRowsConversion
 from pyspark.sql.functions import SkipRestOfInputTableException
 from pyspark.sql.pandas.serializers import (
     ArrowStreamPandasUDFSerializer,
@@ -60,6 +60,12 @@ from pyspark.sql.pandas.serializers import (
     ApplyInPandasWithStateSerializer,
     TransformWithStateInPandasSerializer,
     TransformWithStateInPandasInitStateSerializer,
+    TransformWithStateInPySparkRowSerializer,
+    TransformWithStateInPySparkRowInitStateSerializer,
+    ArrowStreamArrowUDFSerializer,
+    ArrowBatchUDFSerializer,
+    ArrowStreamUDTFSerializer,
+    ArrowStreamArrowUDTFSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import (
@@ -75,7 +81,7 @@ from pyspark.sql.types import (
 )
 from pyspark.util import fail_on_stopiteration, handle_worker_exception
 from pyspark import shuffle
-from pyspark.errors import PySparkRuntimeError, PySparkTypeError
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -157,7 +163,122 @@ def wrap_scalar_pandas_udf(f, args_offsets, kwargs_offsets, return_type, runner_
     )
 
 
+def wrap_scalar_arrow_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
+    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
+
+    arrow_return_type = to_arrow_type(
+        return_type, prefers_large_types=use_large_var_types(runner_conf)
+    )
+
+    def verify_result_type(result):
+        if not hasattr(result, "__len__"):
+            pd_type = "pyarrow.Array"
+            raise PySparkTypeError(
+                errorClass="UDF_RETURN_TYPE",
+                messageParameters={
+                    "expected": pd_type,
+                    "actual": type(result).__name__,
+                },
+            )
+        return result
+
+    def verify_result_length(result, length):
+        if len(result) != length:
+            raise PySparkRuntimeError(
+                errorClass="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
+                messageParameters={
+                    "udf_type": "arrow_udf",
+                    "expected": str(length),
+                    "actual": str(len(result)),
+                },
+            )
+        return result
+
+    return (
+        args_kwargs_offsets,
+        lambda *a: (
+            verify_result_length(verify_result_type(func(*a)), len(a[0])),
+            arrow_return_type,
+        ),
+    )
+
+
 def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
+    if use_legacy_pandas_udf_conversion(runner_conf):
+        return wrap_arrow_batch_udf_legacy(
+            f, args_offsets, kwargs_offsets, return_type, runner_conf
+        )
+    else:
+        return wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf)
+
+
+def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf):
+    from pyspark.sql.pandas.types import to_arrow_type
+
+    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
+
+    zero_arg_exec = False
+    if len(args_kwargs_offsets) == 0:
+        args_kwargs_offsets = (0,)
+        zero_arg_exec = True
+
+    arrow_return_type = to_arrow_type(
+        return_type, prefers_large_types=use_large_var_types(runner_conf)
+    )
+
+    if zero_arg_exec:
+
+        def get_args(*args: list):
+            return [() for _ in args[0]]
+
+    else:
+
+        def get_args(*args: list):
+            return zip(*args)
+
+    if "spark.sql.execution.pythonUDF.arrow.concurrency.level" in runner_conf:
+        from concurrent.futures import ThreadPoolExecutor
+
+        c = int(runner_conf["spark.sql.execution.pythonUDF.arrow.concurrency.level"])
+
+        @fail_on_stopiteration
+        def evaluate(*args):
+            with ThreadPoolExecutor(max_workers=c) as pool:
+                """
+                Takes list of Python objects and returns tuple of
+                (results, arrow_return_type, return_type).
+                """
+                return list(pool.map(lambda row: func(*row), get_args(*args)))
+
+    else:
+
+        @fail_on_stopiteration
+        def evaluate(*args):
+            """
+            Takes list of Python objects and returns tuple of
+            (results, arrow_return_type, return_type).
+            """
+            return [func(*row) for row in get_args(*args)]
+
+    def verify_result_length(result, length):
+        if len(result) != length:
+            raise PySparkRuntimeError(
+                errorClass="SCHEMA_MISMATCH_FOR_ARROW_PYTHON_UDF",
+                messageParameters={
+                    "udf_type": "arrow_batch_udf",
+                    "expected": str(length),
+                    "actual": str(len(result)),
+                },
+            )
+        return result
+
+    return (
+        args_kwargs_offsets,
+        lambda *a: (verify_result_length(evaluate(*a), len(a[0])), arrow_return_type, return_type),
+    )
+
+
+def wrap_arrow_batch_udf_legacy(f, args_offsets, kwargs_offsets, return_type, runner_conf):
     import pandas as pd
 
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
@@ -325,6 +446,41 @@ def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_retu
                 errorClass="UDF_RETURN_TYPE",
                 messageParameters={"expected": "pandas.Series", "actual": type(result).__name__},
             )
+
+
+def wrap_arrow_array_iter_udf(f, return_type, runner_conf):
+    arrow_return_type = to_arrow_type(
+        return_type, prefers_large_types=use_large_var_types(runner_conf)
+    )
+
+    def verify_result(result):
+        if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
+            raise PySparkTypeError(
+                errorClass="UDF_RETURN_TYPE",
+                messageParameters={
+                    "expected": "iterator of pyarrow.Array",
+                    "actual": type(result).__name__,
+                },
+            )
+        return result
+
+    def verify_element(elem):
+        import pyarrow as pa
+
+        if not isinstance(elem, pa.Array):
+            raise PySparkTypeError(
+                errorClass="UDF_RETURN_TYPE",
+                messageParameters={
+                    "expected": "iterator of pyarrow.Array",
+                    "actual": "iterator of {}".format(type(elem).__name__),
+                },
+            )
+
+        return elem
+
+    return lambda *iterator: map(
+        lambda res: (res, arrow_return_type), map(verify_element, verify_result(f(*iterator)))
+    )
 
 
 def wrap_arrow_batch_iter_udf(f, return_type, runner_conf):
@@ -571,6 +727,39 @@ def wrap_grouped_transform_with_state_pandas_init_state_udf(f, return_type, runn
     return lambda p, m, k, v: [(wrapped(p, m, k, v), arrow_return_type)]
 
 
+def wrap_grouped_transform_with_state_udf(f, return_type, runner_conf):
+    def wrapped(stateful_processor_api_client, mode, key, values):
+        result_iter = f(stateful_processor_api_client, mode, key, values)
+
+        # TODO(SPARK-XXXXX): add verification that elements in result_iter are
+        # indeed of type Row and confirm to assigned cols
+
+        return result_iter
+
+    arrow_return_type = to_arrow_type(return_type, use_large_var_types(runner_conf))
+    return lambda p, m, k, v: [(wrapped(p, m, k, v), arrow_return_type)]
+
+
+def wrap_grouped_transform_with_state_init_state_udf(f, return_type, runner_conf):
+    def wrapped(stateful_processor_api_client, mode, key, values):
+        if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
+            values_gen = values[0]
+            init_states_gen = values[1]
+        else:
+            values_gen = iter([])
+            init_states_gen = iter([])
+
+        result_iter = f(stateful_processor_api_client, mode, key, values_gen, init_states_gen)
+
+        # TODO(SPARK-XXXXX): add verification that elements in result_iter are
+        # indeed of type pd.DataFrame and confirm to assigned cols
+
+        return result_iter
+
+    arrow_return_type = to_arrow_type(return_type, use_large_var_types(runner_conf))
+    return lambda p, m, k, v: [(wrapped(p, m, k, v), arrow_return_type)]
+
+
 def wrap_grouped_map_pandas_udf_with_state(f, return_type, runner_conf):
     """
     Provides a new lambda instance wrapping user function of applyInPandasWithState.
@@ -684,10 +873,29 @@ def wrap_grouped_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type, ru
     )
 
 
+def wrap_grouped_agg_arrow_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
+    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
+
+    arrow_return_type = to_arrow_type(
+        return_type, prefers_large_types=use_large_var_types(runner_conf)
+    )
+
+    def wrapped(*series):
+        import pyarrow as pa
+
+        result = func(*series)
+        return pa.array([result])
+
+    return (
+        args_kwargs_offsets,
+        lambda *a: (wrapped(*a), arrow_return_type),
+    )
+
+
 def wrap_window_agg_pandas_udf(
     f, args_offsets, kwargs_offsets, return_type, runner_conf, udf_index
 ):
-    window_bound_types_str = runner_conf.get("pandas_window_bound_types")
+    window_bound_types_str = runner_conf.get("window_bound_types")
     window_bound_type = [t.strip().lower() for t in window_bound_types_str.split(",")][udf_index]
     if window_bound_type == "bounded":
         return wrap_bounded_window_agg_pandas_udf(
@@ -695,6 +903,26 @@ def wrap_window_agg_pandas_udf(
         )
     elif window_bound_type == "unbounded":
         return wrap_unbounded_window_agg_pandas_udf(
+            f, args_offsets, kwargs_offsets, return_type, runner_conf
+        )
+    else:
+        raise PySparkRuntimeError(
+            errorClass="INVALID_WINDOW_BOUND_TYPE",
+            messageParameters={
+                "window_bound_type": window_bound_type,
+            },
+        )
+
+
+def wrap_window_agg_arrow_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf, udf_index):
+    window_bound_types_str = runner_conf.get("window_bound_types")
+    window_bound_type = [t.strip().lower() for t in window_bound_types_str.split(",")][udf_index]
+    if window_bound_type == "bounded":
+        return wrap_bounded_window_agg_arrow_udf(
+            f, args_offsets, kwargs_offsets, return_type, runner_conf
+        )
+    elif window_bound_type == "unbounded":
+        return wrap_unbounded_window_agg_arrow_udf(
             f, args_offsets, kwargs_offsets, return_type, runner_conf
         )
     else:
@@ -722,6 +950,27 @@ def wrap_unbounded_window_agg_pandas_udf(f, args_offsets, kwargs_offsets, return
 
         result = func(*series)
         return pd.Series([result]).repeat(len(series[0]))
+
+    return (
+        args_kwargs_offsets,
+        lambda *a: (wrapped(*a), arrow_return_type),
+    )
+
+
+def wrap_unbounded_window_agg_arrow_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
+    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
+
+    # This is similar to wrap_unbounded_window_agg_pandas_udf, the only difference
+    # is that this function is for arrow udf.
+    arrow_return_type = to_arrow_type(
+        return_type, prefers_large_types=use_large_var_types(runner_conf)
+    )
+
+    def wrapped(*series):
+        import pyarrow as pa
+
+        result = func(*series)
+        return pa.repeat(result, len(series[0]))
 
     return (
         args_kwargs_offsets,
@@ -773,6 +1022,35 @@ def wrap_bounded_window_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_t
     )
 
 
+def wrap_bounded_window_agg_arrow_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
+    # args_offsets should have at least 2 for begin_index, end_index.
+    assert len(args_offsets) >= 2, len(args_offsets)
+    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets[2:], kwargs_offsets)
+
+    arrow_return_type = to_arrow_type(
+        return_type, prefers_large_types=use_large_var_types(runner_conf)
+    )
+
+    def wrapped(begin_index, end_index, *series):
+        import pyarrow as pa
+
+        assert isinstance(begin_index, pa.Int32Array), type(begin_index)
+        assert isinstance(end_index, pa.Int32Array), type(end_index)
+
+        result = []
+        for i in range(len(begin_index)):
+            offset = begin_index[i].as_py()
+            length = end_index[i].as_py() - offset
+            series_slices = [s.slice(offset=offset, length=length) for s in series]
+            result.append(func(*series_slices))
+        return pa.array(result)
+
+    return (
+        args_offsets[:2] + args_kwargs_offsets,
+        lambda *a: (wrapped(*a), arrow_return_type),
+    )
+
+
 def wrap_kwargs_support(f, args_offsets, kwargs_offsets):
     if len(kwargs_offsets):
         keys = list(kwargs_offsets.keys())
@@ -796,6 +1074,7 @@ def wrap_kwargs_support(f, args_offsets, kwargs_offsets):
 def _supports_profiler(eval_type: int) -> bool:
     return eval_type not in (
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
@@ -855,10 +1134,14 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         PythonEvalType.SQL_BATCHED_UDF,
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+        PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
         # The below doesn't support named argument, but shares the same protocol.
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
     ):
         args_offsets = []
         kwargs_offsets = {}
@@ -911,10 +1194,14 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
     # the last returnType will be the return type of UDF
     if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
         return wrap_scalar_pandas_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf)
+    elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_UDF:
+        return wrap_scalar_arrow_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF:
         return wrap_arrow_batch_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
         return args_offsets, wrap_pandas_batch_iter_udf(func, return_type, runner_conf)
+    elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF:
+        return args_offsets, wrap_arrow_array_iter_udf(func, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
         return args_offsets, wrap_pandas_batch_iter_udf(func, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
@@ -935,6 +1222,12 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         return args_offsets, wrap_grouped_transform_with_state_pandas_init_state_udf(
             func, return_type, runner_conf
         )
+    elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF:
+        return args_offsets, wrap_grouped_transform_with_state_udf(func, return_type, runner_conf)
+    elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF:
+        return args_offsets, wrap_grouped_transform_with_state_init_state_udf(
+            func, return_type, runner_conf
+        )
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
         argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
         return args_offsets, wrap_cogrouped_map_pandas_udf(func, return_type, argspec, runner_conf)
@@ -945,8 +1238,16 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         return wrap_grouped_agg_pandas_udf(
             func, args_offsets, kwargs_offsets, return_type, runner_conf
         )
+    elif eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF:
+        return wrap_grouped_agg_arrow_udf(
+            func, args_offsets, kwargs_offsets, return_type, runner_conf
+        )
     elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
         return wrap_window_agg_pandas_udf(
+            func, args_offsets, kwargs_offsets, return_type, runner_conf, udf_index
+        )
+    elif eval_type == PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF:
+        return wrap_window_agg_arrow_udf(
             func, args_offsets, kwargs_offsets, return_type, runner_conf, udf_index
         )
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
@@ -973,11 +1274,23 @@ def use_large_var_types(runner_conf):
     return runner_conf.get("spark.sql.execution.arrow.useLargeVarTypes", "false").lower() == "true"
 
 
+def use_legacy_pandas_udf_conversion(runner_conf):
+    return (
+        runner_conf.get(
+            "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "false"
+        ).lower()
+        == "true"
+    )
+
+
 # Read and process a serialized user-defined table function (UDTF) from a socket.
 # It expects the UDTF to be in a specific format and performs various checks to
 # ensure the UDTF is valid. This function also prepares a mapper function for applying
 # the UDTF logic to input rows.
 def read_udtf(pickleSer, infile, eval_type):
+    prefers_large_var_types = False
+    legacy_pandas_conversion = False
+
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
         runner_conf = {}
         # Load conf used for arrow evaluation.
@@ -986,14 +1299,52 @@ def read_udtf(pickleSer, infile, eval_type):
             k = utf8_deserializer.loads(infile)
             v = utf8_deserializer.loads(infile)
             runner_conf[k] = v
-
-        # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
-        timezone = runner_conf.get("spark.sql.session.timeZone", None)
-        safecheck = (
-            runner_conf.get("spark.sql.execution.pandas.convertToArrowArraySafely", "false").lower()
+        prefers_large_var_types = use_large_var_types(runner_conf)
+        legacy_pandas_conversion = (
+            runner_conf.get(
+                "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "false"
+            ).lower()
             == "true"
         )
-        ser = ArrowStreamPandasUDTFSerializer(timezone, safecheck)
+        input_types = [
+            field.dataType for field in _parse_datatype_json_string(utf8_deserializer.loads(infile))
+        ]
+        if legacy_pandas_conversion:
+            # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
+            safecheck = (
+                runner_conf.get(
+                    "spark.sql.execution.pandas.convertToArrowArraySafely", "false"
+                ).lower()
+                == "true"
+            )
+            int_to_decimal_coercion_enabled = (
+                runner_conf.get(
+                    "spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled", "false"
+                ).lower()
+                == "true"
+            )
+            timezone = runner_conf.get("spark.sql.session.timeZone", None)
+            ser = ArrowStreamPandasUDTFSerializer(
+                timezone,
+                safecheck,
+                input_types=input_types,
+                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+            )
+        else:
+            ser = ArrowStreamUDTFSerializer()
+    elif eval_type == PythonEvalType.SQL_ARROW_UDTF:
+        runner_conf = {}
+        num_conf = read_int(infile)
+        for i in range(num_conf):
+            k = utf8_deserializer.loads(infile)
+            v = utf8_deserializer.loads(infile)
+            runner_conf[k] = v
+        prefers_large_var_types = use_large_var_types(runner_conf)
+        # Read the table argument offsets
+        num_table_arg_offsets = read_int(infile)
+        table_arg_offsets = [read_int(infile) for _ in range(num_table_arg_offsets)]
+        # Use PyArrow-native serializer for Arrow UDTFs with potential UDT support
+        ser = ArrowStreamArrowUDTFSerializer(table_arg_offsets=table_arg_offsets)
     else:
         # Each row is a group so do not batch but send one by one.
         ser = BatchedSerializer(CPickleSerializer(), 1)
@@ -1300,13 +1651,13 @@ def read_udtf(pickleSer, infile, eval_type):
 
     check_output_row_against_schema = build_null_checker(return_type)
 
-    if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
+    if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF and legacy_pandas_conversion:
 
         def wrap_arrow_udtf(f, return_type):
             import pandas as pd
 
             arrow_return_type = to_arrow_type(
-                return_type, prefers_large_types=use_large_var_types(runner_conf)
+                return_type, prefers_large_types=prefers_large_var_types
             )
             return_type_size = len(return_type)
 
@@ -1374,19 +1725,24 @@ def read_udtf(pickleSer, infile, eval_type):
                     else:
                         yield from res
 
-            def evaluate(*args: pd.Series):
+            def evaluate(*args: pd.Series, num_rows=1):
                 if len(args) == 0:
-                    res = func()
-                    yield verify_result(pd.DataFrame(check_return_value(res))), arrow_return_type
+                    for _ in range(num_rows):
+                        yield (
+                            verify_result(pd.DataFrame(check_return_value(func()))),
+                            arrow_return_type,
+                            return_type,
+                        )
                 else:
                     # Create tuples from the input pandas Series, each tuple
                     # represents a row across all Series.
                     row_tuples = zip(*args)
                     for row in row_tuples:
-                        res = func(*row)
-                        yield verify_result(
-                            pd.DataFrame(check_return_value(res))
-                        ), arrow_return_type
+                        yield (
+                            verify_result(pd.DataFrame(check_return_value(func(*row)))),
+                            arrow_return_type,
+                            return_type,
+                        )
 
             return evaluate
 
@@ -1407,6 +1763,294 @@ def read_udtf(pickleSer, infile, eval_type):
                 for a in it:
                     # The eval function yields an iterator. Each element produced by this
                     # iterator is a tuple in the form of (pandas.DataFrame, arrow_return_type).
+                    yield from eval(*[a[o] for o in args_kwargs_offsets], num_rows=len(a[0]))
+                if terminate is not None:
+                    yield from terminate()
+            except SkipRestOfInputTableException:
+                if terminate is not None:
+                    yield from terminate()
+            finally:
+                if cleanup is not None:
+                    cleanup()
+
+        return mapper, None, ser, ser
+
+    elif eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF and not legacy_pandas_conversion:
+
+        def wrap_arrow_udtf(f, return_type):
+            import pyarrow as pa
+
+            arrow_return_type = to_arrow_type(
+                return_type, prefers_large_types=prefers_large_var_types
+            )
+            return_type_size = len(return_type)
+
+            def verify_result(result):
+                if not isinstance(result, pa.Table):
+                    raise PySparkTypeError(
+                        errorClass="INVALID_ARROW_UDTF_RETURN_TYPE",
+                        messageParameters={
+                            "return_type": type(result).__name__,
+                            "value": str(result),
+                            "func": f.__name__,
+                        },
+                    )
+
+                # Validate the output schema when the result dataframe has either output
+                # rows or columns. Note that we avoid using `df.empty` here because the
+                # result dataframe may contain an empty row. For example, when a UDTF is
+                # defined as follows: def eval(self): yield tuple().
+                if result.num_rows > 0 or result.num_columns > 0:
+                    if result.num_columns != return_type_size:
+                        raise PySparkRuntimeError(
+                            errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
+                            messageParameters={
+                                "expected": str(return_type_size),
+                                "actual": str(result.num_columns),
+                                "func": f.__name__,
+                            },
+                        )
+
+                # Verify the type and the schema of the result.
+                verify_arrow_result(
+                    result,
+                    assign_cols_by_name=False,
+                    expected_cols_and_types=[
+                        (field.name, field.type) for field in arrow_return_type
+                    ],
+                )
+                return result
+
+            # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
+            def func(*a: Any) -> Any:
+                try:
+                    return f(*a)
+                except SkipRestOfInputTableException:
+                    raise
+                except Exception as e:
+                    raise PySparkRuntimeError(
+                        errorClass="UDTF_EXEC_ERROR",
+                        messageParameters={"method_name": f.__name__, "error": str(e)},
+                    )
+
+            def check_return_value(res):
+                # Check whether the result of an arrow UDTF is iterable before
+                # using it to construct a pandas DataFrame.
+                if res is not None:
+                    if not isinstance(res, Iterable):
+                        raise PySparkRuntimeError(
+                            errorClass="UDTF_RETURN_NOT_ITERABLE",
+                            messageParameters={
+                                "type": type(res).__name__,
+                                "func": f.__name__,
+                            },
+                        )
+                    for row in res:
+                        if not isinstance(row, tuple) and return_type_size == 1:
+                            row = (row,)
+                        if check_output_row_against_schema is not None:
+                            if row is not None:
+                                check_output_row_against_schema(row)
+                        yield row
+
+            def convert_to_arrow(data: Iterable):
+                data = list(check_return_value(data))
+                if len(data) == 0:
+                    # Return one empty RecordBatch to match the left side of the lateral join
+                    return [
+                        pa.RecordBatch.from_pylist(data, schema=pa.schema(list(arrow_return_type)))
+                    ]
+
+                def raise_conversion_error(original_exception):
+                    raise PySparkRuntimeError(
+                        errorClass="UDTF_ARROW_TYPE_CONVERSION_ERROR",
+                        messageParameters={
+                            "data": str(data),
+                            "schema": return_type.simpleString(),
+                            "arrow_schema": str(arrow_return_type),
+                        },
+                    ) from original_exception
+
+                try:
+                    table = LocalDataToArrowConversion.convert(
+                        data, return_type, prefers_large_var_types
+                    )
+                except PySparkValueError as e:
+                    if e.getErrorClass() == "AXIS_LENGTH_MISMATCH":
+                        raise PySparkRuntimeError(
+                            errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
+                            messageParameters={
+                                "expected": e.getMessageParameters()[
+                                    "expected_length"
+                                ],  # type: ignore[index]
+                                "actual": e.getMessageParameters()[
+                                    "actual_length"
+                                ],  # type: ignore[index]
+                                "func": f.__name__,
+                            },
+                        ) from e
+                    # Fall through to general conversion error
+                    raise_conversion_error(e)
+                except Exception as e:
+                    raise_conversion_error(e)
+
+                return verify_result(table).to_batches()
+
+            def evaluate(*args: list, num_rows=1):
+                if len(args) == 0:
+                    for _ in range(num_rows):
+                        for batch in convert_to_arrow(func()):
+                            yield batch, arrow_return_type
+
+                else:
+                    for row in zip(*args):
+                        for batch in convert_to_arrow(func(*row)):
+                            yield batch, arrow_return_type
+
+            return evaluate
+
+        eval_func_kwargs_support, args_kwargs_offsets = wrap_kwargs_support(
+            getattr(udtf, "eval"), args_offsets, kwargs_offsets
+        )
+        eval = wrap_arrow_udtf(eval_func_kwargs_support, return_type)
+
+        if hasattr(udtf, "terminate"):
+            terminate = wrap_arrow_udtf(getattr(udtf, "terminate"), return_type)
+        else:
+            terminate = None
+
+        cleanup = getattr(udtf, "cleanup") if hasattr(udtf, "cleanup") else None
+
+        def mapper(_, it):
+            try:
+                converters = [
+                    ArrowTableToRowsConversion._create_converter(dt, none_on_identity=True)
+                    for dt in input_types
+                ]
+                for a in it:
+                    pylist = [
+                        [conv(v) for v in column.to_pylist()]
+                        if conv is not None
+                        else column.to_pylist()
+                        for column, conv in zip(a.columns, converters)
+                    ]
+                    # The eval function yields an iterator. Each element produced by this
+                    # iterator is a tuple in the form of (pyarrow.RecordBatch, arrow_return_type).
+                    yield from eval(*[pylist[o] for o in args_kwargs_offsets], num_rows=a.num_rows)
+                if terminate is not None:
+                    yield from terminate()
+            except SkipRestOfInputTableException:
+                if terminate is not None:
+                    yield from terminate()
+            finally:
+                if cleanup is not None:
+                    cleanup()
+
+        return mapper, None, ser, ser
+
+    elif eval_type == PythonEvalType.SQL_ARROW_UDTF:
+
+        def wrap_pyarrow_udtf(f, return_type):
+            import pyarrow as pa
+
+            arrow_return_type = to_arrow_type(
+                return_type, prefers_large_types=use_large_var_types(runner_conf)
+            )
+            return_type_size = len(return_type)
+
+            def verify_result(result):
+                # Validate the output schema when the result has columns
+                if result.num_columns != return_type_size:
+                    raise PySparkRuntimeError(
+                        errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
+                        messageParameters={
+                            "expected": str(return_type_size),
+                            "actual": str(result.num_columns),
+                            "func": f.__name__,
+                        },
+                    )
+
+                # Verify the type and the schema of the result.
+                verify_arrow_result(
+                    pa.Table.from_batches([result], schema=pa.schema(list(arrow_return_type))),
+                    assign_cols_by_name=False,
+                    expected_cols_and_types=[
+                        (col.name, to_arrow_type(col.dataType)) for col in return_type.fields
+                    ],
+                )
+                return result
+
+            # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
+            def func(*a: Any) -> Any:
+                try:
+                    return f(*a)
+                except SkipRestOfInputTableException:
+                    raise
+                except Exception as e:
+                    raise PySparkRuntimeError(
+                        errorClass="UDTF_EXEC_ERROR",
+                        messageParameters={"method_name": f.__name__, "error": str(e)},
+                    )
+
+            def check_return_value(res):
+                # Check whether the result of a PyArrow UDTF is iterable before processing
+                if res is not None:
+                    if not isinstance(res, Iterable):
+                        raise PySparkRuntimeError(
+                            errorClass="UDTF_RETURN_NOT_ITERABLE",
+                            messageParameters={
+                                "type": type(res).__name__,
+                                "func": f.__name__,
+                            },
+                        )
+                    return res
+                else:
+                    return iter([])
+
+            def convert_to_arrow(data: Iterable):
+                data_iter = check_return_value(data)
+
+                # Handle PyArrow Tables/RecordBatches directly
+                is_empty = True
+                for item in data_iter:
+                    is_empty = False
+                    if isinstance(item, pa.Table):
+                        yield from item.to_batches()
+                    elif isinstance(item, pa.RecordBatch):
+                        yield item
+                    else:
+                        # Arrow UDTF should only return Arrow types (RecordBatch/Table)
+                        raise PySparkRuntimeError(
+                            errorClass="UDTF_ARROW_TYPE_CONVERSION_ERROR",
+                            messageParameters={},
+                        )
+
+                if is_empty:
+                    yield pa.RecordBatch.from_pylist([], schema=pa.schema(list(arrow_return_type)))
+
+            def evaluate(*args: pa.RecordBatch):
+                # For Arrow UDTFs, unpack the RecordBatches and pass them to the function
+                for batch in convert_to_arrow(func(*args)):
+                    yield verify_result(batch), arrow_return_type
+
+            return evaluate
+
+        eval_func_kwargs_support, args_kwargs_offsets = wrap_kwargs_support(
+            getattr(udtf, "eval"), args_offsets, kwargs_offsets
+        )
+        eval = wrap_pyarrow_udtf(eval_func_kwargs_support, return_type)
+
+        if hasattr(udtf, "terminate"):
+            terminate = wrap_pyarrow_udtf(getattr(udtf, "terminate"), return_type)
+        else:
+            terminate = None
+
+        cleanup = getattr(udtf, "cleanup") if hasattr(udtf, "cleanup") else None
+
+        def mapper(_, it):
+            try:
+                for a in it:
+                    # For PyArrow UDTFs, pass RecordBatches directly (no row conversion needed)
                     yield from eval(*[a[o] for o in args_kwargs_offsets])
                 if terminate is not None:
                     yield from terminate()
@@ -1428,6 +2072,16 @@ def read_udtf(pickleSer, infile, eval_type):
 
             def verify_and_convert_result(result):
                 if result is not None:
+                    if hasattr(result, "__UDT__"):
+                        # UDT object should not be returned directly.
+                        raise PySparkRuntimeError(
+                            errorClass="UDTF_INVALID_OUTPUT_ROW_TYPE",
+                            messageParameters={
+                                "type": type(result).__name__,
+                                "func": f.__name__,
+                            },
+                        )
+
                     if hasattr(result, "__len__") and len(result) != return_type_size:
                         raise PySparkRuntimeError(
                             errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
@@ -1520,18 +2174,24 @@ def read_udfs(pickleSer, infile, eval_type):
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+        PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
         PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
+        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
+        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
     ):
         # Load conf used for pandas_udf evaluation
         num_conf = read_int(infile)
@@ -1546,8 +2206,12 @@ def read_udfs(pickleSer, infile, eval_type):
         elif (
             eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF
             or eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF
+            or eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF
+            or eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF
         ):
             state_server_port = read_int(infile)
+            if state_server_port == -1:
+                state_server_port = utf8_deserializer.loads(infile)
             key_schema = StructType.fromJson(json.loads(utf8_deserializer.loads(infile)))
 
         # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
@@ -1557,12 +2221,24 @@ def read_udfs(pickleSer, infile, eval_type):
             runner_conf.get("spark.sql.execution.pandas.convertToArrowArraySafely", "false").lower()
             == "true"
         )
+        int_to_decimal_coercion_enabled = (
+            runner_conf.get(
+                "spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled", "false"
+            ).lower()
+            == "true"
+        )
         _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
         if eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
             ser = CogroupArrowUDFSerializer(_assign_cols_by_name)
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
-            ser = CogroupPandasUDFSerializer(timezone, safecheck, _assign_cols_by_name)
+            ser = CogroupPandasUDFSerializer(
+                timezone,
+                safecheck,
+                _assign_cols_by_name,
+                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+                arrow_cast=True,
+            )
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
             arrow_max_records_per_batch = runner_conf.get(
                 "spark.sql.execution.arrow.maxRecordsPerBatch", 10000
@@ -1576,6 +2252,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 state_object_schema,
                 arrow_max_records_per_batch,
                 prefers_large_var_types,
+                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )
         elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
             arrow_max_records_per_batch = runner_conf.get(
@@ -1584,7 +2261,11 @@ def read_udfs(pickleSer, infile, eval_type):
             arrow_max_records_per_batch = int(arrow_max_records_per_batch)
 
             ser = TransformWithStateInPandasSerializer(
-                timezone, safecheck, _assign_cols_by_name, arrow_max_records_per_batch
+                timezone,
+                safecheck,
+                _assign_cols_by_name,
+                arrow_max_records_per_batch,
+                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )
         elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF:
             arrow_max_records_per_batch = runner_conf.get(
@@ -1593,12 +2274,46 @@ def read_udfs(pickleSer, infile, eval_type):
             arrow_max_records_per_batch = int(arrow_max_records_per_batch)
 
             ser = TransformWithStateInPandasInitStateSerializer(
-                timezone, safecheck, _assign_cols_by_name, arrow_max_records_per_batch
+                timezone,
+                safecheck,
+                _assign_cols_by_name,
+                arrow_max_records_per_batch,
+                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )
+        elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF:
+            arrow_max_records_per_batch = runner_conf.get(
+                "spark.sql.execution.arrow.maxRecordsPerBatch", 10000
+            )
+            arrow_max_records_per_batch = int(arrow_max_records_per_batch)
+
+            ser = TransformWithStateInPySparkRowSerializer(arrow_max_records_per_batch)
+        elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF:
+            arrow_max_records_per_batch = runner_conf.get(
+                "spark.sql.execution.arrow.maxRecordsPerBatch", 10000
+            )
+            arrow_max_records_per_batch = int(arrow_max_records_per_batch)
+
+            ser = TransformWithStateInPySparkRowInitStateSerializer(arrow_max_records_per_batch)
         elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
             ser = ArrowStreamUDFSerializer()
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
             ser = ArrowStreamGroupUDFSerializer(_assign_cols_by_name)
+        elif eval_type in (
+            PythonEvalType.SQL_SCALAR_ARROW_UDF,
+            PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+            PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
+        ):
+            # Arrow cast and safe check are always enabled
+            ser = ArrowStreamArrowUDFSerializer(timezone, True, _assign_cols_by_name, True)
+        elif (
+            eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
+            and not use_legacy_pandas_udf_conversion(runner_conf)
+        ):
+            input_types = [
+                f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))
+            ]
+            ser = ArrowBatchUDFSerializer(timezone, safecheck, input_types)
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
             # pandas Series. See SPARK-27240.
@@ -1612,8 +2327,6 @@ def read_udfs(pickleSer, infile, eval_type):
                 "row" if eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF else "dict"
             )
             ndarray_as_list = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
-            # Arrow-optimized Python UDF uses explicit Arrow cast for type coercion
-            arrow_cast = eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             # Arrow-optimized Python UDF takes input types
             input_types = (
                 [f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))]
@@ -1628,8 +2341,9 @@ def read_udfs(pickleSer, infile, eval_type):
                 df_for_struct,
                 struct_in_pandas,
                 ndarray_as_list,
-                arrow_cast,
+                True,
                 input_types,
+                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
             )
     else:
         batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))
@@ -1643,11 +2357,15 @@ def read_udfs(pickleSer, infile, eval_type):
 
     num_udfs = read_int(infile)
 
-    is_scalar_iter = eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
+    is_scalar_iter = eval_type in (
+        PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+    )
     is_map_pandas_iter = eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
     is_map_arrow_iter = eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF
 
     if is_scalar_iter or is_map_pandas_iter or is_map_arrow_iter:
+        # TODO: Better error message for num_udfs != 1
         if is_scalar_iter:
             assert num_udfs == 1, "One SCALAR_ITER UDF expected here."
         if is_map_pandas_iter:
@@ -1829,6 +2547,66 @@ def read_udfs(pickleSer, infile, eval_type):
                 # mode == PROCESS_TIMER or mode == COMPLETE
                 return f(stateful_processor_api_client, mode, None, iter([]))
 
+    elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF:
+        # We assume there is only one UDF here because grouped map doesn't
+        # support combining multiple UDFs.
+        assert num_udfs == 1
+
+        # See TransformWithStateInPySparkExec for how arg_offsets are used to
+        # distinguish between grouping attributes and data attributes
+        arg_offsets, f = read_single_udf(
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+        )
+        parsed_offsets = extract_key_value_indexes(arg_offsets)
+        ser.key_offsets = parsed_offsets[0][0]
+        stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
+
+        def mapper(a):
+            mode = a[0]
+
+            if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
+                key = a[1]
+                values = a[2]
+
+                # This must be generator comprehension - do not materialize.
+                return f(stateful_processor_api_client, mode, key, values)
+            else:
+                # mode == PROCESS_TIMER or mode == COMPLETE
+                return f(stateful_processor_api_client, mode, None, iter([]))
+
+    elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF:
+        # We assume there is only one UDF here because grouped map doesn't
+        # support combining multiple UDFs.
+        assert num_udfs == 1
+
+        # See TransformWithStateInPandasExec for how arg_offsets are used to
+        # distinguish between grouping attributes and data attributes
+        arg_offsets, f = read_single_udf(
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+        )
+        # parsed offsets:
+        # [
+        #     [groupingKeyOffsets, dedupDataOffsets],
+        #     [initStateGroupingOffsets, dedupInitDataOffsets]
+        # ]
+        parsed_offsets = extract_key_value_indexes(arg_offsets)
+        ser.key_offsets = parsed_offsets[0][0]
+        ser.init_key_offsets = parsed_offsets[1][0]
+        stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
+
+        def mapper(a):
+            mode = a[0]
+
+            if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
+                key = a[1]
+                values = a[2]
+
+                # This must be generator comprehension - do not materialize.
+                return f(stateful_processor_api_client, mode, key, values)
+            else:
+                # mode == PROCESS_TIMER or mode == COMPLETE
+                return f(stateful_processor_api_client, mode, None, iter([]))
+
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
         import pyarrow as pa
 
@@ -1968,6 +2746,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
 def main(infile, outfile):
     faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
+    tracebackDumpIntervalSeconds = os.environ.get("PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", None)
     try:
         if faulthandler_log_path:
             faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
@@ -1979,12 +2758,13 @@ def main(infile, outfile):
         if split_index == -1:  # for unit tests
             sys.exit(-1)
 
+        if tracebackDumpIntervalSeconds is not None and int(tracebackDumpIntervalSeconds) > 0:
+            faulthandler.dump_traceback_later(int(tracebackDumpIntervalSeconds), repeat=True)
+
         check_python_version(infile)
 
         # read inputs only for a barrier task
         isBarrier = read_bool(infile)
-        boundPort = read_int(infile)
-        secret = UTF8Deserializer().loads(infile)
 
         memory_limit_mb = int(os.environ.get("PYSPARK_EXECUTOR_MEMORY_MB", "-1"))
         setup_memory_limits(memory_limit_mb)
@@ -1992,6 +2772,12 @@ def main(infile, outfile):
         # initialize global state
         taskContext = None
         if isBarrier:
+            boundPort = read_int(infile)
+            secret = None
+            if boundPort == -1:
+                boundPort = utf8_deserializer.loads(infile)
+            else:
+                secret = utf8_deserializer.loads(infile)
             taskContext = BarrierTaskContext._getOrCreate()
             BarrierTaskContext._initialize(boundPort, secret)
             # Set the task context instance here, so we can get it by TaskContext.get for
@@ -2032,7 +2818,11 @@ def main(infile, outfile):
         eval_type = read_int(infile)
         if eval_type == PythonEvalType.NON_UDF:
             func, profiler, deserializer, serializer = read_command(pickleSer, infile)
-        elif eval_type in (PythonEvalType.SQL_TABLE_UDF, PythonEvalType.SQL_ARROW_TABLE_UDF):
+        elif eval_type in (
+            PythonEvalType.SQL_TABLE_UDF,
+            PythonEvalType.SQL_ARROW_TABLE_UDF,
+            PythonEvalType.SQL_ARROW_UDTF,
+        ):
             func, profiler, deserializer, serializer = read_udtf(pickleSer, infile, eval_type)
         else:
             func, profiler, deserializer, serializer = read_udfs(pickleSer, infile, eval_type)
@@ -2082,12 +2872,17 @@ def main(infile, outfile):
         write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
         sys.exit(-1)
 
+    # Force to cancel dump_traceback_later
+    faulthandler.cancel_dump_traceback_later()
+
 
 if __name__ == "__main__":
     # Read information about how to connect back to the JVM from the environment.
-    java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
-    auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
-    (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
+    conn_info = os.environ.get(
+        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
+    )
+    auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
+    (sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
     # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
     write_int(os.getpid(), sock_file)
     sock_file.flush()

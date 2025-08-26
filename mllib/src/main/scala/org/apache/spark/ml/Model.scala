@@ -49,8 +49,8 @@ abstract class Model[M <: Model[M]] extends Transformer { self =>
    * For ml connect only.
    * Estimate the size of this model in bytes.
    * This is an approximation, the real size might be different.
-   * 1, Only driver side memory usage is counted, distributed objects (like DataFrame,
-   * RDD, Graph, Summary) are ignored.
+   * 1, Both driver side memory usage and distributed objects size (like DataFrame,
+   * RDD, Graph, Summary) are counted.
    * 2, Lazy vals are not counted, e.g., an auxiliary object used in prediction.
    * 3, The default implementation uses `org.apache.spark.util.SizeEstimator.estimate`,
    *    some models override the default implementation to achieve more precise estimation.

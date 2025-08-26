@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, instantToMicros, localDateTimeToMicros}
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.{instantToNanosOfDay, truncateTimeToPrecision}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types._
@@ -113,6 +114,7 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
     val instant = Instant.now()
     val currentTimestampMicros = instantToMicros(instant)
     val currentTime = Literal.create(currentTimestampMicros, TimestampType)
+    val currentTimeOfDayNanos = instantToNanosOfDay(instant, conf.sessionLocalTimeZone)
     val timezone = Literal.create(conf.sessionLocalTimeZone, StringType)
     val currentDates = collection.mutable.HashMap.empty[ZoneId, Literal]
     val localTimestamps = collection.mutable.HashMap.empty[ZoneId, Literal]
@@ -129,6 +131,10 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
               Literal.create(
                 DateTimeUtils.microsToDays(currentTimestampMicros, cd.zoneId), DateType)
             })
+          case currentTimeType : CurrentTime =>
+            val truncatedTime = truncateTimeToPrecision(currentTimeOfDayNanos,
+              currentTimeType.precision)
+            Literal.create(truncatedTime, TimeType(currentTimeType.precision))
           case CurrentTimestamp() | Now() => currentTime
           case CurrentTimeZone() => timezone
           case localTimestamp: LocalTimestamp =>

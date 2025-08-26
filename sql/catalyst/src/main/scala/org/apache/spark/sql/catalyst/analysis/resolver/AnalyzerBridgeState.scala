@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.HashMap
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -28,21 +28,45 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  * [[Resolver]]. It is used  in dual-run mode (when
  * [[ANALYZER_SINGLE_PASS_RESOLVER_RELATION_BRIDGING_ENABLED]] is true).
  *
- * @param relationsWithResolvedMetadata A map from [[UnresolvedRelation]] to the relations with
+ * @param relationsWithResolvedMetadata A map from [[BridgedRelationId]] to the relations with
  *   resolved metadata. It allows us to reuse the relation metadata and avoid duplicate
  *   catalog/table lookups.
  * @param catalogRelationsWithResolvedMetadata A map from [[UnresolvedCatalogRelation]] to the
  *   relations with resolved metadata. It allows us to reuse the relation metadata and avoid
  *   duplicate catalog/table lookups.
+ * @param hiveRelationsWithResolvedMetadata A map from [[HiveTableRelation]] to their resolved
+ *   [[LogicalRelation]] counterparts. We cannot import those nodes here because of recursive
+ *   dependencies, so we rely on overridden [[LogicalPlan.equals]] and [[LogicalPlan.hashCode]].
+ *   Keys are canonicalized to compensate for stats added by [[DetermineTableStats]].
  */
 case class AnalyzerBridgeState(
     relationsWithResolvedMetadata: AnalyzerBridgeState.RelationsWithResolvedMetadata =
       new AnalyzerBridgeState.RelationsWithResolvedMetadata,
     catalogRelationsWithResolvedMetadata: AnalyzerBridgeState.CatalogRelationsWithResolvedMetadata =
-      new AnalyzerBridgeState.CatalogRelationsWithResolvedMetadata
-)
+      new AnalyzerBridgeState.CatalogRelationsWithResolvedMetadata,
+    hiveRelationsWithResolvedMetadata: AnalyzerBridgeState.HiveRelationsWithResolvedMetadata =
+      new AnalyzerBridgeState.HiveRelationsWithResolvedMetadata
+) {
+  def addUnresolvedRelation(unresolvedRelation: UnresolvedRelation, relation: LogicalPlan): Unit = {
+    relationsWithResolvedMetadata.put(
+      BridgedRelationId(unresolvedRelation, AnalysisContext.get.catalogAndNamespace),
+      relation
+    )
+  }
+
+  def addLogicalRelationForHiveRelation(
+      hiveRelation: LogicalPlan,
+      logicalRelation: LogicalPlan): Unit = {
+    hiveRelationsWithResolvedMetadata.put(hiveRelation.canonicalized, logicalRelation)
+  }
+
+  def getLogicalRelationForHiveRelation(hiveRelation: LogicalPlan): Option[LogicalPlan] = {
+    Option(hiveRelationsWithResolvedMetadata.get(hiveRelation.canonicalized))
+  }
+}
 
 object AnalyzerBridgeState {
-  type RelationsWithResolvedMetadata = HashMap[UnresolvedRelation, LogicalPlan]
+  type RelationsWithResolvedMetadata = HashMap[BridgedRelationId, LogicalPlan]
   type CatalogRelationsWithResolvedMetadata = HashMap[UnresolvedCatalogRelation, LogicalPlan]
+  type HiveRelationsWithResolvedMetadata = HashMap[LogicalPlan, LogicalPlan]
 }

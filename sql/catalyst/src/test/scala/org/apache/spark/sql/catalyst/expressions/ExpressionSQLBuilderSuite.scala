@@ -169,7 +169,7 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
     val interval = Literal(new CalendarInterval(0, 0, MICROS_PER_HOUR))
 
     checkSQL(
-      TimeAdd($"a", interval),
+      TimestampAddInterval($"a", interval),
       "a + INTERVAL '1 hours'"
     )
 

@@ -707,8 +707,8 @@ class ArrowTestsMixin:
     def test_createDataFrame_does_not_modify_input(self):
         # Some series get converted for Spark to consume, this makes sure input is unchanged
         pdf = self.create_pandas_data_frame()
-        # Use a nanosecond value to make sure it is not truncated
-        pdf.iloc[0, 7] = pd.Timestamp(1)
+        # Use a nanosecond value that converts to microseconds without precision loss
+        pdf.iloc[0, 7] = pd.Timestamp(1000)
         # Integers with nulls will get NaNs filled with 0 and will be casted
         pdf.iloc[1, 1] = None
         pdf_copy = pdf.copy(deep=True)
@@ -1713,13 +1713,8 @@ class ArrowTestsMixin:
     def test_createDataFrame_arrow_fixed_size_list(self):
         a = pa.array([[-1, 3]] * 5, type=pa.list_(pa.int32(), 2))
         t = pa.table([a], ["fsl"])
-        if LooseVersion(pa.__version__) < LooseVersion("14.0.0"):
-            # PyArrow versions before 14.0.0 do not support casting FixedSizeListArray to ListArray
-            with self.assertRaises(PySparkTypeError):
-                df = self.spark.createDataFrame(t)
-        else:
-            df = self.spark.createDataFrame(t)
-            self.assertIsInstance(df.schema["fsl"].dataType, ArrayType)
+        df = self.spark.createDataFrame(t)
+        self.assertIsInstance(df.schema["fsl"].dataType, ArrayType)
 
 
 @unittest.skipIf(

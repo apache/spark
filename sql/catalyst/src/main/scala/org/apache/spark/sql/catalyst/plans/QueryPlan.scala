@@ -24,16 +24,20 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.rules.RuleId
 import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreeNode, TreeNodeTag}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{OUTER_REFERENCE, PLAN_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
+import org.apache.spark.sql.catalyst.trees.TreePatternBits.toPatternBits
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{BestEffortLazyVal, TransientBestEffortLazyVal}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -52,6 +56,32 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 
   def output: Seq[Attribute]
 
+  override def nodeWithOutputColumnsString(maxColumns: Int): String = {
+    try {
+      nodeName + {
+        if (this.output.length > maxColumns) {
+          val outputWithNullability = this.output.take(maxColumns).map { attr =>
+            attr.toString + s"[nullable=${attr.nullable}]"
+          }
+
+          outputWithNullability.mkString(" <output=", ", ",
+            s" ... ${this.output.length - maxColumns} more columns>")
+        } else {
+          val outputWithNullability = this.output.map { attr =>
+            attr.toString + s"[nullable=${attr.nullable}]"
+          }
+
+          outputWithNullability.mkString(" <output=", ", ", ">")
+        }
+      }
+    } catch {
+      case _: UnresolvedException =>
+        // If we encounter an UnresolvedException, it's high likely that the call of `this.output`
+        // throws it. In this case, we may have to give up and only show the nodeName.
+        nodeName + " <output='Unresolved'>"
+    }
+  }
+
   /**
    * Returns the set of attributes that are output by this node.
    */
@@ -67,7 +97,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   def outputOrdering: Seq[SortOrder] = Nil
 
   // Override `treePatternBits` to propagate bits for its expressions.
-  override lazy val treePatternBits: BitSet = {
+  private val _treePatternBits = new BestEffortLazyVal[BitSet](() => {
     val bits: BitSet = getDefaultTreePatternBits
     // Propagate expressions' pattern bits
     val exprIterator = expressions.iterator
@@ -75,7 +105,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
       bits.union(exprIterator.next().treePatternBits)
     }
     bits
-  }
+  })
+  override def treePatternBits: BitSet = _treePatternBits()
 
   /**
    * The set of all attributes that are input to this operator by its children.
@@ -375,8 +406,6 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
           newValidAttrMapping.filterNot { case (_, a) => existingAttrMappingSet.contains(a) }
         }
         val resultAttrMapping = if (canGetOutput(plan)) {
-          // We propagate the attributes mapping to the parent plan node to update attributes, so
-          // the `newAttr` must be part of this plan's output.
           (transferAttrMapping ++ newOtherAttrMapping).filter {
             case (_, newAttr) => planAfterRule.outputSet.contains(newAttr)
           }
@@ -603,10 +632,20 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 
   /**
    * A variant of `collect`. This method not only apply the given function to all elements in this
-   * plan, also considering all the plans in its (nested) subqueries
+   * plan, also considering all the plans in its (nested) subqueries.
    */
   def collectWithSubqueries[B](f: PartialFunction[PlanType, B]): Seq[B] =
     (this +: subqueriesAll).flatMap(_.collect(f))
+
+  /**
+   * A variant of collectFirst. This method not only apply the given function to all elements in
+   * this plan, also considering all the plans in its (nested) subqueries.
+   */
+  def collectFirstWithSubqueries[B](f: PartialFunction[PlanType, B]): Option[B] = {
+    this.collectFirst(f).orElse {
+      subqueriesAll.foldLeft(None: Option[B]) { (l, r) => l.orElse(r.collectFirst(f)) }
+    }
+  }
 
   override def innerChildren: Seq[QueryPlan[_]] = subqueries
 
@@ -699,6 +738,23 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * significant memory overhead on the driver.
    */
   def allAttributes: AttributeSeq = children.flatMap(_.output)
+
+  final override def validateNodePatterns(): Unit = {
+    if (Utils.isTesting) {
+      assert(
+        !toPatternBits(nodePatterns: _*).intersects(QueryPlanPatternBitMask.mask),
+        s"${this.getClass.getName} returns Expression patterns")
+    }
+  }
+}
+
+object QueryPlanPatternBitMask {
+  val mask: BitSet = {
+    val bits = new BitSet(TreePattern.maxId)
+    bits.clear()
+    bits.setUntil(OPERATOR_START.id)
+    bits
+  }
 }
 
 object QueryPlan extends PredicateHelper {
@@ -767,9 +823,10 @@ object QueryPlan extends PredicateHelper {
       verbose: Boolean,
       addSuffix: Boolean,
       maxFields: Int = SQLConf.get.maxToStringFields,
-      printOperatorId: Boolean = false): Unit = {
+      printOperatorId: Boolean = false,
+      printOutputColumns: Boolean = false): Unit = {
     try {
-      plan.treeString(append, verbose, addSuffix, maxFields, printOperatorId)
+      plan.treeString(append, verbose, addSuffix, maxFields, printOperatorId, printOutputColumns)
     } catch {
       case e: AnalysisException => append(e.toString)
     }

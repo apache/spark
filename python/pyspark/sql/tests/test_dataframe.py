@@ -26,7 +26,18 @@ import io
 from contextlib import redirect_stdout
 
 from pyspark.sql import Row, functions, DataFrame
-from pyspark.sql.functions import col, lit, count, struct, date_format, to_date, array, explode
+from pyspark.sql.functions import (
+    col,
+    lit,
+    count,
+    struct,
+    date_format,
+    to_date,
+    array,
+    explode,
+    when,
+    concat,
+)
 from pyspark.sql.types import (
     StringType,
     IntegerType,
@@ -148,6 +159,15 @@ class DataFrameTestsMixin:
         self.assertTrue(df3.columns, ["id", "value", "id", "value"])
         self.assertTrue(df3.count() == 20)
 
+    def test_lateral_column_alias(self):
+        df1 = self.spark.range(10).select(
+            (col("id") + lit(1)).alias("x"), (col("x") + lit(1)).alias("y")
+        )
+        df2 = self.spark.range(10).select(col("id").alias("x"))
+        df3 = df1.join(df2, df1.x == df2.x).select(df1.y)
+        self.assertTrue(df3.columns, ["y"])
+        self.assertTrue(df3.count() == 9)
+
     def test_duplicated_column_names(self):
         df = self.spark.createDataFrame([(1, 2)], ["c", "c"])
         row = df.select("*").first()
@@ -179,6 +199,54 @@ class DataFrameTestsMixin:
         self.assertEqual(df.drop(col("name")).columns, ["age", "active"])
         self.assertEqual(df.drop(col("name"), col("age")).columns, ["active"])
         self.assertEqual(df.drop(col("name"), col("age"), col("random")).columns, ["active"])
+
+    def test_drop_notexistent_col(self):
+        df1 = self.spark.createDataFrame(
+            [("a", "b", "c")],
+            schema="colA string, colB string, colC string",
+        )
+        df2 = self.spark.createDataFrame(
+            [("c", "d", "e")],
+            schema="colC string, colD string, colE string",
+        )
+        df3 = df1.join(df2, df1["colC"] == df2["colC"]).withColumn(
+            "colB",
+            when(df1["colB"] == "b", concat(df1["colB"].cast("string"), lit("x"))).otherwise(
+                df1["colB"]
+            ),
+        )
+        df4 = df3.drop(df1["colB"])
+
+        self.assertEqual(df4.columns, ["colA", "colB", "colC", "colC", "colD", "colE"])
+        self.assertEqual(df4.count(), 1)
+
+    def test_drop_col_from_different_dataframe(self):
+        df1 = self.spark.range(10)
+        df2 = df1.withColumn("v0", lit(0))
+
+        # drop df2["id"] from df2
+        self.assertEqual(df2.drop(df2["id"]).columns, ["v0"])
+
+        # drop df1["id"] from df2, which is semantically equal to df2["id"]
+        # note that df1.drop(df2["id"]) works in Classic, but not in Connect
+        self.assertEqual(df2.drop(df1["id"]).columns, ["v0"])
+
+        df3 = df2.select("*", lit(1).alias("v1"))
+
+        # drop df3["id"] from df3
+        self.assertEqual(df3.drop(df3["id"]).columns, ["v0", "v1"])
+
+        # drop df2["id"] from df3, which is semantically equal to df3["id"]
+        self.assertEqual(df3.drop(df2["id"]).columns, ["v0", "v1"])
+
+        # drop df1["id"] from df3, which is semantically equal to df3["id"]
+        self.assertEqual(df3.drop(df1["id"]).columns, ["v0", "v1"])
+
+        # drop df3["v0"] from df3
+        self.assertEqual(df3.drop(df3["v0"]).columns, ["id", "v1"])
+
+        # drop df2["v0"] from df3, which is semantically equal to df3["v0"]
+        self.assertEqual(df3.drop(df2["v0"]).columns, ["id", "v1"])
 
     def test_drop_join(self):
         left_df = self.spark.createDataFrame(

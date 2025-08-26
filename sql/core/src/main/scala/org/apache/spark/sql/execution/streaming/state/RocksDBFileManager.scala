@@ -30,17 +30,18 @@ import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
-import org.apache.commons.io.{FilenameUtils, IOUtils}
+import org.apache.commons.io.FilenameUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
-import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, LogKeys, MessageWithContext}
+import org.apache.spark.internal.LogKeys.{DFS_FILE, VERSION_NUM}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -298,22 +299,31 @@ class RocksDBFileManager(
     logDebug(log"Written metadata for version ${MDC(LogKeys.VERSION_NUM, version)}:\n" +
       log"${MDC(LogKeys.METADATA_JSON, metadata.prettyJson)}")
 
-    if (version <= 1 && numKeys <= 0) {
-      // If we're writing the initial version and there's no data, we have to explicitly initialize
-      // the root directory. Normally saveImmutableFilesToDfs will do this initialization, but
-      // when there's no data that method won't write any files, and zipToDfsFile uses the
-      // CheckpointFileManager.createAtomic API which doesn't auto-initialize parent directories.
-      // Moreover, once we disable to track the number of keys, in which the numKeys is -1, we
-      // still need to create the initial dfs root directory anyway.
-      if (!rootDirChecked) {
-        val path = new Path(dfsRootDir)
-        if (!fm.exists(path)) fm.mkdirs(path)
-        rootDirChecked = true
+    val (_, zipFilesTimeMs) = Utils.timeTakenMs {
+      if (version <= 1 && numKeys <= 0) {
+        // If we're writing the initial version and there's no data, we have to initialize
+        // the root directory. Normally saveImmutableFilesToDfs will do this initialization, but
+        // when there's no data that method won't write any files, and zipToDfsFile uses the
+        // CheckpointFileManager.createAtomic API which doesn't auto-initialize parent directories.
+        // Moreover, once we disable to track the number of keys, in which the numKeys is -1, we
+        // still need to create the initial dfs root directory anyway.
+        if (!rootDirChecked) {
+          val path = new Path(dfsRootDir)
+          if (!fm.exists(path)) fm.mkdirs(path)
+          rootDirChecked = true
+        }
       }
+      zipToDfsFile(localOtherFiles :+ metadataFile, dfsBatchZipFile(version, checkpointUniqueId))
+      logInfo(log"Saved checkpoint file for version ${MDC(LogKeys.VERSION_NUM, version)} " +
+        log"checkpointUniqueId: ${MDC(LogKeys.UUID, checkpointUniqueId.getOrElse(""))}")
     }
-    zipToDfsFile(localOtherFiles :+ metadataFile, dfsBatchZipFile(version, checkpointUniqueId))
-    logInfo(log"Saved checkpoint file for version ${MDC(LogKeys.VERSION_NUM, version)} " +
-      log"checkpointUniqueId: ${MDC(LogKeys.UUID, checkpointUniqueId.getOrElse(""))}")
+
+    // populate the SaveCheckpointMetrics
+    saveCheckpointMetrics =
+      saveCheckpointMetrics.copy(
+        // Round up to 1ms to reassure that we've logged successfully and avoid flaky tests
+        saveZipFilesTimeMs = Some(Math.max(zipFilesTimeMs, 1L))
+      )
   }
 
   /**
@@ -335,7 +345,7 @@ class RocksDBFileManager(
     versionToRocksDBFiles.keySet().removeIf(_._1 >= version)
     val metadata = if (version == 0) {
       if (localDir.exists) Utils.deleteRecursively(localDir)
-      localDir.mkdirs()
+      Utils.createDirectory(localDir)
       // Since we cleared the local dir, we should also clear the local file mapping
       rocksDBFileMapping.clear()
       RocksDBCheckpointMetadata(Seq.empty, 0)
@@ -785,6 +795,17 @@ class RocksDBFileManager(
       }
     }
 
+    // Delete remaining unnecessary local immutable file mappings.
+    // Files present in the file mapping but not the filesystem may lead to
+    // versionID mismatch error (SPARK-52637), so we should explicitly delete
+    // them.
+    rocksDBFileMapping.purgeIncompatibleMappingsForLoad(version).foreach {
+      case (_, (dfsFileMappedVersion, dfsFile)) =>
+        logInfo(log"Deleted local fileMapping to ${MDC(DFS_FILE, dfsFile)} because " +
+          log"mapped file version ${MDC(VERSION_NUM, dfsFileMappedVersion)} was " +
+          log"incompatible with versionToLoad ${MDC(VERSION_NUM, version)}")
+    }
+
     var filesCopied = 0L
     var bytesCopied = 0L
     var filesReused = 0L
@@ -828,7 +849,7 @@ class RocksDBFileManager(
   private def getImmutableFilesFromVersionZip(
       version: Long, checkpointUniqueId: Option[String] = None): Seq[RocksDBImmutableFile] = {
     Utils.deleteRecursively(localTempDir)
-    localTempDir.mkdirs()
+    Utils.createDirectory(localTempDir)
     Utils.unzipFilesFromFile(fs, dfsBatchZipFile(version, checkpointUniqueId), localTempDir)
     val metadataFile = localMetadataFile(localTempDir)
     val metadata = RocksDBCheckpointMetadata.readFromFile(metadataFile)
@@ -849,7 +870,7 @@ class RocksDBFileManager(
       files.foreach { file =>
         zout.putNextEntry(new ZipEntry(file.getName))
         in = new FileInputStream(file)
-        val bytes = IOUtils.copy(in, zout)
+        val bytes = in.transferTo(zout)
         in.close()
         zout.closeEntry()
         totalBytes += bytes
@@ -868,8 +889,8 @@ class RocksDBFileManager(
         throw e
     } finally {
       // Close everything no matter what happened
-      IOUtils.closeQuietly(in)
-      IOUtils.closeQuietly(zout)
+      Utils.closeQuietly(in)
+      Utils.closeQuietly(zout)
     }
   }
 
@@ -950,7 +971,9 @@ case class RocksDBFileManagerMetrics(
     bytesCopied: Long,
     filesReused: Long,
     @JsonDeserialize(contentAs = classOf[java.lang.Long])
-    zipFileBytesUncompressed: Option[Long] = None)
+    zipFileBytesUncompressed: Option[Long] = None,
+    @JsonDeserialize(contentAs = classOf[java.lang.Long])
+    saveZipFilesTimeMs: Option[Long] = None)
 
 /**
  * Metrics to return when requested but no operation has been performed.

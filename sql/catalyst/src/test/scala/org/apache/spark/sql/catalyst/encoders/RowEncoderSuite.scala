@@ -75,6 +75,26 @@ class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
   private[spark] override def asNullable: ExamplePointUDT = this
 }
 
+class ExamplePointNotAnnotated(val x: Double, val y: Double) extends Serializable {
+  private val inner = new ExamplePoint(x, y)
+  override def hashCode: Int = inner.hashCode
+  override def equals(that: Any): Boolean = {
+    that match {
+      case e: ExamplePointNotAnnotated => inner.equals(e.inner)
+      case _ => false
+    }
+  }
+}
+class ExamplePointNotAnnotatedUDT extends UserDefinedType[ExamplePointNotAnnotated] {
+  override def sqlType: DataType = DoubleType
+  override def serialize(p: ExamplePointNotAnnotated): Double = p.x
+  override def deserialize(datum: Any): ExamplePointNotAnnotated = {
+    val x = datum.asInstanceOf[Double]
+    new ExamplePointNotAnnotated(x, 3.14 * datum.asInstanceOf[Double])
+  }
+  override def userClass: Class[ExamplePointNotAnnotated] = classOf[ExamplePointNotAnnotated]
+}
+
 class RowEncoderSuite extends CodegenInterpretedPlanTest {
 
   private val structOfString = new StructType().add("str", StringType)
@@ -111,7 +131,8 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       .add("binary", BinaryType)
       .add("date", DateType)
       .add("timestamp", TimestampType)
-      .add("udt", new ExamplePointUDT))
+      .add("udt", new ExamplePointUDT)
+      .add("udtNotAnnotated", new ExamplePointNotAnnotatedUDT))
 
   encodeDecodeTest(
     new StructType()
@@ -178,8 +199,8 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
 
   test("SPARK-23179: RowEncoder should respect nullOnOverflow for decimals") {
     val schema = new StructType().add("decimal", DecimalType.SYSTEM_DEFAULT)
-    testDecimalOverflow(schema, Row(BigDecimal("9" * 100)))
-    testDecimalOverflow(schema, Row(new java.math.BigDecimal("9" * 100)))
+    testDecimalOverflow(schema, Row(BigDecimal("9".repeat(100))))
+    testDecimalOverflow(schema, Row(new java.math.BigDecimal("9".repeat(100))))
   }
 
   private def testDecimalOverflow(schema: StructType, row: Row): Unit = {
@@ -377,7 +398,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     val encoder = ExpressionEncoder(schema).resolveAndBind()
     val localTime = java.time.LocalTime.parse("20:38:45.123456")
     val row = toRow(encoder, Row(localTime))
-    assert(row.getLong(0) === DateTimeUtils.localTimeToMicros(localTime))
+    assert(row.getLong(0) === DateTimeUtils.localTimeToNanos(localTime))
     val readback = fromRow(encoder, row)
     assert(readback.get(0).equals(localTime))
   }

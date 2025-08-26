@@ -51,6 +51,7 @@ trait DelegatesResolutionToExtensions {
       matchedExtension match {
         case None =>
           resolutionResult = extension.resolveOperator(unresolvedOperator, resolver)
+
           if (resolutionResult.isDefined) {
             matchedExtension = Some(extension)
           }

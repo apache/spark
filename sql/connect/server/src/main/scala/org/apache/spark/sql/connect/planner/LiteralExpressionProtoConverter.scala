@@ -97,21 +97,35 @@ object LiteralExpressionProtoConverter {
       case proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL =>
         expressions.Literal(lit.getDayTimeInterval, DayTimeIntervalType())
 
+      case proto.Expression.Literal.LiteralTypeCase.TIME =>
+        var precision = TimeType.DEFAULT_PRECISION
+        if (lit.getTime.hasPrecision) {
+          precision = lit.getTime.getPrecision
+        }
+        expressions.Literal(lit.getTime.getNano, TimeType(precision))
+
       case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
-        expressions.Literal.create(
-          LiteralValueProtoConverter.toCatalystArray(lit.getArray),
-          ArrayType(DataTypeProtoConverter.toCatalystType(lit.getArray.getElementType)))
+        val arrayData = LiteralValueProtoConverter.toCatalystArray(lit.getArray)
+        val dataType = DataTypeProtoConverter.toCatalystType(
+          proto.DataType.newBuilder
+            .setArray(LiteralValueProtoConverter.getProtoArrayType(lit.getArray))
+            .build())
+        expressions.Literal.create(arrayData, dataType)
 
       case proto.Expression.Literal.LiteralTypeCase.MAP =>
-        expressions.Literal.create(
-          LiteralValueProtoConverter.toCatalystMap(lit.getMap),
-          MapType(
-            DataTypeProtoConverter.toCatalystType(lit.getMap.getKeyType),
-            DataTypeProtoConverter.toCatalystType(lit.getMap.getValueType)))
+        val mapData = LiteralValueProtoConverter.toCatalystMap(lit.getMap)
+        val dataType = DataTypeProtoConverter.toCatalystType(
+          proto.DataType.newBuilder
+            .setMap(LiteralValueProtoConverter.getProtoMapType(lit.getMap))
+            .build())
+        expressions.Literal.create(mapData, dataType)
 
       case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
-        val dataType = DataTypeProtoConverter.toCatalystType(lit.getStruct.getStructType)
         val structData = LiteralValueProtoConverter.toCatalystStruct(lit.getStruct)
+        val dataType = DataTypeProtoConverter.toCatalystType(
+          proto.DataType.newBuilder
+            .setStruct(LiteralValueProtoConverter.getProtoStructType(lit.getStruct))
+            .build())
         val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
         expressions.Literal(convert(structData), dataType)
 

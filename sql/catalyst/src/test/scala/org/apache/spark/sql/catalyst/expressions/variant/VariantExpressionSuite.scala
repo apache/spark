@@ -33,6 +33,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.types.variant.VariantBuilder
 import org.apache.spark.types.variant.VariantUtil._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
+import org.apache.spark.util.collection.Utils.createArray
 
 class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   // Zero-extend each byte in the array with the appropriate number of bytes.
@@ -61,7 +62,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // INT8 only has 7 byte content.
     check(Array(primitiveHeader(INT8), 0, 0, 0, 0, 0, 0, 0), emptyMetadata)
     // DECIMAL16 only has 15 byte content.
-    check(Array(primitiveHeader(DECIMAL16)) ++ Array.fill(16)(0.toByte), emptyMetadata)
+    check(Array(primitiveHeader(DECIMAL16)) ++ createArray[Byte](16, 0.toByte), emptyMetadata)
     // 1e38 has a precision of 39. Even if it still fits into 16 bytes, it is not a valid decimal.
     check(Array[Byte](primitiveHeader(DECIMAL16), 0) ++
       BigDecimal(1e38).toBigInt.toByteArray.reverse, emptyMetadata)
@@ -93,21 +94,21 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     check(Array(primitiveHeader(INT1), 0), Array[Byte](3, 0, 0))
     check(Array(primitiveHeader(INT1), 0), Array[Byte](2, 0, 0))
 
-    // Construct binary values that are over 1 << 24 bytes, but otherwise valid.
+    // Construct binary values that are over SIZE_LIMIT bytes, but otherwise valid.
     val bigVersion = Array[Byte]((VERSION | (3 << 6)).toByte)
-    val a = Array.fill(1 << 24)('a'.toByte)
+    val a = createArray[Byte](SIZE_LIMIT, 'a'.toByte)
     val hugeMetadata = bigVersion ++ Array[Byte](2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1) ++
       a ++ Array[Byte]('b')
     check(Array(primitiveHeader(TRUE)), hugeMetadata, "VARIANT_CONSTRUCTOR_SIZE_LIMIT")
 
     // The keys are 'aaa....' and 'b'. Values are "yyy..." and 'true'.
-    val y = Array.fill(1 << 24)('y'.toByte)
+    val y = createArray[Byte](SIZE_LIMIT, 'y'.toByte)
     val hugeObject = Array[Byte](objectHeader(true, 4, 4)) ++
       /* size */ padded(Array(2), 4) ++
       /* id list */ padded(Array(0, 1), 4) ++
-      // Second value starts at offset 5 + (1 << 24), which is `5001` little-endian. The last value
-      // is 1 byte, so the one-past-the-end value is `6001`
-      /* offset list */ Array[Byte](0, 0, 0, 0, 5, 0, 0, 1, 6, 0, 0, 1) ++
+      // Second value starts at offset 5 + (SIZE_LIMIT), which is `5008` little-endian. The last
+      // value is 1 byte, so the one-past-the-end value is `6008`
+      /* offset list */ Array[Byte](0, 0, 0, 0, 5, 0, 0, 8, 6, 0, 0, 8) ++
       /* field data */ Array[Byte](primitiveHeader(LONG_STR), 0, 0, 0, 1) ++ y ++ Array[Byte](
         primitiveHeader(TRUE)
       )
@@ -198,7 +199,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // bytes for size and offsets, plus 1 byte for the final value, so the large value is 1 << 24 -
     // 14 bytes, or (-14, -1, -1) as a signed little-endian value.
     val aSize = (1 << 24) - 14
-    val a = Array.fill(aSize)('a'.toByte)
+    val a = createArray[Byte](aSize, 'a'.toByte)
     val hugeMetadata = bigVersion ++ Array[Byte](2, 0, 0, 0, 0, 0, -14, -1, -1, -13, -1, -1) ++
       a ++ Array[Byte]('b')
     // Validate metadata in isolation.
@@ -212,7 +213,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // In order to get the full binary to 1 << 24, the large string is (1 << 24) - 26 bytes. As a
     // signed little-endian value, this is (-26, -1, -1).
     val ySize = (1 << 24) - 26
-    val y = Array.fill(ySize)('y'.toByte)
+    val y = createArray[Byte](ySize, 'y'.toByte)
     val hugeObject = Array[Byte](objectHeader(true, 3, 3)) ++
       /* size */ padded(Array(2), 4) ++
       /* id list */ padded(Array(0, 1), 3) ++
@@ -900,13 +901,16 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       check(input, input.toString)
     }
     for (precision <- Seq(9, 18, 38)) {
-      val input = BigDecimal("9" * precision)
+      val input = BigDecimal("9".repeat(precision))
       check(Literal.create(input, DecimalType(precision, 0)), input.toString)
     }
     check("", "\"\"")
-    check("x" * 128, "\"" + ("x" * 128) + "\"")
+    check("x".repeat(128), "\"" + "x".repeat(128) + "\"")
     check(Array[Byte](1, 2, 3), "\"AQID\"")
     check(Literal(0, DateType), "\"1970-01-01\"")
+
+    val floatArray = Array.tabulate(25) { i => i.toFloat }
+    check(floatArray, floatArray.mkString("[", ",", "]"))
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       check(Literal(0L, TimestampType), "\"1970-01-01 00:00:00+00:00\"")
@@ -981,7 +985,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val emptyMetadata = Array[Byte](VERSION, 0, 0)
 
     // UUID
-    val uuidVal = Array(primitiveHeader(UUID)) ++ Array.fill(16)(1.toByte)
+    val uuidVal = Array(primitiveHeader(UUID)) ++ createArray[Byte](16, 1.toByte)
     val uuid = Literal(new VariantVal(uuidVal, emptyMetadata))
     checkEvaluation(SchemaOfVariant(uuid), s"UUID")
     // Merge with variantNull retains type.

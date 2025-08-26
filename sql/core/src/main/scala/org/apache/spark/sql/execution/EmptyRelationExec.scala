@@ -61,6 +61,7 @@ case class EmptyRelationExec(@transient logical: LogicalPlan) extends LeafExecNo
       addSuffix: Boolean = false,
       maxFields: Int,
       printNodeId: Boolean,
+      printOutputColumns: Boolean,
       indent: Int = 0): Unit = {
     super.generateTreeString(depth,
       lastChildren,
@@ -70,11 +71,13 @@ case class EmptyRelationExec(@transient logical: LogicalPlan) extends LeafExecNo
       addSuffix,
       maxFields,
       printNodeId,
+      printOutputColumns,
       indent)
     Option(logical).foreach { _ =>
       lastChildren.add(true)
       logical.generateTreeString(
-        depth + 1, lastChildren, append, verbose, "", false, maxFields, printNodeId, indent)
+        depth + 1, lastChildren, append, verbose, "", false, maxFields, printNodeId,
+        printOutputColumns, indent)
       lastChildren.remove(lastChildren.size() - 1)
     }
   }

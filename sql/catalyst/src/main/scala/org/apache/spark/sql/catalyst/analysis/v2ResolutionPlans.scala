@@ -252,8 +252,13 @@ case class ResolvedNonPersistentFunc(
  */
 case class ResolvedIdentifier(
     catalog: CatalogPlugin,
-    identifier: Identifier) extends LeafNodeWithoutStats {
-  override def output: Seq[Attribute] = Nil
+    identifier: Identifier,
+    override val output: Seq[Attribute] = Nil) extends LeafNodeWithoutStats
+
+object ResolvedIdentifier {
+  def unapply(ri: ResolvedIdentifier): Option[(CatalogPlugin, Identifier)] = {
+    Some((ri.catalog, ri.identifier))
+  }
 }
 
 // A fake v2 catalog to hold temp views.

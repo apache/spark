@@ -17,19 +17,29 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
+import org.scalatestplus.mockito.MockitoSugar.mock
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.FunctionResolution
 import org.apache.spark.sql.catalyst.expressions.{
   AttributeReference,
   Cast,
   Expression,
   TimeZoneAwareExpression
 }
+import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
 
-  class HardCodedExpressionResolver(resolvedExpression: Expression)
-      extends TreeNodeResolver[Expression, Expression] {
+  class HardCodedExpressionResolver(catalogManager: CatalogManager, resolvedExpression: Expression)
+      extends ExpressionResolver(
+        resolver = new Resolver(catalogManager),
+        functionResolution =
+          new FunctionResolution(catalogManager, Resolver.createRelationResolution(catalogManager)),
+        planLogger = new PlanLogger
+      ) {
     override def resolve(expression: Expression): Expression = resolvedExpression
   }
 
@@ -37,7 +47,19 @@ class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
     AttributeReference(name = "unresolvedChild", dataType = StringType)()
   private val resolvedChild = AttributeReference(name = "resolvedChild", dataType = IntegerType)()
   private val castExpression = Cast(child = unresolvedChild, dataType = IntegerType)
-  private val expressionResolver = new HardCodedExpressionResolver(resolvedChild)
+  private val nestedCasts = Cast(
+    child = Cast(
+      child = Cast(child = unresolvedChild, dataType = IntegerType, timeZoneId = Some("UTC")),
+      dataType = IntegerType,
+      timeZoneId = None
+    ),
+    dataType = IntegerType,
+    timeZoneId = None
+  )
+  private val expressionResolver = new HardCodedExpressionResolver(
+    catalogManager = mock[CatalogManager],
+    resolvedExpression = resolvedChild
+  )
   private val timezoneAwareExpressionResolver = new TimezoneAwareExpressionResolver(
     expressionResolver
   )
@@ -49,10 +71,24 @@ class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
 
     castExpression.setTagValue(Cast.USER_SPECIFIED_CAST, ())
     val resolvedExpression =
-      timezoneAwareExpressionResolver.resolve(castExpression).asInstanceOf[TimeZoneAwareExpression]
+      expressionResolver.getExpressionTreeTraversals.withNewTraversal(OneRowRelation()) {
+        timezoneAwareExpressionResolver
+          .resolve(castExpression)
+          .asInstanceOf[TimeZoneAwareExpression]
+      }
 
     assert(resolvedExpression.children.head == resolvedChild)
     assert(resolvedExpression.timeZoneId.nonEmpty)
     assert(resolvedExpression.getTagValue(Cast.USER_SPECIFIED_CAST).nonEmpty)
+  }
+
+  test("Timezone is applied recursively") {
+    val expressionWithTimezone =
+      TimezoneAwareExpressionResolver.resolveTimezone(nestedCasts, "UTC")
+
+    assert(expressionWithTimezone.asInstanceOf[Cast].timeZoneId.get == "UTC")
+    assert(
+      expressionWithTimezone.asInstanceOf[Cast].child.asInstanceOf[Cast].timeZoneId.get == "UTC"
+    )
   }
 }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.nio.ByteOrder.{nativeOrder, BIG_ENDIAN}
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.IO_ENCRYPTION_ENABLED
 import org.apache.spark.internal.config.UI.UI_ENABLED
@@ -176,16 +178,21 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
 
     test(s"determining the number of reducers: complex query 1$testNameNote") {
       val test: (SparkSession) => Unit = { spark: SparkSession =>
+        // The default lz4 compression does not generate the same compressed
+        // stream on all architectures especially for different endianness.
+        // Increase the maxRange on big endian so the same number of partitions
+        // are generated as on little endian.
+        val maxRange = if (nativeOrder().equals(BIG_ENDIAN)) 2000 else 1000
         val df1 =
           spark
-            .range(0, 1000, 1, numInputPartitions)
+            .range(0, maxRange, 1, numInputPartitions)
             .selectExpr("id % 500 as key1", "id as value1")
             .groupBy("key1")
             .count()
             .toDF("key1", "cnt1")
         val df2 =
           spark
-            .range(0, 1000, 1, numInputPartitions)
+            .range(0, maxRange, 1, numInputPartitions)
             .selectExpr("id % 500 as key2", "id as value2")
             .groupBy("key2")
             .count()
@@ -197,7 +204,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
         val expectedAnswer =
           spark
             .range(0, 500)
-            .selectExpr("id", "2 as cnt")
+            .selectExpr("id", s"${maxRange/500}L as cnt")
         QueryTest.checkAnswer(
           join,
           expectedAnswer.collect().toImmutableArraySeq)
@@ -496,16 +503,14 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
 
   test("SPARK-51505: log empty partition number metrics") {
     val test: SparkSession => Unit = { spark: SparkSession =>
-      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
-        val df = spark.range(0, 1000, 1, 5).withColumn("value", when(col("id") < 500, 0)
-            .otherwise(1)).groupBy("value").agg("value" -> "sum")
-        df.collect()
-        val plan = df.queryExecution.executedPlan
-        val coalesce = collectFirst(plan) {
-          case e: AQEShuffleReadExec => e
-        }.get
-        assert(coalesce.metrics("numEmptyPartitions").value == 3)
-      }
+      val df = spark.range(0, 1000, 1, 10).withColumn("value", expr("id % 3"))
+        .groupBy("value").agg("value" -> "sum")
+      df.collect()
+      val plan = df.queryExecution.executedPlan
+      val coalesce = collectFirst(plan) {
+        case e: AQEShuffleReadExec => e
+      }.get
+      assert(coalesce.metrics("numEmptyPartitions").value == 2)
     }
     withSparkSession(test, 100, None)
   }

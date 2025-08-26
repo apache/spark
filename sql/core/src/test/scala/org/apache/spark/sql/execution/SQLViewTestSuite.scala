@@ -22,6 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogFunction
+import org.apache.spark.sql.catalyst.catalog.CatalogTable._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.Repartition
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.withDefaultTimeZone
@@ -825,6 +826,32 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         "tempObjName" -> "`table_name`"
       )
     )
+  }
+
+  test("SPARK-52417: Simplify Table properties handling in View Schema Evolution Mode") {
+    withTable("t") {
+      withView("v") {
+        sql("CREATE TABLE t (c1 int)")
+        sql("CREATE VIEW v WITH SCHEMA EVOLUTION AS SELECT * from t")
+        sql("INSERT INTO t VALUES (1), (2), (3)")
+        checkAnswer(sql("SELECT * FROM v"), Seq(Row(1), Row(2), Row(3)))
+
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("v"))
+        assert(table.properties.get(VIEW_SCHEMA_MODE) === Some("EVOLUTION"))
+        assert(!table.properties.exists(_._1.startsWith(VIEW_QUERY_OUTPUT_PREFIX)))
+        assert(!table.properties.exists(_._1.startsWith(VIEW_QUERY_OUTPUT_NUM_COLUMNS)))
+
+        sql("DROP TABLE t")
+        sql("CREATE TABLE t (s1 string, b1 boolean)")
+        sql("INSERT INTO t VALUES ('a', true), ('b', false), ('c', true)")
+        checkAnswer(sql("SELECT * FROM v"), Seq(Row("a", true), Row("b", false), Row("c", true)))
+
+        val updatedTable = spark.sessionState.catalog.getTableMetadata(TableIdentifier("v"))
+        assert(updatedTable.properties.get(VIEW_SCHEMA_MODE) === Some("EVOLUTION"))
+        assert(!updatedTable.properties.exists(_._1.startsWith(VIEW_QUERY_OUTPUT_PREFIX)))
+        assert(!updatedTable.properties.exists(_._1.startsWith(VIEW_QUERY_OUTPUT_NUM_COLUMNS)))
+      }
+    }
   }
 
   def getShowCreateDDL(view: String, serde: Boolean = false): String = {

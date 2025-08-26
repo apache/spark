@@ -44,12 +44,6 @@ class AggregateResolverSuite extends QueryTest with SharedSparkSession {
     resolverRunner.resolve(query)
   }
 
-  test("Valid group by ordinal") {
-    val resolverRunner = createResolverRunner()
-    val query = table.groupBy(intToLiteral(1))(intToLiteral(1))
-    resolverRunner.resolve(query)
-  }
-
   test("Group by aggregate function") {
     val resolverRunner = createResolverRunner()
     val query = table.groupBy($"count".function(intToLiteral(1)))(intToLiteral(1))
@@ -59,31 +53,6 @@ class AggregateResolverSuite extends QueryTest with SharedSparkSession {
       },
       condition = "GROUP_BY_AGGREGATE",
       parameters = Map("sqlExpr" -> $"count".function(intToLiteral(1)).sql)
-    )
-  }
-
-  test("Group by ordinal which refers to aggregate function") {
-    val resolverRunner = createResolverRunner()
-    val query = table.groupBy(intToLiteral(1))($"count".function(intToLiteral(1)))
-    checkError(
-      exception = intercept[AnalysisException] {
-        resolverRunner.resolve(query)
-      },
-      condition = "GROUP_BY_POS_AGGREGATE",
-      parameters =
-        Map("index" -> "1", "aggExpr" -> $"count".function(intToLiteral(1)).as("count(1)").sql)
-    )
-  }
-
-  test("Group by ordinal out of range") {
-    val resolverRunner = createResolverRunner()
-    val query = table.groupBy(intToLiteral(100))(intToLiteral(1))
-    checkError(
-      exception = intercept[AnalysisException] {
-        resolverRunner.resolve(query)
-      },
-      condition = "GROUP_BY_POS_OUT_OF_RANGE",
-      parameters = Map("index" -> "100", "size" -> "1")
     )
   }
 
@@ -124,6 +93,37 @@ class AggregateResolverSuite extends QueryTest with SharedSparkSession {
       },
       condition = "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
       parameters = Map("sqlExpr" -> toSQLExpr($"count".function(rand(1))))
+    )
+  }
+
+  test("Valid group by ordinal") {
+    val resolverRunner = createResolverRunner()
+    val query = table.groupBy(intToLiteral(1))(intToLiteral(1))
+    resolverRunner.resolve(query)
+  }
+
+  test("Group by ordinal which refers to aggregate function") {
+    val resolverRunner = createResolverRunner()
+    val query = table.groupBy(intToLiteral(1))($"count".function(intToLiteral(1)))
+    checkError(
+      exception = intercept[AnalysisException] {
+        resolverRunner.resolve(query)
+      },
+      condition = "GROUP_BY_POS_AGGREGATE",
+      parameters =
+        Map("index" -> "1", "aggExpr" -> $"count".function(intToLiteral(1)).as("count(1)").sql)
+    )
+  }
+
+  test("Group by ordinal out of range") {
+    val resolverRunner = createResolverRunner()
+    val query = table.groupBy(intToLiteral(100))(intToLiteral(1))
+    checkError(
+      exception = intercept[AnalysisException] {
+        resolverRunner.resolve(query)
+      },
+      condition = "GROUP_BY_POS_OUT_OF_RANGE",
+      parameters = Map("index" -> "100", "size" -> "1")
     )
   }
 

@@ -22,9 +22,10 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, ExpressionWithRandomSeed, InterpretedMutableProjection, Literal}
+import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation.hasUnevaluableExpr
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, LogicalPlan, Union, UnionLoopRef}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, LocalRelation, LogicalPlan, OneRowRelation, Project, Union, UnionLoopRef}
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.LogicalRDD.rewriteStatsAndConstraints
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -85,7 +86,8 @@ case class UnionLoopExec(
     @transient anchor: LogicalPlan,
     @transient recursion: LogicalPlan,
     override val output: Seq[Attribute],
-    limit: Option[Int] = None) extends LeafExecNode {
+    limit: Option[Int] = None,
+    maxDepth: Option[Int] = None) extends LeafExecNode {
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(anchor, recursion)
 
@@ -93,6 +95,9 @@ case class UnionLoopExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numIterations" -> SQLMetrics.createMetric(sparkContext, "number of recursive iterations"),
     "numAnchorOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of anchor output rows"))
+
+  private val localRelationLimit =
+    conf.getConf(SQLConf.CTE_RECURSION_ANCHOR_ROWS_LIMIT_TO_CONVERT_TO_LOCAL_RELATION)
 
   /**
    * This function executes the plan (optionally with appended limit node) and caches the result,
@@ -107,9 +112,36 @@ case class UnionLoopExec(
       plan
     }
     val df = Dataset.ofRows(session, planWithLimit)
-    val materializedDF = df.repartition()
-    val count = materializedDF.queryExecution.toRdd.count()
-    (materializedDF, count)
+
+    df.queryExecution.optimizedPlan match {
+      case l: LocalRelation =>
+        (df, l.data.length.toLong)
+      case Project(projectList, _: OneRowRelation) =>
+        if (localRelationLimit != 0 && !projectList.exists(hasUnevaluableExpr)) {
+          val projection = new InterpretedMutableProjection(projectList, Nil)
+          projection.initialize(0)
+          val local = LocalRelation(projectList.map(_.toAttribute),
+            Seq(projection(InternalRow.empty)))
+          (Dataset.ofRows(session, local), 1.toLong)
+        } else {
+          (df, 1.toLong)
+        }
+      case _ =>
+        val materializedDF = df.repartition()
+        val count = materializedDF.queryExecution.toRdd.count()
+
+        // In the case we return a sufficiently small number of rows when executing any step of the
+        // recursion we convert the result into a LocalRelation, so that, if the recursion doesn't
+        // reference any external tables, we are able to calculate everything in the optimizer,
+        // using the ConvertToLocalRelation rule, which significantly improves runtime.
+        if (count <= localRelationLimit) {
+          val local = LocalRelation.fromExternalRows(df.logicalPlan.output,
+            df.collect().toIndexedSeq)
+         (Dataset.ofRows(session, local), count)
+        } else {
+          (materializedDF, count)
+        }
+    }
   }
 
   /**
@@ -125,16 +157,19 @@ case class UnionLoopExec(
     val numOutputRows = longMetric("numOutputRows")
     val numIterations = longMetric("numIterations")
     val numAnchorOutputRows = longMetric("numAnchorOutputRows")
-    val levelLimit = conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT)
+    val levelLimit = maxDepth.getOrElse(conf.getConf(SQLConf.CTE_RECURSION_LEVEL_LIMIT))
     val rowLimit = conf.getConf(SQLConf.CTE_RECURSION_ROW_LIMIT)
 
     // currentLimit is initialized from the limit argument, and in each step it is decreased by
     // the number of rows generated in that step.
-    // If limit is not passed down, currentLimit is set to be zero and won't be considered in the
-    // condition of while loop down (limit.isEmpty will be true).
-    var currentLimit = limit.getOrElse(-1)
+    // If limit is not passed down, currentLimit is set to be the row limit set by the
+    // spark.sql.cteRecursionRowLimit flag. If we breach this limit, then we report an error so that
+    // the user knows they aren't getting all the rows they requested.
+    var currentLimit = limit.getOrElse(rowLimit)
 
-    val unionChildren = mutable.ArrayBuffer.empty[LogicalRDD]
+    val userSpecifiedLimit = limit.isDefined
+
+    val unionChildren = mutable.ArrayBuffer.empty[LogicalPlan]
 
     var (prevDF, prevCount) = executeAndCacheAndCount(anchor, currentLimit)
 
@@ -142,13 +177,59 @@ case class UnionLoopExec(
 
     var currentLevel = 1
 
-    var currentNumRows = 0
-
     var limitReached: Boolean = false
 
     val numPartitions = prevDF.queryExecution.toRdd.partitions.length
+
     // Main loop for obtaining the result of the recursive query.
     while (prevCount > 0 && !limitReached) {
+      // The optimizer might have removed the UnionLoopRef in the recursion node (for example as a
+      // result of an empty join). In this case, prevPlan cannot be defined according to the cases
+      // below, so we set a default value of the previous result here.
+      var prevPlan: LogicalPlan = prevDF.logicalPlan
+
+      // If the recursive part contains non-deterministic expressions that depends on a seed, we
+      // need to create a new seed since the seed for this expression is set in the analysis, and
+      // we avoid re-triggering the analysis for every iterative step.
+      val recursionReseeded = if (currentLevel == 1 || recursion.deterministic) {
+        recursion
+      } else {
+        recursion.transformAllExpressionsWithSubqueries {
+          case e: ExpressionWithRandomSeed =>
+            e.withShiftedSeed(currentLevel - 1)
+        }
+      }
+
+      // the current plan is created by substituting UnionLoopRef node with the project node of
+      // the previous plan.
+      // This way we support only UNION ALL case. Additional case should be added for UNION case.
+      // One way of supporting UNION case can be seen at SPARK-24497 PR from Peter Toth.
+      val newRecursion = recursionReseeded.transformWithSubqueries {
+        case r: UnionLoopRef if r.loopId == loopId =>
+          prevDF.queryExecution.optimizedPlan match {
+            case l: LocalRelation =>
+              prevPlan = l
+              l.copy(output = r.output)
+            // This case will be turned into a LocalRelation whenever the flag
+            // SQLConf.CTE_RECURSION_ANCHOR_ROWS_LIMIT_TO_CONVERT_TO_LOCAL_RELATION is set to be
+            // anything larger than 0. However, we still handle this case in a special way to
+            // optimize the case when the flag is set to 0.
+            case p @ Project(projectList, _: OneRowRelation) if p.subqueries.isEmpty =>
+              prevPlan = p
+              val prevPlanToRefMapping = projectList.zip(r.output).map {
+                case (fa: Alias, ta) => fa.withExprId(ta.exprId).withName(ta.name)
+              }
+              p.copy(projectList = prevPlanToRefMapping)
+            case _ =>
+              val logicalRDD = LogicalRDD.fromDataset(prevDF.queryExecution.toRdd, prevDF,
+                  prevDF.isStreaming).newInstance()
+              prevPlan = logicalRDD
+              val optimizedPlan = prevDF.queryExecution.optimizedPlan
+              val (stats, constraints) = rewriteStatsAndConstraints(r, optimizedPlan,
+                sameOutput = false)
+              logicalRDD.copy(output = r.output)(prevDF.sparkSession, stats, constraints)
+          }
+      }
 
       if (levelLimit != -1 && currentLevel > levelLimit) {
         throw new SparkException(
@@ -157,25 +238,20 @@ case class UnionLoopExec(
           cause = null)
       }
 
-      // Inherit stats and constraints from the dataset of the previous iteration.
-      val prevPlan = LogicalRDD.fromDataset(prevDF.queryExecution.toRdd, prevDF, prevDF.isStreaming)
-        .newInstance()
       unionChildren += prevPlan
 
-      currentNumRows += prevCount.toInt
-
-      if (limit.isDefined) {
+      if (rowLimit != -1) {
         currentLimit -= prevCount.toInt
         if (currentLimit <= 0) {
-          limitReached = true
+          if (userSpecifiedLimit) {
+            limitReached = true
+          } else {
+            throw new SparkException(
+              errorClass = "RECURSION_ROW_LIMIT_EXCEEDED",
+              messageParameters = Map("rowLimit" -> rowLimit.toString),
+              cause = null)
+          }
         }
-      }
-
-      if (rowLimit != -1 && currentNumRows > rowLimit) {
-        throw new SparkException(
-          errorClass = "RECURSION_ROW_LIMIT_EXCEEDED",
-          messageParameters = Map("rowLimit" -> rowLimit.toString),
-          cause = null)
       }
 
       // Update metrics
@@ -183,17 +259,6 @@ case class UnionLoopExec(
       numIterations += 1
 
       if (!limitReached) {
-        // the current plan is created by substituting UnionLoopRef node with the project node of
-        // the previous plan.
-        // This way we support only UNION ALL case. Additional case should be added for UNION case.
-        // One way of supporting UNION case can be seen at SPARK-24497 PR from Peter Toth.
-        val newRecursion = recursion.transform {
-          case r: UnionLoopRef =>
-            val logicalPlan = prevDF.logicalPlan
-            val optimizedPlan = prevDF.queryExecution.optimizedPlan
-            val (stats, constraints) = rewriteStatsAndConstraints(logicalPlan, optimizedPlan)
-            prevPlan.copy(output = r.output)(prevDF.sparkSession, stats, constraints)
-        }
 
         val (df, count) = executeAndCacheAndCount(newRecursion, currentLimit)
         prevDF = df

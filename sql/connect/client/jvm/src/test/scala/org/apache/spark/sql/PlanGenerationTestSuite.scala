@@ -2369,6 +2369,14 @@ class PlanGenerationTestSuite
     fn.to_date(fn.col("s"), "yyyy-MM-dd")
   }
 
+  temporalFunctionTest("try_to_date") {
+    fn.try_to_date(fn.col("s"))
+  }
+
+  temporalFunctionTest("try_to_date with format") {
+    fn.try_to_date(fn.col("s"), "yyyy-MM-dd")
+  }
+
   temporalFunctionTest("xpath") {
     fn.xpath(fn.col("s"), lit("a/b/text()"))
   }
@@ -3319,6 +3327,7 @@ class PlanGenerationTestSuite
       fn.lit(java.sql.Date.valueOf("2023-02-23")),
       fn.lit(java.time.Duration.ofSeconds(200L)),
       fn.lit(java.time.Period.ofDays(100)),
+      fn.lit(java.time.LocalTime.of(23, 59, 59, 999999999)),
       fn.lit(new CalendarInterval(2, 20, 100L)))
   }
 
@@ -3389,13 +3398,14 @@ class PlanGenerationTestSuite
       fn.typedLit(java.sql.Date.valueOf("2023-02-23")),
       fn.typedLit(java.time.Duration.ofSeconds(200L)),
       fn.typedLit(java.time.Period.ofDays(100)),
+      fn.typedLit(java.time.LocalTime.of(23, 59, 59, 999999999)),
       fn.typedLit(new CalendarInterval(2, 20, 100L)),
 
       // Handle parameterized scala types e.g.: List, Seq and Map.
       fn.typedLit(Some(1)),
       fn.typedLit(Array(1, 2, 3)),
       fn.typedLit(Seq(1, 2, 3)),
-      fn.typedLit(Map("a" -> 1, "b" -> 2)),
+      fn.typedLit(mutable.LinkedHashMap("a" -> 1, "b" -> 2)),
       fn.typedLit(("a", 2, 1.0)),
       fn.typedLit[Option[Int]](None),
       fn.typedLit[Array[Option[Int]]](Array(Some(1))),
@@ -3404,9 +3414,20 @@ class PlanGenerationTestSuite
       fn.typedlit[collection.immutable.Map[Int, Option[Int]]](
         collection.immutable.Map(1 -> None)),
       fn.typedLit(Seq(Seq(1, 2, 3), Seq(4, 5, 6), Seq(7, 8, 9))),
-      fn.typedLit(Seq(Map("a" -> 1, "b" -> 2), Map("a" -> 3, "b" -> 4), Map("a" -> 5, "b" -> 6))),
-      fn.typedLit(Map(1 -> Map("a" -> 1, "b" -> 2), 2 -> Map("a" -> 3, "b" -> 4))),
-      fn.typedLit((Seq(1, 2, 3), Map("a" -> 1, "b" -> 2), ("a", Map(1 -> "a", 2 -> "b")))))
+      fn.typedLit(
+        Seq(
+          mutable.LinkedHashMap("a" -> 1, "b" -> 2),
+          mutable.LinkedHashMap("a" -> 3, "b" -> 4),
+          mutable.LinkedHashMap("a" -> 5, "b" -> 6))),
+      fn.typedLit(
+        mutable.LinkedHashMap(
+          1 -> mutable.LinkedHashMap("a" -> 1, "b" -> 2),
+          2 -> mutable.LinkedHashMap("a" -> 3, "b" -> 4))),
+      fn.typedLit(
+        (
+          Seq(1, 2, 3),
+          mutable.LinkedHashMap("a" -> 1, "b" -> 2),
+          ("a", mutable.LinkedHashMap(1 -> "a", 2 -> "b")))))
   }
 
   /* Window API */

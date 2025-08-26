@@ -19,14 +19,14 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.analysis.ResolveWithCTE.checkIfSelfReferenceIsPlacedCorrectly
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, ListAgg, Median, PercentileCont, PercentileDisc}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, ListAgg}
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
@@ -50,9 +50,6 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
    * These rules will be evaluated after our built-in check rules.
    */
   val extendedCheckRules: Seq[LogicalPlan => Unit] = Nil
-
-  val DATA_TYPE_MISMATCH_ERROR = TreeNodeTag[Unit]("dataTypeMismatchError")
-  val INVALID_FORMAT_ERROR = TreeNodeTag[Unit]("invalidFormatError")
 
   // Error that is not supposed to throw immediately on triggering, e.g. certain internal errors.
   // The error will be thrown at the end of the whole check analysis process, if no other error
@@ -365,7 +362,6 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               case checkRes: TypeCheckResult.DataTypeMismatch =>
                 hof.dataTypeMismatch(hof, checkRes)
               case checkRes: TypeCheckResult.InvalidFormat =>
-                hof.setTagValue(INVALID_FORMAT_ERROR, ())
                 hof.invalidFormat(checkRes)
             }
 
@@ -414,23 +410,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName)
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
-            e.checkInputDataTypes() match {
-              case checkRes: TypeCheckResult.DataTypeMismatch =>
-                e.setTagValue(DATA_TYPE_MISMATCH_ERROR, ())
-                e.dataTypeMismatch(e, checkRes)
-              case TypeCheckResult.TypeCheckFailure(message) =>
-                e.setTagValue(DATA_TYPE_MISMATCH_ERROR, ())
-                val extraHint = extraHintForAnsiTypeCoercionExpression(operator)
-                e.failAnalysis(
-                  errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-                  messageParameters = Map(
-                    "sqlExpr" -> toSQLExpr(e),
-                    "msg" -> message,
-                    "hint" -> extraHint))
-              case checkRes: TypeCheckResult.InvalidFormat =>
-                e.setTagValue(INVALID_FORMAT_ERROR, ())
-                e.invalidFormat(checkRes)
-            }
+            TypeCoercionValidation.failOnTypeCheckResult(e, Some(operator))
 
           case c: Cast if !c.resolved =>
             throw SparkException.internalError(
@@ -458,51 +438,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               errorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
               messageParameters = Map("funcName" -> toSQLExpr(w)))
 
-          case w @ WindowExpression(AggregateExpression(_, _, true, _, _), _) =>
-            w.failAnalysis(
-              errorClass = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
-              messageParameters = Map("windowExpr" -> toSQLExpr(w)))
-
-          case w @ WindowExpression(wf: FrameLessOffsetWindowFunction,
-            WindowSpecDefinition(_, order, frame: SpecifiedWindowFrame))
-             if order.isEmpty || !frame.isOffset =>
-            w.failAnalysis(
-              errorClass = "WINDOW_FUNCTION_AND_FRAME_MISMATCH",
-              messageParameters = Map(
-                "funcName" -> toSQLExpr(wf),
-                "windowExpr" -> toSQLExpr(w)))
-
           case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
             if agg.isDistinct && listAgg.needSaveOrderValue =>
             throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
               listAgg.prettyName, listAgg.child, listAgg.orderExpressions)
 
           case w: WindowExpression =>
-            // Only allow window functions with an aggregate expression or an offset window
-            // function or a Pandas window UDF.
-            w.windowFunction match {
-              case agg @ AggregateExpression(fun: ListAgg, _, _, _, _)
-                // listagg(...) WITHIN GROUP (ORDER BY ...) OVER (ORDER BY ...) is unsupported
-                if fun.orderingFilled && (w.windowSpec.orderSpec.nonEmpty ||
-                  w.windowSpec.frameSpecification !=
-                  SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)) =>
-                agg.failAnalysis(
-                  errorClass = "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
-                  messageParameters = Map("aggFunc" -> toSQLExpr(agg.aggregateFunction)))
-              case agg @ AggregateExpression(
-                _: PercentileCont | _: PercentileDisc | _: Median, _, _, _, _)
-                if w.windowSpec.orderSpec.nonEmpty || w.windowSpec.frameSpecification !=
-                    SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing) =>
-                agg.failAnalysis(
-                  errorClass = "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
-                  messageParameters = Map("aggFunc" -> toSQLExpr(agg.aggregateFunction)))
-              case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
-                  _: AggregateWindowFunction => // OK
-              case other =>
-                other.failAnalysis(
-                  errorClass = "UNSUPPORTED_EXPR_FOR_WINDOW",
-                  messageParameters = Map("sqlExpr" -> toSQLExpr(other)))
-            }
+            WindowResolution.validateResolvedWindowExpression(w)
 
           case s: SubqueryExpression =>
             checkSubqueryExpression(operator, s)
@@ -590,7 +532,19 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 messageParameters = Map.empty)
             }
 
-          case a: Aggregate => ExprUtils.assertValidAggregation(a)
+          case a: Aggregate =>
+            a.groupingExpressions.foreach(
+              expression =>
+                if (!expression.deterministic) {
+                  throw SparkException.internalError(
+                    msg = s"Non-deterministic expression '${toSQLExpr(expression)}' should not " +
+                      "appear in grouping expression.",
+                    context = expression.origin.getQueryContext,
+                    summary = expression.origin.context.summary
+                  )
+                }
+            )
+            ExprUtils.assertValidAggregation(a)
 
           case CollectMetrics(name, metrics, _, _) =>
             if (name == null || name.isEmpty) {
@@ -666,24 +620,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           case Sort(orders, _, _, _) =>
             orders.foreach { order =>
-              if (!RowOrdering.isOrderable(order.dataType)) {
-                order.failAnalysis(
-                  errorClass = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
-                  messageParameters = Map("exprType" -> toSQLType(order.dataType)))
-              }
+              TypeUtils.tryThrowNotOrderableExpression(order)
             }
 
           case Window(_, partitionSpec, _, _, _) =>
             // Both `partitionSpec` and `orderSpec` must be orderable. We only need an extra check
             // for `partitionSpec` here because `orderSpec` has the type check itself.
             partitionSpec.foreach { p =>
-              if (!RowOrdering.isOrderable(p.dataType)) {
-                p.failAnalysis(
-                  errorClass = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
-                  messageParameters = Map(
-                    "expr" -> toSQLExpr(p),
-                    "exprType" -> toSQLType(p.dataType)))
-              }
+              TypeUtils.tryThrowNotOrderableExpression(p)
             }
 
           case GlobalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
@@ -724,7 +668,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 )
               }
 
-              val dataTypesAreCompatibleFn = getDataTypesAreCompatibleFn(operator)
+              val dataTypesAreCompatibleFn =
+                TypeCoercionValidation.getDataTypesAreCompatibleFn(operator)
               // Check if the data types match.
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
                 // SPARK-18058: we shall not care about the nullability of columns
@@ -735,7 +680,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                     tableOrdinalNumber = ti + 1,
                     dataType1 = dt1,
                     dataType2 = dt2,
-                    hint = extraHintForAnsiTypeCoercionPlan(operator),
+                    hint = TypeCoercionValidation.getHintForOperatorCoercion(operator),
                     origin = operator.origin
                   )
                 }
@@ -766,12 +711,18 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
+          case a: AddCheckConstraint if !a.checkConstraint.deterministic =>
+            a.checkConstraint.child.failAnalysis(
+              errorClass = "NON_DETERMINISTIC_CHECK_CONSTRAINT",
+              messageParameters = Map("checkCondition" -> a.checkConstraint.condition)
+            )
+
           case alter: AlterTableCommand =>
             checkAlterTableCommand(alter)
 
           case c: CreateVariable
               if c.resolved && c.defaultExpr.child.containsPattern(PLAN_EXPRESSION) =>
-            val ident = c.name.asInstanceOf[ResolvedIdentifier]
+            val ident = c.names(0).asInstanceOf[ResolvedIdentifier]
             val varName = toSQLId(
               (ident.catalog.name +: ident.identifier.namespace :+ ident.identifier.name)
                 .toImmutableArraySeq)
@@ -939,6 +890,17 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               messageParameters = Map(
                 "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
 
+          case j @ LateralJoin(_, right, _, _)
+              if j.getTagValue(LateralJoin.BY_TABLE_ARGUMENT).isEmpty =>
+            right.plan.foreach {
+              case Generate(pyudtf: PythonUDTF, _, _, _, _, _)
+                  if pyudtf.evalType == PythonEvalType.SQL_ARROW_UDTF =>
+                  j.failAnalysis(
+                    errorClass = "LATERAL_JOIN_WITH_ARROW_UDTF_UNSUPPORTED",
+                    messageParameters = Map.empty)
+              case _ =>
+            }
+
           case _ => // Analysis successful!
         }
     }
@@ -967,105 +929,18 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     }
   }
 
-  private def getDataTypesAreCompatibleFn(plan: LogicalPlan): (DataType, DataType) => Boolean = {
-    val isUnion = plan.isInstanceOf[Union]
-    if (isUnion) {
-      (dt1: DataType, dt2: DataType) =>
-        DataType.equalsStructurally(dt1, dt2, true)
-    } else {
-      // SPARK-18058: we shall not care about the nullability of columns
-      (dt1: DataType, dt2: DataType) =>
-        TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).nonEmpty
-    }
-  }
-
-  private def getDefaultTypeCoercionPlan(plan: LogicalPlan): LogicalPlan =
-    TypeCoercion.typeCoercionRules.foldLeft(plan) { case (p, rule) => rule(p) }
-
-  private def extraHintMessage(issueFixedIfAnsiOff: Boolean): String = {
-    if (issueFixedIfAnsiOff) {
-      "\nTo fix the error, you might need to add explicit type casts. If necessary set " +
-        s"${SQLConf.ANSI_ENABLED.key} to false to bypass this error."
-    } else {
-      ""
-    }
-  }
-
-  private[analysis] def extraHintForAnsiTypeCoercionExpression(plan: LogicalPlan): String = {
-    if (!SQLConf.get.ansiEnabled) {
-      ""
-    } else {
-      val nonAnsiPlan = getDefaultTypeCoercionPlan(plan)
-      var issueFixedIfAnsiOff = true
-      getAllExpressions(nonAnsiPlan).foreach(_.foreachUp {
-        case e: Expression if e.getTagValue(DATA_TYPE_MISMATCH_ERROR).isDefined &&
-            e.checkInputDataTypes().isFailure =>
-          e.checkInputDataTypes() match {
-            case TypeCheckResult.TypeCheckFailure(_) | _: TypeCheckResult.DataTypeMismatch =>
-              issueFixedIfAnsiOff = false
-          }
-
-        case _ =>
-      })
-      extraHintMessage(issueFixedIfAnsiOff)
-    }
-  }
-
-  private def extraHintForAnsiTypeCoercionPlan(plan: LogicalPlan): String = {
-    if (!SQLConf.get.ansiEnabled) {
-      ""
-    } else {
-      val nonAnsiPlan = getDefaultTypeCoercionPlan(plan)
-      var issueFixedIfAnsiOff = true
-      nonAnsiPlan match {
-        case _: Union | _: SetOperation if nonAnsiPlan.children.length > 1 =>
-          def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
-
-          val ref = dataTypes(nonAnsiPlan.children.head)
-          val dataTypesAreCompatibleFn = getDataTypesAreCompatibleFn(nonAnsiPlan)
-          nonAnsiPlan.children.tail.zipWithIndex.foreach { case (child, ti) =>
-            // Check if the data types match.
-            dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
-              if (!dataTypesAreCompatibleFn(dt1, dt2)) {
-                issueFixedIfAnsiOff = false
-              }
-            }
-          }
-
-        case _ =>
-      }
-      extraHintMessage(issueFixedIfAnsiOff)
-    }
-  }
-
   def checkSubqueryExpression(plan: LogicalPlan, expr: SubqueryExpression): Unit = {
     if (expr.plan.isStreaming) {
       plan.failAnalysis("INVALID_SUBQUERY_EXPRESSION.STREAMING_QUERY", Map.empty)
     }
-    assertNoRecursiveCTE(expr.plan)
     checkAnalysis0(expr.plan)
     ValidateSubqueryExpression(plan, expr)
   }
 
-  private def assertNoRecursiveCTE(plan: LogicalPlan): Unit = {
-    plan.foreach {
-      case r: CTERelationRef if r.recursive =>
-        throw new AnalysisException(
-          errorClass = "INVALID_RECURSIVE_REFERENCE.PLACE",
-          messageParameters = Map.empty)
-      case p => p.expressions.filter(_.containsPattern(PLAN_EXPRESSION)).foreach {
-        expr => expr.foreach {
-          case s: SubqueryExpression => assertNoRecursiveCTE(s.plan)
-          case _ =>
-        }
-      }
-    }
-  }
-
   /**
    * Validate that collected metrics names are unique. The same name cannot be used for metrics
-   * with different results. However multiple instances of metrics with with same result and name
-   * are allowed (e.g. self-joins).
+   * with different results. However, multiple instances of metrics with same result and name are
+   * allowed (e.g. self-joins).
    */
   private def checkCollectedMetrics(plan: LogicalPlan): Unit = {
     val metricsMap = mutable.Map.empty[String, CollectMetrics]
@@ -1158,7 +1033,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           }
         }
         specs.foreach {
-          case AlterColumnSpec(col: ResolvedFieldName, dataType, nullable, _, _, _) =>
+          case AlterColumnSpec(col: ResolvedFieldName, dataType, nullable, _, _, _, _) =>
             val fieldName = col.name.quoted
             if (dataType.isDefined) {
               val field = CharVarcharUtils.getRawType(col.field.metadata)

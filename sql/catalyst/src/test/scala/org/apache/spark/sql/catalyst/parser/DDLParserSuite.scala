@@ -1912,8 +1912,8 @@ class DDLParserSuite extends AnalysisTest {
         SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
         SubqueryAlias("source", UnresolvedWith(Project(Seq(UnresolvedStar(None)),
           UnresolvedRelation(Seq("s"))),
-          Seq("s" -> SubqueryAlias("s", Project(Seq(UnresolvedStar(None)),
-            UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))))))),
+          Seq(("s", SubqueryAlias("s", Project(Seq(UnresolvedStar(None)),
+            UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl")))), None)))),
         EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
         Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
           UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
@@ -2723,7 +2723,8 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42"),
       AddColumns(UnresolvedTable(Seq("t1"), "ALTER TABLE ... ADD COLUMN"),
-        Seq(QualifiedColType(None, "x", IntegerType, false, None, None, Some("42")))))
+        Seq(QualifiedColType(None, "x", IntegerType, false, None, None,
+          Some(DefaultValueExpression(Literal(42), "42"))))))
     comparePlans(
       parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42"),
       AlterColumns(
@@ -2734,7 +2735,7 @@ class DDLParserSuite extends AnalysisTest {
           None,
           None,
           None,
-          Some("42")))))
+          Some(DefaultValueExpression(Literal(42), "42"))))))
     // It is possible to pass an empty string default value using quotes.
     comparePlans(
       parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT ''"),
@@ -2746,7 +2747,7 @@ class DDLParserSuite extends AnalysisTest {
           None,
           None,
           None,
-          Some("''")))))
+          Some(DefaultValueExpression(Literal(""), "''"))))))
     // It is not possible to pass an empty string default value without using quotes.
     // This results in a parsing error.
     val sql1 = "ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT "
@@ -2772,7 +2773,8 @@ class DDLParserSuite extends AnalysisTest {
           None,
           None,
           None,
-          Some("")))))
+          None,
+          dropDefault = true))))
     // Make sure that the parser returns an exception when the feature is disabled.
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
       val sql = "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\") USING parquet"
@@ -3138,7 +3140,7 @@ class DDLParserSuite extends AnalysisTest {
           nullable = false,
           comment = Some("a"),
           position = Some(UnresolvedFieldPosition(first())),
-          default = Some("'abc'")
+          default = Some(DefaultValueExpression(Literal("abc"), "'abc'"))
         )
       )
     )

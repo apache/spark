@@ -150,11 +150,12 @@ if in_spark:
 # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
 # Also don't forget to update python/docs/source/getting_started/install.rst,
 # python/packaging/client/setup.py, and python/packaging/connect/setup.py
-_minimum_pandas_version = "2.0.0"
+_minimum_pandas_version = "2.2.0"
 _minimum_numpy_version = "1.21"
-_minimum_pyarrow_version = "11.0.0"
+_minimum_pyarrow_version = "15.0.0"
 _minimum_grpc_version = "1.67.0"
 _minimum_googleapis_common_protos_version = "1.65.0"
+_minimum_pyyaml_version = "3.11"
 
 
 class InstallCommand(install):
@@ -366,12 +367,20 @@ try:
                 "googleapis-common-protos>=%s" % _minimum_googleapis_common_protos_version,
                 "numpy>=%s" % _minimum_numpy_version,
             ],
+            "pipelines": [
+                "pandas>=%s" % _minimum_pandas_version,
+                "pyarrow>=%s" % _minimum_pyarrow_version,
+                "numpy>=%s" % _minimum_numpy_version,
+                "grpcio>=%s" % _minimum_grpc_version,
+                "grpcio-status>=%s" % _minimum_grpc_version,
+                "googleapis-common-protos>=%s" % _minimum_googleapis_common_protos_version,
+                "pyyaml>=%s" % _minimum_pyyaml_version,
+            ],
         },
-        python_requires=">=3.9",
+        python_requires=">=3.10",
         classifiers=[
             "Development Status :: 5 - Production/Stable",
             "License :: OSI Approved :: Apache Software License",
-            "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",
             "Programming Language :: Python :: 3.12",

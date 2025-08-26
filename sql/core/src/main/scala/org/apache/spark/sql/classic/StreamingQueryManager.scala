@@ -25,7 +25,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Evolving
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, QUERY_ID, RUN_ID}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table,
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
+import org.apache.spark.sql.execution.streaming.runtime.{AsyncProgressTrackingMicroBatchExecution, MicroBatchExecution, StreamingQueryListenerBus, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
@@ -53,7 +54,7 @@ class StreamingQueryManager private[sql] (
   with Logging {
 
   private[sql] val stateStoreCoordinator =
-    StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env)
+    StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env, sqlConf)
   private val listenerBus =
     new StreamingQueryListenerBus(Some(sparkSession.sparkContext.listenerBus))
 

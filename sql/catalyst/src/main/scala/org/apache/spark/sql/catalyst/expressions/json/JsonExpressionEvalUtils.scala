@@ -26,7 +26,6 @@ import com.fasterxml.jackson.core.json.JsonReadFeature
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
-import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonGenerator, JacksonParser, JsonInferSchema, JSONOptions}
 import org.apache.spark.sql.catalyst.util.{ArrayData, FailFastMode, FailureSafeParser, MapData, PermissiveMode}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -34,13 +33,13 @@ import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, Str
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.Utils
 
-private[this] sealed trait PathInstruction
-private[this] object PathInstruction {
+sealed trait PathInstruction
+object PathInstruction {
   private[expressions] case object Subscript extends PathInstruction
   private[expressions] case object Wildcard extends PathInstruction
   private[expressions] case object Key extends PathInstruction
   private[expressions] case class Index(index: Long) extends PathInstruction
-  private[expressions] case class Named(name: String) extends PathInstruction
+  case class Named(name: String) extends PathInstruction
 }
 
 private[this] sealed trait WriteStyle
@@ -50,7 +49,7 @@ private[this] object WriteStyle {
   private[expressions] case object FlattenStyle extends WriteStyle
 }
 
-private[this] object JsonPathParser extends RegexParsers {
+object JsonPathParser extends RegexParsers {
   import PathInstruction._
 
   def root: Parser[Char] = '$'
@@ -123,6 +122,8 @@ case class JsonToStructsEvaluator(
       (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getArray(0) else null
     case _: MapType =>
       (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getMap(0) else null
+    case _: VariantType =>
+      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getVariant(0) else null
   }
 
   @transient
@@ -152,13 +153,7 @@ case class JsonToStructsEvaluator(
 
   final def evaluate(json: UTF8String): Any = {
     if (json == null) return null
-    nullableSchema match {
-      case _: VariantType =>
-        VariantExpressionEvalUtils.parseJson(json,
-          allowDuplicateKeys = variantAllowDuplicateKeys)
-      case _ =>
-        converter(parser.parse(json))
-    }
+    converter(parser.parse(json))
   }
 }
 

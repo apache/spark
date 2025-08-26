@@ -24,7 +24,7 @@ import scala.language.implicitConversions
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
@@ -59,7 +59,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
    */
   def withTempDirAllowFailureInjection(f: (File, FailureInjectionState) => Unit): Unit = {
     withTempDir { dir =>
-      val injectionState = FailureInjectionFileSystem.addPathToTempToInjectionState(dir.getPath)
+      val injectionState = FailureInjectionFileSystem.registerTempPath(dir.getPath)
       try {
         f(dir, injectionState)
       } finally {
@@ -377,12 +377,14 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
 
           injectionState.createAtomicDelayCloseRegex = Seq(".*/2_.*changelog")
 
+          val additionalConfs = Map(
+            rocksdbChangelogCheckpointingConfKey -> "true",
+            SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2",
+            STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key -> fileManagerClassName)
           testStream(aggregated, Update)(
-            StartStream(checkpointLocation = checkpointDir.getAbsolutePath,
-              additionalConfs = Map(
-                rocksdbChangelogCheckpointingConfKey -> "true",
-                SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2",
-                STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key -> fileManagerClassName)),
+            StartStream(
+              checkpointLocation = checkpointDir.getAbsolutePath,
+              additionalConfs = additionalConfs),
             AddData(inputData, 3),
             CheckLastBatch((3, 1)),
             AddData(inputData, 3, 2),
@@ -400,13 +402,89 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
 
           // The query will restart successfully and start at the checkpoint after Batch 1
           testStream(aggregated, Update)(
-            StartStream(checkpointLocation = checkpointDir.getAbsolutePath,
-              additionalConfs = Map(
-                rocksdbChangelogCheckpointingConfKey -> "true",
-                SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2",
-                STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key -> fileManagerClassName)),
+            StartStream(
+              checkpointLocation = checkpointDir.getAbsolutePath,
+              additionalConfs = additionalConfs),
             AddData(inputData, 4),
             CheckLastBatch((3, 3), (1, 1), (4, 1)),
+            StopStream
+          )
+        }
+      }
+    }
+  }
+
+  case class FailureConf2(logType: String, checkpointFormatVersion: String) {
+    override def toString: String = {
+      s"logType = $logType, checkpointFormatVersion = $checkpointFormatVersion"
+    }
+  }
+
+  // tests to validate the behavior after failures when writing to the commit and offset logs
+  Seq(
+    FailureConf2("commits", checkpointFormatVersion = "1"),
+    FailureConf2("commits", checkpointFormatVersion = "2"),
+    FailureConf2("offsets", checkpointFormatVersion = "1"),
+    FailureConf2("offsets", checkpointFormatVersion = "2")).foreach { failureConf =>
+    test(s"Progress log fails to write $failureConf") {
+      val hadoopConf = new Configuration()
+      hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fileManagerClassName)
+      val rocksdbChangelogCheckpointingConfKey =
+        RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled"
+
+      withTempDirAllowFailureInjection { (checkpointDir, injectionState) =>
+        withSQLConf(
+          rocksdbChangelogCheckpointingConfKey -> "true",
+          SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "2") {
+          val inputData = MemoryStream[Int]
+          val aggregated =
+            inputData.toDF()
+              .groupBy($"value")
+              .agg(count("*"))
+              .as[(Int, Long)]
+
+          // This should cause the second batch to fail
+          injectionState.createAtomicDelayCloseRegex = Seq(s".*/${failureConf.logType}/1")
+
+          val additionalConfs = Map(
+            rocksdbChangelogCheckpointingConfKey -> "true",
+            SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key ->
+              failureConf.checkpointFormatVersion,
+            STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key -> fileManagerClassName)
+
+          testStream(aggregated, Update)(
+            StartStream(
+              checkpointLocation = checkpointDir.getAbsolutePath,
+              additionalConfs = additionalConfs),
+            AddData(inputData, 3),
+            CheckNewAnswer((3, 1)),
+            AddData(inputData, 3, 2),
+            // We should categorize this error.
+            // TODO after the error is categorized, we should check error class
+            ExpectFailure[IOException] { _ => () }
+          )
+
+          injectionState.createAtomicDelayCloseRegex = Seq.empty
+
+          inputData.addData(3, 1)
+
+          // The query will restart successfully and start at the checkpoint after Batch 1
+          testStream(aggregated, Update)(
+            StartStream(
+              checkpointLocation = checkpointDir.getAbsolutePath,
+              additionalConfs = additionalConfs),
+            AddData(inputData, 4),
+            if (failureConf.logType == "commits") {
+              // If the failure is in the commit log, data is already committed.
+              // MemorySink isn't an ExactlyOnce sink, so we will see the data from the previous
+              // batch. We should see the data from the previous batch and the new data.
+              CheckNewAnswer((3, 2), (2, 1), (3, 3), (1, 1), (4, 1))
+            } else {
+              // If the failure is in the offset log, previous batch didn't run. when the query
+              // restarts, it will include all data since the last finished batch.
+              CheckNewAnswer((3, 3), (1, 1), (4, 1), (2, 1))
+
+            },
             StopStream
           )
         }
@@ -523,7 +601,9 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
         loggingId = s"[Thread-${Thread.currentThread.getId}]",
         useColumnFamilies = true,
         enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
-        partitionId = 0)
+        partitionId = 0,
+        eventForwarder = None,
+        uniqueId = None)
       db.load(version, checkpointId)
       func(db)
     } finally {

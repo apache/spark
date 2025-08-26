@@ -22,6 +22,7 @@ from pyspark.errors.exceptions.base import (
     PySparkAttributeError,
 )
 from pyspark.resource import ResourceProfile
+from pyspark.sql.connect.logging import logger
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -43,6 +44,7 @@ from typing import (
 )
 
 import copy
+import os
 import sys
 import random
 import pyarrow as pa
@@ -69,6 +71,7 @@ from pyspark.errors import (
     PySparkRuntimeError,
 )
 from pyspark.util import PythonEvalType
+from pyspark.serializers import CPickleSerializer
 from pyspark.storagelevel import StorageLevel
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.conversion import ArrowTableToRowsConversion
@@ -85,7 +88,7 @@ from pyspark.sql.connect.expressions import (
 )
 from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
-from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
+from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignore[attr-defined]
 from pyspark.sql.table_arg import TableArg
 
 
@@ -141,6 +144,7 @@ class DataFrame(ParentDataFrame):
         # by __repr__ and _repr_html_ while eager evaluation opens.
         self._support_repr_html = False
         self._cached_schema: Optional[StructType] = None
+        self._cached_schema_serialized: Optional[bytes] = None
         self._execution_info: Optional["ExecutionInfo"] = None
 
     def __reduce__(self) -> Tuple:
@@ -1737,7 +1741,9 @@ class DataFrame(ParentDataFrame):
                 # }
 
                 # validate the column name
-                if not hasattr(self._session, "is_mock_session"):
+                if os.environ.get("PYSPARK_VALIDATE_COLUMN_NAME_LEGACY") == "1" and not hasattr(
+                    self._session, "is_mock_session"
+                ):
                     from pyspark.sql.connect.types import verify_col_name
 
                     # Try best to verify the column name with cached schema
@@ -1836,11 +1842,24 @@ class DataFrame(ParentDataFrame):
         if self._cached_schema is None:
             query = self._plan.to_proto(self._session.client)
             self._cached_schema = self._session.client.schema(query)
+            try:
+                self._cached_schema_serialized = CPickleSerializer().dumps(self._schema)
+            except Exception as e:
+                logger.warn(f"DataFrame schema pickle dumps failed with exception: {e}.")
+                self._cached_schema_serialized = None
         return self._cached_schema
 
     @property
     def schema(self) -> StructType:
-        return copy.deepcopy(self._schema)
+        # self._schema call will cache the schema and serialize it if it is not cached yet.
+        _schema = self._schema
+        if self._cached_schema_serialized is not None:
+            try:
+                return CPickleSerializer().loads(self._cached_schema_serialized)
+            except Exception as e:
+                logger.warn(f"DataFrame schema pickle loads failed with exception: {e}.")
+        # In case of pickle ser/de failure, fallback to deepcopy approach.
+        return copy.deepcopy(_schema)
 
     @functools.cache
     def isLocal(self) -> bool:
@@ -2054,7 +2073,7 @@ class DataFrame(ParentDataFrame):
     ) -> ParentDataFrame:
         from pyspark.sql.connect.udf import UserDefinedFunction
 
-        _validate_pandas_udf(func, evalType)
+        _validate_vectorized_udf(func, evalType)
         if isinstance(schema, str):
             schema = cast(StructType, self._session._parse_ddl(schema))
         udf_obj = UserDefinedFunction(

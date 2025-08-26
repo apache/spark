@@ -18,7 +18,7 @@
 package org.apache.spark.api.r
 
 import java.io.{File, OutputStream}
-import java.net.Socket
+import java.nio.channels.{Channels, SocketChannel}
 import java.util.{Map => JMap}
 
 import scala.jdk.CollectionConverters._
@@ -179,8 +179,8 @@ private[spark] class RParallelizeServer(sc: JavaSparkContext, parallelism: Int)
     extends SocketAuthServer[JavaRDD[Array[Byte]]](
       new RAuthHelper(SparkEnv.get.conf), "sparkr-parallelize-server") {
 
-  override def handleConnection(sock: Socket): JavaRDD[Array[Byte]] = {
-    val in = sock.getInputStream()
+  override def handleConnection(sock: SocketChannel): JavaRDD[Array[Byte]] = {
+    val in = Channels.newInputStream(sock)
     JavaRDD.readRDDFromInputStream(sc.sc, in, parallelism)
   }
 }

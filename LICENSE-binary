@@ -365,8 +365,6 @@ org.apache.xbean:xbean-asm9-shaded
 org.apache.yetus:audience-annotations
 org.apache.zookeeper:zookeeper
 org.apache.zookeeper:zookeeper-jute
-org.codehaus.jackson:jackson-core-asl
-org.codehaus.jackson:jackson-mapper-asl
 org.datanucleus:datanucleus-api-jdo
 org.datanucleus:datanucleus-core
 org.datanucleus:datanucleus-rdbms
@@ -388,7 +386,6 @@ org.glassfish.jersey.core:jersey-common
 org.glassfish.jersey.core:jersey-server
 org.glassfish.jersey.inject:jersey-hk2
 org.javassist:javassist
-org.jetbrains:annotations
 org.json4s:json4s-ast_2.13
 org.json4s:json4s-core_2.13
 org.json4s:json4s-jackson-core_2.13
@@ -401,7 +398,6 @@ org.rocksdb:rocksdbjni
 org.scala-lang:scala-compiler
 org.scala-lang:scala-library
 org.scala-lang:scala-reflect
-org.scala-lang.modules:scala-collection-compat_2.13
 org.scala-lang.modules:scala-parallel-collections_2.13
 org.scala-lang.modules:scala-parser-combinators_2.13
 org.scala-lang.modules:scala-xml_2.13
@@ -442,7 +438,6 @@ com.github.luben:zstd-jni
 com.github.wendykierp:JTransforms
 javolution:javolution
 jline:jline
-org.jodd:jodd-core
 pl.edu.icm:JLargeArrays
 
 python/pyspark/errors/exceptions/tblib.py
@@ -465,6 +460,7 @@ org.codehaus.janino:janino
 org.fusesource.leveldbjni:leveldbjni-all
 org.jline:jline
 org.jpmml:pmml-model
+org.locationtech.jts:jts-core
 org.threeten:threeten-extra
 
 python/lib/py4j-*-src.zip

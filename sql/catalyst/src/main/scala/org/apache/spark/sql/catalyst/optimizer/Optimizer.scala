@@ -20,10 +20,9 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.{LogKeys, MDC}
+import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression.hasCorrelatedSubquery
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -574,19 +573,6 @@ object EliminateAggregateFilter extends Rule[LogicalPlan] {
 }
 
 /**
- * An optimizer used in test code.
- *
- * To ensure extendability, we leave the standard rules in the abstract optimizer rules, while
- * specific rules go to the subclasses
- */
-object SimpleTestOptimizer extends SimpleTestOptimizer
-
-class SimpleTestOptimizer extends Optimizer(
-  new CatalogManager(
-    FakeV2SessionCatalog,
-    new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, EmptyTableFunctionRegistry)))
-
-/**
  * Remove redundant aliases from a query plan. A redundant alias is an alias that does not change
  * the name or metadata of a column, and does not deduplicate it.
  */
@@ -611,7 +597,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
     // If the alias name is different from attribute name, we can't strip it either, or we
     // may accidentally change the output schema name of the root plan.
     case a @ Alias(attr: Attribute, name)
-      if (a.metadata == Metadata.empty || a.metadata == attr.metadata) &&
+      if (a.metadata == attr.metadata) &&
         name == attr.name &&
         !excludeList.contains(attr) &&
         !excludeList.contains(a) =>
@@ -654,16 +640,23 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
       case u: Union =>
         var first = true
         plan.mapChildren { child =>
-          if (first) {
-            first = false
-            // `Union` inherits its first child's outputs. We don't remove those aliases from the
-            // first child's tree that prevent aliased attributes to appear multiple times in the
-            // `Union`'s output. A parent projection node on the top of an `Union` with non-unique
-            // output attributes could return incorrect result.
-            removeRedundantAliases(child, excluded ++ child.outputSet)
+          if (!conf.unionIsResolvedWhenDuplicatesPerChildResolved || shouldRemoveAliasesUnderUnion(
+            child
+          )) {
+            if (first) {
+              first = false
+              // `Union` inherits its first child's outputs. We don't remove those aliases from the
+              // first child's tree that prevent aliased attributes to appear multiple times in the
+              // `Union`'s output. A parent projection node on the top of an `Union` with
+              // non-unique output attributes could return incorrect result.
+              removeRedundantAliases(child, excluded ++ child.outputSet)
+            } else {
+              // We don't need to exclude those attributes that `Union` inherits from its first
+              // child.
+              removeRedundantAliases(child, excluded -- u.children.head.outputSet)
+            }
           } else {
-            // We don't need to exclude those attributes that `Union` inherits from its first child.
-            removeRedundantAliases(child, excluded -- u.children.head.outputSet)
+            child
           }
         }
 
@@ -671,8 +664,10 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         val subQueryAttributes = if (conf.getConf(SQLConf
           .EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES)) {
           // Collect the references for all the subquery expressions in the plan.
-          AttributeSet.fromAttributeSets(plan.expressions.collect {
-            case e: SubqueryExpression => e.references
+          AttributeSet.fromAttributeSets(plan.expressions.flatMap { e =>
+            e.collect {
+              case s: SubqueryExpression => s.references
+            }
           })
         } else {
           AttributeSet.empty
@@ -703,6 +698,44 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
             case a: Attribute => mapping.get(a).map(_.withName(a.name)).getOrElse(a)
           })
         }
+    }
+  }
+
+  /**
+   * In case a [[Project]], [[Aggregate]] or [[Window]] is a child of [[Union]], we don't remove an
+   * [[Alias]] in case it is on top of an [[Attribute]] which exists in the output set of the
+   * operator. This is needed because otherwise, we end up having an operator with duplicates in
+   * its output. When that happens, [[Union]] is not resolved, and we fail (but we shouldn't).
+   * In this example:
+   *
+   * {{{ SELECT col1 FROM values(1) WHERE 100 IN (SELECT col1 UNION SELECT col1); }}}
+   *
+   * Without `shouldRemoveAliasesUnderUnion` check, we would remove the [[Alias]] introduced in
+   * [[DeduplicateRelations]] rule (in a [[Project]] tagged as
+   * `PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION`), the result is unresolved [[Union]] which causes the
+   * failure. With the check, [[Alias]] stays, and we resolve the plan properly.
+   */
+  private def shouldRemoveAliasesUnderUnion(operator: LogicalPlan): Boolean = {
+    operator match {
+      case project: Project =>
+        project.projectList.forall {
+          case Alias(attribute: Attribute, _) =>
+            !project.outputSet.contains(attribute)
+          case _ => true
+        }
+      case aggregate: Aggregate =>
+        aggregate.aggregateExpressions.forall {
+          case Alias(attribute: Attribute, _) =>
+            !aggregate.outputSet.contains(attribute)
+          case _ => true
+        }
+      case window: Window =>
+        window.windowExpressions.forall {
+          case Alias(attribute: Attribute, _) =>
+            !window.outputSet.contains(attribute)
+          case _ => true
+        }
+      case other => true
     }
   }
 
@@ -934,6 +967,15 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
     result.asInstanceOf[A]
   }
 
+  /**
+   * If [[SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED]] is true, [[Project]] can
+   * only be pushed down if there are no duplicate [[ExprId]]s in the project list.
+   */
+  def canPushProjectionThroughUnion(project: Project): Boolean = {
+    !conf.unionIsResolvedWhenDuplicatesPerChildResolved ||
+    project.outputSet.size == project.projectList.size
+  }
+
   def pushProjectionThroughUnion(projectList: Seq[NamedExpression], u: Union): Seq[LogicalPlan] = {
     val newFirstChild = Project(projectList, u.children.head)
     val newOtherChildren = u.children.tail.map { child =>
@@ -947,8 +989,9 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] {
     _.containsAllPatterns(UNION, PROJECT)) {
 
     // Push down deterministic projection through UNION ALL
-    case Project(projectList, u: Union)
-        if projectList.forall(_.deterministic) && u.children.nonEmpty =>
+    case project @ Project(projectList, u: Union)
+      if projectList.forall(_.deterministic) && u.children.nonEmpty &&
+        canPushProjectionThroughUnion(project) =>
       u.copy(children = pushProjectionThroughUnion(projectList, u))
   }
 }
@@ -1039,8 +1082,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
         p
       }
 
-    // TODO: Pruning `UnionLoop`s needs to take into account both the outer `Project` and the inner
-    //  `UnionLoopRef` nodes.
+    // Avoid pruning UnionLoop because of its recursive nature.
     case p @ Project(_, _: UnionLoop) => p
 
     // Prune unnecessary window expressions
@@ -1278,8 +1320,22 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
   def buildCleanedProjectList(
       upper: Seq[NamedExpression],
       lower: Seq[NamedExpression]): Seq[NamedExpression] = {
+    val explicitlyPreserveAliasMetadata =
+      conf.getConf(SQLConf.PRESERVE_ALIAS_METADATA_WHEN_COLLAPSING_PROJECTS)
     val aliases = getAliasMap(lower)
-    upper.map(replaceAliasButKeepName(_, aliases))
+    upper.map {
+      case alias: Alias if !alias.metadata.isEmpty && explicitlyPreserveAliasMetadata =>
+        replaceAliasButKeepName(alias, aliases) match {
+          case newAlias: Alias => Alias(child = newAlias.child, name = newAlias.name)(
+            exprId = newAlias.exprId,
+            qualifier = newAlias.qualifier,
+            explicitMetadata = Some(alias.metadata),
+            nonInheritableMetadataKeys = newAlias.nonInheritableMetadataKeys
+          )
+          case other => other
+        }
+      case other => replaceAliasButKeepName(other, aliases)
+    }
   }
 
   /**
@@ -1574,7 +1630,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
  */
 object CombineUnions extends Rule[LogicalPlan] {
   import CollapseProject.{buildCleanedProjectList, canCollapseExpressions}
-  import PushProjectionThroughUnion.pushProjectionThroughUnion
+  import PushProjectionThroughUnion.{canPushProjectionThroughUnion, pushProjectionThroughUnion}
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
     _.containsAnyPattern(UNION, DISTINCT_LIKE), ruleId) {
@@ -1619,17 +1675,19 @@ object CombineUnions extends Rule[LogicalPlan] {
           stack.pushAll(children.reverse)
         // Push down projection through Union and then push pushed plan to Stack if
         // there is a Project.
-        case Project(projectList, Distinct(u @ Union(children, byName, allowMissingCol)))
+        case project @ Project(projectList, Distinct(u @ Union(children, byName, allowMissingCol)))
             if projectList.forall(_.deterministic) && children.nonEmpty &&
-              flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol =>
+              flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol &&
+              canPushProjectionThroughUnion(project) =>
           stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
-        case Project(projectList, Deduplicate(keys: Seq[Attribute], u: Union))
+        case project @ Project(projectList, Deduplicate(keys: Seq[Attribute], u: Union))
             if projectList.forall(_.deterministic) && flattenDistinct && u.byName == topByName &&
-              u.allowMissingCol == topAllowMissingCol && AttributeSet(keys) == u.outputSet =>
+              u.allowMissingCol == topAllowMissingCol && AttributeSet(keys) == u.outputSet &&
+              canPushProjectionThroughUnion(project) =>
           stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
-        case Project(projectList, u @ Union(children, byName, allowMissingCol))
-            if projectList.forall(_.deterministic) && children.nonEmpty &&
-              byName == topByName && allowMissingCol == topAllowMissingCol =>
+        case project @ Project(projectList, u @ Union(children, byName, allowMissingCol))
+            if projectList.forall(_.deterministic) && children.nonEmpty && byName == topByName &&
+              allowMissingCol == topAllowMissingCol && canPushProjectionThroughUnion(project) =>
           stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
         case child =>
           flattened += child
@@ -2140,6 +2198,8 @@ object EliminateLimits extends Rule[LogicalPlan] {
       child
     case GlobalLimit(l, child) if canEliminate(l, child) =>
       child
+    case LocalLimit(l, child) if canEliminate(l, child) =>
+      child
 
     case LocalLimit(IntegerLiteral(0), child) =>
       LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
@@ -2277,6 +2337,9 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
     case Limit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming, stream)) =>
       LocalRelation(output, data.take(limit), isStreaming, stream)
 
+    case LocalLimit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming, stream)) =>
+      LocalRelation(output, data.take(limit), isStreaming, stream)
+
     case Filter(condition, LocalRelation(output, data, isStreaming, stream))
         if !hasUnevaluableExpr(condition) =>
       val predicate = Predicate.create(condition, output)
@@ -2284,7 +2347,7 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
       LocalRelation(output, data.filter(row => predicate.eval(row)), isStreaming, stream)
   }
 
-  private def hasUnevaluableExpr(expr: Expression): Boolean = {
+  def hasUnevaluableExpr(expr: Expression): Boolean = {
     expr.exists(e => e.isInstanceOf[Unevaluable] && !e.isInstanceOf[AttributeReference])
   }
 }
@@ -2566,6 +2629,28 @@ object GenerateOptimization extends Rule[LogicalPlan] {
             val updatedGenerate = rewrittenG.copy(generatorOutput = updatedGeneratorOutput)
             p.withNewChildren(Seq(updatedGenerate))
           case _ => p
+        }
+
+      case p @ Project(_, g: Generate) if g.generator.isInstanceOf[JsonTuple] =>
+        val generatorOutput = g.generatorOutput
+        val usedOutputs =
+          AttributeSet(generatorOutput).intersect(AttributeSet(p.projectList.flatMap(_.references)))
+
+        usedOutputs.size match {
+          case 0 =>
+            p.withNewChildren(g.children)
+          case n if n < generatorOutput.size =>
+            val originJsonTuple = g.generator.asInstanceOf[JsonTuple]
+            val (newJsonExpressions, newGeneratorOutput) =
+              generatorOutput.zipWithIndex.collect {
+                case (attr, i) if usedOutputs.contains(attr) =>
+                  (originJsonTuple.children(i + 1), attr)
+              }.unzip
+            p.withNewChildren(Seq(g.copy(
+              generator = JsonTuple(originJsonTuple.children.head +: newJsonExpressions),
+              generatorOutput = newGeneratorOutput)))
+          case _ =>
+            p
         }
     }
 }

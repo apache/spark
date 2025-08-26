@@ -2,8 +2,8 @@
 py4j>=0.10.9.9
 
 # PySpark dependencies (optional)
-numpy>=1.21
-pyarrow>=11.0.0
+numpy>=1.22
+pyarrow>=15.0.0
 six==1.16.0
 pandas>=2.2.0
 scipy
@@ -12,6 +12,7 @@ mlflow>=2.3.1
 scikit-learn
 matplotlib
 memory-profiler>=0.61.0
+pyyaml>=3.11
 
 # PySpark test dependencies
 unittest-xml-reporting
@@ -26,6 +27,8 @@ pytest-mypy-plugins==1.9.3
 flake8==3.9.0
 # See SPARK-38680.
 pandas-stubs<1.2.0.54
+scipy-stubs; python_version>='3.10'
+types-PyYAML
 
 # Documentation (SQL)
 mkdocs

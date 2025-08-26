@@ -26,7 +26,7 @@ import breeze.linalg.{axpy => brzAxpy, inv, svd => brzSvd, DenseMatrix => BDM, D
 import breeze.numerics.{sqrt => brzSqrt}
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.stat._

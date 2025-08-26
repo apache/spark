@@ -76,13 +76,13 @@ class ParquetOptions(
    */
   def datetimeRebaseModeInRead: String = parameters
     .get(DATETIME_REBASE_MODE)
-    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_REBASE_MODE_IN_READ))
+    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_REBASE_MODE_IN_READ).toString)
   /**
    * The rebasing mode for INT96 timestamp values in reads.
    */
   def int96RebaseModeInRead: String = parameters
     .get(INT96_REBASE_MODE)
-    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ))
+    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ).toString)
 }
 
 

@@ -29,13 +29,18 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.DataSourceOptions
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.{JoinSideValues, READ_REGISTERED_TIMERS, STATE_VAR_NAME}
+import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.{JoinSideValues, READ_REGISTERED_TIMERS, STATE_VAR_NAME, STORE_NAME}
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.{StateMetadataPartitionReader, StateMetadataTableEntry}
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.{CommitLog, OffsetSeqLog, OffsetSeqMetadata, TimerStateUtils, TransformWithStateOperatorProperties, TransformWithStateVariableInfo}
-import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
-import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
+import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorsUtils
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.SymmetricHashJoinStateManager
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{TransformWithStateOperatorProperties, TransformWithStateVariableInfo}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerStateUtils
+import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_STATE
+import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryCheckpointMetadata
 import org.apache.spark.sql.execution.streaming.state.{InMemoryStateSchemaProvider, KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateSchemaCompatibilityChecker, StateSchemaMetadata, StateSchemaProvider, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProviderId}
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.streaming.TimeMode
@@ -51,21 +56,17 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
   private lazy val hadoopConf: Configuration = session.sessionState.newHadoopConf()
 
-  private lazy val serializedHadoopConf = new SerializableConfiguration(hadoopConf)
-
-  // Seq of operator names who uses state schema v3 and TWS related options.
-  // This Seq was used in checks before reading state schema files.
-  private val twsShortNameSeq = Seq("transformWithStateExec", "transformWithStateInPandasExec")
-
   override def shortName(): String = "statestore"
 
   override def getTable(
       schema: StructType,
       partitioning: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    val sourceOptions = StateSourceOptions.apply(session, hadoopConf, properties)
+    val sourceOptions = StateSourceOptions.modifySourceOptions(hadoopConf,
+      StateSourceOptions.apply(session, hadoopConf, properties))
     val stateConf = buildStateStoreConf(sourceOptions.resolvedCpLocation, sourceOptions.batchId)
-    val stateStoreReaderInfo: StateStoreReaderInfo = getStoreMetadataAndRunChecks(sourceOptions)
+    val stateStoreReaderInfo: StateStoreReaderInfo = getStoreMetadataAndRunChecks(
+      sourceOptions)
 
     // The key state encoder spec should be available for all operators except stream-stream joins
     val keyStateEncoderSpec = if (stateStoreReaderInfo.keyStateEncoderSpecOpt.isDefined) {
@@ -78,24 +79,28 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     new StateTable(session, schema, sourceOptions, stateConf, keyStateEncoderSpec,
       stateStoreReaderInfo.transformWithStateVariableInfoOpt,
       stateStoreReaderInfo.stateStoreColFamilySchemaOpt,
-      stateStoreReaderInfo.stateSchemaProviderOpt)
+      stateStoreReaderInfo.stateSchemaProviderOpt,
+      stateStoreReaderInfo.joinColFamilyOpt)
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
-    val sourceOptions = StateSourceOptions.apply(session, hadoopConf, options)
+    val sourceOptions = StateSourceOptions.modifySourceOptions(hadoopConf,
+      StateSourceOptions.apply(session, hadoopConf, options))
 
-    val stateStoreReaderInfo: StateStoreReaderInfo = getStoreMetadataAndRunChecks(sourceOptions)
+    val stateStoreReaderInfo: StateStoreReaderInfo = getStoreMetadataAndRunChecks(
+      sourceOptions)
+    val oldSchemaFilePaths = StateDataSource.getOldSchemaFilePaths(sourceOptions, hadoopConf)
 
     val stateCheckpointLocation = sourceOptions.stateCheckpointLocation
     try {
       val (keySchema, valueSchema) = sourceOptions.joinSide match {
         case JoinSideValues.left =>
           StreamStreamJoinStateHelper.readKeyValueSchema(session, stateCheckpointLocation.toString,
-            sourceOptions.operatorId, LeftSide)
+            sourceOptions.operatorId, LeftSide, oldSchemaFilePaths)
 
         case JoinSideValues.right =>
           StreamStreamJoinStateHelper.readKeyValueSchema(session, stateCheckpointLocation.toString,
-            sourceOptions.operatorId, RightSide)
+            sourceOptions.operatorId, RightSide, oldSchemaFilePaths)
 
         case JoinSideValues.none =>
           // we should have the schema for the state store if joinSide is none
@@ -117,8 +122,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
   override def supportsExternalMetadata(): Boolean = false
 
   private def buildStateStoreConf(checkpointLocation: String, batchId: Long): StateStoreConf = {
-    val offsetLog = new OffsetSeqLog(session,
-      new Path(checkpointLocation, DIR_NAME_OFFSETS).toString)
+    val offsetLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).offsetLog
     offsetLog.get(batchId) match {
       case Some(value) =>
         val metadata = value.metadata.getOrElse(
@@ -137,19 +141,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
   private def runStateVarChecks(
       sourceOptions: StateSourceOptions,
       stateStoreMetadata: Array[StateMetadataTableEntry]): Unit = {
-    if (sourceOptions.stateVarName.isDefined || sourceOptions.readRegisteredTimers) {
-      // Perform checks for transformWithState operator in case state variable name is provided
-      require(stateStoreMetadata.size == 1)
-      val opMetadata = stateStoreMetadata.head
-      if (!twsShortNameSeq.contains(opMetadata.operatorName)) {
-        // if we are trying to query state source with state variable name, then the operator
-        // should be transformWithState
-        val errorMsg = "Providing state variable names is only supported with the " +
-          s"transformWithState operator. Found operator=${opMetadata.operatorName}. " +
-          s"Please remove this option and re-run the query."
-        throw StateDataSourceErrors.invalidOptionValue(STATE_VAR_NAME, errorMsg)
-      }
-
+    def runTWSChecks(opMetadata: StateMetadataTableEntry): Unit = {
       // if the operator is transformWithState, but the operator properties are empty, then
       // the user has not defined any state variables for the operator
       val operatorProperties = opMetadata.operatorPropertiesJson
@@ -179,35 +171,74 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
         throw StateDataSourceErrors.invalidOptionValue(STATE_VAR_NAME,
           s"State variable $stateVarName is not defined for the transformWithState operator.")
       }
-    } else {
-      // if the operator is transformWithState, then a state variable argument is mandatory
-      if (stateStoreMetadata.size == 1 &&
-        twsShortNameSeq.contains(stateStoreMetadata.head.operatorName)) {
-        throw StateDataSourceErrors.requiredOptionUnspecified("stateVarName")
-      }
     }
-  }
 
-  private def getStateStoreMetadata(stateSourceOptions: StateSourceOptions):
-    Array[StateMetadataTableEntry] = {
-    val allStateStoreMetadata = new StateMetadataPartitionReader(
-      stateSourceOptions.stateCheckpointLocation.getParent.toString,
-      serializedHadoopConf, stateSourceOptions.batchId).stateMetadata.toArray
-    val stateStoreMetadata = allStateStoreMetadata.filter { entry =>
-      entry.operatorId == stateSourceOptions.operatorId &&
-        entry.stateStoreName == stateSourceOptions.storeName
+    sourceOptions.stateVarName match {
+      case Some(name) =>
+        // Check that stateStoreMetadata exists
+        require(stateStoreMetadata.size == 1)
+        val opMetadata = stateStoreMetadata.head
+        opMetadata.operatorName match {
+          case opName: String if opName ==
+            StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME =>
+            // Verify that the storename is valid
+            val possibleStoreNames = SymmetricHashJoinStateManager.allStateStoreNames(
+              LeftSide, RightSide)
+            if (!possibleStoreNames.contains(name)) {
+              val errorMsg = s"Store name $name not allowed for join operator. Allowed names are " +
+                s"$possibleStoreNames. " +
+                s"Please remove this option and re-run the query."
+              throw StateDataSourceErrors.invalidOptionValue(STORE_NAME, errorMsg)
+            }
+          case opName: String if StatefulOperatorsUtils.TRANSFORM_WITH_STATE_OP_NAMES
+            .contains(opName) =>
+            runTWSChecks(opMetadata)
+          case _ =>
+            // if we are trying to query state source with state variable name, then the operator
+            // should be transformWithState
+            val errorMsg = "Providing state variable names is only supported with the " +
+              s"transformWithState operator. Found operator=${opMetadata.operatorName}. " +
+              s"Please remove this option and re-run the query."
+            throw StateDataSourceErrors.invalidOptionValue(STATE_VAR_NAME, errorMsg)
+        }
+      case None =>
+        if (sourceOptions.readRegisteredTimers) {
+          // Check that stateStoreMetadata exists
+          require(stateStoreMetadata.size == 1)
+          val opMetadata = stateStoreMetadata.head
+          opMetadata.operatorName match {
+            case opName: String if StatefulOperatorsUtils.TRANSFORM_WITH_STATE_OP_NAMES
+              .contains(opName) =>
+              runTWSChecks(opMetadata)
+            case _ =>
+              // if we are trying to query state source with state variable name, then the operator
+              // should be transformWithState
+              val errorMsg = "Providing readRegisteredTimers=true is only supported with the " +
+                s"transformWithState operator. Found operator=${opMetadata.operatorName}. " +
+                s"Please remove this option and re-run the query."
+              throw StateDataSourceErrors.invalidOptionValue(READ_REGISTERED_TIMERS, errorMsg)
+          }
+        } else {
+          // if the operator is transformWithState, then a state variable argument is mandatory
+          if (stateStoreMetadata.size == 1 &&
+            StatefulOperatorsUtils.TRANSFORM_WITH_STATE_OP_NAMES.contains(
+              stateStoreMetadata.head.operatorName)) {
+            throw StateDataSourceErrors.requiredOptionUnspecified("stateVarName")
+          }
+        }
     }
-    stateStoreMetadata
   }
 
   private def getStoreMetadataAndRunChecks(sourceOptions: StateSourceOptions):
     StateStoreReaderInfo = {
-    val storeMetadata = getStateStoreMetadata(sourceOptions)
+    val storeMetadata = StateDataSource.getStateStoreMetadata(sourceOptions, hadoopConf)
     runStateVarChecks(sourceOptions, storeMetadata)
+
     var keyStateEncoderSpecOpt: Option[KeyStateEncoderSpec] = None
     var stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema] = None
     var transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo] = None
     var stateSchemaProvider: Option[StateSchemaProvider] = None
+    var joinColFamilyOpt: Option[String] = None
     var timeMode: String = TimeMode.None.toString
 
     if (sourceOptions.joinSide == JoinSideValues.none) {
@@ -216,34 +247,41 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
       // Read the schema file path from operator metadata version v2 onwards
       // for the transformWithState operator
-      val oldSchemaFilePaths = if (storeMetadata.length > 0 && storeMetadata.head.version == 2
-        && twsShortNameSeq.exists(storeMetadata.head.operatorName.contains)) {
-        val storeMetadataEntry = storeMetadata.head
-        val operatorProperties = TransformWithStateOperatorProperties.fromJson(
-          storeMetadataEntry.operatorPropertiesJson)
-        timeMode = operatorProperties.timeMode
+      val oldSchemaFilePaths = if (storeMetadata.length > 0 && storeMetadata.head.version == 2) {
+        val opName = storeMetadata.head.operatorName
+        if (StatefulOperatorsUtils.TRANSFORM_WITH_STATE_OP_NAMES.exists(opName.contains)) {
+          val storeMetadataEntry = storeMetadata.head
+          val operatorProperties = TransformWithStateOperatorProperties.fromJson(
+            storeMetadataEntry.operatorPropertiesJson)
+          timeMode = operatorProperties.timeMode
 
-        if (sourceOptions.readRegisteredTimers) {
-          stateVarName = TimerStateUtils.getTimerStateVarNames(timeMode)._1
+          if (sourceOptions.readRegisteredTimers) {
+            stateVarName = TimerStateUtils.getTimerStateVarNames(timeMode)._1
+          }
+
+          val stateVarInfoList = operatorProperties.stateVariables
+            .filter(stateVar => stateVar.stateName == stateVarName)
+          require(stateVarInfoList.size == 1, s"Failed to find unique state variable info " +
+            s"for state variable $stateVarName in operator ${sourceOptions.operatorId}")
+          val stateVarInfo = stateVarInfoList.head
+          transformWithStateVariableInfoOpt = Some(stateVarInfo)
+          val schemaFilePaths = storeMetadataEntry.stateSchemaFilePaths
+          val stateSchemaMetadata = StateSchemaMetadata.createStateSchemaMetadata(
+            sourceOptions.stateCheckpointLocation.toString,
+            hadoopConf,
+            schemaFilePaths
+          )
+          stateSchemaProvider = Some(new InMemoryStateSchemaProvider(stateSchemaMetadata))
+          schemaFilePaths.map(new Path(_))
+        } else {
+          if (opName == StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME) {
+            joinColFamilyOpt = Some(stateVarName)
+          }
+          StateDataSource.getOldSchemaFilePaths(sourceOptions, hadoopConf)
         }
-
-        val stateVarInfoList = operatorProperties.stateVariables
-          .filter(stateVar => stateVar.stateName == stateVarName)
-        require(stateVarInfoList.size == 1, s"Failed to find unique state variable info " +
-          s"for state variable $stateVarName in operator ${sourceOptions.operatorId}")
-        val stateVarInfo = stateVarInfoList.head
-        transformWithStateVariableInfoOpt = Some(stateVarInfo)
-        val schemaFilePaths = storeMetadataEntry.stateSchemaFilePaths
-        val stateSchemaMetadata = StateSchemaMetadata.createStateSchemaMetadata(
-          sourceOptions.stateCheckpointLocation.toString,
-          hadoopConf,
-          schemaFilePaths
-        )
-        stateSchemaProvider = Some(new InMemoryStateSchemaProvider(stateSchemaMetadata))
-        schemaFilePaths.map(new Path(_))
       } else {
-        None
-      }.toList
+        StateDataSource.getOldSchemaFilePaths(sourceOptions, hadoopConf)
+      }
 
       try {
         // Read the actual state schema from the provided path for v2 or from the dedicated path
@@ -272,7 +310,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       keyStateEncoderSpecOpt,
       stateStoreColFamilySchemaOpt,
       transformWithStateVariableInfoOpt,
-      stateSchemaProvider
+      stateSchemaProvider,
+      joinColFamilyOpt
     )
   }
 
@@ -543,11 +582,31 @@ object StateSourceOptions extends DataSourceOptions {
   }
 
   private def getLastCommittedBatch(session: SparkSession, checkpointLocation: String): Long = {
-    val commitLog = new CommitLog(session,
-      new Path(checkpointLocation, DIR_NAME_COMMITS).toString)
+    val commitLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).commitLog
     commitLog.getLatest() match {
       case Some((lastId, _)) => lastId
       case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
+    }
+  }
+
+  // Modifies options due to external data. Returns modified options.
+  // If this is a join operator specifying a store name using state format v3,
+  // we need to modify the options.
+  private[state] def modifySourceOptions(
+    hadoopConf: Configuration, sourceOptions: StateSourceOptions): StateSourceOptions = {
+    // If a storeName is specified (e.g. right-keyToNumValues) and v3 is used,
+    // we are using join with virtual column families not diff stores. Therefore,
+    // options will be modified to set stateVarName to that storeName and storeName
+    // to default.
+    if (sourceOptions.storeName != StateStoreId.DEFAULT_STORE_NAME &&
+      StreamStreamJoinStateHelper.usesVirtualColumnFamilies(
+        hadoopConf, sourceOptions.stateCheckpointLocation.toString,
+        sourceOptions.operatorId)) {
+      sourceOptions.copy(
+        stateVarName = Some(sourceOptions.storeName),
+        storeName = StateStoreId.DEFAULT_STORE_NAME)
+    } else {
+      sourceOptions
     }
   }
 }
@@ -558,5 +617,28 @@ case class StateStoreReaderInfo(
     keyStateEncoderSpecOpt: Option[KeyStateEncoderSpec],
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
     transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo],
-    stateSchemaProviderOpt: Option[StateSchemaProvider]
+    stateSchemaProviderOpt: Option[StateSchemaProvider],
+    joinColFamilyOpt: Option[String] // Only used for join op with state format v3
 )
+
+object StateDataSource {
+  private def getStateStoreMetadata(
+    stateSourceOptions: StateSourceOptions,
+    hadoopConf: Configuration): Array[StateMetadataTableEntry] = {
+    val allStateStoreMetadata = new StateMetadataPartitionReader(
+      stateSourceOptions.stateCheckpointLocation.getParent.toString,
+      new SerializableConfiguration(hadoopConf), stateSourceOptions.batchId).stateMetadata.toArray
+    val stateStoreMetadata = allStateStoreMetadata.filter { entry =>
+      entry.operatorId == stateSourceOptions.operatorId &&
+        entry.stateStoreName == stateSourceOptions.storeName
+    }
+    stateStoreMetadata
+  }
+
+  def getOldSchemaFilePaths(
+    stateSourceOptions: StateSourceOptions,
+    hadoopConf: Configuration): List[Path] = {
+    val metadata = getStateStoreMetadata(stateSourceOptions, hadoopConf)
+    metadata.headOption.map(_.stateSchemaFilePaths.map(new Path(_))).getOrElse(List.empty)
+  }
+}

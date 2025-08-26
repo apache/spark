@@ -36,6 +36,8 @@ class SparkSubmitTests(unittest.TestCase):
             "spark.driver.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
             "--conf",
             "spark.executor.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
+            "--conf",
+            "spark.python.unix.domain.socket.enabled=false",
         ]
 
     def tearDown(self):

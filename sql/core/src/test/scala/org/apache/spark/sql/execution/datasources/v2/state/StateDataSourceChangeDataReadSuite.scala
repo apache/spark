@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.v2.state
 
+import java.util.UUID
+
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.Assertions
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
@@ -71,6 +73,8 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
    */
   private def getNewStateStoreProvider(checkpointDir: String): StateStoreProvider = {
     val provider = newStateStoreProvider()
+    val conf = new Configuration
+    conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
     provider.init(
       StateStoreId(checkpointDir, 0, 0),
       keySchema,
@@ -78,7 +82,7 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
       NoPrefixKeyStateEncoderSpec(keySchema),
       useColumnFamilies = false,
       StateStoreConf(spark.sessionState.conf),
-      new Configuration)
+      conf)
     provider
   }
 

@@ -20,38 +20,57 @@ package org.apache.spark.sql.execution.streaming.state
 import java.util.UUID
 
 import scala.collection.immutable
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
 import org.apache.avro.AvroTypeException
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
+import org.scalatest.PrivateMethodTester
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 @ExtendedSQLTest
 class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvider]
   with AlsoTestWithEncodingTypes
   with AlsoTestWithRocksDBFeatures
+  with PrivateMethodTester
   with SharedSparkSession
-  with BeforeAndAfter {
+  with BeforeAndAfter
+  with Matchers {
+
+  // Helper method to get RocksDBStateStore using PrivateMethodTester
+  private def getRocksDBStateStore(
+      provider: RocksDBStateStoreProvider, version: Long): provider.RocksDBStateStore = {
+    val getRocksDBStateStoreMethod =
+      PrivateMethod[provider.RocksDBStateStore](Symbol("getRocksDBStateStore"))
+    provider invokePrivate getRocksDBStateStoreMethod(version)
+  }
+
+  override def beforeEach(): Unit = {}
+  override def afterEach(): Unit = {}
 
   before {
     StateStore.stop()
     require(!StateStore.isMaintenanceRunning)
+    spark.streams.stateStoreCoordinator // initialize the lazy coordinator
   }
 
   after {
@@ -67,30 +86,35 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
     tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
-      val keyRow = dataToKeyRow("a", 0)
-      val valueRow = dataToValueRow(1)
-      store.put(keyRow, valueRow)
-      val iter = provider.rocksDB.iterator()
-      assert(iter.hasNext)
-      val kv = iter.next()
+      try {
+        val keyRow = dataToKeyRow("a", 0)
+        val valueRow = dataToValueRow(1)
+        store.put(keyRow, valueRow)
+        val iter = provider.rocksDB.iterator()
+        assert(iter.hasNext)
+        val kv = iter.next()
 
-      // Verify the version encoded in first byte of the key and value byte arrays
-      assert(Platform.getByte(kv.key, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
-      assert(Platform.getByte(kv.value, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
+        // Verify the version encoded in first byte of the key and value byte arrays
+        assert(Platform.getByte(kv.key, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
+        assert(Platform.getByte(kv.value, Platform.BYTE_ARRAY_OFFSET) === STATE_ENCODING_VERSION)
 
-      // The test verifies that the actual key-value pair (kv) matches these expected byte patterns
-      // exactly using sameElements, which ensures the serialization format remains consistent and
-      // backward compatible. This is particularly important for state storage where the format
-      // needs to be stable across Spark versions.
-      val (expectedKey, expectedValue) = if (conf.stateStoreEncodingFormat == "avro") {
-        (Array(0, 0, 0, 2, 2, 97, 2, 0), Array(0, 0, 0, 2, 2))
-      } else {
-        (Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 24, 0, 0,
-          0, 0, 0, 0, 0, 0, 0, 0, 0, 97, 0, 0, 0, 0, 0, 0, 0),
-          Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0))
+        // The test verifies that the actual key-value pair (kv) matches these expected
+        // byte patterns
+        // exactly using sameElements, which ensures the serialization format remains consistent and
+        // backward compatible. This is particularly important for state storage where the format
+        // needs to be stable across Spark versions.
+        val (expectedKey, expectedValue) = if (conf.stateStoreEncodingFormat == "avro") {
+          (Array(0, 0, 0, 2, 2, 97, 2, 0), Array(0, 0, 0, 2, 2))
+        } else {
+          (Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 24, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 97, 0, 0, 0, 0, 0, 0, 0),
+            Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0))
+        }
+        assert(kv.key.sameElements(expectedKey))
+        assert(kv.value.sameElements(expectedValue))
+      } finally {
+        if (!store.hasCommitted) store.abort()
       }
-      assert(kv.key.sameElements(expectedKey))
-      assert(kv.value.sameElements(expectedValue))
     }
   }
 
@@ -255,19 +279,20 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     keySchemaWithSomeUnsupportedTypeCols.fields.zipWithIndex.foreach { case (field, index) =>
       val isAllowed = allowedRangeOrdinals.contains(index)
 
-      val getStore = () => {
+      if (isAllowed) {
         tryWithProviderResource(newStoreProvider(keySchemaWithSomeUnsupportedTypeCols,
             RangeKeyScanStateEncoderSpec(keySchemaWithSomeUnsupportedTypeCols, Seq(index)),
             colFamiliesEnabled)) { provider =>
-            provider.getStore(0)
+          val store = provider.getStore(0)
+          store.abort()
         }
-      }
-
-      if (isAllowed) {
-        getStore()
       } else {
         val ex = intercept[SparkUnsupportedOperationException] {
-          getStore()
+          tryWithProviderResource(newStoreProvider(keySchemaWithSomeUnsupportedTypeCols,
+              RangeKeyScanStateEncoderSpec(keySchemaWithSomeUnsupportedTypeCols, Seq(index)),
+              colFamiliesEnabled)) { provider =>
+            provider.getStore(0)
+          }
         }
         checkError(
           ex,
@@ -354,6 +379,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         key._1
       }.toSeq
       assert(result1 === (timerTimestamps ++ timerTimestamps1).sorted)
+      store1.commit()
     }
   }
 
@@ -521,6 +547,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         key._1
       }.toSeq
       assert(result1 === (timerTimestamps ++ timerTimestamps1).sorted)
+      store1.commit()
     }
   }
 
@@ -627,6 +654,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         (key._1, key._2)
       }.toSeq
       assert(result === timerTimestamps.sorted)
+      store.abort()
     }
   }
 
@@ -1319,89 +1347,95 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     tryWithProviderResource(newStoreProvider(testSchema,
       RangeKeyScanStateEncoderSpec(testSchema, Seq(0, 1)), colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
+      try {
+        val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+        if (colFamiliesEnabled) {
+          store.createColFamilyIfAbsent(cfName,
+            testSchema, valueSchema,
+            RangeKeyScanStateEncoderSpec(testSchema, Seq(0, 1)))
+        }
 
-      val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
-      if (colFamiliesEnabled) {
-        store.createColFamilyIfAbsent(cfName,
-          testSchema, valueSchema,
-          RangeKeyScanStateEncoderSpec(testSchema, Seq(0, 1)))
+        val timerTimestamps = Seq((931L, 10), (null, 40), (452300L, 1),
+          (4200L, 68), (90L, 2000), (1L, 27), (1L, 394), (1L, 5), (3L, 980), (35L, 2112),
+          (6L, 90118), (9L, 95118), (6L, 87210), (null, 113), (null, 28),
+          (null, -23), (null, -5534), (-67450L, 2434), (-803L, 3422))
+        timerTimestamps.foreach { ts =>
+          // order by long col first and then by int col
+          val keyRow = schemaProj.apply(new GenericInternalRow(Array[Any](ts._1, ts._2,
+            UTF8String.fromString(Random.alphanumeric.take(Random.nextInt(20) + 1).mkString))))
+          val valueRow = dataToValueRow(1)
+          store.put(keyRow, valueRow, cfName)
+          assert(valueRowToData(store.get(keyRow, cfName)) === 1)
+        }
+
+        // verify that the expected null cols are seen
+        val nullRows = store.iterator(cfName).filter { kv =>
+          val keyRow = kv.key
+          keyRow.isNullAt(0)
+        }
+        assert(nullRows.size === 5)
+
+        // filter out the null rows and verify the rest
+        val result: Seq[(Long, Int)] = store.iterator(cfName).filter { kv =>
+          val keyRow = kv.key
+          !keyRow.isNullAt(0)
+        }.map { kv =>
+          val keyRow = kv.key
+          val key = (keyRow.getLong(0), keyRow.getInt(1), keyRow.getString(2))
+          (key._1, key._2)
+        }.toSeq
+
+        val timerTimestampsWithoutNulls = Seq((931L, 10), (452300L, 1),
+          (4200L, 68), (90L, 2000), (1L, 27), (1L, 394), (1L, 5), (3L, 980), (35L, 2112),
+          (6L, 90118), (9L, 95118), (6L, 87210), (-67450L, 2434), (-803L, 3422))
+
+        assert(result === timerTimestampsWithoutNulls.sorted)
+
+        // verify that the null cols are seen in the correct order filtering for nulls
+        val nullRowsWithOrder = store.iterator(cfName).filter { kv =>
+          val keyRow = kv.key
+          keyRow.isNullAt(0)
+        }.map { kv =>
+          val keyRow = kv.key
+          keyRow.getInt(1)
+        }.toSeq
+
+        assert(nullRowsWithOrder === Seq(-5534, -23, 28, 40, 113))
+      } finally {
+        if (!store.hasCommitted) store.abort()
       }
-
-      val timerTimestamps = Seq((931L, 10), (null, 40), (452300L, 1),
-        (4200L, 68), (90L, 2000), (1L, 27), (1L, 394), (1L, 5), (3L, 980), (35L, 2112),
-        (6L, 90118), (9L, 95118), (6L, 87210), (null, 113), (null, 28), (null, -23), (null, -5534),
-        (-67450L, 2434), (-803L, 3422))
-      timerTimestamps.foreach { ts =>
-        // order by long col first and then by int col
-        val keyRow = schemaProj.apply(new GenericInternalRow(Array[Any](ts._1, ts._2,
-          UTF8String.fromString(Random.alphanumeric.take(Random.nextInt(20) + 1).mkString))))
-        val valueRow = dataToValueRow(1)
-        store.put(keyRow, valueRow, cfName)
-        assert(valueRowToData(store.get(keyRow, cfName)) === 1)
-      }
-
-      // verify that the expected null cols are seen
-      val nullRows = store.iterator(cfName).filter { kv =>
-        val keyRow = kv.key
-        keyRow.isNullAt(0)
-      }
-      assert(nullRows.size === 5)
-
-      // filter out the null rows and verify the rest
-      val result: Seq[(Long, Int)] = store.iterator(cfName).filter { kv =>
-        val keyRow = kv.key
-        !keyRow.isNullAt(0)
-      }.map { kv =>
-        val keyRow = kv.key
-        val key = (keyRow.getLong(0), keyRow.getInt(1), keyRow.getString(2))
-        (key._1, key._2)
-      }.toSeq
-
-      val timerTimestampsWithoutNulls = Seq((931L, 10), (452300L, 1),
-        (4200L, 68), (90L, 2000), (1L, 27), (1L, 394), (1L, 5), (3L, 980), (35L, 2112),
-        (6L, 90118), (9L, 95118), (6L, 87210), (-67450L, 2434), (-803L, 3422))
-
-      assert(result === timerTimestampsWithoutNulls.sorted)
-
-      // verify that the null cols are seen in the correct order filtering for nulls
-      val nullRowsWithOrder = store.iterator(cfName).filter { kv =>
-        val keyRow = kv.key
-        keyRow.isNullAt(0)
-      }.map { kv =>
-        val keyRow = kv.key
-        keyRow.getInt(1)
-      }.toSeq
-
-      assert(nullRowsWithOrder === Seq(-5534, -23, 28, 40, 113))
-
-      store.abort()
 
       val store1 = provider.getStore(0)
-      if (colFamiliesEnabled) {
-        store1.createColFamilyIfAbsent(cfName,
-          testSchema, valueSchema,
-          RangeKeyScanStateEncoderSpec(testSchema, Seq(0, 1)))
+      try {
+        val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+        if (colFamiliesEnabled) {
+          store1.createColFamilyIfAbsent(cfName,
+            testSchema, valueSchema,
+            RangeKeyScanStateEncoderSpec(testSchema, Seq(0, 1)))
+        }
+
+        val timerTimestamps1 = Seq((null, 3), (null, 1), (null, 32),
+          (null, 113), (null, 40872), (null, -675456), (null, -924), (null, -666),
+          (null, 66))
+        timerTimestamps1.foreach { ts =>
+          // order by long col first and then by int col
+          val keyRow = schemaProj.apply(new GenericInternalRow(Array[Any](ts._1, ts._2,
+            UTF8String.fromString(Random.alphanumeric.take(Random.nextInt(20) + 1).mkString))))
+          val valueRow = dataToValueRow(1)
+          store1.put(keyRow, valueRow, cfName)
+          assert(valueRowToData(store1.get(keyRow, cfName)) === 1)
+        }
+
+        // verify that ordering for non-null columns on the right in still maintained
+        val result1: Seq[Int] = store1.iterator(cfName).map { kv =>
+          val keyRow = kv.key
+          keyRow.getInt(1)
+        }.toSeq
+
+        assert(result1 === timerTimestamps1.map(_._2).sorted)
+      } finally {
+        if (!store1.hasCommitted) store1.abort()
       }
-
-      val timerTimestamps1 = Seq((null, 3), (null, 1), (null, 32),
-        (null, 113), (null, 40872), (null, -675456), (null, -924), (null, -666),
-        (null, 66))
-      timerTimestamps1.foreach { ts =>
-        // order by long col first and then by int col
-        val keyRow = schemaProj.apply(new GenericInternalRow(Array[Any](ts._1, ts._2,
-          UTF8String.fromString(Random.alphanumeric.take(Random.nextInt(20) + 1).mkString))))
-        val valueRow = dataToValueRow(1)
-        store1.put(keyRow, valueRow, cfName)
-        assert(valueRowToData(store1.get(keyRow, cfName)) === 1)
-      }
-
-      // verify that ordering for non-null columns on the right in still maintained
-      val result1: Seq[Int] = store.iterator(cfName).map { kv =>
-        val keyRow = kv.key
-        keyRow.getInt(1)
-      }.toSeq
-
-      assert(result1 === timerTimestamps1.map(_._2).sorted)
     }
   }
 
@@ -1456,6 +1490,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           (key._1, key._2)
         }.toSeq
       assert(result.map(_._1) === timerTimestamps.map(_._1).sorted)
+      store.abort()
     }
   }
 
@@ -1501,6 +1536,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         (key._1, key._2)
       }.toSeq
       assert(result === timerTimestamps.sorted)
+      store.abort()
     }
   }
 
@@ -1512,37 +1548,42 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     tryWithProviderResource(newStoreProvider(valueSchema,
       RangeKeyScanStateEncoderSpec(valueSchema, Seq(0)), colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
-      val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
-      if (colFamiliesEnabled) {
-        store.createColFamilyIfAbsent(cfName,
-          valueSchema, valueSchema,
-          RangeKeyScanStateEncoderSpec(valueSchema, Seq(0)))
-      }
+      try {
+        val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+        if (colFamiliesEnabled) {
+          store.createColFamilyIfAbsent(cfName,
+            valueSchema, valueSchema,
+            RangeKeyScanStateEncoderSpec(valueSchema, Seq(0)))
+        }
 
-      val timerTimestamps = Seq(931, 8000, 452300, 4200,
-        -3545, -343, 133, -90, -8014490, -79247,
-        90, 1, 2, 8, 3, 35, 6, 9, 5, -233)
-      timerTimestamps.foreach { ts =>
-        // non-timestamp col is of variable size
-        val keyRow = dataToValueRow(ts)
-        val valueRow = dataToValueRow(1)
-        store.put(keyRow, valueRow, cfName)
-        assert(valueRowToData(store.get(keyRow, cfName)) === 1)
-      }
+        val timerTimestamps = Seq(931, 8000, 452300, 4200,
+          -3545, -343, 133, -90, -8014490, -79247,
+          90, 1, 2, 8, 3, 35, 6, 9, 5, -233)
+        timerTimestamps.foreach { ts =>
+          // non-timestamp col is of variable size
+          val keyRow = dataToValueRow(ts)
+          val valueRow = dataToValueRow(1)
+          store.put(keyRow, valueRow, cfName)
+          assert(valueRowToData(store.get(keyRow, cfName)) === 1)
+        }
 
-      val result = store.iterator(cfName).map { kv =>
-        valueRowToData(kv.key)
-      }.toSeq
-      assert(result === timerTimestamps.sorted)
-
-      // also check for prefix scan
-      timerTimestamps.foreach { ts =>
-        val prefix = dataToValueRow(ts)
-        val result = store.prefixScan(prefix, cfName).map { kv =>
-          assert(valueRowToData(kv.value) === 1)
+        val result = store.iterator(cfName).map { kv =>
           valueRowToData(kv.key)
         }.toSeq
-        assert(result.size === 1)
+        assert(result === timerTimestamps.sorted)
+
+        // also check for prefix scan
+        timerTimestamps.foreach { ts =>
+          val prefix = dataToValueRow(ts)
+          val result = store.prefixScan(prefix, cfName).map { kv =>
+            assert(valueRowToData(kv.value) === 1)
+            valueRowToData(kv.key)
+          }.toSeq
+          assert(result.size === 1)
+        }
+        store.commit()
+      } finally {
+        if (!store.hasCommitted) store.abort()
       }
     }
   }
@@ -1554,32 +1595,36 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
       colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
-
-      val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
-      if (colFamiliesEnabled) {
-        store.createColFamilyIfAbsent(cfName,
-          keySchemaWithRangeScan, valueSchema,
-          RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
-      }
-
-      val timerTimestamps = Seq(931L, -1331L, 8000L, 1L, -244L, -8350L, -55L)
-      timerTimestamps.zipWithIndex.foreach { case (ts, idx) =>
-        (1 to idx + 1).foreach { keyVal =>
-          val keyRow = dataToKeyRowWithRangeScan(ts, keyVal.toString)
-          val valueRow = dataToValueRow(1)
-          store.put(keyRow, valueRow, cfName)
-          assert(valueRowToData(store.get(keyRow, cfName)) === 1)
+      try {
+        val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+        if (colFamiliesEnabled) {
+          store.createColFamilyIfAbsent(cfName,
+            keySchemaWithRangeScan, valueSchema,
+            RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
         }
-      }
 
-      timerTimestamps.zipWithIndex.foreach { case (ts, idx) =>
-        val prefix = dataToPrefixKeyRowWithRangeScan(ts)
-        val result = store.prefixScan(prefix, cfName).map { kv =>
-          assert(valueRowToData(kv.value) === 1)
-          val key = keyRowWithRangeScanToData(kv.key)
-          key._2
-        }.toSeq
-        assert(result.size === idx + 1)
+        val timerTimestamps = Seq(931L, -1331L, 8000L, 1L, -244L, -8350L, -55L)
+        timerTimestamps.zipWithIndex.foreach { case (ts, idx) =>
+          (1 to idx + 1).foreach { keyVal =>
+            val keyRow = dataToKeyRowWithRangeScan(ts, keyVal.toString)
+            val valueRow = dataToValueRow(1)
+            store.put(keyRow, valueRow, cfName)
+            assert(valueRowToData(store.get(keyRow, cfName)) === 1)
+          }
+        }
+
+        timerTimestamps.zipWithIndex.foreach { case (ts, idx) =>
+          val prefix = dataToPrefixKeyRowWithRangeScan(ts)
+          val result = store.prefixScan(prefix, cfName).map { kv =>
+            assert(valueRowToData(kv.value) === 1)
+            val key = keyRowWithRangeScanToData(kv.key)
+            key._2
+          }.toSeq
+          assert(result.size === idx + 1)
+        }
+        store.commit()
+      } finally {
+        if (!store.hasCommitted) store.abort()
       }
     }
   }
@@ -1607,6 +1652,81 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       assert(valueRowToData(store.get(keyRow2)) === 2)
       store.remove(keyRow2)
       assert(store.get(keyRow2) === null)
+      store.abort()
+    }
+  }
+
+  testWithColumnFamiliesAndEncodingTypes(
+    "closing the iterator also closes the underlying rocksdb iterator",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+
+    // use the same schema as value schema for single col key schema
+    tryWithProviderResource(newStoreProvider(valueSchema,
+      RangeKeyScanStateEncoderSpec(valueSchema, Seq(0)), colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+      try {
+        val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+        if (colFamiliesEnabled) {
+          store.createColFamilyIfAbsent(cfName,
+            valueSchema, valueSchema,
+            RangeKeyScanStateEncoderSpec(valueSchema, Seq(0)))
+        }
+
+        val timerTimestamps = Seq(1, 2, 3, 22)
+        timerTimestamps.foreach { ts =>
+          val keyRow = dataToValueRow(ts)
+          val valueRow = dataToValueRow(1)
+          store.put(keyRow, valueRow, cfName)
+          assert(valueRowToData(store.get(keyRow, cfName)) === 1)
+        }
+
+        val iter1 = store.iterator(cfName)
+        for (i <- 1 to 4) {
+          assert(iter1.hasNext)
+          iter1.next()
+        }
+        // We were fully able to process the 4 elements
+        assert(!iter1.hasNext)
+
+        val iter2 = store.iterator(cfName)
+        for (i <- 1 to 2) {
+          assert(iter2.hasNext)
+          iter2.next()
+        }
+        // Close the iterator
+        iter2.close()
+        // After closing, this will call AbstractRocksIterator.isValid which should throw and
+        // exception since it no longer owns the underlying rocksdb iterator
+        val exception1 = intercept[AssertionError] {
+          iter2.next()
+        }
+        // Check that the exception is thrown from AbstractRocksIterator.isValid
+        assert(exception1.getStackTrace()(0).getClassName.contains("AbstractRocksIterator"))
+        assert(exception1.getStackTrace()(0).getMethodName.contains("isValid"))
+
+        // also check for prefix scan
+        val prefix = dataToValueRow(2)
+        val iter3 = store.prefixScan(prefix, cfName)
+
+        iter3.next()
+        assert(!iter3.hasNext)
+
+        val iter4 = store.prefixScan(prefix, cfName)
+        // Immediately close the iterator without calling next
+        iter4.close()
+
+        // Since we closed the iterator, this will throw an exception when we try to call next
+        val exception2 = intercept[AssertionError] {
+          iter4.next()
+        }
+        // Check that the exception is thrown from AbstractRocksIterator.isValid
+        assert(exception2.getStackTrace()(0).getClassName.contains("AbstractRocksIterator"))
+        assert(exception2.getStackTrace()(0).getMethodName.contains("isValid"))
+
+        store.commit()
+      } finally {
+        if (!store.hasCommitted) store.abort()
+      }
     }
   }
 
@@ -1641,6 +1761,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         assert(!iterator2.hasNext)
 
         assert(get(store, "a", 0).isEmpty)
+        store.abort()
       }
     }
   }
@@ -1680,6 +1801,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           )
         }
       }
+      store.abort()
     }
   }
 
@@ -1716,6 +1838,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           )
         }
       }
+      store.abort()
     }
   }
 
@@ -1725,30 +1848,34 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       newStoreProvider(useColumnFamilies = colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
 
-      val colFamilyName = "test"
+      try {
+        val colFamilyName = "test"
 
-      verifyStoreOperationUnsupported("put", colFamiliesEnabled, colFamilyName) {
-        store.put(dataToKeyRow("a", 1), dataToValueRow(1), colFamilyName)
-      }
+        verifyStoreOperationUnsupported("put", colFamiliesEnabled, colFamilyName) {
+          store.put(dataToKeyRow("a", 1), dataToValueRow(1), colFamilyName)
+        }
 
-      verifyStoreOperationUnsupported("remove", colFamiliesEnabled, colFamilyName) {
-        store.remove(dataToKeyRow("a", 1), colFamilyName)
-      }
+        verifyStoreOperationUnsupported("remove", colFamiliesEnabled, colFamilyName) {
+          store.remove(dataToKeyRow("a", 1), colFamilyName)
+        }
 
-      verifyStoreOperationUnsupported("get", colFamiliesEnabled, colFamilyName) {
-        store.get(dataToKeyRow("a", 1), colFamilyName)
-      }
+        verifyStoreOperationUnsupported("get", colFamiliesEnabled, colFamilyName) {
+          store.get(dataToKeyRow("a", 1), colFamilyName)
+        }
 
-      verifyStoreOperationUnsupported("iterator", colFamiliesEnabled, colFamilyName) {
-        store.iterator(colFamilyName)
-      }
+        verifyStoreOperationUnsupported("iterator", colFamiliesEnabled, colFamilyName) {
+          store.iterator(colFamilyName)
+        }
 
-      verifyStoreOperationUnsupported("merge", colFamiliesEnabled, colFamilyName) {
-        store.merge(dataToKeyRow("a", 1), dataToValueRow(1), colFamilyName)
-      }
+        verifyStoreOperationUnsupported("merge", colFamiliesEnabled, colFamilyName) {
+          store.merge(dataToKeyRow("a", 1), dataToValueRow(1), colFamilyName)
+        }
 
-      verifyStoreOperationUnsupported("prefixScan", colFamiliesEnabled, colFamilyName) {
-        store.prefixScan(dataToKeyRow("a", 1), colFamilyName)
+        verifyStoreOperationUnsupported("prefixScan", colFamiliesEnabled, colFamilyName) {
+          store.prefixScan(dataToKeyRow("a", 1), colFamilyName)
+        }
+      } finally {
+        if (!store.hasCommitted) store.abort()
       }
     }
   }
@@ -1789,12 +1916,10 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       put(store, ("a", 1), 1, colFamily2)
       assert(valueRowToData(get(store, "a", 1, colFamily2)) === 1)
 
-      // calling commit on this store creates version 1
       store.commit()
 
       // reload version 0
       store = provider.getStore(0)
-
       val e = intercept[Exception]{
         get(store, "a", 1, colFamily1)
       }
@@ -1804,6 +1929,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         sqlState = Some("42802"),
         parameters = Map("operationType" -> "get", "colFamilyName" -> colFamily1)
       )
+      store.abort()
 
       store = provider.getStore(1)
       // version 1 data recovered correctly
@@ -1828,7 +1954,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
   test("verify that column family id is assigned correctly after removal") {
     tryWithProviderResource(newStoreProvider(useColumnFamilies = true)) { provider =>
-      var store = provider.getRocksDBStateStore(0)
+      var store = getRocksDBStateStore(provider, 0)
       val colFamily1: String = "abc"
       val colFamily2: String = "def"
       val colFamily3: String = "ghi"
@@ -1841,27 +1967,29 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         NoPrefixKeyStateEncoderSpec(keySchema))
       store.commit()
 
-      store = provider.getRocksDBStateStore(1)
+      store = getRocksDBStateStore(provider, 1)
       store.removeColFamilyIfExists(colFamily2)
       store.commit()
 
-      store = provider.getRocksDBStateStore(2)
+      store = getRocksDBStateStore(provider, 2)
       store.createColFamilyIfAbsent(colFamily3, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema))
       store.removeColFamilyIfExists(colFamily1)
       store.removeColFamilyIfExists(colFamily3)
       store.commit()
 
-      store = provider.getRocksDBStateStore(1)
+      store = getRocksDBStateStore(provider, 1)
       // this should return the old id, because we didn't remove this colFamily for version 1
       store.createColFamilyIfAbsent(colFamily1, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema))
+      store.abort()
 
-      store = provider.getRocksDBStateStore(3)
+      store = getRocksDBStateStore(provider, 3)
       store.createColFamilyIfAbsent(colFamily4, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema))
       store.createColFamilyIfAbsent(colFamily5, keySchema, valueSchema,
         NoPrefixKeyStateEncoderSpec(keySchema))
+      store.abort()
     }
   }
 
@@ -1942,10 +2070,12 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         val metricPair = store
           .metrics.customMetrics.find(_._1.name == "rocksdbNumInternalColFamiliesKeys")
         assert(metricPair.isDefined && metricPair.get._2 === 4)
-        assert(rowPairsToDataSet(store.iterator(cfName)) ===
+        val store1 = provider.getStore(1)
+        assert(rowPairsToDataSet(store1.iterator(cfName)) ===
           Set(("a", 0) -> 1, ("b", 0) -> 2, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
-        assert(rowPairsToDataSet(store.iterator(internalCfName)) ===
+        assert(rowPairsToDataSet(store1.iterator(internalCfName)) ===
           Set(("a", 0) -> 1, ("m", 0) -> 2, ("n", 0) -> 3, ("b", 0) -> 4))
+        store1.abort()
 
         // Reload the store and remove some keys
         val reloadedProvider = newStoreProvider(store.id, colFamiliesEnabled)
@@ -1962,10 +2092,12 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         val metricPairUpdated = reloadedStore
           .metrics.customMetrics.find(_._1.name == "rocksdbNumInternalColFamiliesKeys")
         assert(metricPairUpdated.isDefined && metricPairUpdated.get._2 === 3)
-        assert(rowPairsToDataSet(reloadedStore.iterator(cfName)) ===
+        val reloadedStore1 = reloadedProvider.getStore(2)
+        assert(rowPairsToDataSet(reloadedStore1.iterator(cfName)) ===
           Set(("a", 0) -> 1, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
-        assert(rowPairsToDataSet(reloadedStore.iterator(internalCfName)) ===
+        assert(rowPairsToDataSet(reloadedStore1.iterator(internalCfName)) ===
           Set(("a", 0) -> 1, ("n", 0) -> 3, ("b", 0) -> 4))
+        reloadedStore1.commit()
       }
     }
   }
@@ -1979,36 +2111,455 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       tryWithProviderResource(newStoreProvider(keySchema, keyEncoder, true)) { provider =>
         val store = provider.getStore(0)
 
-        val cfName = "testColFamily"
-        store.createColFamilyIfAbsent(cfName, keySchema, valueSchema, keyEncoder)
+        try {
+          val cfName = "testColFamily"
+          store.createColFamilyIfAbsent(cfName, keySchema, valueSchema, keyEncoder)
 
-        // remove non-exist col family will return false
-        assert(!store.removeColFamilyIfExists("non-existence"))
+          // remove non-exist col family will return false
+          assert(!store.removeColFamilyIfExists("non-existence"))
 
-        // put some test data into state store
-        val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
-          -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L)
-        timerTimestamps.foreach { ts =>
-          val keyRow = dataToKeyRow(ts.toString, ts.toInt)
-          val valueRow = dataToValueRow(1)
-          store.put(keyRow, valueRow, cfName)
+          // put some test data into state store
+          val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
+            -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L)
+          timerTimestamps.foreach { ts =>
+            val keyRow = dataToKeyRow(ts.toString, ts.toInt)
+            val valueRow = dataToValueRow(1)
+            store.put(keyRow, valueRow, cfName)
+          }
+          assert(store.iterator(cfName).toSeq.length == timerTimestamps.length)
+
+          // assert col family existence
+          assert(store.removeColFamilyIfExists(cfName))
+
+          val e = intercept[Exception] {
+            store.iterator(cfName)
+          }
+
+          checkError(
+            exception = e.asInstanceOf[StateStoreUnsupportedOperationOnMissingColumnFamily],
+            condition = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
+            sqlState = Some("42802"),
+            parameters = Map("operationType" -> "iterator", "colFamilyName" -> cfName)
+          )
+        } finally {
+          store.abort()
         }
-        assert(store.iterator(cfName).toSeq.length == timerTimestamps.length)
-
-        // assert col family existence
-        assert(store.removeColFamilyIfExists(cfName))
-
-        val e = intercept[Exception] {
-          store.iterator(cfName)
-        }
-
-        checkError(
-          exception = e.asInstanceOf[StateStoreUnsupportedOperationOnMissingColumnFamily],
-          condition = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
-          sqlState = Some("42802"),
-          parameters = Map("operationType" -> "iterator", "colFamilyName" -> cfName)
-        )
       }
+    }
+  }
+
+  test("state transitions with commit and illegal operations") {
+    tryWithProviderResource(newStoreProvider(useColumnFamilies = false)) { provider =>
+      // Get a store and put some data
+      val store = provider.getStore(0)
+      put(store, "a", 0, 1)
+      put(store, "b", 0, 2)
+
+      // Verify data is accessible before commit
+      assert(get(store, "a", 0) === Some(1))
+      assert(get(store, "b", 0) === Some(2))
+
+      // Commit the changes
+      assert(store.commit() === 1)
+      assert(store.hasCommitted)
+
+      // Operations after commit should fail with IllegalStateException
+      val exception = intercept[StateStoreInvalidStamp] {
+        put(store, "c", 0, 3)
+      }
+      assert(exception.getMessage.contains("Invalid stamp"))
+
+      // Getting a new store for the same version should work
+      val store1 = provider.getStore(1)
+      assert(get(store1, "a", 0) === Some(1))
+      assert(get(store1, "b", 0) === Some(2))
+
+      // Can update the new store instance
+      put(store1, "c", 0, 3)
+      assert(get(store1, "c", 0) === Some(3))
+
+      // Commit the new changes
+      assert(store1.commit() === 2)
+    }
+  }
+
+  test("state transitions with abort and subsequent operations") {
+    tryWithProviderResource(newStoreProvider(useColumnFamilies = false)) { provider =>
+      // Get a store and put some data
+      val store = provider.getStore(0)
+      put(store, "a", 0, 1)
+      put(store, "b", 0, 2)
+
+      // Abort the changes
+      store.abort()
+
+      // Operations after abort should fail with IllegalStateException
+      val exception = intercept[StateStoreInvalidStamp] {
+        put(store, "c", 0, 3)
+      }
+      assert(exception.getMessage.contains("Invalid stamp"))
+
+      // Get a new store, should be empty since previous changes were aborted
+      val store1 = provider.getStore(0)
+      assert(store1.iterator().isEmpty)
+
+      // Put data and commit
+      put(store1, "d", 0, 4)
+      assert(store1.commit() === 1)
+
+      // Get a new store and verify data
+      val store2 = provider.getStore(1)
+      assert(get(store2, "d", 0) === Some(4))
+      store2.commit()
+    }
+  }
+
+  test("abort after commit throws StateStoreOperationOutOfOrder") {
+    tryWithProviderResource(newStoreProvider(useColumnFamilies = false)) { provider =>
+      val store = provider.getStore(0)
+      put(store, "a", 0, 1)
+      assert(store.commit() === 1)
+
+      // Abort after commit should throw a SparkRuntimeException
+      val exception = intercept[SparkRuntimeException] {
+        store.abort()
+      }
+      checkError(
+        exception,
+        condition = "STATE_STORE_OPERATION_OUT_OF_ORDER",
+        parameters = Map("errorMsg" ->
+          ("Expected possible states " +
+          "(UPDATING, ABORTED) but found COMMITTED"))
+      )
+
+      // Get a new store and verify data was committed
+      val store1 = provider.getStore(1)
+      assert(get(store1, "a", 0) === Some(1))
+      store1.commit()
+    }
+  }
+
+  test("multiple aborts are idempotent") {
+    tryWithProviderResource(newStoreProvider(useColumnFamilies = false)) { provider =>
+      val store = provider.getStore(0)
+      put(store, "a", 0, 1)
+
+      // First abort
+      store.abort()
+
+      // Second abort should not throw
+      store.abort()
+
+      // Operations should still fail
+      val exception = intercept[StateStoreInvalidStamp] {
+        put(store, "b", 0, 2)
+      }
+      assert(exception.getMessage.contains("Invalid stamp"))
+    }
+  }
+
+  test("multiple commits throw exception") {
+    tryWithProviderResource(newStoreProvider(useColumnFamilies = false)) { provider =>
+      val store = provider.getStore(0)
+      put(store, "a", 0, 1)
+      assert(store.commit() === 1)
+
+      // Second commit should fail with stamp verification
+      val exception = intercept[SparkRuntimeException] {
+        store.commit()
+      }
+      checkError(
+        exception,
+        condition = "STATE_STORE_OPERATION_OUT_OF_ORDER",
+        parameters = Map("errorMsg" ->
+          "Expected possible states (UPDATING) but found COMMITTED")
+      )
+    }
+  }
+
+  test("get metrics works only after commit") {
+    tryWithProviderResource(newStoreProvider(useColumnFamilies = false)) { provider =>
+      val store = provider.getStore(0)
+      put(store, "a", 0, 1)
+
+      // Getting metrics before commit should throw
+      val exception = intercept[SparkRuntimeException] {
+        store.metrics
+      }
+      checkError(
+        exception,
+        condition = "STATE_STORE_OPERATION_OUT_OF_ORDER",
+        parameters = Map("errorMsg" -> "Cannot get metrics in UPDATING state")
+      )
+      // Commit the changes
+      assert(store.commit() === 1)
+
+      // Getting metrics after commit should work
+      val metrics = store.metrics
+      assert(metrics.numKeys === 1)
+    }
+  }
+
+  test("get checkpoint info works only after commit") {
+    tryWithProviderResource(newStoreProvider(useColumnFamilies = false)) { provider =>
+      val store = provider.getStore(0)
+      put(store, "a", 0, 1)
+
+      // Getting checkpoint info before commit should throw
+      val exception = intercept[SparkRuntimeException] {
+        store.getStateStoreCheckpointInfo()
+      }
+      checkError(
+        exception,
+        condition = "STATE_STORE_OPERATION_OUT_OF_ORDER",
+        parameters = Map("errorMsg" -> "Cannot get metrics in UPDATING state")
+      )
+
+      // Commit the changes
+      assert(store.commit() === 1)
+
+      // Getting checkpoint info after commit should work
+      val checkpointInfo = store.getStateStoreCheckpointInfo()
+      assert(checkpointInfo != null)
+    }
+  }
+
+  test("read store and write store with common stamp") {
+    tryWithProviderResource(newStoreProvider(useColumnFamilies = false)) { provider =>
+      // First prepare some data
+      val initialStore = provider.getStore(0)
+      put(initialStore, "a", 0, 1)
+      assert(initialStore.commit() === 1)
+
+      // Get a read store
+      val readStore = provider.getReadStore(1)
+      assert(get(readStore, "a", 0) === Some(1))
+
+      // Get a write store from the read store
+      val writeStore = provider.upgradeReadStoreToWriteStore(
+        readStore, 1)
+
+      // Verify data access
+      assert(get(writeStore, "a", 0) === Some(1))
+
+      // Update through write store
+      put(writeStore, "b", 0, 2)
+      assert(get(writeStore, "b", 0) === Some(2))
+
+      // Commit the write store
+      assert(writeStore.commit() === 2)
+
+      // Get a new store and verify
+      val newStore = provider.getStore(2)
+      assert(get(newStore, "a", 0) === Some(1))
+      assert(get(newStore, "b", 0) === Some(2))
+      newStore.commit()
+    }
+  }
+
+  test("verify operation validation before and after commit") {
+    tryWithProviderResource(newStoreProvider(useColumnFamilies = false)) { provider =>
+      val store = provider.getStore(0)
+
+      // Put operations should work in UPDATING state
+      put(store, "a", 0, 1)
+      assert(get(store, "a", 0) === Some(1))
+
+      // Remove operations should work in UPDATING state
+      remove(store, _._1 == "a")
+      assert(get(store, "a", 0) === None)
+
+      // Iterator operations should work in UPDATING state
+      put(store, "b", 0, 2)
+      assert(rowPairsToDataSet(store.iterator()) === Set(("b", 0) -> 2))
+
+      // Commit should work in UPDATING state
+      assert(store.commit() === 1)
+
+      intercept[StateStoreInvalidStamp] {
+        put(store, "c", 0, 3)
+      }
+
+      intercept[StateStoreInvalidStamp] {
+        remove(store, _._1 == "b")
+      }
+
+      intercept[StateStoreInvalidStamp] {
+        store.iterator()
+      }
+
+      // Get a new store for the next version
+      val store1 = provider.getStore(1)
+
+      // Abort the store
+      store1.abort()
+
+      // Operations after abort should fail due to invalid stamp
+      intercept[StateStoreInvalidStamp] {
+        put(store1, "c", 0, 3)
+      }
+    }
+  }
+
+  test("Rocks DB task completion listener does not double unlock acquireThread") {
+    // This test verifies that a thread that locks then unlocks the db and then
+    // fires a completion listener (Thread 1) does not unlock the lock validly
+    // acquired by another thread (Thread 2).
+    //
+    // Timeline of this test (* means thread is active):
+    // STATE | MAIN             | THREAD 1         | THREAD 2         |
+    // ------| ---------------- | ---------------- | ---------------- |
+    // 0.    | wait for s3      | *load, commit    | wait for s1      |
+    //       |                  | *signal s1       |                  |
+    // ------| ---------------- | ---------------- | ---------------- |
+    // 1.    |                  | wait for s2      | *load, signal s2 |
+    // ------| ---------------- | ---------------- | ---------------- |
+    // 2.    |                  | *task complete   | wait for s4      |
+    //       |                  | *signal s3, END  |                  |
+    // ------| ---------------- | ---------------- | ---------------- |
+    // 3.    | *verify locked   |                  |                  |
+    //       | *signal s4       |                  |                  |
+    // ------| ---------------- | ---------------- | ---------------- |
+    // 4.    | wait for s5      |                  | *commit          |
+    //       |                  |                  | *signal s5, END  |
+    // ------| ---------------- | ---------------- | ---------------- |
+    // 5.    | *close db, END   |                  |                  |
+    //
+    // NOTE: state 4 and 5 are only for cleanup
+
+    // Create a custom ExecutionContext with 3 threads
+    implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(
+      ThreadUtils.newDaemonFixedThreadPool(3, "pool-thread-executor"))
+    val stateLock = new Object()
+    var state = 0
+
+    tryWithProviderResource(newStoreProvider()) { provider =>
+      Future { // THREAD 1
+        // Set thread 1's task context so that it is not a clone
+        // of the main thread's taskContext, which will end if the
+        // task is marked as complete
+        val taskContext = TaskContext.empty()
+        TaskContext.setTaskContext(taskContext)
+
+        stateLock.synchronized {
+          // -------------------- STATE 0 --------------------
+          // Simulate a task that loads and commits, db should be unlocked after
+          val store = provider.getStore(0)
+          store.commit()
+          // Signal that we have entered state 1
+          state = 1
+          stateLock.notifyAll()
+
+          // -------------------- STATE 2 --------------------
+          // Wait until we have entered state 2 (thread 2 has loaded db and acquired lock)
+          while (state != 2) {
+            stateLock.wait()
+          }
+
+          // thread 1's task context is marked as complete and signal
+          // that we have entered state 3
+          // At this point, thread 2 should still hold the DB lock.
+          taskContext.markTaskCompleted(None)
+          state = 3
+          stateLock.notifyAll()
+        }
+      }
+
+      Future { // THREAD 2
+        // Set thread 2's task context so that it is not a clone of thread 1's
+        // so it won't be marked as complete
+        val taskContext = TaskContext.empty()
+        TaskContext.setTaskContext(taskContext)
+
+        stateLock.synchronized {
+          // -------------------- STATE 1 --------------------
+          // Wait until we have entered state 1 (thread 1 finished loading and committing)
+          while (state != 1) {
+            stateLock.wait()
+          }
+
+          // Load the db and signal that we have entered state 2
+          val store = provider.getStore(1)
+          assertAcquiredThreadIsCurrentThread(provider)
+          state = 2
+          stateLock.notifyAll()
+
+          // -------------------- STATE 4 --------------------
+          // Wait until we have entered state 4 (thread 1 completed and
+          // main thread confirmed that lock is held)
+          while (state != 4) {
+            stateLock.wait()
+          }
+
+          // Ensure we still have the lock
+          assertAcquiredThreadIsCurrentThread(provider)
+
+          // commit and signal that we have entered state 5
+          store.commit()
+          state = 5
+          stateLock.notifyAll()
+        }
+      }
+
+      // MAIN THREAD
+      stateLock.synchronized {
+        // -------------------- STATE 3 --------------------
+        // Wait until we have entered state 3 (thread 1 is complete)
+        while (state != 3) {
+          stateLock.wait()
+        }
+
+        // Verify that the lock is being held
+        val stateMachine = PrivateMethod[Any](Symbol("stateMachine"))
+        val stateMachineObj = provider invokePrivate stateMachine()
+        val threadInfo = stateMachineObj.asInstanceOf[RocksDBStateMachine].getAcquiredThreadInfo
+        assert(threadInfo.nonEmpty, s"acquiredThreadInfo was None when it should be Some")
+
+        // Signal that we have entered state 4 (thread 2 can now release lock)
+        state = 4
+        stateLock.notifyAll()
+
+        // -------------------- STATE 5 --------------------
+        // Wait until we have entered state 5 (thread 2 has released lock)
+        // so that we can clean up
+        while (state != 5) {
+          stateLock.wait()
+        }
+      }
+    }
+  }
+
+  test("RocksDB task completion listener correctly releases for failed task") {
+    // This test verifies that a thread that locks the DB and then fails
+    // can rely on the completion listener to release the lock.
+
+    // Create a custom ExecutionContext with 1 thread
+    implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(
+      ThreadUtils.newDaemonSingleThreadExecutor("single-thread-executor"))
+    val timeout = 5.seconds
+
+    tryWithProviderResource(newStoreProvider()) { provider =>
+      // New task that will load and then complete with failure
+      val fut = Future {
+        val taskContext = TaskContext.empty()
+        TaskContext.setTaskContext(taskContext)
+
+        provider.getStore(0)
+        assertAcquiredThreadIsCurrentThread(provider)
+
+        // Task completion listener should unlock
+        taskContext.markTaskCompleted(
+          Some(new SparkException("Task failure injection")))
+      }
+
+      ThreadUtils.awaitResult(fut, timeout)
+
+      // Assert that db is not locked
+      val stateMachine = PrivateMethod[Any](Symbol("stateMachine"))
+      val stateMachineObj = provider invokePrivate stateMachine()
+      val stamp = stateMachineObj.asInstanceOf[RocksDBStateMachine].currentValidStamp.get()
+      assert(stamp == -1,
+        s"state machine stamp should be -1 (unlocked) but was $stamp")
     }
   }
 
@@ -2097,6 +2648,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       useMultipleValuesPerKey: Boolean = false): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
     val testStateSchemaProvider = new TestStateSchemaProvider
+    conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
     provider.init(
       storeId,
       keySchema,
@@ -2123,7 +2675,12 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     tryWithProviderResource(newStoreProvider(provider.stateStoreId,
       useColumnFamilies)) { reloadedProvider =>
       val versionToRead = if (version < 0) reloadedProvider.latestVersion else version
-      reloadedProvider.getStore(versionToRead).iterator().map(rowPairToDataPair).toSet
+      val store = reloadedProvider.getStore(versionToRead)
+      try {
+        store.iterator().map(rowPairToDataPair).toSet
+      } finally {
+        if (!store.hasCommitted) store.abort()
+      }
     }
   }
 
@@ -2170,6 +2727,19 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         }
       }
     }
+  }
+
+  def assertAcquiredThreadIsCurrentThread(provider: RocksDBStateStoreProvider): Unit = {
+    val stateMachine = PrivateMethod[Any](Symbol("stateMachine"))
+    val stateMachineObj = provider invokePrivate stateMachine()
+    val threadInfo = stateMachineObj.asInstanceOf[RocksDBStateMachine].getAcquiredThreadInfo
+    assert(threadInfo.isDefined,
+      "acquired thread info should not be null after load")
+    val threadId = threadInfo.get.threadRef.get.get.getId
+    assert(
+      threadId == Thread.currentThread().getId,
+      s"acquired thread should be curent thread ${Thread.currentThread().getId} " +
+        s"after load but was $threadId")
   }
 }
 

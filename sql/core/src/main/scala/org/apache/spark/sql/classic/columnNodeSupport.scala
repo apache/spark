@@ -28,11 +28,12 @@ import org.apache.spark.sql.catalyst.parser.{ParserInterface, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF, TypedAggregateExpression}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator}
-import org.apache.spark.sql.internal.{Alias, CaseWhenOtherwise, Cast, ColumnNode, ColumnNodeLike, InvokeInlineUserDefinedFunction, LambdaFunction, LazyExpression, Literal, SortOrder, SQLConf, SqlExpression, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedNamedLambdaVariable, UnresolvedRegex, UnresolvedStar, UpdateFields, Window, WindowFrame}
+import org.apache.spark.sql.internal.{Alias, CaseWhenOtherwise, Cast, ColumnNode, ColumnNodeLike, InvokeInlineUserDefinedFunction, LambdaFunction, LazyExpression, Literal, SortOrder, SQLConf, SqlExpression, SubqueryExpression, SubqueryType, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedNamedLambdaVariable, UnresolvedRegex, UnresolvedStar, UpdateFields, Window, WindowFrame}
 import org.apache.spark.sql.types.{DataType, NullType}
 
 /**
@@ -191,6 +192,17 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
 
         case l: LazyExpression =>
           analysis.LazyExpression(apply(l.child))
+
+        case SubqueryExpression(ds, subqueryType, _) =>
+          subqueryType match {
+            case SubqueryType.SCALAR =>
+              expressions.ScalarSubquery(ds.logicalPlan)
+            case SubqueryType.EXISTS =>
+              expressions.Exists(ds.logicalPlan)
+            case SubqueryType.IN(values) =>
+              expressions.InSubquery(
+                values.map(value => apply(value)), expressions.ListQuery(ds.logicalPlan))
+          }
 
         case node =>
           throw SparkException.internalError("Unsupported ColumnNode: " + node)

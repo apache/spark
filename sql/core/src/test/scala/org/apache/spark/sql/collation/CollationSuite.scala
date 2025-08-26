@@ -19,13 +19,15 @@ package org.apache.spark.sql.collation
 
 import scala.jdk.CollectionConverters.MapHasAsJava
 
+import com.ibm.icu.util.VersionInfo.ICU_VERSION
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, InMemoryTable}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
@@ -608,16 +610,16 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sql(s"ALTER TABLE $tableName ALTER COLUMN c3.value TYPE STRING COLLATE UTF8_BINARY")
       sql(s"ALTER TABLE $tableName ALTER COLUMN c4.t TYPE STRING COLLATE UNICODE")
       val testCatalog = catalog("testcat").asTableCatalog
-      val tableSchema = testCatalog.loadTable(Identifier.of(Array(), "alter_column_tbl")).schema()
-      val c1Metadata = tableSchema.find(_.name == "c1").get.metadata
-      assert(c1Metadata === createMetadata("c1"))
-      val c2Metadata = tableSchema.find(_.name == "c2").get.metadata
-      assert(c2Metadata === createMetadata("c2"))
-      val c3Metadata = tableSchema.find(_.name == "c3").get.metadata
-      assert(c3Metadata === createMetadata("c3"))
-      val c4Metadata = tableSchema.find(_.name == "c4").get.metadata
-      assert(c4Metadata === createMetadata("c4"))
-      val c4tMetadata = tableSchema.find(_.name == "c4").get.dataType
+      val columns = testCatalog.loadTable(Identifier.of(Array(), "alter_column_tbl")).columns()
+      val c1Metadata = columns.find(_.name() == "c1").get.metadataInJSON()
+      assert(c1Metadata === createMetadata("c1").json)
+      val c2Metadata = columns.find(_.name() == "c2").get.metadataInJSON()
+      assert(c2Metadata === createMetadata("c2").json)
+      val c3Metadata = columns.find(_.name() == "c3").get.metadataInJSON()
+      assert(c3Metadata === createMetadata("c3").json)
+      val c4Metadata = columns.find(_.name() == "c4").get.metadataInJSON()
+      assert(c4Metadata === createMetadata("c4").json)
+      val c4tMetadata = columns.find(_.name() == "c4").get.dataType()
         .asInstanceOf[StructType].find(_.name == "t").get.metadata
       assert(c4tMetadata === createMetadata("c4t"))
     }
@@ -862,7 +864,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       assert(table.columns().head.dataType() == StringType(collationId))
 
       val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
-      checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
+      checkAnswer(spark.internalCreateDataFrame(rdd,
+        CatalogV2Util.v2ColumnsToStructType(table.columns)), Seq.empty)
 
       sql(s"INSERT INTO $tableName VALUES ('a'), ('A')")
 
@@ -1919,7 +1922,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
     // verify that the output ordering is as expected (UTF8_BINARY, UTF8_LCASE, etc.)
     val df = sql("SELECT * FROM collations() limit 10")
-    val icvVersion = "76.1.0.0"
+    val icvVersion = ICU_VERSION.toString
     checkAnswer(df,
       Seq(Row("SYSTEM", "BUILTIN", "UTF8_BINARY", null, null,
         "ACCENT_SENSITIVE", "CASE_SENSITIVE", "NO_PAD", null),

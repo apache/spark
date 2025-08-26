@@ -901,20 +901,10 @@ WITH RECURSIVE x(n) AS (SELECT n FROM x UNION ALL SELECT 1)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`n`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 32,
-    "stopIndex" : 32,
-    "fragment" : "n"
-  } ]
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
 }
 
 
@@ -986,17 +976,13 @@ WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM x
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
+  "errorClass" : "RECURSION_LEVEL_LIMIT_EXCEEDED",
   "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 134,
-    "fragment" : "WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM x\n                          WHERE n IN (SELECT * FROM x))\n  SELECT * FROM x"
-  } ]
+  "messageParameters" : {
+    "levelLimit" : "100"
+  }
 }
 
 
@@ -1060,17 +1046,13 @@ WITH RECURSIVE x(id) AS (values (1)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
+  "errorClass" : "RECURSION_LEVEL_LIMIT_EXCEEDED",
   "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 116,
-    "fragment" : "WITH RECURSIVE x(id) AS (values (1)\n    UNION ALL\n    SELECT (SELECT * FROM x) FROM x WHERE id < 5\n) SELECT * FROM x"
-  } ]
+  "messageParameters" : {
+    "levelLimit" : "100"
+  }
 }
 
 
@@ -1108,20 +1090,119 @@ WITH RECURSIVE foo(i) AS
        SELECT i+1 FROM foo WHERE i < 5)
 ) SELECT * FROM foo
 -- !query schema
-struct<>
+struct<i:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 175,
-    "fragment" : "WITH RECURSIVE foo(i) AS\n    (values (1)\n    UNION ALL\n       (SELECT i+1 FROM foo WHERE i < 10\n          UNION ALL\n       SELECT i+1 FROM foo WHERE i < 5)\n) SELECT * FROM foo"
-  } ]
-}
+1
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+2
+2
+3
+3
+3
+3
+4
+4
+4
+4
+4
+4
+4
+4
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
 
 
 -- !query
@@ -1134,20 +1215,119 @@ WITH RECURSIVE foo(i) AS
        SELECT i+1 FROM foo WHERE i < 5) AS t
 ) SELECT * FROM foo
 -- !query schema
-struct<>
+struct<i:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 198,
-    "fragment" : "WITH RECURSIVE foo(i) AS\n    (values (1)\n    UNION ALL\n\t   SELECT * FROM\n       (SELECT i+1 FROM foo WHERE i < 10\n          UNION ALL\n       SELECT i+1 FROM foo WHERE i < 5) AS t\n) SELECT * FROM foo"
-  } ]
-}
+1
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+10
+2
+2
+3
+3
+3
+3
+4
+4
+4
+4
+4
+4
+4
+4
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+5
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+6
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+8
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
+9
 
 
 -- !query
@@ -1159,20 +1339,9 @@ WITH RECURSIVE foo(i) AS
        SELECT i+1 FROM foo WHERE i < 5)
 ) SELECT * FROM foo
 -- !query schema
-struct<>
+struct<i:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 172,
-    "fragment" : "WITH RECURSIVE foo(i) AS\n    (values (1)\n    UNION ALL\n       (SELECT i+1 FROM foo WHERE i < 10\n          EXCEPT\n       SELECT i+1 FROM foo WHERE i < 5)\n) SELECT * FROM foo"
-  } ]
-}
+1
 
 
 -- !query
@@ -1184,20 +1353,13 @@ WITH RECURSIVE foo(i) AS
        SELECT i+1 FROM foo WHERE i < 5)
 ) SELECT * FROM foo
 -- !query schema
-struct<>
+struct<i:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 175,
-    "fragment" : "WITH RECURSIVE foo(i) AS\n    (values (1)\n    UNION ALL\n       (SELECT i+1 FROM foo WHERE i < 10\n          INTERSECT\n       SELECT i+1 FROM foo WHERE i < 5)\n) SELECT * FROM foo"
-  } ]
-}
+1
+2
+3
+4
+5
 
 
 -- !query
@@ -1381,15 +1543,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 185,
-    "fragment" : "WITH RECURSIVE outermost(x) AS (\n  WITH innermost as (SELECT 2 FROM outermost) -- fail\n    SELECT * FROM innermost\n    UNION SELECT * from outermost\n)\nSELECT * FROM outermost ORDER BY 1"
-  } ]
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
 }
 
 

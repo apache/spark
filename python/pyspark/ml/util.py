@@ -16,7 +16,9 @@
 #
 
 import json
+import logging
 import os
+import threading
 import time
 import uuid
 import functools
@@ -41,6 +43,7 @@ from pyspark import since
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import SparkSession
 from pyspark.sql.utils import is_remote
+from pyspark.storagelevel import StorageLevel
 from pyspark.util import VersionUtils
 
 if TYPE_CHECKING:
@@ -66,19 +69,7 @@ FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 ML_CONNECT_HELPER_ID = "______ML_CONNECT_HELPER______"
 
-
-def try_remote_intermediate_result(f: FuncT) -> FuncT:
-    """Mark the function/property that returns the intermediate result of the remote call.
-    Eg, model.summary"""
-
-    @functools.wraps(f)
-    def wrapped(self: "JavaWrapper") -> Any:
-        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            return f"{self._java_obj}.{f.__name__}"
-        else:
-            return f(self)
-
-    return cast(FuncT, wrapped)
+_logger = logging.getLogger("pyspark.ml.util")
 
 
 def invoke_helper_attr(method: str, *args: Any) -> Any:
@@ -107,15 +98,25 @@ def invoke_remote_attribute_relation(
     from pyspark.ml.connect.proto import AttributeRelation
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+    from pyspark.ml.wrapper import JavaModel
 
     session = SparkSession.getActiveSession()
     assert session is not None
 
-    assert isinstance(instance._java_obj, str)
-
-    methods, obj_ref = _extract_id_methods(instance._java_obj)
+    if isinstance(instance, JavaModel):
+        assert isinstance(instance._java_obj, RemoteModelRef)
+        object_id = instance._java_obj.ref_id
+    else:
+        # model summary
+        object_id = instance._java_obj  # type: ignore
+    methods, obj_ref = _extract_id_methods(object_id)
     methods.append(pb2.Fetch.Method(method=method, args=serialize(session.client, *args)))
-    plan = AttributeRelation(obj_ref, methods)
+
+    if methods[0].method == "summary":
+        child = instance._summary_dataset._plan  # type: ignore
+    else:
+        child = None
+    plan = AttributeRelation(obj_ref, methods, child=child)
 
     # To delay the GC of the model, keep a reference to the source instance,
     # might be a model or a summary.
@@ -136,6 +137,33 @@ def try_remote_attribute_relation(f: FuncT) -> FuncT:
             return f(self, *args, **kwargs)
 
     return cast(FuncT, wrapped)
+
+
+class RemoteModelRef:
+    def __init__(self, ref_id: str) -> None:
+        self._ref_id = ref_id
+        self._ref_count = 1
+        self._lock = threading.Lock()
+
+    @property
+    def ref_id(self) -> str:
+        return self._ref_id
+
+    def add_ref(self) -> None:
+        with self._lock:
+            assert self._ref_count > 0
+            self._ref_count += 1
+
+    def release_ref(self) -> None:
+        with self._lock:
+            assert self._ref_count > 0
+            self._ref_count -= 1
+            if self._ref_count == 0:
+                # Delete the model if possible
+                del_remote_cache(self.ref_id)
+
+    def __str__(self) -> str:
+        return self.ref_id
 
 
 def try_remote_fit(f: FuncT) -> FuncT:
@@ -163,8 +191,19 @@ def try_remote_fit(f: FuncT) -> FuncT:
             )
             (_, properties, _) = client.execute_command(command)
             model_info = deserialize(properties)
-            client.add_ml_cache(model_info.obj_ref.id)
-            model = self._create_model(model_info.obj_ref.id)
+            if warning_msg := getattr(model_info, "warning_message", None):
+                _logger.warning(warning_msg)
+            remote_model_ref = RemoteModelRef(model_info.obj_ref.id)
+            model = self._create_model(remote_model_ref)
+            if isinstance(model, HasTrainingSummary):
+                summary_dataset = model._summary_dataset(dataset)
+
+                summary = model._summaryCls(f"{str(model._java_obj)}.summary")  # type: ignore
+                summary._summary_dataset = summary_dataset
+                summary._remote_model_obj = model._java_obj  # type: ignore
+                summary._remote_model_obj.add_ref()
+
+                model._summary = summary  # type: ignore
             if model.__class__.__name__ not in ["Bucketizer"]:
                 model._resetUid(self.uid)
             return self._copyValues(model)
@@ -191,11 +230,11 @@ def try_remote_transform_relation(f: FuncT) -> FuncT:
             if isinstance(self, Model):
                 from pyspark.ml.connect.proto import TransformerRelation
 
-                assert isinstance(self._java_obj, str)
+                assert isinstance(self._java_obj, RemoteModelRef)
                 params = serialize_ml_params(self, session.client)
                 plan = TransformerRelation(
                     child=dataset._plan,
-                    name=self._java_obj,
+                    name=self._java_obj.ref_id,
                     ml_params=params,
                     is_model=True,
                 )
@@ -240,35 +279,69 @@ def try_remote_call(f: FuncT) -> FuncT:
     @functools.wraps(f)
     def wrapped(self: "JavaWrapper", name: str, *args: Any) -> Any:
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
-            # Launch a remote call if possible
+            from pyspark.errors.exceptions.connect import SparkException
             import pyspark.sql.connect.proto as pb2
             from pyspark.sql.connect.session import SparkSession
-            from pyspark.ml.connect.util import _extract_id_methods
-            from pyspark.ml.connect.serialize import serialize, deserialize
 
             session = SparkSession.getActiveSession()
-            assert session is not None
-            assert isinstance(self._java_obj, str)
-            methods, obj_ref = _extract_id_methods(self._java_obj)
-            methods.append(pb2.Fetch.Method(method=name, args=serialize(session.client, *args)))
-            command = pb2.Command()
-            command.ml_command.fetch.CopyFrom(
-                pb2.Fetch(obj_ref=pb2.ObjectRef(id=obj_ref), methods=methods)
-            )
-            (_, properties, _) = session.client.execute_command(command)
-            ml_command_result = properties["ml_command_result"]
-            if ml_command_result.HasField("summary"):
-                summary = ml_command_result.summary
-                session.client.add_ml_cache(summary)
-                return summary
-            elif ml_command_result.HasField("operator_info"):
-                model_info = deserialize(properties)
-                session._client.add_ml_cache(model_info.obj_ref.id)
-                # get a new model ref id from the existing model,
-                # it is up to the caller to build the model
-                return model_info.obj_ref.id
-            else:
-                return deserialize(properties)
+
+            def remote_call() -> Any:
+                from pyspark.ml.connect.util import _extract_id_methods
+                from pyspark.ml.connect.serialize import serialize, deserialize
+                from pyspark.ml.wrapper import JavaModel
+
+                assert session is not None
+                if self._java_obj == ML_CONNECT_HELPER_ID:
+                    obj_id = ML_CONNECT_HELPER_ID
+                else:
+                    if isinstance(self, JavaModel):
+                        assert isinstance(self._java_obj, RemoteModelRef)
+                        obj_id = self._java_obj.ref_id
+                    else:
+                        # model summary
+                        obj_id = self._java_obj  # type: ignore
+                methods, obj_ref = _extract_id_methods(obj_id)
+                methods.append(pb2.Fetch.Method(method=name, args=serialize(session.client, *args)))
+                command = pb2.Command()
+                command.ml_command.fetch.CopyFrom(
+                    pb2.Fetch(obj_ref=pb2.ObjectRef(id=obj_ref), methods=methods)
+                )
+                (_, properties, _) = session.client.execute_command(command)
+                ml_command_result = properties["ml_command_result"]
+                if ml_command_result.HasField("summary"):
+                    summary = ml_command_result.summary
+                    return summary
+                elif ml_command_result.HasField("operator_info"):
+                    model_info = deserialize(properties)
+                    # get a new model ref id from the existing model,
+                    # it is up to the caller to build the model
+                    return model_info.obj_ref.id
+                else:
+                    return deserialize(properties)
+
+            try:
+                return remote_call()
+            except SparkException as e:
+                if e.getErrorClass() == "CONNECT_ML.MODEL_SUMMARY_LOST":
+                    # the model summary is lost because the remote model was offloaded,
+                    # send request to restore model.summary
+                    create_summary_command = pb2.Command()
+                    create_summary_command.ml_command.create_summary.CopyFrom(
+                        pb2.MlCommand.CreateSummary(
+                            model_ref=pb2.ObjectRef(
+                                id=self._remote_model_obj.ref_id  # type: ignore
+                            ),
+                            dataset=self._summary_dataset._plan.plan(  # type: ignore
+                                session.client  # type: ignore
+                            ),
+                        )
+                    )
+                    session.client.execute_command(create_summary_command)  # type: ignore
+
+                    return remote_call()
+
+                # for other unexpected error, re-raise it.
+                raise
         else:
             return f(self, name, *args)
 
@@ -283,7 +356,7 @@ def del_remote_cache(ref_id: str) -> None:
 
             session = SparkSession.getActiveSession()
             if session is not None:
-                session.client.remove_ml_cache(ref_id)
+                session.client._delete_ml_cache([ref_id])
                 return
         except Exception:
             # SparkSession's down.
@@ -301,9 +374,10 @@ def try_remote_del(f: FuncT) -> FuncT:
             return
 
         if in_remote:
-            # Delete the model if possible
-            model_id = self._java_obj
-            del_remote_cache(cast(str, model_id))
+            if isinstance(self._java_obj, RemoteModelRef):
+                self._java_obj.release_ref()
+            if hasattr(self, "_remote_model_obj"):
+                self._remote_model_obj.release_ref()
             return
         else:
             return f(self)
@@ -1032,17 +1106,32 @@ class HasTrainingSummary(Generic[T]):
         Indicates whether a training summary exists for this model
         instance.
         """
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            return hasattr(self, "_summary")
         return cast("JavaWrapper", self)._call_java("hasSummary")
 
     @property
     @since("2.1.0")
-    @try_remote_intermediate_result
     def summary(self) -> T:
         """
         Gets summary of the model trained on the training set. An exception is thrown if
         no summary exists.
         """
-        return cast("JavaWrapper", self)._call_java("summary")
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            if hasattr(self, "_summary"):
+                return self._summary
+            else:
+                raise RuntimeError(
+                    "No training summary available for this %s" % self.__class__.__name__
+                )
+        return self._summaryCls(cast("JavaWrapper", self)._call_java("summary"))
+
+    @property
+    def _summaryCls(self) -> type:
+        raise NotImplementedError()
+
+    def _summary_dataset(self, train_dataset: "DataFrame") -> "DataFrame":
+        return self.transform(train_dataset)  # type: ignore
 
 
 class MetaAlgorithmReadWrite:
@@ -1138,7 +1227,15 @@ def _remove_dfs_dir(path: str, spark_session: "SparkSession") -> None:
 
 
 @contextmanager
-def _cache_spark_dataset(dataset: "DataFrame") -> Iterator[Any]:
+def _cache_spark_dataset(
+    dataset: "DataFrame",
+    storageLevel: "StorageLevel" = StorageLevel.MEMORY_AND_DISK_DESER,
+    enable: bool = True,
+) -> Iterator[Any]:
+    if not enable:
+        yield dataset
+        return
+
     spark_session = dataset._session
     tmp_dfs_path = os.environ.get(_SPARKML_TEMP_DFS_PATH)
 
@@ -1150,7 +1247,7 @@ def _cache_spark_dataset(dataset: "DataFrame") -> Iterator[Any]:
         finally:
             _remove_dfs_dir(tmp_cache_path, spark_session)
     else:
-        dataset.cache()
+        dataset.persist(storageLevel)
         try:
             yield dataset
         finally:

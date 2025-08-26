@@ -705,7 +705,7 @@ class ExpressionParserSuite extends AnalysisTest {
       parameters = Map(
         "unsupportedType" -> "\"GEO\"",
         "supportedTypes" ->
-        """"DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X""""),
+        """"DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X", "TIME""""),
       context = ExpectedContext(
         fragment = "GEO '(10,-6)'",
         start = 0,
@@ -1194,16 +1194,18 @@ class ExpressionParserSuite extends AnalysisTest {
     }
   }
 
-  test("current date/timestamp braceless expressions") {
+  test("current date/timestamp/time braceless expressions") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
       SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
       assertEqual("current_date", CurrentDate())
       assertEqual("current_timestamp", CurrentTimestamp())
+      assertEqual("current_time", CurrentTime())
     }
 
     def testNonAnsiBehavior(): Unit = {
       assertEqual("current_date", UnresolvedAttribute.quoted("current_date"))
       assertEqual("current_timestamp", UnresolvedAttribute.quoted("current_timestamp"))
+      assertEqual("current_time", UnresolvedAttribute.quoted("current_time"))
     }
     withSQLConf(
       SQLConf.ANSI_ENABLED.key -> "false",

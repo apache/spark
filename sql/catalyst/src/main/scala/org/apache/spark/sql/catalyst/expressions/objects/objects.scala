@@ -992,7 +992,7 @@ case class MapObjects private(
       }
     case Some(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
       // Scala sequence
-      executeFuncOnCollection(_).toSeq
+      executeFuncOnCollection(_).toIndexedSeq
     case Some(cls) if classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
       // Scala set
       executeFuncOnCollection(_).toSet

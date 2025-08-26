@@ -53,7 +53,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
   "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
@@ -69,7 +69,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
   "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
@@ -312,6 +312,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'xx'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"DATE\""
@@ -470,6 +471,7 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1.2'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -644,6 +646,7 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1.2'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -799,7 +802,7 @@ struct<(2001-10-01 - DATE '2001-09-28'):interval day>
 -- !query
 select date '2001-09-28' - null
 -- !query schema
-struct<date_sub(DATE '2001-09-28', NULL):date>
+struct<(DATE '2001-09-28' - NULL):interval day>
 -- !query output
 NULL
 
@@ -883,7 +886,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select date'2011-11-11' + null
 -- !query schema
-struct<date_add(DATE '2011-11-11', NULL):date>
+struct<DATE '2011-11-11' + NULL:timestamp>
 -- !query output
 NULL
 
@@ -891,7 +894,7 @@ NULL
 -- !query
 select null + date'2011-11-11'
 -- !query schema
-struct<date_add(DATE '2011-11-11', NULL):date>
+struct<DATE '2011-11-11' + NULL:timestamp>
 -- !query output
 NULL
 

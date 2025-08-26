@@ -43,6 +43,19 @@ def plot_pyspark(data: "DataFrame", kind: str, **kwargs: Any) -> "Figure":
         return plot_kde(data, **kwargs)
     if kind == "hist":
         return plot_histogram(data, **kwargs)
+    if kind not in PySparkPlotAccessor.plot_data_map:
+        raise PySparkValueError(
+            errorClass="UNSUPPORTED_PLOT_KIND",
+            messageParameters={
+                "plot_type": kind,
+                "supported_plot_types": ", ".join(
+                    sorted(
+                        list(PySparkPlotAccessor.plot_data_map.keys())
+                        + ["pie", "box", "kde", "density", "hist"]
+                    )
+                ),
+            },
+        )
 
     return plotly.plot(PySparkPlotAccessor.plot_data_map[kind](data), kind, **kwargs)
 

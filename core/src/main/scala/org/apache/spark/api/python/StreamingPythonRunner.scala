@@ -18,14 +18,15 @@
 package org.apache.spark.api.python
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream}
+import java.nio.channels.Channels
 
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkEnv, SparkPythonException}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{PYTHON_WORKER_MODULE, PYTHON_WORKER_RESPONSE, SESSION_ID}
 import org.apache.spark.internal.config.BUFFER_SIZE
-import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
+import org.apache.spark.internal.config.Python.{PYTHON_AUTH_SOCKET_TIMEOUT, PYTHON_UNIX_DOMAIN_SOCKET_ENABLED}
 
 
 private[spark] object StreamingPythonRunner {
@@ -45,6 +46,7 @@ private[spark] class StreamingPythonRunner(
     sessionId: String,
     workerModule: String) extends Logging {
   private val conf = SparkEnv.get.conf
+  private val isUnixDomainSock = conf.get(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED)
   protected val bufferSize: Int = conf.get(BUFFER_SIZE)
   protected val authSocketTimeout = conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
 
@@ -78,14 +80,20 @@ private[spark] class StreamingPythonRunner(
     pythonWorker = Some(worker)
     pythonWorkerFactory = Some(workerFactory)
 
-    val socket = pythonWorker.get.channel.socket()
-    val stream = new BufferedOutputStream(socket.getOutputStream, bufferSize)
-    val dataIn = new DataInputStream(new BufferedInputStream(socket.getInputStream, bufferSize))
+    val socketChannel = pythonWorker.get.channel
+    val stream = new BufferedOutputStream(Channels.newOutputStream(socketChannel), bufferSize)
+    val dataIn = new DataInputStream(
+      new BufferedInputStream(Channels.newInputStream(socketChannel), bufferSize))
     val dataOut = new DataOutputStream(stream)
 
-    val originalTimeout = socket.getSoTimeout()
-    // Set timeout to 5 minute during initialization config transmission
-    socket.setSoTimeout(5 * 60 * 1000)
+    val originalTimeout = if (!isUnixDomainSock) {
+      val timeout = socketChannel.socket().getSoTimeout()
+      // Set timeout to 5 minute during initialization config transmission
+      socketChannel.socket().setSoTimeout(5 * 60 * 1000)
+      Some(timeout)
+    } else {
+      None
+    }
 
     val resFromPython = try {
       PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
@@ -111,7 +119,7 @@ private[spark] class StreamingPythonRunner(
 
     // Set timeout back to the original timeout
     // Should be infinity by default
-    socket.setSoTimeout(originalTimeout)
+    originalTimeout.foreach(v => socketChannel.socket().setSoTimeout(v))
 
     if (resFromPython != 0) {
       val errMessage = PythonWorkerUtils.readUTF(dataIn)

@@ -108,21 +108,24 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("Recursive CTEs metrics") {
-    val df = sql("""WITH RECURSIVE t(n) AS(
-                          | VALUES 1, 2
-                          | UNION ALL
-                          | SELECT n+1 FROM t WHERE n < 20
-                          | )
-                          | SELECT * FROM t""".stripMargin)
-    val unionLoopExec = df.queryExecution.executedPlan.collect {
-      case ule: UnionLoopExec => ule
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
+      val df = sql(
+        """WITH RECURSIVE t(n) AS(
+          | VALUES 1, 2
+          | UNION ALL
+          | SELECT n+1 FROM t WHERE n < 20
+          | )
+          | SELECT * FROM t""".stripMargin)
+      val unionLoopExec = df.queryExecution.executedPlan.collect {
+        case ule: UnionLoopExec => ule
+      }
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(unionLoopExec.size == 1)
+      val expected = Map("number of output rows" -> 39L, "number of recursive iterations" -> 20L,
+        "number of anchor output rows" -> 2L)
+      testSparkPlanMetrics(df, 22, Map(
+        2L -> (("UnionLoop", expected))))
     }
-    sparkContext.listenerBus.waitUntilEmpty()
-    assert(unionLoopExec.size == 1)
-    val expected = Map("number of output rows" -> 39L, "number of recursive iterations" -> 20L,
-      "number of anchor output rows" -> 2L)
-    testSparkPlanMetrics(df, 22, Map(
-      2L -> (("UnionLoop", expected))))
   }
 
   test("Filter metrics") {
@@ -981,6 +984,18 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   test("SQLMetric#toInfoUpdate") {
     assert(SQLMetrics.createSizeMetric(sparkContext, name = "m").toInfoUpdate.update === Some(-1))
     assert(SQLMetrics.createMetric(sparkContext, name = "m").toInfoUpdate.update === Some(0))
+  }
+
+  test("withTimingNs should time and return same result") {
+    val metric = SQLMetrics.createTimingMetric(sparkContext, name = "m")
+
+    // Use a simple block that returns a value
+    val result = SQLMetrics.withTimingNs(metric) {
+      42
+    }
+
+    assert(result === 42)
+    assert(!metric.isZero, "Metric was not increased")
   }
 }
 

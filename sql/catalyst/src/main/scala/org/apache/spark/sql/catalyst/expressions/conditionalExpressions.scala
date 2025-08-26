@@ -200,6 +200,8 @@ case class CaseWhen(
     branches.exists(_._2.nullable) || elseValue.map(_.nullable).getOrElse(true)
   }
 
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
+
   override def checkInputDataTypes(): TypeCheckResult = {
     if (TypeCoercion.haveSameType(inputTypesForMerging)) {
       // Make sure all branch conditions are boolean types.

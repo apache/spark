@@ -627,16 +627,6 @@ class Dataset[T] private[sql] (
     buildTranspose(Seq.empty)
 
   /** @inheritdoc */
-  def scalar(): Column = {
-    Column(SubqueryExpressionNode(plan.getRoot, SubqueryType.SCALAR))
-  }
-
-  /** @inheritdoc */
-  def exists(): Column = {
-    Column(SubqueryExpressionNode(plan.getRoot, SubqueryType.EXISTS))
-  }
-
-  /** @inheritdoc */
   def limit(n: Int): Dataset[T] = sparkSession.newDataset(agnosticEncoder) { builder =>
     builder.getLimitBuilder
       .setInput(plan.getRoot)

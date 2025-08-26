@@ -52,6 +52,7 @@ case class ReplaceTableExec(
       .withColumns(columns)
       .withPartitions(partitioning.toArray)
       .withProperties(tableProperties.asJava)
+      .withConstraints(tableSpec.constraints.toArray)
       .build()
     catalog.createTable(ident, tableInfo)
     Seq.empty
@@ -80,12 +81,20 @@ case class AtomicReplaceTableExec(
       invalidateCache(catalog, table, identifier)
     }
     val staged = if (orCreate) {
-      catalog.stageCreateOrReplace(
-        identifier, columns, partitioning.toArray, tableProperties.asJava)
+      val tableInfo = new TableInfo.Builder()
+        .withColumns(columns)
+        .withPartitions(partitioning.toArray)
+        .withProperties(tableProperties.asJava)
+        .build()
+      catalog.stageCreateOrReplace(identifier, tableInfo)
     } else if (catalog.tableExists(identifier)) {
       try {
-        catalog.stageReplace(
-          identifier, columns, partitioning.toArray, tableProperties.asJava)
+        val tableInfo = new TableInfo.Builder()
+          .withColumns(columns)
+          .withPartitions(partitioning.toArray)
+          .withProperties(tableProperties.asJava)
+          .build()
+        catalog.stageReplace(identifier, tableInfo)
       } catch {
         case e: NoSuchTableException =>
           throw QueryCompilationErrors.cannotReplaceMissingTableError(identifier, Some(e))

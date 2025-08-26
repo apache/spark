@@ -35,6 +35,7 @@ import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.StructType.fromDDL
 import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.UTF8String.LongWrapper
 
 class StructTypeSuite extends SparkFunSuite with SQLHelper {
 
@@ -835,18 +836,33 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   test("SPARK-51119: Add fallback to process unresolved EXISTS_DEFAULT") {
     val source = StructType(
       Array(
-      StructField("c1", VariantType, true,
-        new MetadataBuilder()
-          .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "parse_json(null)")
-          .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "parse_json(null)")
-          .build()),
-      StructField("c0", StringType, true,
-        new MetadataBuilder()
-          .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "current_catalog()")
-          .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "current_catalog()")
-          .build())))
+        StructField("c0", VariantType, true,
+          new MetadataBuilder()
+            .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY,
+              "parse_json(null)")
+            .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+              "parse_json(null)")
+            .build()),
+        StructField("c1", StringType, true,
+          new MetadataBuilder()
+            .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY,
+              "current_catalog()")
+            .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+              "current_catalog()")
+            .build()),
+        StructField("c2", StringType, true,
+          new MetadataBuilder()
+            .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY,
+              "CAST(CURRENT_TIMESTAMP AS BIGINT)")
+            .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+              "CAST(CURRENT_TIMESTAMP AS BIGINT)")
+            .build())))
     val res = ResolveDefaultColumns.existenceDefaultValues(source)
     assert(res(0) == null)
     assert(res(1) == UTF8String.fromString("spark_catalog"))
+
+    val res2Wrapper = new LongWrapper
+    assert(res(2).asInstanceOf[UTF8String].toLong(res2Wrapper))
+    assert(res2Wrapper.value > 0)
   }
 }

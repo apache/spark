@@ -19,10 +19,10 @@ from io import StringIO
 import unittest
 from typing import Iterable
 
-from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 from pyspark.testing.connectutils import (
     should_test_connect,
     connect_requirement_message,
+    ReusedConnectTestCase,
 )
 from pyspark.testing.utils import PySparkErrorTestUtils
 
@@ -105,7 +105,7 @@ class ProgressBarTest(unittest.TestCase, PySparkErrorTestUtils):
         self.assertTrue(done_called, "After finish, done should be True")
 
 
-class SparkConnectProgressHandlerE2E(SparkConnectSQLTestCase):
+class SparkConnectProgressHandlerE2E(ReusedConnectTestCase):
     def test_custom_handler_works(self):
         called = False
 
@@ -119,11 +119,11 @@ class SparkConnectProgressHandlerE2E(SparkConnectSQLTestCase):
             self.assertGreater(len(kwargs.get("operation_id")), 0)
 
         try:
-            self.connect.registerProgressHandler(handler)
-            self.connect.range(100).repartition(20).count()
+            self.spark.registerProgressHandler(handler)
+            self.spark.range(100).repartition(20).count()
             self.assertTrue(called, "Handler must have been called")
         finally:
-            self.connect.clearProgressHandlers()
+            self.spark.clearProgressHandlers()
 
     def test_progress_properly_recorded(self):
         state = {"counter": 0}
@@ -132,11 +132,11 @@ class SparkConnectProgressHandlerE2E(SparkConnectSQLTestCase):
             state["counter"] += 1
 
         try:
-            self.connect.registerProgressHandler(handler)
-            self.connect.range(10000).repartition(20).count()
+            self.spark.registerProgressHandler(handler)
+            self.spark.range(10000).repartition(20).count()
             self.assertGreaterEqual(state["counter"], 1, "Handler should be called at least once.")
         finally:
-            self.connect.clearProgressHandlers()
+            self.spark.clearProgressHandlers()
 
 
 if __name__ == "__main__":

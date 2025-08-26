@@ -48,7 +48,7 @@ from pyspark.sql.datasource import (
 )
 from pyspark.sql.functions import spark_partition_id
 from pyspark.sql.session import SparkSession
-from pyspark.sql.types import Row, StructType
+from pyspark.sql.types import Row, StructType, VariantVal
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     SPARK_HOME,
@@ -88,18 +88,33 @@ class BasePythonDataSourceTestsMixin:
     def test_data_source_register(self):
         class TestReader(DataSourceReader):
             def read(self, partition):
-                yield (0, 1)
+                yield (
+                    0,
+                    1,
+                    VariantVal.parseJson('{"c":1}'),
+                    {"v": VariantVal.parseJson('{"d":2}')},
+                    [VariantVal.parseJson('{"e":3}')],
+                    {"v1": VariantVal.parseJson('{"f":4}'), "v2": VariantVal.parseJson('{"g":5}')},
+                )
 
         class TestDataSource(DataSource):
             def schema(self):
-                return "a INT, b INT"
+                return (
+                    "a INT, b INT, c VARIANT, d STRUCT<v VARIANT>, e ARRAY<VARIANT>,"
+                    "f MAP<STRING, VARIANT>"
+                )
 
             def reader(self, schema):
                 return TestReader()
 
         self.spark.dataSource.register(TestDataSource)
         df = self.spark.read.format("TestDataSource").load()
-        assertDataFrameEqual(df, [Row(a=0, b=1)])
+        assertDataFrameEqual(
+            df.selectExpr(
+                "a", "b", "to_json(c) c", "to_json(d.v) d", "to_json(e[0]) e", "to_json(f['v2']) f"
+            ),
+            [Row(a=0, b=1, c='{"c":1}', d='{"d":2}', e='{"e":3}', f='{"g":5}')],
+        )
 
         class MyDataSource(TestDataSource):
             @classmethod
@@ -107,13 +122,21 @@ class BasePythonDataSourceTestsMixin:
                 return "TestDataSource"
 
             def schema(self):
-                return "c INT, d INT"
+                return (
+                    "c INT, d INT, e VARIANT, f STRUCT<v VARIANT>, g ARRAY<VARIANT>,"
+                    "h MAP<STRING, VARIANT>"
+                )
 
         # Should be able to register the data source with the same name.
         self.spark.dataSource.register(MyDataSource)
 
         df = self.spark.read.format("TestDataSource").load()
-        assertDataFrameEqual(df, [Row(c=0, d=1)])
+        assertDataFrameEqual(
+            df.selectExpr(
+                "c", "d", "to_json(e) e", "to_json(f.v) f", "to_json(g[0]) g", "to_json(h['v2']) h"
+            ),
+            [Row(c=0, d=1, e='{"c":1}', f='{"d":2}', g='{"e":3}', h='{"g":5}')],
+        )
 
     def register_data_source(
         self,

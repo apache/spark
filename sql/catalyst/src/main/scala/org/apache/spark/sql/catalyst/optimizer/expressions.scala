@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -58,7 +59,20 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case _ => false
   }
 
-  private def constantFolding(
+  private def tryFold(expr: Expression, isConditionalBranch: Boolean): Expression = {
+    try {
+      Literal.create(expr.freshCopyIfContainsStatefulExpression().eval(EmptyRow), expr.dataType)
+    } catch {
+      case NonFatal(_) if isConditionalBranch =>
+        // When doing constant folding inside conditional expressions, we should not fail
+        // during expression evaluation, as the branch we are evaluating may not be reached at
+        // runtime, and we shouldn't fail the query, to match the original behavior.
+        expr.setTagValue(FAILED_TO_EVALUATE, ())
+        expr
+    }
+  }
+
+  private[sql] def constantFolding(
       e: Expression,
       isConditionalBranch: Boolean = false): Expression = e match {
     case c: ConditionalExpression if !c.foldable =>
@@ -77,17 +91,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case e if e.getTagValue(FAILED_TO_EVALUATE).isDefined => e
 
     // Fold expressions that are foldable.
-    case e if e.foldable =>
-      try {
-        Literal.create(e.freshCopyIfContainsStatefulExpression().eval(EmptyRow), e.dataType)
-      } catch {
-        case NonFatal(_) if isConditionalBranch =>
-          // When doing constant folding inside conditional expressions, we should not fail
-          // during expression evaluation, as the branch we are evaluating may not be reached at
-          // runtime, and we shouldn't fail the query, to match the original behavior.
-          e.setTagValue(FAILED_TO_EVALUATE, ())
-          e
-      }
+    case e if e.foldable => tryFold(e, isConditionalBranch)
 
     // Don't replace ScalarSubquery if its plan is an aggregate that may suffer from a COUNT bug.
     case s @ ScalarSubquery(_, _, _, _, _, mayHaveCountBug, _)
@@ -99,7 +103,13 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case s: ScalarSubquery if s.plan.maxRows.contains(0) =>
       Literal(null, s.dataType)
 
-    case other => other.mapChildren(constantFolding(_, isConditionalBranch))
+    case other =>
+      val newOther = other.mapChildren(constantFolding(_, isConditionalBranch))
+      if (newOther.foldable) {
+        tryFold(newOther, isConditionalBranch)
+      } else {
+        newOther
+      }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(AlwaysProcess.fn, ruleId) {
@@ -725,7 +735,7 @@ object SupportedBinaryExpr {
     case _: BinaryArithmetic => Some(expr, expr.children.head, expr.children.last)
     case _: BinaryMathExpression => Some(expr, expr.children.head, expr.children.last)
     case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub |
-         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimeAdd =>
+         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimestampAddInterval =>
       Some(expr, expr.children.head, expr.children.last)
     case _: FindInSet | _: RoundBase => Some(expr, expr.children.head, expr.children.last)
     case BinaryPredicate(expr) =>
@@ -742,10 +752,11 @@ object SupportedBinaryExpr {
 object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
   // if guards below protect from escapes on trailing %.
   // Cases like "something\%" are not optimized, but this does not affect correctness.
-  private val startsWith = "([^_%]+)%".r
-  private val endsWith = "%([^_%]+)".r
-  private val startsAndEndsWith = "([^_%]+)%([^_%]+)".r
-  private val contains = "%([^_%]+)%".r
+  // Consecutive wildcard characters are equivalent to a single wildcard character.
+  private val startsWith = "([^_%]+)%+".r
+  private val endsWith = "%+([^_%]+)".r
+  private val startsAndEndsWith = "([^_%]+)%+([^_%]+)".r
+  private val contains = "%+([^_%]+)%+".r
   private val equalTo = "([^_%]*)".r
 
   private def simplifyLike(
@@ -1091,6 +1102,8 @@ object FoldablePropagation extends Rule[LogicalPlan] {
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
     _.containsPattern(CAST), ruleId) {
+    case c @ Cast(e: NamedExpression, StringType, _, _)
+      if e.dataType == StringType && e.metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY) => c
     case Cast(e, dataType, _, _) if e.dataType == dataType => e
     case c @ Cast(Cast(e, dt1: NumericType, _, _), dt2: NumericType, _, _)
         if isWiderCast(e.dataType, dt1) && isWiderCast(dt1, dt2) =>

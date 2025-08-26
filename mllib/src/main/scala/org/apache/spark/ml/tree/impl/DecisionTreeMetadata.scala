@@ -20,7 +20,7 @@ package org.apache.spark.ml.tree.impl
 import scala.collection.mutable
 import scala.util.Try
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.tree.TreeEnsembleParams
 import org.apache.spark.mllib.tree.configuration.Algo._

@@ -163,6 +163,7 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       toAttributes(outputSchema),
       Seq((ChainedPythonFunctions(Seq(pythonUDF.func)), pythonUDF.resultId.id)),
       inputSchema,
+      outputSchema,
       conf.arrowMaxRecordsPerBatch,
       pythonEvalType,
       conf.sessionLocalTimeZone,

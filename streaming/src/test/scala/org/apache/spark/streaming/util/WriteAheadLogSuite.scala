@@ -27,7 +27,6 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 
-import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.mockito.ArgumentCaptor
@@ -477,7 +476,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     val batchedWal = new BatchedWriteAheadLog(wal, sparkConf)
 
     val e = intercept[SparkException] {
-      val buffer = if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
+      val buffer = if (Utils.isJavaVersionAtMost17) {
         mock[ByteBuffer]
       } else {
         // SPARK-40731: Use a 0 size `ByteBuffer` instead of `mock[ByteBuffer]`
@@ -553,7 +552,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     batchedWal.close()
     verify(wal, times(1)).close()
 
-    val buffer = if (SystemUtils.isJavaVersionAtMost(JavaVersion.JAVA_17)) {
+    val buffer = if (Utils.isJavaVersionAtMost17) {
       mock[ByteBuffer]
     } else {
       // SPARK-40731: Use a 0 size `ByteBuffer` instead of `mock[ByteBuffer]`

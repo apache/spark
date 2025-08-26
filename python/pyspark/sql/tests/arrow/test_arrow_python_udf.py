@@ -221,6 +221,61 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             ):
                 super().test_udf_with_udt()
 
+    def test_udf_use_arrow_and_session_conf(self):
+        with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": "true"}):
+            self.assertEqual(
+                udf(lambda x: str(x), useArrow=None).evalType, PythonEvalType.SQL_ARROW_BATCHED_UDF
+            )
+            self.assertEqual(
+                udf(lambda x: str(x), useArrow=True).evalType, PythonEvalType.SQL_ARROW_BATCHED_UDF
+            )
+            self.assertEqual(
+                udf(lambda x: str(x), useArrow=False).evalType, PythonEvalType.SQL_BATCHED_UDF
+            )
+        with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": "false"}):
+            self.assertEqual(
+                udf(lambda x: str(x), useArrow=None).evalType, PythonEvalType.SQL_BATCHED_UDF
+            )
+            self.assertEqual(
+                udf(lambda x: str(x), useArrow=True).evalType, PythonEvalType.SQL_ARROW_BATCHED_UDF
+            )
+            self.assertEqual(
+                udf(lambda x: str(x), useArrow=False).evalType, PythonEvalType.SQL_BATCHED_UDF
+            )
+
+
+@unittest.skipIf(
+    not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
+)
+class ArrowPythonUDFLegacyTestsMixin(ArrowPythonUDFTestsMixin):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.spark.conf.set("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "true")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled")
+        finally:
+            super().tearDownClass()
+
+
+class ArrowPythonUDFNonLegacyTestsMixin(ArrowPythonUDFTestsMixin):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.spark.conf.set(
+            "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled", "false"
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled")
+        finally:
+            super().tearDownClass()
+
 
 class ArrowPythonUDFTests(ArrowPythonUDFTestsMixin, ReusedSQLTestCase):
     @classmethod
@@ -236,18 +291,32 @@ class ArrowPythonUDFTests(ArrowPythonUDFTestsMixin, ReusedSQLTestCase):
             super(ArrowPythonUDFTests, cls).tearDownClass()
 
 
-class AsyncArrowPythonUDFTests(ArrowPythonUDFTests):
+class ArrowPythonUDFLegacyTests(ArrowPythonUDFLegacyTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(AsyncArrowPythonUDFTests, cls).setUpClass()
-        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.concurrency.level", "4")
+        super(ArrowPythonUDFLegacyTests, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
 
     @classmethod
     def tearDownClass(cls):
         try:
-            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.concurrency.level")
+            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
         finally:
-            super(AsyncArrowPythonUDFTests, cls).tearDownClass()
+            super(ArrowPythonUDFLegacyTests, cls).tearDownClass()
+
+
+class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super(ArrowPythonUDFNonLegacyTests, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
+        finally:
+            super(ArrowPythonUDFNonLegacyTests, cls).tearDownClass()
 
 
 if __name__ == "__main__":

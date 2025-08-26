@@ -41,6 +41,11 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
 
+  object JdbcClientTypes {
+    val INTEGER = "int"
+    val STRING = "nvarchar"
+  }
+
   def getExternalEngineQuery(executedPlan: SparkPlan): String = {
     getExternalEngineRdd(executedPlan).asInstanceOf[JDBCRDD].getExternalEngineQuery
   }
@@ -52,25 +57,44 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     queryNode.rdd
   }
 
+  // Following tests are disabled for both single and multiple partition read
   override def excluded: Seq[String] = Seq(
-    "simple scan with OFFSET",
-    "simple scan with LIMIT and OFFSET",
-    "simple scan with paging: top N and OFFSET",
-    "scan with aggregate push-down: VAR_POP with DISTINCT",
-    "scan with aggregate push-down: COVAR_POP with DISTINCT",
-    "scan with aggregate push-down: COVAR_POP without DISTINCT",
-    "scan with aggregate push-down: COVAR_SAMP with DISTINCT",
-    "scan with aggregate push-down: COVAR_SAMP without DISTINCT",
-    "scan with aggregate push-down: CORR with DISTINCT",
-    "scan with aggregate push-down: CORR without DISTINCT",
-    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT",
-    "scan with aggregate push-down: REGR_INTERCEPT without DISTINCT",
-    "scan with aggregate push-down: REGR_SLOPE with DISTINCT",
-    "scan with aggregate push-down: REGR_SLOPE without DISTINCT",
-    "scan with aggregate push-down: REGR_R2 with DISTINCT",
-    "scan with aggregate push-down: REGR_R2 without DISTINCT",
-    "scan with aggregate push-down: REGR_SXY with DISTINCT",
-    "scan with aggregate push-down: REGR_SXY without DISTINCT")
+    "simple scan with OFFSET (false)",
+    "simple scan with OFFSET (true)",
+    "simple scan with LIMIT and OFFSET (false)",
+    "simple scan with LIMIT and OFFSET (true)",
+    "simple scan with paging: top N and OFFSET (false)",
+    "simple scan with paging: top N and OFFSET (true)",
+    "scan with aggregate push-down: VAR_POP with DISTINCT (false)",
+    "scan with aggregate push-down: VAR_POP with DISTINCT (true)",
+    "scan with aggregate push-down: COVAR_POP with DISTINCT (false)",
+    "scan with aggregate push-down: COVAR_POP with DISTINCT (true)",
+    "scan with aggregate push-down: COVAR_POP without DISTINCT (false)",
+    "scan with aggregate push-down: COVAR_POP without DISTINCT (true)",
+    "scan with aggregate push-down: COVAR_SAMP with DISTINCT (false)",
+    "scan with aggregate push-down: COVAR_SAMP with DISTINCT (true)",
+    "scan with aggregate push-down: COVAR_SAMP without DISTINCT (false)",
+    "scan with aggregate push-down: COVAR_SAMP without DISTINCT (true)",
+    "scan with aggregate push-down: CORR with DISTINCT (false)",
+    "scan with aggregate push-down: CORR with DISTINCT (true)",
+    "scan with aggregate push-down: CORR without DISTINCT (false)",
+    "scan with aggregate push-down: CORR without DISTINCT (true)",
+    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_INTERCEPT without DISTINCT (false)",
+    "scan with aggregate push-down: REGR_INTERCEPT without DISTINCT (true)",
+    "scan with aggregate push-down: REGR_SLOPE with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_SLOPE with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_SLOPE without DISTINCT (false)",
+    "scan with aggregate push-down: REGR_SLOPE without DISTINCT (true)",
+    "scan with aggregate push-down: REGR_R2 with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_R2 with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_R2 without DISTINCT (false)",
+    "scan with aggregate push-down: REGR_R2 without DISTINCT (true)",
+    "scan with aggregate push-down: REGR_SXY with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_SXY with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_SXY without DISTINCT (false)",
+    "scan with aggregate push-down: REGR_SXY without DISTINCT (true)")
 
   override val catalogName: String = "mssql"
   override val db = new MsSQLServerDatabaseOnDocker
@@ -93,18 +117,28 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     ).executeUpdate()
   }
 
+  override def testRenameColumn(tbl: String): Unit = {
+    sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO RENAMED")
+    val t = spark.table(s"$tbl")
+    val expectedSchema = new StructType()
+      .add("RENAMED", StringType, true, defaultMetadata(StringType, JdbcClientTypes.STRING))
+      .add("ID1", StringType, true, defaultMetadata(StringType, JdbcClientTypes.STRING))
+      .add("ID2", StringType, true, defaultMetadata(StringType, JdbcClientTypes.STRING))
+    assert(t.schema === expectedSchema)
+  }
+
   override def notSupportsTableComment: Boolean = true
 
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
     var expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, JdbcClientTypes.INTEGER))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
     expectedSchema = new StructType()
-      .add("ID", StringType, true, defaultMetadata())
+      .add("ID", StringType, true, defaultMetadata(StringType, JdbcClientTypes.STRING))
     assert(t.schema === expectedSchema)
     // Update column type from STRING to INTEGER
     val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"

@@ -20,13 +20,15 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, SQLFunctionNode, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, SQLFunction, UserDefinedFunctionErrors}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, WindowExpression}
+import org.apache.spark.sql.catalyst.analysis.{withPosition, Analyzer, SQLFunctionExpression, SQLFunctionNode, SQLScalarFunction, SQLTableFunction, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, SQLFunction, UserDefinedFunction, UserDefinedFunctionErrors}
+import org.apache.spark.sql.catalyst.catalog.UserDefinedFunction._
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.logical.{LateralJoin, LogicalPlan, OneRowRelation, Project, UnresolvedWith}
+import org.apache.spark.sql.catalyst.plans.logical.{LateralJoin, LocalRelation, LogicalPlan, OneRowRelation, Project, Range, UnresolvedWith, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.CreateUserDefinedFunctionCommand._
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
@@ -70,7 +72,7 @@ case class CreateSQLFunctionCommand(
     val catalog = sparkSession.sessionState.catalog
     val conf = sparkSession.sessionState.conf
 
-    val inputParam = inputParamText.map(parser.parseTableSchema)
+    val inputParam = inputParamText.map(UserDefinedFunction.parseRoutineParam(_, parser))
     val returnType = parseReturnTypeText(returnTypeText, isTableFunc, parser)
 
     val function = SQLFunction(
@@ -150,6 +152,9 @@ case class CreateSQLFunctionCommand(
           Project(outputAlias, inputPlan)
         }
 
+        // Check cyclic function reference before running the analyzer.
+        checkCyclicFunctionReference(catalog, name, plan)
+
         // Check the function body can be analyzed correctly.
         val analyzed = analyzer.execute(plan)
         val (resolved, resolvedReturnType) = analyzed match {
@@ -172,6 +177,8 @@ case class CreateSQLFunctionCommand(
         if (query.isEmpty) {
           throw UserDefinedFunctionErrors.bodyIsNotAQueryForSqlTableUdf(name.funcName)
         }
+        // Check cyclic function reference before running the analyzer.
+        checkCyclicFunctionReference(catalog, name, query.get)
 
         // Construct a lateral join to analyze the function body.
         val plan = LateralJoin(inputPlan, LateralSubquery(query.get), Inner, None)
@@ -241,10 +248,14 @@ case class CreateSQLFunctionCommand(
       // Derive determinism of the SQL function.
       val deterministic = analyzedPlan.deterministic
 
+      // Derive and check a SQL function with CONTAINS SQL data access should not reads SQL data.
+      val readsSQLData = deriveSQLDataAccess(analyzedPlan)
+
       function.copy(
         // Assign the return type, inferring from the function body if needed.
         returnType = inferredReturnType,
         deterministic = Some(function.deterministic.getOrElse(deterministic)),
+        containsSQL = Some(function.containsSQL.getOrElse(!readsSQLData)),
         properties = properties
       )
     }
@@ -368,6 +379,61 @@ case class CreateSQLFunctionCommand(
   }
 
   /**
+   * Check if the given plan contains cyclic function references.
+   */
+  private def checkCyclicFunctionReference(
+      catalog: SessionCatalog,
+      identifier: FunctionIdentifier,
+      plan: LogicalPlan): Unit = {
+
+    def checkPlan(plan: LogicalPlan, path: Seq[FunctionIdentifier]): Unit = {
+      plan.foreach {
+        case u @ UnresolvedTableValuedFunction(nameParts, arguments, _) =>
+          val funcId = nameParts.asFunctionIdentifier
+          val info = catalog.lookupFunctionInfo(funcId)
+          if (isSQLFunction(info.getClassName)) {
+            val f = withPosition(u) {
+              catalog.lookupTableFunction(funcId, arguments).asInstanceOf[SQLTableFunction]
+            }
+            // Check cyclic reference using qualified function names.
+            val newPath = path :+ f.function.name
+            if (f.function.name == name) {
+              throw UserDefinedFunctionErrors.cyclicFunctionReference(newPath.mkString(" -> "))
+            }
+            val plan = catalog.makeSQLTableFunctionPlan(f.name, f.function, f.inputs, f.output)
+            checkPlan(plan, newPath)
+        }
+        case p: LogicalPlan =>
+          p.expressions.foreach(checkExpression(_, path))
+      }
+    }
+
+    def checkExpression(expression: Expression, path: Seq[FunctionIdentifier]): Unit = {
+      expression.foreach {
+        case s: SubqueryExpression => checkPlan(s.plan, path)
+        case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _) =>
+          val funcId = nameParts.asFunctionIdentifier
+          val info = catalog.lookupFunctionInfo(funcId)
+          if (isSQLFunction(info.getClassName)) {
+            val f = withPosition(u) {
+              catalog.lookupFunction(funcId, arguments).asInstanceOf[SQLFunctionExpression]
+            }
+            // Check cyclic reference using qualified function names.
+            val newPath = path :+ f.function.name
+            if (f.function.name == name) {
+              throw UserDefinedFunctionErrors.cyclicFunctionReference(newPath.mkString(" -> "))
+            }
+            val plan = catalog.makeSQLFunctionPlan(f.name, f.function, f.inputs)
+            checkPlan(plan, newPath)
+          }
+        case _ =>
+      }
+    }
+
+    checkPlan(plan, Seq(identifier))
+  }
+
+  /**
    * Check if the SQL function body contains aggregate/window/generate functions.
    * Note subqueries inside the SQL function body can contain aggregate/window/generate functions.
    */
@@ -382,6 +448,43 @@ case class CreateSQLFunctionCommand(
           )
       }
     }
+  }
+
+  /**
+   * Derive the SQL data access routine of the function and check if the SQL function matches
+   * its data access routine. If the data access is CONTAINS SQL, the expression should not
+   * access operators and expressions that read SQL data.
+   *
+   * Returns true is SQL data access routine is READS SQL DATA, otherwise returns false.
+   */
+  private def deriveSQLDataAccess(plan: LogicalPlan): Boolean = {
+    // Find logical plan nodes that read SQL data.
+    val readsSQLData = plan.find {
+      case _: View => true
+      case p if p.children.isEmpty => p match {
+        case _: OneRowRelation | _: LocalRelation | _: Range => false
+        case _ => true
+      }
+      case f: SQLFunctionNode => f.function.containsSQL.contains(false)
+      case p: LogicalPlan =>
+        lazy val sub = p.subqueries.exists(deriveSQLDataAccess)
+        // If the SQL function contains another SQL function that has SQL data access routine
+        // to be READS SQL DATA, then this SQL function will also be READS SQL DATA.
+        p.expressions.exists(expr => expr.find {
+          case f: SQLScalarFunction => f.function.containsSQL.contains(false)
+          case sub: SubqueryExpression => deriveSQLDataAccess(sub.plan)
+          case _ => false
+        }.isDefined)
+    }.isDefined
+
+    if (containsSQL.contains(true) && readsSQLData) {
+      throw new AnalysisException(
+        errorClass = "INVALID_SQL_FUNCTION_DATA_ACCESS",
+        messageParameters = Map.empty
+      )
+    }
+
+    readsSQLData
   }
 
   /**
@@ -407,7 +510,7 @@ case class CreateSQLFunctionCommand(
     }
     val tempVars = ViewHelper.collectTemporaryVariables(analyzed)
 
-    sqlConfigsToProps(conf) ++
+    sqlConfigsToProps(conf, SQL_CONFIG_PREFIX) ++
       catalogAndNamespaceToProps(
         manager.currentCatalog.name,
         manager.currentNamespace.toIndexedSeq) ++

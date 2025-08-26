@@ -25,7 +25,7 @@ import java.util.Locale
 import scala.concurrent.duration.MICROSECONDS
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
@@ -45,7 +45,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources.SimpleScanSource
@@ -56,6 +56,9 @@ abstract class DataSourceV2SQLSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
   with DeleteFromTests with DatasourceV2SQLBase with StatsEstimationTestBase
   with AdaptiveSparkPlanHelper {
+
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
 
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
   override protected val v2Format = v2Source
@@ -645,8 +648,16 @@ class DataSourceV2SQLSuiteV1Filter
       assert(replaced.columns.length === 1,
         "Replaced table should have new schema.")
       val actual = replaced.columns.head
-      val expected = ColumnV2.create("id", LongType, false, null,
-        new ColumnDefaultValue("41 + 1", LiteralValue(42L, LongType)), null)
+      val expected = ColumnV2.create(
+        "id",
+        LongType,
+        false, /* not nullable */
+        null, /* no comment */
+        new ColumnDefaultValue(
+          "41 + 1",
+          LiteralValue(42L, LongType),
+          LiteralValue(42L, LongType)),
+        null /* no metadata */)
       assert(actual === expected,
         "Replaced table should have new schema with DEFAULT column metadata.")
     }
@@ -3552,19 +3563,109 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("SPARK-48286: Add new column with default value which is not foldable") {
+  test("CREATE TABLE with invalid default value") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      withTable("t") {
+        // The default value fails to analyze.
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"create table t(s int default badvalue) using $v2Format")
+          },
+          condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          parameters = Map(
+            "statement" -> "CREATE TABLE",
+            "colName" -> "`s`",
+            "defaultValue" -> "badvalue"))
+      }
+    }
+  }
+
+  test("REPLACE TABLE with invalid default value") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
+      withTable("t") {
+        sql(s"create table t(i boolean) using $v2Format")
+
+        // The default value fails to analyze.
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"replace table t(s int default badvalue) using $v2Format")
+          },
+          condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          parameters = Map(
+            "statement" -> "REPLACE TABLE",
+            "colName" -> "`s`",
+            "defaultValue" -> "badvalue"))
+      }
+    }
+  }
+
+  test("SPARK-52116: Create table with default value which is not deterministic") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> v2Source) {
+      withTable("tab") {
+        val exception = analysisException(
+          // Rand function is not deterministic
+          s"CREATE TABLE tab (col1 DOUBLE DEFAULT rand()) USING $v2Source")
+        assert(exception.getSqlState == "42623")
+        assert(exception.errorClass.get == "INVALID_DEFAULT_VALUE.NON_DETERMINISTIC")
+        assert(exception.messageParameters("statement") == "CREATE TABLE")
+        assert(exception.messageParameters("colName") == "`col1`")
+        assert(exception.messageParameters("defaultValue") == "rand()")
+      }
+    }
+  }
+
+  test("SPARK-52116: Replace table with default value which is not deterministic") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> v2Source) {
+      withTable("tab") {
+        spark.sql(s"CREATE TABLE tab (col1 INT DEFAULT 100) USING $v2Source")
+        val exception = analysisException(
+          // Rand function is not deterministic
+          s"REPLACE TABLE tab (col1 DOUBLE DEFAULT rand()) USING $v2Source")
+        assert(exception.getSqlState == "42623")
+        assert(exception.errorClass.get == "INVALID_DEFAULT_VALUE.NON_DETERMINISTIC")
+        assert(exception.messageParameters("statement") == "REPLACE TABLE")
+        assert(exception.messageParameters("colName") == "`col1`")
+        assert(exception.messageParameters("defaultValue") == "rand()")
+      }
+    }
+  }
+
+  test("SPARK-52116: Add new column with default value which is not deterministic") {
     val foldableExpressions = Seq("1", "2 + 1")
     withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> v2Source) {
       withTable("tab") {
         spark.sql(s"CREATE TABLE tab (col1 INT DEFAULT 100) USING $v2Source")
         val exception = analysisException(
-          // Rand function is not foldable
+          // Rand function is not deterministic
           s"ALTER TABLE tab ADD COLUMN col2 DOUBLE DEFAULT rand()")
         assert(exception.getSqlState == "42623")
-        assert(exception.errorClass.get == "INVALID_DEFAULT_VALUE.NOT_CONSTANT")
+        assert(exception.errorClass.get == "INVALID_DEFAULT_VALUE.NON_DETERMINISTIC")
+        assert(exception.messageParameters("statement") == "ALTER TABLE ADD COLUMNS")
         assert(exception.messageParameters("colName") == "`col2`")
         assert(exception.messageParameters("defaultValue") == "rand()")
-        assert(exception.messageParameters("statement") == "ALTER TABLE")
+      }
+      foldableExpressions.foreach(expr => {
+        withTable("tab") {
+          spark.sql(s"CREATE TABLE tab (col1 INT DEFAULT 100) USING $v2Source")
+          spark.sql(s"ALTER TABLE tab ADD COLUMN col2 DOUBLE DEFAULT $expr")
+        }
+      })
+    }
+  }
+
+  test("SPARK-52116: alter column with default value which is not deterministic") {
+    val foldableExpressions = Seq("1", "2 + 1")
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> v2Source) {
+      withTable("tab") {
+        spark.sql(s"CREATE TABLE tab (col1 DOUBLE DEFAULT 0) USING $v2Source")
+        val exception = analysisException(
+          // Rand function is not deterministic
+          s"ALTER TABLE tab ALTER COLUMN col1 SET DEFAULT rand()")
+        assert(exception.getSqlState == "42623")
+        assert(exception.errorClass.get == "INVALID_DEFAULT_VALUE.NON_DETERMINISTIC")
+        assert(exception.messageParameters("statement") == "ALTER TABLE ALTER COLUMN")
+        assert(exception.messageParameters("colName") == "`col1`")
+        assert(exception.messageParameters("defaultValue") == "rand()")
       }
       foldableExpressions.foreach(expr => {
         withTable("tab") {
@@ -3805,12 +3906,8 @@ class SimpleDelegatingCatalog extends DelegatingCatalogExtension {
 
 
 class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
-  override def createTable(
-      ident: Identifier,
-      columns: Array[ColumnV2],
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
-    super.createTable(ident, columns, partitions, properties)
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    super.createTable(ident, tableInfo)
     null
   }
 
@@ -3836,12 +3933,9 @@ class V2CatalogSupportBuiltinDataSource extends InMemoryCatalog {
 }
 
 class ReadOnlyCatalog extends InMemoryCatalog {
-  override def createTable(
-      ident: Identifier,
-      columns: Array[ColumnV2],
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
-    super.createTable(ident, columns, partitions, properties)
+
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    super.createTable(ident, tableInfo)
     null
   }
 

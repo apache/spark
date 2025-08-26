@@ -21,21 +21,20 @@ import java.io.{DataInputStream, DataOutputStream, FileNotFoundException, IOExce
 
 import scala.util.control.NonFatal
 
-import com.google.common.io.ByteStreams
-import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs.{FSError, Path}
 import org.json4s._
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.execution.streaming.state.RecordType.RecordType
 import org.apache.spark.util.NextIterator
+import org.apache.spark.util.Utils
 
 /**
  * Enum used to write record types to changelog files used with RocksDBStateStoreProvider.
@@ -132,7 +131,7 @@ abstract class StateStoreChangelogWriter(
   def abort(): Unit = {
     try {
       if (backingFileStream != null) backingFileStream.cancel()
-      if (compressedStream != null) IOUtils.closeQuietly(compressedStream)
+      if (compressedStream != null) Utils.closeQuietly(compressedStream)
     } catch {
       // Closing the compressedStream causes the stream to write/flush data into the
       // rawStream. Since the rawStream is already closed, there may be errors.
@@ -368,7 +367,14 @@ class StateStoreChangelogReaderFactory(
       // When there is no record being written in the changelog file in V1,
       // the file contains a single int -1 meaning EOF, then the above readUTF()
       // throws with EOFException and we return version 1.
-      case _: java.io.EOFException => 1
+      // Or if the first record in the changelog file in V1 has a large enough
+      // key, readUTF() will throw a UTFDataFormatException so we should return
+      // version 1 (SPARK-51922).
+      case _: java.io.EOFException |
+           _: java.io.UTFDataFormatException |
+           // SPARK-52553 - Can throw this if the bytes in the file is coincidentally
+           // decoded as UTF string like "v)".
+           _: NumberFormatException => 1
     }
   }
 
@@ -478,14 +484,14 @@ class StateStoreChangelogReaderV1(
     } else {
       // TODO: reuse the key buffer and value buffer across records.
       val keyBuffer = new Array[Byte](keySize)
-      ByteStreams.readFully(input, keyBuffer, 0, keySize)
+      Utils.readFully(input, keyBuffer, 0, keySize)
       val valueSize = input.readInt()
       if (valueSize < 0) {
         // A deletion record
         (RecordType.DELETE_RECORD, keyBuffer, null)
       } else {
         val valueBuffer = new Array[Byte](valueSize)
-        ByteStreams.readFully(input, valueBuffer, 0, valueSize)
+        Utils.readFully(input, valueBuffer, 0, valueSize)
         // A put record.
         (RecordType.PUT_RECORD, keyBuffer, valueBuffer)
       }
@@ -509,7 +515,7 @@ class StateStoreChangelogReaderV2(
   private def parseBuffer(input: DataInputStream): Array[Byte] = {
     val blockSize = input.readInt()
     val blockBuffer = new Array[Byte](blockSize)
-    ByteStreams.readFully(input, blockBuffer, 0, blockSize)
+    Utils.readFully(input, blockBuffer, 0, blockSize)
     blockBuffer
   }
 

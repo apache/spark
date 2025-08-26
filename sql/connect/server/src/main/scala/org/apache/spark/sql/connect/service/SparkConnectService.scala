@@ -29,13 +29,12 @@ import io.grpc.netty.NettyServerBuilder
 import io.grpc.protobuf.ProtoUtils
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
-import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, SparkConnectServiceGrpc}
 import org.apache.spark.connect.proto.SparkConnectServiceGrpc.AsyncService
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.HOST
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerEvent}
@@ -363,7 +362,7 @@ object SparkConnectService extends Logging {
    * Starts the GRPC Service.
    */
   private def startGRPCService(): Unit = {
-    val debugMode = SparkEnv.get.conf.getBoolean("spark.connect.grpc.debug.enabled", true)
+    val debugMode = SparkEnv.get.conf.getBoolean("spark.connect.grpc.debug.enabled", false)
     val bindAddress = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_ADDRESS)
     val startPort = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_PORT)
     val sparkConnectService = new SparkConnectService(debugMode)
@@ -409,7 +408,11 @@ object SparkConnectService extends Logging {
     }
 
     val maxRetries: Int = SparkEnv.get.conf.get(CONNECT_GRPC_PORT_MAX_RETRIES)
-    Utils.startServiceOnPort[Server](startPort, startServiceFn, maxRetries, getClass.getName)
+    Utils.startServiceOnPort[Server](
+      startPort,
+      startServiceFn,
+      maxRetries,
+      getClass.getName.stripSuffix("$"))
   }
 
   // Starts the service
@@ -500,7 +503,7 @@ object SparkConnectService extends Logging {
   }
 
   def extractErrorMessage(st: Throwable): String = {
-    val message = StringUtils.abbreviate(st.getMessage, 2048)
+    val message = Utils.abbreviate(st.getMessage, 2048)
     convertNullString(message)
   }
 

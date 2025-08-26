@@ -324,7 +324,9 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def charTypeMissingLengthError(dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
+  def charVarcharTypeMissingLengthError(
+      dataType: String,
+      ctx: PrimitiveDataTypeContext): Throwable = {
     new ParseException(
       errorClass = "DATATYPE_MISSING_SIZE",
       messageParameters = Map("type" -> toSQLType(dataType)),
@@ -333,7 +335,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def nestedTypeMissingElementTypeError(
       dataType: String,
-      ctx: PrimitiveDataTypeContext): Throwable = {
+      ctx: ComplexDataTypeContext): Throwable = {
     dataType.toUpperCase(Locale.ROOT) match {
       case "ARRAY" =>
         new ParseException(
@@ -652,6 +654,20 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.CREATE_ROUTINE_WITH_IF_NOT_EXISTS_AND_REPLACE",
       ctx)
+  }
+
+  def createTempTableUsingProviderError(ctx: CreateTableContext): Throwable = {
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.CREATE_TEMP_TABLE_USING_PROVIDER", ctx)
+  }
+
+  def createFuncWithGeneratedColumnsError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_GENERATED_COLUMNS_AS_PARAMETERS",
+      ctx)
+  }
+
+  def createFuncWithConstraintError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.CREATE_FUNC_WITH_COLUMN_CONSTRAINTS", ctx)
   }
 
   def defineTempFuncWithIfNotExistsError(ctx: ParserRuleContext): Throwable = {

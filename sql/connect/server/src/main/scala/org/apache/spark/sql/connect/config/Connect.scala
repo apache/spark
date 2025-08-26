@@ -304,7 +304,7 @@ object Connect {
       .version("4.0.0")
       .internal()
       .intConf
-      .createWithDefault(16)
+      .createWithDefault(32)
 
   val CONNECT_SESSION_PLAN_CACHE_ENABLED =
     buildConf("spark.connect.session.planCache.enabled")
@@ -313,6 +313,17 @@ object Connect {
         s" When false, the cache is disabled even if '${CONNECT_SESSION_PLAN_CACHE_SIZE.key}' is" +
         " greater than zero. The caching is best-effort and not guaranteed.")
       .version("4.0.0")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
+  val CONNECT_ALWAYS_CACHE_DATA_SOURCE_READS_ENABLED =
+    buildConf("spark.connect.session.planCache.alwaysCacheDataSourceReadsEnabled")
+      .doc("When true, always cache the translation of Read.DataSource plans" +
+        " in the plan cache. This massively improves the performance of queries that reuse the" +
+        " same Read.DataSource within the same session, since these translations/analyses" +
+        " are usually quite costly.")
+      .version("4.1.0")
       .internal()
       .booleanConf
       .createWithDefault(true)
@@ -334,23 +345,51 @@ object Connect {
     }
   }
 
-  val CONNECT_SESSION_CONNECT_ML_CACHE_MAX_SIZE =
-    buildConf("spark.connect.session.connectML.mlCache.maxSize")
-      .doc("Maximum size of the MLCache per session. The cache will evict the least recently" +
-        "used models if the size exceeds this limit. The size is in bytes.")
+  val CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED =
+    buildConf("spark.connect.session.connectML.mlCache.memoryControl.enabled")
+      .doc("Enables ML cache memory control, it includes offloading model to disk, " +
+        "limiting model size, and limiting per-session ML cache size.")
+      .version("4.1.0")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
+  val CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_IN_MEMORY_SIZE =
+    buildConf("spark.connect.session.connectML.mlCache.memoryControl.maxInMemorySize")
+      .doc(
+        "Maximum in-memory size of the MLCache per session. The cache will offload the least " +
+          "recently used models to Spark driver local disk if the size exceeds this limit. " +
+          "The size is in bytes.")
       .version("4.1.0")
       .internal()
       .bytesConf(ByteUnit.BYTE)
-      // By default, 1/3 of total designated memory (the configured -Xmx).
-      .createWithDefault(Runtime.getRuntime.maxMemory() / 3)
+      // By default, 1/4 of total designated memory (the configured -Xmx).
+      .createWithDefault(Runtime.getRuntime.maxMemory() / 4)
 
-  val CONNECT_SESSION_CONNECT_ML_CACHE_TIMEOUT =
-    buildConf("spark.connect.session.connectML.mlCache.timeout")
+  val CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_OFFLOADING_TIMEOUT =
+    buildConf("spark.connect.session.connectML.mlCache.memoryControl.offloadingTimeout")
       .doc(
-        "Timeout of models in MLCache. Models will be evicted from the cache if they are not " +
-          "used for this amount of time. The timeout is in minutes.")
+        "Timeout of model offloading in MLCache. Models will be offloaded to Spark driver local " +
+          "disk if they are not used for this amount of time. The timeout is in minutes.")
       .version("4.1.0")
       .internal()
       .timeConf(TimeUnit.MINUTES)
       .createWithDefault(15)
+
+  val CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE =
+    buildConf("spark.connect.session.connectML.mlCache.memoryControl.maxModelSize")
+      .doc("Maximum size of a single SparkML model. The size is in bytes.")
+      .version("4.1.0")
+      .internal()
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("1g")
+
+  val CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_STORAGE_SIZE =
+    buildConf("spark.connect.session.connectML.mlCache.memoryControl.maxStorageSize")
+      .doc("Maximum total size (including in-memory and offloaded data) of the ml cache. " +
+        "The size is in bytes.")
+      .version("4.1.0")
+      .internal()
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("10g")
 }

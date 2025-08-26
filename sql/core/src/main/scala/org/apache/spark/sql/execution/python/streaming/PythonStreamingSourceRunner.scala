@@ -19,6 +19,7 @@
 package org.apache.spark.sql.execution.python.streaming
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream}
+import java.nio.channels.Channels
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -27,7 +28,7 @@ import org.apache.arrow.vector.ipc.ArrowStreamReader
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.api.python.{PythonFunction, PythonWorker, PythonWorkerFactory, PythonWorkerUtils, SpecialLengths}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.PYTHON_EXEC
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
@@ -99,7 +100,7 @@ class PythonStreamingSourceRunner(
     pythonWorkerFactory = Some(workerFactory)
 
     val stream = new BufferedOutputStream(
-      pythonWorker.get.channel.socket().getOutputStream, bufferSize)
+      Channels.newOutputStream(pythonWorker.get.channel), bufferSize)
     dataOut = new DataOutputStream(stream)
 
     PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
@@ -118,7 +119,7 @@ class PythonStreamingSourceRunner(
     dataOut.flush()
 
     dataIn = new DataInputStream(
-      new BufferedInputStream(pythonWorker.get.channel.socket().getInputStream, bufferSize))
+      new BufferedInputStream(Channels.newInputStream(pythonWorker.get.channel), bufferSize))
 
     val initStatus = dataIn.readInt()
     if (initStatus == SpecialLengths.PYTHON_EXCEPTION_THROWN) {

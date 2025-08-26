@@ -382,7 +382,8 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       parameters = Map(
         "expression" -> "'str'",
         "sourceType" -> "\"STRING\"",
-        "targetType" -> "\"DECIMAL(10,0)\""))
+        "targetType" -> "\"DECIMAL(10,0)\"",
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
   }
 
   test("SPARK-35841: Casting string to decimal type doesn't work " +

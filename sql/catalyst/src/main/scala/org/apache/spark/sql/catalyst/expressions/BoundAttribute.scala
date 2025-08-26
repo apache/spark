@@ -77,8 +77,7 @@ object BindReferences extends Logging {
         if (allowFailures) {
           a
         } else {
-          throw SparkException.internalError(
-            s"Couldn't find $a in ${input.attrs.mkString("[", ",", "]")}")
+          throw attributeNotFoundException(a, input.attrs)
         }
       } else {
         BoundReference(ordinal, a.dataType, input(ordinal).nullable)
@@ -94,4 +93,18 @@ object BindReferences extends Logging {
       input: AttributeSeq): Seq[A] = {
     expressions.map(BindReferences.bindReference(_, input))
   }
+
+  /**
+   * A helper function to produce an exception when binding a reference fails.
+   * Public for testing.
+   */
+  def attributeNotFoundException(
+      missingAttr: AttributeReference,
+      inputAttrs: Seq[Attribute]): SparkException =
+    new SparkException(
+      errorClass = "INTERNAL_ERROR_ATTRIBUTE_NOT_FOUND",
+      messageParameters = Map(
+        "missingAttr" -> missingAttr.toString,
+        "inputAttrs" -> inputAttrs.mkString("[", ",", "]")),
+      cause = null)
 }

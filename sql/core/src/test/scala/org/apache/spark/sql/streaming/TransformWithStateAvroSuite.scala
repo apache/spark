@@ -17,17 +17,26 @@
 
 package org.apache.spark.sql.streaming
 
+import org.apache.hadoop.fs.Path
 import org.scalactic.source.Position
 import org.scalatest.Tag
+import org.scalatest.matchers.must.Matchers.be
+import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
+import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
-import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.{RocksDBStateStoreProvider, StateStoreInvalidValueSchemaEvolution, StateStoreValueSchemaEvolutionThresholdExceeded}
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, MicroBatchExecution}
+import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_OFFSETS
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataV2, RocksDBStateStoreProvider, StateStoreInvalidValueSchemaEvolution, StateStoreValueSchemaEvolutionThresholdExceeded}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.SlowSQLTest
 
+@SlowSQLTest
 class TransformWithStateAvroSuite extends TransformWithStateSuite {
 
   import testImplicits._
@@ -260,6 +269,190 @@ class TransformWithStateAvroSuite extends TransformWithStateSuite {
           CheckNewAnswer(("a", "2")), // Should continue counting from previous state
           StopStream
         )
+      }
+    }
+  }
+
+  test("transformWithState - verify schema files are retained through multiple evolutions") {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "1",
+      SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "avro") {
+      withTempDir { chkptDir =>
+        val stateOpIdPath = new Path(new Path(chkptDir.getCanonicalPath, "state"), "0")
+        val stateSchemaPath = getStateSchemaPath(stateOpIdPath)
+        val metadataPath = OperatorStateMetadataV2.metadataDirPath(stateOpIdPath)
+
+        // Start with initial basic state schema
+        val inputData = MemoryStream[String]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new DefaultValueInitialProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, "a"),
+          CheckNewAnswer(("a", BasicState("a".hashCode, "a"))),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+
+        val hadoopConf = spark.sessionState.newHadoopConf()
+        val fm = CheckpointFileManager.create(new Path(chkptDir.toString),
+          hadoopConf)
+        fm.mkdirs(new Path(new Path(chkptDir.toString, DIR_NAME_OFFSETS),
+          "dummy_path_name"))
+        fm.mkdirs(
+          new Path(OperatorStateMetadataV2.metadataDirPath(
+            new Path(new Path(new Path(chkptDir.toString), "state"), "0")
+          ),
+            "dummy_path_name")
+        )
+        val dummySchemaPath =
+          new Path(stateSchemaPath, "__dummy_file_path")
+        fm.mkdirs(dummySchemaPath)
+
+
+        // Capture initial schema files (after first schema evolution)
+        val initialSchemaFiles = getFiles(stateSchemaPath).length
+        assert(initialSchemaFiles > 0, "Expected schema files after initial run")
+
+        // Second run with evolved state (adding fields)
+        val result2 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new DefaultValueEvolvedProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, "b"),
+          CheckNewAnswer(("b", EvolvedState("b".hashCode, "b", 100L, true, 99.9))),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+
+        // Capture schema files after second evolution
+        val afterAddingFieldsSchemaFiles = getFiles(stateSchemaPath).length
+        assert(afterAddingFieldsSchemaFiles > initialSchemaFiles,
+          s"Expected more schema files after adding fields," +
+            s" but had $initialSchemaFiles before and $afterAddingFieldsSchemaFiles after")
+
+        // Third run with TwoLongs schema
+        val result3 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessorTwoLongs(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result3, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, "c"),
+          CheckNewAnswer(("c", "1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+
+        // Capture schema files after third evolution
+        val afterTwoLongsSchemaFiles = getFiles(stateSchemaPath).length
+        assert(afterTwoLongsSchemaFiles > afterAddingFieldsSchemaFiles,
+          "Expected more schema files after TwoLongs schema change")
+
+        // Fourth run with ReorderedLongs schema
+        val result4 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessorReorderedFields(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result4, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, "d"),
+          CheckNewAnswer(("d", "1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+
+        // Capture schema files after fourth evolution
+        val afterReorderedSchemaFiles = getFiles(stateSchemaPath).length
+        assert(afterReorderedSchemaFiles > afterTwoLongsSchemaFiles,
+          "Expected more schema files after ReorderedLongs schema change")
+
+        // Fifth run with RenamedFields schema
+        val result5 = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RenameEvolvedProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result5, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, "e"),
+          CheckNewAnswer(("e", "1")),
+          // Run multiple batches to trigger maintenance
+          AddData(inputData, "f"),
+          CheckNewAnswer(("f", "1")),
+          AddData(inputData, "g"),
+          CheckNewAnswer(("g", "1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+
+        // Verify metadata files were purged with MIN_BATCHES_TO_RETAIN=1
+        val finalMetadataFiles = getFiles(metadataPath).length
+        // We expect the dummy folder and 2 metadata files
+        assert(finalMetadataFiles <= 3,
+          s"Expected metadata files to be purged to at most 3, but found $finalMetadataFiles")
+
+        // Verify schema files were NOT purged despite aggressive metadata purging
+        val schemaFiles = getFiles(stateSchemaPath).map(_.getPath.getName)
+        val finalSchemaFiles = schemaFiles.length
+        assert(finalSchemaFiles >= 5,
+          s"Expected at least 5 schema files to be retained" +
+            s" (one per schema evolution), but found $finalSchemaFiles")
+        assert(schemaFiles.contains(dummySchemaPath.getName))
+
+        // Verify we can read historical state for different batches
+        // This should work even though metadata may have been purged for earlier batches
+        val latestStateDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, chkptDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+          .load()
+
+        assert(latestStateDf.count() > 0, "Expected to read current state data")
+
+        // Check schema of latest state - should have RenamedFields schema structure
+        val latestValueField = latestStateDf.schema.fields.find(_.name == "value").get
+        val latestValueType = latestValueField.dataType.asInstanceOf[StructType]
+
+        // Should have value4 field from RenamedFields
+        assert(latestValueType.fields.exists(f => f.name == "value4"),
+          "Expected renamed schema with value4 field")
       }
     }
   }

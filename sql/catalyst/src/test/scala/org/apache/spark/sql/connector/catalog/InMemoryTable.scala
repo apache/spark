@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util
 
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsOverwrite, WriteBuilder, WriterCommitMessage}
@@ -32,18 +33,31 @@ import org.apache.spark.util.ArrayImplicits._
  */
 class InMemoryTable(
     name: String,
-    schema: StructType,
+    columns: Array[Column],
     override val partitioning: Array[Transform],
     override val properties: util.Map[String, String],
+    override val constraints: Array[Constraint] = Array.empty,
     distribution: Distribution = Distributions.unspecified(),
     ordering: Array[SortOrder] = Array.empty,
     numPartitions: Option[Int] = None,
     advisoryPartitionSize: Option[Long] = None,
     isDistributionStrictlyRequired: Boolean = true,
     override val numRowsPerSplit: Int = Int.MaxValue)
-  extends InMemoryBaseTable(name, schema, partitioning, properties, distribution,
+  extends InMemoryBaseTable(name, columns, partitioning, properties, constraints, distribution,
     ordering, numPartitions, advisoryPartitionSize, isDistributionStrictlyRequired,
     numRowsPerSplit) with SupportsDelete {
+
+  def this(
+      name: String,
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]) = {
+    this(
+      name,
+      CatalogV2Util.structTypeToV2Columns(schema),
+      partitioning,
+      properties)
+  }
 
   override def canDeleteWhere(filters: Array[Filter]): Boolean = {
     InMemoryTable.supportsFilters(filters)
@@ -53,6 +67,7 @@ class InMemoryTable(
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     dataMap --= InMemoryTable
       .filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted).toImmutableArraySeq, filters)
+    increaseCurrentVersion()
   }
 
   override def withData(data: Array[BufferedRows]): InMemoryTable = {
@@ -83,7 +98,7 @@ class InMemoryTable(
           row.getInt(0) == InMemoryTable.uncommittableValue()))) {
         throw new IllegalArgumentException(s"Test only mock write failure")
       }
-
+      increaseCurrentVersion()
       this
     }
   }

@@ -249,7 +249,8 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
               parameters = Map(
                 "expression" -> "'aaa'",
                 "sourceType" -> "\"STRING\"",
-                "targetType" -> "\"INT\""),
+                "targetType" -> "\"INT\"",
+                "ansiConfig" -> "\"spark.sql.ansi.enabled\""),
               context = ExpectedContext(
                 fragment = s"ALTER TABLE $t ADD PARTITION (p='aaa')",
                 start = 0,

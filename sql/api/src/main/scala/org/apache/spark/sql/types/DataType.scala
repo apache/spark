@@ -126,6 +126,7 @@ object DataType {
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
   private val CHAR_TYPE = """char\(\s*(\d+)\s*\)""".r
   private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
+  private val STRING_WITH_COLLATION = """string\s+collate\s+(\w+)""".r
 
   val COLLATIONS_METADATA_KEY = "__COLLATIONS"
 
@@ -215,6 +216,7 @@ object DataType {
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
       case CHAR_TYPE(length) => CharType(length.toInt)
       case VARCHAR_TYPE(length) => VarcharType(length.toInt)
+      case STRING_WITH_COLLATION(collation) => StringType(collation)
       // For backwards compatibility, previously the type name of NullType is "null"
       case "null" => NullType
       case "timestamp_ltz" => TimestampType
@@ -234,11 +236,15 @@ object DataType {
     }
   }
 
+  private[sql] def parseDataType(json: JValue): DataType = {
+    parseDataType(json, fieldPath = "", collationsMap = Map.empty)
+  }
+
   // NOTE: Map fields must be sorted in alphabetical order to keep consistent with the Python side.
   private[sql] def parseDataType(
       json: JValue,
-      fieldPath: String = "",
-      collationsMap: Map[String, String] = Map.empty): DataType = json match {
+      fieldPath: String,
+      collationsMap: Map[String, String]): DataType = json match {
     case JString(name) =>
       collationsMap.get(fieldPath) match {
         case Some(collation) =>
@@ -442,15 +448,35 @@ object DataType {
   }
 
   /**
-   * Check if `from` is equal to `to` type except for collations, which are checked to be
-   * compatible so that data of type `from` can be interpreted as of type `to`.
+   * Compares two data types, ignoring compatible collation of StringType. If `checkComplexTypes`
+   * is true, it will also ignore collations for nested types.
    */
-  private[sql] def equalsIgnoreCompatibleCollation(from: DataType, to: DataType): Boolean = {
-    (from, to) match {
-      // String types with possibly different collations are compatible.
-      case (a: StringType, b: StringType) => a.constraint == b.constraint
+  private[sql] def equalsIgnoreCompatibleCollation(
+      from: DataType,
+      to: DataType,
+      checkComplexTypes: Boolean = true): Boolean = {
+    def transform: PartialFunction[DataType, DataType] = {
+      case dt @ (_: CharType | _: VarcharType) => dt
+      case _: StringType => StringType
+    }
 
-      case (fromDataType, toDataType) => fromDataType == toDataType
+    if (checkComplexTypes) {
+      from.transformRecursively(transform) == to.transformRecursively(transform)
+    } else {
+      (from, to) match {
+        case (a: StringType, b: StringType) => a.constraint == b.constraint
+
+        case (fromDataType, toDataType) => fromDataType == toDataType
+      }
+    }
+  }
+
+  private[sql] def equalsIgnoreCompatibleCollation(
+      from: Seq[DataType],
+      to: Seq[DataType]): Boolean = {
+    from.length == to.length &&
+    from.zip(to).forall { case (fromDataType, toDataType) =>
+      equalsIgnoreCompatibleCollation(fromDataType, toDataType)
     }
   }
 

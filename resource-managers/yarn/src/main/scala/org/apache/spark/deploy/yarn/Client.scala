@@ -17,20 +17,20 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.{File, FileFilter, FileNotFoundException, FileOutputStream, InterruptedIOException, IOException, OutputStreamWriter}
+import java.io.{BufferedInputStream, BufferedOutputStream, File, FileFilter, FileInputStream, FileNotFoundException, FileOutputStream, InterruptedIOException, IOException, OutputStreamWriter}
 import java.net.{InetAddress, UnknownHostException, URI, URL}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
-import java.util.{Collections, Locale, Properties, UUID}
+import java.util.{Collections, Locale, Objects, Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.immutable.{Map => IMap}
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.jdk.CollectionConverters._
+import scala.util.Using
 import scala.util.control.NonFatal
 
-import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
@@ -55,7 +55,7 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.launcher.{JavaModuleOptions, LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
@@ -711,21 +711,21 @@ private[spark] class Client(
             sparkConf.getenv("SPARK_HOME")))
           val jarsArchive = File.createTempFile(LOCALIZED_LIB_DIR, ".zip",
             new File(Utils.getLocalDir(sparkConf)))
-          val jarsStream = new ZipOutputStream(new FileOutputStream(jarsArchive))
-
-          try {
-            jarsStream.setLevel(0)
-            jarsDir.listFiles().foreach { f =>
-              if (f.isFile && f.getName.toLowerCase(Locale.ROOT).endsWith(".jar") && f.canRead) {
-                jarsStream.putNextEntry(new ZipEntry(f.getName))
-                Files.copy(f.toPath, jarsStream)
+          val bufferSize = sparkConf.get(BUFFER_SIZE)
+          Using.resource(new ZipOutputStream(
+            new BufferedOutputStream(new FileOutputStream(jarsArchive), bufferSize))) {
+            jarsStream =>
+              jarsStream.setLevel(0)
+              jarsDir.listFiles().foreach { f =>
+                if (f.isFile && f.getName.toLowerCase(Locale.ROOT).endsWith(".jar") && f.canRead) {
+                  jarsStream.putNextEntry(new ZipEntry(f.getName))
+                  Using.resource(new BufferedInputStream(new FileInputStream(f), bufferSize)) {
+                    _.transferTo(jarsStream)
+                  }
+                }
                 jarsStream.closeEntry()
               }
-            }
-          } finally {
-            jarsStream.close()
           }
-
           distribute(jarsArchive.toURI.getPath,
             resType = LocalResourceType.ARCHIVE,
             destName = Some(LOCALIZED_LIB_DIR))
@@ -1725,7 +1725,7 @@ private[spark] object Client extends Logging {
       }
     }
 
-    Objects.equal(srcHost, dstHost) && srcUri.getPort() == dstUri.getPort()
+    Objects.equals(srcHost, dstHost) && srcUri.getPort() == dstUri.getPort()
 
   }
 

@@ -31,7 +31,7 @@ import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{JobConf, Reporter}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.config.SPECULATION_ENABLED
 import org.apache.spark.sql.SparkSession
@@ -48,7 +48,7 @@ import org.apache.spark.util.SerializableJobConf
  *
  * TODO: implement the read logic.
  */
-class HiveFileFormat(fileSinkConf: FileSinkDesc)
+case class HiveFileFormat(fileSinkConf: FileSinkDesc)
   extends FileFormat with DataSourceRegister with Logging {
 
   def this() = this(null)

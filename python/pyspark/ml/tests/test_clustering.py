@@ -37,6 +37,7 @@ from pyspark.ml.clustering import (
     DistributedLDAModel,
     PowerIterationClustering,
 )
+from pyspark.sql import is_remote
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -84,23 +85,39 @@ class ClusteringTestsMixin:
 
         self.assertTrue(np.allclose(model.predict(Vectors.dense(0.0, 5.0)), 1, atol=1e-4))
 
-        # Model summary
-        self.assertTrue(model.hasSummary)
-        summary = model.summary
-        self.assertTrue(isinstance(summary, KMeansSummary))
-        self.assertEqual(summary.k, 2)
-        self.assertEqual(summary.numIter, 2)
-        self.assertEqual(summary.clusterSizes, [4, 2])
-        self.assertTrue(np.allclose(summary.trainingCost, 1.35710375, atol=1e-4))
+        def check_summary():
+            # Model summary
+            self.assertTrue(model.hasSummary)
+            summary = model.summary
+            self.assertTrue(isinstance(summary, KMeansSummary))
+            self.assertEqual(summary.k, 2)
+            self.assertEqual(summary.numIter, 2)
+            self.assertEqual(summary.clusterSizes, [4, 2])
+            self.assertTrue(np.allclose(summary.trainingCost, 1.35710375, atol=1e-4))
 
-        self.assertEqual(summary.featuresCol, "features")
-        self.assertEqual(summary.predictionCol, "prediction")
+            self.assertEqual(summary.featuresCol, "features")
+            self.assertEqual(summary.predictionCol, "prediction")
 
-        self.assertEqual(summary.cluster.columns, ["prediction"])
-        self.assertEqual(summary.cluster.count(), 6)
+            self.assertEqual(summary.cluster.columns, ["prediction"])
+            self.assertEqual(summary.cluster.count(), 6)
 
-        self.assertEqual(summary.predictions.columns, expected_cols)
-        self.assertEqual(summary.predictions.count(), 6)
+            self.assertEqual(summary.predictions.columns, expected_cols)
+            self.assertEqual(summary.predictions.count(), 6)
+
+        # check summary before model offloading occurs
+        check_summary()
+
+        if is_remote():
+            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
+            # check summary "try_remote_call" path after model offloading occurs
+            self.assertEqual(model.summary.numIter, 2)
+
+            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
+            # check summary "invoke_remote_attribute_relation" path after model offloading occurs
+            self.assertEqual(model.summary.cluster.count(), 6)
+
+            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
+            check_summary()
 
         # save & load
         with tempfile.TemporaryDirectory(prefix="kmeans_model") as d:
@@ -111,6 +128,9 @@ class ClusteringTestsMixin:
             model.write().overwrite().save(d)
             model2 = KMeansModel.load(d)
             self.assertEqual(str(model), str(model2))
+            self.assertFalse(model2.hasSummary)
+            with self.assertRaisesRegex(Exception, "No training summary available"):
+                model2.summary
 
     def test_bisecting_kmeans(self):
         df = (
@@ -277,30 +297,36 @@ class ClusteringTestsMixin:
         self.assertEqual(output.columns, expected_cols)
         self.assertEqual(output.count(), 6)
 
-        # Model summary
-        self.assertTrue(model.hasSummary)
-        summary = model.summary
-        self.assertTrue(isinstance(summary, GaussianMixtureSummary))
-        self.assertEqual(summary.k, 2)
-        self.assertEqual(summary.numIter, 2)
-        self.assertEqual(len(summary.clusterSizes), 2)
-        self.assertEqual(summary.clusterSizes, [3, 3])
-        ll = summary.logLikelihood
-        self.assertTrue(ll < 0, ll)
-        self.assertTrue(np.allclose(ll, -1.311264553744033, atol=1e-4), ll)
+        def check_summary():
+            # Model summary
+            self.assertTrue(model.hasSummary)
+            summary = model.summary
+            self.assertTrue(isinstance(summary, GaussianMixtureSummary))
+            self.assertEqual(summary.k, 2)
+            self.assertEqual(summary.numIter, 2)
+            self.assertEqual(len(summary.clusterSizes), 2)
+            self.assertEqual(summary.clusterSizes, [3, 3])
+            ll = summary.logLikelihood
+            self.assertTrue(ll < 0, ll)
+            self.assertTrue(np.allclose(ll, -1.311264553744033, atol=1e-4), ll)
 
-        self.assertEqual(summary.featuresCol, "features")
-        self.assertEqual(summary.predictionCol, "prediction")
-        self.assertEqual(summary.probabilityCol, "probability")
+            self.assertEqual(summary.featuresCol, "features")
+            self.assertEqual(summary.predictionCol, "prediction")
+            self.assertEqual(summary.probabilityCol, "probability")
 
-        self.assertEqual(summary.cluster.columns, ["prediction"])
-        self.assertEqual(summary.cluster.count(), 6)
+            self.assertEqual(summary.cluster.columns, ["prediction"])
+            self.assertEqual(summary.cluster.count(), 6)
 
-        self.assertEqual(summary.predictions.columns, expected_cols)
-        self.assertEqual(summary.predictions.count(), 6)
+            self.assertEqual(summary.predictions.columns, expected_cols)
+            self.assertEqual(summary.predictions.count(), 6)
 
-        self.assertEqual(summary.probability.columns, ["probability"])
-        self.assertEqual(summary.predictions.count(), 6)
+            self.assertEqual(summary.probability.columns, ["probability"])
+            self.assertEqual(summary.predictions.count(), 6)
+
+        check_summary()
+        if is_remote():
+            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
+            check_summary()
 
         # save & load
         with tempfile.TemporaryDirectory(prefix="gaussian_mixture") as d:
@@ -377,6 +403,8 @@ class ClusteringTestsMixin:
             self.assertEqual(str(model), str(model2))
 
     def test_distributed_lda(self):
+        if is_remote():
+            self.skipTest("Do not support Spark Connect.")
         spark = self.spark
         df = (
             spark.createDataFrame(

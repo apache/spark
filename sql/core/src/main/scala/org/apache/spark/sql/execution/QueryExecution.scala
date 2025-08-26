@@ -26,15 +26,15 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{LazyExpression, UnsupportedOperationChecker}
+import org.apache.spark.sql.catalyst.analysis.{LazyExpression, NameParameterizedQuery, UnsupportedOperationChecker}
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union, WithCTE}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -44,8 +44,10 @@ import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableU
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
-import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata, WatermarkPropagator}
+import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
+import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, WatermarkPropagator}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.scripting.SqlScriptingExecution
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{LazyTry, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -93,16 +95,26 @@ class QueryExecution(
   }
 
   private val lazyAnalyzed = LazyTry {
+    val withScriptExecuted = logical match {
+      // Execute the SQL script. Script doesn't need to go through the analyzer as Spark will run
+      // each statement as individual query.
+      case NameParameterizedQuery(compoundBody: CompoundBody, argNames, argValues) =>
+        val args = argNames.zip(argValues).toMap
+        SqlScriptingExecution.executeSqlScript(sparkSession, compoundBody, args)
+      case compoundBody: CompoundBody =>
+        SqlScriptingExecution.executeSqlScript(sparkSession, compoundBody)
+      case _ => logical
+    }
     try {
       val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
         // We can't clone `logical` here, which will reset the `_analyzed` flag.
-        sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
+        sparkSession.sessionState.analyzer.executeAndCheck(withScriptExecuted, tracker)
       }
       tracker.setAnalyzed(plan)
       plan
     } catch {
       case NonFatal(e) =>
-        tracker.setAnalysisFailed(logical)
+        tracker.setAnalysisFailed(withScriptExecuted)
         throw e
     }
   }
@@ -153,9 +165,14 @@ class QueryExecution(
     p transformDown {
       case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) =>
         eagerlyExecute(u, "multi-commands", CommandExecutionMode.SKIP)
+      case w @ WithCTE(u @ Union(children, _, _), _) if children.forall(_.isInstanceOf[Command]) =>
+        eagerlyExecute(w, "multi-commands", CommandExecutionMode.SKIP)
       case c: Command =>
         val name = commandExecutionName(c)
         eagerlyExecute(c, name, CommandExecutionMode.NON_ROOT)
+      case w @ WithCTE(c: Command, _) =>
+        val name = commandExecutionName(c)
+        eagerlyExecute(w, name, CommandExecutionMode.SKIP)
     }
   }
 
@@ -209,7 +226,7 @@ class QueryExecution(
     executePhase(QueryPlanningTracker.PLANNING) {
       // Clone the logical plan here, in case the planner rules change the states of the logical
       // plan.
-      QueryExecution.createSparkPlan(sparkSession, planner, optimizedPlan.clone())
+      QueryExecution.createSparkPlan(planner, optimizedPlan.clone())
     }
   }
 
@@ -574,7 +591,6 @@ object QueryExecution {
    * Note that the returned physical plan still needs to be prepared for execution.
    */
   def createSparkPlan(
-      sparkSession: SparkSession,
       planner: SparkPlanner,
       plan: LogicalPlan): SparkPlan = {
     // TODO: We use next(), i.e. take the first plan returned by the planner, here for now,
@@ -594,7 +610,7 @@ object QueryExecution {
    * [[SparkPlan]] for execution.
    */
   def prepareExecutedPlan(spark: SparkSession, plan: LogicalPlan): SparkPlan = {
-    val sparkPlan = createSparkPlan(spark, spark.sessionState.planner, plan.clone())
+    val sparkPlan = createSparkPlan(spark.sessionState.planner, plan.clone())
     prepareExecutedPlan(spark, sparkPlan)
   }
 
@@ -603,11 +619,11 @@ object QueryExecution {
    * This method is only called by [[PlanAdaptiveDynamicPruningFilters]].
    */
   def prepareExecutedPlan(
-      session: SparkSession,
       plan: LogicalPlan,
       context: AdaptiveExecutionContext): SparkPlan = {
-    val sparkPlan = createSparkPlan(session, session.sessionState.planner, plan.clone())
-    val preparationRules = preparations(session, Option(InsertAdaptiveSparkPlan(context)), true)
+    val sparkPlan = createSparkPlan(context.session.sessionState.planner, plan.clone())
+    val preparationRules =
+      preparations(context.session, Option(InsertAdaptiveSparkPlan(context)), true)
     prepareForExecution(preparationRules, sparkPlan.clone())
   }
 

@@ -19,11 +19,9 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.{HashMap, HashSet}
 
-import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
   Attribute,
   Expression,
   ExprId,
@@ -44,6 +42,7 @@ import org.apache.spark.sql.internal.SQLConf
 class ProjectResolver(operatorResolver: Resolver, expressionResolver: ExpressionResolver)
     extends TreeNodeResolver[Project, LogicalPlan] {
   private val scopes = operatorResolver.getNameScopes
+  private val lcaResolver = expressionResolver.getLcaResolver
 
   /**
    * [[Project]] introduces a new scope to resolve its subtree and project list expressions.
@@ -55,12 +54,25 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
    * construct a multi-level [[Project]], created from all lateral column aliases and their
    * dependencies. Finally, we place the original resolved project on top of this multi-level one.
    *
+   * If the output operator is [[Aggregate]] and if the [[Aggregate]] contains lateral column
+   * references, delegate the resolution of these column to
+   * [[LateralColumnAliasResolver.handleLcaInAggregate]].
+   *
    * After the subtree and project-list expressions are resolved in the child scope we overwrite
    * current scope with resolved operators output to expose new names to the parent operators.
+   *
+   * We need to clear [[NameScope.availableAliases]]. Those are only relevant for the immediate
+   * project list for output prioritization to work correctly in
+   * [[NameScope.tryResolveMultipartNameByOutput]].
    */
   override def resolve(unresolvedProject: Project): LogicalPlan = {
-    val (resolvedOperator, resolvedProjectList) = scopes.withNewScope() {
+    scopes.pushScope()
+
+    val (resolvedOperator, resolvedProjectList) = try {
       val resolvedChild = operatorResolver.resolve(unresolvedProject.child)
+
+      scopes.current.availableAliases.clear()
+
       val childReferencedAttributes = expressionResolver.getLastReferencedAttributes
       val resolvedProjectList =
         expressionResolver.resolveProjectList(unresolvedProject.projectList, unresolvedProject)
@@ -69,10 +81,6 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
         retainOriginalJoinOutput(resolvedChild, resolvedProjectList, childReferencedAttributes)
 
       if (resolvedProjectList.hasAggregateExpressions) {
-        if (resolvedProjectList.hasLateralColumnAlias) {
-          // Disable LCA in Aggregates until fully supported.
-          throw new ExplicitlyUnsupportedResolverFeature("LateralColumnAlias in Aggregate")
-        }
         val aggregate = Aggregate(
           groupingExpressions = Seq.empty[Expression],
           aggregateExpressions = resolvedProjectList.expressions,
@@ -80,27 +88,49 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
           hint = None
         )
 
-        // TODO: This validation function does a post-traversal. This is discouraged in
-        // single-pass Analyzer.
-        ExprUtils.assertValidAggregation(aggregate)
+        if (resolvedProjectList.hasLateralColumnAlias) {
+          val aggregateWithLcaResolutionResult = lcaResolver.handleLcaInAggregate(aggregate)
+          val projectList = ResolvedProjectList(
+            expressions = aggregateWithLcaResolutionResult.outputList,
+            hasAggregateExpressions = false,
+            hasLateralColumnAlias = false,
+            aggregateListAliases = aggregateWithLcaResolutionResult.aggregateListAliases,
+            baseAggregate = Some(aggregateWithLcaResolutionResult.baseAggregate)
+          )
+          (aggregateWithLcaResolutionResult.resolvedOperator, projectList)
+        } else {
+          // TODO: This validation function does a post-traversal. This is discouraged in
+          // single-pass Analyzer.
+          ExprUtils.assertValidAggregation(aggregate)
 
-        (aggregate, resolvedProjectList)
+          val resolvedAggregateList = resolvedProjectList.copy(
+            aggregateListAliases = scopes.current.aggregateListAliases,
+            baseAggregate = Some(aggregate)
+          )
+
+          (aggregate, resolvedAggregateList)
+        }
       } else {
         val projectWithLca = if (conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) {
-          buildProjectWithResolvedLCAs(
-            resolvedChildWithMetadataColumns,
-            resolvedProjectList.expressions
+          lcaResolver.buildProjectWithResolvedLca(
+            resolvedChild = resolvedChildWithMetadataColumns,
+            scope = scopes.current,
+            originalProjectList = resolvedProjectList.expressions,
+            firstIterationProjectList = scopes.current.output
           )
         } else {
           Project(resolvedProjectList.expressions, resolvedChildWithMetadataColumns)
         }
         (projectWithLca, resolvedProjectList)
       }
+    } finally {
+      scopes.popScope()
     }
 
     scopes.overwriteOutputAndExtendHiddenOutput(
-      output =
-        resolvedProjectList.expressions.map(namedExpression => namedExpression.toAttribute)
+      output = resolvedProjectList.expressions.map(namedExpression => namedExpression.toAttribute),
+      aggregateListAliases = resolvedProjectList.aggregateListAliases,
+      baseAggregate = resolvedProjectList.baseAggregate
     )
 
     resolvedOperator
@@ -225,76 +255,5 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
       scopes.current.resolveMissingAttributesByHiddenOutput(missingAttributes)
 
     missingAttributeResolvedByHiddenOutput.nonEmpty
-  }
-
-  /**
-   * Builds a multi-level [[Project]] with all lateral column aliases and their dependencies. First,
-   * from top scope, we acquire dependency levels of all aliases. Dependency level is defined as a
-   * number of attributes that an attribute depends on in the lateral alias reference chain. For
-   * example, in a query like:
-   *
-   * {{{ SELECT 0 AS a, 1 AS b, 2 AS c, b AS d, a AS e, d AS f, a AS g, g AS h, h AS i }}}
-   *
-   * Dependency levels will be as follows:
-   *
-   * level 0: a, b, c
-   * level 1: d, e, g
-   * level 2: f, h
-   * level 3: i
-   *
-   * Once we have dependency levels, we construct a multi-level [[Project]] in a following way:
-   *  - There is exactly one [[Project]] node per level.
-   *  - Project lists are compounded such that project lists on upper levels must contain all
-   *  attributes from the below levels.
-   *  - Project list on level 0 includes all attributes from the output of the operator below the
-   *  original [[Project]].
-   *  - Original [[Project]] is placed on top of the multi-level [[Project]]. Any aliases that have
-   *  been laterally referenced need to be replaced with only their names. This is because their
-   *  full definitions ( `attr` as `name` ) have already been defined on lower levels.
-   *  - If an attribute is never referenced, it does not show up in multi-level project lists, but
-   *  instead only in the top-most [[Project]].
-   *
-   *  For previously given query, following above rules, resolved [[Project]] would look like:
-   *
-   * Project [a, b, 2 AS c, d, a AS e, d AS f, g, h, h AS i]
-   * +- Project [b, a, d, g, g AS h]
-   *    +- Project [b, a, b AS d, a AS g]
-   *       +- Project [1 AS b, 0 AS a]
-   *          +- OneRowRelation
-   */
-  private def buildProjectWithResolvedLCAs(
-      resolvedChild: LogicalPlan,
-      originalProjectList: Seq[NamedExpression]) = {
-    val aliasDependencyMap = scopes.current.lcaRegistry.getAliasDependencyLevels()
-    val (finalChildPlan, _) = aliasDependencyMap.asScala.foldLeft(
-      (resolvedChild, scopes.current.output.map(_.asInstanceOf[NamedExpression]))
-    ) {
-      case ((currentPlan, currentProjectList), availableAliases) =>
-        val referencedAliases = new ArrayBuffer[Alias]
-        availableAliases.forEach(
-          alias =>
-            if (scopes.current.lcaRegistry.isAttributeLaterallyReferenced(alias.toAttribute)) {
-              referencedAliases.append(alias)
-            }
-        )
-
-        if (referencedAliases.nonEmpty) {
-          val newProjectList = currentProjectList.map(_.toAttribute) ++ referencedAliases
-          (Project(newProjectList, currentPlan), newProjectList)
-        } else {
-          (currentPlan, currentProjectList)
-        }
-    }
-
-    val finalProjectList = originalProjectList.map(
-      alias =>
-        if (scopes.current.lcaRegistry.isAttributeLaterallyReferenced(alias.toAttribute)) {
-          alias.toAttribute
-        } else {
-          alias
-        }
-    )
-
-    Project(finalProjectList, finalChildPlan)
   }
 }

@@ -229,7 +229,7 @@ public class VariantBuilder {
   public void appendFloat(float f) {
     checkCapacity(1 + 4);
     writeBuffer[writePos++] = primitiveHeader(FLOAT);
-    writeLong(writeBuffer, writePos, Float.floatToIntBits(f), 8);
+    writeLong(writeBuffer, writePos, Float.floatToIntBits(f), 4);
     writePos += 4;
   }
 
@@ -542,12 +542,13 @@ public class VariantBuilder {
   }
 
   // Choose the smallest unsigned integer type that can store `value`. It must be within
-  // `[0, U24_MAX]`.
+  // `[0, SIZE_LIMIT]`.
   private int getIntegerSize(int value) {
-    assert value >= 0 && value <= U24_MAX;
+    assert value >= 0 && value <= SIZE_LIMIT;
     if (value <= U8_MAX) return 1;
     if (value <= U16_MAX) return 2;
-    return U24_SIZE;
+    if (value <= U24_MAX) return 3;
+    return 4;
   }
 
   private void parseFloatingPoint(JsonParser parser) throws IOException {

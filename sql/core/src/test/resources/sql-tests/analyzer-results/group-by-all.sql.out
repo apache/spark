@@ -348,3 +348,112 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "non_exist"
   } ]
 }
+
+
+-- !query
+SELECT * FROM data GROUP BY ALL
+-- !query analysis
+Aggregate [country#x, city#x, name#x, id#x, power#x], [country#x, city#x, name#x, id#x, power#x]
++- SubqueryAlias data
+   +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
+      +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
+         +- Project [country#x, city#x, name#x, id#x, power#x]
+            +- SubqueryAlias data
+               +- LocalRelation [country#x, city#x, name#x, id#x, power#x]
+
+
+-- !query
+SELECT 4 AS a, 5 AS b, 6 AS c, * FROM data GROUP BY ALL
+-- !query analysis
+Aggregate [4, 5, 6, country#x, city#x, name#x, id#x, power#x], [4 AS a#x, 5 AS b#x, 6 AS c#x, country#x, city#x, name#x, id#x, power#x]
++- SubqueryAlias data
+   +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
+      +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
+         +- Project [country#x, city#x, name#x, id#x, power#x]
+            +- SubqueryAlias data
+               +- LocalRelation [country#x, city#x, name#x, id#x, power#x]
+
+
+-- !query
+SELECT *, 4 AS a, 5 AS b, 6 AS c FROM data GROUP BY ALL
+-- !query analysis
+Aggregate [country#x, city#x, name#x, id#x, power#x, 4, 5, 6], [country#x, city#x, name#x, id#x, power#x, 4 AS a#x, 5 AS b#x, 6 AS c#x]
++- SubqueryAlias data
+   +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
+      +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
+         +- Project [country#x, city#x, name#x, id#x, power#x]
+            +- SubqueryAlias data
+               +- LocalRelation [country#x, city#x, name#x, id#x, power#x]
+
+
+-- !query
+SELECT 4 AS a, 5 AS b, *, 6 AS c FROM data GROUP BY ALL
+-- !query analysis
+Aggregate [4, 5, country#x, city#x, name#x, id#x, power#x, 6], [4 AS a#x, 5 AS b#x, country#x, city#x, name#x, id#x, power#x, 6 AS c#x]
++- SubqueryAlias data
+   +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
+      +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
+         +- Project [country#x, city#x, name#x, id#x, power#x]
+            +- SubqueryAlias data
+               +- LocalRelation [country#x, city#x, name#x, id#x, power#x]
+
+
+-- !query
+SELECT (
+  WITH cte AS (SELECT 1)
+  SELECT * FROM cte
+) AS subq1
+FROM
+  VALUES (1)
+GROUP BY
+  ALL
+-- !query analysis
+Aggregate [scalar-subquery#x []], [scalar-subquery#x [] AS subq1#x]
+:  :- WithCTE
+:  :  :- CTERelationDef xxxx, false
+:  :  :  +- SubqueryAlias cte
+:  :  :     +- Project [1 AS 1#x]
+:  :  :        +- OneRowRelation
+:  :  +- Project [1#x]
+:  :     +- SubqueryAlias cte
+:  :        +- CTERelationRef xxxx, true, [1#x], false, false, 1
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias cte
+:     :     +- Project [1 AS 1#x]
+:     :        +- OneRowRelation
+:     +- Project [1#x]
+:        +- SubqueryAlias cte
+:           +- CTERelationRef xxxx, true, [1#x], false, false, 1
++- LocalRelation [col1#x]
+
+
+-- !query
+SELECT (
+  SELECT country FROM data LIMIT 1
+) AS subq1
+FROM
+  VALUES (1)
+GROUP BY
+  ALL
+-- !query analysis
+Aggregate [scalar-subquery#x []], [scalar-subquery#x [] AS subq1#x]
+:  :- GlobalLimit 1
+:  :  +- LocalLimit 1
+:  :     +- Project [country#x]
+:  :        +- SubqueryAlias data
+:  :           +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
+:  :              +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
+:  :                 +- Project [country#x, city#x, name#x, id#x, power#x]
+:  :                    +- SubqueryAlias data
+:  :                       +- LocalRelation [country#x, city#x, name#x, id#x, power#x]
+:  +- GlobalLimit 1
+:     +- LocalLimit 1
+:        +- Project [country#x]
+:           +- SubqueryAlias data
+:              +- View (`data`, [country#x, city#x, name#x, id#x, power#x])
+:                 +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
+:                    +- Project [country#x, city#x, name#x, id#x, power#x]
+:                       +- SubqueryAlias data
+:                          +- LocalRelation [country#x, city#x, name#x, id#x, power#x]
++- LocalRelation [col1#x]

@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import ColumnNode._
 
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.AttributeNameParser
 import org.apache.spark.sql.errors.DataTypeErrorsBase
@@ -650,4 +651,25 @@ private[sql] case class LazyExpression(
     copy(child = child.normalize(), origin = NO_ORIGIN)
   override def sql: String = "lazy" + argumentsToSql(Seq(child))
   override private[internal] def children: Seq[ColumnNodeLike] = Seq(child)
+}
+
+sealed trait SubqueryType
+
+object SubqueryType {
+  case object SCALAR extends SubqueryType
+  case object EXISTS extends SubqueryType
+  case class IN(values: Seq[ColumnNode]) extends SubqueryType
+}
+
+case class SubqueryExpression(
+    ds: Dataset[_],
+    subqueryType: SubqueryType,
+    override val origin: Origin = CurrentOrigin.get)
+    extends ColumnNode {
+  override def sql: String = subqueryType match {
+    case SubqueryType.SCALAR => s"($ds)"
+    case SubqueryType.IN(values) => s"(${values.map(_.sql).mkString(",")}) IN ($ds)"
+    case _ => s"$subqueryType ($ds)"
+  }
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
 }

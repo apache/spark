@@ -89,6 +89,7 @@ from pyspark.ml.util import (
     try_remote_read,
     try_remote_write,
     try_remote_attribute_relation,
+    _cache_spark_dataset,
 )
 from pyspark.ml.wrapper import JavaParams, JavaPredictor, JavaPredictionModel, JavaWrapper
 from pyspark.ml.common import inherit_doc
@@ -888,15 +889,14 @@ class LinearSVCModel(
         Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
-        if self.hasSummary:
-            s = LinearSVCTrainingSummary(super(LinearSVCModel, self).summary)
-            if is_remote():
-                s.__source_transformer__ = self  # type: ignore[attr-defined]
-            return s
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
+        return super().summary
+
+    @property
+    def _summaryCls(self) -> type:
+        return LinearSVCTrainingSummary
+
+    def _summary_dataset(self, train_dataset: DataFrame) -> DataFrame:
+        return train_dataset
 
     def evaluate(self, dataset: DataFrame) -> "LinearSVCSummary":
         """
@@ -1576,29 +1576,6 @@ class LogisticRegressionModel(
         """
         return self._call_java("interceptVector")
 
-    @property
-    @since("2.0.0")
-    def summary(self) -> "LogisticRegressionTrainingSummary":
-        """
-        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
-        trained on the training set. An exception is thrown if `trainingSummary is None`.
-        """
-        if self.hasSummary:
-            s: LogisticRegressionTrainingSummary
-            if self.numClasses <= 2:
-                s = BinaryLogisticRegressionTrainingSummary(
-                    super(LogisticRegressionModel, self).summary
-                )
-            else:
-                s = LogisticRegressionTrainingSummary(super(LogisticRegressionModel, self).summary)
-            if is_remote():
-                s.__source_transformer__ = self  # type: ignore[attr-defined]
-            return s
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
-
     def evaluate(self, dataset: DataFrame) -> "LogisticRegressionSummary":
         """
         Evaluates the model on a test dataset.
@@ -1621,6 +1598,15 @@ class LogisticRegressionModel(
         if is_remote():
             s.__source_transformer__ = self  # type: ignore[attr-defined]
         return s
+
+    @property
+    def _summaryCls(self) -> type:
+        if self.numClasses <= 2:
+            return BinaryLogisticRegressionTrainingSummary
+        return LogisticRegressionTrainingSummary
+
+    def _summary_dataset(self, train_dataset: DataFrame) -> DataFrame:
+        return train_dataset
 
 
 class LogisticRegressionSummary(_ClassificationSummary):
@@ -2305,33 +2291,22 @@ class RandomForestClassificationModel(
     def trees(self) -> List[DecisionTreeClassificationModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         if is_remote():
-            return [DecisionTreeClassificationModel(m) for m in self._call_java("trees").split(",")]
+            from pyspark.ml.util import RemoteModelRef
+
+            return [
+                DecisionTreeClassificationModel(RemoteModelRef(m))
+                for m in self._call_java("trees").split(",")
+            ]
         return [DecisionTreeClassificationModel(m) for m in list(self._call_java("trees"))]
 
     @property
-    @since("3.1.0")
-    def summary(self) -> "RandomForestClassificationTrainingSummary":
-        """
-        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
-        trained on the training set. An exception is thrown if `trainingSummary is None`.
-        """
-        if self.hasSummary:
-            s: RandomForestClassificationTrainingSummary
-            if self.numClasses <= 2:
-                s = BinaryRandomForestClassificationTrainingSummary(
-                    super(RandomForestClassificationModel, self).summary
-                )
-            else:
-                s = RandomForestClassificationTrainingSummary(
-                    super(RandomForestClassificationModel, self).summary
-                )
-            if is_remote():
-                s.__source_transformer__ = self  # type: ignore[attr-defined]
-            return s
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
+    def _summaryCls(self) -> type:
+        if self.numClasses <= 2:
+            return BinaryRandomForestClassificationTrainingSummary
+        return RandomForestClassificationTrainingSummary
+
+    def _summary_dataset(self, train_dataset: DataFrame) -> DataFrame:
+        return train_dataset
 
     def evaluate(self, dataset: DataFrame) -> "RandomForestClassificationSummary":
         """
@@ -2804,7 +2779,12 @@ class GBTClassificationModel(
     def trees(self) -> List[DecisionTreeRegressionModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         if is_remote():
-            return [DecisionTreeRegressionModel(m) for m in self._call_java("trees").split(",")]
+            from pyspark.ml.util import RemoteModelRef
+
+            return [
+                DecisionTreeRegressionModel(RemoteModelRef(m))
+                for m in self._call_java("trees").split(",")
+            ]
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
     def evaluateEachIteration(self, dataset: DataFrame) -> List[float]:
@@ -3361,17 +3341,14 @@ class MultilayerPerceptronClassificationModel(
         Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
-        if self.hasSummary:
-            s = MultilayerPerceptronClassificationTrainingSummary(
-                super(MultilayerPerceptronClassificationModel, self).summary
-            )
-            if is_remote():
-                s.__source_transformer__ = self  # type: ignore[attr-defined]
-            return s
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
+        return super().summary
+
+    @property
+    def _summaryCls(self) -> type:
+        return MultilayerPerceptronClassificationTrainingSummary
+
+    def _summary_dataset(self, train_dataset: DataFrame) -> DataFrame:
+        return train_dataset
 
     def evaluate(self, dataset: DataFrame) -> "MultilayerPerceptronClassificationSummary":
         """
@@ -3603,46 +3580,47 @@ class OneVsRest(
 
         # persist if underlying dataset is not persistent.
         handlePersistence = dataset.storageLevel == StorageLevel(False, False, False, False)
-        if handlePersistence:
-            multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
 
-        def _oneClassFitTasks(numClasses: int) -> List[Callable[[], Tuple[int, CM]]]:
-            indices = iter(range(numClasses))
+        with _cache_spark_dataset(
+            multiclassLabeled,
+            storageLevel=StorageLevel.MEMORY_AND_DISK,
+            enable=handlePersistence,
+        ) as multiclassLabeled:
 
-            def trainSingleClass() -> Tuple[int, CM]:
-                index = next(indices)
+            def _oneClassFitTasks(numClasses: int) -> List[Callable[[], Tuple[int, CM]]]:
+                indices = iter(range(numClasses))
 
-                binaryLabelCol = "mc2b$" + str(index)
-                trainingDataset = multiclassLabeled.withColumn(
-                    binaryLabelCol,
-                    F.when(multiclassLabeled[labelCol] == float(index), 1.0).otherwise(0.0),
-                )
-                paramMap = dict(
-                    [
-                        (classifier.labelCol, binaryLabelCol),
-                        (classifier.featuresCol, featuresCol),
-                        (classifier.predictionCol, predictionCol),
-                    ]
-                )
-                if weightCol:
-                    paramMap[cast(HasWeightCol, classifier).weightCol] = weightCol
-                return index, classifier.fit(trainingDataset, paramMap)
+                def trainSingleClass() -> Tuple[int, CM]:
+                    index = next(indices)
 
-            return [trainSingleClass] * numClasses
+                    binaryLabelCol = "mc2b$" + str(index)
+                    trainingDataset = multiclassLabeled.withColumn(
+                        binaryLabelCol,
+                        F.when(multiclassLabeled[labelCol] == float(index), 1.0).otherwise(0.0),
+                    )
+                    paramMap = dict(
+                        [
+                            (classifier.labelCol, binaryLabelCol),
+                            (classifier.featuresCol, featuresCol),
+                            (classifier.predictionCol, predictionCol),
+                        ]
+                    )
+                    if weightCol:
+                        paramMap[cast(HasWeightCol, classifier).weightCol] = weightCol
+                    return index, classifier.fit(trainingDataset, paramMap)
 
-        tasks = map(
-            inheritable_thread_target(dataset.sparkSession),
-            _oneClassFitTasks(numClasses),
-        )
-        pool = ThreadPool(processes=min(self.getParallelism(), numClasses))
+                return [trainSingleClass] * numClasses
 
-        subModels = [None] * numClasses
-        for j, subModel in pool.imap_unordered(lambda f: f(), tasks):
-            assert subModels is not None
-            subModels[j] = subModel
+            tasks = map(
+                inheritable_thread_target(dataset.sparkSession),
+                _oneClassFitTasks(numClasses),
+            )
+            pool = ThreadPool(processes=min(self.getParallelism(), numClasses))
 
-        if handlePersistence:
-            multiclassLabeled.unpersist()
+            subModels = [None] * numClasses
+            for j, subModel in pool.imap_unordered(lambda f: f(), tasks):
+                assert subModels is not None
+                subModels[j] = subModel
 
         return self._copyValues(OneVsRestModel(models=cast(List[ClassificationModel], subModels)))
 
@@ -3868,32 +3846,31 @@ class OneVsRestModel(
 
         # persist if underlying dataset is not persistent.
         handlePersistence = dataset.storageLevel == StorageLevel(False, False, False, False)
-        if handlePersistence:
-            newDataset.persist(StorageLevel.MEMORY_AND_DISK)
+        with _cache_spark_dataset(
+            newDataset,
+            storageLevel=StorageLevel.MEMORY_AND_DISK,
+            enable=handlePersistence,
+        ) as newDataset:
+            # update the accumulator column with the result of prediction of models
+            aggregatedDataset = newDataset
+            for index, model in enumerate(self.models):
+                rawPredictionCol = self.getRawPredictionCol()
 
-        # update the accumulator column with the result of prediction of models
-        aggregatedDataset = newDataset
-        for index, model in enumerate(self.models):
-            rawPredictionCol = self.getRawPredictionCol()
+                columns = origCols + [rawPredictionCol, accColName]
 
-            columns = origCols + [rawPredictionCol, accColName]
+                # add temporary column to store intermediate scores and update
+                tmpColName = "mbc$tmp" + str(uuid.uuid4())
+                transformedDataset = model.transform(aggregatedDataset).select(*columns)
+                updatedDataset = transformedDataset.withColumn(
+                    tmpColName,
+                    F.array_append(accColName, SF.vector_get(F.col(rawPredictionCol), F.lit(1))),
+                )
+                newColumns = origCols + [tmpColName]
 
-            # add temporary column to store intermediate scores and update
-            tmpColName = "mbc$tmp" + str(uuid.uuid4())
-            transformedDataset = model.transform(aggregatedDataset).select(*columns)
-            updatedDataset = transformedDataset.withColumn(
-                tmpColName,
-                F.array_append(accColName, SF.vector_get(F.col(rawPredictionCol), F.lit(1))),
-            )
-            newColumns = origCols + [tmpColName]
-
-            # switch out the intermediate column with the accumulator column
-            aggregatedDataset = updatedDataset.select(*newColumns).withColumnRenamed(
-                tmpColName, accColName
-            )
-
-        if handlePersistence:
-            newDataset.unpersist()
+                # switch out the intermediate column with the accumulator column
+                aggregatedDataset = updatedDataset.select(*newColumns).withColumnRenamed(
+                    tmpColName, accColName
+                )
 
         if self.getRawPredictionCol():
             aggregatedDataset = aggregatedDataset.withColumn(
@@ -4310,22 +4287,6 @@ class FMClassificationModel(
         """
         return self._call_java("factors")
 
-    @since("3.1.0")
-    def summary(self) -> "FMClassificationTrainingSummary":
-        """
-        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
-        trained on the training set. An exception is thrown if `trainingSummary is None`.
-        """
-        if self.hasSummary:
-            s = FMClassificationTrainingSummary(super(FMClassificationModel, self).summary)
-            if is_remote():
-                s.__source_transformer__ = self  # type: ignore[attr-defined]
-            return s
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
-
     def evaluate(self, dataset: DataFrame) -> "FMClassificationSummary":
         """
         Evaluates the model on a test dataset.
@@ -4344,6 +4305,21 @@ class FMClassificationModel(
         if is_remote():
             s.__source_transformer__ = self  # type: ignore[attr-defined]
         return s
+
+    @since("3.1.0")
+    def summary(self) -> "FMClassificationTrainingSummary":
+        """
+        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
+        trained on the training set. An exception is thrown if `trainingSummary is None`.
+        """
+        return super().summary
+
+    @property
+    def _summaryCls(self) -> type:
+        return FMClassificationTrainingSummary
+
+    def _summary_dataset(self, train_dataset: DataFrame) -> DataFrame:
+        return train_dataset
 
 
 class FMClassificationSummary(_BinaryClassificationSummary):

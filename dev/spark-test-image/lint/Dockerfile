@@ -24,7 +24,7 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image for Linter"
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20250312
+ENV FULL_REFRESH_DATE=20250618
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -51,6 +51,7 @@ RUN apt-get update && apt-get install -y \
     npm \
     pkg-config \
     qpdf \
+    tzdata \
     r-base \
     software-properties-common \
     wget \
@@ -65,13 +66,17 @@ RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown', 'rmarkdown',
 # See more in SPARK-39735
 ENV R_LIBS_SITE="/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
-# Install Python 3.9
+# Install Python 3.11
 RUN add-apt-repository ppa:deadsnakes/ppa
-RUN apt-get update && apt-get install -y python3.9 python3.9-distutils \
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    && apt-get autoremove --purge -y \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
 
-RUN python3.9 -m pip install \
+
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
+RUN python3.11 -m pip install \
     'black==23.12.1' \
     'flake8==3.9.0' \
     'googleapis-common-protos-stubs==2.2.0' \
@@ -88,9 +93,9 @@ RUN python3.9 -m pip install \
     'pandas' \
     'pandas-stubs==1.2.0.53' \
     'plotly>=4.8' \
-    'pyarrow>=19.0.0' \
+    'pyarrow>=21.0.0' \
     'pytest-mypy-plugins==1.9.3' \
     'pytest==7.1.3' \
-    && python3.9 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
-    && python3.9 -m pip install torcheval \
-    && python3.9 -m pip cache purge
+    && python3.11 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
+    && python3.11 -m pip install torcheval \
+    && python3.11 -m pip cache purge

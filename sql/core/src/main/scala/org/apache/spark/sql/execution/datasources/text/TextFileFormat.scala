@@ -37,7 +37,7 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 /**
  * A data source for reading text files. The text files must be encoded as UTF-8.
  */
-class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
+case class TextFileFormat() extends TextBasedFileFormat with DataSourceRegister {
 
   override def shortName(): String = "text"
 
@@ -107,8 +107,7 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
     verifyReadSchema(requiredSchema)
     val textOptions = new TextOptions(options)
     val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
-
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     readToUnsafeMem(broadcastedHadoopConf, requiredSchema, textOptions)
   }
 

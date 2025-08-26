@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.internal.SQLConf
 
 /** A class that contains configuration parameters for [[StateStore]]s. */
 class StateStoreConf(
-    @transient private[state] val sqlConf: SQLConf,
+    // Should be private because it could be null under serialization (due to
+    // the transient annotation)
+    @transient private val sqlConf: SQLConf,
     val extraOptions: Map[String, String] = Map.empty)
   extends Serializable {
 
@@ -37,6 +39,8 @@ class StateStoreConf(
    * Timeout for state store maintenance operations to complete on shutdown
    */
   val stateStoreMaintenanceShutdownTimeout: Long = sqlConf.stateStoreMaintenanceShutdownTimeout
+
+  val stateStoreMaintenanceProcessingTimeout: Long = sqlConf.stateStoreMaintenanceProcessingTimeout
 
   /**
    * Minimum number of delta files in a chain after which HDFSBackedStateStore will
@@ -68,6 +72,13 @@ class StateStoreConf(
   val formatValidationEnabled: Boolean = sqlConf.stateStoreFormatValidationEnabled
 
   /**
+   * Whether to validate StateStore commits for ForeachBatch sinks to ensure all partitions
+   * are processed. This helps detect incomplete processing due to operations like show()
+   * or limit().
+   */
+  val commitValidationEnabled = sqlConf.stateStoreCommitValidationEnabled
+
+  /**
    * Whether to validate the value side. This config is applied to both validators as below:
    *
    * - whether to validate the value format when the format validation is enabled.
@@ -96,6 +107,18 @@ class StateStoreConf(
    */
   val enableStateStoreCheckpointIds =
     StatefulOperatorStateInfo.enableStateStoreCheckpointIds(sqlConf)
+
+  /**
+   * Whether the coordinator is reporting state stores trailing behind in snapshot uploads.
+   */
+  val reportSnapshotUploadLag: Boolean =
+    sqlConf.stateStoreCoordinatorReportSnapshotUploadLag
+
+  /** Whether to unload the store on task completion. */
+  val unloadOnCommit = sqlConf.stateStoreUnloadOnCommit
+
+  /** The version of the state store checkpoint format. */
+  val stateStoreCheckpointFormatVersion: Int = sqlConf.stateStoreCheckpointFormatVersion
 
   /**
    * Additional configurations related to state store. This will capture all configs in

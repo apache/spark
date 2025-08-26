@@ -162,7 +162,7 @@ class OrcFileFormat
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(hadoopConf, sqlConf.caseSensitiveAnalysis)
 
     val broadcastedConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+        SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     val orcFilterPushDown = sparkSession.sessionState.conf.orcFilterPushDown
 

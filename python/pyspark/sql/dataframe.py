@@ -2127,15 +2127,16 @@ class DataFrame:
         Examples
         --------
         >>> from pyspark.sql.functions import col
-        >>> dataset = spark.range(0, 100).select((col("id") % 3).alias("key"))
+        >>> dataset = spark.range(0, 100, 1, 5).select((col("id") % 3).alias("key"))
         >>> sampled = dataset.sampleBy("key", fractions={0: 0.1, 1: 0.2}, seed=0)
         >>> sampled.groupBy("key").count().orderBy("key").show()
         +---+-----+
         |key|count|
         +---+-----+
-        |  0|    3|
-        |  1|    6|
+        |  0|    4|
+        |  1|    9|
         +---+-----+
+
         >>> dataset.sampleBy(col("key"), fractions={2: 1.0}, seed=0).count()
         33
         """
@@ -4181,7 +4182,10 @@ class DataFrame:
         |  2| 12|   1.2|
         +---+---+------+
 
-        >>> df.unpivot("id", ["int", "double"], "var", "val").show()
+        >>> from pyspark.sql import functions as sf
+        >>> df.unpivot(
+        ...     "id", ["int", "double"], "var", "val"
+        ... ).sort("id", sf.desc("var")).show()
         +---+------+----+
         | id|   var| val|
         +---+------+----+
@@ -5233,7 +5237,7 @@ class DataFrame:
         |NULL|  NULL|NULL|
         +----+------+----+
 
-        Example 4: Replace 10 to 20 in the 'name' column.
+        Example 4: Replace 10 to 18 in the 'age' column.
 
         >>> df.na.replace(10, 18, 'age').show()
         +----+------+-----+

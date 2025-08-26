@@ -190,6 +190,28 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       == "SELECT 3")
   }
 
+  test("not atomic body") {
+    val sqlScriptText =
+      """
+        |BEGIN NOT ATOMIC
+        |  SELECT 1;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText)
+    assert(tree.isInstanceOf[CompoundBody])
+  }
+
+  test("nested not atomic body") {
+    val sqlScriptText =
+      """
+        |BEGIN NOT ATOMIC
+        |  BEGIN NOT ATOMIC
+        |    SELECT 1;
+        |  END;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.collection.head.isInstanceOf[CompoundBody])
+  }
+
   // TODO: to be removed once the parser rule for top level compound is fixed to support labels!
   test("top level compound: labels not allowed") {
     val sqlScriptText =
@@ -247,6 +269,21 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.label.contains("lbl"))
   }
 
+  test("compound: beginLabel + endLabel - case sensitivity check") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: BEGIN
+        |    SELECT 1;
+        |    SELECT 2;
+        |    INSERT INTO A VALUES (a, b, 3);
+        |    SELECT a, b, c FROM T;
+        |    SELECT * FROM T;
+        |  END LbL;
+        |END""".stripMargin
+    parsePlan(sqlScriptText)
+  }
+
   test("compound: beginLabel + endLabel with different values") {
     val sqlScriptText =
       """
@@ -286,7 +323,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_NAME_FORBIDDEN",
+      condition = "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN",
       parameters = Map("label" -> toSQLId("system")))
     assert(exception.origin.line.contains(3))
   }
@@ -308,7 +345,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_NAME_FORBIDDEN",
+      condition = "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN",
       parameters = Map("label" -> toSQLId("sysxyz")))
     assert(exception.origin.line.contains(3))
   }
@@ -330,7 +367,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_NAME_FORBIDDEN",
+      condition = "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN",
       parameters = Map("label" -> toSQLId("session")))
     assert(exception.origin.line.contains(3))
   }
@@ -352,7 +389,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_NAME_FORBIDDEN",
+      condition = "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN",
       parameters = Map("label" -> toSQLId("builtin")))
     assert(exception.origin.line.contains(3))
   }
@@ -374,7 +411,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_NAME_FORBIDDEN",
+      condition = "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN",
       parameters = Map("label" -> toSQLId("system")))
     assert(exception.origin.line.contains(3))
   }
@@ -396,7 +433,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_NAME_FORBIDDEN",
+      condition = "LABEL_OR_FOR_VARIABLE_NAME_FORBIDDEN",
       parameters = Map("label" -> toSQLId("session")))
     assert(exception.origin.line.contains(3))
   }
@@ -496,7 +533,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(exception.origin.line.contains(4))
   }
 
-  test("declare in wrong scope") {
+  test("declare variable in wrong scope") {
     val sqlScriptText =
       """
         |BEGIN
@@ -512,32 +549,6 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       condition = "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",
       parameters = Map("varName" -> "`testVariable`"))
     assert(exception.origin.line.contains(4))
-  }
-
-  test("SET VAR statement test") {
-    val sqlScriptText =
-      """
-        |BEGIN
-        |  DECLARE totalInsCnt = 0;
-        |  SET VAR totalInsCnt = (SELECT x FROM y WHERE id = 1);
-        |END""".stripMargin
-    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
-    assert(tree.collection.length == 2)
-    assert(tree.collection.head.isInstanceOf[SingleStatement])
-    assert(tree.collection(1).isInstanceOf[SingleStatement])
-  }
-
-  test("SET VARIABLE statement test") {
-    val sqlScriptText =
-      """
-        |BEGIN
-        |  DECLARE totalInsCnt = 0;
-        |  SET VARIABLE totalInsCnt = (SELECT x FROM y WHERE id = 1);
-        |END""".stripMargin
-    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
-    assert(tree.collection.length == 2)
-    assert(tree.collection.head.isInstanceOf[SingleStatement])
-    assert(tree.collection(1).isInstanceOf[SingleStatement])
   }
 
   test("SET statement test") {
@@ -2001,7 +2012,45 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
+      parameters = Map("label" -> toSQLId("lbl")))
+  }
+
+  test("unique label names: nested begin-end blocks - case sensitivity check 1") {
+    val sqlScriptText =
+      """BEGIN
+        |LbL: BEGIN
+        |  lbl: BEGIN
+        |    SELECT 1;
+        |  END;
+        |END;
+        |END
+      """.stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    }
+    checkError(
+      exception = exception,
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
+      parameters = Map("label" -> toSQLId("lbl")))
+  }
+
+  test("unique label names: nested begin-end blocks - case sensitivity check 2") {
+    val sqlScriptText =
+      """BEGIN
+        |lbl: BEGIN
+        |  LbL: BEGIN
+        |    SELECT 1;
+        |  END;
+        |END;
+        |END
+      """.stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    }
+    checkError(
+      exception = exception,
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("lbl")))
   }
 
@@ -2043,7 +2092,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("lbl_1")))
   }
 
@@ -2062,7 +2111,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("lbl")))
   }
 
@@ -2081,7 +2130,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("lbl")))
   }
 
@@ -2100,7 +2149,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("w_loop")))
   }
 
@@ -2121,7 +2170,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("r_loop")))
   }
 
@@ -2140,7 +2189,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("l_loop")))
   }
 
@@ -2159,7 +2208,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "LABEL_ALREADY_EXISTS",
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("f_loop")))
   }
 
@@ -2285,6 +2334,130 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     // For statement
     val forStatement = repeatStatement.body.collection.head.asInstanceOf[ForStatement]
     assert(forStatement.label.get == "lbl_4")
+  }
+
+  test("for variable not the same as labels in scope") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  L1: BEGIN
+        |    L2: BEGIN
+        |      L3: FOR L4 AS SELECT 1 DO
+        |        SELECT 1;
+        |        FOR L5 AS SELECT 3 DO
+        |          BEGIN
+        |            SELECT L4;
+        |          END;
+        |         SELECT 4;
+        |        END FOR;
+        |      END FOR L3;
+        |    END L2;
+        |    L4: BEGIN
+        |      SELECT 3;
+        |    END L4;
+        |  END L1;
+        |END""".stripMargin
+
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[CompoundBody])
+  }
+
+  test("for variable name is the same as a label in scope - should fail") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  L1: BEGIN
+        |    L2: BEGIN
+        |      L3: FOR L2 AS SELECT 1 DO
+        |        SELECT 1;
+        |        SELECT 2;
+        |      END FOR L3;
+        |    END L2;
+        |    L4: BEGIN
+        |      SELECT 3;
+        |    END L4;
+        |  END L1;
+        |END""".stripMargin
+
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
+      parameters = Map("label" -> "`l2`"))
+  }
+
+  test("for variable name is the same as the label of the for loop - should fail") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  L1: FOR L1 AS SELECT 1 DO
+        |    SELECT 2;
+        |  END FOR L1;
+        |END""".stripMargin
+
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
+      parameters = Map("label" -> "`l1`"))
+  }
+
+  test("label name is the same as the for loop variable name - should fail") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  FOR L1 AS SELECT 1 DO
+        |    L1: BEGIN
+        |      SELECT 2;
+        |    END L1;
+        |  END FOR;
+        |END""".stripMargin
+
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
+      parameters = Map("label" -> "`l1`"))
+  }
+
+  test("nested for loop variable names are the same - should fail") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  FOR L1 AS SELECT 1 DO
+        |    FOR L1 AS SELECT 2 DO
+        |     SELECT 3;
+        |    END FOR;
+        |  END FOR;
+        |END""".stripMargin
+
+    checkError(
+      exception = intercept[SqlScriptingException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "LABEL_OR_FOR_VARIABLE_ALREADY_EXISTS",
+      parameters = Map("label" -> "`l1`"))
+  }
+
+  test("for loop variable names are the same but for loops are not nested") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  FOR L1 AS SELECT 1 DO
+        |    SELECT 2;
+        |  END FOR;
+        |  FOR L1 AS SELECT 3 DO
+        |    SELECT 4;
+        |  END FOR;
+        |END""".stripMargin
+
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.collection.length == 2)
+    assert(tree.collection.forall(_.isInstanceOf[ForStatement]))
   }
 
   test("for statement") {
@@ -2561,7 +2734,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.conditions("TEST").equals("12000"))
   }
 
-  ignore("declare condition: default sqlstate") {
+  test("declare condition: default sqlstate") {
     val sqlScriptText =
       """
         |BEGIN
@@ -2584,9 +2757,27 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "INVALID_ERROR_CONDITION_DECLARATION.ONLY_AT_BEGINNING",
+      condition = "INVALID_ERROR_CONDITION_DECLARATION.NOT_AT_START_OF_COMPOUND_STATEMENT",
       parameters = Map("conditionName" -> "`TEST_CONDITION`"))
     assert(exception.origin.line.contains(2))
+  }
+
+  test("declare condition in wrong scope") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        | IF 1=1 THEN
+        |   DECLARE TEST_CONDITION CONDITION FOR SQLSTATE '12345';
+        | END IF;
+        |END""".stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText)
+    }
+    checkError(
+      exception = exception,
+      condition = "INVALID_ERROR_CONDITION_DECLARATION.NOT_AT_START_OF_COMPOUND_STATEMENT",
+      parameters = Map("conditionName" -> toSQLId("TEST_CONDITION")))
+    assert(exception.origin.line.contains(4))
   }
 
   test("declare qualified condition") {
@@ -2621,6 +2812,48 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(exception.origin.line.contains(3))
   }
 
+  test("declare duplicate condition") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE TEST_CONDITION CONDITION FOR SQLSTATE '12000';
+        |  DECLARE TEST_CONDITION CONDITION FOR SQLSTATE '13000';
+        |  SELECT 1;
+        |END""".stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText)
+    }
+    checkError(
+      exception = exception,
+      condition = "DUPLICATE_CONDITION_IN_SCOPE",
+      parameters = Map("condition" -> toSQLId("TEST_CONDITION")))
+    assert(exception.origin.line.contains(2))
+  }
+
+  test("declare duplicate condition nested") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE TEST_CONDITION CONDITION FOR SQLSTATE '12000';
+        |  BEGIN
+        |    IF (1 = 1) THEN
+        |      BEGIN
+        |        DECLARE TEST_CONDITION CONDITION FOR SQLSTATE '13000';
+        |      END;
+        |    END IF;
+        |  END;
+        |  SELECT 1;
+        |END""".stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText)
+    }
+    checkError(
+      exception = exception,
+      condition = "DUPLICATE_CONDITION_IN_SCOPE",
+      parameters = Map("condition" -> toSQLId("TEST_CONDITION")))
+    assert(exception.origin.line.contains(6))
+  }
+
   test("continue handler not supported") {
     val sqlScript =
       """
@@ -2628,7 +2861,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  DECLARE OR REPLACE flag INT = -1;
         |  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
         |  BEGIN
-        |    SET VAR flag = 1;
+        |    SET flag = 1;
         |  END;
         |  SELECT 1/0;
         |  SELECT flag;
@@ -2649,7 +2882,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  DECLARE OR REPLACE flag INT = -1;
         |  DECLARE EXIT HANDLER FOR qualified.condition.name
         |  BEGIN
-        |    SET VAR flag = 1;
+        |    SET flag = 1;
         |  END;
         |  SELECT 1/0;
         |  SELECT flag;
@@ -2705,7 +2938,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  DECLARE DUPLICATE_CONDITION CONDITION FOR SQLSTATE '12345';
         |  DECLARE EXIT HANDLER FOR duplicate_condition, duplicate_condition
         |  BEGIN
-        |    SET VAR flag = 1;
+        |    SET flag = 1;
         |  END;
         |  SELECT 1/0;
         |  SELECT flag;
@@ -2726,7 +2959,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  DECLARE OR REPLACE flag INT = -1;
         |  DECLARE EXIT HANDLER FOR SQLSTATE '12345', SQLSTATE '12345'
         |  BEGIN
-        |    SET VAR flag = 1;
+        |    SET flag = 1;
         |  END;
         |  SELECT 1/0;
         |  SELECT flag;
@@ -2747,7 +2980,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  DECLARE OR REPLACE flag INT = -1;
         |  DECLARE EXIT HANDLER FOR SQLEXCEPTION, SQLSTATE '12345'
         |  BEGIN
-        |    SET VAR flag = 1;
+        |    SET flag = 1;
         |  END;
         |  SELECT 1/0;
         |  SELECT flag;
@@ -2905,6 +3138,43 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.handlers.head.body.collection.size == 1)
   }
 
+  test("declare handler for condition in parent scope") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE TEST_CONDITION CONDITION FOR SQLSTATE '12345';
+        |  BEGIN
+        |    DECLARE EXIT HANDLER FOR TEST_CONDITION SET test_var = 1;
+        |  END;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    val handlerBody = tree.collection.head.asInstanceOf[CompoundBody]
+    assert(handlerBody.handlers.length == 1)
+    assert(handlerBody.handlers.head.isInstanceOf[ExceptionHandler])
+    assert(handlerBody.handlers.head.exceptionHandlerTriggers.conditions.size == 1)
+    assert(handlerBody.handlers.head.exceptionHandlerTriggers.conditions.contains("TEST_CONDITION"))
+    assert(handlerBody.handlers.head.body.collection.size == 1)
+  }
+
+  test("declare nested handler for condition in parent scope of parent handler") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  DECLARE TEST_CONDITION CONDITION FOR SQLSTATE '12345';
+        |  BEGIN
+        |    DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
+        |      BEGIN
+        |        DECLARE EXIT HANDLER FOR TEST_CONDITION SET test_var = 1;
+        |      END;
+        |  END;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    val handlerBody = tree
+      .collection.head.asInstanceOf[CompoundBody]
+      .handlers.head.body.asInstanceOf[CompoundBody]
+      .handlers.head
+    assert(handlerBody.exceptionHandlerTriggers.conditions.contains("TEST_CONDITION"))
+  }
 
   // Helper methods
   def cleanupStatementString(statementStr: String): String = {

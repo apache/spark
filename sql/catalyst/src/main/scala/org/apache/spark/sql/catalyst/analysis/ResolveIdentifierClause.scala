@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper, Expre
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{CreateView, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
-import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_IDENTIFIER
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
@@ -62,7 +62,8 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
   private def apply0(
       plan: LogicalPlan,
       referredTempVars: Option[mutable.ArrayBuffer[Seq[String]]] = None): LogicalPlan =
-    plan.resolveOperatorsUpWithPruning(_.containsPattern(UNRESOLVED_IDENTIFIER)) {
+    plan.resolveOperatorsUpWithPruning(_.containsAnyPattern(
+      UNRESOLVED_IDENTIFIER, PLAN_WITH_UNRESOLVED_IDENTIFIER)) {
       case p: PlanWithUnresolvedIdentifier if p.identifierExpr.resolved && p.childrenResolved =>
 
         if (referredTempVars.isDefined) {

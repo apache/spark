@@ -45,10 +45,13 @@ class DataFrameSubquerySuite extends QueryTest with RemoteSparkSession {
     row((null, 5.0)),
     row((6, null))).toDF("c", "d")
 
+  lazy val t = r.filter($"c".isNotNull && $"d".isNotNull)
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     l.createOrReplaceTempView("l")
     r.createOrReplaceTempView("r")
+    t.createOrReplaceTempView("t")
   }
 
   test("noop outer()") {
@@ -316,6 +319,128 @@ class DataFrameSubquerySuite extends QueryTest with RemoteSparkSession {
         .table("l")
         .select($"a", spark.table("r").where($"c" === $"a").select(sum($"d")).scalar()),
       sql("select a, (select sum(d) from r where c = a) from l"))
+  }
+
+  test("IN predicate subquery") {
+    checkAnswer(
+      spark.table("l").where($"l.a".isin(spark.table("r").select($"c"))),
+      sql("select * from l where l.a in (select c from r)"))
+
+    checkAnswer(
+      spark
+        .table("l")
+        .where($"l.a".isin(spark.table("r").where($"l.b".outer() < $"r.d").select($"c"))),
+      sql("select * from l where l.a in (select c from r where l.b < r.d)"))
+
+    checkAnswer(
+      spark
+        .table("l")
+        .where($"l.a".isin(spark.table("r").select("c")) && $"l.a" > 2 && $"l.b".isNotNull),
+      sql("select * from l where l.a in (select c from r) and l.a > 2 and l.b is not null"))
+  }
+
+  test("IN predicate subquery with struct") {
+    withTempView("ll", "rr") {
+      spark.table("l").select($"*", struct("a", "b").alias("sab")).createOrReplaceTempView("ll")
+      spark
+        .table("r")
+        .select($"*", struct($"c".as("a"), $"d".as("b")).alias("scd"))
+        .createOrReplaceTempView("rr")
+
+      for ((col, values) <- Seq(
+          ($"sab", "sab"),
+          (struct(struct($"a", $"b")), "struct(struct(a, b))"));
+        (df, query) <- Seq(
+          (spark.table("rr").select($"scd"), "select scd from rr"),
+          (
+            spark.table("rr").select(struct($"c".as("a"), $"d".as("b"))),
+            "select struct(c as a, d as b) from rr"),
+          (spark.table("rr").select(struct($"c", $"d")), "select struct(c, d) from rr"))) {
+        checkAnswer(
+          spark.table("ll").where(col.isin(df)).select($"a", $"b"),
+          sql(s"select a, b from ll where $values in ($query)"))
+      }
+    }
+  }
+
+  test("NOT IN predicate subquery") {
+    checkAnswer(
+      spark.table("l").where(!$"a".isin(spark.table("r").select($"c"))),
+      sql("select * from l where a not in (select c from r)"))
+
+    checkAnswer(
+      spark.table("l").where(!$"a".isin(spark.table("r").where($"c".isNotNull).select($"c"))),
+      sql("select * from l where a not in (select c from r where c is not null)"))
+
+    checkAnswer(
+      spark
+        .table("l")
+        .where(!struct($"a", $"b").isin(spark.table("t").select($"c", $"d")) && $"a" < lit(4)),
+      sql("select * from l where (a, b) not in (select c, d from t) and a < 4"))
+
+    // Empty sub-query
+    checkAnswer(
+      spark
+        .table("l")
+        .where(
+          !struct($"a", $"b").isin(spark.table("r").where($"c" > lit(10)).select($"c", $"d"))),
+      sql("select * from l where (a, b) not in (select c, d from r where c > 10)"))
+  }
+
+  test("IN predicate subquery within OR") {
+    checkAnswer(
+      spark
+        .table("l")
+        .where($"l.a".isin(spark.table("r").select("c"))
+          || $"l.a".isin(spark.table("r").where($"l.b".outer() < $"r.d").select($"c"))),
+      sql(
+        "select * from l where l.a in (select c from r)" +
+          " or l.a in (select c from r where l.b < r.d)"))
+
+    checkAnswer(
+      spark
+        .table("l")
+        .where(!$"a".isin(spark.table("r").select("c"))
+          || !$"a".isin(spark.table("r").where($"c".isNotNull).select($"c"))),
+      sql(
+        "select * from l where a not in (select c from r)" +
+          " or a not in (select c from r where c is not null)"))
+  }
+
+  test("complex IN predicate subquery") {
+    checkAnswer(
+      spark.table("l").where(!struct($"a", $"b").isin(spark.table("r").select($"c", $"d"))),
+      sql("select * from l where (a, b) not in (select c, d from r)"))
+
+    checkAnswer(
+      spark
+        .table("l")
+        .where(!struct($"a", $"b").isin(spark.table("t").select($"c", $"d"))
+          && ($"a" + $"b").isNotNull),
+      sql("select * from l where (a, b) not in (select c, d from t) and (a + b) is not null"))
+  }
+
+  test("same column in subquery and outer table") {
+    checkAnswer(
+      spark
+        .table("l")
+        .as("l1")
+        .where(
+          $"a".isin(
+            spark
+              .table("l")
+              .where($"a" < lit(3))
+              .groupBy($"a")
+              .agg(Map.empty[String, String])))
+        .select($"a"),
+      sql("select a from l l1 where a in (select a from l where a < 3 group by a)"))
+  }
+
+  test("col IN (NULL)") {
+    checkAnswer(spark.table("l").where($"a".isin(null)), sql("SELECT * FROM l WHERE a IN (NULL)"))
+    checkAnswer(
+      spark.table("l").where(!$"a".isin(null)),
+      sql("SELECT * FROM l WHERE a NOT IN (NULL)"))
   }
 
   private def table1() = {

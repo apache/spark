@@ -31,7 +31,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CALL_SITE_LONG_FORM, CLASS_NAME, CONFIG}
 import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
 import org.apache.spark.rdd.RDD
@@ -42,10 +42,9 @@ import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, LogicalPlan, Range}
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, Range}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.SparkSession.applyAndLoadExtensions
@@ -56,7 +55,6 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal._
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.scripting.SqlScriptingExecution
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -433,50 +431,6 @@ class SparkSession private(
    * ----------------- */
 
   /**
-   * Executes given script and return the result of the last statement.
-   * If script contains no queries, an empty `DataFrame` is returned.
-   *
-   * @param script A SQL script to execute.
-   * @param args A map of parameter names to SQL literal expressions.
-   *
-   * @return The result as a `DataFrame`.
-   */
-  private def executeSqlScript(
-      script: CompoundBody,
-      args: Map[String, Expression] = Map.empty): DataFrame = {
-    val sse = new SqlScriptingExecution(script, this, args)
-    sse.withLocalVariableManager {
-      var result: Option[Seq[Row]] = None
-
-      // We must execute returned df before calling sse.getNextResult again because sse.hasNext
-      // advances the script execution and executes all statements until the next result. We must
-      // collect results immediately to maintain execution order.
-      // This ensures we respect the contract of SqlScriptingExecution API.
-      var df: Option[DataFrame] = sse.getNextResult
-      var resultSchema: Option[StructType] = None
-      while (df.isDefined) {
-        sse.withErrorHandling {
-          // Collect results from the current DataFrame.
-          result = Some(df.get.collect().toSeq)
-          resultSchema = Some(df.get.schema)
-        }
-        df = sse.getNextResult
-      }
-
-      if (result.isEmpty) {
-        emptyDataFrame
-      } else {
-        // If `result` is defined, then `resultSchema` must be defined as well.
-        assert(resultSchema.isDefined)
-
-        val attributes = DataTypeUtils.toAttributes(resultSchema.get)
-        Dataset.ofRows(
-          self, LocalRelation.fromExternalRows(attributes, result.get))
-      }
-    }
-  }
-
-  /**
    * Executes a SQL query substituting positional parameters by the given arguments,
    * returning the result as a `DataFrame`.
    * This API eagerly runs DDL/DML commands, but not for SELECT queries.
@@ -495,30 +449,17 @@ class SparkSession private(
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-        parsedPlan match {
-          case compoundBody: CompoundBody =>
-            if (args.nonEmpty) {
-              // Positional parameters are not supported for SQL scripting.
-              throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
-            }
-            compoundBody
-          case logicalPlan: LogicalPlan =>
-            if (args.nonEmpty) {
-              PosParameterizedQuery(logicalPlan, args.map(lit(_).expr).toImmutableArraySeq)
-            } else {
-              logicalPlan
-            }
+        if (args.nonEmpty) {
+          if (parsedPlan.isInstanceOf[CompoundBody]) {
+            // Positional parameters are not supported for SQL scripting.
+            throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+          }
+          PosParameterizedQuery(parsedPlan, args.map(lit(_).expr).toImmutableArraySeq)
+        } else {
+          parsedPlan
         }
       }
-
-      plan match {
-        case compoundBody: CompoundBody =>
-          // Execute the SQL script.
-          executeSqlScript(compoundBody)
-        case logicalPlan: LogicalPlan =>
-          // Execute the standalone SQL statement.
-          Dataset.ofRows(self, plan, tracker)
-      }
+      Dataset.ofRows(self, plan, tracker)
     }
 
   /** @inheritdoc */
@@ -549,26 +490,13 @@ class SparkSession private(
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-        parsedPlan match {
-          case compoundBody: CompoundBody =>
-            compoundBody
-          case logicalPlan: LogicalPlan =>
-            if (args.nonEmpty) {
-              NameParameterizedQuery(logicalPlan, args.transform((_, v) => lit(v).expr))
-            } else {
-              logicalPlan
-            }
+        if (args.nonEmpty) {
+          NameParameterizedQuery(parsedPlan, args.transform((_, v) => lit(v).expr))
+        } else {
+          parsedPlan
         }
       }
-
-      plan match {
-        case compoundBody: CompoundBody =>
-          // Execute the SQL script.
-          executeSqlScript(compoundBody, args.transform((_, v) => lit(v).expr))
-        case logicalPlan: LogicalPlan =>
-          // Execute the standalone SQL statement.
-          Dataset.ofRows(self, plan, tracker)
-      }
+      Dataset.ofRows(self, plan, tracker)
     }
 
   /** @inheritdoc */

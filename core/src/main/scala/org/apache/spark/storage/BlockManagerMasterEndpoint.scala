@@ -31,7 +31,7 @@ import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.RDD_CACHE_VISIBILITY_TRACKING_ENABLED
 import org.apache.spark.network.shuffle.{ExternalBlockStoreClient, RemoteBlockPushResolver}
@@ -863,36 +863,36 @@ class BlockManagerMasterEndpoint(
       blockId: BlockId,
       requesterHost: String): Option[BlockLocationsAndStatus] = {
     val allLocations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
-    val hostLocalLocations = allLocations.filter(bmId => bmId.host == requesterHost)
-
     val blockStatusWithBlockManagerId: Option[(BlockStatus, BlockManagerId)] =
-      (if (externalShuffleServiceRddFetchEnabled) {
-         // if fetching RDD is enabled from the external shuffle service then first try to find
-         // the block in the external shuffle service of the same host
-         val location = hostLocalLocations.find(_.port == externalShuffleServicePort)
-         location
-           .flatMap(blockStatusByShuffleService.get(_).flatMap(_.get(blockId)))
-           .zip(location)
-       } else {
-         None
-       })
-        .orElse {
-          // if the block is not found via the external shuffle service trying to find it in the
-          // executors running on the same host and persisted on the disk
-          // using flatMap on iterators makes the transformation lazy
-          hostLocalLocations.iterator
-            .flatMap { bmId =>
-              blockManagerInfo.get(bmId).flatMap { blockInfo =>
-                blockInfo.getStatus(blockId).map((_, bmId))
-              }
+      (if (externalShuffleServiceRddFetchEnabled && blockId.isRDD) {
+        // If fetching disk persisted RDD from the external shuffle service is enabled then first
+        // try to find the block in the external shuffle service preferring the one running on
+        // the same host. This search includes blocks stored on already killed executors as well.
+        val hostLocalLocations = allLocations.find { bmId =>
+          bmId.host == requesterHost && bmId.port == externalShuffleServicePort
+        }
+        val location = hostLocalLocations
+          .orElse(allLocations.find(_.port == externalShuffleServicePort))
+        location
+          .flatMap(blockStatusByShuffleService.get(_).flatMap(_.get(blockId)))
+          .zip(location)
+      } else {
+        // trying to find it in the executors running on the same host and persisted on the disk
+        // Implementation detail: using flatMap on iterators makes the transformation lazy.
+        allLocations.filter(_.host == requesterHost).iterator
+          .flatMap { bmId =>
+            blockManagerInfo.get(bmId).flatMap { blockInfo =>
+              blockInfo.getStatus(blockId).map((_, bmId))
             }
-            .find(_._1.storageLevel.useDisk)
-        }
-        .orElse {
-          // if the block cannot be found in the same host search it in all the executors
-          val location = allLocations.headOption
-          location.flatMap(blockManagerInfo.get(_)).flatMap(_.getStatus(blockId)).zip(location)
-        }
+          }
+          .find(_._1.storageLevel.useDisk)
+      })
+      .orElse {
+        // if the block cannot be found in the same host as a disk stored block then extend the
+        // search to all active (not killed) executors and to all storage levels
+        val location = allLocations.headOption
+        location.flatMap(blockManagerInfo.get(_)).flatMap(_.getStatus(blockId)).zip(location)
+      }
     logDebug(s"Identified block: $blockStatusWithBlockManagerId")
     blockStatusWithBlockManagerId
       .map { case (blockStatus: BlockStatus, bmId: BlockManagerId) =>

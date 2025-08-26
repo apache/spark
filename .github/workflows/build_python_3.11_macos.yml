@@ -29,5 +29,5 @@ jobs:
     permissions:
       packages: write
     name: Run
-    uses: ./.github/workflows/python_macos_test.yml
+    uses: ./.github/workflows/python_hosted_runner_test.yml
     if: github.repository == 'apache/spark'

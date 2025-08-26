@@ -16,19 +16,20 @@
  */
 package org.apache.spark.sql.connector.catalog;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-import com.google.common.collect.Maps;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+
+import org.apache.spark.sql.connector.catalog.constraints.Constraint;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
-
-import java.util.Collections;
-import java.util.Map;
 
 public class TableInfo {
 
   private final Column[] columns;
   private final Map<String, String> properties;
   private final Transform[] partitions;
+  private final Constraint[] constraints;
 
   /**
    * Constructor for TableInfo used by the builder.
@@ -36,8 +37,9 @@ public class TableInfo {
    */
   private TableInfo(Builder builder) {
     this.columns = builder.columns;
-    this.properties = Collections.unmodifiableMap(builder.properties);
+    this.properties = builder.properties;
     this.partitions = builder.partitions;
+    this.constraints = builder.constraints;
   }
 
   public Column[] columns() {
@@ -56,10 +58,13 @@ public class TableInfo {
     return partitions;
   }
 
+  public Constraint[] constraints() { return constraints; }
+
   public static class Builder {
     private Column[] columns;
-    private Map<String, String> properties;
-    private Transform[] partitions;
+    private Map<String, String> properties = new HashMap<>();
+    private Transform[] partitions = new Transform[0];
+    private Constraint[] constraints = new Constraint[0];
 
     public Builder withColumns(Column[] columns) {
       this.columns = columns;
@@ -67,8 +72,7 @@ public class TableInfo {
     }
 
     public Builder withProperties(Map<String, String> properties) {
-      this.properties = Maps.newHashMap();
-      this.properties.putAll(properties);
+      this.properties = properties;
       return this;
     }
 
@@ -77,8 +81,13 @@ public class TableInfo {
       return this;
     }
 
+    public Builder withConstraints(Constraint[] constraints) {
+      this.constraints = constraints;
+      return this;
+    }
+
     public TableInfo build() {
-      checkNotNull(columns, "columns should not be null");
+      Objects.requireNonNull(columns, "columns should not be null");
       return new TableInfo(this);
     }
   }

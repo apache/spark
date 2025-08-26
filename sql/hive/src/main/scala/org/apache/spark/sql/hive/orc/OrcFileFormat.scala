@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.hive.orc
 
-import java.util.Properties
+import java.util.{Base64, Properties}
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.Output
-import org.apache.commons.codec.binary.Base64
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.ql.io.orc._
@@ -55,15 +54,11 @@ import org.apache.spark.util.SerializableConfiguration
  * `FileFormat` for reading ORC files. If this is moved or renamed, please update
  * `DataSource`'s backwardCompatibilityMap.
  */
-class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable {
+case class OrcFileFormat() extends FileFormat with DataSourceRegister with Serializable {
 
   override def shortName(): String = "orc"
 
   override def toString: String = "ORC"
-
-  override def hashCode(): Int = getClass.hashCode()
-
-  override def equals(other: Any): Boolean = other.isInstanceOf[OrcFileFormat]
 
   override def inferSchema(
       sparkSession: SparkSession,
@@ -147,7 +142,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     }
 
     val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val ignoreCorruptFiles =
       new OrcOptions(options, sparkSession.sessionState.conf).ignoreCorruptFiles
 
@@ -219,7 +214,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     val out = new Output(4 * 1024, 10 * 1024 * 1024)
     kryo.writeObject(out, sarg)
     out.close()
-    Base64.encodeBase64String(out.toBytes)
+    Base64.getEncoder().encodeToString(out.toBytes)
   }
 }
 

@@ -44,7 +44,7 @@ Cluster administrators should use [Pod Security Policies](https://kubernetes.io/
 
 # Prerequisites
 
-* A running Kubernetes cluster at version >= 1.30 with access configured to it using
+* A running Kubernetes cluster at version >= 1.32 with access configured to it using
 [kubectl](https://kubernetes.io/docs/reference/kubectl/).  If you do not already have a working Kubernetes cluster,
 you may set up a test cluster on your local machine using
 [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
@@ -643,7 +643,8 @@ See the [configuration page](configuration.html) for information on Spark config
     Container image to use for the Spark application.
     This is usually of the form <code>example.com/repo/spark:v1.0.0</code>.
     This configuration is required and must be provided by the user, unless explicit
-    images are provided for each different container type.
+    images are provided for each different container type. Note that <code>{{SPARK_VERSION}}</code> 
+    is the built-in variable that will be substituted with current Spark's version.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -651,7 +652,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.driver.container.image</code></td>
   <td><code>(value of spark.kubernetes.container.image)</code></td>
   <td>
-    Custom container image to use for the driver.
+    Custom container image to use for the driver. Note that <code>{{SPARK_VERSION}}</code> 
+    is the built-in variable that will be substituted with current Spark's version.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -659,7 +661,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.executor.container.image</code></td>
   <td><code>(value of spark.kubernetes.container.image)</code></td>
   <td>
-    Custom container image to use for executors.
+    Custom container image to use for executors. Note that <code>{{SPARK_VERSION}}</code> 
+    is the built-in variable that will be substituted with current Spark's version.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -1988,10 +1991,10 @@ Install Apache YuniKorn:
 ```bash
 helm repo add yunikorn https://apache.github.io/yunikorn-release
 helm repo update
-helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.6.1 --create-namespace --set embedAdmissionController=false
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.7.0 --create-namespace --set embedAdmissionController=false
 ```
 
-The above steps will install YuniKorn v1.6.1 on an existing Kubernetes cluster.
+The above steps will install YuniKorn v1.7.0 on an existing Kubernetes cluster.
 
 ##### Get started
 

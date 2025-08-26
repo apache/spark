@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, QueryTest, Row, SparkSession, SQLContext}
-import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, CatalogV2Util, Column, Identifier, SupportsRead, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, CatalogV2Util, Column, Identifier, SupportsRead, Table, TableCapability, TableInfo}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns, V1Scan}
 import org.apache.spark.sql.execution.RowDataSourceScanExec
@@ -113,6 +113,10 @@ class V1ReadFallbackCatalog extends BasicInMemoryTableCatalog {
     tables.put(ident, table)
     table
   }
+
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties)
+  }
 }
 
 object V1ReadFallbackCatalog {
@@ -140,7 +144,7 @@ class TableWithV1ReadFallback(override val name: String) extends Table with Supp
   private class V1ReadFallbackScanBuilder extends ScanBuilder
     with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
 
-    private var requiredSchema: StructType = schema()
+    private var requiredSchema: StructType = CatalogV2Util.v2ColumnsToStructType(columns())
     override def pruneColumns(requiredSchema: StructType): Unit = {
       this.requiredSchema = requiredSchema
     }

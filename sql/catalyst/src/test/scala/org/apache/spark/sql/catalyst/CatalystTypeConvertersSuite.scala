@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
+import java.math.{BigDecimal => JavaBigDecimal}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period}
 
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
@@ -153,6 +154,14 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
         "other" -> "test",
         "otherClass" -> "java.lang.String",
         "dataType" -> "decimal(10,0)"))
+  }
+
+  test("SPARK-51941: convert BigDecimal to Decimal") {
+    val expected = Decimal("0.01")
+    val bigDecimal = BigDecimal("0.01")
+    assert(CatalystTypeConverters.convertToCatalyst(bigDecimal) === expected)
+    val javaBigDecimal = new JavaBigDecimal("0.01")
+    assert(CatalystTypeConverters.convertToCatalyst(javaBigDecimal) === expected)
   }
 
   test("converting a wrong value to the string type") {
@@ -426,7 +435,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       "23:59:59.999999").foreach { time =>
       val input = LocalTime.parse(time)
       val result = CatalystTypeConverters.convertToCatalyst(input)
-      val expected = DateTimeUtils.localTimeToMicros(input)
+      val expected = DateTimeUtils.localTimeToNanos(input)
       assert(result === expected)
     }
   }
@@ -440,8 +449,9 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       43200999999L,
       86399000000L,
       86399999999L).foreach { us =>
-      val localTime = DateTimeUtils.microsToLocalTime(us)
-      assert(CatalystTypeConverters.createToScalaConverter(TimeType())(us) === localTime)
+      val nanos = us * 1000L
+      val localTime = DateTimeUtils.nanosToLocalTime(nanos)
+      assert(CatalystTypeConverters.createToScalaConverter(TimeType())(nanos) === localTime)
     }
   }
 }

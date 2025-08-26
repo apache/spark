@@ -25,8 +25,8 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.util.Progressable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
-import org.apache.spark.sql.execution.streaming.FileSystemBasedCheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
+import org.apache.spark.sql.execution.streaming.checkpointing.FileSystemBasedCheckpointFileManager
 
 /**
  * A wrapper file output stream that will throw exception in close() and put the underlying
@@ -58,6 +58,8 @@ class DelayCloseFSDataOutputStreamWrapper(
  * Used in unit tests to simulate failure scenarios.
  * This can be put into SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS to provide failure
  * injection behavior.
+ * Requirement: when this file manager is created, `path` should already be registered using
+ * FailureInjectionFileSystem.registerTempPath(path)
  *
  * @param path The path to the checkpoint directory, passing to the parent class
  * @param hadoopConf  hadoop conf that will be passed to the parent class
@@ -153,7 +155,7 @@ object FailureInjectionFileSystem {
    * @param path  the temp path
    * @return  the newly created failure injection state
    */
-  def addPathToTempToInjectionState(path: String): FailureInjectionState = synchronized {
+  def registerTempPath(path: String): FailureInjectionState = synchronized {
     // Throw exception if the path already exists in the map
     assert(!tempPathToInjectionState.contains(path), s"Path $path already exists in the map")
     tempPathToInjectionState = tempPathToInjectionState + (path -> new FailureInjectionState)
@@ -165,6 +167,10 @@ object FailureInjectionFileSystem {
    * @param path the temp path to be cle
    */
   def removePathFromTempToInjectionState(path: String): Unit = synchronized {
+    // if we can find the injection state of the path, cancel all the delayed streams
+    tempPathToInjectionState.get(path).foreach { state =>
+      state.delayedStreams.foreach(_.cancel())
+    }
     tempPathToInjectionState = tempPathToInjectionState - path
   }
 
@@ -251,7 +257,9 @@ class FailureInjectionRocksDBStateStoreProvider extends RocksDBStateStoreProvide
       loggingId: String,
       useColumnFamilies: Boolean,
       enableStateStoreCheckpointIds: Boolean,
-      partitionId: Int): RocksDB = {
+      partitionId: Int,
+      eventForwarder: Option[RocksDBEventForwarder] = None,
+      uniqueId: Option[String]): RocksDB = {
     FailureInjectionRocksDBStateStoreProvider.createRocksDBWithFaultInjection(
       dfsRootDir,
       conf,
@@ -260,7 +268,9 @@ class FailureInjectionRocksDBStateStoreProvider extends RocksDBStateStoreProvide
       loggingId,
       useColumnFamilies,
       enableStateStoreCheckpointIds,
-      partitionId)
+      partitionId,
+      eventForwarder,
+      uniqueId)
   }
 }
 
@@ -277,7 +287,9 @@ object FailureInjectionRocksDBStateStoreProvider {
       loggingId: String,
       useColumnFamilies: Boolean,
       enableStateStoreCheckpointIds: Boolean,
-      partitionId: Int): RocksDB = {
+      partitionId: Int,
+      eventForwarder: Option[RocksDBEventForwarder],
+      uniqueId: Option[String]): RocksDB = {
     new RocksDB(
       dfsRootDir,
       conf = conf,
@@ -286,7 +298,9 @@ object FailureInjectionRocksDBStateStoreProvider {
       loggingId = loggingId,
       useColumnFamilies = useColumnFamilies,
       enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
-      partitionId = partitionId
+      partitionId = partitionId,
+      eventForwarder = eventForwarder,
+      uniqueId
     ) {
       override def createFileManager(
           dfsRootDir: String,

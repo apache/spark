@@ -85,11 +85,7 @@ trait RelationMetadataProvider extends LookupCatalog {
           isStreaming = unresolvedRelation.isStreaming
         )
       case _ =>
-        RelationId(
-          multipartIdentifier = unresolvedRelation.multipartIdentifier,
-          options = unresolvedRelation.options,
-          isStreaming = unresolvedRelation.isStreaming
-        )
+        unresolvedRelation.tableNotFound(unresolvedRelation.multipartIdentifier)
     }
   }
 }

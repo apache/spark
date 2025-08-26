@@ -33,7 +33,7 @@ import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SerializableConfiguration
 import org.apache.spark.util.Utils
 
-class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
+case class SimpleTextSource() extends TextBasedFileFormat with DataSourceRegister {
   override def shortName(): String = "test"
 
   override def inferSchema(
@@ -80,7 +80,7 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
     }
 
     val broadcastedHadoopConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
 
     (file: PartitionedFile) => {
       val predicate = {

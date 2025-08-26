@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
  */
 object EliminateView extends Rule[LogicalPlan] with CastSupport {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case View(_, _, child) => child
+    case v: View => v.child
   }
 }
 

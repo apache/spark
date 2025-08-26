@@ -325,7 +325,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`department`, false
 INSERT INTO department VALUES (0, NULL, 'ROOT')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/department, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/department], Append, `spark_catalog`.`default`.`department`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/department), [id, parent_department, name]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as int) AS parent_department#x, cast(col3#x as string) AS name#x]
++- Project [col1#x AS id#x, cast(col2#x as int) AS parent_department#x, col3#x AS name#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -333,7 +333,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO department VALUES (1, 0, 'A')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/department, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/department], Append, `spark_catalog`.`default`.`department`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/department), [id, parent_department, name]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as int) AS parent_department#x, cast(col3#x as string) AS name#x]
++- Project [col1#x AS id#x, col2#x AS parent_department#x, col3#x AS name#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -341,7 +341,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO department VALUES (2, 1, 'B')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/department, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/department], Append, `spark_catalog`.`default`.`department`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/department), [id, parent_department, name]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as int) AS parent_department#x, cast(col3#x as string) AS name#x]
++- Project [col1#x AS id#x, col2#x AS parent_department#x, col3#x AS name#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -349,7 +349,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO department VALUES (3, 2, 'C')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/department, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/department], Append, `spark_catalog`.`default`.`department`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/department), [id, parent_department, name]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as int) AS parent_department#x, cast(col3#x as string) AS name#x]
++- Project [col1#x AS id#x, col2#x AS parent_department#x, col3#x AS name#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -357,7 +357,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO department VALUES (4, 2, 'D')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/department, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/department], Append, `spark_catalog`.`default`.`department`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/department), [id, parent_department, name]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as int) AS parent_department#x, cast(col3#x as string) AS name#x]
++- Project [col1#x AS id#x, col2#x AS parent_department#x, col3#x AS name#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -365,7 +365,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO department VALUES (5, 0, 'E')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/department, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/department], Append, `spark_catalog`.`default`.`department`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/department), [id, parent_department, name]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as int) AS parent_department#x, cast(col3#x as string) AS name#x]
++- Project [col1#x AS id#x, col2#x AS parent_department#x, col3#x AS name#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -373,7 +373,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO department VALUES (6, 4, 'F')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/department, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/department], Append, `spark_catalog`.`default`.`department`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/department), [id, parent_department, name]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as int) AS parent_department#x, cast(col3#x as string) AS name#x]
++- Project [col1#x AS id#x, col2#x AS parent_department#x, col3#x AS name#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -381,7 +381,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO department VALUES (7, 5, 'G')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/department, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/department], Append, `spark_catalog`.`default`.`department`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/department), [id, parent_department, name]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as int) AS parent_department#x, cast(col3#x as string) AS name#x]
++- Project [col1#x AS id#x, col2#x AS parent_department#x, col3#x AS name#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -774,7 +774,7 @@ VALUES (1, NULL), (2, 1), (3,1), (4,2), (5,2), (6,2), (7,3), (8,3),
        (9,4), (10,4), (11,7), (12,7), (13,7), (14, 9), (15,11), (16,11)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/tree, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/tree], Append, `spark_catalog`.`default`.`tree`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/tree), [id, parent_id]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as int) AS parent_id#x]
++- Project [col1#x AS id#x, col2#x AS parent_id#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -902,7 +902,7 @@ insert into graph values
 	(5, 1, 'arc 5 -> 1')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/graph, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/graph], Append, `spark_catalog`.`default`.`graph`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/graph), [f, t, label]
-+- Project [cast(col1#x as int) AS f#x, cast(col2#x as int) AS t#x, cast(col3#x as string) AS label#x]
++- Project [col1#x AS f#x, col2#x AS t#x, col3#x AS label#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -1111,7 +1111,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`y`, false
 INSERT INTO y SELECT EXPLODE(SEQUENCE(1, 10))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/y, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/y], Append, `spark_catalog`.`default`.`y`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/y), [a]
-+- Project [cast(col#x as int) AS a#x]
++- Project [col#x AS a#x]
    +- Project [col#x]
       +- Generate explode(sequence(1, 10, None, Some(America/Los_Angeles))), false, [col#x]
          +- OneRowRelation
@@ -1183,20 +1183,10 @@ org.apache.spark.sql.AnalysisException
 WITH RECURSIVE x(n) AS (SELECT n FROM x UNION ALL SELECT 1)
 	SELECT * FROM x
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`n`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 32,
-    "stopIndex" : 32,
-    "fragment" : "n"
-  } ]
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
 }
 
 
@@ -1210,7 +1200,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`y`, false
 INSERT INTO y SELECT EXPLODE(SEQUENCE(1, 10))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/y, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/y], Append, `spark_catalog`.`default`.`y`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/y), [a]
-+- Project [cast(col#x as int) AS a#x]
++- Project [col#x AS a#x]
    +- Project [col#x]
       +- Generate explode(sequence(1, 10, None, Some(America/Los_Angeles))), false, [col#x]
          +- OneRowRelation
@@ -1260,18 +1250,25 @@ WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM x
                           WHERE n IN (SELECT * FROM x))
   SELECT * FROM x
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 134,
-    "fragment" : "WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM x\n                          WHERE n IN (SELECT * FROM x))\n  SELECT * FROM x"
-  } ]
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias x
+:     +- Project [1#x AS n#x]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x]
+:           :  +- OneRowRelation
+:           +- Project [(n#x + 1) AS (n + 1)#x]
+:              +- Filter n#x IN (list#x [])
+:                 :  +- Project [n#x]
+:                 :     +- SubqueryAlias x
+:                 :        +- Project [1#x AS n#x]
+:                 :           +- UnionLoopRef xxxx, [1#x], false
+:                 +- SubqueryAlias x
+:                    +- Project [1#x AS n#x]
+:                       +- UnionLoopRef xxxx, [1#x], false
++- Project [n#x]
+   +- SubqueryAlias x
+      +- CTERelationRef xxxx, true, [n#x], false, false
 
 
 -- !query
@@ -1324,18 +1321,24 @@ WITH RECURSIVE x(id) AS (values (1)
     SELECT (SELECT * FROM x) FROM x WHERE id < 5
 ) SELECT * FROM x
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 116,
-    "fragment" : "WITH RECURSIVE x(id) AS (values (1)\n    UNION ALL\n    SELECT (SELECT * FROM x) FROM x WHERE id < 5\n) SELECT * FROM x"
-  } ]
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias x
+:     +- Project [col1#x AS id#x]
+:        +- UnionLoop xxxx
+:           :- LocalRelation [col1#x]
+:           +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
+:              :  +- Project [id#x]
+:              :     +- SubqueryAlias x
+:              :        +- Project [col1#x AS id#x]
+:              :           +- UnionLoopRef xxxx, [col1#x], false
+:              +- Filter (id#x < 5)
+:                 +- SubqueryAlias x
+:                    +- Project [col1#x AS id#x]
+:                       +- UnionLoopRef xxxx, [col1#x], false
++- Project [id#x]
+   +- SubqueryAlias x
+      +- CTERelationRef xxxx, true, [id#x], false, false
 
 
 -- !query
@@ -1370,18 +1373,26 @@ WITH RECURSIVE foo(i) AS
        SELECT i+1 FROM foo WHERE i < 5)
 ) SELECT * FROM foo
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 175,
-    "fragment" : "WITH RECURSIVE foo(i) AS\n    (values (1)\n    UNION ALL\n       (SELECT i+1 FROM foo WHERE i < 10\n          UNION ALL\n       SELECT i+1 FROM foo WHERE i < 5)\n) SELECT * FROM foo"
-  } ]
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias foo
+:     +- Project [col1#x AS i#x]
+:        +- UnionLoop xxxx
+:           :- LocalRelation [col1#x]
+:           +- Union false, false
+:              :- Project [(i#x + 1) AS (i + 1)#x]
+:              :  +- Filter (i#x < 10)
+:              :     +- SubqueryAlias foo
+:              :        +- Project [col1#x AS i#x]
+:              :           +- UnionLoopRef xxxx, [col1#x], false
+:              +- Project [(i#x + 1) AS (i + 1)#x]
+:                 +- Filter (i#x < 5)
+:                    +- SubqueryAlias foo
+:                       +- Project [col1#x AS i#x]
+:                          +- UnionLoopRef xxxx, [col1#x], false
++- Project [i#x]
+   +- SubqueryAlias foo
+      +- CTERelationRef xxxx, true, [i#x], false, false
 
 
 -- !query
@@ -1394,18 +1405,28 @@ WITH RECURSIVE foo(i) AS
        SELECT i+1 FROM foo WHERE i < 5) AS t
 ) SELECT * FROM foo
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 198,
-    "fragment" : "WITH RECURSIVE foo(i) AS\n    (values (1)\n    UNION ALL\n\t   SELECT * FROM\n       (SELECT i+1 FROM foo WHERE i < 10\n          UNION ALL\n       SELECT i+1 FROM foo WHERE i < 5) AS t\n) SELECT * FROM foo"
-  } ]
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias foo
+:     +- Project [col1#x AS i#x]
+:        +- UnionLoop xxxx
+:           :- LocalRelation [col1#x]
+:           +- Project [(i + 1)#x]
+:              +- SubqueryAlias t
+:                 +- Union false, false
+:                    :- Project [(i#x + 1) AS (i + 1)#x]
+:                    :  +- Filter (i#x < 10)
+:                    :     +- SubqueryAlias foo
+:                    :        +- Project [col1#x AS i#x]
+:                    :           +- UnionLoopRef xxxx, [col1#x], false
+:                    +- Project [(i#x + 1) AS (i + 1)#x]
+:                       +- Filter (i#x < 5)
+:                          +- SubqueryAlias foo
+:                             +- Project [col1#x AS i#x]
+:                                +- UnionLoopRef xxxx, [col1#x], false
++- Project [i#x]
+   +- SubqueryAlias foo
+      +- CTERelationRef xxxx, true, [i#x], false, false
 
 
 -- !query
@@ -1417,18 +1438,26 @@ WITH RECURSIVE foo(i) AS
        SELECT i+1 FROM foo WHERE i < 5)
 ) SELECT * FROM foo
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 172,
-    "fragment" : "WITH RECURSIVE foo(i) AS\n    (values (1)\n    UNION ALL\n       (SELECT i+1 FROM foo WHERE i < 10\n          EXCEPT\n       SELECT i+1 FROM foo WHERE i < 5)\n) SELECT * FROM foo"
-  } ]
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias foo
+:     +- Project [col1#x AS i#x]
+:        +- UnionLoop xxxx
+:           :- LocalRelation [col1#x]
+:           +- Except false
+:              :- Project [(i#x + 1) AS (i + 1)#x]
+:              :  +- Filter (i#x < 10)
+:              :     +- SubqueryAlias foo
+:              :        +- Project [col1#x AS i#x]
+:              :           +- UnionLoopRef xxxx, [col1#x], false
+:              +- Project [(i#x + 1) AS (i + 1)#x]
+:                 +- Filter (i#x < 5)
+:                    +- SubqueryAlias foo
+:                       +- Project [col1#x AS i#x]
+:                          +- UnionLoopRef xxxx, [col1#x], false
++- Project [i#x]
+   +- SubqueryAlias foo
+      +- CTERelationRef xxxx, true, [i#x], false, false
 
 
 -- !query
@@ -1440,18 +1469,26 @@ WITH RECURSIVE foo(i) AS
        SELECT i+1 FROM foo WHERE i < 5)
 ) SELECT * FROM foo
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_RECURSIVE_REFERENCE.NUMBER",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 175,
-    "fragment" : "WITH RECURSIVE foo(i) AS\n    (values (1)\n    UNION ALL\n       (SELECT i+1 FROM foo WHERE i < 10\n          INTERSECT\n       SELECT i+1 FROM foo WHERE i < 5)\n) SELECT * FROM foo"
-  } ]
-}
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias foo
+:     +- Project [col1#x AS i#x]
+:        +- UnionLoop xxxx
+:           :- LocalRelation [col1#x]
+:           +- Intersect false
+:              :- Project [(i#x + 1) AS (i + 1)#x]
+:              :  +- Filter (i#x < 10)
+:              :     +- SubqueryAlias foo
+:              :        +- Project [col1#x AS i#x]
+:              :           +- UnionLoopRef xxxx, [col1#x], false
+:              +- Project [(i#x + 1) AS (i + 1)#x]
+:                 +- Filter (i#x < 5)
+:                    +- SubqueryAlias foo
+:                       +- Project [col1#x AS i#x]
+:                          +- UnionLoopRef xxxx, [col1#x], false
++- Project [i#x]
+   +- SubqueryAlias foo
+      +- CTERelationRef xxxx, true, [i#x], false, false
 
 
 -- !query
@@ -1503,27 +1540,28 @@ SELECT * FROM t
 -- !query analysis
 WithCTE
 :- CTERelationDef xxxx, false
-:  +- SubqueryAlias s
-:     +- Project [col1#x AS i#x]
-:        +- UnionLoop xxxx
-:           :- LocalRelation [col1#x]
-:           +- Project [(i#x + 1) AS (i + 1)#x]
-:              +- Filter (i#x < 10)
-:                 +- SubqueryAlias s
-:                    +- Project [col1#x AS i#x]
-:                       +- UnionLoopRef xxxx, [col1#x], false
-:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [i#x AS j#x]
-:        +- UnionLoop xxxx
-:           :- Project [i#x]
+:        +- WithCTE
+:           :- CTERelationDef xxxx, false
 :           :  +- SubqueryAlias s
-:           :     +- CTERelationRef xxxx, true, [i#x], false, false
-:           +- Project [(j#x + 1) AS (j + 1)#x]
-:              +- Filter (j#x < 10)
-:                 +- SubqueryAlias t
-:                    +- Project [i#x AS j#x]
-:                       +- UnionLoopRef xxxx, [i#x], false
+:           :     +- Project [col1#x AS i#x]
+:           :        +- UnionLoop xxxx
+:           :           :- LocalRelation [col1#x]
+:           :           +- Project [(i#x + 1) AS (i + 1)#x]
+:           :              +- Filter (i#x < 10)
+:           :                 +- SubqueryAlias s
+:           :                    +- Project [col1#x AS i#x]
+:           :                       +- UnionLoopRef xxxx, [col1#x], false
+:           +- UnionLoop xxxx
+:              :- Project [i#x]
+:              :  +- SubqueryAlias s
+:              :     +- CTERelationRef xxxx, true, [i#x], false, false
+:              +- Project [(j#x + 1) AS (j + 1)#x]
+:                 +- Filter (j#x < 10)
+:                    +- SubqueryAlias t
+:                       +- Project [i#x AS j#x]
+:                          +- UnionLoopRef xxxx, [i#x], false
 +- Project [j#x]
    +- SubqueryAlias t
       +- CTERelationRef xxxx, true, [j#x], false, false
@@ -1622,15 +1660,8 @@ SELECT * FROM outermost ORDER BY 1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNION_NOT_SUPPORTED_IN_RECURSIVE_CTE",
-  "sqlState" : "42836",
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 185,
-    "fragment" : "WITH RECURSIVE outermost(x) AS (\n  WITH innermost as (SELECT 2 FROM outermost) -- fail\n    SELECT * FROM innermost\n    UNION SELECT * from outermost\n)\nSELECT * FROM outermost ORDER BY 1"
-  } ]
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
 }
 
 
@@ -1671,7 +1702,7 @@ TruncateTableCommand `spark_catalog`.`default`.`y`
 INSERT INTO y SELECT EXPLODE(SEQUENCE(1, 3))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/y, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/y], Append, `spark_catalog`.`default`.`y`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/y), [a]
-+- Project [cast(col#x as int) AS a#x]
++- Project [col#x AS a#x]
    +- Project [col#x]
       +- Generate explode(sequence(1, 3, None, Some(America/Los_Angeles))), false, [col#x]
          +- OneRowRelation
@@ -1725,7 +1756,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`parent`, false
 INSERT INTO parent VALUES ( 1, 'p1' )
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/parent, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/parent], Append, `spark_catalog`.`default`.`parent`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/parent), [id, val]
-+- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS val#x]
++- Project [col1#x AS id#x, col2#x AS val#x]
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -1828,7 +1859,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`test`, false
 with test as (select 42) insert into test select * from test
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/test, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/test], Append, `spark_catalog`.`default`.`test`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/test), [i]
-+- Project [cast(42#x as int) AS i#x]
++- Project [42#x AS i#x]
    +- WithCTE
       :- CTERelationDef xxxx, false
       :  +- SubqueryAlias test

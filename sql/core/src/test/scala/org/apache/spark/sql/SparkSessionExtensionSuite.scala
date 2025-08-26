@@ -640,6 +640,10 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
 
   override def parseQuery(sqlText: String): LogicalPlan =
     delegate.parseQuery(sqlText)
+
+  override def parseRoutineParam(sqlText: String): StructType = {
+    delegate.parseRoutineParam(sqlText)
+  }
 }
 
 object MyExtensions {

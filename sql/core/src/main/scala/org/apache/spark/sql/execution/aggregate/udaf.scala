@@ -84,7 +84,7 @@ sealed trait BufferSetterGetterUtils {
           (row: InternalRow, ordinal: Int) =>
             if (row.isNullAt(ordinal)) null else row.getInt(ordinal)
 
-        case TimestampType | TimestampNTZType =>
+        case TimestampType | TimestampNTZType | _: TimeType =>
           (row: InternalRow, ordinal: Int) =>
             if (row.isNullAt(ordinal)) null else row.getLong(ordinal)
 
@@ -188,7 +188,7 @@ sealed trait BufferSetterGetterUtils {
               row.setNullAt(ordinal)
             }
 
-        case TimestampType | TimestampNTZType =>
+        case TimestampType | TimestampNTZType | _: TimeType =>
           (row: InternalRow, ordinal: Int, value: Any) =>
             if (value != null) {
               row.setLong(ordinal, value.asInstanceOf[Long])
@@ -530,7 +530,7 @@ case class ScalaAggregator[IN, BUF, OUT](
 
   def eval(buffer: BUF): Any = {
     val row = outputSerializer(agg.finish(buffer))
-    if (outputEncoder.isSerializedAsStruct) row else row.get(0, dataType)
+    if (outputEncoder.isSerializedAsStructForTopLevel) row else row.get(0, dataType)
   }
 
   @transient private[this] lazy val bufferRow = new UnsafeRow(bufferEncoder.namedExpressions.length)

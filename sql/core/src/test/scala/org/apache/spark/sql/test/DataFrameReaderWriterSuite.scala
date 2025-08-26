@@ -32,7 +32,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type.Repetition
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkContext, TestUtils}
+import org.apache.spark.{SparkContext, SparkIllegalArgumentException, TestUtils}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -1466,5 +1466,13 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       .replaceFirst("file:/", "har:/")
 
     testRead(spark.read.schema(fileSchema).csv(s"$harPath/test.csv"), data, fileSchema)
+  }
+
+  test("SPARK-51182: DataFrameWriter should throw dataPathNotSpecifiedError when path is not " +
+    "specified") {
+    val dataFrameWriter = spark.range(0).write
+    checkError(
+      exception = intercept[SparkIllegalArgumentException](dataFrameWriter.save()),
+      condition = "_LEGACY_ERROR_TEMP_2047")
   }
 }

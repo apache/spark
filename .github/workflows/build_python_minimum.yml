@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / Python-only (master, Python with old dependencies)"
+name: "Build / Python-only (master, Minimum dependencies of PySpark)"
 
 on:
   schedule:
@@ -38,7 +38,7 @@ jobs:
       envs: >-
         {
           "PYSPARK_IMAGE_TO_TEST": "python-minimum",
-          "PYTHON_TO_TEST": "python3.9"
+          "PYTHON_TO_TEST": "python3.10"
         }
       jobs: >-
         {

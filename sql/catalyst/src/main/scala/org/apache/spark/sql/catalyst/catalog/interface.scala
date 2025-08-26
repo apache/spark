@@ -22,21 +22,21 @@ import java.time.{ZoneId, ZoneOffset}
 import java.util.Date
 
 import scala.collection.mutable
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
-import org.apache.commons.lang3.StringUtils
 import org.json4s.JsonAST.{JArray, JBool, JDecimal, JDouble, JInt, JLong, JNull, JObject, JString, JValue}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CurrentUserContext, FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, Resolver, SchemaBinding, SchemaCompensation, SchemaEvolution, SchemaTypeEvolution, SchemaUnsupported, UnresolvedLeafNode, ViewSchemaMode}
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NormalizeableRelation, Resolver, SchemaBinding, SchemaCompensation, SchemaEvolution, SchemaTypeEvolution, SchemaUnsupported, UnresolvedLeafNode, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -50,6 +50,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 /**
  * Interface providing util to convert JValue to String representation of catalog entities.
@@ -629,10 +630,6 @@ case class CatalogTable(
       if (lastAccessTime <= 0) JString("UNKNOWN")
       else JLong(lastAccessTime)
 
-    val viewQueryOutputColumns: JValue =
-      if (viewQueryColumnNames.nonEmpty) JArray(viewQueryColumnNames.map(JString).toList)
-      else JNull
-
     val map = mutable.LinkedHashMap[String, JValue]()
 
     if (identifier.catalog.isDefined) map += "Catalog" -> JString(identifier.catalog.get)
@@ -649,21 +646,35 @@ case class CatalogTable(
     }
     if (comment.isDefined) map += "Comment" -> JString(comment.get)
     if (collation.isDefined) map += "Collation" -> JString(collation.get)
-    if (tableType == CatalogTableType.VIEW && viewText.isDefined) {
-      map += "View Text" -> JString(viewText.get)
-    }
-    if (tableType == CatalogTableType.VIEW && viewOriginalText.isDefined) {
-      map += "View Original Text" -> JString(viewOriginalText.get)
-    }
-    if (SQLConf.get.viewSchemaBindingEnabled && tableType == CatalogTableType.VIEW) {
-      map += "View Schema Mode" -> JString(viewSchemaMode.toString)
-    }
-    if (viewCatalogAndNamespace.nonEmpty && tableType == CatalogTableType.VIEW) {
-      import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-      map += "View Catalog and Namespace" -> JString(viewCatalogAndNamespace.quoted)
-    }
-    if (viewQueryOutputColumns != JNull) {
-      map += "View Query Output Columns" -> viewQueryOutputColumns
+
+    if (tableType == CatalogTableType.VIEW) {
+      if (viewText.isDefined) {
+        map += "View Text" -> JString(viewText.get)
+      }
+      if (viewOriginalText.isDefined) {
+        map += "View Original Text" -> JString(viewOriginalText.get)
+      }
+      if (SQLConf.get.viewSchemaBindingEnabled) {
+        val viewSchemaModeInfo = Try(viewSchemaMode.toString).getOrElse("UNKNOWN")
+        map += "View Schema Mode" -> JString(viewSchemaModeInfo)
+      }
+      val viewCatalogAndNamespaceInfos = Try(viewCatalogAndNamespace).getOrElse(Seq.empty)
+      if (viewCatalogAndNamespaceInfos.nonEmpty) {
+        import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+        map += "View Catalog and Namespace" -> JString(viewCatalogAndNamespaceInfos.quoted)
+      }
+      val viewQueryOutputColumns: JValue = Try {
+        if (viewSchemaMode == SchemaEvolution) {
+          JArray(schema.map(_.name).map(JString).toList)
+        } else if (viewQueryColumnNames.nonEmpty) {
+          JArray(viewQueryColumnNames.map(JString).toList)
+        } else {
+          JNull
+        }
+      }.getOrElse(JNull)
+      if (viewQueryOutputColumns != JNull) {
+        map += "View Query Output Columns" -> viewQueryOutputColumns
+      }
     }
     if (tableProperties != JNull) map += "Table Properties" -> tableProperties
     stats.foreach { s =>
@@ -1082,7 +1093,7 @@ case class HiveTableRelation(
     partitionCols: Seq[AttributeReference],
     tableStats: Option[Statistics] = None,
     @transient prunedPartitions: Option[Seq[CatalogTablePartition]] = None)
-  extends LeafNode with MultiInstanceRelation {
+  extends LeafNode with MultiInstanceRelation with NormalizeableRelation {
   assert(tableMeta.identifier.database.isDefined)
   assert(DataTypeUtils.sameType(tableMeta.partitionSchema, partitionCols.toStructType))
   assert(DataTypeUtils.sameType(tableMeta.dataSchema, dataCols.toStructType))
@@ -1144,10 +1155,17 @@ case class HiveTableRelation(
     val metadataEntries = metadata.toSeq.map {
       case (key, value) if key == "CatalogTable" => value
       case (key, value) =>
-        key + ": " + StringUtils.abbreviate(value, SQLConf.get.maxMetadataStringLength)
+        key + ": " + Utils.abbreviate(value, SQLConf.get.maxMetadataStringLength)
     }
 
     val metadataStr = truncatedString(metadataEntries, "[", ", ", "]", maxFields)
     s"$nodeName $metadataStr"
+  }
+
+  /**
+   * Minimally normalizes this [[HiveTableRelation]] to make it comparable in [[NormalizePlan]].
+   */
+  override def normalize(): LogicalPlan = {
+    copy(tableMeta = CatalogTable.normalize(tableMeta))
   }
 }

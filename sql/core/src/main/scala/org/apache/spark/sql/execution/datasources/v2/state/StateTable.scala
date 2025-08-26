@@ -25,7 +25,7 @@ import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsMetadataC
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.TransformWithStateVariableInfo
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateVariableInfo
 import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, StateSchemaProvider, StateStoreColFamilySchema, StateStoreConf}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -44,7 +44,8 @@ class StateTable(
     keyStateEncoderSpec: KeyStateEncoderSpec,
     stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
-    stateSchemaProviderOpt: Option[StateSchemaProvider])
+    stateSchemaProviderOpt: Option[StateSchemaProvider],
+    joinColFamilyOpt: Option[String])
   extends Table with SupportsRead with SupportsMetadataColumns {
 
   import StateTable._
@@ -85,7 +86,8 @@ class StateTable(
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new StateScanBuilder(session, schema, sourceOptions, stateConf, keyStateEncoderSpec,
-      stateVariableInfoOpt, stateStoreColFamilySchemaOpt, stateSchemaProviderOpt)
+      stateVariableInfoOpt, stateStoreColFamilySchemaOpt, stateSchemaProviderOpt,
+      joinColFamilyOpt)
 
   override def properties(): util.Map[String, String] = Map.empty[String, String].asJava
 

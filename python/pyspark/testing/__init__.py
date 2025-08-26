@@ -14,54 +14,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import sys
 import typing
+import unittest
+
+
+_unittest_main = None
+
+if sys.version_info >= (3, 12) and _unittest_main is None:
+    _unittest_main = unittest.main
+
+    def unittest_main(*args, **kwargs):
+        exit = kwargs.pop("exit", True)
+        kwargs["exit"] = False
+        res = _unittest_main(*args, **kwargs)
+
+        if exit:
+            if not res.result.wasSuccessful():
+                sys.exit(1)
+            elif res.result.testsRun == 0 and len(res.result.skipped) == 0:
+                sys.exit(5)
+            else:
+                sys.exit(0)
+
+        return res
+
+    unittest.main = unittest_main
+
 
 from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual
-
-
-grpc_requirement_message = None
-try:
-    import grpc
-except ImportError as e:
-    grpc_requirement_message = str(e)
-have_grpc = grpc_requirement_message is None
-
-
-grpc_status_requirement_message = None
-try:
-    import grpc_status
-except ImportError as e:
-    grpc_status_requirement_message = str(e)
-have_grpc_status = grpc_status_requirement_message is None
-
-googleapis_common_protos_requirement_message = None
-try:
-    from google.rpc import error_details_pb2
-except ImportError as e:
-    googleapis_common_protos_requirement_message = str(e)
-have_googleapis_common_protos = googleapis_common_protos_requirement_message is None
-
-graphviz_requirement_message = None
-try:
-    import graphviz
-except ImportError as e:
-    graphviz_requirement_message = str(e)
-have_graphviz: bool = graphviz_requirement_message is None
-
-from pyspark.testing.utils import (
-    PySparkErrorTestUtils,
-    pandas_requirement_message,
-    pyarrow_requirement_message,
-)
-
-
-connect_requirement_message = (
-    pandas_requirement_message
-    or pyarrow_requirement_message
-    or grpc_requirement_message
-    or googleapis_common_protos_requirement_message
-    or grpc_status_requirement_message
-)
-should_test_connect: str = typing.cast(str, connect_requirement_message is None)
 
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]

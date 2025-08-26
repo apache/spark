@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 
@@ -598,6 +600,22 @@ class NaiveBayesModel private[ml] (
 
 @Since("1.6.0")
 object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
+  private[ml] case class Data(pi: Vector, theta: Matrix, sigma: Matrix)
+
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeVector(data.pi, dos)
+    serializeMatrix(data.theta, dos)
+    serializeMatrix(data.sigma, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val pi = deserializeVector(dis)
+    val theta = deserializeMatrix(dis)
+    val sigma = deserializeMatrix(dis)
+    Data(pi, theta, sigma)
+  }
 
   @Since("1.6.0")
   override def read: MLReader[NaiveBayesModel] = new NaiveBayesModelReader
@@ -608,8 +626,6 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
   /** [[MLWriter]] instance for [[NaiveBayesModel]] */
   private[NaiveBayesModel] class NaiveBayesModelWriter(instance: NaiveBayesModel) extends MLWriter {
     import NaiveBayes._
-
-    private case class Data(pi: Vector, theta: Matrix, sigma: Matrix)
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
@@ -624,7 +640,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       }
 
       val data = Data(instance.pi, instance.theta, instance.sigma)
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -639,21 +655,17 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-      val vecConverted = MLUtils.convertVectorColumnsToML(data, "pi")
-
       val model = if (major < 3) {
+        val data = sparkSession.read.parquet(dataPath)
+        val vecConverted = MLUtils.convertVectorColumnsToML(data, "pi")
         val Row(pi: Vector, theta: Matrix) =
           MLUtils.convertMatrixColumnsToML(vecConverted, "theta")
             .select("pi", "theta")
             .head()
         new NaiveBayesModel(metadata.uid, pi, theta, Matrices.zeros(0, 0))
       } else {
-        val Row(pi: Vector, theta: Matrix, sigma: Matrix) =
-          MLUtils.convertMatrixColumnsToML(vecConverted, "theta", "sigma")
-            .select("pi", "theta", "sigma")
-            .head()
-        new NaiveBayesModel(metadata.uid, pi, theta, sigma)
+        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
+        new NaiveBayesModel(metadata.uid, data.pi, data.theta, data.sigma)
       }
 
       metadata.getAndSetParams(model)

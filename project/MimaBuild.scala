@@ -86,13 +86,13 @@ object MimaBuild {
 
   def mimaSettings(sparkHome: File, projectRef: ProjectRef): Seq[Setting[_]] = {
     val organization = "org.apache.spark"
-    val previousSparkVersion = "3.5.0"
+    val previousSparkVersion = "4.0.0"
     val project = projectRef.project
     val id = "spark-" + project
 
     Seq(
       mimaFailOnNoPrevious := true,
-      mimaPreviousArtifacts := Set(organization %% id % previousSparkVersion),
+      mimaPreviousArtifacts := Set(organization % s"${id}_2.13" % previousSparkVersion),
       mimaBinaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value)
     )
   }

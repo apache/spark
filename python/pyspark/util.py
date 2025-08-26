@@ -63,12 +63,19 @@ if typing.TYPE_CHECKING:
         ArrowCogroupedMapUDFType,
         PandasGroupedMapUDFTransformWithStateType,
         PandasGroupedMapUDFTransformWithStateInitStateType,
+        GroupedMapUDFTransformWithStateType,
+        GroupedMapUDFTransformWithStateInitStateType,
+        ArrowScalarUDFType,
+        ArrowScalarIterUDFType,
+        ArrowGroupedAggUDFType,
+        ArrowWindowAggUDFType,
     )
     from pyspark.sql._typing import (
         SQLArrowBatchedUDFType,
         SQLArrowTableUDFType,
         SQLBatchedUDFType,
         SQLTableUDFType,
+        SQLArrowUDTFType,
     )
     from pyspark.serializers import Serializer
     from pyspark.sql import SparkSession
@@ -395,6 +402,12 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
 
             @functools.wraps(ff)
             def inner(*args: Any, **kwargs: Any) -> Any:
+                # Propagates the active remote spark session to the current thread.
+                from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+
+                RemoteSparkSession._set_default_and_active_session(
+                    session  # type: ignore[arg-type]
+                )
                 # Set thread locals in child thread.
                 for attr, value in session_client_thread_local_attrs:
                     setattr(
@@ -633,8 +646,20 @@ class PythonEvalType:
     SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF: "PandasGroupedMapUDFTransformWithStateInitStateType" = (  # noqa: E501
         212
     )
+    SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF: "GroupedMapUDFTransformWithStateType" = 213
+    SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF: "GroupedMapUDFTransformWithStateInitStateType" = (  # noqa: E501
+        214
+    )
+
+    # Arrow UDFs
+    SQL_SCALAR_ARROW_UDF: "ArrowScalarUDFType" = 250
+    SQL_SCALAR_ARROW_ITER_UDF: "ArrowScalarIterUDFType" = 251
+    SQL_GROUPED_AGG_ARROW_UDF: "ArrowGroupedAggUDFType" = 252
+    SQL_WINDOW_AGG_ARROW_UDF: "ArrowWindowAggUDFType" = 253
+
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
     SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301
+    SQL_ARROW_UDTF: "SQLArrowUDTFType" = 302
 
 
 def _create_local_socket(sock_info: "JavaArray") -> "io.BufferedRWPair":
@@ -652,9 +677,9 @@ def _create_local_socket(sock_info: "JavaArray") -> "io.BufferedRWPair":
     """
     sockfile: "io.BufferedRWPair"
     sock: "socket.socket"
-    port: int = sock_info[0]
+    conn_info: int = sock_info[0]
     auth_secret: str = sock_info[1]
-    sockfile, sock = local_connect_and_auth(port, auth_secret)
+    sockfile, sock = local_connect_and_auth(conn_info, auth_secret)
     # The RDD materialization time is unpredictable, if we set a timeout for socket reading
     # operation, it will very possibly fail. See SPARK-18281.
     sock.settimeout(None)
@@ -731,7 +756,9 @@ def _local_iterator_from_socket(sock_info: "JavaArray", serializer: "Serializer"
     return iter(PyLocalIterable(sock_info, serializer))
 
 
-def local_connect_and_auth(port: Optional[Union[str, int]], auth_secret: str) -> Tuple:
+def local_connect_and_auth(
+    conn_info: Optional[Union[str, int]], auth_secret: Optional[str]
+) -> Tuple:
     """
     Connect to local host, authenticate with it, and return a (sockfile,sock) for that connection.
     Handles IPV4 & IPV6, does some error handling.
@@ -739,26 +766,49 @@ def local_connect_and_auth(port: Optional[Union[str, int]], auth_secret: str) ->
     Parameters
     ----------
     port : str or int, optional
-    auth_secret : str
+    auth_secret : str, optional
 
     Returns
     -------
     tuple
         with (sockfile, sock)
     """
+    is_unix_domain_socket = isinstance(conn_info, str) and auth_secret is None
+    if is_unix_domain_socket:
+        sock_path = conn_info
+        assert isinstance(sock_path, str)
+        sock = None
+        try:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.settimeout(int(os.environ.get("SPARK_AUTH_SOCKET_TIMEOUT", 15)))
+            sock.connect(sock_path)
+            sockfile = sock.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
+            return (sockfile, sock)
+        except socket.error as e:
+            if sock is not None:
+                sock.close()
+            raise PySparkRuntimeError(
+                errorClass="CANNOT_OPEN_SOCKET",
+                messageParameters={
+                    "errors": "tried to connect to %s, but an error occurred: %s"
+                    % (sock_path, str(e)),
+                },
+            )
+
     sock = None
     errors = []
     # Support for both IPv4 and IPv6.
     addr = "127.0.0.1"
     if os.environ.get("SPARK_PREFER_IPV6", "false").lower() == "true":
         addr = "::1"
-    for res in socket.getaddrinfo(addr, port, socket.AF_UNSPEC, socket.SOCK_STREAM):
+    for res in socket.getaddrinfo(addr, conn_info, socket.AF_UNSPEC, socket.SOCK_STREAM):
         af, socktype, proto, _, sa = res
         try:
             sock = socket.socket(af, socktype, proto)
             sock.settimeout(int(os.environ.get("SPARK_AUTH_SOCKET_TIMEOUT", 15)))
             sock.connect(sa)
             sockfile = sock.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
+            assert isinstance(auth_secret, str)
             _do_server_auth(sockfile, auth_secret)
             return (sockfile, sock)
         except socket.error as e:

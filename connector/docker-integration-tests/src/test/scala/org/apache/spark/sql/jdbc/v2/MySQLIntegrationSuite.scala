@@ -36,28 +36,62 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
 
+  // Following tests are disabled for both single and multiple partition read
   override def excluded: Seq[String] = Seq(
-    "scan with aggregate push-down: VAR_POP with DISTINCT",
-    "scan with aggregate push-down: VAR_SAMP with DISTINCT",
-    "scan with aggregate push-down: STDDEV_POP with DISTINCT",
-    "scan with aggregate push-down: STDDEV_SAMP with DISTINCT",
-    "scan with aggregate push-down: COVAR_POP with DISTINCT",
-    "scan with aggregate push-down: COVAR_POP without DISTINCT",
-    "scan with aggregate push-down: COVAR_SAMP with DISTINCT",
-    "scan with aggregate push-down: COVAR_SAMP without DISTINCT",
-    "scan with aggregate push-down: CORR with DISTINCT",
-    "scan with aggregate push-down: CORR without DISTINCT",
-    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT",
-    "scan with aggregate push-down: REGR_INTERCEPT without DISTINCT",
-    "scan with aggregate push-down: REGR_SLOPE with DISTINCT",
-    "scan with aggregate push-down: REGR_SLOPE without DISTINCT",
-    "scan with aggregate push-down: REGR_R2 with DISTINCT",
-    "scan with aggregate push-down: REGR_R2 without DISTINCT",
-    "scan with aggregate push-down: REGR_SXY with DISTINCT",
-    "scan with aggregate push-down: REGR_SXY without DISTINCT")
+    "scan with aggregate push-down: VAR_POP with DISTINCT (false)",
+    "scan with aggregate push-down: VAR_POP with DISTINCT (true)",
+    "scan with aggregate push-down: VAR_SAMP with DISTINCT (false)",
+    "scan with aggregate push-down: VAR_SAMP with DISTINCT (true)",
+    "scan with aggregate push-down: STDDEV_POP with DISTINCT (false)",
+    "scan with aggregate push-down: STDDEV_POP with DISTINCT (true)",
+    "scan with aggregate push-down: STDDEV_SAMP with DISTINCT (false)",
+    "scan with aggregate push-down: STDDEV_SAMP with DISTINCT (true)",
+    "scan with aggregate push-down: COVAR_POP with DISTINCT (false)",
+    "scan with aggregate push-down: COVAR_POP with DISTINCT (true)",
+    "scan with aggregate push-down: COVAR_POP without DISTINCT (false)",
+    "scan with aggregate push-down: COVAR_POP without DISTINCT (true)",
+    "scan with aggregate push-down: COVAR_SAMP with DISTINCT (false)",
+    "scan with aggregate push-down: COVAR_SAMP with DISTINCT (true)",
+    "scan with aggregate push-down: COVAR_SAMP without DISTINCT (false)",
+    "scan with aggregate push-down: COVAR_SAMP without DISTINCT (true)",
+    "scan with aggregate push-down: CORR with DISTINCT (false)",
+    "scan with aggregate push-down: CORR with DISTINCT (true)",
+    "scan with aggregate push-down: CORR without DISTINCT (false)",
+    "scan with aggregate push-down: CORR without DISTINCT (true)",
+    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_INTERCEPT without DISTINCT (false)",
+    "scan with aggregate push-down: REGR_INTERCEPT without DISTINCT (true)",
+    "scan with aggregate push-down: REGR_SLOPE with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_SLOPE with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_SLOPE without DISTINCT (false)",
+    "scan with aggregate push-down: REGR_SLOPE without DISTINCT (true)",
+    "scan with aggregate push-down: REGR_R2 with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_R2 with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_R2 without DISTINCT (false)",
+    "scan with aggregate push-down: REGR_R2 without DISTINCT (true)",
+    "scan with aggregate push-down: REGR_SXY with DISTINCT (false)",
+    "scan with aggregate push-down: REGR_SXY with DISTINCT (true)",
+    "scan with aggregate push-down: REGR_SXY without DISTINCT (false)",
+    "scan with aggregate push-down: REGR_SXY without DISTINCT (true)")
 
   override val catalogName: String = "mysql"
   override val db = new MySQLDatabaseOnDocker
+
+  case class JdbcClientTypes(INTEGER: String, STRING: String)
+
+  val jdbcClientTypes: JdbcClientTypes =
+    JdbcClientTypes(INTEGER = "INT", STRING = "LONGTEXT")
+
+  override def defaultMetadata(
+      dataType: DataType = StringType,
+      jdbcClientType: String = jdbcClientTypes.STRING): Metadata =
+    new MetadataBuilder()
+      .putLong("scale", 0)
+      .putBoolean("isTimestampNTZ", false)
+      .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
+      .putString("jdbcClientType", jdbcClientType)
+      .build()
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.mysql", classOf[JDBCTableCatalog].getName)
@@ -99,7 +133,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
     var expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, jdbcClientTypes.INTEGER))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
@@ -153,7 +187,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       s" TBLPROPERTIES('ENGINE'='InnoDB', 'DEFAULT CHARACTER SET'='utf8')")
     val t = spark.table(tbl)
     val expectedSchema = new StructType()
-      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType, jdbcClientTypes.INTEGER))
     assert(t.schema === expectedSchema)
   }
 
@@ -188,7 +222,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     assert(rows2(0).getString(0) === "amy")
     assert(rows2(1).getString(0) === "alex")
 
-    val df3 = sql(s"SELECT name FROM $tbl WHERE second(time1) = 0 AND month(date1) = 5")
+    val df3 = sql(s"SELECT name FROM $tbl WHERE month(date1) = 5")
     checkFilterPushed(df3)
     val rows3 = df3.collect()
     assert(rows3.length === 2)
@@ -255,6 +289,15 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       assert(rows(0).getString(0) === "tom")
     }
 
+    withClue("second") {
+      val df = sql(s"SELECT name FROM $tbl WHERE second(time1) = 0 AND month(date1) = 5")
+      checkFilterPushed(df, false)
+      val rows = df.collect()
+      assert(rows.length === 2)
+      assert(rows(0).getString(0) === "amy")
+      assert(rows(1).getString(0) === "alex")
+    }
+
     val df9 = sql(s"SELECT name FROM $tbl WHERE " +
       "dayofyear(date1) > 100 order by dayofyear(date1) limit 1")
     checkFilterPushed(df9)
@@ -282,11 +325,18 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
  */
 @DockerTest
 class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
-  override def defaultMetadata(dataType: DataType = StringType): Metadata = new MetadataBuilder()
-    .putLong("scale", 0)
-    .putBoolean("isTimestampNTZ", false)
-    .putBoolean("isSigned", true)
-    .build()
+  override val jdbcClientTypes: JdbcClientTypes =
+    JdbcClientTypes(INTEGER = "INTEGER", STRING = "LONGTEXT")
+
+  override def defaultMetadata(
+      dataType: DataType = StringType,
+      jdbcClientType: String = jdbcClientTypes.STRING): Metadata =
+    new MetadataBuilder()
+      .putLong("scale", 0)
+      .putBoolean("isTimestampNTZ", false)
+      .putBoolean("isSigned", true)
+      .putString("jdbcClientType", jdbcClientType)
+      .build()
 
   override val db = new MySQLDatabaseOnDocker {
     override def getJdbcUrl(ip: String, port: Int): String =

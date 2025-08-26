@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.connector.expressions.{Expression, Literal}
+import org.apache.spark.sql.connector.expressions.{Expression, Extract, Literal}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.jdbc.OracleDialect._
@@ -44,12 +44,41 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   // scalastyle:on line.size.limit
   private val supportedAggregateFunctions =
     Set("MAX", "MIN", "SUM", "COUNT", "AVG") ++ distinctUnsupportedAggregateFunctions
-  private val supportedFunctions = supportedAggregateFunctions
+  private val supportedFunctions = supportedAggregateFunctions ++ Set("TRUNC")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getMessage.contains("ORA-00942") ||
+      e.getMessage.contains("ORA-39165")
+  }
+
   class OracleSQLBuilder extends JDBCSQLBuilder {
+
+    override def visitExtract(extract: Extract): String = {
+      val field = extract.field
+      field match {
+        // YEAR, MONTH, DAY, HOUR, MINUTE are identical on Oracle and Spark for
+        // both datetime and interval types.
+        case "YEAR" | "MONTH" | "DAY" | "HOUR" | "MINUTE" =>
+          super.visitExtract(field, build(extract.source()))
+        // Oracle does not support the following date fields: DAY_OF_YEAR, WEEK, QUARTER,
+        // DAY_OF_WEEK, or YEAR_OF_WEEK.
+        // We can't push down SECOND due to the difference in result types between Spark and
+        // Oracle. Spark returns decimal(8, 6), but Oracle returns integer.
+        case _ =>
+          visitUnexpectedExpr(extract)
+      }
+    }
+
+    override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
+      funcName match {
+        case "TRUNC" =>
+          s"TRUNC(${inputs(0)}, 'IW')"
+        case _ => super.visitSQLFunction(funcName, inputs)
+      }
+    }
 
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
@@ -168,6 +197,11 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
+  // See https://docs.oracle.com/cd/E11882_01/appdev.112/e10827/appd.htm#g642406
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    "42000".equals(exception.getSQLState)
+  }
+
   /**
    * The SQL query used to truncate a table.
    * @param table The table to truncate
@@ -223,7 +257,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     extends JdbcSQLQueryBuilder(dialect, options) {
 
     override def build(): String = {
-      val selectStmt = s"SELECT $hintClause$columnList FROM ${options.tableOrQuery}" +
+      val selectStmt = s"SELECT $hintClause$columnList FROM $tableOrQuery" +
         s" $tableSampleClause $whereClause $groupByClause $orderByClause"
       val finalSelectStmt = if (limit > 0) {
         if (offset > 0) {
@@ -257,6 +291,8 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   override def supportsOffset: Boolean = true
 
   override def supportsHint: Boolean = true
+
+  override def supportsJoin: Boolean = true
 
   override def classifyException(
       e: Throwable,
