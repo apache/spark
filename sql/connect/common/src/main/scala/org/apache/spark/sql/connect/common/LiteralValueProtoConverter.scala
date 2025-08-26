@@ -493,7 +493,8 @@ object LiteralValueProtoConverter {
           val struct = literal.getStruct
           val size = struct.getElementsCount
           val structTypeBuilder = proto.DataType.Struct.newBuilder
-          Iterator.range(0, size).foreach { i =>
+          var i = 0
+          while (i < size) {
             val field = struct.getDataTypeStruct.getFields(i)
             if (field.hasDataType) {
               structTypeBuilder.addFields(field)
@@ -511,6 +512,7 @@ object LiteralValueProtoConverter {
                 case None => return None
               }
             }
+            i += 1
           }
           builder.setStruct(structTypeBuilder.build())
         } else {
