@@ -46,7 +46,7 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.protobuf.{functions => pbFn}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
 import org.apache.spark.util.SparkFileUtils
 
 // scalastyle:off
@@ -3328,7 +3328,8 @@ class PlanGenerationTestSuite
       fn.lit(java.time.Duration.ofSeconds(200L)),
       fn.lit(java.time.Period.ofDays(100)),
       fn.lit(java.time.LocalTime.of(23, 59, 59, 999999999)),
-      fn.lit(new CalendarInterval(2, 20, 100L)))
+      fn.lit(new CalendarInterval(2, 20, 100L)),
+      fn.lit(new VariantVal(Array[Byte](1), Array[Byte](1))))
   }
 
   test("function lit array") {
@@ -3400,6 +3401,7 @@ class PlanGenerationTestSuite
       fn.typedLit(java.time.Period.ofDays(100)),
       fn.typedLit(java.time.LocalTime.of(23, 59, 59, 999999999)),
       fn.typedLit(new CalendarInterval(2, 20, 100L)),
+      fn.typedLit(new VariantVal(Array[Byte](1), Array[Byte](1))),
 
       // Handle parameterized scala types e.g.: List, Seq and Map.
       fn.typedLit(Some(1)),
