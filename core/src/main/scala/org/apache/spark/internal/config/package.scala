@@ -359,8 +359,8 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("10s")
 
-  private[spark] val DRIVER_HEARTBEAT_INTERVAL =
-    ConfigBuilder("spark.driver.heartbeatInterval")
+  private[spark] val DRIVER_METRICS_POLLING_INTERVAL =
+    ConfigBuilder("spark.driver.metrics.pollingInterval")
       .version("4.1.0")
       .fallbackConf(EXECUTOR_HEARTBEAT_INTERVAL)
 
