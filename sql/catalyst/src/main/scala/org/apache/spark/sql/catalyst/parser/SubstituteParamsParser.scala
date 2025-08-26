@@ -90,6 +90,7 @@ class SubstituteParamsParser extends Logging {
     parser.legacy_exponent_literal_as_decimal_enabled = SQLConf.get.exponentLiteralAsDecimalEnabled
     parser.SQL_standard_keyword_behavior = SQLConf.get.enforceReservedKeywords
     parser.double_quoted_identifiers = SQLConf.get.doubleQuotedIdentifiers
+    parser.parameter_substitution_enabled = !SQLConf.get.legacyParameterSubstitutionConstantsOnly
 
     val astBuilder = new SubstituteParmsAstBuilder()
 
@@ -165,6 +166,7 @@ class SubstituteParamsParser extends Logging {
     parser.legacy_exponent_literal_as_decimal_enabled = SQLConf.get.exponentLiteralAsDecimalEnabled
     parser.SQL_standard_keyword_behavior = SQLConf.get.enforceReservedKeywords
     parser.double_quoted_identifiers = SQLConf.get.doubleQuotedIdentifiers
+    parser.parameter_substitution_enabled = !SQLConf.get.legacyParameterSubstitutionConstantsOnly
 
     val astBuilder = new SubstituteParmsAstBuilder()
 

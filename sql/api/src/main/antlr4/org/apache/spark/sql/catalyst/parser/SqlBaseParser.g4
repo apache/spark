@@ -40,6 +40,12 @@ options { tokenVocab = SqlBaseLexer; }
    * When true, double quoted literals are identifiers rather than STRINGs.
    */
   public boolean double_quoted_identifiers = false;
+
+  /**
+   * When false, parameter markers (? and :param) are only allowed in constant contexts.
+   * When true, parameter markers are allowed everywhere a literal is supported.
+   */
+  public boolean parameter_substitution_enabled = true;
 }
 
 compoundOrSingleStatement
@@ -1271,12 +1277,12 @@ literalType
 constant
     : NULL                                                                                     #nullLiteral
     | QUESTION                                                                                 #posParameterLiteral
+    | namedParameterMarker                                                                     #namedParameterLiteral
     | interval                                                                                 #intervalLiteral
     | literalType stringLitWithoutMarker                                                       #typeConstructor
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
     | stringLit+                                                                               #stringLiteral
-    | namedParameterMarker                                                                     #namedParameterLiteral
     ;
 
 namedParameterMarker
@@ -1611,8 +1617,8 @@ number
 
 integerValue
     : INTEGER_VALUE                                                                          #integerVal
-    | namedParameterMarker                                                                   #namedParameterIntegerValue
-    | QUESTION                                                                               #positionalParameterIntegerValue
+    | {parameter_substitution_enabled}? namedParameterMarker                                 #namedParameterIntegerValue
+    | {parameter_substitution_enabled}? QUESTION                                             #positionalParameterIntegerValue
     ;
 
 columnConstraintDefinition
@@ -1695,8 +1701,8 @@ stringLitWithoutMarker
 
 stringLit
     : stringLitWithoutMarker                                                                   #stringLiteralInContext
-    | namedParameterMarker                                                                     #namedParameterValue
-    | QUESTION                                                                                 #positionalParameterValue
+    | {parameter_substitution_enabled}? namedParameterMarker                                   #namedParameterValue
+    | {parameter_substitution_enabled}? QUESTION                                               #positionalParameterValue
     ;
 
 comment

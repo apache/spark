@@ -75,26 +75,28 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   }
 
   override def visitNamedParameterValue(ctx: NamedParameterValueContext): Token = {
-    // For namedParameterValue in data type contexts, this shouldn't normally occur
-    // This indicates that parameter substitution failed or wasn't applied
-    QueryParsingErrors.parameterMarkerInDataTypeError(ctx)
+    // This should be unreachable due to grammar-level blocking of parameter markers
+    // when legacy parameter substitution is enabled
+    QueryParsingErrors.unexpectedUseOfParameterMarker(ctx)
   }
 
   override def visitNamedParameterIntegerValue(ctx: NamedParameterIntegerValueContext): Token = {
-    // For namedParameterIntegerValue in data type contexts, this shouldn't normally occur
-    // This indicates that parameter substitution failed or wasn't applied
-    QueryParsingErrors.parameterMarkerInDataTypeError(ctx)
+    // This should be unreachable due to grammar-level blocking of parameter markers
+    // when legacy parameter substitution is enabled
+    QueryParsingErrors.unexpectedUseOfParameterMarker(ctx)
   }
 
   override def visitPositionalParameterIntegerValue(
       ctx: PositionalParameterIntegerValueContext): Token = {
-    // For positionalParameterIntegerValue in data type contexts, this shouldn't normally occur
-    // This indicates that parameter substitution failed or wasn't applied
-    QueryParsingErrors.parameterMarkerInDataTypeError(ctx)
+    // This should be unreachable due to grammar-level blocking of parameter markers
+    // when legacy parameter substitution is enabled
+    QueryParsingErrors.unexpectedUseOfParameterMarker(ctx)
   }
 
   override def visitPositionalParameterValue(ctx: PositionalParameterValueContext): Token = {
-    QueryParsingErrors.parameterMarkerInDataTypeError(ctx)
+    // This should be unreachable due to grammar-level blocking of parameter markers
+    // when legacy parameter substitution is enabled
+    QueryParsingErrors.unexpectedUseOfParameterMarker(ctx)
   }
 
   /**

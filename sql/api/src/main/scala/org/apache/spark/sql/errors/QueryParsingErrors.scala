@@ -822,29 +822,16 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   /**
-   * Throws an internal error for parameter markers found in data type contexts.
-   * This indicates that parameter substitution should have occurred before parsing.
+   * Throws an internal error for unexpected parameter markers found during AST building.
+   * This should be unreachable in normal operation due to grammar-level blocking.
    *
    * @param ctx The parser context containing the parameter marker
-   * @throws SparkException.internalError Always throws this exception
+   * @throws ParseException Always throws this exception
    */
-  def parameterMarkerInDataTypeError(ctx: ParserRuleContext): Nothing = {
-    throw SparkException.internalError(
-      s"Parameter marker '${ctx.getText}' found in data type context. " +
-      "Parameter substitution should have occurred before reaching this point.")
-  }
-
-  /**
-   * Throws an internal error for unexpected parameter markers in contexts where
-   * they should have been substituted.
-   *
-   * @param parameterText The text of the parameter marker
-   * @param context Description of the context where the parameter was found
-   * @throws SparkException.internalError Always throws this exception
-   */
-  def unexpectedParameterMarkerError(parameterText: String, context: String): Nothing = {
-    throw SparkException.internalError(
-      s"Parameter marker '$parameterText' found in $context. " +
-      "Parameter substitution should have occurred before reaching this point.")
+  def unexpectedUseOfParameterMarker(ctx: ParserRuleContext): Nothing = {
+    throw new ParseException(
+      errorClass = "UNEXPECTED_USE_OF_PARAMETER_MARKER",
+      messageParameters = Map("parameterMarker" -> ctx.getText),
+      ctx = ctx)
   }
 }

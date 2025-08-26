@@ -5123,6 +5123,7 @@ object SQLConf {
         "in contexts where constant literals are expected. When false (default), " +
         "parameter substitution is enabled everywhere a literal is supported, " +
         "allowing parameter markers in any literal context throughout SQL parsing.")
+      .internal()
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
@@ -7127,6 +7128,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   override def doubleQuotedIdentifiers: Boolean = ansiEnabled && getConf(DOUBLE_QUOTED_IDENTIFIERS)
 
+
   def ansiRelationPrecedence: Boolean = ansiEnabled && getConf(ANSI_RELATION_PRECEDENCE)
 
   def chunkBase64StringEnabled: Boolean = getConf(CHUNK_BASE64_STRING_ENABLED)
@@ -7320,7 +7322,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyOutputSchema: Boolean = getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)
 
-  def legacyParameterSubstitutionConstantsOnly: Boolean =
+  override def legacyParameterSubstitutionConstantsOnly: Boolean =
     getConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY)
 
   def streamStatePollingInterval: Long = getConf(SQLConf.PIPELINES_STREAM_STATE_POLLING_INTERVAL)

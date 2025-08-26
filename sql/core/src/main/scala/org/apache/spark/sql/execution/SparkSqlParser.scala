@@ -73,9 +73,21 @@ class SparkSqlParser extends AbstractSqlParser {
     // Step 2: Apply existing variable substitution
     val variableSubstituted = substitutor.substitute(paramSubstituted)
 
-    // Step 3: Continue with normal parsing and handle position translation for parse errors
+    // Step 3: Set up CurrentOrigin with substituted SQL text for proper error context
+    // and continue with normal parsing, handling position translation for parse errors
+    val currentOrigin = org.apache.spark.sql.catalyst.trees.CurrentOrigin.get
+    val originWithSubstitutedSql = if (paramSubstituted != command) {
+      // Parameter substitution occurred, set origin with substituted SQL for proper error context
+      currentOrigin.copy(sqlText = Some(variableSubstituted))
+    } else {
+      // No substitution, ensure original command is in the origin
+      currentOrigin.copy(sqlText = Some(command))
+    }
+
     try {
-      super.parse(variableSubstituted)(toResult)
+      org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(originWithSubstitutedSql) {
+        super.parse(variableSubstituted)(toResult)
+      }
     } catch {
       case e: Throwable with org.apache.spark.sql.catalyst.trees.WithOrigin =>
         // Apply position mapping only if parameter substitution is enabled and we have a mapper
