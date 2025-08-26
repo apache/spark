@@ -18,6 +18,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
 import org.antlr.v4.runtime.atn.PredictionMode
+import org.antlr.v4.runtime.misc.ParseCancellationException
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -90,19 +91,38 @@ class SubstituteParamsParser extends Logging {
     parser.SQL_standard_keyword_behavior = SQLConf.get.enforceReservedKeywords
     parser.double_quoted_identifiers = SQLConf.get.doubleQuotedIdentifiers
 
-    // Use the same error handling strategy as the main parser for consistent error messages
-    parser.setErrorHandler(new SparkParserErrorStrategy())
-    parser.getInterpreter.setPredictionMode(PredictionMode.LL)
-
     val astBuilder = new SubstituteParmsAstBuilder()
 
-    // Parse as a single statement to get parameter locations
-    val ctx = rule match {
-      case SubstitutionRule.Query => parser.query()
-      case SubstitutionRule.Statement => parser.singleStatement()
-      case SubstitutionRule.CompoundOrSingleStatement => parser.compoundOrSingleStatement()
-      case SubstitutionRule.Expression => parser.expression()
-      case SubstitutionRule.ColDefinitionList => parser.colDefinitionList()
+    // Use the same two-stage parsing strategy as the main parser for consistent error messages
+    val ctx = try {
+      try {
+        // First attempt: SLL mode with bail error strategy
+        parser.setErrorHandler(new SparkParserBailErrorStrategy())
+        parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
+        rule match {
+          case SubstitutionRule.Query => parser.query()
+          case SubstitutionRule.Statement => parser.singleStatement()
+          case SubstitutionRule.CompoundOrSingleStatement => parser.compoundOrSingleStatement()
+          case SubstitutionRule.Expression => parser.expression()
+          case SubstitutionRule.ColDefinitionList => parser.colDefinitionList()
+        }
+      } catch {
+        case e: ParseCancellationException =>
+          // Second attempt: LL mode with full error strategy
+          tokenStream.seek(0) // rewind input stream
+          parser.reset()
+          parser.setErrorHandler(new SparkParserErrorStrategy())
+          parser.getInterpreter.setPredictionMode(PredictionMode.LL)
+          rule match {
+            case SubstitutionRule.Query => parser.query()
+            case SubstitutionRule.Statement => parser.singleStatement()
+            case SubstitutionRule.CompoundOrSingleStatement => parser.compoundOrSingleStatement()
+            case SubstitutionRule.Expression => parser.expression()
+            case SubstitutionRule.ColDefinitionList => parser.colDefinitionList()
+          }
+      }
+    } catch {
+      case e: Throwable => throw e
     }
     val parameterLocations = astBuilder.extractParameterLocations(ctx)
 
@@ -146,19 +166,38 @@ class SubstituteParamsParser extends Logging {
     parser.SQL_standard_keyword_behavior = SQLConf.get.enforceReservedKeywords
     parser.double_quoted_identifiers = SQLConf.get.doubleQuotedIdentifiers
 
-    // Use the same error handling strategy as the main parser for consistent error messages
-    parser.setErrorHandler(new SparkParserErrorStrategy())
-    parser.getInterpreter.setPredictionMode(PredictionMode.LL)
-
     val astBuilder = new SubstituteParmsAstBuilder()
 
-    // Parse as a single statement to get parameter locations
-    val ctx = rule match {
-      case SubstitutionRule.Query => parser.query()
-      case SubstitutionRule.Statement => parser.singleStatement()
-      case SubstitutionRule.CompoundOrSingleStatement => parser.compoundOrSingleStatement()
-      case SubstitutionRule.Expression => parser.expression()
-      case SubstitutionRule.ColDefinitionList => parser.colDefinitionList()
+    // Use the same two-stage parsing strategy as the main parser for consistent error messages
+    val ctx = try {
+      try {
+        // First attempt: SLL mode with bail error strategy
+        parser.setErrorHandler(new SparkParserBailErrorStrategy())
+        parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
+        rule match {
+          case SubstitutionRule.Query => parser.query()
+          case SubstitutionRule.Statement => parser.singleStatement()
+          case SubstitutionRule.CompoundOrSingleStatement => parser.compoundOrSingleStatement()
+          case SubstitutionRule.Expression => parser.expression()
+          case SubstitutionRule.ColDefinitionList => parser.colDefinitionList()
+        }
+      } catch {
+        case e: ParseCancellationException =>
+          // Second attempt: LL mode with full error strategy
+          tokenStream.seek(0) // rewind input stream
+          parser.reset()
+          parser.setErrorHandler(new SparkParserErrorStrategy())
+          parser.getInterpreter.setPredictionMode(PredictionMode.LL)
+          rule match {
+            case SubstitutionRule.Query => parser.query()
+            case SubstitutionRule.Statement => parser.singleStatement()
+            case SubstitutionRule.CompoundOrSingleStatement => parser.compoundOrSingleStatement()
+            case SubstitutionRule.Expression => parser.expression()
+            case SubstitutionRule.ColDefinitionList => parser.colDefinitionList()
+          }
+      }
+    } catch {
+      case e: Throwable => throw e
     }
     val parameterLocations = astBuilder.extractParameterLocations(ctx)
 
