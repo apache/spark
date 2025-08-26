@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.connect.common
 
-import scala.jdk.CollectionConverters._
-
 import org.apache.spark.connect.proto
 
 private[spark] object ProtoSpecializedArray {
@@ -112,13 +110,39 @@ private[spark] object ProtoSpecializedArray {
     }
   }
 
-  def fromArray(array: Array[Boolean]): proto.Bools =
-    proto.Bools.newBuilder()
-      .addAllValues(array.toSeq.map(_.asJava).asJava)
-      .build()
+  def fromArray(array: Array[Boolean]): proto.Bools = {
+    val builder = proto.Bools.newBuilder()
+    array.foreach(builder.addValues)
+    builder.build()
+  }
 
-  def fromArray(array: Array[Int]): proto.Ints =
-    proto.Ints.newBuilder()
-      .addAllValues(array.toSeq.map(_.asJava).asJava)
-      .build()
+  def fromArray(array: Array[Int]): proto.Ints = {
+    val builder = proto.Ints.newBuilder()
+    array.foreach(builder.addValues)
+    builder.build()
+  }
+
+  def fromArray(array: Array[Long]): proto.Longs = {
+    val builder = proto.Longs.newBuilder()
+    array.foreach(builder.addValues)
+    builder.build()
+  }
+
+  def fromArray(array: Array[Float]): proto.Floats = {
+    val builder = proto.Floats.newBuilder()
+    array.foreach(builder.addValues)
+    builder.build()
+  }
+
+  def fromArray(array: Array[Double]): proto.Doubles = {
+    val builder = proto.Doubles.newBuilder()
+    array.foreach(builder.addValues)
+    builder.build()
+  }
+
+  def fromArray(array: Array[String]): proto.Strings = {
+    val builder = proto.Strings.newBuilder()
+    array.foreach(builder.addValues)
+    builder.build()
+  }
 }
