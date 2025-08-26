@@ -2812,6 +2812,10 @@ object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
        NULL
       > SELECT _FUNC_(2024, 13, 22, 15, 30, 0);
        NULL
+      > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887');
+       2014-12-28 06:30:45.887
+      > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887', 'CET');
+       2014-12-27 21:30:45.887
   """,
   group = "datetime_funcs",
   since = "4.0.0")
