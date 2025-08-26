@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys.BATCH_ID
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, GlobalLimit, LeafNode, LocalRelation, LogicalPlan, Project, SequentialUnion, StreamSourceAwareLogicalPlan}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
@@ -261,14 +261,50 @@ class MicroBatchExecution(
               throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(
                 srcName, sparkSession.sessionState.conf.disabledV2StreamingMicroBatchReaders, table)
             }
+          case project @ Project(_, child) =>
+            // Use the Project's output schema, not seqUnion.output, to preserve transformations
+            val projectOutput = project.output
+            child match {
+              case streamingRelation @ StreamingRelation(dataSourceV1, sourceName, _) =>
+                toExecutionRelationMap.getOrElseUpdate(streamingRelation, {
+                  val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
+                  val source = dataSourceV1.createSource(metadataPath)
+                  nextSourceId += 1
+                  StreamingExecutionRelation(source, projectOutput,
+                    dataSourceV1.catalogTable)(sparkSession)
+                })
+              case s @ StreamingRelationV2(
+                src, srcName, table: SupportsRead, options, _, catalog, identifier, v1) =>
+                if (table.supports(TableCapability.MICRO_BATCH_READ)) {
+                  val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
+                  nextSourceId += 1
+                  val scan = table.newScanBuilder(options).build()
+                  val stream = scan.toMicroBatchStream(metadataPath)
+                  StreamingExecutionRelation(stream, projectOutput, None)(sparkSession)
+                } else if (v1.isDefined) {
+                  val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
+                  val source =
+                    v1.get.asInstanceOf[StreamingRelation].dataSource.createSource(metadataPath)
+                  nextSourceId += 1
+                  StreamingExecutionRelation(source, projectOutput, None)(sparkSession)
+                } else {
+                  throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(
+                    srcName, sparkSession.sessionState.conf.
+                      disabledV2StreamingMicroBatchReaders, table)
+                }
+              case other =>
+                throw new IllegalStateException(
+                  s"Project in SequentialUnion must wrap a streaming relation," +
+                    s" got: ${other.getClass.getSimpleName} - ${other}")
+            }
           case other =>
             throw new IllegalStateException(
               s"SequentialUnion child must be a streaming relation," +
                 s" got: ${other.getClass.getSimpleName} - ${other}")
         }
 
-        val result = SequentialUnionExecutionRelation(
-          childExecutionRelations, sparkSession)
+        val result = new SequentialUnionExecutionRelation(
+          childExecutionRelations, seqUnion.children, seqUnion.output, sparkSession)
         logError(s"### Created SequentialUnionExecutionRelation with" +
           s" ${childExecutionRelations.length} sources")
         result
@@ -954,6 +990,66 @@ class MicroBatchExecution(
                   log"produce the information of catalog table by its own.")
               }
               newRelation
+            case OffsetHolder(start, end) =>
+              logError(s"### OffsetHolder case for ${source.getClass.getSimpleName}: " +
+                s"start=$start, end=$end")
+              source match {
+                case stream: MicroBatchStream =>
+                  logError(s"### Recreating StreamingDataSourceV2ScanRelation from original plan")
+                  // Find the corresponding original logical plan for this source
+                  val sourceIndex = seqUnion.sourceRelations.indexWhere(_.source == source)
+                  if (sourceIndex >= 0 && sourceIndex < seqUnion.originalRelations.length) {
+                    val originalPlan = seqUnion.originalRelations(sourceIndex)
+                    logError(s"### Found original plan: ${originalPlan.getClass.getSimpleName}")
+
+                    // Recreate proper StreamingDataSourceV2ScanRelation from original plan
+                    originalPlan match {
+                      case project @ Project(projectList, child @ StreamingRelationV2(
+                          _, _, table: SupportsRead, options, _, catalog, identifier, _)) =>
+                        logError(s"### Project with expressions: ${projectList.map(_.toString)}")
+                        logError(s"### Child output schema:" +
+                          s" ${child.output.map(attr => s"${attr.name}:${attr.dataType}")}")
+                        logError(s"### Target output schema:" +
+                          s" ${output.map(attr => s"${attr.name}:${attr.dataType}")}")
+
+                        // Recreate the underlying StreamingDataSourceV2ScanRelation with offsets
+                        val scan = table.newScanBuilder(options).build()
+                        val relation = StreamingDataSourceV2Relation(
+                          table, child.output.map(_.asInstanceOf[AttributeReference]),
+                          catalog, identifier, options, "")
+                        val scanRelation = StreamingDataSourceV2ScanRelation(relation, scan,
+                          child.output.map(_.asInstanceOf[AttributeReference]), stream,
+                          Some(start), Some(end))
+
+                        // Apply the Project transformation to
+                        // handle schema conversions (Long -> String)
+                        val result = Project(projectList, scanRelation)
+                        logError(s"### Created Project result with" +
+                          s" output:" +
+                          s" ${result.output.map(attr => s"${attr.name}:${attr.dataType}")}")
+                        result
+                      case child @ StreamingRelationV2(_, _, table: SupportsRead,
+                          options, _, catalog, identifier, _) =>
+                        val scan = table.newScanBuilder(options).build()
+                        val relation = StreamingDataSourceV2Relation(
+                          table, output.map(_.asInstanceOf[AttributeReference]),
+                          catalog, identifier, options, "")
+                        StreamingDataSourceV2ScanRelation(relation, scan,
+                          output.map(_.asInstanceOf[AttributeReference]),
+                          stream, Some(start), Some(end))
+                      case other =>
+                        logError(s"### Unexpected original plan type:" +
+                          s" ${other.getClass.getSimpleName}")
+                        LocalRelation(output, isStreaming = true)
+                    }
+                  } else {
+                    logError(s"### Could not find original plan for source index $sourceIndex")
+                    LocalRelation(output, isStreaming = true)
+                  }
+                case _ =>
+                  logError(s"### Non-MicroBatchStream source, using empty LocalRelation")
+                  LocalRelation(output, isStreaming = true)
+              }
           }
           val finalDataPlanWithStream = finalDataPlan transformUp {
             case l: StreamSourceAwareLogicalPlan => l.withStream(source)
@@ -964,10 +1060,21 @@ class MicroBatchExecution(
             s"Invalid batch: ${truncatedString(output, ",", maxFields)} != " +
               s"${truncatedString(finalDataPlanWithStream.output, ",", maxFields)}")
 
-          val aliases = output.zip(finalDataPlanWithStream.output).map { case (to, from) =>
-            Alias(from, to.name)(exprId = to.exprId, explicitMetadata = Some(from.metadata))
+          // Only create aliases when attributes differ to avoid expression ID conflicts
+          val needsProjection = output.zip(
+            finalDataPlanWithStream.output).exists { case (to, from) =>
+            to.exprId != from.exprId || to.name != from.name || to.dataType != from.dataType
           }
-          Project(aliases, finalDataPlanWithStream)
+
+          if (needsProjection) {
+            val aliases = output.zip(finalDataPlanWithStream.output).map { case (to, from) =>
+              Alias(from, to.name)(exprId = to.exprId, explicitMetadata = Some(from.metadata))
+            }
+            Project(aliases, finalDataPlanWithStream)
+          } else {
+            // Attributes are identical, no projection needed
+            finalDataPlanWithStream
+          }
         } else {
           logError(s"### No data found for any source in sequential union")
           LocalRelation(seqUnion.output, isStreaming = true)
@@ -1026,6 +1133,10 @@ class MicroBatchExecution(
           // Don't track the source node which is known to produce zero rows.
           LocalRelation(output, isStreaming = true)
         }
+
+      // Handle Project nodes (let them pass through - they will be handled by natural recursion)
+      case project @ Project(_, _) =>
+        project
 
       // For v2 sources.
       case r: StreamingDataSourceV2ScanRelation =>

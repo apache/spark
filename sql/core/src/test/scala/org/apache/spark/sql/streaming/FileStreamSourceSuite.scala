@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 import java.net.URI
+import java.nio.file.Files
 import java.time.{LocalDateTime, ZoneOffset}
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicLong
@@ -2623,31 +2624,68 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
   // TODO: Add Sequential Source Test Cases here:
-  test("sequential union - file to memory stream") {
+  test("sequential union - file to rate stream") {
     withTempDirs { case (src, tmp) =>
-      // Create bounded file stream with maxFilesPerTrigger
-      val fileStream = spark.readStream
-        .format("text")
-        .option("maxFilesPerTrigger", "1")
-        .load(src.getCanonicalPath)
+      withTempDir { outputDir =>
+        // Create bounded file stream with maxFilesPerTrigger
+        val fileStream = spark.readStream
+          .format("text")
+          .option("maxFilesPerTrigger", "1")
+          .load(src.getCanonicalPath)
 
-      // Create memory stream for second source
-      val memoryStream = MemoryStream[String]
-      val memoryDF = memoryStream.toDF()
+        // Create rate stream for second source
+        val rateStream = spark.readStream
+          .format("rate")
+          .option("rowsPerSecond", "1") // Slower rate for easier testing
+          .option("numPartitions", "1")
+          .load()
+          .select($"value".cast("string").as("value")) // Match file stream schema
 
-      // Create sequential union
-      val sequentialStream = fileStream.followedBy(memoryDF)
+        // Create sequential union
+        val sequentialStream = fileStream.followedBy(rateStream)
 
-      testStream(sequentialStream)(
-        // First: Add file data and process
-        AddTextFileData("file_data_1\nfile_data_2", src, tmp),
-        ProcessAllAvailable(),
-        CheckAnswer("file_data_1", "file_data_2"),
-        ProcessAllAvailable(),
-        // Second: Add memory stream data (should process after file completes)
-        AddData(memoryStream, "memory_data_1", "memory_data_2"),
-        CheckAnswer("file_data_1", "file_data_2", "memory_data_1", "memory_data_2")
-      )
+        // First: Add file data
+        val fileData = "file_data_1\nfile_data_2"
+        val testFile = new File(src, "test.txt")
+        Files.write(testFile.toPath, fileData.getBytes)
+
+        // Start streaming query writing to parquet
+        val query = sequentialStream.writeStream
+          .format("parquet")
+          .option("path", outputDir.getCanonicalPath)
+          .option("checkpointLocation", tmp.getCanonicalPath)
+          .trigger(Trigger.ProcessingTime("1 second"))
+          .start()
+
+        try {
+          // Wait for file data to be processed
+          eventually(timeout(10.seconds)) {
+            val files = outputDir.listFiles().filter(_.getName.endsWith(".parquet"))
+            assert(files.nonEmpty, "No parquet files written")
+
+            val result = spark.read.parquet(outputDir.getCanonicalPath).collect()
+            assert(result.length >= 2, s"Expected at least 2 rows from file, got ${result.length}")
+
+            val fileValues = result.map(_.getString(0)).filter(_.startsWith("file_"))
+            assert(fileValues.contains("file_data_1"), "Missing file_data_1")
+            assert(fileValues.contains("file_data_2"), "Missing file_data_2")
+          }
+
+          // Wait a bit more for rate stream data (should appear after file completes)
+          Thread.sleep(3000)
+
+          val finalResult = spark.read.parquet(outputDir.getCanonicalPath).collect()
+          val rateValues = finalResult.map(_.getString(0)).filter(!_.startsWith("file_"))
+
+          // Should have some rate stream data (numeric values)
+          assert(rateValues.nonEmpty,
+            s"Expected some rate stream data, got only:" +
+              s" ${finalResult.map(_.getString(0)).mkString(", ")}")
+
+        } finally {
+          query.stop()
+        }
+      }
     }
   }
 

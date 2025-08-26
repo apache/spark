@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.SupportsSequentialExecution
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
@@ -34,16 +35,21 @@ import org.apache.spark.sql.execution.streaming.Source
  */
 class SequentialUnionExecutionRelation(
     val sourceRelations: Seq[StreamingExecutionRelation],
+    val originalRelations: Seq[LogicalPlan],
+    unifiedSchema: Seq[Attribute],
     session: SparkSession) extends StreamingExecutionRelation(
   sourceRelations.head.source, // Will be overridden by delegation
-  sourceRelations.head.output, // Will be overridden by delegation
+  unifiedSchema, // Will be overridden by delegation
   None // Will be overridden by delegation
 )(session) with Logging {
 
   require(sourceRelations.nonEmpty, "SequentialUnionExecutionRelation requires at least one source")
 
-  // Create unified schema based on first source (all sources should have compatible schemas)
-  private val unifiedOutput: Seq[Attribute] = sourceRelations.head.output
+  // Use the provided unified schema with fresh expression IDs to avoid conflicts
+  // This prevents alias creation errors when sources produce attributes with same IDs
+  private val unifiedOutput: Seq[Attribute] = unifiedSchema.map { attr =>
+    attr.newInstance()
+  }
 
   // Track current active source index
   private val currentSourceIndex = new AtomicInteger(0)
@@ -145,7 +151,9 @@ class SequentialUnionExecutionRelation(
 object SequentialUnionExecutionRelation {
   def apply(
       sourceRelations: Seq[StreamingExecutionRelation],
+      originalRelations: Seq[LogicalPlan],
+      unifiedSchema: Seq[Attribute],
       session: SparkSession): SequentialUnionExecutionRelation = {
-    new SequentialUnionExecutionRelation(sourceRelations, session)
+    new SequentialUnionExecutionRelation(sourceRelations, originalRelations, unifiedSchema, session)
   }
 }
