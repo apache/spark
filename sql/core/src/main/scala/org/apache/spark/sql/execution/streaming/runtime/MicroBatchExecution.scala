@@ -1143,6 +1143,12 @@ class MicroBatchExecution(
         mutableNewData.get(r.stream).map {
           case OffsetHolder(start, end) =>
             r.copy(startOffset = Some(start), endOffset = Some(end))
+          case project: Project =>
+            // Handle case where sequential union put a Project in mutableNewData
+            project.child
+          case otherPlan: LogicalPlan =>
+            // Handle other LogicalPlan types that might be in mutableNewData
+            otherPlan
         }.getOrElse {
           // Don't track the source node which is known to produce zero rows.
           LocalRelation(r.output, isStreaming = true)

@@ -2676,6 +2676,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
           val finalResult = spark.read.parquet(outputDir.getCanonicalPath).collect()
           val rateValues = finalResult.map(_.getString(0)).filter(!_.startsWith("file_"))
+          logError(s"### finalResult: ${finalResult.mkString("Array(", ", ", ")")}")
 
           // Should have some rate stream data (numeric values)
           assert(rateValues.nonEmpty,
