@@ -720,8 +720,6 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
         assert isinstance(arr, pa.Array)
         assert isinstance(arrow_type, pa.DataType)
 
-        # TODO: should we handle timezone here?
-
         if arr.type == arrow_type:
             return arr
         elif arrow_cast:
