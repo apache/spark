@@ -6293,7 +6293,8 @@ object functions {
     Column.internalFn("timestampadd", lit(unit), quantity, ts)
 
   /**
-   * Returns the difference between two times, measured in specified units.
+   * Returns the difference between two times, measured in specified units. Throws a
+   * SparkIllegalArgumentException, in case the specified unit is not supported.
    *
    * @param unit
    *   A STRING representing the unit of the time difference. Supported units are: "HOUR",
@@ -6306,8 +6307,6 @@ object functions {
    *   The difference between `end` and `start` times, measured in specified units.
    * @note
    *   If any of the inputs is `NULL`, the result is `NULL`.
-   * @throws SparkIllegalArgumentException
-   *   If the `unit` is not supported.
    * @group datetime_funcs
    * @since 4.1.0
    */
