@@ -85,11 +85,15 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
  * Used to link a streaming [[Source]] of data into a
  * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].
  */
-case class StreamingExecutionRelation(
-    source: SparkDataStream,
-    output: Seq[Attribute],
-    catalogTable: Option[CatalogTable])(session: SparkSession)
+class StreamingExecutionRelation(
+    protected val _source: SparkDataStream,
+    protected val _output: Seq[Attribute],
+    protected val _catalogTable: Option[CatalogTable])(val session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
+
+  def source: SparkDataStream = _source
+  def output: Seq[Attribute] = _output
+  def catalogTable: Option[CatalogTable] = _catalogTable
 
   override def otherCopyArgs: Seq[AnyRef] = session :: Nil
   override def isStreaming: Boolean = true
@@ -103,7 +107,19 @@ case class StreamingExecutionRelation(
     sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
   )
 
-  override def newInstance(): LogicalPlan = this.copy(output = output.map(_.newInstance()))(session)
+  override def newInstance(): LogicalPlan = {
+    new StreamingExecutionRelation(_source, _output.map(_.newInstance()), _catalogTable)(session)
+  }
+
+  // Product methods - required when extending from case class hierarchy
+  def productArity: Int = 3
+  def productElement(n: Int): Any = n match {
+    case 0 => _source
+    case 1 => _output
+    case 2 => _catalogTable
+    case _ => throw new IndexOutOfBoundsException(n.toString)
+  }
+  def canEqual(that: Any): Boolean = that.isInstanceOf[StreamingExecutionRelation]
 }
 
 /**
@@ -122,13 +138,24 @@ case class StreamingRelationExec(
 
 object StreamingExecutionRelation {
   def apply(source: Source, session: SparkSession): StreamingExecutionRelation = {
-    StreamingExecutionRelation(source, toAttributes(source.schema), None)(session)
+    new StreamingExecutionRelation(source, toAttributes(source.schema), None)(session)
+  }
+
+  def apply(source: SparkDataStream, output: Seq[Attribute], catalogTable: Option[CatalogTable])
+           (session: SparkSession): StreamingExecutionRelation = {
+    new StreamingExecutionRelation(source, output, catalogTable)(session)
   }
 
   def apply(
       source: Source,
       session: SparkSession,
       catalogTable: CatalogTable): StreamingExecutionRelation = {
-    StreamingExecutionRelation(source, toAttributes(source.schema), Some(catalogTable))(session)
+    new StreamingExecutionRelation(source, toAttributes(source.schema), Some(catalogTable))(session)
+  }
+
+  def unapply(
+      relation: StreamingExecutionRelation):
+  Option[(SparkDataStream, Seq[Attribute], Option[CatalogTable])] = {
+    Some((relation.source, relation.output, relation.catalogTable))
   }
 }

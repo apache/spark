@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.paths.SparkPath
+import org.apache.spark.sql.catalyst.streaming.SupportsSequentialExecution
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connector.read.streaming
@@ -55,6 +56,7 @@ class FileStreamSource(
     options: Map[String, String])
   extends SupportsAdmissionControl
   with SupportsTriggerAvailableNow
+  with SupportsSequentialExecution
   with Source
   with Logging {
 
@@ -304,6 +306,8 @@ class FileStreamSource(
 
     assert(startOffset <= endOffset)
     val files = metadataLog.get(Some(startOffset + 1), Some(endOffset)).flatMap(_._2)
+    logError(s"### getBatch:" +
+      s" start=$start($startOffset), end=$end($endOffset), files=${files.length}")
     logInfo(log"Processing ${MDC(LogKeys.NUM_FILES, files.length)} files from " +
       log"${MDC(LogKeys.FILE_START_OFFSET, startOffset + 1)}:" +
       log"${MDC(LogKeys.FILE_END_OFFSET, endOffset)}")
@@ -431,6 +435,35 @@ class FileStreamSource(
   }
 
   override def stop(): Unit = sourceCleaner.foreach(_.stop())
+
+  /**
+   * Implementation of SupportsSequentialExecution interface.
+   * Returns true if this file source has finished processing all available files
+   * and can be considered "done" for sequential execution purposes.
+   */
+  override def isSourceComplete(): Boolean = {
+    sourceOptions.maxFilesPerTrigger match {
+      case Some(maxFiles) =>
+        // For bounded file sources with maxFilesPerTrigger, check if we've processed enough
+        val currentFiles = seenFiles.size
+        val availableFiles = fetchAllFiles().length
+
+        logError(s"### FileStreamSource.isSourceComplete: currentFiles=$currentFiles, " +
+          s"availableFiles=$availableFiles, maxFiles=$maxFiles")
+
+        // Source is done if we've processed all available files AND seen at least one file,
+        // OR if we've processed the maximum number of files
+        val isComplete = (currentFiles >= availableFiles && availableFiles > 0) ||
+          currentFiles >= maxFiles
+        logError(s"### FileStreamSource result: $isComplete")
+        isComplete
+      case None =>
+        // Unbounded file source (no maxFilesPerTrigger) - never done
+        // This represents continuous file monitoring
+        logError("### FileStreamSource.isSourceComplete: unbounded source, never done")
+        false
+    }
+  }
 }
 
 

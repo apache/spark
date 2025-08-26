@@ -27,7 +27,7 @@ import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys.BATCH_ID
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, GlobalLimit, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, GlobalLimit, LeafNode, LocalRelation, LogicalPlan, Project, SequentialUnion, StreamSourceAwareLogicalPlan}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -43,6 +43,7 @@ import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, On
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitMetadata, OffsetSeq, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.runtime.AcceptsLatestSeenOffsetHandler
+import org.apache.spark.sql.execution.streaming.runtime.SequentialUnionExecutionRelation
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchSink, WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
 import org.apache.spark.sql.execution.streaming.state.{StateSchemaBroadcast, StateStoreErrors}
@@ -221,13 +222,75 @@ class MicroBatchExecution(
             StreamingExecutionRelation(source, output, None)(sparkSession)
           })
         }
+
+      case seqUnion @ SequentialUnion(children, byName, allowMissingCol) =>
+        logError(s"### SequentialUnion transform:" +
+          s" children=${children.map(_.getClass.getSimpleName)}")
+        // Transform children to get their execution relations
+        val childExecutionRelations = children.map {
+          case rel: StreamingExecutionRelation => rel
+          case rel: StreamingDataSourceV2ScanRelation =>
+            // Convert V2 relation to execution relation for uniform handling
+            val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
+            nextSourceId += 1
+            StreamingExecutionRelation(rel.stream, rel.output, None)(sparkSession)
+          case streamingRelation @ StreamingRelation(dataSourceV1, sourceName, output) =>
+            // Handle v1 streaming relation that hasn't been transformed yet
+            toExecutionRelationMap.getOrElseUpdate(streamingRelation, {
+              val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
+              val source = dataSourceV1.createSource(metadataPath)
+              nextSourceId += 1
+              StreamingExecutionRelation(source, output, dataSourceV1.catalogTable)(sparkSession)
+            })
+          case s @ StreamingRelationV2(
+            src, srcName, table: SupportsRead, options, output, catalog, identifier, v1) =>
+            // Handle v2 streaming relation that hasn't been transformed yet
+            if (table.supports(TableCapability.MICRO_BATCH_READ)) {
+              val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
+              nextSourceId += 1
+              val scan = table.newScanBuilder(options).build()
+              val stream = scan.toMicroBatchStream(metadataPath)
+              StreamingExecutionRelation(stream, output, None)(sparkSession)
+            } else if (v1.isDefined) {
+              val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
+              val source =
+                v1.get.asInstanceOf[StreamingRelation].dataSource.createSource(metadataPath)
+              nextSourceId += 1
+              StreamingExecutionRelation(source, output, None)(sparkSession)
+            } else {
+              throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(
+                srcName, sparkSession.sessionState.conf.disabledV2StreamingMicroBatchReaders, table)
+            }
+          case other =>
+            throw new IllegalStateException(
+              s"SequentialUnion child must be a streaming relation," +
+                s" got: ${other.getClass.getSimpleName} - ${other}")
+        }
+
+        val result = SequentialUnionExecutionRelation(
+          childExecutionRelations, sparkSession)
+        logError(s"### Created SequentialUnionExecutionRelation with" +
+          s" ${childExecutionRelations.length} sources")
+        result
     }
     sources = _logicalPlan.collect {
+      // sequential union - collect sources from active relation
+      case s: SequentialUnionExecutionRelation =>
+        logError(s"### Found SequentialUnionExecutionRelation in sources collection")
+        val activeSource = s.getActiveSourceRelation().source
+        logError(s"### Active source: ${activeSource.getClass.getSimpleName}")
+        activeSource
       // v1 source
-      case s: StreamingExecutionRelation => s.source
+      case s: StreamingExecutionRelation =>
+        logError(s"### Found StreamingExecutionRelation: ${s.source.getClass.getSimpleName}")
+        s.source
       // v2 source
-      case r: StreamingDataSourceV2ScanRelation => r.stream
+      case r: StreamingDataSourceV2ScanRelation =>
+        logError(s"### Found StreamingDataSourceV2ScanRelation:" +
+          s" ${r.stream.getClass.getSimpleName}")
+        r.stream
     }
+    logError(s"### Total sources collected: ${sources.length}")
 
     // Initializing TriggerExecutor relies on `sources`, hence calling this after initializing
     // sources.
@@ -380,6 +443,7 @@ class MicroBatchExecution(
       execCtx.startTrigger()
 
       execCtx.reportTimeTaken("triggerExecution") {
+
         // Set this before calling constructNextBatch() so any Spark jobs executed by sources
         // while getting new data have the correct description
         sparkSession.sparkContext.setJobDescription(getBatchDescriptionString)
@@ -793,6 +857,54 @@ class MicroBatchExecution(
 
     // Replace sources in the logical plan with data that has arrived since the last batch.
     val newBatchesPlan = logicalPlan transform {
+      // For sequential union - delegate to active source
+      case seqUnion: SequentialUnionExecutionRelation =>
+        logError(s"### runBatch transform: handling SequentialUnionExecutionRelation")
+        val activeRelation = seqUnion.getActiveSourceRelation()
+        logError(s"### Active relation for batch: ${activeRelation.source.getClass.getSimpleName}")
+        // Transform the active relation using the same logic as regular StreamingExecutionRelation
+        val StreamingExecutionRelation(source, output, catalogTable) = activeRelation
+        mutableNewData.get(source).map { dataPlan =>
+          logError(s"### Found data for active source: ${source.getClass.getSimpleName}")
+          val hasFileMetadata = output.exists {
+            case FileSourceMetadataAttribute(_) => true
+            case _ => false
+          }
+          val finalDataPlan = dataPlan transformUp {
+            case l: LogicalRelation =>
+              var newRelation = l
+              if (hasFileMetadata) {
+                newRelation = newRelation.withMetadataColumns()
+              }
+              if (newRelation.catalogTable.isEmpty) {
+                catalogTable.foreach { table =>
+                  newRelation = newRelation.copy(catalogTable = Some(table))
+                }
+              } else if (catalogTable.exists(_ ne newRelation.catalogTable.get)) {
+                logWarning(log"Source ${MDC(LogKeys.SPARK_DATA_STREAM, source)} should not " +
+                  log"produce the information of catalog table by its own.")
+              }
+              newRelation
+          }
+          val finalDataPlanWithStream = finalDataPlan transformUp {
+            case l: StreamSourceAwareLogicalPlan => l.withStream(source)
+          }
+          mutableNewData.put(source, finalDataPlanWithStream)
+          val maxFields = SQLConf.get.maxToStringFields
+          assert(output.size == finalDataPlanWithStream.output.size,
+            s"Invalid batch: ${truncatedString(output, ",", maxFields)} != " +
+              s"${truncatedString(finalDataPlanWithStream.output, ",", maxFields)}")
+
+          val aliases = output.zip(finalDataPlanWithStream.output).map { case (to, from) =>
+            Alias(from, to.name)(exprId = to.exprId, explicitMetadata = Some(from.metadata))
+          }
+          Project(aliases, finalDataPlanWithStream)
+        }.getOrElse {
+          logError(s"### No data found for active source:" +
+            s" ${source.getClass.getSimpleName}, returning empty relation")
+          LocalRelation(output, isStreaming = true)
+        }
+
       // For v1 sources.
       case StreamingExecutionRelation(source, output, catalogTable) =>
         mutableNewData.get(source).map { dataPlan =>

@@ -635,6 +635,45 @@ case class Union(
     copy(children = newChildren)
 }
 
+/**
+ * Sequential Union processes children sequentially rather than concurrently.
+ * Each child must complete before the next child begins execution.
+ *
+ * Unlike Union which processes all children in parallel, SequentialUnion is designed
+ * for streaming scenarios where you want to process bounded data first (e.g., historical files)
+ * followed by unbounded data (e.g., live streams).
+ *
+ * Schema validation and resolution follow the same rules as Union.
+ */
+case class SequentialUnion(
+    children: Seq[LogicalPlan],
+    byName: Boolean = false,
+    allowMissingCol: Boolean = false) extends UnionBase {
+  assert(!allowMissingCol || byName, "`allowMissingCol` can be true only if `byName` is true.")
+
+  override def maxRows: Option[Long] = {
+    // Sequential execution means sum of all children's rows
+    var sum = BigInt(0)
+    children.foreach { child =>
+      if (child.maxRows.isDefined) {
+        sum += child.maxRows.get
+        if (!sum.isValidLong) {
+          return None
+        }
+      } else {
+        return None
+      }
+    }
+    Some(sum.toLong)
+  }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNION)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): SequentialUnion =
+    copy(children = newChildren)
+}
+
 object Join {
   def computeOutput(
     joinType: JoinType,

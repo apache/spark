@@ -2621,6 +2621,68 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       }
     }
   }
+
+  // TODO: Add Sequential Source Test Cases here:
+  test("sequential union - file to memory stream") {
+    withTempDirs { case (src, tmp) =>
+      // Create bounded file stream with maxFilesPerTrigger
+      val fileStream = spark.readStream
+        .format("text")
+        .option("maxFilesPerTrigger", "1")
+        .load(src.getCanonicalPath)
+
+      // Create memory stream for second source
+      val memoryStream = MemoryStream[String]
+      val memoryDF = memoryStream.toDF()
+
+      // Create sequential union
+      val sequentialStream = fileStream.followedBy(memoryDF)
+
+      testStream(sequentialStream)(
+        // First: Add file data and process
+        AddTextFileData("file_data_1\nfile_data_2", src, tmp),
+        ProcessAllAvailable(),
+        CheckAnswer("file_data_1", "file_data_2"),
+
+        // Second: Add memory stream data (should process after file completes)
+        AddData(memoryStream, "memory_data_1", "memory_data_2"),
+        ProcessAllAvailable(),
+        CheckAnswer("file_data_1", "file_data_2", "memory_data_1", "memory_data_2")
+      )
+    }
+  }
+
+  test("sequential union - multiple file sources") {
+    withTempDirs { case (src1, tmp1) =>
+      withTempDirs { case (src2, tmp2) =>
+        // Create two bounded file streams
+        val fileStream1 = spark.readStream
+          .format("text")
+          .option("maxFilesPerTrigger", "1")
+          .load(src1.getCanonicalPath)
+
+        val fileStream2 = spark.readStream
+          .format("text")
+          .option("maxFilesPerTrigger", "1")
+          .load(src2.getCanonicalPath)
+
+        val sequentialStream = fileStream1.followedBy(fileStream2)
+
+        testStream(sequentialStream)(
+          // First: Add data to first source
+          AddTextFileData("source1_data1\nsource1_data2", src1, tmp1),
+          ProcessAllAvailable(),
+          CheckAnswer("source1_data1", "source1_data2"),
+
+          // Second: Add data to second source (should process after first completes)
+          AddTextFileData("source2_data1\nsource2_data2", src2, tmp2),
+          ProcessAllAvailable(),
+          CheckAnswer("source1_data1", "source1_data2", "source2_data1", "source2_data2"),
+          StopStream
+        )
+      }
+    }
+  }
 }
 
 @SlowSQLTest

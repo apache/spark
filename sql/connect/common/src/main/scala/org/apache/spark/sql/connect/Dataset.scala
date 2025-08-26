@@ -1195,6 +1195,13 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
+  def followedBy(other: org.apache.spark.sql.Dataset[T]): this.type = {
+    // For Spark Connect, this would need proper implementation
+    // For now, return this as a placeholder
+    this
+  }
+
+  /** @inheritdoc */
   @DeveloperApi
   def sameSemantics(other: sql.Dataset[T]): Boolean = {
     sparkSession.sameSemantics(this.plan, other.plan)
