@@ -27288,8 +27288,9 @@ def udtf(
             }
         )
     
-    # Validation: check for invalid positional argument types
-    if cls is not None and not isinstance(cls, (str, StructType, type)):
+    # Validation: check for invalid positional argument types (only for obvious non-schema types)
+    # Allow functions, integers and other types to pass through to original validation for proper error messages
+    if cls is not None and isinstance(cls, (list, dict, tuple)):
         raise PySparkTypeError(
             errorClass="NOT_COLUMN_OR_STR", 
             messageParameters={

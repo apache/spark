@@ -4501,8 +4501,7 @@ def udtf(
             }
         )
     
-    # check for invalid positional argument types
-    if cls is not None and not isinstance(cls, (str, StructType, type)):
+    if cls is not None and isinstance(cls, (list, dict, tuple)):
         raise PySparkTypeError(
             errorClass="NOT_COLUMN_OR_STR", 
             messageParameters={
