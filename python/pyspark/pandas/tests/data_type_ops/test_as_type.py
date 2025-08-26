@@ -32,19 +32,14 @@ from pyspark.pandas.typedef.typehints import (
 
 
 class AsTypeTestsMixin:
-    """Unit tests for arithmetic operations of numeric data types.
-
-    A few test cases are disabled because pandas-on-Spark returns float64 whereas pandas
-    returns float32.
-    The underlying reason is the respective Spark operations return DoubleType always.
-    """
+    """Unit tests for arithmetic operations of numeric data types."""
 
     def test_astype(self):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
 
-            for int_type in [int, np.int32, np.int16, np.int8]:
+            for int_type in [int, np.int64, np.int32, np.int16, np.int8]:
                 if not pser.hasnans:
                     self.assert_eq(pser.astype(int_type), psser.astype(int_type))
                 else:
