@@ -704,8 +704,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
 
     if (rel.hasData) {
-      val (rows, structType) = ArrowConverters.fromBatchWithSchemaIterator(
-        Iterator(rel.getData.toByteArray),
+      val (rows, structType) = ArrowConverters.fromIPCStream(rel.getData.toByteArray,
         TaskContext.get())
       if (structType == null) {
         throw InvalidPlanInput(s"Input data for LocalRelation does not produce a schema.")
