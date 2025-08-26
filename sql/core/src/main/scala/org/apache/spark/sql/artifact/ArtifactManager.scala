@@ -292,15 +292,13 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
             throw SparkException.internalError(s"Unsupported artifact storage: ${artifact.storage}")
         }
       } catch {
-        case e: SparkRuntimeException =>
+        case e: SparkRuntimeException if e.getCondition == "ARTIFACT_ALREADY_EXISTS" =>
           failedArtifactExceptions += e
       }
     }
 
     if (failedArtifactExceptions.nonEmpty) {
-      val exception = failedArtifactExceptions.head
-      failedArtifactExceptions.drop(1).foreach(exception.addSuppressed(_))
-      throw exception
+      throw ArtifactUtils.mergeExceptionsWithSuppressed(failedArtifactExceptions.toSeq)
     }
   }
 

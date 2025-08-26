@@ -135,9 +135,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
     }.toSeq
 
     if (failedArtifactExceptions.nonEmpty) {
-      val exception = failedArtifactExceptions.head
-      failedArtifactExceptions.drop(1).foreach(exception.addSuppressed(_))
-      throw exception
+      throw ArtifactUtils.mergeExceptionsWithSuppressed(failedArtifactExceptions.toSeq)
     }
 
     summaries

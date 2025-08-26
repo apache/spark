@@ -378,19 +378,26 @@ class ArtifactManagerSuite extends SharedSparkSession {
 
     spark.artifactManager.addLocalArtifacts(Seq(artifact1))
 
-    val exception = intercept[SparkRuntimeException] {
+    val ex = intercept[SparkRuntimeException] {
       spark.artifactManager.addLocalArtifacts(
         Seq(alreadyExistingArtifact, artifact2, alreadyExistingArtifact))
     }
 
-    // Validate exception: Should be ARTIFACT_ALREADY_EXISTS and have one suppressed exception
-    assert(exception.getCondition == "ARTIFACT_ALREADY_EXISTS",
-      s"Expected ARTIFACT_ALREADY_EXISTS but got: ${exception.getCondition}")
+    checkError(
+      exception = ex,
+      condition = "ARTIFACT_ALREADY_EXISTS",
+      parameters = Map("normalizedRemoteRelativePath" -> s"jars/${targetPath.toString}"),
+    )
 
-    assert(exception.getSuppressed.length == 1)
-    assert(exception.getSuppressed.head.isInstanceOf[SparkRuntimeException])
-    val suppressed = exception.getSuppressed.head.asInstanceOf[SparkRuntimeException]
-    assert(suppressed.getCondition == "ARTIFACT_ALREADY_EXISTS")
+    assert(ex.getSuppressed.length == 1)
+    assert(ex.getSuppressed.head.isInstanceOf[SparkRuntimeException])
+    val suppressed = ex.getSuppressed.head.asInstanceOf[SparkRuntimeException]
+
+    checkError(
+      exception = suppressed,
+      condition = "ARTIFACT_ALREADY_EXISTS",
+      parameters = Map("normalizedRemoteRelativePath" -> s"jars/${targetPath.toString}"),
+    )
 
     // Artifact1 should have been added
     val expectedFile1 = ArtifactManager.artifactRootDirectory

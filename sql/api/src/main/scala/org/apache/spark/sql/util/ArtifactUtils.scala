@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.util
 
+import org.apache.spark.SparkRuntimeException
 import java.nio.file.{Path, Paths}
 
 object ArtifactUtils {
@@ -39,5 +40,18 @@ object ArtifactUtils {
 
   private[sql] def concatenatePaths(basePath: Path, otherPath: String): Path = {
     concatenatePaths(basePath, Paths.get(otherPath))
+  }
+
+  /**
+   * Converts a sequence of exceptions into a single exception by adding all but the first
+   * exceptions as suppressed exceptions to the first one.
+   * @param exceptions
+   * @return
+   */
+  private[sql] def mergeExceptionsWithSuppressed(exceptions: Seq[SparkRuntimeException]): SparkRuntimeException = {
+    require(exceptions.nonEmpty)
+    val mainException = exceptions.head
+    exceptions.drop(1).foreach(mainException.addSuppressed)
+    mainException
   }
 }
