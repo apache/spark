@@ -55,14 +55,20 @@ class SparkSqlParser extends AbstractSqlParser {
   private[execution] val parameterHandler = new ParameterHandler()
 
     protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
-    // Step 1: Check if we have a parameterized query context and substitute parameters
+    // Step 1: Check if parameter substitution is enabled and we have a parameterized query context
     val paramSubstituted =
-      org.apache.spark.sql.catalyst.parser.ThreadLocalParameterContext.get() match {
-      case Some(context) =>
-        substituteParametersIfNeeded(command, context)
-      case None =>
-        command  // No parameters to substitute
-    }
+      if (SQLConf.get.legacyDisableParameterSubstitution) {
+        // Legacy mode: parameter substitution is disabled, skip it entirely
+        command
+      } else {
+        // Modern mode: check if we have a parameterized query context and substitute parameters
+        org.apache.spark.sql.catalyst.parser.ThreadLocalParameterContext.get() match {
+          case Some(context) =>
+            substituteParametersIfNeeded(command, context)
+          case None =>
+            command  // No parameters to substitute
+        }
+      }
 
     // Step 2: Apply existing variable substitution
     val variableSubstituted = substitutor.substitute(paramSubstituted)
@@ -72,19 +78,23 @@ class SparkSqlParser extends AbstractSqlParser {
       super.parse(variableSubstituted)(toResult)
     } catch {
       case e: Throwable with org.apache.spark.sql.catalyst.trees.WithOrigin =>
-        // Apply position mapping if we have parameter substitution
-        val translatedError = parameterHandler.getPositionMapper match {
-          case Some(positionMapper) =>
-            e.updateQueryContext { contexts =>
-              contexts.map { context =>
-                context match {
-                  case sqlContext: org.apache.spark.sql.catalyst.trees.SQLQueryContext =>
-                    PositionTranslationUtils.translateSqlContext(sqlContext, positionMapper)
-                  case _ => context
+        // Apply position mapping only if parameter substitution is enabled and we have a mapper
+        val translatedError = if (!SQLConf.get.legacyDisableParameterSubstitution) {
+          parameterHandler.getPositionMapper match {
+            case Some(positionMapper) =>
+              e.updateQueryContext { contexts =>
+                contexts.map { context =>
+                  context match {
+                    case sqlContext: org.apache.spark.sql.catalyst.trees.SQLQueryContext =>
+                      PositionTranslationUtils.translateSqlContext(sqlContext, positionMapper)
+                    case _ => context
+                  }
                 }
-              }
-            }.asInstanceOf[Throwable]
-          case None => e
+              }.asInstanceOf[Throwable]
+            case None => e
+          }
+        } else {
+          e  // Legacy mode: no position translation
         }
         throw translatedError
       case e: Throwable =>
@@ -101,7 +111,12 @@ class SparkSqlParser extends AbstractSqlParser {
       command: String,
       context: org.apache.spark.sql.catalyst.parser.ParameterContext): String = {
 
-    parameterHandler.substituteParametersWithAutoRule(command, context)
+    // Check legacy configuration - if parameter substitution is disabled, return original command
+    if (SQLConf.get.legacyDisableParameterSubstitution) {
+      command
+    } else {
+      parameterHandler.substituteParametersWithAutoRule(command, context)
+    }
   }
 
 

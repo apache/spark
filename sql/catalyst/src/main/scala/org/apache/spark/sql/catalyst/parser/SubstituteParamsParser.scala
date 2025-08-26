@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
+import org.antlr.v4.runtime.atn.PredictionMode
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -83,6 +84,10 @@ class SubstituteParamsParser extends Logging {
     parser.SQL_standard_keyword_behavior = SQLConf.get.enforceReservedKeywords
     parser.double_quoted_identifiers = SQLConf.get.doubleQuotedIdentifiers
 
+    // Use the same error handling strategy as the main parser for consistent error messages
+    parser.setErrorHandler(new SparkParserErrorStrategy())
+    parser.getInterpreter.setPredictionMode(PredictionMode.LL)
+
     val astBuilder = new SubstituteParmsAstBuilder()
 
     // Parse as a single statement to get parameter locations
@@ -129,6 +134,10 @@ class SubstituteParamsParser extends Logging {
     parser.legacy_exponent_literal_as_decimal_enabled = SQLConf.get.exponentLiteralAsDecimalEnabled
     parser.SQL_standard_keyword_behavior = SQLConf.get.enforceReservedKeywords
     parser.double_quoted_identifiers = SQLConf.get.doubleQuotedIdentifiers
+
+    // Use the same error handling strategy as the main parser for consistent error messages
+    parser.setErrorHandler(new SparkParserErrorStrategy())
+    parser.getInterpreter.setPredictionMode(PredictionMode.LL)
 
     val astBuilder = new SubstituteParmsAstBuilder()
 

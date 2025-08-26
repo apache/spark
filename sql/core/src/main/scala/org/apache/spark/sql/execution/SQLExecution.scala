@@ -68,7 +68,12 @@ object SQLExecution extends Logging {
    */
   private def translateParameterPositions(error: Throwable,
       queryExecution: QueryExecution): Throwable = {
-    // Check if this query execution involved parameter substitution
+    // Check if parameter substitution is enabled and this query execution involved it
+    if (queryExecution.sparkSession.sessionState.conf.legacyDisableParameterSubstitution) {
+      // Legacy mode: parameter substitution is disabled, no position translation needed
+      return error
+    }
+
     val positionMapperOpt = ThreadLocalParameterContext.get() match {
       case Some(_) =>
         // Parameter substitution occurred, try to get the position mapper

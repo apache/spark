@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.Limit
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -1203,6 +1204,71 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       val tableProps = spark.sql("DESCRIBE TABLE EXTENDED tblprop_dynamic_pos").collect()
       val propsRow = tableProps.find(_.getString(0) == "Table Properties").get
       assert(propsRow.getString(1).contains("modified_by=user123"))
+    }
+  }
+
+  test("legacy parameter substitution configuration - basic functionality") {
+    // When legacy mode is disabled (default), parameter substitution should work
+    withSQLConf("spark.sql.legacy.disableParameterSubstitution" -> "false") {
+      val result1 = spark.sql("SELECT ?", Array(42)).collect()
+      assert(result1(0).getInt(0) == 42)
+
+      val result2 = spark.sql("SELECT :param", Map("param" -> 42)).collect()
+      assert(result2(0).getInt(0) == 42)
+    }
+
+    // When legacy mode is enabled, parameter substitution should be disabled
+    // Parameter markers should remain unbound and cause errors
+    withSQLConf("spark.sql.legacy.disableParameterSubstitution" -> "true") {
+      // Test that positional parameters cause errors in legacy mode
+      val exception1 = intercept[ExtendedAnalysisException] {
+        spark.sql("SELECT ?", Array(42)).collect()
+      }
+      assert(exception1.getMessage.contains("UNBOUND_SQL_PARAMETER") ||
+             exception1.getMessage.contains("unbound parameter"))
+
+      // Test that named parameters cause errors in legacy mode
+      val exception2 = intercept[Exception] {
+        spark.sql("SELECT :param", Map("param" -> 42)).collect()
+      }
+      assert(exception2.getMessage.contains("Parameter marker") ||
+             exception2.getMessage.contains("UNBOUND_SQL_PARAMETER") ||
+             exception2.getMessage.contains("unbound parameter"))
+    }
+  }
+
+  test("legacy parameter substitution configuration - integration with existing tests") {
+    // Ensure that existing parameter functionality is preserved when config is false
+    withSQLConf("spark.sql.legacy.disableParameterSubstitution" -> "false") {
+      // Test some of the existing parameter functionality
+      checkAnswer(spark.sql("SELECT ?", Array(1)), Row(1))
+      checkAnswer(spark.sql("SELECT :param", Map("param" -> "test")), Row("test"))
+
+      // Test with multiple positional parameters
+      checkAnswer(spark.sql("SELECT ?, ?", Array(1, 2)), Row(1, 2))
+
+      // Test with multiple named parameters
+      checkAnswer(
+        spark.sql("SELECT :a, :b", Map("a" -> "hello", "b" -> "world")),
+        Row("hello", "world")
+      )
+    }
+
+    // Ensure that when config is true, parameter substitution is disabled and causes errors
+    withSQLConf("spark.sql.legacy.disableParameterSubstitution" -> "true") {
+      // In legacy mode, parameter markers should remain unbound and cause errors
+      val exception1 = intercept[ExtendedAnalysisException] {
+        spark.sql("SELECT ?", Array(1)).collect()
+      }
+      assert(exception1.getMessage.contains("UNBOUND_SQL_PARAMETER") ||
+             exception1.getMessage.contains("unbound parameter"))
+
+      val exception2 = intercept[Exception] {
+        spark.sql("SELECT :test", Map("test" -> "value")).collect()
+      }
+      assert(exception2.getMessage.contains("Parameter marker") ||
+             exception2.getMessage.contains("UNBOUND_SQL_PARAMETER") ||
+             exception2.getMessage.contains("unbound parameter"))
     }
   }
 }

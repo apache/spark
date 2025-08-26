@@ -5116,6 +5116,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_DISABLE_PARAMETER_SUBSTITUTION =
+    buildConf("spark.sql.legacy.disableParameterSubstitution")
+      .doc("When true, disables parameter substitution for SQL queries with ? or :param markers. " +
+        "This restores the legacy behavior where parameter markers would cause parse errors " +
+        "instead of being substituted with provided parameter values. When false (default), " +
+        "parameter substitution is enabled and parameter markers are replaced with their " +
+        "corresponding values during query parsing.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.mssqlserver.numericMapping.enabled")
       .internal()
@@ -7308,6 +7319,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
 
   def legacyOutputSchema: Boolean = getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)
+
+  def legacyDisableParameterSubstitution: Boolean =
+    getConf(SQLConf.LEGACY_DISABLE_PARAMETER_SUBSTITUTION)
 
   def streamStatePollingInterval: Long = getConf(SQLConf.PIPELINES_STREAM_STATE_POLLING_INTERVAL)
 
