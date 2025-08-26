@@ -33,8 +33,7 @@ trait SharedJDBCIntegrationTests extends QueryTest {
   }
 
   test("SPARK-53386: Parameter `query` should work when ending with semicolon") {
-    // Create table using Databricks SQL
-    spark.sql(s"""
+    sql(s"""
       CREATE OR REPLACE TEMPORARY VIEW tbl_semicolon
       USING org.apache.spark.sql.jdbc
       OPTIONS (
@@ -43,7 +42,6 @@ trait SharedJDBCIntegrationTests extends QueryTest {
       )
     """)
 
-    // Test that queries with semicolons work properly
     val dfWithSemicolon = spark.read.format("jdbc")
       .option("url", jdbcUrl)
       .option("query", "SELECT 1 as id, 'test_data' as name;")
