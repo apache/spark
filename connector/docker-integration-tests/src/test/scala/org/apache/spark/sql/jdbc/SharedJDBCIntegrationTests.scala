@@ -34,7 +34,7 @@ trait SharedJDBCIntegrationTests extends QueryTest {
 
   test("SPARK-53386: Parameter `query` should work when ending with semicolon") {
     // Create table using Databricks SQL
-    sql(s"""
+    spark.sql(s"""
       CREATE OR REPLACE TEMPORARY VIEW tbl_semicolon
       USING org.apache.spark.sql.jdbc
       OPTIONS (
