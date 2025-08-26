@@ -69,7 +69,7 @@ jobs:
           - ${{inputs.python}}
         modules:
           - >-
-            pyspark-sql, pyspark-resource, pyspark-testing, pyspark-types
+            pyspark-sql, pyspark-resource, pyspark-testing
           - >-
             pyspark-core, pyspark-errors, pyspark-streaming
           - >-

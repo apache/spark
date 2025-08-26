@@ -632,10 +632,14 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     pyspark.sql.UDFRegistration.register
     """
 
-    # The return type and input type behavior of pandas_udfs is documented in python/pyspark/sql/tests/udf_type_tests.
-    # It shows most of Pandas data and SQL type conversions in Pandas UDFs that are not yet visible to the user.
-    # Some of behaviors are buggy and might be changed in the near future. The table might have to be eventually documented externally.
-    # The folder python/pyspark/sql/tests/udf_type_tests contains type tests and golden files, as well as the code to regenerate the tables.
+    # The return type and input type behavior of pandas_udfs is documented in
+    # python/pyspark/sql/tests/udf_type_tests.
+    # It shows most of Pandas data and SQL type conversions in Pandas UDFs that are not
+    # yet visible to the user.
+    # Some of behaviors are buggy and might be changed in the near future. The table might
+    # have to be eventually documented externally.
+    # The folder python/pyspark/sql/tests/udf_type_tests contains type tests and golden
+    # files, as well as the code to regenerate the tables.
     require_minimum_pandas_version()
     require_minimum_pyarrow_version()
 

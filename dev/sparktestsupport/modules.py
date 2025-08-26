@@ -593,6 +593,8 @@ pyspark_sql = Module(
         "pyspark.sql.tests.plot.test_frame_plot",
         "pyspark.sql.tests.plot.test_frame_plot_plotly",
         "pyspark.sql.tests.test_connect_compatibility",
+        "pyspark.sql.tests.udf_type_tests.test_udf_input_types",
+        "pyspark.sql.tests.udf_type_tests.test_udf_return_types",
     ],
 )
 
@@ -740,20 +742,6 @@ pyspark_ml = Module(
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
-    ],
-)
-
-pyspark_types = Module(
-    name="pyspark-types",
-    dependencies=[pyspark_core, pyspark_sql],
-    source_file_regexes=["python/pyspark/sql/tests/udf_type_tests/"],
-    python_test_goals=[
-        "pyspark.sql.tests.udf_type_tests.test_udf_input_types",
-        "pyspark.sql.tests.udf_type_tests.test_udf_return_types",
-    ],
-    excluded_python_implementations=[
-        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
-        # they aren't available there
     ],
 )
 

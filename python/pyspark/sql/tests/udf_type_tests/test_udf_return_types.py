@@ -18,13 +18,12 @@
 import array
 import datetime
 import os
-import tempfile
 import unittest
 from decimal import Decimal
 import numpy as np
 import pandas as pd
 
-from pyspark.sql import Row, SparkSession
+from pyspark.sql import Row
 from pyspark.sql.functions import udf, pandas_udf
 from pyspark.sql.types import (
     ArrayType,
@@ -183,7 +182,7 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
                 diff_output = generate_table_diff(actual_output, expected_output)
                 self.fail(
                     f"""
-                    Results don't match golden file for \:{test_name}\".\n
+                    Results don't match golden file for :{test_name}.\n
                     Diff:\n{diff_output}
                     """
                 )

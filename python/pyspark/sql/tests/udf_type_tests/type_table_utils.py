@@ -65,7 +65,7 @@ def parse_table_content(content: str) -> Tuple[List[str], List[List[str]]]:
 def highlight_cell_diff(
     expected_cell: str, actual_cell: str, use_colors: bool = True, cell_width: int = CELL_WIDTH
 ) -> str:
-    """Highlight differences within a single cell, showing inline diff with both parts always visible."""
+    """Highlight differences within a single cell, showing inline diff with both parts visible."""
     if expected_cell == actual_cell:
         return expected_cell
 
@@ -92,7 +92,10 @@ def highlight_cell_diff(
         actual_truncated = actual_cell
 
     if use_colors:
-        return f"{Colors.BG_RED}{expected_truncated}{Colors.RESET}→{Colors.BG_GREEN}{actual_truncated}{Colors.RESET}"
+        return (
+            f"{Colors.BG_RED}{expected_truncated}{Colors.RESET}→"
+            f"{Colors.BG_GREEN}{actual_truncated}{Colors.RESET}"
+        )
     else:
         return f"[-{expected_truncated}-][+{actual_truncated}+]"
 
@@ -204,9 +207,9 @@ def format_table_diff(
     output_lines.append(create_border())
 
     if not changes_found:
-        output_lines.append(
-            f"\n{Colors.GREEN if use_colors else ''}✓ Tables are identical!{Colors.RESET if use_colors else ''}"
-        )
+        green_start = Colors.GREEN if use_colors else ""
+        reset_end = Colors.RESET if use_colors else ""
+        output_lines.append(f"\n{green_start}✓ Tables are identical!{reset_end}")
     else:
         legend = "\nLegend:"
         if use_colors:
