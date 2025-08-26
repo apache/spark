@@ -250,7 +250,7 @@ Input [2]: [d_date_sk#9, d_month_seq#26]
 
 (42) Filter [codegen id : 1]
 Input [2]: [d_date_sk#9, d_month_seq#26]
-Condition : ((isnotnull(d_month_seq#26) AND (d_month_seq#26 = ReusedSubquery Subquery scalar-subquery#27, [id=#28])) AND isnotnull(d_date_sk#9))
+Condition : ((isnotnull(d_month_seq#26) AND (d_month_seq#26 = ReusedSubquery Subquery scalar-subquery#27, [id=#7])) AND isnotnull(d_date_sk#9))
 
 (43) Project [codegen id : 1]
 Output [1]: [d_date_sk#9]
@@ -258,11 +258,11 @@ Input [2]: [d_date_sk#9, d_month_seq#26]
 
 (44) BroadcastExchange
 Input [1]: [d_date_sk#9]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=7]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=8]
 
-Subquery:2 Hosting operator id = 42 Hosting Expression = ReusedSubquery Subquery scalar-subquery#27, [id=#28]
+Subquery:2 Hosting operator id = 42 Hosting Expression = ReusedSubquery Subquery scalar-subquery#27, [id=#7]
 
-Subquery:3 Hosting operator id = 40 Hosting Expression = Subquery scalar-subquery#27, [id=#28]
+Subquery:3 Hosting operator id = 40 Hosting Expression = Subquery scalar-subquery#27, [id=#7]
 * HashAggregate (51)
 +- Exchange (50)
    +- * HashAggregate (49)
@@ -273,39 +273,39 @@ Subquery:3 Hosting operator id = 40 Hosting Expression = Subquery scalar-subquer
 
 
 (45) Scan parquet spark_catalog.default.date_dim
-Output [3]: [d_month_seq#29, d_year#30, d_moy#31]
+Output [3]: [d_month_seq#28, d_year#29, d_moy#30]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2000), EqualTo(d_moy,1)]
 ReadSchema: struct<d_month_seq:int,d_year:int,d_moy:int>
 
 (46) ColumnarToRow [codegen id : 1]
-Input [3]: [d_month_seq#29, d_year#30, d_moy#31]
+Input [3]: [d_month_seq#28, d_year#29, d_moy#30]
 
 (47) Filter [codegen id : 1]
-Input [3]: [d_month_seq#29, d_year#30, d_moy#31]
-Condition : (((isnotnull(d_year#30) AND isnotnull(d_moy#31)) AND (d_year#30 = 2000)) AND (d_moy#31 = 1))
+Input [3]: [d_month_seq#28, d_year#29, d_moy#30]
+Condition : (((isnotnull(d_year#29) AND isnotnull(d_moy#30)) AND (d_year#29 = 2000)) AND (d_moy#30 = 1))
 
 (48) Project [codegen id : 1]
-Output [1]: [d_month_seq#29]
-Input [3]: [d_month_seq#29, d_year#30, d_moy#31]
+Output [1]: [d_month_seq#28]
+Input [3]: [d_month_seq#28, d_year#29, d_moy#30]
 
 (49) HashAggregate [codegen id : 1]
-Input [1]: [d_month_seq#29]
-Keys [1]: [d_month_seq#29]
+Input [1]: [d_month_seq#28]
+Keys [1]: [d_month_seq#28]
 Functions: []
 Aggregate Attributes: []
-Results [1]: [d_month_seq#29]
+Results [1]: [d_month_seq#28]
 
 (50) Exchange
-Input [1]: [d_month_seq#29]
-Arguments: hashpartitioning(d_month_seq#29, 5), ENSURE_REQUIREMENTS, [plan_id=8]
+Input [1]: [d_month_seq#28]
+Arguments: hashpartitioning(d_month_seq#28, 5), ENSURE_REQUIREMENTS, [plan_id=9]
 
 (51) HashAggregate [codegen id : 2]
-Input [1]: [d_month_seq#29]
-Keys [1]: [d_month_seq#29]
+Input [1]: [d_month_seq#28]
+Keys [1]: [d_month_seq#28]
 Functions: []
 Aggregate Attributes: []
-Results [1]: [d_month_seq#29]
+Results [1]: [d_month_seq#28]
 
 

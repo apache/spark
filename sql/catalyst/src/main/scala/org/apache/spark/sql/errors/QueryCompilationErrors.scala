@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, Star, TableAlreadyExistsException, UnresolvedRegex}
@@ -3348,6 +3348,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "change" -> change.toString, "tableName" -> toSQLId(sanitizedTableName)))
   }
 
+  def unsupportedTableChangesInAutoSchemaEvolutionError(
+      changes: Array[TableChange], tableName: Seq[String]): Throwable = {
+    val sanitizedTableName = tableName.map(_.replaceAll("\"", ""))
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_TABLE_CHANGES_IN_AUTO_SCHEMA_EVOLUTION",
+      messageParameters = Map(
+        "changes" -> changes.mkString(","), "tableName" -> toSQLId(sanitizedTableName)))
+  }
+
   def pathOptionNotSetCorrectlyWhenReadingError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1306",
@@ -4203,9 +4212,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def mustOverrideOneMethodError(methodName: String): RuntimeException = {
     val msg = s"You must override one `$methodName`. It's preferred to not override the " +
       "deprecated one."
-    new SparkRuntimeException(
-      "INTERNAL_ERROR",
-      Map("message" -> msg))
+    SparkException.mustOverrideOneMethodError(msg)
   }
 
   def cannotAssignEventTimeColumn(): Throwable = {

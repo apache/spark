@@ -25,7 +25,8 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StateStore, StateStoreConf, StateStoreId, StateStoreProviderId, StreamingSessionWindowStateManager}
+import org.apache.spark.sql.execution.streaming.operators.stateful.{MergingSortWithSessionWindowStateIterator, StatefulOperatorStateInfo, StreamingSessionWindowStateManager}
+import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StateStore, StateStoreConf, StateStoreId, StateStoreProviderId}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}

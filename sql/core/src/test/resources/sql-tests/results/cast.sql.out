@@ -2305,7 +2305,7 @@ org.apache.spark.SparkArithmeticException
     "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "1",
     "scale" : "0",
-    "value" : "60.0"
+    "value" : "60.000000000"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2330,7 +2330,7 @@ org.apache.spark.SparkArithmeticException
     "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "3",
     "scale" : "0",
-    "value" : "3600.0"
+    "value" : "3600.000000000"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2355,7 +2355,7 @@ org.apache.spark.SparkArithmeticException
     "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "5",
     "scale" : "2",
-    "value" : "36000.0"
+    "value" : "36000.000000000"
   },
   "queryContext" : [ {
     "objectType" : "",

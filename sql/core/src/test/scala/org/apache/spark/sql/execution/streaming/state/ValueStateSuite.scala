@@ -25,10 +25,13 @@ import scala.util.Random
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.TaskContext.withTaskContext
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
-import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StreamExecution, ValueStateImplWithTTL}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.ttl.ValueStateImplWithTTL
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{TimeMode, TTLConfig, ValueState}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -476,7 +479,14 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
   protected def tryWithProviderResource[T](
       provider: StateStoreProvider)(f: StateStoreProvider => T): T = {
     try {
-      f(provider)
+      val tc = TaskContext.empty()
+      try {
+        withTaskContext(tc) {
+          f(provider)
+        }
+      } finally {
+        tc.markTaskCompleted(None)
+      }
     } finally {
       provider.close()
     }

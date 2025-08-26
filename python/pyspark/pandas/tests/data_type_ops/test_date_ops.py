@@ -208,31 +208,37 @@ class DateOpsTestsMixin:
         pdf, psdf = self.date_pdf, self.date_psdf
         self.assert_eq(pdf["this"] == pdf["that"], psdf["this"] == psdf["that"])
         self.assert_eq(pdf["this"] == pdf["this"], psdf["this"] == psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] == pdf["this"])
 
     def test_ne(self):
         pdf, psdf = self.date_pdf, self.date_psdf
         self.assert_eq(pdf["this"] != pdf["that"], psdf["this"] != psdf["that"])
         self.assert_eq(pdf["this"] != pdf["this"], psdf["this"] != psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] != pdf["this"])
 
     def test_lt(self):
         pdf, psdf = self.date_pdf, self.date_psdf
         self.assert_eq(pdf["this"] < pdf["that"], psdf["this"] < psdf["that"])
         self.assert_eq(pdf["this"] < pdf["this"], psdf["this"] < psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] < pdf["this"])
 
     def test_le(self):
         pdf, psdf = self.date_pdf, self.date_psdf
         self.assert_eq(pdf["this"] <= pdf["that"], psdf["this"] <= psdf["that"])
         self.assert_eq(pdf["this"] <= pdf["this"], psdf["this"] <= psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] <= pdf["this"])
 
     def test_gt(self):
         pdf, psdf = self.date_pdf, self.date_psdf
         self.assert_eq(pdf["this"] > pdf["that"], psdf["this"] > psdf["that"])
         self.assert_eq(pdf["this"] > pdf["this"], psdf["this"] > psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] > pdf["this"])
 
     def test_ge(self):
         pdf, psdf = self.date_pdf, self.date_psdf
         self.assert_eq(pdf["this"] >= pdf["that"], psdf["this"] >= psdf["that"])
         self.assert_eq(pdf["this"] >= pdf["this"], psdf["this"] >= psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] >= pdf["this"])
 
 
 class DateOpsTests(

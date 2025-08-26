@@ -731,9 +731,6 @@ case class Cast(
   private[this] def timestampToDouble(ts: Long): Double = {
     ts / MICROS_PER_SECOND.toDouble
   }
-  private[this] def timeToDouble(timeNanos: Long): Double = {
-    timeNanos / NANOS_PER_SECOND.toDouble
-  }
   private[this] def timeToLong(timeNanos: Long): Long = {
     Math.floorDiv(timeNanos, NANOS_PER_SECOND)
   }
@@ -1047,11 +1044,15 @@ case class Cast(
         b => toPrecision(if (b) Decimal.ONE else Decimal.ZERO, target, getContextOrNull()))
     case DateType =>
       buildCast[Int](_, d => null) // date can't cast to decimal in Hive
-    case TimestampType =>
-      // Note that we lose precision here.
-      buildCast[Long](_, t => changePrecision(Decimal(timestampToDouble(t)), target))
-    case _: TimeType =>
-      buildCast[Long](_, t => changePrecision(Decimal(timeToDouble(t)), target))
+    case TimestampType => buildCast[Long](_, t => changePrecision(
+        // 19 digits is enough to represent any TIMESTAMP value in Long.
+        // 6 digits of scale is for microseconds precision of TIMESTAMP values.
+        Decimal.apply(t, 19, 6), target))
+    case _: TimeType => buildCast[Long](_, t => changePrecision(
+      // 14 digits is enough to cover the full range of TIME value [0, 24:00) which is
+      // [0, 24 * 60 * 60 * 1000 * 1000 * 1000) = [0, 86400000000000).
+      // 9 digits of scale is for nanoseconds precision of TIME values.
+      Decimal.apply(t, precision = 14, scale = 9), target))
     case dt: DecimalType =>
       b => toPrecision(b.asInstanceOf[Decimal], target, getContextOrNull())
     case t: IntegralType =>
@@ -1510,18 +1511,15 @@ case class Cast(
         // date can't cast to decimal in Hive
         (c, evPrim, evNull) => code"$evNull = true;"
       case TimestampType =>
-        // Note that we lose precision here.
         (c, evPrim, evNull) =>
           code"""
-            Decimal $tmp = Decimal.apply(
-              scala.math.BigDecimal.valueOf(${timestampToDoubleCode(c)}));
+            Decimal $tmp = Decimal.apply($c, 19, 6);
             ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
       case _: TimeType =>
         (c, evPrim, evNull) =>
           code"""
-            Decimal $tmp = Decimal.apply(
-              scala.math.BigDecimal.valueOf(${timeToDoubleCode(c)}));
+            Decimal $tmp = Decimal.apply($c, 14, 9);
             ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
       case DecimalType() =>
@@ -1771,8 +1769,6 @@ case class Cast(
   private[this] def timestampToDoubleCode(ts: ExprValue): Block =
     code"$ts / (double)$MICROS_PER_SECOND"
 
-  private[this] def timeToDoubleCode(ts: ExprValue): Block =
-    code"$ts / (double)$NANOS_PER_SECOND"
   private[this] def timeToLongCode(timeValue: ExprValue): Block =
     code"Math.floorDiv($timeValue, ${NANOS_PER_SECOND}L)"
 

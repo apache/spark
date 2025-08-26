@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateView, InsertIntoStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.command.{CreateViewCommand, SetCatalogCommand, SetCommand, SetNamespaceCommand}
-import org.apache.spark.sql.pipelines.{Language, QueryOriginType}
+import org.apache.spark.sql.pipelines.Language
 import org.apache.spark.sql.types.StructType
 
 /**

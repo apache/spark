@@ -69,5 +69,10 @@ public interface SupportsPushDownJoin extends ScanBuilder {
    *  <br>
    *  Holds information of original output name and the alias of the new output.
    */
-  record ColumnWithAlias(String colName, String alias) {}
+  record ColumnWithAlias(String colName, String alias) {
+    public String prettyString() {
+      if (alias == null) return colName;
+      else return colName + " AS " + alias;
+    }
+  }
 }

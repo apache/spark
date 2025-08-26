@@ -3067,6 +3067,21 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
+  // Throws a SparkIllegalArgumentException when an invalid time unit is specified.
+  // Note that the supported units are: HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND.
+  def invalidTimeUnitError(
+      functionName: String,
+      invalidValue: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE.TIME_UNIT",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "parameter" -> toSQLId("unit"),
+        "invalidValue" -> toSQLValue(invalidValue)
+      )
+    )
+  }
+
   // Throws a SparkRuntimeException when a CHECK constraint is violated, including details of the
   // violation. This is a Java-friendly version of the above method.
   def checkViolationJava(

@@ -26,18 +26,16 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import com.google.common.io.ByteStreams
-import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkException}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.{SparkConf, SparkEnv, SparkException, TaskContext}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -83,19 +81,24 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = map.get(key)
 
-    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
-      map.iterator()
+    override def iterator(colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      val iter = map.iterator()
+      new StateStoreIterator(iter)
     }
 
     override def abort(): Unit = {}
+
+    override def release(): Unit = {}
 
     override def toString(): String = {
       s"HDFSReadStateStore[stateStoreId=$stateStoreId_, version=$version]"
     }
 
-    override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
-      Iterator[UnsafeRowPair] = {
-      map.prefixScan(prefixKey)
+    override def prefixScan(
+        prefixKey: UnsafeRow,
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      val iter = map.prefixScan(prefixKey)
+      new StateStoreIterator(iter)
     }
 
     override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
@@ -112,6 +115,15 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     case object UPDATING extends STATE
     case object COMMITTED extends STATE
     case object ABORTED extends STATE
+    case object RELEASED extends STATE
+
+    Option(TaskContext.get()).foreach { ctxt =>
+      ctxt.addTaskCompletionListener[Unit](ctx => {
+        if (state == UPDATING) {
+          abort()
+        }
+      })
+    }
 
     private val newVersion = version + 1
     @volatile private var state: STATE = UPDATING
@@ -173,6 +185,12 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         logInfo(log"Committed version ${MDC(LogKeys.COMMITTED_VERSION, newVersion)} " +
           log"for ${MDC(LogKeys.STATE_STORE_PROVIDER, this)} to file " +
           log"${MDC(LogKeys.FILE_NAME, finalDeltaFile)}")
+
+        // Report the commit to StateStoreCoordinator for tracking
+        if (storeConf.commitValidationEnabled) {
+          StateStore.reportCommitToCoordinator(newVersion, stateStoreId, hadoopConf)
+        }
+
         newVersion
       } catch {
         case e: Throwable =>
@@ -198,15 +216,18 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
      * Get an iterator of all the store data.
      * This can be called only after committing all the updates made in the current thread.
      */
-    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
+    override def iterator(colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       assertUseOfDefaultColFamily(colFamilyName)
-      mapToUpdate.iterator()
+      val iter = mapToUpdate.iterator()
+      new StateStoreIterator(iter)
     }
 
-    override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
-      Iterator[UnsafeRowPair] = {
+    override def prefixScan(
+        prefixKey: UnsafeRow,
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
       assertUseOfDefaultColFamily(colFamilyName)
-      mapToUpdate.prefixScan(prefixKey)
+      val iter = mapToUpdate.prefixScan(prefixKey)
+      new StateStoreIterator(iter)
     }
 
     override def metrics: StateStoreMetrics = {
@@ -640,7 +661,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
             fileToRead, toString(), keySize)
         } else {
           val keyRowBuffer = new Array[Byte](keySize)
-          ByteStreams.readFully(input, keyRowBuffer, 0, keySize)
+          Utils.readFully(input, keyRowBuffer, 0, keySize)
 
           val keyRow = new UnsafeRow(keySchema.fields.length)
           keyRow.pointTo(keyRowBuffer, keySize)
@@ -650,7 +671,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
             map.remove(keyRow)
           } else {
             val valueRowBuffer = new Array[Byte](valueSize)
-            ByteStreams.readFully(input, valueRowBuffer, 0, valueSize)
+            Utils.readFully(input, valueRowBuffer, 0, valueSize)
             val valueRow = new UnsafeRow(valueSchema.fields.length)
             // If valueSize in existing file is not multiple of 8, floor it to multiple of 8.
             // This is a workaround for the following:
@@ -720,7 +741,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       rawStream: CancellableFSDataOutputStream): Unit = {
     try {
       if (rawStream != null) rawStream.cancel()
-      IOUtils.closeQuietly(compressedStream)
+      Utils.closeQuietly(compressedStream)
     } catch {
       // Closing the compressedStream causes the stream to write/flush flush data into the
       // rawStream. Since the rawStream is already closed, there may be errors.
@@ -760,7 +781,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
             fileToRead, toString(), keySize)
         } else {
           val keyRowBuffer = new Array[Byte](keySize)
-          ByteStreams.readFully(input, keyRowBuffer, 0, keySize)
+          Utils.readFully(input, keyRowBuffer, 0, keySize)
 
           val keyRow = new UnsafeRow(keySchema.fields.length)
           keyRow.pointTo(keyRowBuffer, keySize)
@@ -771,7 +792,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
               fileToRead, toString(), valueSize)
           } else {
             val valueRowBuffer = new Array[Byte](valueSize)
-            ByteStreams.readFully(input, valueRowBuffer, 0, valueSize)
+            Utils.readFully(input, valueRowBuffer, 0, valueSize)
             val valueRow = new UnsafeRow(valueSchema.fields.length)
             // If valueSize in existing file is not multiple of 8, floor it to multiple of 8.
             // This is a workaround for the following:
@@ -953,7 +974,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
    * @param endVersion   checkpoint version to end with
    * @return [[HDFSBackedStateStore]]
    */
-  override def replayStateFromSnapshot(snapshotVersion: Long, endVersion: Long): StateStore = {
+  override def replayStateFromSnapshot(
+      snapshotVersion: Long, endVersion: Long, readOnly: Boolean): StateStore = {
     val newMap = replayLoadedMapFromSnapshot(snapshotVersion, endVersion)
     logInfo(log"Retrieved snapshot at version " +
       log"${MDC(LogKeys.STATE_STORE_VERSION, snapshotVersion)} and apply delta files to version " +

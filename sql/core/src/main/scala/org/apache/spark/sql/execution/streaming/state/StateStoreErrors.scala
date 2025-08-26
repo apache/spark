@@ -92,6 +92,18 @@ object StateStoreErrors {
     new StateStoreIncorrectNumOrderingColsForPrefixScan(numPrefixCols)
   }
 
+  def invalidStateMachineTransition(
+      oldState: String,
+      newState: String,
+      transition: String,
+      storeId: StateStoreId): StateStoreInvalidStateMachineTransition = {
+    new StateStoreInvalidStateMachineTransition(oldState, newState, transition, storeId)
+  }
+
+  def invalidStamp(providedStamp: Long, currentStamp: Long): StateStoreInvalidStamp = {
+    new StateStoreInvalidStamp(providedStamp, currentStamp)
+  }
+
   def incorrectNumOrderingColsForRangeScan(numOrderingCols: String):
     StateStoreIncorrectNumOrderingColsForRangeScan = {
     new StateStoreIncorrectNumOrderingColsForRangeScan(numOrderingCols)
@@ -175,6 +187,11 @@ object StateStoreErrors {
       numSchemaFiles, schemaFilesThreshold, addedColFamilies, removedColFamilies)
   }
 
+  def streamingStateCheckpointLocationNotEmpty(checkpointLocation: String)
+    : StateStoreCheckpointLocationNotEmpty = {
+    new StateStoreCheckpointLocationNotEmpty(checkpointLocation)
+  }
+
   def stateStoreColumnFamilyMismatch(
       columnFamilyName: String,
       oldColumnFamilySchema: String,
@@ -202,6 +219,14 @@ object StateStoreErrors {
   def invalidConfigChangedAfterRestart(configName: String, oldConfig: String, newConfig: String):
     StateStoreInvalidConfigAfterRestart = {
     new StateStoreInvalidConfigAfterRestart(configName, oldConfig, newConfig)
+  }
+
+  def stateStoreCommitValidationFailed(
+      batchId: Long,
+      expectedCommits: Int,
+      actualCommits: Int,
+      missingCommits: String): StateStoreCommitValidationFailed = {
+    new StateStoreCommitValidationFailed(batchId, expectedCommits, actualCommits, missingCommits)
   }
 
   def duplicateStateVariableDefined(stateName: String):
@@ -343,6 +368,30 @@ class StateStoreVariableSizeOrderingColsNotSupported(fieldName: String, index: S
     errorClass = "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED",
     messageParameters = Map("fieldName" -> fieldName, "index" -> index))
 
+class StateStoreInvalidStateMachineTransition(
+    oldState: String,
+    newState: String,
+    operation: String,
+    storeId: StateStoreId)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_INVALID_STATE_MACHINE_TRANSITION",
+    messageParameters = Map(
+      "oldState" -> oldState,
+      "newState" -> newState,
+      "operation" -> operation,
+      "storeId" -> storeId.toString
+    )
+  )
+
+class StateStoreInvalidStamp(providedStamp: Long, currentStamp: Long)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_INVALID_STAMP",
+    messageParameters = Map(
+      "providedStamp" -> providedStamp.toString,
+      "currentStamp" -> currentStamp.toString
+    )
+  )
+
 class StateStoreNullTypeOrderingColsNotSupported(fieldName: String, index: String)
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED",
@@ -430,6 +479,13 @@ class StateStoreStateSchemaFilesThresholdExceeded(
       "addedColumnFamilies" -> addedColFamilies.mkString("(", ",", ")"),
       "removedColumnFamilies" -> removedColFamilies.mkString("(", ",", ")")))
 
+class StateStoreCheckpointLocationNotEmpty(
+    checkpointLocation: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY",
+    messageParameters = Map(
+      "checkpointLocation" -> checkpointLocation))
+
 class StateStoreSnapshotFileNotFound(fileToRead: String, clazz: String)
   extends SparkRuntimeException(
     errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_MISSING_SNAPSHOT_FILE",
@@ -487,4 +543,19 @@ class StateStoreOperationOutOfOrder(errorMsg: String)
   extends SparkRuntimeException(
     errorClass = "STATE_STORE_OPERATION_OUT_OF_ORDER",
     messageParameters = Map("errorMsg" -> errorMsg)
+  )
+
+class StateStoreCommitValidationFailed(
+    batchId: Long,
+    expectedCommits: Int,
+    actualCommits: Int,
+    missingCommits: String)
+  extends SparkRuntimeException(
+    errorClass = "STATE_STORE_COMMIT_VALIDATION_FAILED",
+    messageParameters = Map(
+      "batchId" -> batchId.toString,
+      "expectedCommits" -> expectedCommits.toString,
+      "actualCommits" -> actualCommits.toString,
+      "missingCommits" -> missingCommits
+    )
   )

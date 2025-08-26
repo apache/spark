@@ -241,6 +241,15 @@ object SQLConf {
     }
   }
 
+  val DONT_DEDUPLICATE_EXPRESSION_IF_EXPR_ID_IN_OUTPUT =
+    buildConf("spark.sql.analyzer.dontDeduplicateExpressionIfExprIdInOutput")
+    .internal()
+    .doc(
+      "DeduplicateRelations shouldn't remap expressions to new ExprIds if old ExprId still " +
+      "exists in output.")
+    .booleanConf
+    .createWithDefault(true)
+
   val UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED =
     buildConf("spark.sql.analyzer.unionIsResolvedWhenDuplicatesPerChildResolved")
     .internal()
@@ -439,6 +448,15 @@ object SQLConf {
       .version("3.4.0")
       .intConf
       .createWithDefault(3)
+
+  val PRESERVE_ALIAS_METADATA_WHEN_COLLAPSING_PROJECTS =
+    buildConf("spark.sql.optimizer.preserveAliasMetadataWhenCollapsingProjects")
+    .internal()
+    .doc("When true, make sure to explicitly copy the metadata of the aliases from lower " +
+      "project list.")
+    .version("4.1.0")
+    .booleanConf
+    .createWithDefault(true)
 
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
@@ -1006,6 +1024,15 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  lazy val COLLATION_AWARE_HASHING_ENABLED =
+    buildConf("spark.sql.legacy.collationAwareHashFunctions")
+      .internal()
+      .doc("Enables collation aware hashing (legacy behavior) for collated strings in " +
+        "Murmur3Hash and XxHash64 user-facing expressions.")
+      .version("4.0.1")
+      .booleanConf
+      .createWithDefault(false)
 
   val ICU_CASE_MAPPINGS_ENABLED =
     buildConf("spark.sql.icu.caseMappings.enabled")
@@ -2436,6 +2463,13 @@ object SQLConf {
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(300L)
 
+  val STATE_STORE_MAINTENANCE_PROCESSING_TIMEOUT =
+    buildConf("spark.sql.streaming.stateStore.maintenanceProcessingTimeout")
+      .internal()
+      .doc("Timeout in seconds to wait for maintenance to process this partition.")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(30L)
+
   val STATE_SCHEMA_CHECK_ENABLED =
     buildConf("spark.sql.streaming.stateStore.stateSchemaCheck")
       .doc("When true, Spark will validate the state schema against schema on existing state and " +
@@ -2653,6 +2687,16 @@ object SQLConf {
       .intConf
       .createWithDefault(16)
 
+  val STREAMING_VERIFY_CHECKPOINT_DIRECTORY_EMPTY_ON_START =
+    buildConf("spark.sql.streaming.verifyCheckpointDirectoryEmptyOnStart")
+      .internal()
+      .doc("When true, verifies that the checkpoint directory (offsets, state, commits) is " +
+        "empty when first starting a streaming query. This prevents prevents sharing checkpoint " +
+        "directories between different queries.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")
       .internal()
@@ -2674,6 +2718,17 @@ object SQLConf {
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
+
+  val STATE_STORE_COMMIT_VALIDATION_ENABLED =
+    buildConf("spark.sql.streaming.stateStore.commitValidation.enabled")
+      .doc("When true, Spark will validate that all StateStore instances have committed for " +
+        "stateful streaming queries using foreachBatch. This helps detect cases where " +
+        "user-defined functions in foreachBatch (e.g., show(), limit()) don't process all " +
+        "partitions, which can lead to incorrect results. The validation only applies to " +
+        "foreachBatch sinks without global aggregates or limits.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val CHECKPOINT_RENAMEDFILE_CHECK_ENABLED =
     buildConf("spark.sql.streaming.checkpoint.renamedFileCheck.enabled")
@@ -3921,6 +3976,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED =
+    buildConf("spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled")
+      .doc("When true, convert int to Decimal python objects before converting " +
+        "Pandas.Series to Arrow array during serialization." +
+        "Disabled by default, impacts performance.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PYTHON_TABLE_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDTF.arrow.enabled")
       .doc("Enable Arrow optimization for Python UDTFs.")
@@ -3933,6 +3997,18 @@ object SQLConf {
       .internal()
       .doc(s"When true and ${PYTHON_TABLE_UDF_ARROW_ENABLED.key} is enabled, extra pandas " +
         "conversion happens during (de)serialization between JVM and Python workers. " +
+        "This matters especially when the produced output has a schema different from " +
+        "specified schema, resulting in a different type coercion.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED =
+    buildConf("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled")
+      .internal()
+      .doc(s"When true and ${PYTHON_UDF_ARROW_ENABLED.key} is enabled, matches the " +
+        "default Arrow Python UDF behavior before 4.1.0. With this behavior, extra" +
+        "pandas conversion happens during (de)serialization between JVM and Python workers. " +
         "This matters especially when the produced output has a schema different from " +
         "specified schema, resulting in a different type coercion.")
       .version("4.1.0")
@@ -3971,7 +4047,7 @@ object SQLConf {
         "check and do type conversions anyway. This config only works for Arrow 0.11.0+.")
       .version("3.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PYSPARK_WORKER_PYTHON_EXECUTABLE =
     buildConf("spark.sql.execution.pyspark.python")
@@ -5986,6 +6062,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val UNION_OUTPUT_PARTITIONING =
+    buildConf("spark.sql.unionOutputPartitioning")
+      .internal()
+      .doc("When set to true, the output partitioning of UnionExec will be the same as the " +
+        "input partitioning if its children have same partitioning. Otherwise, it will be a " +
+        "default partitioning.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_PARSE_QUERY_WITHOUT_EOF = buildConf("spark.sql.legacy.parseQueryWithoutEof")
     .internal()
     .doc(
@@ -6136,6 +6222,43 @@ object SQLConf {
         "Otherwise, no order is enforced."
       )
       .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val LEGACY_TRUNCATE_FOR_EMPTY_REGEX_SPLIT =
+    buildConf("spark.sql.legacy.truncateForEmptyRegexSplit")
+      .internal()
+      .doc("When set to true, splitting a string of length n using an empty regex with a " +
+        "positive limit discards the last n - limit characters." +
+        "For example: SELECT split('abcd', '', 2) returns ['a', 'b']." +
+        "When set to false, the last element of the resulting array contains all input beyond " +
+        "the last matched regex." +
+        "For example: SELECT split('abcd', '', 2) returns ['a', 'bcd']." +
+        "According to the description of the split function, this should be set to false by " +
+        "default. See SPARK-49968 for details.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_XML_PARSER_ENABLED = {
+    buildConf("spark.sql.xml.legacyXMLParser.enabled")
+      .internal()
+      .doc(
+        "When set to true, use the legacy XML parser for parsing XML files. " +
+        "Compared to the default parser, the legacy parser has less stringent validation checks " +
+        "for malformed content, but it's less memory-efficient"
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+  }
+
+  val ASSUME_ANSI_FALSE_IF_NOT_PERSISTED =
+    buildConf("spark.sql.assumeAnsiFalseIfNotPersisted.enabled")
+      .internal()
+      .doc("If enabled, assume ANSI mode is false if not persisted during view or UDF " +
+        "creation. Otherwise use the default value.")
+      .version("4.0.1")
       .booleanConf
       .createWithDefault(true)
 
@@ -6343,6 +6466,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def stateStoreMaintenanceShutdownTimeout: Long = getConf(STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT)
 
+  def stateStoreMaintenanceProcessingTimeout: Long =
+    getConf(STATE_STORE_MAINTENANCE_PROCESSING_TIMEOUT)
+
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
   def stateStoreFormatValidationEnabled: Boolean = getConf(STATE_STORE_FORMAT_VALIDATION_ENABLED)
@@ -6486,6 +6612,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def maxBatchesToRetainInMemory: Int = getConf(MAX_BATCHES_TO_RETAIN_IN_MEMORY)
 
   def stateStoreUnloadOnCommit: Boolean = getConf(STATE_STORE_UNLOAD_ON_COMMIT)
+
+  def stateStoreCommitValidationEnabled: Boolean = getConf(STATE_STORE_COMMIT_VALIDATION_ENABLED)
 
   def streamingMaintenanceInterval: Long = getConf(STREAMING_MAINTENANCE_INTERVAL)
 
@@ -6964,6 +7092,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyPandasConversion: Boolean = getConf(PYTHON_TABLE_UDF_LEGACY_PANDAS_CONVERSION_ENABLED)
 
+  def legacyPandasConversionUDF: Boolean = getConf(PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED)
+
   def pythonPlannerExecMemory: Option[Long] = getConf(PYTHON_PLANNER_EXEC_MEMORY)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
@@ -7237,6 +7367,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def maxFlowRetryAttempts: Int = getConf(SQLConf.PIPELINES_MAX_FLOW_RETRY_ATTEMPTS)
 
   def hadoopLineRecordReaderEnabled: Boolean = getConf(SQLConf.HADOOP_LINE_RECORD_READER_ENABLED)
+
+  def legacyXMLParserEnabled: Boolean =
+    getConf(SQLConf.LEGACY_XML_PARSER_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

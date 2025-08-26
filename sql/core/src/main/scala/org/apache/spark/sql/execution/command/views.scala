@@ -430,8 +430,18 @@ object ViewHelper extends SQLConfHelper with Logging {
     "spark.sql.hive.convertMetastoreCtas",
     SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.key)
 
-  private val configAllowList = Seq(
+  private val configAllowList = Set(
     SQLConf.DISABLE_HINTS.key
+  )
+
+  /**
+   * Set of single-pass resolver confs that shouldn't be stored during view/UDF/proc creation.
+   * This is needed to avoid accidental failures in tentative and dual-run modes when querying the
+   * view.
+   */
+  private val singlePassResolverDenyList = Set(
+    SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key,
+    SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key
   )
 
   /**
@@ -440,8 +450,10 @@ object ViewHelper extends SQLConfHelper with Logging {
    * 2. do not exists in denyList
    */
   private def shouldCaptureConfig(key: String): Boolean = {
-    configAllowList.exists(prefix => key.equals(prefix)) ||
-      !configPrefixDenyList.exists(prefix => key.startsWith(prefix))
+    configAllowList.contains(key) || (
+      !configPrefixDenyList.exists(prefix => key.startsWith(prefix)) &&
+      !singlePassResolverDenyList.contains(key)
+    )
   }
 
   import CatalogTable._
@@ -481,16 +493,19 @@ object ViewHelper extends SQLConfHelper with Logging {
   }
 
   /**
-   * Convert the view SQL configs to `properties`.
+   * Convert the view SQL configs to `properties`. Here we only capture the SQL configs that are
+   * modifiable and should be captured, i.e. not in the denyList and in the allowList. We also
+   * capture `SESSION_LOCAL_TIMEZONE` whose default value relies on the JVM system timezone and
+   * the `ANSI_ENABLED` value.
+   *
+   * We need to always capture them to make sure we apply the same configs when querying the view.
    */
   private def sqlConfigsToProps(conf: SQLConf): Map[String, String] = {
     val modifiedConfs = getModifiedConf(conf)
-    // Some configs have dynamic default values, such as SESSION_LOCAL_TIMEZONE whose
-    // default value relies on the JVM system timezone. We need to always capture them to
-    // to make sure we apply the same configs when reading the view.
-    val alwaysCaptured = Seq(SQLConf.SESSION_LOCAL_TIMEZONE)
+
+    val alwaysCaptured = Seq(SQLConf.SESSION_LOCAL_TIMEZONE, SQLConf.ANSI_ENABLED)
       .filter(c => !modifiedConfs.contains(c.key))
-      .map(c => (c.key, conf.getConf(c)))
+      .map(c => (c.key, conf.getConf(c).toString))
 
     val props = new mutable.HashMap[String, String]
     for ((key, value) <- modifiedConfs ++ alwaysCaptured) {

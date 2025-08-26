@@ -18,8 +18,7 @@
 import unittest
 import datetime
 
-# TODO: import arrow_udf from public API
-from pyspark.sql.pandas.functions import arrow_udf, ArrowUDFType, PandasUDFType
+from pyspark.sql.functions import arrow_udf, ArrowUDFType, PandasUDFType
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
     DoubleType,
@@ -165,6 +164,13 @@ class ArrowUDFTestsMixin:
                 @arrow_udf(LongType(), ArrowUDFType.SCALAR)
                 def zero_with_type():
                     return 1
+
+            with self.assertRaisesRegex(ValueError, "0-arg arrow_udfs.*not.*supported"):
+
+                @arrow_udf(LongType(), ArrowUDFType.SCALAR_ITER)
+                def zero_with_type():
+                    yield 1
+                    yield 2
 
     def test_arrow_udf_timestamp_ntz(self):
         import pyarrow as pa

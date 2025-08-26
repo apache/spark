@@ -114,14 +114,14 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with Expressio
     // Date is represented as Int in unsafeRow
     assert(DateTimeUtils.toJavaDate(unsafeRow.getInt(2)) === Date.valueOf("1970-01-01"))
     // Timestamp is represented as Long in unsafeRow
-    DateTimeUtils.toJavaTimestamp(unsafeRow.getLong(3)) should be
-    (Timestamp.valueOf("2015-05-08 08:10:25"))
+    DateTimeUtils.toJavaTimestamp(unsafeRow.getLong(3)) should be(
+      Timestamp.valueOf("2015-05-08 08:10:25"))
 
     unsafeRow.setInt(2, DateTimeUtils.fromJavaDate(Date.valueOf("2015-06-22")))
     assert(DateTimeUtils.toJavaDate(unsafeRow.getInt(2)) === Date.valueOf("2015-06-22"))
     unsafeRow.setLong(3, DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-06-22 08:10:25")))
-    DateTimeUtils.toJavaTimestamp(unsafeRow.getLong(3)) should be
-    (Timestamp.valueOf("2015-06-22 08:10:25"))
+    DateTimeUtils.toJavaTimestamp(unsafeRow.getLong(3)) should be(
+      Timestamp.valueOf("2015-06-22 08:10:25"))
   }
 
   testBothCodegenAndInterpreted(

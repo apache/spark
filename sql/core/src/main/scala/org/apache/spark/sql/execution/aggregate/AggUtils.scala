@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.operators.stateful._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{Utils => CUtils}

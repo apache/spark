@@ -19,13 +19,10 @@ package org.apache.spark
 
 import java.net.URL
 
-import scala.jdk.CollectionConverters._
-
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.apache.commons.text.StringSubstitutor
 
 import org.apache.spark.annotation.DeveloperApi
 
@@ -48,9 +45,7 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
       case (key, null) => key -> "null"
       case (key, value) => key -> value
     }
-    val sub = new StringSubstitutor(sanitizedParameters.asJava)
-    sub.setEnableUndefinedVariableException(true)
-    sub.setDisableSubstitutionInValues(true)
+    val sub = new StringSubstitutor(sanitizedParameters)
     val errorMessage = try {
       sub.replace(ErrorClassesJsonReader.TEMPLATE_REGEX.replaceAllIn(
         messageTemplate, "\\$\\{$1\\}"))

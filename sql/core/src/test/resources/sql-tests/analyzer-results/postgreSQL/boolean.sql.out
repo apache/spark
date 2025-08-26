@@ -290,7 +290,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`BOOLTBL1`, false
 INSERT INTO BOOLTBL1 VALUES (cast('t' as boolean))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/booltbl1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/booltbl1], Append, `spark_catalog`.`default`.`booltbl1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/booltbl1), [f1]
-+- Project [cast(col1#x as boolean) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -298,7 +298,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO BOOLTBL1 VALUES (cast('True' as boolean))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/booltbl1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/booltbl1], Append, `spark_catalog`.`default`.`booltbl1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/booltbl1), [f1]
-+- Project [cast(col1#x as boolean) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -306,7 +306,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO BOOLTBL1 VALUES (cast('true' as boolean))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/booltbl1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/booltbl1], Append, `spark_catalog`.`default`.`booltbl1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/booltbl1), [f1]
-+- Project [cast(col1#x as boolean) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -355,7 +355,7 @@ Project [ AS zero#x, f1#x]
 INSERT INTO BOOLTBL1 VALUES (boolean('f'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/booltbl1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/booltbl1], Append, `spark_catalog`.`default`.`booltbl1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/booltbl1), [f1]
-+- Project [cast(col1#x as boolean) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -380,7 +380,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`BOOLTBL2`, false
 INSERT INTO BOOLTBL2 VALUES (boolean('f'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/booltbl2, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/booltbl2], Append, `spark_catalog`.`default`.`booltbl2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/booltbl2), [f1]
-+- Project [cast(col1#x as boolean) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -388,7 +388,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO BOOLTBL2 VALUES (boolean('false'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/booltbl2, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/booltbl2], Append, `spark_catalog`.`default`.`booltbl2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/booltbl2), [f1]
-+- Project [cast(col1#x as boolean) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -396,7 +396,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO BOOLTBL2 VALUES (boolean('False'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/booltbl2, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/booltbl2], Append, `spark_catalog`.`default`.`booltbl2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/booltbl2), [f1]
-+- Project [cast(col1#x as boolean) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -404,7 +404,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO BOOLTBL2 VALUES (boolean('FALSE'))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/booltbl2, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/booltbl2], Append, `spark_catalog`.`default`.`booltbl2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/booltbl2), [f1]
-+- Project [cast(col1#x as boolean) AS f1#x]
++- Project [col1#x AS f1#x]
    +- LocalRelation [col1#x]
 
 
@@ -593,7 +593,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`BOOLTBL3`, false
 INSERT INTO BOOLTBL3 VALUES ('true', true, 1)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/booltbl3, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/booltbl3], Append, `spark_catalog`.`default`.`booltbl3`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/booltbl3), [d, b, o]
-+- Project [cast(col1#x as string) AS d#x, cast(col2#x as boolean) AS b#x, cast(col3#x as int) AS o#x]
++- Project [col1#x AS d#x, col2#x AS b#x, col3#x AS o#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -601,7 +601,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO BOOLTBL3 VALUES ('false', false, 2)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/booltbl3, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/booltbl3], Append, `spark_catalog`.`default`.`booltbl3`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/booltbl3), [d, b, o]
-+- Project [cast(col1#x as string) AS d#x, cast(col2#x as boolean) AS b#x, cast(col3#x as int) AS o#x]
++- Project [col1#x AS d#x, col2#x AS b#x, col3#x AS o#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -609,7 +609,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 INSERT INTO BOOLTBL3 VALUES ('null', null, 3)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/booltbl3, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/booltbl3], Append, `spark_catalog`.`default`.`booltbl3`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/booltbl3), [d, b, o]
-+- Project [cast(col1#x as string) AS d#x, cast(col2#x as boolean) AS b#x, cast(col3#x as int) AS o#x]
++- Project [col1#x AS d#x, cast(col2#x as boolean) AS b#x, col3#x AS o#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -641,7 +641,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`booltbl4`, false
 INSERT INTO booltbl4 VALUES (false, true, null)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/booltbl4, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/booltbl4], Append, `spark_catalog`.`default`.`booltbl4`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/booltbl4), [isfalse, istrue, isnul]
-+- Project [cast(col1#x as boolean) AS isfalse#x, cast(col2#x as boolean) AS istrue#x, cast(col3#x as boolean) AS isnul#x]
++- Project [col1#x AS isfalse#x, col2#x AS istrue#x, cast(col3#x as boolean) AS isnul#x]
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 

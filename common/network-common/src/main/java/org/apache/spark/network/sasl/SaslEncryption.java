@@ -23,7 +23,6 @@ import java.nio.channels.WritableByteChannel;
 import java.util.List;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -35,6 +34,7 @@ import io.netty.handler.codec.MessageToMessageDecoder;
 
 import org.apache.spark.network.util.AbstractFileRegion;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.NettyUtils;
 
 /**
@@ -152,7 +152,7 @@ class SaslEncryption {
     private long transferred;
 
     EncryptedMessage(SaslEncryptionBackend backend, Object msg, int maxOutboundBlockSize) {
-      Preconditions.checkArgument(msg instanceof ByteBuf || msg instanceof FileRegion,
+      JavaUtils.checkArgument(msg instanceof ByteBuf || msg instanceof FileRegion,
         "Unrecognized message type: %s", msg.getClass().getName());
       this.backend = backend;
       this.isByteBuf = msg instanceof ByteBuf;
@@ -241,7 +241,7 @@ class SaslEncryption {
     public long transferTo(final WritableByteChannel target, final long position)
       throws IOException {
 
-      Preconditions.checkArgument(position == transferred(), "Invalid position.");
+      JavaUtils.checkArgument(position == transferred(), "Invalid position.");
 
       long reportedWritten = 0L;
       long actuallyWritten = 0L;

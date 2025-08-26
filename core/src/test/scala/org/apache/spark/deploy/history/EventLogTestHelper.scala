@@ -108,6 +108,6 @@ object EventLogTestHelper {
   }
 
   def convertEvent(event: SparkListenerEvent): String = {
-    new JsonProtocol(new SparkConf()).sparkEventToJsonString(event)
+    JsonProtocol.sparkEventToJsonString(event)
   }
 }

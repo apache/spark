@@ -28,8 +28,8 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.broadcast
-import org.apache.spark.internal.{MDC, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.MessageWithContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -488,7 +488,7 @@ case class AdaptiveSparkPlanExec(
       maxFields: Int,
       printNodeId: Boolean,
       printOutputColumns: Boolean): Unit = {
-    append("   " * depth)
+    append("   ".repeat(depth))
     append(s"+- == $header ==\n")
     plan.generateTreeString(
       0,

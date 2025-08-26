@@ -25,8 +25,6 @@ import java.nio.file.{Files, Paths}
 import scala.collection.mutable.ArrayBuffer
 import scala.io.{Codec, Source}
 
-import com.google.common.io.ByteStreams
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FSDataInputStream, Path}
 import org.scalatest.BeforeAndAfterEach
@@ -111,7 +109,7 @@ class SparkSubmitSuite
   with TestPrematureExit {
 
   private val emptyIvySettings = File.createTempFile("ivy", ".xml")
-  FileUtils.write(emptyIvySettings, "<ivysettings />", StandardCharsets.UTF_8)
+  Files.writeString(emptyIvySettings.toPath, "<ivysettings />")
 
   private val submit = new SparkSubmit()
 
@@ -1189,14 +1187,14 @@ class SparkSubmitSuite
 
             val appArgs = new SparkSubmitArguments(args)
             val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
-            conf.get("spark.yarn.dist.jars").split(",").toSet should be
-            (Set(jar1.toURI.toString, jar2.toURI.toString))
-            conf.get("spark.yarn.dist.files").split(",").toSet should be
-            (Set(file1.toURI.toString, file2.toURI.toString))
-            conf.get("spark.yarn.dist.pyFiles").split(",").toSet should be
-            (Set(pyFile1.getAbsolutePath, pyFile2.getAbsolutePath))
-            conf.get("spark.yarn.dist.archives").split(",").toSet should be
-            (Set(archive1.toURI.toString, archive2.toURI.toString))
+            conf.get("spark.yarn.dist.jars").split(",").toSet should be(
+              Set(jar1.toURI.toString, jar2.toURI.toString))
+            conf.get("spark.yarn.dist.files").split(",").toSet should be(
+              Set(file1.toURI.toString, file2.toURI.toString))
+            conf.get("spark.yarn.dist.pyFiles").split(",").toSet should be(
+              Set(pyFile1.toURI.toString, pyFile2.toURI.toString))
+            conf.get("spark.yarn.dist.archives").split(",").toSet should be(
+              Set(archive1.toURI.toString, archive2.toURI.toString))
           }
         }
       }
@@ -1293,8 +1291,8 @@ class SparkSubmitSuite
 
     // The path and filename are preserved.
     assert(outputUri.getPath.endsWith(new Path(sourceUri).getName))
-    assert(FileUtils.readFileToString(new File(outputUri.getPath), StandardCharsets.UTF_8) ===
-      FileUtils.readFileToString(new File(sourceUri.getPath), StandardCharsets.UTF_8))
+    assert(Files.readString(new File(outputUri.getPath).toPath) ===
+      Files.readString(new File(sourceUri.getPath).toPath))
   }
 
   private def deleteTempOutputFile(outputPath: String): Unit = {
@@ -1336,7 +1334,7 @@ class SparkSubmitSuite
     val jarFile = File.createTempFile("test", ".jar")
     jarFile.deleteOnExit()
     val content = "hello, world"
-    FileUtils.write(jarFile, content, StandardCharsets.UTF_8)
+    Files.writeString(jarFile.toPath, content)
     val hadoopConf = new Configuration()
     val tmpDir = Files.createTempDirectory("tmp").toFile
     updateConfWithFakeS3Fs(hadoopConf)
@@ -1351,7 +1349,7 @@ class SparkSubmitSuite
     val jarFile = File.createTempFile("test", ".jar")
     jarFile.deleteOnExit()
     val content = "hello, world"
-    FileUtils.write(jarFile, content, StandardCharsets.UTF_8)
+    Files.writeString(jarFile.toPath, content)
     val hadoopConf = new Configuration()
     val tmpDir = Files.createTempDirectory("tmp").toFile
     updateConfWithFakeS3Fs(hadoopConf)
@@ -1818,7 +1816,7 @@ class SparkSubmitSuite
         "spark = SparkSession.builder.getOrCreate();" +
         "assert 'connect' in str(type(spark));" +
         "assert spark.range(1).first()[0] == 0"
-    FileUtils.write(pyFile, content, StandardCharsets.UTF_8)
+    Files.writeString(pyFile.toPath, content)
     val args = Seq(
       "--name", "testPyApp",
       "--remote", "local",
@@ -1881,8 +1879,7 @@ object SimpleApplicationTest {
 object UserClasspathFirstTest {
   def main(args: Array[String]): Unit = {
     val ccl = Thread.currentThread().getContextClassLoader()
-    val resource = ccl.getResourceAsStream("test.resource")
-    val bytes = ByteStreams.toByteArray(resource)
+    val bytes = ccl.getResourceAsStream("test.resource").readAllBytes()
     val contents = new String(bytes, 0, bytes.length, StandardCharsets.UTF_8)
     if (contents != "USER") {
       throw new SparkException("Should have read user resource, but instead read: " + contents)

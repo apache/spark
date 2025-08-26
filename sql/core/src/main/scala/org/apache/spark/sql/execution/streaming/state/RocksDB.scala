@@ -21,14 +21,13 @@ import java.io.File
 import java.util.Locale
 import java.util.Set
 import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
-import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
 import scala.jdk.CollectionConverters.ConcurrentMapHasAsScala
-import scala.ref.WeakReference
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.json4s.{Formats, NoTypeHints}
@@ -38,7 +37,7 @@ import org.rocksdb.CompressionType._
 import org.rocksdb.TickerType._
 
 import org.apache.spark.TaskContext
-import org.apache.spark.internal.{LogEntry, Logging, LogKeys, MDC}
+import org.apache.spark.internal.{LogEntry, Logging, LogKeys}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.{NextIterator, Utils}
@@ -75,7 +74,8 @@ class RocksDB(
     useColumnFamilies: Boolean = false,
     enableStateStoreCheckpointIds: Boolean = false,
     partitionId: Int = 0,
-    eventForwarder: Option[RocksDBEventForwarder] = None) extends Logging {
+    eventForwarder: Option[RocksDBEventForwarder] = None,
+    uniqueId: Option[String] = None) extends Logging {
 
   import RocksDB._
 
@@ -158,7 +158,7 @@ class RocksDB(
   private val byteArrayPair = new ByteArrayPair()
   private val commitLatencyMs = new mutable.HashMap[String, Long]()
 
-  private val acquireLock = new Object
+  private val loadMetrics = new mutable.HashMap[String, Long]()
 
   @volatile private var db: NativeRocksDB = _
   @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
@@ -185,6 +185,25 @@ class RocksDB(
   protected var sessionStateStoreCkptId: Option[String] = None
   protected[sql] val lineageManager: RocksDBLineageManager = new RocksDBLineageManager
 
+  // Memory tracking fields for unmanaged memory monitoring
+  // This allows the UnifiedMemoryManager to track RocksDB memory usage without
+  // directly accessing RocksDB from the polling thread, avoiding segmentation faults
+
+  // Timestamp of the last memory usage update in milliseconds.
+  // Used to enforce the update interval and prevent excessive memory queries.
+  private val lastMemoryUpdateTime = new AtomicLong(0L)
+
+  // Minimum interval between memory usage updates in milliseconds.
+  // This prevents performance impact from querying RocksDB memory too frequently.
+  private val memoryUpdateIntervalMs = conf.memoryUpdateIntervalMs
+
+  // Generate a unique ID if not provided to ensure proper memory tracking
+  private val instanceUniqueId = uniqueId.getOrElse(UUID.randomUUID().toString)
+
+  // Register with RocksDBMemoryManager
+  // Initial registration with zero memory usage
+  RocksDBMemoryManager.updateMemoryUsage(instanceUniqueId, 0L, conf.boundedMemoryUsage)
+
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
 
@@ -195,24 +214,14 @@ class RocksDB(
 
   // SPARK-46249 - Keep track of recorded metrics per version which can be used for querying later
   // Updates and access to recordedMetrics are protected by the DB instance lock
-  @GuardedBy("acquireLock")
   @volatile private var recordedMetrics: Option[RocksDBMetrics] = None
 
-  @GuardedBy("acquireLock")
-  @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
-
-  // This is accessed and updated only between load and commit
-  // which means it is implicitly guarded by acquireLock
-  @GuardedBy("acquireLock")
   private val colFamilyNameToInfoMap = new ConcurrentHashMap[String, ColumnFamilyInfo]()
 
-  @GuardedBy("acquireLock")
   private val colFamilyIdToNameMap = new ConcurrentHashMap[Short, String]()
 
-  @GuardedBy("acquireLock")
   private val maxColumnFamilyId: AtomicInteger = new AtomicInteger(-1)
 
-  @GuardedBy("acquireLock")
   private val shouldForceSnapshot: AtomicBoolean = new AtomicBoolean(false)
 
   private def getColumnFamilyInfo(cfName: String): ColumnFamilyInfo = {
@@ -300,11 +309,6 @@ class RocksDB(
     colFamilyNameToInfoMap.asScala.values.toSeq.count(_.isInternal == isInternal)
   }
 
-  // Mapping of local SST files to DFS files for file reuse.
-  // This mapping should only be updated using the Task thread - at version load and commit time.
-  // If same mapping instance is updated from different threads,
-  // it will result in undefined behavior (and most likely incorrect mapping state).
-  @GuardedBy("acquireLock")
   private val rocksDBFileMapping: RocksDBFileMapping = new RocksDBFileMapping()
 
   // We send snapshots that needs to be uploaded by the maintenance thread to this queue
@@ -583,9 +587,13 @@ class RocksDB(
       version: Long,
       stateStoreCkptId: Option[String] = None,
       readOnly: Boolean = false): RocksDB = {
+    val startTime = System.currentTimeMillis()
+
     assert(version >= 0)
-    acquire(LoadStore)
     recordedMetrics = None
+    // Reset the load metrics before loading
+    loadMetrics.clear()
+
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)} with stateStoreCkptId: ${
       MDC(LogKeys.UUID, stateStoreCkptId.getOrElse(""))}")
     if (stateStoreCkptId.isDefined || enableStateStoreCheckpointIds && version == 0) {
@@ -593,6 +601,15 @@ class RocksDB(
     } else {
       loadWithoutCheckpointId(version, readOnly)
     }
+
+    // Record the metrics after loading
+    val duration = System.currentTimeMillis() - startTime
+    loadMetrics ++= Map(
+      "load" -> duration
+    )
+    // Register with memory manager after successful load
+    updateMemoryUsageIfNeeded()
+
     this
   }
 
@@ -608,9 +625,12 @@ class RocksDB(
    *         Source.
    */
   def loadFromSnapshot(snapshotVersion: Long, endVersion: Long): RocksDB = {
+    val startTime = System.currentTimeMillis()
+
     assert(snapshotVersion >= 0 && endVersion >= snapshotVersion)
-    acquire(LoadStore)
     recordedMetrics = None
+    loadMetrics.clear()
+
     logInfo(
       log"Loading snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
       log"changelog files to version ${MDC(LogKeys.VERSION_NUM, endVersion)}.")
@@ -627,6 +647,12 @@ class RocksDB(
     }
     // Report this snapshot version to the coordinator
     reportSnapshotUploadToCoordinator(snapshotVersion)
+
+    // Record the metrics after loading
+    loadMetrics ++= Map(
+      "loadFromSnapshot" -> (System.currentTimeMillis() - startTime)
+    )
+
     this
   }
 
@@ -692,6 +718,8 @@ class RocksDB(
    * Replay change log from the loaded version to the target version.
    */
   private def replayChangelog(versionsAndUniqueIds: Array[(Long, Option[String])]): Unit = {
+    val startTime = System.currentTimeMillis()
+
     assert(!versionsAndUniqueIds.isEmpty && versionsAndUniqueIds.head._1 == loadedVersion + 1,
       s"Replay changelog should start from one version after loadedVersion: $loadedVersion," +
         s" but it is not."
@@ -713,13 +741,13 @@ class RocksDB(
           changelogReader.foreach { case (recordType, key, value) =>
             recordType match {
               case RecordType.PUT_RECORD =>
-                put(key, value, includesPrefix = true)
+                put(key, value, includesPrefix = true, deriveCfName = true)
 
               case RecordType.DELETE_RECORD =>
-                remove(key, includesPrefix = true)
+                remove(key, includesPrefix = true, deriveCfName = true)
 
               case RecordType.MERGE_RECORD =>
-                merge(key, value, includesPrefix = true)
+                merge(key, value, includesPrefix = true, deriveCfName = true)
             }
           }
         } else {
@@ -740,6 +768,12 @@ class RocksDB(
         if (changelogReader != null) changelogReader.closeIfNeeded()
       }
     }
+
+    val duration = System.currentTimeMillis() - startTime
+    loadMetrics ++= Map(
+      "replayChangelog" -> Math.max(duration, 1L), // avoid flaky tests
+      "numReplayChangeLogFiles" -> versionsAndUniqueIds.length
+    )
   }
 
   /**
@@ -775,6 +809,7 @@ class RocksDB(
   def get(
       key: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Array[Byte] = {
+    updateMemoryUsageIfNeeded()
     val keyWithPrefix = if (useColumnFamilies) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
@@ -841,14 +876,23 @@ class RocksDB(
       key: Array[Byte],
       value: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
-      includesPrefix: Boolean = false): Unit = {
+      includesPrefix: Boolean = false,
+      deriveCfName: Boolean = false): Unit = {
+    updateMemoryUsageIfNeeded()
     val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
       key
     }
 
-    handleMetricsUpdate(keyWithPrefix, cfName, isPutOrMerge = true)
+    val columnFamilyName = if (deriveCfName && useColumnFamilies) {
+      val (_, cfName) = decodeStateRowWithPrefix(keyWithPrefix)
+      cfName
+    } else {
+      cfName
+    }
+
+    handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
     db.put(writeOptions, keyWithPrefix, value)
     changelogWriter.foreach(_.put(keyWithPrefix, value))
   }
@@ -868,14 +912,23 @@ class RocksDB(
       key: Array[Byte],
       value: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
-      includesPrefix: Boolean = false): Unit = {
+      includesPrefix: Boolean = false,
+      deriveCfName: Boolean = false): Unit = {
+    updateMemoryUsageIfNeeded()
     val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
       key
     }
 
-    handleMetricsUpdate(keyWithPrefix, cfName, isPutOrMerge = true)
+    val columnFamilyName = if (deriveCfName && useColumnFamilies) {
+      val (_, cfName) = decodeStateRowWithPrefix(keyWithPrefix)
+      cfName
+    } else {
+      cfName
+    }
+
+    handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
     db.merge(writeOptions, keyWithPrefix, value)
     changelogWriter.foreach(_.merge(keyWithPrefix, value))
   }
@@ -887,14 +940,23 @@ class RocksDB(
   def remove(
       key: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
-      includesPrefix: Boolean = false): Unit = {
+      includesPrefix: Boolean = false,
+      deriveCfName: Boolean = false): Unit = {
+    updateMemoryUsageIfNeeded()
     val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
       key
     }
 
-    handleMetricsUpdate(keyWithPrefix, cfName, isPutOrMerge = false)
+    val columnFamilyName = if (deriveCfName && useColumnFamilies) {
+      val (_, cfName) = decodeStateRowWithPrefix(keyWithPrefix)
+      cfName
+    } else {
+      cfName
+    }
+
+    handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = false)
     db.delete(writeOptions, keyWithPrefix)
     changelogWriter.foreach(_.delete(keyWithPrefix))
   }
@@ -902,7 +964,8 @@ class RocksDB(
   /**
    * Get an iterator of all committed and uncommitted key-value pairs.
    */
-  def iterator(): Iterator[ByteArrayPair] = {
+  def iterator(): NextIterator[ByteArrayPair] = {
+    updateMemoryUsageIfNeeded()
     val iter = db.newIterator()
     logInfo(log"Getting iterator from version ${MDC(LogKeys.LOADED_VERSION, loadedVersion)}")
     iter.seekToFirst()
@@ -938,7 +1001,8 @@ class RocksDB(
   /**
    * Get an iterator of all committed and uncommitted key-value pairs for the given column family.
    */
-  def iterator(cfName: String): Iterator[ByteArrayPair] = {
+  def iterator(cfName: String): NextIterator[ByteArrayPair] = {
+    updateMemoryUsageIfNeeded()
     if (!useColumnFamilies) {
       iterator()
     } else {
@@ -987,7 +1051,8 @@ class RocksDB(
 
   def prefixScan(
       prefix: Array[Byte],
-      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[ByteArrayPair] = {
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): NextIterator[ByteArrayPair] = {
+    updateMemoryUsageIfNeeded()
     val iter = db.newIterator()
     val updatedPrefix = if (useColumnFamilies) {
       encodeStateRowWithPrefix(prefix, cfName)
@@ -1025,6 +1090,8 @@ class RocksDB(
     }
   }
 
+  def release(): Unit = {}
+
   /**
    * Commit all the updates made as a version to DFS. The steps it needs to do to commits are:
    * - Flush all changes to disk
@@ -1032,6 +1099,8 @@ class RocksDB(
    * - Sync the checkpoint dir files to DFS
    */
   def commit(): (Long, StateStoreCheckpointInfo) = {
+    commitLatencyMs.clear()
+    updateMemoryUsageIfNeeded()
     val newVersion = loadedVersion + 1
     try {
       logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
@@ -1043,13 +1112,14 @@ class RocksDB(
         commitLatencyMs ++= snapshotLatency
       }
 
+      var isUploaded = false
+
       logInfo(log"Syncing checkpoint for ${MDC(LogKeys.VERSION_NUM, newVersion)} to DFS")
       val fileSyncTimeMs = timeTakenMs {
         if (enableChangelogCheckpointing) {
           // If we have changed the columnFamilyId mapping, we have set a new
           // snapshot and need to upload this to the DFS even if changelog checkpointing
           // is enabled.
-          var isUploaded = false
           if (shouldForceSnapshot.get()) {
             assert(snapshot.isDefined)
             uploadSnapshot(snapshot.get)
@@ -1060,7 +1130,14 @@ class RocksDB(
           // ensure that changelog files are always written
           try {
             assert(changelogWriter.isDefined)
-            changelogWriter.foreach(_.commit())
+            val changeLogWriterCommitTimeMs = timeTakenMs {
+              changelogWriter.foreach(_.commit())
+            }
+            // Record the commit time for the changelog writer
+            commitLatencyMs ++= Map(
+              "changeLogWriterCommit" -> changeLogWriterCommitTimeMs
+            )
+
             if (!isUploaded) {
               snapshot.foreach(snapshotsToUploadQueue.offer)
             }
@@ -1071,7 +1148,17 @@ class RocksDB(
           assert(changelogWriter.isEmpty)
           assert(snapshot.isDefined)
           uploadSnapshot(snapshot.get)
+          isUploaded = true
         }
+      }
+
+      if (isUploaded) {
+        // If we have uploaded the snapshot, the fileManagerMetrics will be cleared and updated
+        // in uploadSnapshot. If there are new metrics needed to be added specific to this commit,
+        // add them here to not accidentally use old fileManagerMetrics from the maintenance threads
+        commitLatencyMs ++= Map(
+          "saveZipFiles" -> fileManagerMetrics.saveZipFilesTimeMs.getOrElse(0L)
+        )
       }
 
       if (enableStateStoreCheckpointIds) {
@@ -1105,10 +1192,6 @@ class RocksDB(
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded version
         throw t
-    } finally {
-      // reset resources as either 1) we already pushed the changes and it has been committed or
-      // 2) commit has failed and the current version is "invalidated".
-      release(LoadStore)
     }
   }
 
@@ -1192,23 +1275,18 @@ class RocksDB(
    * Drop uncommitted changes, and roll back to previous version.
    */
   def rollback(): Unit = {
-    acquire(RollbackStore)
-    try {
-      numKeysOnWritingVersion = numKeysOnLoadedVersion
-      numInternalKeysOnWritingVersion = numInternalKeysOnLoadedVersion
-      loadedVersion = -1L
-      lastCommitBasedStateStoreCkptId = None
-      lastCommittedStateStoreCkptId = None
-      loadedStateStoreCkptId = None
-      sessionStateStoreCkptId = None
-      lineageManager.clear()
-      changelogWriter.foreach(_.abort())
-      // Make sure changelogWriter gets recreated next time.
-      changelogWriter = None
-      logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
-    } finally {
-      release(RollbackStore)
-    }
+    numKeysOnWritingVersion = numKeysOnLoadedVersion
+    numInternalKeysOnWritingVersion = numInternalKeysOnLoadedVersion
+    loadedVersion = -1L
+    lastCommitBasedStateStoreCkptId = None
+    lastCommittedStateStoreCkptId = None
+    loadedStateStoreCkptId = None
+    sessionStateStoreCkptId = None
+    lineageManager.clear()
+    changelogWriter.foreach(_.abort())
+    // Make sure changelogWriter gets recreated next time.
+    changelogWriter = None
+    logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
   }
 
   def doMaintenance(): Unit = {
@@ -1240,7 +1318,6 @@ class RocksDB(
   /** Release all resources */
   def close(): Unit = {
     // Acquire DB instance lock and release at the end to allow for synchronized access
-    acquire(CloseStore)
     try {
       closeDB()
 
@@ -1256,14 +1333,21 @@ class RocksDB(
         snapshot = snapshotsToUploadQueue.poll()
       }
 
+      // Unregister from RocksDBMemoryManager
+      try {
+        RocksDBMemoryManager.unregisterInstance(instanceUniqueId)
+      } catch {
+        case NonFatal(e) =>
+          logWarning(log"Failed to unregister from RocksDBMemoryManager " +
+            log"${MDC(LogKeys.EXCEPTION, e)}")
+      }
+
       silentDeleteRecursively(localRootDir, "closing RocksDB")
       // Clear internal maps to reset the state
       clearColFamilyMaps()
     } catch {
       case e: Exception =>
         logWarning("Error closing RocksDB", e)
-    } finally {
-      release(CloseStore)
     }
   }
 
@@ -1290,9 +1374,6 @@ class RocksDB(
   private def metrics: RocksDBMetrics = {
     import HistogramType._
     val totalSSTFilesBytes = getDBProperty("rocksdb.total-sst-files-size")
-    val readerMemUsage = getDBProperty("rocksdb.estimate-table-readers-mem")
-    val memTableMemUsage = getDBProperty("rocksdb.size-all-mem-tables")
-    val blockCacheUsage = getDBProperty("rocksdb.block-cache-usage")
     val pinnedBlocksMemUsage = getDBProperty("rocksdb.block-cache-pinned-usage")
     val nativeOpsHistograms = Seq(
       "get" -> DB_GET,
@@ -1326,14 +1407,8 @@ class RocksDB(
       nativeStats.getTickerCount(typ)
     }
 
-    // if bounded memory usage is enabled, we share the block cache across all state providers
-    // running on the same node and account the usage to this single cache. In this case, its not
-    // possible to provide partition level or query level memory usage.
-    val memoryUsage = if (conf.boundedMemoryUsage) {
-      0L
-    } else {
-      readerMemUsage + memTableMemUsage + blockCacheUsage
-    }
+    // Use RocksDBMemoryManager to calculate the memory usage accounting
+    val memoryUsage = RocksDBMemoryManager.getInstanceMemoryUsage(instanceUniqueId, getMemoryUsage)
 
     RocksDBMetrics(
       numKeysOnLoadedVersion,
@@ -1343,7 +1418,9 @@ class RocksDB(
       pinnedBlocksMemUsage,
       totalSSTFilesBytes,
       nativeOpsLatencyMicros,
-      commitLatencyMs,
+      // Ensure that the maps are cloned to avoid sharing these Maps
+      commitLatencyMs.clone(),
+      loadMetrics.clone(),
       bytesCopied = fileManagerMetrics.bytesCopied,
       filesCopied = fileManagerMetrics.filesCopied,
       filesReused = fileManagerMetrics.filesReused,
@@ -1359,99 +1436,66 @@ class RocksDB(
    */
   def metricsOpt: Option[RocksDBMetrics] = {
     var rocksDBMetricsOpt: Option[RocksDBMetrics] = None
-    acquire(ReportStoreMetrics)
     try {
       rocksDBMetricsOpt = recordedMetrics
     } catch {
       case ex: Exception =>
         logInfo(log"Failed to acquire metrics with exception=${MDC(LogKeys.ERROR, ex)}")
-    } finally {
-      release(ReportStoreMetrics)
     }
     rocksDBMetricsOpt
   }
 
   /**
-   * Function to acquire RocksDB instance lock that allows for synchronized access to the state
-   * store instance
-   *
-   * @param opType - operation type requesting the lock
+   * Refresh the recorded metrics with the latest metrics.
    */
-  private def acquire(opType: RocksDBOpType): Unit = acquireLock.synchronized {
-    val newAcquiredThreadInfo = AcquiredThreadInfo()
-    val waitStartTime = System.nanoTime()
-    def timeWaitedMs = {
-      val elapsedNanos = System.nanoTime() - waitStartTime
-      TimeUnit.MILLISECONDS.convert(elapsedNanos, TimeUnit.NANOSECONDS)
-    }
-    def isAcquiredByDifferentThread = acquiredThreadInfo != null &&
-      acquiredThreadInfo.threadRef.get.isDefined &&
-      newAcquiredThreadInfo.threadRef.get.get.getId != acquiredThreadInfo.threadRef.get.get.getId
-
-    while (isAcquiredByDifferentThread && timeWaitedMs < conf.lockAcquireTimeoutMs) {
-      acquireLock.wait(10)
-    }
-    if (isAcquiredByDifferentThread) {
-      val stackTraceOutput = acquiredThreadInfo.threadRef.get.get.getStackTrace.mkString("\n")
-      throw QueryExecutionErrors.unreleasedThreadError(loggingId, opType.toString,
-        newAcquiredThreadInfo.toString(), acquiredThreadInfo.toString(), timeWaitedMs,
-        stackTraceOutput)
-    } else {
-      acquiredThreadInfo = newAcquiredThreadInfo
-      // Add a listener to always release the lock when the task (if active) completes
-      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] {
-        _ => this.release(StoreTaskCompletionListener, Some(newAcquiredThreadInfo))
-      })
-      logInfo(log"RocksDB instance was acquired by " +
-        log"ownerThread=${MDC(LogKeys.THREAD, acquiredThreadInfo)} " +
-        log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
-    }
-  }
-
-  /**
-   * Function to release RocksDB instance lock that allows for synchronized access to the state
-   * store instance. Optionally provide a thread to check against, and release only if provided
-   * thread is the one that acquired the lock.
-   *
-   * @param opType - operation type releasing the lock
-   * @param releaseForThreadOpt - optional thread to check against acquired thread
-   */
-  private def release(
-      opType: RocksDBOpType,
-      releaseForThreadOpt: Option[AcquiredThreadInfo] = None): Unit = acquireLock.synchronized {
-    if (acquiredThreadInfo != null) {
-      val release = releaseForThreadOpt match {
-        case Some(releaseForThread) if releaseForThread.threadRef.get.isEmpty =>
-          logInfo(log"Thread reference is empty when attempting to release for " +
-            log"opType=${MDC(LogKeys.OP_TYPE, opType.toString)}, ignoring release. " +
-            log"Lock is held by ownerThread=${MDC(LogKeys.THREAD, acquiredThreadInfo)}")
-          false
-        // NOTE: we compare the entire acquiredThreadInfo object to ensure that we are
-        // releasing not only for the right thread but the right task as well. This is
-        // inconsistent with the logic for acquire which uses only the thread ID, consider
-        // updating this in future.
-        case Some(releaseForThread) if acquiredThreadInfo != releaseForThread =>
-          logInfo(log"Thread info for " +
-            log"releaseThread=${MDC(LogKeys.THREAD, releaseForThreadOpt.get)} " +
-            log"does not match the acquired thread when attempting to " +
-            log"release for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}, ignoring release. " +
-            log"Lock is held by ownerThread=${MDC(LogKeys.THREAD, acquiredThreadInfo)}")
-          false
-        case _ => true
-      }
-
-      if (release) {
-        logInfo(log"RocksDB instance was released by " +
-          log"releaseThread=${MDC(LogKeys.THREAD, AcquiredThreadInfo())} " +
-          log"with ownerThread=${MDC(LogKeys.THREAD, acquiredThreadInfo)} " +
-          log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
-        acquiredThreadInfo = null
-        acquireLock.notifyAll()
-      }
-    }
+  private[state] def refreshRecordedMetricsForTest(): Unit = {
+    recordedMetrics = Some(metrics)
   }
 
   private def getDBProperty(property: String): Long = db.getProperty(property).toLong
+
+  /**
+   * Returns the current memory usage of this RocksDB instance in bytes.
+   * WARNING: This method should only be called from the task thread when
+   * RocksDB is in a safe state.
+   *
+   * This includes memory from all major RocksDB components:
+   * - Table readers (indexes and filters in memory)
+   * - Memtables (write buffers)
+   * - Block cache (cached data blocks)
+   * - Block cache pinned usage (blocks pinned in cache)
+   *
+   * @return Total memory usage in bytes across all tracked components
+   */
+  def getMemoryUsage: Long = {
+    require(db != null && !db.isClosed, "RocksDB must be open to get memory usage")
+    RocksDB.mainMemorySources.map(getDBProperty).sum
+  }
+
+  /**
+   * Updates the cached memory usage if enough time has passed.
+   * This is called from task thread operations, so it's already thread-safe.
+   */
+  def updateMemoryUsageIfNeeded(): Unit = {
+
+    val currentTime = System.currentTimeMillis()
+    val timeSinceLastUpdate = currentTime - lastMemoryUpdateTime.get()
+
+    if (timeSinceLastUpdate >= memoryUpdateIntervalMs && db != null && !db.isClosed) {
+      try {
+        val usage = getMemoryUsage
+        lastMemoryUpdateTime.set(currentTime)
+        // Report usage to RocksDBMemoryManager
+        RocksDBMemoryManager.updateMemoryUsage(
+          instanceUniqueId,
+          usage,
+          conf.boundedMemoryUsage)
+      } catch {
+        case NonFatal(e) =>
+          logDebug(s"Failed to update RocksDB memory usage: ${e.getMessage}")
+      }
+    }
+  }
 
   private def openDB(): Unit = {
     assert(db == null)
@@ -1472,11 +1516,6 @@ class RocksDB(
       }
       db = null
     }
-  }
-
-  private[state] def getAcquiredThreadInfo(): Option[AcquiredThreadInfo] =
-      acquireLock.synchronized {
-    Option(acquiredThreadInfo).map(_.copy())
   }
 
   /** Upload the snapshot to DFS and remove it from snapshots pending */
@@ -1577,6 +1616,12 @@ class RocksDB(
 }
 
 object RocksDB extends Logging {
+
+  val mainMemorySources: Seq[String] = Seq(
+    "rocksdb.estimate-table-readers-mem",
+    "rocksdb.size-all-mem-tables",
+    "rocksdb.block-cache-usage")
+
   case class RocksDBSnapshot(
       checkpointDir: File,
       version: Long,
@@ -1818,6 +1863,7 @@ case class RocksDBConf(
     totalMemoryUsageMB: Long,
     writeBufferCacheRatio: Double,
     highPriorityPoolRatio: Double,
+    memoryUpdateIntervalMs: Long,
     compressionCodec: String,
     allowFAllocate: Boolean,
     compression: String,
@@ -1903,6 +1949,12 @@ object RocksDBConf {
   val HIGH_PRIORITY_POOL_RATIO_CONF_KEY = "highPriorityPoolRatio"
   private val HIGH_PRIORITY_POOL_RATIO_CONF = SQLConfEntry(HIGH_PRIORITY_POOL_RATIO_CONF_KEY,
     "0.1")
+
+  // Memory usage update interval for unmanaged memory tracking
+  val MEMORY_UPDATE_INTERVAL_MS_CONF_KEY = "memoryUpdateIntervalMs"
+  private val MEMORY_UPDATE_INTERVAL_MS_CONF = SQLConfEntry(MEMORY_UPDATE_INTERVAL_MS_CONF_KEY,
+    "1000")
+
 
   // Allow files to be pre-allocated on disk using fallocate
   // Disabling may slow writes, but can solve an issue where
@@ -2002,6 +2054,7 @@ object RocksDBConf {
       getLongConf(MAX_MEMORY_USAGE_MB_CONF),
       getRatioConf(WRITE_BUFFER_CACHE_RATIO_CONF),
       getRatioConf(HIGH_PRIORITY_POOL_RATIO_CONF),
+      getPositiveLongConf(MEMORY_UPDATE_INTERVAL_MS_CONF),
       storeConf.compressionCodec,
       getBooleanConf(ALLOW_FALLOCATE_CONF),
       getStringConf(COMPRESSION_CONF),
@@ -2021,6 +2074,7 @@ case class RocksDBMetrics(
     totalSSTFilesBytes: Long,
     nativeOpsHistograms: Map[String, RocksDBNativeHistogram],
     lastCommitLatencyMs: Map[String, Long],
+    loadMetrics: Map[String, Long],
     filesCopied: Long,
     bytesCopied: Long,
     filesReused: Long,
@@ -2050,21 +2104,6 @@ object RocksDBNativeHistogram {
       nativeHist.getPercentile95,
       nativeHist.getPercentile99,
       nativeHist.getCount)
-  }
-}
-
-case class AcquiredThreadInfo(
-    threadRef: WeakReference[Thread] = new WeakReference[Thread](Thread.currentThread()),
-    tc: TaskContext = TaskContext.get()) {
-  override def toString(): String = {
-    val taskStr = if (tc != null) {
-      val taskDetails =
-        s"partition ${tc.partitionId()}.${tc.attemptNumber()} in stage " +
-          s"${tc.stageId()}.${tc.stageAttemptNumber()}, TID ${tc.taskAttemptId()}"
-      s", task: $taskDetails"
-    } else ""
-
-    s"[ThreadId: ${threadRef.get.map(_.getId)}$taskStr]"
   }
 }
 

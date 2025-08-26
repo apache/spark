@@ -29,18 +29,18 @@ class StreamingTestsForeachBatchMixin:
         q = None
 
         def collectBatch(batch_df, batch_id):
-            batch_df.write.format("parquet").saveAsTable("test_table")
+            batch_df.write.format("parquet").saveAsTable("test_table1")
 
         try:
             df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
             q = df.writeStream.foreachBatch(collectBatch).start()
             q.processAllAvailable()
-            collected = self.spark.sql("select * from test_table").collect()
+            collected = self.spark.sql("select * from test_table1").collect()
             self.assertTrue(len(collected), 2)
         finally:
             if q:
                 q.stop()
-            self.spark.sql("DROP TABLE IF EXISTS test_table")
+            self.spark.sql("DROP TABLE IF EXISTS test_table1")
 
     def test_streaming_foreach_batch_tempview(self):
         q = None
@@ -52,18 +52,18 @@ class StreamingTestsForeachBatchMixin:
             # streaming query
             assert len(batch_df.sparkSession.sql("SELECT * FROM updates").collect()) == 2
             # Write a table to verify on the repl/client side.
-            batch_df.write.format("parquet").saveAsTable("test_table")
+            batch_df.write.format("parquet").saveAsTable("test_table2")
 
         try:
             df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
             q = df.writeStream.foreachBatch(collectBatch).start()
             q.processAllAvailable()
-            collected = self.spark.sql("SELECT * FROM test_table").collect()
+            collected = self.spark.sql("SELECT * FROM test_table2").collect()
             self.assertTrue(len(collected[0]), 2)
         finally:
             if q:
                 q.stop()
-            self.spark.sql("DROP TABLE IF EXISTS test_table")
+            self.spark.sql("DROP TABLE IF EXISTS test_table2")
 
     def test_streaming_foreach_batch_propagates_python_errors(self):
         from pyspark.errors import StreamingQueryException
@@ -208,22 +208,22 @@ class StreamingTestsForeachBatchMixin:
         from pyspark.sql import functions as sf
 
         table_name = "testTable_foreach_batch_external_column"
+        with self.table(table_name):
+            # Define 'col' outside the `func` below, so it'd have to be serialized.
+            col = sf.col("value")
 
-        # Define 'col' outside the `func` below, so it'd have to be serialized.
-        col = sf.col("value")
+            def func(df: DataFrame, batch_id: int):
+                result_df = df.select(col.alias("result"))
+                result_df.write.mode("append").saveAsTable(table_name)
 
-        def func(df: DataFrame, batch_id: int):
-            result_df = df.select(col.alias("result"))
-            result_df.write.mode("append").saveAsTable(table_name)
+            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+            q = df.writeStream.foreachBatch(func).start()
+            q.processAllAvailable()
+            q.stop()
 
-        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
-        q = df.writeStream.foreachBatch(func).start()
-        q.processAllAvailable()
-        q.stop()
-
-        collected = self.spark.sql("select * from " + table_name).collect()
-        results = [row["result"] for row in collected]
-        self.assertEqual(sorted(results), ["hello", "this"])
+            collected = self.spark.sql("select * from " + table_name).collect()
+            results = [row["result"] for row in collected]
+            self.assertEqual(sorted(results), ["hello", "this"])
 
 
 class StreamingTestsForeachBatch(StreamingTestsForeachBatchMixin, ReusedSQLTestCase):

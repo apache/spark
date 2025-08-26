@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.{StateVariableType, TransformWithStateVariableInfo}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{StateVariableType, TransformWithStateVariableInfo}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.streaming.state.RecordType.{getRecordTypeAsString, RecordType}
 import org.apache.spark.sql.types.{NullType, StructField, StructType}
@@ -124,6 +124,7 @@ abstract class StatePartitionReaderBase(
         stateStoreColFamilySchema.keyStateEncoderSpec.get,
         useMultipleValuesPerKey = useMultipleValuesPerKey,
         isInternal = isInternal)
+      store.abort()
     }
     provider
   }
@@ -204,7 +205,7 @@ class StatePartitionReader(
   }
 
   override def close(): Unit = {
-    store.abort()
+    store.release()
     super.close()
   }
 }
