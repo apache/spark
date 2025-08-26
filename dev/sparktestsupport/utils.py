@@ -137,8 +137,8 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
      'pyspark-core', 'pyspark-ml', 'pyspark-ml-connect', 'pyspark-mllib', 'pyspark-pandas',
      'pyspark-pandas-connect-part0', 'pyspark-pandas-connect-part1', 'pyspark-pandas-connect-part2',
      'pyspark-pandas-connect-part3', 'pyspark-pandas-slow', 'pyspark-pipelines', 'pyspark-resource',
-     'pyspark-sql', 'pyspark-streaming', 'pyspark-testing', 'pyspark-types', 'repl', 'root', 'sparkr', 'sql',
-     'sql-kafka-0-10', 'streaming', 'streaming-kafka-0-10', 'streaming-kinesis-asl']
+     'pyspark-sql', 'pyspark-streaming', 'pyspark-testing', 'pyspark-types', 'repl', 'root', 'sparkr',
+     'sql', 'sql-kafka-0-10', 'streaming', 'streaming-kafka-0-10', 'streaming-kinesis-asl']
     """
     modules_to_test = set()
     for module in changed_modules:
