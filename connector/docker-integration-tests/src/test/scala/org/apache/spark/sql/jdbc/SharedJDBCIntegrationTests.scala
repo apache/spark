@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row}
 
 trait SharedJDBCIntegrationTests extends QueryTest {
   protected def jdbcUrl: String
@@ -30,5 +30,26 @@ trait SharedJDBCIntegrationTests extends QueryTest {
         .option("query", "THIS IS NOT VALID SQL").load()
     }
     assert(e.getCondition.startsWith("JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR"))
+  }
+
+  test("SPARK-53386: Parameter `query` should work when ending with semicolon") {
+    // Create table using Databricks SQL
+    sql(s"""
+      CREATE OR REPLACE TEMPORARY VIEW tbl_semicolon
+      USING org.apache.spark.sql.jdbc
+      OPTIONS (
+        url '$jdbcUrl',
+        query 'SELECT 1 as id, ''test_data'' as name'
+      )
+    """)
+
+    // Test that queries with semicolons work properly
+    val dfWithSemicolon = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "SELECT 1 as id, 'test_data' as name;")
+      .load()
+
+    val expectedResult = Seq(Row(1, "test_data"))
+    checkAnswer(dfWithSemicolon, expectedResult)
   }
 }
