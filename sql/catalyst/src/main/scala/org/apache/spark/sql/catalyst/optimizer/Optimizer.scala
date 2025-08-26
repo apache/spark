@@ -1169,9 +1169,12 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
 
   def apply(plan: LogicalPlan, alwaysInline: Boolean): LogicalPlan = {
     plan.transformUpWithPruning(_.containsPattern(PROJECT), ruleId) {
-      case p1 @ Project(_, p2: Project)
-          if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline) =>
-        p2.copy(projectList = buildCleanedProjectList(p1.projectList, p2.projectList))
+      case p1 @ Project(_, p2: Project) =>
+        mergeProjectExpressions(p1.projectList, p2.projectList, alwaysInline) match {
+          case (Seq(), merged) => p2.copy(projectList = merged)
+          case (newUpper, newLower) =>
+            p1.copy(projectList = newUpper, child = p2.copy(projectList = newLower))
+        }
       case p @ Project(_, agg: Aggregate)
           if canCollapseExpressions(p.projectList, agg.aggregateExpressions, alwaysInline) &&
              canCollapseAggregate(p, agg) =>
@@ -1191,6 +1194,67 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
     }
   }
 
+  private def cheapToInlineProducer(
+      producer: NamedExpression,
+      relatedConsumers: Iterable[Expression]) = trimAliases(producer) match {
+    // These collection creation functions are not cheap as a producer, but we have
+    // optimizer rules that can optimize them out if they are only consumed by
+    // ExtractValue (See SimplifyExtractValueOps), so we need to allow to inline them to
+    // avoid perf regression. As an example:
+    //   Project(s.a, s.b, Project(create_struct(a, b, c) as s, child))
+    // We should collapse these two projects and eventually get Project(a, b, child)
+    case e @ (_: CreateNamedStruct | _: UpdateFields | _: CreateMap | _: CreateArray) =>
+      // We can inline the collection creation producer if at most one of its access
+      // is non-cheap. Cheap access here means the access can be optimized by
+      // `SimplifyExtractValueOps` and become a cheap expression. For example,
+      // `create_struct(a, b, c).a` is a cheap access as it can be optimized to `a`.
+      // For a query:
+      //   Project(s.a, s, Project(create_struct(a, b, c) as s, child))
+      // We should collapse these two projects and eventually get
+      //   Project(a, create_struct(a, b, c) as s, child)
+      var nonCheapAccessSeen = false
+      def nonCheapAccessVisitor(): Boolean = {
+        // Returns true for all calls after the first.
+        try {
+          nonCheapAccessSeen
+        } finally {
+          nonCheapAccessSeen = true
+        }
+      }
+
+      !relatedConsumers
+        .exists(findNonCheapAccesses(_, producer.toAttribute, e, nonCheapAccessVisitor))
+
+    case other => isCheap(other)
+  }
+
+  private def mergeProjectExpressions(
+      consumers: Seq[NamedExpression],
+      producers: Seq[NamedExpression],
+      alwaysInline: Boolean): (Seq[NamedExpression], Seq[NamedExpression]) = {
+    lazy val producerAttributes = AttributeSet(producers.collect { case a: Alias => a.toAttribute })
+    lazy val producerReferences = AttributeMap(consumers
+      .flatMap(e => collectReferences(e).filter(producerAttributes.contains).map(_ -> e))
+      .groupMap(_._1)(_._2)
+      .transform((_, v) => (v.size, ExpressionSet(v))))
+
+    val (substitute, keep) = producers.partition {
+      case a: Alias if producerReferences.contains(a.toAttribute) =>
+        val (count, relatedConsumers) = producerReferences(a.toAttribute)
+        a.deterministic &&
+          (alwaysInline || count == 1 || cheapToInlineProducer(a, relatedConsumers))
+
+      case _ => true
+    }
+
+    val substituted = buildCleanedProjectList(consumers, substitute)
+    if (keep.isEmpty) {
+      (Seq.empty, substituted)
+    } else {
+      (substituted, keep ++ AttributeSet(substitute.flatMap(_.references)))
+    }
+  }
+
   /**
    * Check if we can collapse expressions safely.
    */
@@ -1206,7 +1270,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
    */
   def canCollapseExpressions(
       consumers: Seq[Expression],
-      producerMap: Map[Attribute, Expression],
+      producerMap: Map[Attribute, NamedExpression],
       alwaysInline: Boolean = false): Boolean = {
     // We can only collapse expressions if all input expressions meet the following criteria:
     // - The input is deterministic.
@@ -1221,38 +1285,8 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
           val producer = producerMap.getOrElse(reference, reference)
           val relatedConsumers = consumers.filter(_.references.contains(reference))
 
-          def cheapToInlineProducer: Boolean = trimAliases(producer) match {
-            // These collection creation functions are not cheap as a producer, but we have
-            // optimizer rules that can optimize them out if they are only consumed by
-            // ExtractValue (See SimplifyExtractValueOps), so we need to allow to inline them to
-            // avoid perf regression. As an example:
-            //   Project(s.a, s.b, Project(create_struct(a, b, c) as s, child))
-            // We should collapse these two projects and eventually get Project(a, b, child)
-            case e @ (_: CreateNamedStruct | _: UpdateFields | _: CreateMap | _: CreateArray) =>
-              // We can inline the collection creation producer if at most one of its access
-              // is non-cheap. Cheap access here means the access can be optimized by
-              // `SimplifyExtractValueOps` and become a cheap expression. For example,
-              // `create_struct(a, b, c).a` is a cheap access as it can be optimized to `a`.
-              // For a query:
-              //   Project(s.a, s, Project(create_struct(a, b, c) as s, child))
-              // We should collapse these two projects and eventually get
-              //   Project(a, create_struct(a, b, c) as s, child)
-              var nonCheapAccessSeen = false
-              def nonCheapAccessVisitor(): Boolean = {
-                // Returns true for all calls after the first.
-                try {
-                  nonCheapAccessSeen
-                } finally {
-                  nonCheapAccessSeen = true
-                }
-              }
-
-              !relatedConsumers.exists(findNonCheapAccesses(_, reference, e, nonCheapAccessVisitor))
-
-            case other => isCheap(other)
-          }
-
-          producer.deterministic && (count == 1 || alwaysInline || cheapToInlineProducer)
+          producer.deterministic &&
+            (count == 1 || alwaysInline || cheapToInlineProducer(producer, relatedConsumers))
       }
   }
 

@@ -298,4 +298,20 @@ class CollapseProjectSuite extends PlanTest {
       comparePlans(optimized, expected)
     }
   }
+
+  test("SPARK-53399: Merge expressions") {
+    val query = testRelation
+      .select($"a" + 1 as "a_plus_1", $"b" + 1 as "b_plus_1")
+      .select($"a_plus_1" + $"a_plus_1", $"b_plus_1")
+      .analyze
+
+    val optimized = Optimize.execute(query)
+
+    val expected = testRelation
+      .select($"a" + 1 as "a_plus_1", $"b")
+      .select($"a_plus_1" + $"a_plus_1", $"b" + 1 as "b_plus_1")
+      .analyze
+
+    comparePlans(optimized, expected)
+  }
 }
