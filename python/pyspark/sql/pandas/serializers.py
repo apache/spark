@@ -1520,7 +1520,6 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         Please refer the doc of inner function `generate_data_batches` for more details how
         this function works in overall.
         """
-        import pyarrow as pa
         from pyspark.sql.streaming.stateful_processor_util import (
             TransformWithStateInPandasFuncMode,
         )
@@ -1658,7 +1657,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
             def groupby_pair(gen1, gen2, keyfunc):
                 """
                 Iterate over two sorted generators in parallel, grouped by the same key.
-                Yields (key, group1, group2), where groups are iterators (empty if no items for the key).
+                Yields (key, group1, group2), where groups are iterators.
                 """
 
                 def safe_next(group_iter):
