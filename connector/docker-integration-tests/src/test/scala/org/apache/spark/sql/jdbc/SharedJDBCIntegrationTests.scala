@@ -35,10 +35,10 @@ trait SharedJDBCIntegrationTests extends QueryTest {
   test("SPARK-53386: Parameter `query` should work when ending with semicolon") {
     val dfWithSemicolon = spark.read.format("jdbc")
       .option("url", jdbcUrl)
-      .option("query", "SELECT * from tbl_semicolon")
+      .option("query", "SELECT 1 as id;")
       .load()
 
-    val expectedResult = Seq(Row(1, "test_data"))
+    val expectedResult = Seq(Row(1))
     checkAnswer(dfWithSemicolon, expectedResult)
   }
 }
