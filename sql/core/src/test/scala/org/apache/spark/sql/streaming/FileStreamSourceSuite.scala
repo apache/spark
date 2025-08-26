@@ -2643,10 +2643,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         AddTextFileData("file_data_1\nfile_data_2", src, tmp),
         ProcessAllAvailable(),
         CheckAnswer("file_data_1", "file_data_2"),
-
+        ProcessAllAvailable(),
         // Second: Add memory stream data (should process after file completes)
         AddData(memoryStream, "memory_data_1", "memory_data_2"),
-        ProcessAllAvailable(),
         CheckAnswer("file_data_1", "file_data_2", "memory_data_1", "memory_data_2")
       )
     }
@@ -2671,10 +2670,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         testStream(sequentialStream)(
           // First: Add data to first source
           AddTextFileData("source1_data1\nsource1_data2", src1, tmp1),
+          // Second: Add data to second source (should process after first completes)
           ProcessAllAvailable(),
           CheckAnswer("source1_data1", "source1_data2"),
-
-          // Second: Add data to second source (should process after first completes)
           AddTextFileData("source2_data1\nsource2_data2", src2, tmp2),
           ProcessAllAvailable(),
           CheckAnswer("source1_data1", "source1_data2", "source2_data1", "source2_data2"),

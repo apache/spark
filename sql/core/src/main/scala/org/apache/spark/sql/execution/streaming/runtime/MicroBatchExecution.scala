@@ -274,22 +274,25 @@ class MicroBatchExecution(
         result
     }
     sources = _logicalPlan.collect {
-      // sequential union - collect sources from active relation
+      // sequential union - collect ALL sources, not just active one
       case s: SequentialUnionExecutionRelation =>
-        logError(s"### Found SequentialUnionExecutionRelation in sources collection")
-        val activeSource = s.getActiveSourceRelation().source
-        logError(s"### Active source: ${activeSource.getClass.getSimpleName}")
-        activeSource
+        logError(s"### Found SequentialUnionExecutionRelation" +
+          s" with ${s.sourceRelations.length} sources")
+        s.sourceRelations.map { relation =>
+          logError(s"### Collecting source:" +
+            s" ${relation.source.getClass.getSimpleName}")
+          relation.source
+        }
       // v1 source
       case s: StreamingExecutionRelation =>
         logError(s"### Found StreamingExecutionRelation: ${s.source.getClass.getSimpleName}")
-        s.source
+        Seq(s.source)
       // v2 source
       case r: StreamingDataSourceV2ScanRelation =>
         logError(s"### Found StreamingDataSourceV2ScanRelation:" +
           s" ${r.stream.getClass.getSimpleName}")
-        r.stream
-    }
+        Seq(r.stream)
+    }.flatten
     logError(s"### Total sources collected: ${sources.length}")
 
     // Initializing TriggerExecutor relies on `sources`, hence calling this after initializing
@@ -707,39 +710,87 @@ class MicroBatchExecution(
    * - If either of the above is true, then construct the next batch by committing to the offset
    *   log that range of offsets that the next batch will process.
    */
+  private def isSourceActiveInSequentialUnion(source: SparkDataStream,
+      activeSequentialSources: Set[SparkDataStream]): Boolean = {
+    val sequentialUnions = logicalPlan.collect {
+      case s: SequentialUnionExecutionRelation => s
+    }
+
+    sequentialUnions.find(_.sourceRelations.exists(_.source == source)) match {
+      case Some(_) =>
+        // Source is part of a sequential union - check if it's in the snapshot
+        val isActive = activeSequentialSources.contains(source)
+        logError(s"### Source ${source.getClass.getSimpleName}" +
+          s" in sequential union: active=$isActive")
+        isActive
+      case None =>
+        // Source is not part of any sequential union - always active
+        true
+    }
+  }
+
   private def constructNextBatch(
       execCtx: MicroBatchExecutionContext,
       noDataBatchesEnabled: Boolean): Boolean = withProgressLocked {
     if (execCtx.isCurrentBatchConstructed) return true
 
+    // Snapshot active sources from sequential unions to avoid race conditions
+    val activeSequentialSources = logicalPlan.collect {
+      case s: SequentialUnionExecutionRelation => s.getActiveSourceRelation().source
+    }.toSet
+
     // Generate a map from each unique source to the next available offset.
     val (nextOffsets, recentOffsets) = uniqueSources.toSeq.map {
       case (s: AvailableNowDataStreamWrapper, limit) =>
-        execCtx.updateStatusMessage(s"Getting offsets from $s")
         val originalSource = s.delegate
-        execCtx.reportTimeTaken("latestOffset") {
-          val next = s.latestOffset(getStartOffset(execCtx, originalSource), limit)
-          val latest = s.reportLatestOffset()
-          ((originalSource, Option(next)), (originalSource, Option(latest)))
+        if (isSourceActiveInSequentialUnion(originalSource, activeSequentialSources)) {
+          execCtx.updateStatusMessage(s"Getting offsets from $s")
+          execCtx.reportTimeTaken("latestOffset") {
+            val next = s.latestOffset(getStartOffset(execCtx, originalSource), limit)
+            val latest = s.reportLatestOffset()
+            ((originalSource, Option(next)), (originalSource, Option(latest)))
+          }
+        } else {
+          // Source not active in sequential union - no new data
+          logError(s"### Skipping inactive source: ${originalSource.getClass.getSimpleName}")
+          ((originalSource, None), (originalSource, None))
         }
       case (s: SupportsAdmissionControl, limit) =>
-        execCtx.updateStatusMessage(s"Getting offsets from $s")
-        execCtx.reportTimeTaken("latestOffset") {
-          val next = s.latestOffset(getStartOffset(execCtx, s), limit)
-          val latest = s.reportLatestOffset()
-          ((s, Option(next)), (s, Option(latest)))
+        if (isSourceActiveInSequentialUnion(s, activeSequentialSources)) {
+          execCtx.updateStatusMessage(s"Getting offsets from $s")
+          execCtx.reportTimeTaken("latestOffset") {
+            val next = s.latestOffset(getStartOffset(execCtx, s), limit)
+            val latest = s.reportLatestOffset()
+            ((s, Option(next)), (s, Option(latest)))
+          }
+        } else {
+          // Source not active in sequential union - no new data
+          logError(s"### Skipping inactive source: ${s.getClass.getSimpleName}")
+          ((s, None), (s, None))
         }
       case (s: Source, _) =>
-        execCtx.updateStatusMessage(s"Getting offsets from $s")
-        execCtx.reportTimeTaken("getOffset") {
-          val offset = s.getOffset
-          ((s, offset), (s, offset))
+        if (isSourceActiveInSequentialUnion(s, activeSequentialSources)) {
+          execCtx.updateStatusMessage(s"Getting offsets from $s")
+          execCtx.reportTimeTaken("getOffset") {
+            val offset = s.getOffset
+            ((s, offset), (s, offset))
+          }
+        } else {
+          // Source not active in sequential union - no new data
+          logError(s"### Skipping inactive source: ${s.getClass.getSimpleName}")
+          ((s, None), (s, None))
         }
       case (s: MicroBatchStream, _) =>
-        execCtx.updateStatusMessage(s"Getting offsets from $s")
-        execCtx.reportTimeTaken("latestOffset") {
-          val latest = s.latestOffset()
-          ((s, Option(latest)), (s, Option(latest)))
+        if (isSourceActiveInSequentialUnion(s, activeSequentialSources)) {
+          execCtx.updateStatusMessage(s"Getting offsets from $s")
+          execCtx.reportTimeTaken("latestOffset") {
+            val latest = s.latestOffset()
+            ((s, Option(latest)), (s, Option(latest)))
+          }
+        } else {
+          // Source not active in sequential union - no new data
+          logError(s"### Skipping inactive source: ${s.getClass.getSimpleName}")
+          ((s, None), (s, None))
         }
       case (s, _) =>
         // for some reason, the compiler is unhappy and thinks the match is not exhaustive
@@ -857,15 +908,33 @@ class MicroBatchExecution(
 
     // Replace sources in the logical plan with data that has arrived since the last batch.
     val newBatchesPlan = logicalPlan transform {
-      // For sequential union - delegate to active source
+      // For sequential union - find data from any of its sources
       case seqUnion: SequentialUnionExecutionRelation =>
         logError(s"### runBatch transform: handling SequentialUnionExecutionRelation")
-        val activeRelation = seqUnion.getActiveSourceRelation()
-        logError(s"### Active relation for batch: ${activeRelation.source.getClass.getSimpleName}")
-        // Transform the active relation using the same logic as regular StreamingExecutionRelation
-        val StreamingExecutionRelation(source, output, catalogTable) = activeRelation
-        mutableNewData.get(source).map { dataPlan =>
-          logError(s"### Found data for active source: ${source.getClass.getSimpleName}")
+
+        // Try to find data from any source in the sequential union using the sources collection
+        val sourceDataPairs = seqUnion.sourceRelations.flatMap { relation =>
+          // Look for the matching source in mutableNewData
+          // using sources from the sources collection
+          val matchingSource = sources.find { source =>
+            // Match by class and potentially other identifying characteristics
+            source.getClass == relation.source.getClass &&
+              source.toString == relation.source.toString
+          }
+
+          matchingSource.flatMap { source =>
+            mutableNewData.get(source).map { dataPlan =>
+              logError(s"### Found data for source: ${source.getClass.getSimpleName}")
+              (source, dataPlan, seqUnion.output, relation.catalogTable)
+            }
+          }
+        }
+
+        if (sourceDataPairs.nonEmpty) {
+          // Use the first source that has data
+          val (source, dataPlan, output, catalogTable) = sourceDataPairs.head
+          logError(s"### Using data from: ${source.getClass.getSimpleName}")
+
           val hasFileMetadata = output.exists {
             case FileSourceMetadataAttribute(_) => true
             case _ => false
@@ -899,10 +968,9 @@ class MicroBatchExecution(
             Alias(from, to.name)(exprId = to.exprId, explicitMetadata = Some(from.metadata))
           }
           Project(aliases, finalDataPlanWithStream)
-        }.getOrElse {
-          logError(s"### No data found for active source:" +
-            s" ${source.getClass.getSimpleName}, returning empty relation")
-          LocalRelation(output, isStreaming = true)
+        } else {
+          logError(s"### No data found for any source in sequential union")
+          LocalRelation(seqUnion.output, isStreaming = true)
         }
 
       // For v1 sources.
