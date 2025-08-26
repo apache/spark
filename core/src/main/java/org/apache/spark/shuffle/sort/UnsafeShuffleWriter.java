@@ -167,6 +167,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     return peakMemoryUsedBytes;
   }
 
+  // For test only.
   @VisibleForTesting
   RowBasedChecksum[] getRowBasedChecksums() {
     return rowBasedChecksums;

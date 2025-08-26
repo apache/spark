@@ -213,6 +213,7 @@ final class BypassMergeSortShuffleWriter<K, V>
     return partitionLengths;
   }
 
+  // For test only.
   @VisibleForTesting
   RowBasedChecksum[] getRowBasedChecksums() {
     return rowBasedChecksums;
