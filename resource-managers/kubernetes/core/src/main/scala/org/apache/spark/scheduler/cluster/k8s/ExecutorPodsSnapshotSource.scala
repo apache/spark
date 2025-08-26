@@ -16,9 +16,7 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import org.apache.spark.internal.Logging
-
-abstract class ExecutorPodsSnapshotSource extends Logging {
+abstract class ExecutorPodsSnapshotSource {
   def start(applicationId: String): Unit
   def stop(): Unit
 }

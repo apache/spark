@@ -25,7 +25,9 @@ import org.apache.spark.annotation.{DeveloperApi, Unstable}
 @Unstable
 @DeveloperApi
 abstract class ExecutorPodsInformerCustomSnapshotSource extends ExecutorPodsSnapshotSource {
-  def init(sparkConf: SparkConf, kubernetesClient: KubernetesClient,
-           snapshotStore: ExecutorPodsSnapshotsStore,
-           informerManager: InformerManager): Unit
+  def init(
+      sparkConf: SparkConf,
+      kubernetesClient: KubernetesClient,
+      snapshotStore: ExecutorPodsSnapshotsStore,
+      informerManager: InformerManager): Unit
 }

@@ -21,21 +21,26 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.informers.ResourceEventHandler
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-class ExecutorPodsInformerSnapshotSource extends ExecutorPodsInformerCustomSnapshotSource {
+class ExecutorPodsInformerSnapshotSource
+  extends ExecutorPodsInformerCustomSnapshotSource
+  with Logging {
 
-    private var client: KubernetesClient = _
-    private var store: ExecutorPodsSnapshotsStore = _
-    private var im: InformerManager = _
+  private var client: KubernetesClient = _
+  private var store: ExecutorPodsSnapshotsStore = _
+  private var im: InformerManager = _
 
-    def init(conf: SparkConf, kubernetesClient: KubernetesClient,
-             snapshotsStore: ExecutorPodsSnapshotsStore,
-             informerManager: InformerManager): Unit = {
-      client = kubernetesClient
-      store = snapshotsStore
-      im = informerManager
-      informerManager.getInformer.addEventHandler(new ExecutorPodsInformer)
+  def init(
+      conf: SparkConf,
+      kubernetesClient: KubernetesClient,
+      snapshotsStore: ExecutorPodsSnapshotsStore,
+      informerManager: InformerManager): Unit = {
+    client = kubernetesClient
+    store = snapshotsStore
+    im = informerManager
+    informerManager.getInformer().addEventHandler(new ExecutorPodsInformer)
   }
 
   override def start(applicationId: String): Unit = {
@@ -52,7 +57,7 @@ class ExecutorPodsInformerSnapshotSource extends ExecutorPodsInformerCustomSnaps
     override def onAdd(pod: Pod): Unit = {
       logDebug(s"Received add executor pod event for pod named ${pod.getMetadata.getName}")
       store.updatePod(pod)
-      }
+    }
 
     override def onUpdate(oldPod: Pod, newPod: Pod): Unit = {
       logDebug(s"Received update executor pod event for pod named ${newPod.getMetadata.getName}")

@@ -27,9 +27,12 @@ import io.fabric8.kubernetes.client.informers.cache.Lister
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config.KUBERNETES_EXECUTOR_LISTER_POLLING_INTERVAL
 import org.apache.spark.deploy.k8s.Constants.{SPARK_APP_ID_LABEL, SPARK_POD_EXECUTOR_ROLE, SPARK_ROLE_LABEL}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ThreadUtils, Utils}
 
-class ExecutorPodsListerSnapshotSource extends ExecutorPodsInformerCustomSnapshotSource {
+class ExecutorPodsListerSnapshotSource
+  extends ExecutorPodsInformerCustomSnapshotSource
+  with Logging {
 
   private var conf: SparkConf = _
   private var store: ExecutorPodsSnapshotsStore = _
@@ -39,9 +42,11 @@ class ExecutorPodsListerSnapshotSource extends ExecutorPodsInformerCustomSnapsho
   private var pollingFuture: Future[_] = _
   private var im: InformerManager = _
 
-  override def init(sparkConf: SparkConf, kubernetesClient: KubernetesClient,
-    snapshotStore: ExecutorPodsSnapshotsStore,
-    informerManager: InformerManager): Unit = {
+  override def init(
+      sparkConf: SparkConf,
+      kubernetesClient: KubernetesClient,
+      snapshotStore: ExecutorPodsSnapshotsStore,
+      informerManager: InformerManager): Unit = {
     logDebug(s"Starting lister for pods with labels $SPARK_APP_ID_LABEL=$appId," +
       s" $SPARK_ROLE_LABEL=$SPARK_POD_EXECUTOR_ROLE.")
     im = informerManager
@@ -52,10 +57,12 @@ class ExecutorPodsListerSnapshotSource extends ExecutorPodsInformerCustomSnapsho
     conf = sparkConf
   }
 
-  def init(sparkConf: SparkConf, kubernetesClient: KubernetesClient,
-           snapshotStore: ExecutorPodsSnapshotsStore,
-           informerManager: InformerManager,
-           pollingExecutor: ScheduledExecutorService): Unit = {
+  def init(
+      sparkConf: SparkConf,
+      kubernetesClient: KubernetesClient,
+      snapshotStore: ExecutorPodsSnapshotsStore,
+      informerManager: InformerManager,
+      pollingExecutor: ScheduledExecutorService): Unit = {
     this.pollingExecutor = pollingExecutor
     this.init(sparkConf, kubernetesClient, snapshotStore, informerManager)
   }
@@ -74,8 +81,7 @@ class ExecutorPodsListerSnapshotSource extends ExecutorPodsInformerCustomSnapsho
     im.startInformer()
     val pollingInterval = conf.get(KUBERNETES_EXECUTOR_LISTER_POLLING_INTERVAL)
     pollingFuture = pollingExecutor.scheduleWithFixedDelay(
-      new PollRunnable(
-        new Lister(im.getInformer.getIndexer, client.getNamespace)),
+      new PollRunnable(new Lister(im.getInformer().getIndexer, client.getNamespace)),
       pollingInterval,
       pollingInterval,
       TimeUnit.MILLISECONDS)

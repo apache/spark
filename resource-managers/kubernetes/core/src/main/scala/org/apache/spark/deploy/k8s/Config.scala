@@ -448,7 +448,7 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.executor.pod.snapshotSources")
       .doc("Class names of pod snapshot sources implementing " +
         "ExecutorPodsCustomSnapshotSource. This is a developer API. Comma separated. " +
-        "If not specified, the default snapshot sources, ExecutorPodsWatchSnapshotSource" +
+        "If not specified, the default snapshot sources, ExecutorPodsWatchSnapshotSource " +
         "and ExecutorPodsPollingSnapshotSource are used.")
       .version("4.1.0")
       .stringConf
@@ -531,7 +531,7 @@ private[spark] object Config extends Logging {
         "state of executors.")
       .version("4.1.0")
       .timeConf(TimeUnit.MILLISECONDS)
-      .checkValue(interval => interval > 0, s"informer lister polling interval must be a" +
+      .checkValue(interval => interval > 0, "informer lister polling interval must be a" +
         " positive time value.")
       .createWithDefaultString("30s")
 
@@ -540,8 +540,8 @@ private[spark] object Config extends Logging {
       .doc("Interval between informer cache resync")
       .version("4.1.0")
       .timeConf(TimeUnit.MILLISECONDS)
-      .checkValue(interval => interval >= 0, s"informer resync interval must not be a negative" +
-        s" time value.")
+      .checkValue(interval => interval >= 0, "informer resync interval must not be a negative" +
+        " time value.")
       .createWithDefaultString("0s")
 
   val KUBERNETES_EXECUTOR_API_POLLING_INTERVAL =

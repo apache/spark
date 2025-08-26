@@ -63,7 +63,7 @@ class InformerManagerSuite extends SparkFunSuite with BeforeAndAfter {
   test("If informer is null, getInformer should initialize it") {
     val manager = new InformerManager(kubernetesClient, applicationId, conf)
     assert(manager.informer == null)
-    assert(manager.getInformer == informer)
+    assert(manager.getInformer() == informer)
   }
 
   test("startInformer should not call run if informer is already running") {
@@ -71,7 +71,7 @@ class InformerManagerSuite extends SparkFunSuite with BeforeAndAfter {
     val manager = new InformerManager(kubernetesClient, applicationId, conf)
 
     manager.initInformer()
-    manager.getInformer
+    manager.getInformer()
     manager.startInformer()
 
     verify(informer, times(0)).run()
@@ -92,10 +92,10 @@ class InformerManagerSuite extends SparkFunSuite with BeforeAndAfter {
     val manager = new InformerManager(kubernetesClient, applicationId, conf)
     manager.initInformer()
     manager.startInformer()
-    assert(manager.getInformer != null)
+    assert(manager.getInformer() != null)
     manager.stopInformer()
 
-    assert(manager.getInformer == null)
+    assert(manager.getInformer() == null)
   }
 
   test("Calling startInformer after stopInformer should throw") {

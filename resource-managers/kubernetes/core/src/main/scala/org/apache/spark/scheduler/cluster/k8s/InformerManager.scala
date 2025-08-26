@@ -26,8 +26,8 @@ import org.apache.spark.deploy.k8s.Constants.{SPARK_APP_ID_LABEL, SPARK_POD_EXEC
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-class InformerManager(kubernetesClient: KubernetesClient,
-  applicationId: String, conf: SparkConf) extends Logging {
+class InformerManager(kubernetesClient: KubernetesClient, applicationId: String, conf: SparkConf)
+  extends Logging {
 
   private val resyncInterval = conf.get(KUBERNETES_EXECUTOR_INFORMER_RESYNC_INTERVAL)
   // VisibleForTesting
@@ -35,13 +35,13 @@ class InformerManager(kubernetesClient: KubernetesClient,
   private var stopped = false
 
   def initInformer(): Unit = {
-     informer = kubernetesClient.pods()
+    informer = kubernetesClient.pods()
       .withLabel(SPARK_APP_ID_LABEL, applicationId)
       .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
       .runnableInformer(resyncInterval)
   }
 
-  def getInformer: SharedIndexInformer[Pod] = {
+  def getInformer(): SharedIndexInformer[Pod] = {
     // Don't initialize the informer if stopInformer() has been called
     if (informer == null && !stopped) {
       initInformer()
