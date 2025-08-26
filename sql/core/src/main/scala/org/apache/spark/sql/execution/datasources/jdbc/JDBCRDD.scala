@@ -80,7 +80,8 @@ object JDBCRDD extends Logging {
 
   def getQueryOutputSchema(
       query: String, options: JDBCOptions, dialect: JdbcDialect, conn: Connection): StructType = {
-    logInfo(log"Generated JDBC query to get scan output schema: ${MDC(SQL_TEXT, query)}")
+    logError(log"Generated JDBC query to get scan output schema: ${MDC(SQL_TEXT, query)}")
+    print(s"executed query $query \n")
     Using.resource(conn.prepareStatement(query)) { statement =>
       statement.setQueryTimeout(options.queryTimeout)
       Using.resource(statement.executeQuery()) { rs =>
