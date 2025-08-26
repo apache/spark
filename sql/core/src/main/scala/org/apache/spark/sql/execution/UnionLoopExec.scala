@@ -183,7 +183,10 @@ case class UnionLoopExec(
 
     // Main loop for obtaining the result of the recursive query.
     while (prevCount > 0 && !limitReached) {
-      var prevPlan: LogicalPlan = null
+      // The optimizer might have removed the UnionLoopRef in the recursion node (for example as a
+      // result of an empty join). In this case, prevPlan cannot be defined according to the cases
+      // below, so we set a default value of the previous result here.
+      var prevPlan: LogicalPlan = prevDF.logicalPlan
 
       // If the recursive part contains non-deterministic expressions that depends on a seed, we
       // need to create a new seed since the seed for this expression is set in the analysis, and
@@ -226,14 +229,6 @@ case class UnionLoopExec(
                 sameOutput = false)
               logicalRDD.copy(output = r.output)(prevDF.sparkSession, stats, constraints)
           }
-      }
-
-      // The optimizer might have removed the UnionLoopRef in the recursion node (for example as a
-      // result of an empty join). In this case, prevPlan is null and needs to be set to the anchor
-      // result manually.
-      if (prevPlan == null) {
-        prevPlan = LogicalRDD.fromDataset(prevDF.queryExecution.toRdd, prevDF,
-          prevDF.isStreaming).newInstance()
       }
 
       if (levelLimit != -1 && currentLevel > levelLimit) {
