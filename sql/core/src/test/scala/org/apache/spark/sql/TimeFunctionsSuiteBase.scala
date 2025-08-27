@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.time.LocalDate
 import java.time.LocalTime
 import java.time.temporal.ChronoUnit
 
@@ -140,6 +141,54 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
     // Check that the results match the expected output.
     checkAnswer(result1, expected)
     checkAnswer(result2, expected)
+  }
+
+  test("SPARK-53109: make_timestamp_ntz function") {
+    // Input data for the function.
+    val schema = StructType(Seq(
+      StructField("date", DateType, nullable = false),
+      StructField("time", TimeType(), nullable = false)
+    ))
+    val data = Seq(
+      Row(LocalDate.parse("2020-01-01"), LocalTime.parse("00:00:00")),
+      Row(LocalDate.parse("2023-10-20"), LocalTime.parse("12:34:56")),
+      Row(LocalDate.parse("2023-12-31"), LocalTime.parse("23:59:59.999999"))
+    )
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+    // Test the function using both `selectExpr` and `select`.
+    val result1 = df.selectExpr(
+      "make_timestamp_ntz(date, time)"
+    )
+    val result2 = df.select(
+      make_timestamp_ntz(col("date"), col("time"))
+    )
+    // Check that both methods produce the same result.
+    checkAnswer(result1, result2)
+
+    // Expected output of the function.
+    val expected = Seq(
+      "2020-01-01 00:00:00",
+      "2023-10-20 12:34:56",
+      "2023-12-31 23:59:59.999999"
+    ).toDF("timestamp_ntz").select(col("timestamp_ntz").cast("timestamp_ntz"))
+    // Check that the results match the expected output.
+    checkAnswer(result1, expected)
+    checkAnswer(result2, expected)
+
+    // NULL result is returned for any NULL input.
+    val nullInputDF = Seq(
+      (null, LocalTime.parse("00:00:00")),
+      (LocalDate.parse("2020-01-01"), null),
+      (null, null)
+    ).toDF("date", "time")
+    val nullResult = Seq[Integer](
+      null, null, null
+    ).toDF("ts").select(col("ts"))
+    checkAnswer(
+      nullInputDF.select(make_timestamp_ntz(col("date"), col("time"))),
+      nullResult
+    )
   }
 
   test("SPARK-52885: hour function") {
@@ -379,6 +428,54 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
       },
       condition = "CANNOT_PARSE_TIME",
       parameters = Map("input" -> "'invalid_time'", "format" -> "'HH.mm.ss'")
+    )
+  }
+
+  test("SPARK-53109: try_make_timestamp_ntz function") {
+    // Input data for the function.
+    val schema = StructType(Seq(
+      StructField("date", DateType, nullable = false),
+      StructField("time", TimeType(), nullable = false)
+    ))
+    val data = Seq(
+      Row(LocalDate.parse("2020-01-01"), LocalTime.parse("00:00:00")),
+      Row(LocalDate.parse("2023-10-20"), LocalTime.parse("12:34:56")),
+      Row(LocalDate.parse("2023-12-31"), LocalTime.parse("23:59:59.999999"))
+    )
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+    // Test the function using both `selectExpr` and `select`.
+    val result1 = df.selectExpr(
+      "try_make_timestamp_ntz(date, time)"
+    )
+    val result2 = df.select(
+      try_make_timestamp_ntz(col("date"), col("time"))
+    )
+    // Check that both methods produce the same result.
+    checkAnswer(result1, result2)
+
+    // Expected output of the function.
+    val expected = Seq(
+      "2020-01-01 00:00:00",
+      "2023-10-20 12:34:56",
+      "2023-12-31 23:59:59.999999"
+    ).toDF("timestamp_ntz").select(col("timestamp_ntz").cast("timestamp_ntz"))
+    // Check that the results match the expected output.
+    checkAnswer(result1, expected)
+    checkAnswer(result2, expected)
+
+    // NULL result is returned for any NULL input.
+    val nullInputDF = Seq(
+      (null, LocalTime.parse("00:00:00")),
+      (LocalDate.parse("2020-01-01"), null),
+      (null, null)
+    ).toDF("date", "time")
+    val nullResult = Seq[Integer](
+      null, null, null
+    ).toDF("ts").select(col("ts"))
+    checkAnswer(
+      nullInputDF.select(try_make_timestamp_ntz(col("date"), col("time"))),
+      nullResult
     )
   }
 
