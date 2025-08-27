@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.paths.SparkPath
+import org.apache.spark.sql.catalyst.streaming.SupportsSequentialExecution
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connector.read.streaming
@@ -55,6 +56,7 @@ class FileStreamSource(
     options: Map[String, String])
   extends SupportsAdmissionControl
   with SupportsTriggerAvailableNow
+  with SupportsSequentialExecution
   with Source
   with Logging {
 
@@ -304,6 +306,8 @@ class FileStreamSource(
 
     assert(startOffset <= endOffset)
     val files = metadataLog.get(Some(startOffset + 1), Some(endOffset)).flatMap(_._2)
+    logError(s"### FileStreamSource.getBatch: Processing ${files.length} files from " +
+      s"$startOffset to $endOffset")
     logInfo(log"Processing ${MDC(LogKeys.NUM_FILES, files.length)} files from " +
       log"${MDC(LogKeys.FILE_START_OFFSET, startOffset + 1)}:" +
       log"${MDC(LogKeys.FILE_END_OFFSET, endOffset)}")
@@ -431,6 +435,35 @@ class FileStreamSource(
   }
 
   override def stop(): Unit = sourceCleaner.foreach(_.stop())
+
+  /**
+   * Implementation of SupportsSequentialExecution interface.
+   * Returns true if this file source has finished processing all available files
+   * and can be considered "done" for sequential execution purposes.
+   */
+  override def isSourceComplete(): Boolean = {
+    sourceOptions.maxFilesPerTrigger match {
+      case Some(_) =>
+        // For bounded file sources with maxFilesPerTrigger, check if we've processed all
+        // available files. A source is complete when:
+        // 1. We have discovered all available files in the directory
+        // 2. We have processed all of them (seenFiles contains all available files)
+        val availableFiles = fetchAllFiles()
+        val processedFiles = seenFiles.size
+
+        logDebug(s"FileStreamSource.isSourceComplete: " +
+          s"processedFiles=$processedFiles, availableFiles=${availableFiles.length}")
+
+        // Source is complete if we've processed all available files AND there are files to process
+        // (we don't want to consider an empty directory as "complete")
+        availableFiles.nonEmpty && processedFiles >= availableFiles.length
+
+      case None =>
+        // Unbounded file source (no maxFilesPerTrigger) - never done
+        // This represents continuous file monitoring
+        false
+    }
+  }
 }
 
 

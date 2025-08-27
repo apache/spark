@@ -676,6 +676,14 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
+  def followedBy(other: sql.Dataset[T]): Dataset[T] = {
+    // For Spark Connect, this would need proper protocol support
+    // For now, throw an exception indicating it's not supported
+    throw new UnsupportedOperationException(
+      "followedBy is not yet supported in Spark Connect")
+  }
+
+  /** @inheritdoc */
   def intersect(other: sql.Dataset[T]): Dataset[T] = {
     buildSetOp(other, proto.SetOperation.SetOpType.SET_OP_TYPE_INTERSECT) { builder =>
       builder.setIsAll(false)

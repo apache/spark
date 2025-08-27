@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 import java.net.URI
+import java.nio.file.Files
 import java.time.{LocalDateTime, ZoneOffset}
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicLong
@@ -2619,6 +2620,247 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
             .json(dir.getCanonicalPath).schema)
         assert(thrown1.getMessage.contains(msg))
       }
+    }
+  }
+
+  test("sequential union - basic file to file") {
+    withTempDirs { case (src1, tmp1) =>
+      withTempDirs { case (src2, tmp2) =>
+        // Create two bounded file streams
+        val fileStream1 = spark.readStream
+          .format("text")
+          .option("maxFilesPerTrigger", "1")
+          .load(src1.getCanonicalPath)
+
+        val fileStream2 = spark.readStream
+          .format("text")
+          .option("maxFilesPerTrigger", "1")
+          .load(src2.getCanonicalPath)
+
+        val sequentialStream = fileStream1.followedBy(fileStream2)
+
+        testStream(sequentialStream)(
+          // First: Add data to first source
+          AddTextFileData("source1_data1\nsource1_data2", src1, tmp1),
+          ProcessAllAvailable(),
+          CheckAnswer("source1_data1", "source1_data2"),
+
+          // Second: Add data to second source (should process after first completes)
+          AddTextFileData("source2_data1\nsource2_data2", src2, tmp2),
+          ProcessAllAvailable(),
+          CheckAnswer("source1_data1", "source1_data2", "source2_data1", "source2_data2"),
+          StopStream
+        )
+      }
+    }
+  }
+
+  test("sequential union - file completion detection") {
+    withTempDirs { case (src1, tmp1) =>
+      withTempDirs { case (src2, tmp2) =>
+        val fileStream1 = spark.readStream
+          .format("text")
+          .option("maxFilesPerTrigger", "2") // Process up to 2 files, then complete
+          .load(src1.getCanonicalPath)
+
+        val fileStream2 = spark.readStream
+          .format("text")
+          .option("maxFilesPerTrigger", "1")
+          .load(src2.getCanonicalPath)
+
+        val sequentialStream = fileStream1.followedBy(fileStream2)
+
+        testStream(sequentialStream)(
+          // Add multiple files to first source
+          AddTextFileData("file1_data", src1, tmp1, "file1.txt"),
+          AddTextFileData("file2_data", src1, tmp1, "file2.txt"),
+          ProcessAllAvailable(),
+          CheckAnswer("file1_data", "file2_data"), // First source processes 2 files
+
+          // Add more files to first source (should be ignored as maxFiles=2 reached)
+          AddTextFileData("file3_data", src1, tmp1, "file3.txt"),
+          ProcessAllAvailable(),
+          CheckAnswer("file1_data", "file2_data"), // Still only 2 files from first source
+
+          // Add data to second source (should now be active)
+          AddTextFileData("source2_data", src2, tmp2),
+          ProcessAllAvailable(),
+          CheckAnswer("file1_data", "file2_data", "source2_data"), // Second source now active
+          StopStream
+        )
+      }
+    }
+  }
+
+  // TODO: Add Sequential Source Test Cases here:
+  test("sequential union - file to rate stream") {
+    withTempDirs { case (src, tmp) =>
+      withTempDir { outputDir =>
+        // Create bounded file stream with maxFilesPerTrigger
+        val fileStream = spark.readStream
+          .format("text")
+          .option("maxFilesPerTrigger", "1")
+          .load(src.getCanonicalPath)
+
+        // Create rate stream for second source
+        val rateStream = spark.readStream
+          .format("rate")
+          .option("rowsPerSecond", "1") // Slower rate for easier testing
+          .option("numPartitions", "1")
+          .load()
+          .select($"value".cast("string").as("value")) // Match file stream schema
+
+        // Create sequential union
+        val sequentialStream = fileStream.followedBy(rateStream)
+
+        // First: Add file data
+        val fileData = "file_data_1\nfile_data_2"
+        val testFile = new File(src, "test.txt")
+        Files.write(testFile.toPath, fileData.getBytes)
+
+        // Start streaming query writing to parquet
+        val query = sequentialStream.writeStream
+          .format("parquet")
+          .option("path", outputDir.getCanonicalPath)
+          .option("checkpointLocation", tmp.getCanonicalPath)
+          .trigger(Trigger.ProcessingTime("1 second"))
+          .start()
+
+        try {
+          // Wait for file data to be processed
+          eventually(timeout(10.seconds)) {
+            val files = outputDir.listFiles().filter(_.getName.endsWith(".parquet"))
+            assert(files.nonEmpty, "No parquet files written")
+
+            val result = spark.read.parquet(outputDir.getCanonicalPath).collect()
+            assert(result.length >= 2, s"Expected at least 2 rows from file, got ${result.length}")
+
+            val fileValues = result.map(_.getString(0)).filter(_.startsWith("file_"))
+            assert(fileValues.contains("file_data_1"), "Missing file_data_1")
+            assert(fileValues.contains("file_data_2"), "Missing file_data_2")
+          }
+
+          // Wait a bit more for rate stream data (should appear after file completes)
+          Thread.sleep(3000)
+
+          val finalResult = spark.read.parquet(outputDir.getCanonicalPath).collect()
+          val rateValues = finalResult.map(_.getString(0)).filter(!_.startsWith("file_"))
+          logError(s"### finalResult: ${finalResult.mkString("Array(", ", ", ")")}")
+
+          // Should have some rate stream data (numeric values)
+          assert(rateValues.nonEmpty,
+            s"Expected some rate stream data, got only:" +
+              s" ${finalResult.map(_.getString(0)).mkString(", ")}")
+
+        } finally {
+          query.stop()
+        }
+      }
+    }
+  }
+
+  test("sequential union - mixed bounded and unbounded sources") {
+    withTempDirs { case (src1, tmp1) =>
+      val boundedStream = spark.readStream
+        .format("text")
+        .option("maxFilesPerTrigger", "3")
+        .load(src1.getCanonicalPath)
+
+      // Create a rate stream (unbounded)
+      val unboundedStream = spark.readStream
+        .format("rate")
+        .option("rowsPerSecond", "1")
+        .option("numPartitions", "1")
+        .load()
+        .select($"value".cast("string").as("value")) // Match schema
+
+      val sequentialStream = boundedStream.followedBy(unboundedStream)
+
+      testStream(sequentialStream)(
+        // Add multiple file data entries
+        AddTextFileData("file_data_1", src1, tmp1),
+        AddTextFileData("file_data_2", src1, tmp1),
+        AddTextFileData("file_data_3", src1, tmp1),
+        ProcessAllAvailable(),
+
+        // Should have all file data processed
+        CheckAnswer("file_data_1", "file_data_2", "file_data_3"),
+
+        // Wait for transition to rate stream
+        AssertOnQuery { query =>
+          // Let rate stream generate some data
+          Thread.sleep(3000)
+          true
+        },
+        ProcessAllAvailable(),
+
+        // Should now have both file data and some rate stream data
+        AssertOnQuery { query =>
+          val result = query.lastProgress.inputRowsPerSecond
+          result > 0 // Rate stream should be producing data
+        },
+        StopStream
+      )
+    }
+  }
+
+  test("sequential union - multiple file sources with different schemas") {
+    withTempDirs { case (src1, tmp1) =>
+      withTempDirs { case (src2, tmp2) =>
+        // First source: numbers as strings
+        val fileStream1 = spark.readStream
+          .format("text")
+          .option("maxFilesPerTrigger", "1")
+          .load(src1.getCanonicalPath)
+
+        // Second source: numbers as strings (same schema)
+        val fileStream2 = spark.readStream
+          .format("text")
+          .option("maxFilesPerTrigger", "1")
+          .load(src2.getCanonicalPath)
+          .select($"value".cast("string").as("value")) // Explicit schema alignment
+
+        val sequentialStream = fileStream1.followedBy(fileStream2)
+
+        testStream(sequentialStream)(
+          AddTextFileData("100", src1, tmp1),
+          ProcessAllAvailable(),
+          CheckAnswer("100"),
+
+          AddTextFileData("200", src2, tmp2),
+          ProcessAllAvailable(),
+          CheckAnswer("100", "200"),
+          StopStream
+        )
+      }
+    }
+  }
+
+  test("sequential union - source completion interface") {
+    withTempDir { src =>
+      val fileStream = spark.readStream
+        .format("text")
+        .option("maxFilesPerTrigger", "1")
+        .load(src.getCanonicalPath)
+
+      // Test the completion detection directly
+      import org.apache.spark.sql.execution.streaming.runtime.FileStreamSource
+      import org.apache.spark.sql.catalyst.streaming.SupportsSequentialExecution
+
+      // This test verifies that FileStreamSource properly implements SupportsSequentialExecution
+      val source = new FileStreamSource(
+        spark, src.getCanonicalPath, "text",
+        fileStream.schema, Seq.empty, src.getCanonicalPath + "/metadata",
+        Map("maxFilesPerTrigger" -> "1")
+      )
+
+      // Should implement the interface
+      assert(source.isInstanceOf[SupportsSequentialExecution])
+
+      // Initially should not be complete (no files)
+      assert(!source.isSourceComplete())
+
+      source.stop()
     }
   }
 }

@@ -1961,6 +1961,33 @@ abstract class Dataset[T] extends Serializable {
   def unionByName(other: Dataset[T], allowMissingColumns: Boolean): Dataset[T]
 
   /**
+   * Returns a Dataset containing rows from this Dataset followed sequentially by rows from
+   * another Dataset. Unlike `union` which processes both datasets concurrently, this method
+   * processes this Dataset completely before starting the other Dataset.
+   *
+   * This is useful for scenarios like processing historical data followed by live streaming data.
+   * For example:
+   * {{{
+   *   val historical = spark.readStream.format("json")
+   *     .option("maxFilesPerTrigger", "100")  // Makes it bounded
+   *     .load("/historical-data")
+   *
+   *   val live = spark.readStream.format("kafka")
+   *     .option("subscribe", "events")
+   *     .load()
+   *
+   *   val sequential = historical.followedBy(live)
+   *   // Processes all historical files first, then transitions to live Kafka
+   * }}}
+   *
+   * @param other Another Dataset to append after this one completes
+   * @return A new Dataset with sequential union semantics
+   * @group typedrel
+   * @since 4.0.0
+   */
+  def followedBy(other: Dataset[T]): Dataset[T]
+
+  /**
    * Returns a new Dataset containing rows only in both this Dataset and another Dataset. This is
    * equivalent to `INTERSECT` in SQL.
    *
