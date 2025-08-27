@@ -27,7 +27,7 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.common.FlowStatus
@@ -77,7 +77,10 @@ class PipelineEventSender(
               sendEventToClient(event)
             } catch {
               case NonFatal(e) =>
-                logError(s"Failed to send pipeline event to client: ${event.message}", e)
+                logError(
+                  log"Failed to send pipeline event to client: " +
+                    log"${MDC(LogKeys.ERROR, event.message)}",
+                  e)
             }
           }
         })
@@ -120,11 +123,13 @@ class PipelineEventSender(
       // disregard the timeout since we want all events to be processed
       if (!executor.awaitTermination(Long.MaxValue, java.util.concurrent.TimeUnit.MILLISECONDS)) {
         logError(
-          s"Pipeline event sender for session ${sessionHolder.sessionId}" +
-            s"failed to terminate")
+          log"Pipeline event sender for session " +
+            log"${MDC(LogKeys.SESSION_ID, sessionHolder.sessionId)} failed to terminate")
         executor.shutdownNow()
       }
-      logInfo(s"Pipeline event sender shutdown completed for session ${sessionHolder.sessionId}")
+      logInfo(
+        log"Pipeline event sender shutdown completed for session " +
+          log"${MDC(LogKeys.SESSION_ID, sessionHolder.sessionId)}")
     }
   }
 
@@ -171,7 +176,10 @@ class PipelineEventSender(
           .build())
     } catch {
       case NonFatal(e) =>
-        logError(s"Failed to send pipeline event to client: ${event.message}", e)
+        logError(
+          log"Failed to send pipeline event to client: " +
+            log"${MDC(LogKeys.ERROR, event.message)}",
+          e)
     }
   }
 }
