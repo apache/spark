@@ -488,20 +488,12 @@ class FunctionsTestsMixin:
         assertDataFrameEqual(actual, [Row(None)])
 
         # Tests with arguments: date, time.
-
-        # Valid input.
         df = self.spark.range(1).select(
             F.lit(datetime.date(2024, 5, 22)).alias("date"),
             F.lit(datetime.time(10, 30, 0)).alias("time"),
         )
         actual = df.select(F.try_make_timestamp_ntz(df.date, df.time))
         assertDataFrameEqual(actual, [Row(result)])
-
-        # Invalid input.
-        data = [(datetime.date(2024, 13, 22), datetime.time(10, 30, 0))]
-        df = self.spark.createDataFrame(data, ["date", "time"])
-        actual = df.select(F.try_make_timestamp_ntz(df.date, df.time))
-        assertDataFrameEqual(actual, [Row(None)])
 
     def test_string_functions(self):
         string_functions = [
