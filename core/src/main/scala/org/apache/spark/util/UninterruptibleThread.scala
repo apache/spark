@@ -100,7 +100,8 @@ private[spark] class UninterruptibleThread(
      * @return true when there is no concurrent [[runUninterruptibly()]] call ([[uninterruptible]]
      *         is true) and no concurrent [[interrupt()]] call, otherwise false
      */
-    def isInterruptible: Boolean = synchronized {
+    def isInterruptible(t: Thread): Boolean = synchronized {
+//      shouldInterruptThread = uninterruptible || t.isInterrupted
       shouldInterruptThread = uninterruptible
       // as we are releasing uninterruptibleLock before calling super.interrupt() there is a
       // possibility that runUninterruptibly() would be called after lock is released but before
@@ -157,7 +158,7 @@ private[spark] class UninterruptibleThread(
    * interrupted until it enters into the interruptible status.
    */
   override def interrupt(): Unit = {
-    if (uninterruptibleLock.isInterruptible) {
+    if (uninterruptibleLock.isInterruptible(this)) {
       try {
         super.interrupt()
       } finally {
