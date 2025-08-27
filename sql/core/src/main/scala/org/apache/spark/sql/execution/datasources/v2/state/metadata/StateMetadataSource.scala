@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceErrors
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.PATH
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataUtils, OperatorStateMetadataV1, OperatorStateMetadataV2}
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, StructType}

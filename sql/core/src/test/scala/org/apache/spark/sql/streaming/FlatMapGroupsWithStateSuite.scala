@@ -32,8 +32,9 @@ import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExecHelper, MemoryStateStore, RocksDBStateStoreProvider, StateStore}
+import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.{FlatMapGroupsWithStateExec, FlatMapGroupsWithStateExecHelper, FlatMapGroupsWithStateUserFuncException}
+import org.apache.spark.sql.execution.streaming.runtime._
+import org.apache.spark.sql.execution.streaming.state.{MemoryStateStore, RocksDBStateStoreProvider, StateStore}
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -52,7 +53,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   import testImplicits._
 
   import FlatMapGroupsWithStateSuite._
-  import GroupStateImpl._
+  import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl._
   import GroupStateTimeout._
 
   /**

@@ -2594,6 +2594,13 @@ class DataFrameAggregateSuite extends QueryTest
       res,
       Row(LocalTime.of(22, 1, 0), LocalTime.of(3, 0, 0)))
   }
+
+  test("SPARK-53155: global lower aggregation should not be removed") {
+    val df = emptyTestData
+      .groupBy().agg(lit(1).as("col1"), lit(2).as("col2"), lit(3).as("col3"))
+      .groupBy($"col1").agg(max("col1"))
+    checkAnswer(df, Seq(Row(1, 1)))
+  }
 }
 
 case class B(c: Option[Double])

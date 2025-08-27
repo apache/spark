@@ -20,8 +20,6 @@ package org.apache.spark.util.logging
 import java.io._
 import java.util.zip.GZIPOutputStream
 
-import com.google.common.io.Files
-
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config
@@ -100,7 +98,7 @@ private[spark] class RollingFileAppender(
         Utils.closeQuietly(gzOutputStream)
       }
     } else {
-      Files.move(activeFile, rolloverFile)
+      Utils.moveFile(activeFile, rolloverFile)
     }
   }
 

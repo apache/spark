@@ -21,7 +21,8 @@ import java.io._
 import java.nio.charset.StandardCharsets
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, SerializedOffset}
+import org.apache.spark.sql.execution.streaming.checkpointing.HDFSMetadataLog
+import org.apache.spark.sql.execution.streaming.runtime.SerializedOffset
 import org.apache.spark.util.Utils
 
 /** A version of [[HDFSMetadataLog]] specialized for saving the initial offsets. */

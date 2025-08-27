@@ -21,7 +21,6 @@ import java.io.{DataInputStream, DataOutputStream, FileNotFoundException, IOExce
 
 import scala.util.control.NonFatal
 
-import com.google.common.io.ByteStreams
 import org.apache.hadoop.fs.{FSError, Path}
 import org.json4s._
 import org.json4s.jackson.Serialization
@@ -31,8 +30,8 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.execution.streaming.state.RecordType.RecordType
 import org.apache.spark.util.NextIterator
 import org.apache.spark.util.Utils
@@ -485,14 +484,14 @@ class StateStoreChangelogReaderV1(
     } else {
       // TODO: reuse the key buffer and value buffer across records.
       val keyBuffer = new Array[Byte](keySize)
-      ByteStreams.readFully(input, keyBuffer, 0, keySize)
+      Utils.readFully(input, keyBuffer, 0, keySize)
       val valueSize = input.readInt()
       if (valueSize < 0) {
         // A deletion record
         (RecordType.DELETE_RECORD, keyBuffer, null)
       } else {
         val valueBuffer = new Array[Byte](valueSize)
-        ByteStreams.readFully(input, valueBuffer, 0, valueSize)
+        Utils.readFully(input, valueBuffer, 0, valueSize)
         // A put record.
         (RecordType.PUT_RECORD, keyBuffer, valueBuffer)
       }
@@ -516,7 +515,7 @@ class StateStoreChangelogReaderV2(
   private def parseBuffer(input: DataInputStream): Array[Byte] = {
     val blockSize = input.readInt()
     val blockBuffer = new Array[Byte](blockSize)
-    ByteStreams.readFully(input, blockBuffer, 0, blockSize)
+    Utils.readFully(input, blockBuffer, 0, blockSize)
     blockBuffer
   }
 

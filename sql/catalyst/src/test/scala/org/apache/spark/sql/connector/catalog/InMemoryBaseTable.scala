@@ -20,13 +20,12 @@ package org.apache.spark.sql.connector.catalog
 import java.time.{Instant, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util
+import java.util.Objects
 import java.util.OptionalLong
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
-
-import com.google.common.base.Objects
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, MetadataStructFieldWithLogicalName}
@@ -135,6 +134,8 @@ abstract class InMemoryBaseTable(
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
 
   private val acceptAnySchema = properties.getOrDefault("accept-any-schema", "false").toBoolean
+  private val autoSchemaEvolution = properties.getOrDefault("auto-schema-evolution", "true")
+    .toBoolean
 
   partitioning.foreach {
     case _: IdentityTransform =>
@@ -350,13 +351,11 @@ abstract class InMemoryBaseTable(
     TableCapability.OVERWRITE_DYNAMIC,
     TableCapability.TRUNCATE)
 
-  override def capabilities(): util.Set[TableCapability] = {
-    if (acceptAnySchema) {
-      (baseCapabiilities ++ Set(TableCapability.ACCEPT_ANY_SCHEMA)).asJava
-    } else {
-      baseCapabiilities.asJava
-    }
-  }
+  override def capabilities(): util.Set[TableCapability] =
+    (baseCapabiilities ++
+      (if (acceptAnySchema) Seq(TableCapability.ACCEPT_ANY_SCHEMA) else Seq.empty) ++
+      (if (autoSchemaEvolution) Seq(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION) else Seq.empty))
+      .asJava
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new InMemoryScanBuilder(schema, options)
@@ -756,7 +755,7 @@ case class PartitionInternalRow(keys: Array[Any])
     this.keys == other.asInstanceOf[PartitionInternalRow].keys
   }
   override def hashCode: Int = {
-    Objects.hashCode(keys)
+    Objects.hash(keys)
   }
 }
 

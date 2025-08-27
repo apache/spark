@@ -145,13 +145,17 @@ trait DataSourcePushdownTestUtils extends ExplainSuiteHelper {
     assert(joinNodes.nonEmpty, "Join should not be pushed down")
   }
 
-  protected def checkJoinPushed(df: DataFrame, expectedTables: String*): Unit = {
+  protected def checkJoinPushed(df: DataFrame): Unit = {
     val joinNodes = df.queryExecution.optimizedPlan.collect {
       case j: Join => j
     }
     assert(joinNodes.isEmpty, "Join should be pushed down")
-    if (expectedTables.nonEmpty) {
-      checkPushedInfo(df, s"PushedJoins: [${expectedTables.mkString(", ")}]")
+  }
+
+  protected def checkJoinPushed(df: DataFrame, expectedPushdownString: String): Unit = {
+    checkJoinPushed(df)
+    if (expectedPushdownString.nonEmpty) {
+      checkPushedInfo(df, expectedPushdownString)
     }
   }
 

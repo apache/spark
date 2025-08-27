@@ -19,13 +19,12 @@ package org.apache.spark
 
 import java.io._
 import java.nio.ByteBuffer
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.zip.GZIPOutputStream
 
 import scala.io.Source
 import scala.util.control.NonFatal
 
-import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io._
@@ -40,6 +39,7 @@ import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.Utils.createArray
 
 class FileSuite extends SparkFunSuite with LocalSparkContext {
   var tempDir: File = _
@@ -87,11 +87,12 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
     val normalFile = new File(normalDir, "part-00000")
     val normalContent = sc.textFile(normalDir).collect()
-    assert(normalContent === Array.fill(10000)("a"))
+    val expected = createArray(10000, "a")
+    assert(normalContent === expected)
 
     val compressedFile = new File(compressedOutputDir, "part-00000" + codec.getDefaultExtension)
     val compressedContent = sc.textFile(compressedOutputDir).collect()
-    assert(compressedContent === Array.fill(10000)("a"))
+    assert(compressedContent === expected)
 
     assert(compressedFile.length < normalFile.length)
   }
@@ -126,11 +127,12 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
       val normalFile = new File(normalDir, "part-00000")
       val normalContent = sc.sequenceFile[String, String](normalDir).collect()
-      assert(normalContent === Array.fill(100)(("abc", "abc")))
+      val expected = createArray(100, ("abc", "abc"))
+      assert(normalContent === expected)
 
       val compressedFile = new File(compressedOutputDir, "part-00000" + codec.getDefaultExtension)
       val compressedContent = sc.sequenceFile[String, String](compressedOutputDir).collect()
-      assert(compressedContent === Array.fill(100)(("abc", "abc")))
+      assert(compressedContent === expected)
 
       assert(compressedFile.length < normalFile.length)
     }
@@ -334,8 +336,8 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
       for (i <- 0 until 8) {
         val tempFile = new File(tempDir, s"part-0000$i")
-        Files.asCharSink(tempFile, StandardCharsets.UTF_8)
-          .write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1")
+        Files.writeString(tempFile.toPath,
+          "someline1 in file1\nsomeline2 in file1\nsomeline3 in file1")
       }
 
       for (p <- Seq(1, 2, 8)) {

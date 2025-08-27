@@ -21,16 +21,15 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.codahale.metrics.MetricSet;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
-import com.google.common.collect.Lists;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -100,9 +99,9 @@ public class TransportClientFactory implements Closeable {
   public TransportClientFactory(
       TransportContext context,
       List<TransportClientBootstrap> clientBootstraps) {
-    this.context = Preconditions.checkNotNull(context);
+    this.context = Objects.requireNonNull(context);
     this.conf = context.getConf();
-    this.clientBootstraps = Lists.newArrayList(Preconditions.checkNotNull(clientBootstraps));
+    this.clientBootstraps = new ArrayList<>(Objects.requireNonNull(clientBootstraps));
     this.connectionPool = new ConcurrentHashMap<>();
     this.numConnectionsPerPeer = conf.numConnectionsPerPeer();
     this.rand = new Random();
@@ -342,7 +341,7 @@ public class TransportClientFactory implements Closeable {
       logger.error("Exception while bootstrapping client after {} ms", e,
         MDC.of(LogKeys.BOOTSTRAP_TIME, bootstrapTimeMs));
       client.close();
-      Throwables.throwIfUnchecked(e);
+      if (e instanceof RuntimeException re) throw re;
       throw new RuntimeException(e);
     }
     long postBootstrap = System.nanoTime();

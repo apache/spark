@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import java.sql.Timestamp
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.{count, expr, lit, timestamp_seconds, window}
 import org.apache.spark.sql.internal.SQLConf
 

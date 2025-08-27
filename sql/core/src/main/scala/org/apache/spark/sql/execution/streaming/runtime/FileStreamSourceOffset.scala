@@ -15,12 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.runtime
 
 import scala.util.control.Exception._
 
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
+
+import org.apache.spark.sql.execution.streaming.Offset
 
 /**
  * Offset for the [[FileStreamSource]].
