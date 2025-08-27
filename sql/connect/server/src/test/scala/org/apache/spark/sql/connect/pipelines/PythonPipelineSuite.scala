@@ -445,10 +445,7 @@ class PythonPipelineSuite
 
         @dp.materialized_view
         def groupby_result():
-          return spark.read.table("src").groupBy("id").agg(
-            sum("id").alias("sum_id"),
-            count("*").alias("cnt")
-          )
+            return spark.read.table("src").groupBy("id").count()
       """)
 
     val updateContext = new PipelineUpdateContextImpl(graph, e => (
