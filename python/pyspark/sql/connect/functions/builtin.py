@@ -4487,8 +4487,8 @@ udf.__doc__ = pysparkfuncs.udf.__doc__
 
 def udtf(
     cls: Optional[Union[Type, StructType, str]] = None,
-    *,
     returnType: Optional[Union[StructType, str]] = None,
+    *,
     useArrow: Optional[bool] = None,
 ) -> Union["UserDefinedTableFunction", Callable[[Type], "UserDefinedTableFunction"]]:
     # check for conflicting returnType arguments
