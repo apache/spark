@@ -256,9 +256,13 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
             should_write_start_length = True
             for packed in iterator:
                 batch, arrow_return_type = packed
-                assert isinstance(batch, pa.RecordBatch), f"Expected pa.RecordBatch, got {type(batch)}"
-                assert isinstance(arrow_return_type, pa.StructType), f"Expected pa.StructType, got {type(arrow_return_type)}"
-                
+                assert isinstance(
+                    batch, pa.RecordBatch
+                ), f"Expected pa.RecordBatch, got {type(batch)}"
+                assert isinstance(
+                    arrow_return_type, pa.StructType
+                ), f"Expected pa.StructType, got {type(arrow_return_type)}"
+
                 # Apply type coercion to each column if needed
                 coerced_arrays = []
                 for i, field in enumerate(arrow_return_type):
@@ -275,20 +279,19 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                                 "func": "ArrowUDTF",
                             },
                         )
-                
+
                 # Create new batch with coerced arrays
                 struct = pa.StructArray.from_arrays(coerced_arrays, fields=arrow_return_type)
                 coerced_batch = pa.RecordBatch.from_arrays([struct], ["_0"])
-                
+
                 # Write the first record batch with initialization
                 if should_write_start_length:
                     write_int(SpecialLengths.START_ARROW_STREAM, stream)
                     should_write_start_length = False
-                
+
                 yield coerced_batch
 
         return ArrowStreamSerializer.dump_stream(self, wrap_and_init_stream(), stream)
-
 
 
 class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):

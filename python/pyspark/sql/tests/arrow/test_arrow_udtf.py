@@ -191,7 +191,7 @@ class ArrowUDTFTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            r"pyarrow\.lib\.ArrowInvalid: Failed to parse string: 'wrong_col' as a scalar of type int32"
+            r"pyarrow\.lib\.ArrowInvalid: Failed to parse string: 'wrong_col' as a scalar of type int32",
         ):
             result_df = MismatchedSchemaUDTF()
             result_df.collect()
@@ -353,7 +353,7 @@ class ArrowUDTFTestsMixin:
         # Should fail with Arrow cast exception since string cannot be cast to int
         with self.assertRaisesRegex(
             PythonException,
-            r"pyarrow\.lib\.ArrowInvalid: Failed to parse string: 'xyz' as a scalar of type int32"
+            r"pyarrow\.lib\.ArrowInvalid: Failed to parse string: 'xyz' as a scalar of type int32",
         ):
             result_df = StringToIntUDTF()
             result_df.collect()
@@ -396,14 +396,18 @@ class ArrowUDTFTestsMixin:
             def eval(self) -> Iterator["pa.Table"]:
                 result_table = pa.table(
                     {
-                        "id": pa.array([1, 2, 3], type=pa.int64()),         # long -> int coercion
-                        "price": pa.array([10.5, 20.7, 30.9], type=pa.float64()),  # double -> float coercion
+                        "id": pa.array([1, 2, 3], type=pa.int64()),  # long -> int coercion
+                        "price": pa.array(
+                            [10.5, 20.7, 30.9], type=pa.float64()
+                        ),  # double -> float coercion
                     }
                 )
                 yield result_table
 
         result_df = MultipleColumnCoercionUDTF()
-        expected_df = self.spark.createDataFrame([(1, 10.5), (2, 20.7), (3, 30.9)], "id int, price float")
+        expected_df = self.spark.createDataFrame(
+            [(1, 10.5), (2, 20.7), (3, 30.9)], "id int, price float"
+        )
         assertDataFrameEqual(result_df, expected_df)
 
     def test_arrow_udtf_with_empty_column_result(self):
