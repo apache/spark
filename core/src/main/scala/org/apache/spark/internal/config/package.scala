@@ -1212,8 +1212,8 @@ package object config {
   private[spark] val DRIVER_METRICS_POLLING_INTERVAL =
     ConfigBuilder("spark.driver.metrics.pollingInterval")
       .doc("How often to collect driver metrics (in milliseconds). " +
-        "If 0, the polling is done at the executor heartbeat interval. " +
-        "If positive, the polling is done at this interval.")
+        "If unset, the polling is done at the executor heartbeat interval. " +
+        "If set, the polling is done at this interval.")
       .version("4.1.0")
       .fallbackConf(EXECUTOR_HEARTBEAT_INTERVAL)
 
