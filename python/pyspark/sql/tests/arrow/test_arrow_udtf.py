@@ -345,13 +345,16 @@ class ArrowUDTFTestsMixin:
                 # Return string values that cannot be coerced to int
                 result_table = pa.table(
                     {
-                        "id": pa.array(["abc", "def", "xyz"], type=pa.string()),
+                        "id": pa.array(["1", "2", "xyz"], type=pa.string()),
                     }
                 )
                 yield result_table
 
         # Should fail with Arrow cast exception since string cannot be cast to int
-        with self.assertRaises(Exception):
+        with self.assertRaisesRegex(
+            PythonException,
+            r"pyarrow\.lib\.ArrowInvalid: Failed to parse string: 'xyz' as a scalar of type int32"
+        ):
             result_df = StringToIntUDTF()
             result_df.collect()
 
