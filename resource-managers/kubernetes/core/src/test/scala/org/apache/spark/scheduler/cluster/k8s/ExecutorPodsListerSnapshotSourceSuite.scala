@@ -33,10 +33,9 @@ import org.apache.spark.deploy.k8s.Constants.{SPARK_APP_ID_LABEL, SPARK_POD_EXEC
 import org.apache.spark.deploy.k8s.Fabric8Aliases.{LABELED_PODS, PODS}
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
 
-class ExecutorPodsListerSnapshotSourceSuite extends SparkFunSuite
-  with BeforeAndAfterEach {
+class ExecutorPodsListerSnapshotSourceSuite extends SparkFunSuite with BeforeAndAfterEach {
 
-  val TEST_NAMESPACE = "test-namespace"
+  private val testNamespace = "test-namespace"
   private val sparkConf = new SparkConf
   private val pollingInterval = sparkConf.get(KUBERNETES_EXECUTOR_LISTER_POLLING_INTERVAL)
   private val resyncInterval = sparkConf.get(KUBERNETES_EXECUTOR_INFORMER_RESYNC_INTERVAL)
@@ -70,10 +69,10 @@ class ExecutorPodsListerSnapshotSourceSuite extends SparkFunSuite
     MockitoAnnotations.initMocks(this)
     snapshotSource = new ExecutorPodsListerSnapshotSource
     informerManager = new InformerManager(kubernetesClient, TEST_SPARK_APP_ID, sparkConf)
-    snapshotSource.init(sparkConf, kubernetesClient, snapshotsStore,
-      informerManager, pollingExecutor)
+    snapshotSource.init(sparkConf, kubernetesClient, snapshotsStore, informerManager,
+      pollingExecutor)
 
-    when(kubernetesClient.getNamespace).thenReturn(TEST_NAMESPACE)
+    when(kubernetesClient.getNamespace).thenReturn(testNamespace)
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
       .thenReturn(appIdLabeledPods)
@@ -90,13 +89,13 @@ class ExecutorPodsListerSnapshotSourceSuite extends SparkFunSuite
     val exec1 = runningExecutor(1)
     val exec2 = runningExecutor(2)
     val podList = new PodListBuilder().addToItems(exec1, exec2).build().getItems
-    when(indexer.byIndex("namespace", TEST_NAMESPACE)).thenReturn(podList)
+    when(indexer.byIndex("namespace", testNamespace)).thenReturn(podList)
     pollingExecutor.tick(pollingInterval, TimeUnit.MILLISECONDS)
     verify(snapshotsStore).replaceSnapshot(Seq(exec1, exec2))
   }
 
   test("Empty list of pods results in empty snapshot replacement") {
-    when(indexer.byIndex("namespace", TEST_NAMESPACE))
+    when(indexer.byIndex("namespace", testNamespace))
       .thenReturn(new PodListBuilder().build().getItems)
 
     pollingExecutor.tick(pollingInterval, TimeUnit.MILLISECONDS)

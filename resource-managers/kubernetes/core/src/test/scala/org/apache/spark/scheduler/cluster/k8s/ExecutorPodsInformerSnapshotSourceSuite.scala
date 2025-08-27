@@ -30,11 +30,14 @@ import org.apache.spark.deploy.k8s.Constants.{SPARK_APP_ID_LABEL, SPARK_POD_EXEC
 import org.apache.spark.deploy.k8s.Fabric8Aliases.{LABELED_PODS, PODS}
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils.{runningExecutor, TEST_SPARK_APP_ID}
 
-class ExecutorPodsInformerSnapshotSourceSuite extends SparkFunSuite
-  with BeforeAndAfterEach with MockitoSugar {
+class ExecutorPodsInformerSnapshotSourceSuite
+  extends SparkFunSuite
+  with BeforeAndAfterEach
+  with MockitoSugar {
 
   private var snapshotSource: ExecutorPodsInformerSnapshotSource = _
   private var informerManager: InformerManager = _
+
   private val sparkConf = new SparkConf()
   private val resyncInterval = sparkConf.get(KUBERNETES_EXECUTOR_INFORMER_RESYNC_INTERVAL)
   private val handlerCaptor: ArgumentCaptor[ResourceEventHandler[Pod]] =
@@ -76,13 +79,11 @@ class ExecutorPodsInformerSnapshotSourceSuite extends SparkFunSuite
 
   test("Informer should be run when snapshot source is started") {
     snapshotSource.start(TEST_SPARK_APP_ID)
-
     verify(informer, times(1)).run()
   }
 
   test("Informer should stop running when snapshot source is stopped") {
     snapshotSource.start(TEST_SPARK_APP_ID)
-
     snapshotSource.stop()
     verify(informer, times(1)).close()
   }
