@@ -685,6 +685,15 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Row(11))
   }
 
+  test("EXECUTE IMMEDIATE with parameters in data type contexts") {
+    // Test that EXECUTE IMMEDIATE with parameters in data type contexts still works
+    // This validates that our top-level parsing fix doesn't break nested parameter substitution
+    checkAnswer(
+      sql("EXECUTE IMMEDIATE 'SELECT 5::DECIMAL(:p, :s)' USING 10 AS p, 5 AS s"),
+      Row(BigDecimal("5.00000"))
+    )
+  }
+
   test("SPARK-49398: Cache Table with parameter markers in select query now works") {
     val sqlText = "CACHE TABLE CacheTable as SELECT 1 + :param1"
     // Parameter markers are now supported in CACHE TABLE statements

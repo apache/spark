@@ -480,35 +480,9 @@ class SparkSession private(
                         case _ => Array.empty[org.apache.spark.QueryContext]
                       }
 
-                      val translatedError = if (contexts.isEmpty) {
-                        // No query context available - create a default context
-                        // spanning the entire original SQL
-                        val originalSql = positionMapper.originalText
-                        val defaultContext = org.apache.spark.sql.catalyst.trees.SQLQueryContext(
-                          line = None,
-                          startPosition = None,
-                          originStartIndex = Some(0),
-                          originStopIndex = Some(originalSql.length - 1),
-                          sqlText = Some(originalSql),
-                          originObjectType = None,
-                          originObjectName = None
-                        )
-
-                        // For ParseException, create a new instance with the updated context
-                        e match {
-                          case pe: org.apache.spark.sql.catalyst.parser.ParseException =>
-                            new org.apache.spark.sql.catalyst.parser.ParseException(
-                              pe.command,
-                              pe.start,
-                              pe.getCondition,
-                              pe.messageParameters,
-                              Array(defaultContext)
-                            )
-                          case _ =>
-                            // For other exception types, try the generic updateQueryContext
-                            e.updateQueryContext(_ => Array(defaultContext)).asInstanceOf[Throwable]
-                        }
-                      } else {
+                      // Only apply position mapping if we have existing contexts
+                      // - don't create artificial ones
+                      if (contexts.nonEmpty) {
                         // Apply position mapping to existing contexts
                         val translatedContexts = contexts.map { context =>
                           context match {
@@ -520,8 +494,7 @@ class SparkSession private(
                           }
                         }
 
-                        // For ParseException, create a new instance with translated contexts
-                        e match {
+                        val translatedError = e match {
                           case pe: org.apache.spark.sql.catalyst.parser.ParseException =>
                             new org.apache.spark.sql.catalyst.parser.ParseException(
                               pe.command,
@@ -532,10 +505,14 @@ class SparkSession private(
                             )
                           case _ =>
                             // For other exception types, try the generic updateQueryContext
-                            e.updateQueryContext(_ => translatedContexts).asInstanceOf[Throwable]
+                            e.updateQueryContext(_ => translatedContexts)
+                              .asInstanceOf[Throwable]
                         }
+                        throw translatedError
+                      } else {
+                        // No existing contexts - don't create artificial ones, just throw original
+                        throw e
                       }
-                      throw translatedError
                     case None =>
                       throw e
                   }
@@ -574,109 +551,96 @@ class SparkSession private(
    *             such as `map()`, `array()`, `struct()`, in that case it is taken as is.
    * @param tracker A tracker that can notify when query is ready for execution
    */
-  private[sql] def sql(
+    private[sql] def sql(
       sqlText: String,
       args: Map[String, Any],
       tracker: QueryPlanningTracker): DataFrame =
     withActive {
-      // Always set parameter context for the entire execution cycle, even if args is empty
-      val paramContext = NamedParameterContext(args.transform((_, v) => lit(v).expr))
-      ThreadLocalParameterContext.withContext(paramContext) {
+      // Only set parameter context if we have actual parameters
+      if (args.nonEmpty) {
+        val paramContext = NamedParameterContext(args.transform((_, v) => lit(v).expr))
+        ThreadLocalParameterContext.withContext(paramContext) {
+          val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
+            sessionState.sqlParser.parsePlan(sqlText)
+          }
+
+          // Apply position mapping to any exceptions that bubble up from the entire execution cycle
+          try {
+            Dataset.ofRows(self, plan, tracker)
+          } catch {
+            case e: Throwable with org.apache.spark.sql.catalyst.trees.WithOrigin =>
+              val contexts = e match {
+                case ae: org.apache.spark.sql.AnalysisException => ae.getQueryContext
+                case _ => Array.empty[org.apache.spark.QueryContext]
+              }
+
+              // Check if parameter substitution occurred and apply position mapping
+              if (!sessionState.conf.legacyParameterSubstitutionConstantsOnly && args.nonEmpty) {
+                sessionState.sqlParser match {
+                  case sparkParser: org.apache.spark.sql.execution.SparkSqlParser =>
+                    sparkParser.getPositionMapper match {
+                      case Some(positionMapper) =>
+                        val contexts = e match {
+                          case ae: org.apache.spark.sql.AnalysisException => ae.getQueryContext
+                          case _ => Array.empty[org.apache.spark.QueryContext]
+                        }
+
+                        // Only apply position mapping if we have existing contexts
+                        // - don't create artificial ones
+                        if (contexts.nonEmpty) {
+                          // Apply position mapping to existing contexts
+                          val translatedContexts = contexts.map { context =>
+                            context match {
+                              case sqlContext:
+                                  org.apache.spark.sql.catalyst.trees.SQLQueryContext =>
+                                org.apache.spark.sql.catalyst.parser.PositionTranslationUtils
+                                  .translateSqlContext(sqlContext, positionMapper)
+                              case _ => context
+                            }
+                          }
+
+                          // For ParseException, create a new instance with translated contexts
+                          val translatedError = e match {
+                            case pe: org.apache.spark.sql.catalyst.parser.ParseException =>
+                              new org.apache.spark.sql.catalyst.parser.ParseException(
+                                pe.command,
+                                pe.start,
+                                pe.getCondition,
+                                pe.messageParameters,
+                                translatedContexts
+                              )
+                            case _ =>
+                              // For other exception types, try the generic updateQueryContext
+                              e.updateQueryContext(_ => translatedContexts)
+                                .asInstanceOf[Throwable]
+                          }
+                          throw translatedError
+                        } else {
+                          // No existing contexts - don't create artificial ones,
+                          // just throw original
+                          throw e
+                        }
+                      case None =>
+                        throw e
+                    }
+                  case _ =>
+                    throw e
+                }
+              } else {
+                throw e
+              }
+            case e: Throwable =>
+
+              // No WithOrigin trait, throw as-is
+              throw e
+          }
+        }
+      } else {
+        // No parameters - parse normally without parameter context
         val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
           sessionState.sqlParser.parsePlan(sqlText)
         }
-
-        // Apply position mapping to any exceptions that bubble up from the entire execution cycle
-        try {
-          Dataset.ofRows(self, plan, tracker)
-        } catch {
-          case e: Throwable with org.apache.spark.sql.catalyst.trees.WithOrigin =>
-            val contexts = e match {
-              case ae: org.apache.spark.sql.AnalysisException => ae.getQueryContext
-              case _ => Array.empty[org.apache.spark.QueryContext]
-            }
-
-            // Check if parameter substitution occurred and apply position mapping
-            if (!sessionState.conf.legacyParameterSubstitutionConstantsOnly && args.nonEmpty) {
-              sessionState.sqlParser match {
-                case sparkParser: org.apache.spark.sql.execution.SparkSqlParser =>
-                  sparkParser.getPositionMapper match {
-                    case Some(positionMapper) =>
-                      val contexts = e match {
-                        case ae: org.apache.spark.sql.AnalysisException => ae.getQueryContext
-                        case _ => Array.empty[org.apache.spark.QueryContext]
-                      }
-
-                      val translatedError = if (contexts.isEmpty) {
-                        // No query context available - create a default context
-                        // spanning the entire original SQL
-                        val originalSql = positionMapper.originalText
-                        val defaultContext = org.apache.spark.sql.catalyst.trees.SQLQueryContext(
-                          line = None,
-                          startPosition = None,
-                          originStartIndex = Some(0),
-                          originStopIndex = Some(originalSql.length - 1),
-                          sqlText = Some(originalSql),
-                          originObjectType = None,
-                          originObjectName = None
-                        )
-
-                        // For ParseException, create a new instance with the updated context
-                        e match {
-                          case pe: org.apache.spark.sql.catalyst.parser.ParseException =>
-                            new org.apache.spark.sql.catalyst.parser.ParseException(
-                              pe.command,
-                              pe.start,
-                              pe.getCondition,
-                              pe.messageParameters,
-                              Array(defaultContext)
-                            )
-                          case _ =>
-                            // For other exception types, try the generic updateQueryContext
-                            e.updateQueryContext(_ => Array(defaultContext)).asInstanceOf[Throwable]
-                        }
-                      } else {
-                        // Apply position mapping to existing contexts
-                        val translatedContexts = contexts.map { context =>
-                          context match {
-                            case sqlContext:
-                                org.apache.spark.sql.catalyst.trees.SQLQueryContext =>
-                              org.apache.spark.sql.catalyst.parser.PositionTranslationUtils
-                                .translateSqlContext(sqlContext, positionMapper)
-                            case _ => context
-                          }
-                        }
-
-                        // For ParseException, create a new instance with translated contexts
-                        e match {
-                          case pe: org.apache.spark.sql.catalyst.parser.ParseException =>
-                            new org.apache.spark.sql.catalyst.parser.ParseException(
-                              pe.command,
-                              pe.start,
-                              pe.getCondition,
-                              pe.messageParameters,
-                              translatedContexts
-                            )
-                          case _ =>
-                            // For other exception types, try the generic updateQueryContext
-                            e.updateQueryContext(_ => translatedContexts).asInstanceOf[Throwable]
-                        }
-                      }
-                      throw translatedError
-                    case None =>
-                      throw e
-                  }
-                case _ =>
-                  throw e
-              }
-            } else {
-              throw e
-            }
-          case e: Throwable =>
-
-            // No WithOrigin trait, throw as-is
-            throw e
-        }
+        Dataset.ofRows(self, plan, tracker)
       }
     }
 
