@@ -1562,12 +1562,12 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val ctx = TaskContext.empty()
 
     val batchIter = ArrowConverters.toBatchIterator(
-      inputRows.iterator, schema, 10, null, true, false, ctx)
+      inputRows.iterator, schema, 10, null, true, ctx)
 
     // Write batches to Arrow IPC stream format
     val out = new ByteArrayOutputStream()
     Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
-      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true)
       writer.writeBatches(batchIter)
       writer.end()
     }
@@ -1605,11 +1605,11 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
     // Create multiple batches with small batch size
     val batchIter = ArrowConverters.toBatchIterator(
-      inputRows.iterator, schema, 5, null, true, false, ctx)
+      inputRows.iterator, schema, 5, null, true, ctx)
 
     val out = new ByteArrayOutputStream()
     Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
-      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true)
       writer.writeBatches(batchIter)
       writer.end()
     }
@@ -1639,11 +1639,11 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val ctx = TaskContext.empty()
 
     val batchIter = ArrowConverters.toBatchIterator(
-      inputRows.iterator, schema, 7, null, true, false, ctx)
+      inputRows.iterator, schema, 7, null, true, ctx)
 
     val out = new ByteArrayOutputStream()
     Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
-      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true)
       writer.writeBatches(batchIter)
       writer.end()
     }
@@ -1676,11 +1676,11 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
     // Create multiple batches
     val batchIter = ArrowConverters.toBatchIterator(
-      inputRows.iterator, schema, 4, null, true, false, ctx)
+      inputRows.iterator, schema, 4, null, true, ctx)
 
     val out = new ByteArrayOutputStream()
     Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
-      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true)
       writer.writeBatches(batchIter)
       writer.end()
     }
@@ -1712,11 +1712,11 @@ class ArrowConvertersSuite extends SharedSparkSession {
     testCases.foreach { case (rowCount, batchSize) =>
       val inputRows = (0 until rowCount).map(InternalRow(_))
       val batchIter = ArrowConverters.toBatchIterator(
-        inputRows.iterator, schema, batchSize, null, true, false, ctx)
+        inputRows.iterator, schema, batchSize, null, true, ctx)
 
       val out = new ByteArrayOutputStream()
       Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
-        val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
+        val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true)
         writer.writeBatches(batchIter)
         writer.end()
       }
@@ -1755,11 +1755,11 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val ctx = TaskContext.empty()
 
     val batchIter = ArrowConverters.toBatchIterator(
-      Iterator.empty, schema, 10, null, true, false, ctx)
+      Iterator.empty, schema, 10, null, true, ctx)
 
     val out = new ByteArrayOutputStream()
     Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
-      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true)
       writer.writeBatches(batchIter)
       writer.end()
     }
@@ -1801,11 +1801,11 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val ctx = TaskContext.empty()
 
     val batchIter = ArrowConverters.toBatchIterator(
-      inputRows.iterator, schema, 10, null, true, false, ctx)
+      inputRows.iterator, schema, 10, null, true, ctx)
 
     val out = new ByteArrayOutputStream()
     Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
-      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true)
       writer.writeBatches(batchIter)
       writer.end()
     }
@@ -1828,11 +1828,11 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
     // Create many small batches
     val batchIter = ArrowConverters.toBatchIterator(
-      inputRows.iterator, schema, 3, null, true, false, ctx)
+      inputRows.iterator, schema, 3, null, true, ctx)
 
     val out = new ByteArrayOutputStream()
     Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
-      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true)
       writer.writeBatches(batchIter)
       writer.end()
     }
@@ -1897,11 +1897,11 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
     // Use small batch size to create many batches
     val batchIter = ArrowConverters.toBatchIterator(
-      projectedRows.iterator, schema, 7, null, true, false, ctx)
+      projectedRows.iterator, schema, 7, null, true, ctx)
 
     val out = new ByteArrayOutputStream()
     Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
-      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true)
       writer.writeBatches(batchIter)
       writer.end()
     }
@@ -1933,11 +1933,11 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val batchSize = 7
 
     val batchIter = ArrowConverters.toBatchIterator(
-      inputRows.iterator, schema, batchSize, null, true, false, ctx)
+      inputRows.iterator, schema, batchSize, null, true, ctx)
 
     val out = new ByteArrayOutputStream()
     Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
-      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true)
       writer.writeBatches(batchIter)
       writer.end()
     }
