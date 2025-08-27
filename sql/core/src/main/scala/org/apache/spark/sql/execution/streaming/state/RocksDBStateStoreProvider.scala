@@ -877,15 +877,21 @@ private[sql] class RocksDBStateStoreProvider
   override def getStateStoreChangeDataReader(
       startVersion: Long,
       endVersion: Long,
-      colFamilyNameOpt: Option[String] = None):
+      colFamilyNameOpt: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None):
     StateStoreChangeDataReader = {
     val statePath = stateStoreId.storeCheckpointLocation()
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
+
+    val fileManager = rocksDB.fileManager
+
     new RocksDBStateStoreChangeDataReader(
       CheckpointFileManager.create(statePath, hadoopConf),
+      fileManager,
       statePath,
       startVersion,
       endVersion,
+      endVersionStateStoreCkptId,
       CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec),
       keyValueEncoderMap,
       colFamilyNameOpt)
@@ -1224,9 +1230,11 @@ object RocksDBStateStoreProvider {
 /** [[StateStoreChangeDataReader]] implementation for [[RocksDBStateStoreProvider]] */
 class RocksDBStateStoreChangeDataReader(
     fm: CheckpointFileManager,
+    rocksDBFileManager: RocksDBFileManager,
     stateLocation: Path,
     startVersion: Long,
     endVersion: Long,
+    endVersionStateStoreCkptId: Option[String],
     compressionCodec: CompressionCodec,
     keyValueEncoderMap:
       ConcurrentHashMap[String, (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short)],
@@ -1234,7 +1242,20 @@ class RocksDBStateStoreChangeDataReader(
   extends StateStoreChangeDataReader(
     fm, stateLocation, startVersion, endVersion, compressionCodec, colFamilyNameOpt) {
 
-  override protected var changelogSuffix: String = "changelog"
+  override protected val versionsAndUniqueIds: Array[(Long, Option[String])] =
+    if (endVersionStateStoreCkptId.isDefined) {
+      val fullVersionLineage = rocksDBFileManager.getFullLineage(
+        startVersion,
+        endVersion,
+        endVersionStateStoreCkptId)
+      fullVersionLineage
+        .sortBy(_.version)
+        .map(item => (item.version, Some(item.checkpointUniqueId)))
+    } else {
+      (startVersion to endVersion).map((_, None)).toArray
+    }
+
+  override protected val changelogSuffix: String = "changelog"
 
   override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
     var currRecord: (RecordType.Value, Array[Byte], Array[Byte]) = null

@@ -47,6 +47,14 @@ class RocksDBWithChangelogCheckpointStateDataSourceChangeDataReaderSuite extends
   }
 }
 
+class RocksDBWithCheckpointV2StateDataSourceChangeDataReaderSuite extends
+  RocksDBWithChangelogCheckpointStateDataSourceChangeDataReaderSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set("spark.sql.streaming.stateStore.checkpointFormatVersion", "2")
+  }
+}
+
 abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestBase
   with Assertions {
 
@@ -139,11 +147,16 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
   }
 
   test("getChangeDataReader of state store provider") {
+    val versionToCkptId = scala.collection.mutable.Map[Long, Option[String]]()
+
     def withNewStateStore(provider: StateStoreProvider, version: Int)(f: StateStore => Unit):
       Unit = {
-      val stateStore = provider.getStore(version)
+      val stateStore = provider.getStore(version, versionToCkptId.getOrElse(version, None))
       f(stateStore)
       stateStore.commit()
+
+      val ssInfo = stateStore.getStateStoreCheckpointInfo()
+      versionToCkptId(ssInfo.batchVersion) = ssInfo.stateStoreCkptId
     }
 
     withTempDir { tempDir =>
@@ -158,7 +171,8 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
         stateStore.remove(dataToKeyRow("b", 2)) }
 
       val reader =
-        provider.asInstanceOf[SupportsFineGrainedReplay].getStateStoreChangeDataReader(1, 4)
+        provider.asInstanceOf[SupportsFineGrainedReplay]
+          .getStateStoreChangeDataReader(1, 4, None, versionToCkptId.getOrElse(4, None))
 
       assert(reader.next() === (RecordType.PUT_RECORD, dataToKeyRow("a", 1), dataToValueRow(1), 0L))
       assert(reader.next() === (RecordType.PUT_RECORD, dataToKeyRow("b", 2), dataToValueRow(2), 1L))
@@ -320,6 +334,93 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
       )
 
       checkAnswer(keyToNumValuesDf, keyToNumValuesDfExpectedDf)
+    }
+  }
+
+  test("read change feed past multiple snapshots") {
+    withSQLConf("spark.sql.streaming.stateStore.minDeltasForSnapshot" -> "2") {
+      withTempDir { tempDir =>
+        val inputData = MemoryStream[Int]
+        val df = inputData.toDF().groupBy("value").count()
+        testStream(df, OutputMode.Update)(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+          AddData(inputData, 1, 2, 3, 4, 1),
+          ProcessAllAvailable(),
+          AddData(inputData, 2, 3, 4, 5),
+          ProcessAllAvailable(),
+          AddData(inputData, 3, 4, 5, 6),
+          ProcessAllAvailable(),
+          AddData(inputData, 1, 1),
+          ProcessAllAvailable(),
+          AddData(inputData, 1, 1),
+          ProcessAllAvailable(),
+          AddData(inputData, 1, 1),
+          ProcessAllAvailable()
+        )
+
+        val stateDf = spark.read.format("statestore")
+          .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+          .option(StateSourceOptions.CHANGE_END_BATCH_ID, 5)
+          .load(tempDir.getAbsolutePath)
+
+        val expectedDf = Seq(
+          Row(0L, "update", Row(3), Row(1), 1),
+          Row(1L, "update", Row(3), Row(2), 1),
+          Row(1L, "update", Row(5), Row(1), 1),
+          Row(2L, "update", Row(3), Row(3), 1),
+          Row(2L, "update", Row(5), Row(2), 1),
+          Row(0L, "update", Row(4), Row(1), 2),
+          Row(1L, "update", Row(4), Row(2), 2),
+          Row(2L, "update", Row(4), Row(3), 2),
+          Row(0L, "update", Row(1), Row(2), 3),
+          Row(3L, "update", Row(1), Row(4), 3),
+          Row(4L, "update", Row(1), Row(6), 3),
+          Row(5L, "update", Row(1), Row(8), 3),
+          Row(0L, "update", Row(2), Row(1), 4),
+          Row(1L, "update", Row(2), Row(2), 4),
+          Row(2L, "update", Row(6), Row(1), 4)
+        )
+
+        checkAnswer(stateDf, expectedDf)
+
+        val stateDf2 = spark.read.format("statestore")
+          .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 1)
+          .option(StateSourceOptions.CHANGE_END_BATCH_ID, 3)
+          .load(tempDir.getAbsolutePath)
+
+        val expectedDf2 = Seq(
+          Row(1L, "update", Row(3), Row(2), 1),
+          Row(1L, "update", Row(5), Row(1), 1),
+          Row(2L, "update", Row(3), Row(3), 1),
+          Row(2L, "update", Row(5), Row(2), 1),
+          Row(1L, "update", Row(4), Row(2), 2),
+          Row(2L, "update", Row(4), Row(3), 2),
+          Row(3L, "update", Row(1), Row(4), 3),
+          Row(1L, "update", Row(2), Row(2), 4),
+          Row(2L, "update", Row(6), Row(1), 4)
+        )
+
+        checkAnswer(stateDf2, expectedDf2)
+
+        val stateDf3 = spark.read.format("statestore")
+          .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 2)
+          .option(StateSourceOptions.CHANGE_END_BATCH_ID, 4)
+          .load(tempDir.getAbsolutePath)
+
+        val expectedDf3 = Seq(
+          Row(2L, "update", Row(3), Row(3), 1),
+          Row(2L, "update", Row(5), Row(2), 1),
+          Row(2L, "update", Row(4), Row(3), 2),
+          Row(3L, "update", Row(1), Row(4), 3),
+          Row(4L, "update", Row(1), Row(6), 3),
+          Row(2L, "update", Row(6), Row(1), 4)
+        )
+
+        checkAnswer(stateDf3, expectedDf3)
+      }
     }
   }
 }

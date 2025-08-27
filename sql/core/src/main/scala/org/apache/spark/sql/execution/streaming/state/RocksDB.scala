@@ -315,35 +315,6 @@ class RocksDB(
   private val snapshotsToUploadQueue = new ConcurrentLinkedQueue[RocksDBSnapshot]()
 
   /**
-   * Read the lineage from the changelog files. It first get the changelog reader
-   * of the correct changelog version and then read the lineage information from the file.
-   * The changelog file is named as version_stateStoreCkptId.changelog
-   * @param version version of the changelog file, used to load changelog file.
-   * @param stateStoreCkptId uniqueId of the changelog file, used to load changelog file.
-   * @return the lineage stored in the changelog file
-   */
-  private def getLineageFromChangelogFile(
-      version: Long,
-      stateStoreCkptId: Option[String]): Array[LineageItem] = {
-    var changelogReader: StateStoreChangelogReader = null
-    var currLineage: Array[LineageItem] = Array.empty
-    try {
-      changelogReader = fileManager.getChangelogReader(version, stateStoreCkptId)
-      currLineage = changelogReader.lineage
-      logInfo(log"Loading lineage: " +
-        log"${MDC(LogKeys.LINEAGE, lineageManager)} from " +
-        log"changelog version: ${MDC(LogKeys.VERSION_NUM, version)} " +
-        log"uniqueId: ${MDC(LogKeys.UUID, stateStoreCkptId.getOrElse(""))}.")
-    } finally {
-      if (changelogReader != null) {
-        changelogReader.closeIfNeeded()
-      }
-    }
-    currLineage
-  }
-
-
-  /**
    * Load the given version of data in a native RocksDB instance.
    * Note that this will copy all the necessary file from DFS to local disk as needed,
    * and possibly restart the native RocksDB instance.
@@ -374,8 +345,9 @@ class RocksDB(
             currVersionLineage = Array(LineageItem(version, stateStoreCkptId.get))
             (version, stateStoreCkptId)
           } else {
-            currVersionLineage = getLineageFromChangelogFile(version, stateStoreCkptId) :+
-              LineageItem(version, stateStoreCkptId.get)
+            currVersionLineage
+              = fileManager.getLineageFromChangelogFile(version, stateStoreCkptId) :+
+                LineageItem(version, stateStoreCkptId.get)
             currVersionLineage = currVersionLineage.sortBy(_.version)
 
             val latestSnapshotVersionsAndUniqueId =
