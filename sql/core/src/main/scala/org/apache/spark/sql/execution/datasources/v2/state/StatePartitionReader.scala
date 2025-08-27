@@ -132,7 +132,7 @@ abstract class StatePartitionReaderBase(
     if (useColFamilies) {
       val store = provider.getStore(
         partition.sourceOptions.batchId + 1,
-        getStartStoreUniqueId)
+        getEndStoreUniqueId)
       require(stateStoreColFamilySchemaOpt.isDefined)
       val stateStoreColFamilySchema = stateStoreColFamilySchemaOpt.get
       require(stateStoreColFamilySchema.keyStateEncoderSpec.isDefined)
