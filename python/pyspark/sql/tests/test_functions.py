@@ -492,7 +492,7 @@ class FunctionsTestsMixin:
         # Valid input.
         df = self.spark.range(1).select(
             F.lit(datetime.date(2024, 5, 22)).alias("date"),
-            F.lit(datetime.time(10, 30, 0)).alias("time")
+            F.lit(datetime.time(10, 30, 0)).alias("time"),
         )
         actual = df.select(F.try_make_timestamp_ntz(df.date, df.time))
         assertDataFrameEqual(actual, [Row(result)])
@@ -710,7 +710,7 @@ class FunctionsTestsMixin:
         # Tests with arguments: date, time.
         df = self.spark.range(1).select(
             F.lit(datetime.date(2024, 5, 22)).alias("date"),
-            F.lit(datetime.time(10, 30, 0)).alias("time")
+            F.lit(datetime.time(10, 30, 0)).alias("time"),
         )
         actual = df.select(F.make_timestamp_ntz(df.date, df.time))
         assertDataFrameEqual(actual, [Row(result)])

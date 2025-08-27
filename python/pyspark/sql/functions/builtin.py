@@ -25238,9 +25238,7 @@ def make_timestamp_ntz(
         )
     elif not hasDays and not hasHours and not hasMins and not hasSecs:
         # Overload with inputs: date, time.
-        return _invoke_function_over_columns(
-            "make_timestamp_ntz", yearsOrDate, monthsOrTime
-        )
+        return _invoke_function_over_columns("make_timestamp_ntz", yearsOrDate, monthsOrTime)
     else:
         raise PySparkValueError(
             errorClass="INVALID_NUM_ARGS",
@@ -25379,9 +25377,7 @@ def try_make_timestamp_ntz(
         )
     elif not hasDays and not hasHours and not hasMins and not hasSecs:
         # Overload with inputs: date, time.
-        return _invoke_function_over_columns(
-            "try_make_timestamp_ntz", yearsOrDate, monthsOrTime
-        )
+        return _invoke_function_over_columns("try_make_timestamp_ntz", yearsOrDate, monthsOrTime)
     else:
         raise PySparkValueError(
             errorClass="INVALID_NUM_ARGS",
