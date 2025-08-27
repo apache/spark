@@ -19,7 +19,7 @@ import numbers
 from typing import Any, Union
 
 import pandas as pd
-from pandas.api.types import CategoricalDtype, is_integer_dtype
+from pandas.api.types import CategoricalDtype, is_integer_dtype  # type: ignore[attr-defined]
 from pandas.core.dtypes.common import is_numeric_dtype
 
 from pyspark.pandas.base import column_op, IndexOpsMixin
