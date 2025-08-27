@@ -28,7 +28,7 @@ from typing import Iterator, cast
 from pyspark import SparkConf
 from pyspark.errors import PySparkValueError
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, pandas_udf, udf
+from pyspark.sql.functions import col, arrow_udf, pandas_udf, udf
 from pyspark.sql.window import Window
 from pyspark.profiler import UDFBasicProfiler
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -127,6 +127,16 @@ class UDFProfilerTests(unittest.TestCase):
 
         self.spark.range(10).select(iter_to_iter("id")).collect()
 
+    def exec_arrow_udf_iter_to_iter(self):
+        import pyarrow as pa
+
+        @arrow_udf("int")
+        def iter_to_iter(iter: Iterator[pa.Array]) -> Iterator[pa.Array]:
+            for s in iter:
+                yield pa.compute.add(s, 1)
+
+        self.spark.range(10).select(iter_to_iter("id")).collect()
+
     # Unsupported
     def exec_map(self):
         import pandas as pd
@@ -143,6 +153,15 @@ class UDFProfilerTests(unittest.TestCase):
         with warnings.catch_warnings(record=True) as warns:
             warnings.simplefilter("always")
             self.exec_pandas_udf_iter_to_iter()
+            user_warns = [warn.message for warn in warns if isinstance(warn.message, UserWarning)]
+            self.assertTrue(len(user_warns) > 0)
+            self.assertTrue(
+                "Profiling UDFs with iterators input/output is not supported" in str(user_warns[0])
+            )
+
+        with warnings.catch_warnings(record=True) as warns:
+            warnings.simplefilter("always")
+            self.exec_arrow_udf_iter_to_iter()
             user_warns = [warn.message for warn in warns if isinstance(warn.message, UserWarning)]
             self.assertTrue(len(user_warns) > 0)
             self.assertTrue(
