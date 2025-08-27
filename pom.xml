@@ -382,7 +382,7 @@
     </repository>
     <repository>
       <id>hadoop-staging</id>
-      <url>https://repository.apache.org/content/repositories/orgapachehadoop-1441</url>
+      <url>https://repository.apache.org/content/repositories/orgapachehadoop-1443</url>
       <releases>
         <enabled>true</enabled>
       </releases>
