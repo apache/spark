@@ -96,13 +96,13 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with SharedJDBCInte
   test("SPARK-53386: Parameter `query` should work when ending with semicolons db2") {
     val dfSingle = spark.read.format("jdbc")
       .option("url", jdbcUrl)
-      .option("query", "SELECT 1 AS id FROM DUAL;")
+      .option("query", "SELECT 1 AS id FROM tbl LIMIT 1;")
       .load()
     checkAnswer(dfSingle, Seq(Row(1)))
 
     val dfMultiple = spark.read.format("jdbc")
       .option("url", jdbcUrl)
-      .option("query", "SELECT 1 AS id FROM DUAL;;;")
+      .option("query", "SELECT 1 AS id FROM tbl LIMIT 1;;;")
       .load()
     checkAnswer(dfMultiple, Seq(Row(1)))
   }
