@@ -359,11 +359,6 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("10s")
 
-  private[spark] val DRIVER_METRICS_POLLING_INTERVAL =
-    ConfigBuilder("spark.driver.metrics.pollingInterval")
-      .version("4.1.0")
-      .fallbackConf(EXECUTOR_HEARTBEAT_INTERVAL)
-
   private[spark] val EXECUTOR_HEARTBEAT_MAX_FAILURES =
     ConfigBuilder("spark.executor.heartbeat.maxFailures")
       .internal()
@@ -1213,6 +1208,14 @@ package object config {
     .timeConf(TimeUnit.MINUTES)
     .checkValue(v => v >= 0, "The value should be a non-negative time value.")
     .createWithDefaultString("0min")
+
+  private[spark] val DRIVER_METRICS_POLLING_INTERVAL =
+    ConfigBuilder("spark.driver.metrics.pollingInterval")
+      .doc("How often to collect driver metrics (in milliseconds). " +
+        "If 0, the polling is done at the executor heartbeat interval. " +
+        "If positive, the polling is done at this interval.")
+      .version("4.1.0")
+      .fallbackConf(EXECUTOR_HEARTBEAT_INTERVAL)
 
   private[spark] val DRIVER_BIND_ADDRESS = ConfigBuilder("spark.driver.bindAddress")
     .doc("Address where to bind network listen sockets on the driver.")
