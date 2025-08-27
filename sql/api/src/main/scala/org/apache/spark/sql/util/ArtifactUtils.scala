@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.util
 
-import org.apache.spark.SparkRuntimeException
 import java.nio.file.{Path, Paths}
+
+import org.apache.spark.SparkRuntimeException
 
 object ArtifactUtils {
 
@@ -48,7 +49,8 @@ object ArtifactUtils {
    * @param exceptions
    * @return
    */
-  private[sql] def mergeExceptionsWithSuppressed(exceptions: Seq[SparkRuntimeException]): SparkRuntimeException = {
+  private[sql] def mergeExceptionsWithSuppressed(exceptions: Seq[SparkRuntimeException]):
+      SparkRuntimeException = {
     require(exceptions.nonEmpty)
     val mainException = exceptions.head
     exceptions.drop(1).foreach(mainException.addSuppressed)
