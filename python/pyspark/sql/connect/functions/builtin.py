@@ -4494,11 +4494,11 @@ def udtf(
     # check for conflicting returnType arguments
     if cls is not None and isinstance(cls, (str, StructType)) and returnType is not None:
         raise PySparkTypeError(
-            errorClass="VALUE_NOT_ALLOWED", 
+            errorClass="VALUE_NOT_ALLOWED",
             messageParameters={
                 "arg_name": "returnType",
-                "allowed_values": "either positional or keyword, not both"
-            }
+                "allowed_values": "either positional or keyword, not both",
+            },
         )
 
     # Handle positional returnType argument

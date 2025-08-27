@@ -135,10 +135,10 @@ class BaseUDTFTestsMixin:
         assertDataFrameEqual(TestUDTF(lit(1)), [Row(a=1, b=2)])
 
     def test_udtf_decorator_positional_struct_type(self):
-        schema = StructType([
-            StructField("a", IntegerType(), True),
-            StructField("b", IntegerType(), True)
-        ])
+        schema = StructType(
+            [StructField("a", IntegerType(), True), StructField("b", IntegerType(), True)]
+        )
+
         @udtf(schema)
         class TestUDTF:
             def eval(self, a: int):
@@ -152,7 +152,7 @@ class BaseUDTFTestsMixin:
             @staticmethod
             def analyze() -> AnalyzeResult:
                 return AnalyzeResult(StructType().add("c1", StringType()).add("c2", StringType()))
-            
+
             def eval(self):
                 yield "hello", "world"
 
@@ -164,7 +164,7 @@ class BaseUDTFTestsMixin:
             @staticmethod
             def analyze() -> AnalyzeResult:
                 return AnalyzeResult(StructType().add("c1", StringType()).add("c2", StringType()))
-            
+
             def eval(self):
                 yield "hello", "world"
 
@@ -280,7 +280,6 @@ class BaseUDTFTestsMixin:
         assertDataFrameEqual(res, [Row(a=1, b=2), Row(a=2, b=3)])
 
     def test_udtf_eval_returning_non_tuple(self):
-
         @udtf(returnType="a: int")
         class TestUDTF:
             def eval(self, a: int):
@@ -2983,21 +2982,24 @@ class BaseUDTFTestsMixin:
 
     def test_udtf_decorator_invalid_both_positional_and_keyword_return_type(self):
         with self.assertRaises(PySparkTypeError) as context:
+
             @udtf("a: int, b: int", returnType="c: string")
             class TestUDTF:
                 def eval(self, a: int):
                     yield a, a + 1
-        
+
         self.assertIn("either positional or keyword, not both", str(context.exception))
 
     def test_udtf_decorator_invalid_non_schema_positional(self):
         with self.assertRaises(PySparkTypeError):
+
             @udtf([1, 2, 3])  # List is not allowed
             class TestUDTF:
                 def eval(self, a: int):
                     yield a, a + 1
 
         with self.assertRaises(PySparkTypeError):
+
             @udtf({"a": 1})  # Dict is not allowed
             class TestUDTF:
                 def eval(self, a: int):
@@ -3005,14 +3007,17 @@ class BaseUDTFTestsMixin:
 
     def test_udtf_decorator_invalid_schema_string(self):
         with self.assertRaises(AnalysisException):
+
             @udtf("invalid schema string")
             class TestUDTF:
                 def eval(self, a: int):
                     yield a, a + 1
+
             TestUDTF(lit(1)).collect()
 
     def test_udtf_decorator_invalid_struct_type(self):
         with self.assertRaises(PySparkTypeError):
+
             @udtf(IntegerType())  # Should be StructType, not IntegerType
             class TestUDTF:
                 def eval(self, a: int):
@@ -3020,10 +3025,12 @@ class BaseUDTFTestsMixin:
 
     def test_udtf_decorator_missing_return_type_no_analyze(self):
         with self.assertRaises(PySparkAttributeError):
+
             @udtf
             class TestUDTF:  # No analyze method and no returnType
                 def eval(self, a: int):
                     yield a, a + 1
+
             TestUDTF(lit(1)).collect()
 
 
