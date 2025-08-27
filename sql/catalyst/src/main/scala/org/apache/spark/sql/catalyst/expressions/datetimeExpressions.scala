@@ -2747,6 +2747,8 @@ object TryMakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
               0 to 60. If the sec argument equals to 60, the seconds field is set
               to 0 and 1 minute is added to the final timestamp.
       * timezone - the time zone identifier. For example, CET, UTC and etc.
+      * date - a date to represent, from 0001-01-01 to 9999-12-31
+      * time - a local time to represent, from 00:00:00 to 23:59:59.999999
   """,
   examples = """
     Examples:
