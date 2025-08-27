@@ -100,12 +100,12 @@ private[spark] class UninterruptibleThread(
      * @return true when there is no concurrent [[runUninterruptibly()]] call ([[uninterruptible]]
      *         is true) and no concurrent [[interrupt()]] call, otherwise false
      */
-    def isInterruptible(t: Thread): Boolean = synchronized {
+    def isInterruptible: Boolean = synchronized {
       // SPARK-53394: We should not interrupt the thread when it is already interrupted.
       // Otherwise, the state of `shouldInterruptThread` becomes inconsistent between
       // `isInterruptible()` and `isInterruptPending()`, leading to `UninterruptibleThread`
       // be interruptible under `runUninterruptibly`.
-      shouldInterruptThread = uninterruptible || t.isInterrupted
+      shouldInterruptThread = uninterruptible || UninterruptibleThread.this.isInterrupted
       // as we are releasing uninterruptibleLock before calling super.interrupt() there is a
       // possibility that runUninterruptibly() would be called after lock is released but before
       // super.interrupt() is called. In this case to prevent runUninterruptibly() from being
@@ -161,7 +161,7 @@ private[spark] class UninterruptibleThread(
    * interrupted until it enters into the interruptible status.
    */
   override def interrupt(): Unit = {
-    if (uninterruptibleLock.isInterruptible(this)) {
+    if (uninterruptibleLock.isInterruptible) {
       try {
         super.interrupt()
       } finally {
