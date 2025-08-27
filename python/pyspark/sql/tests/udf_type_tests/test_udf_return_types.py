@@ -115,6 +115,8 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
             pd.date_range("19700101", periods=2, tz="US/Eastern").values,
             [pd.Timedelta("1 day"), pd.Timedelta("2 days")],
             pd.Categorical(["A", "B"]),
+            pd.DataFrame({"_1": [1, 2]}),
+            [{"a": 1}, {"b": 2}],
         ]
 
     def test_udf_return_type_coercion_arrow_disabled(self):
@@ -201,7 +203,6 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
                     test_udf = udf(lambda _: value, spark_type, useArrow=use_arrow)
                     row = self.spark.range(1).select(test_udf("id")).first()
                     result_value = repr(row[0])
-                    print("result_value", result_value)
                     # Normalize Java object hash codes to make tests deterministic
                     import re
 
@@ -222,7 +223,7 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
 
         results = self._generate_pandas_udf_type_coercion_results()
         header = ["SQL Type \\ Pandas Value(Type)"] + [
-            f"{str(v)}({type(v).__name__})" for v in self.pandas_test_data
+            f"{str(v).replace(chr(10), ' ')}({type(v).__name__})" for v in self.pandas_test_data
         ]
         actual_output = format_type_table(results, header)
         self._compare_or_create_golden_file(actual_output, golden_file, test_name)
@@ -235,14 +236,17 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
             for value in self.pandas_test_data:
                 try:
 
+                    @pandas_udf(returnType=spark_type)
                     def pandas_udf_func(series: pd.Series) -> pd.Series:
                         assert len(series) == 2
-                        return pd.Series(value)
+                        if isinstance(value, pd.DataFrame):
+                            return value
+                        else:
+                            return pd.Series(value)
 
-                    test_pandas_udf = pandas_udf(pandas_udf_func, returnType=spark_type)
-                    row = self.spark.range(2).select(test_pandas_udf("id").alias("result")).first()
-                    ret_str = repr(row[0])
-                except Exception:
+                    rows = self.spark.range(0, 2, 1, 1).select(pandas_udf_func("id").alias("result")).collect()
+                    ret_str = repr([row[0] for row in rows])
+                except Exception as e:
                     ret_str = "X"
                 result.append(ret_str)
             results.append(result)
