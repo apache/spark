@@ -252,9 +252,10 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
         import pyarrow as pa
         from pyspark.serializers import write_int, SpecialLengths
 
-        def wrap_and_coerce_output():
+        def wrap_and_init_stream():
             should_write_start_length = True
-            for batch, arrow_return_type in iterator:
+            for packed in iterator:
+                batch, arrow_return_type = packed
                 assert isinstance(batch, pa.RecordBatch), f"Expected pa.RecordBatch, got {type(batch)}"
                 assert isinstance(arrow_return_type, pa.StructType), f"Expected pa.StructType, got {type(arrow_return_type)}"
                 
@@ -276,10 +277,8 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                         )
                 
                 # Create new batch with coerced arrays
-                coerced_batch = pa.RecordBatch.from_arrays(
-                    coerced_arrays, 
-                    schema=arrow_return_type
-                )
+                struct = pa.StructArray.from_arrays(coerced_arrays, fields=arrow_return_type)
+                coerced_batch = pa.RecordBatch.from_arrays([struct], ["_0"])
                 
                 # Write the first record batch with initialization
                 if should_write_start_length:
@@ -288,7 +287,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                 
                 yield coerced_batch
 
-        return ArrowStreamSerializer.dump_stream(self, wrap_and_coerce_output(), stream)
+        return ArrowStreamSerializer.dump_stream(self, wrap_and_init_stream(), stream)
 
 
 

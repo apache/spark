@@ -178,18 +178,21 @@ class ArrowUDTFTestsMixin:
             result_df.collect()
 
     def test_arrow_udtf_error_mismatched_schema(self):
-        @arrow_udtf(returnType="x int, y string")
+        @arrow_udtf(returnType="x int, y int")
         class MismatchedSchemaUDTF:
             def eval(self) -> Iterator["pa.Table"]:
                 result_table = pa.table(
                     {
-                        "wrong_col": pa.array([1], type=pa.int32()),
-                        "another_wrong_col": pa.array([2.5], type=pa.float64()),
+                        "col_with_arrow_cast": pa.array([1], type=pa.int32()),
+                        "wrong_col": pa.array(["wrong_col"], type=pa.string()),
                     }
                 )
                 yield result_table
 
-        with self.assertRaisesRegex(PythonException, "Schema at index 0 was different"):
+        with self.assertRaisesRegex(
+            PythonException,
+            r"pyarrow\.lib\.ArrowInvalid: Failed to parse string: 'wrong_col' as a scalar of type int32"
+        ):
             result_df = MismatchedSchemaUDTF()
             result_df.collect()
 
@@ -406,7 +409,7 @@ class ArrowUDTFTestsMixin:
             def eval(self) -> Iterator["pa.Table"]:
                 yield pa.Table.from_struct_array(pa.array([{}] * 3))
 
-        assertDataFrameEqual(EmptyResultUDTF(), [Row(), Row(), Row()])
+        assertDataFrameEqual(EmptyResultUDTF(), [None, None, None])
 
         @arrow_udtf(returnType="id int")
         class InvalidEmptyResultUDTF:
