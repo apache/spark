@@ -37,8 +37,15 @@ import org.apache.spark.sql.internal.SQLConf._
  * An ordered collection of offsets, used to track the progress of processing data from one or more
  * [[Source]]s that are present in a streaming query. This is similar to simplified, single-instance
  * vector clock that must progress linearly forward.
+ *
+ * This class supports both positional offsets (legacy V1 format) and named sources (V2 format).
+ * Internally, all sources are tracked by name, with ordinal names ("0", "1", "2", etc.) used
+ * when explicit names are not provided.
  */
-case class OffsetSeq(offsets: Seq[Option[OffsetV2]], metadata: Option[OffsetSeqMetadata] = None) {
+case class OffsetSeq(
+    offsets: Seq[Option[OffsetV2]],
+    metadata: Option[OffsetSeqMetadata] = None,
+    namedOffsets: Option[Map[String, OffsetV2]] = None) {
 
   /**
    * Unpacks an offset into [[StreamProgress]] by associating each offset with the ordered list of
@@ -54,8 +61,66 @@ case class OffsetSeq(offsets: Seq[Option[OffsetV2]], metadata: Option[OffsetSeqM
     new StreamProgress ++ sources.zip(offsets).collect { case (s, Some(o)) => (s, o) }
   }
 
-  override def toString: String =
-    offsets.map(_.map(_.json).getOrElse("-")).mkString("[", ", ", "]")
+  /**
+   * Unpacks named offsets into [[StreamProgress]] by associating each named offset with the
+   * corresponding source.
+   *
+   * @param namedSources Map from source name to SparkDataStream
+   * @return The StreamProgress containing the offset mapping
+   */
+  def toStreamProgress(namedSources: Map[String, SparkDataStream]): StreamProgress = {
+    namedOffsets match {
+      case Some(sourceOffsets) =>
+        val sourceOffsetPairs = sourceOffsets.flatMap { case (name, offset) =>
+          namedSources.get(name) match {
+            case Some(source) => Some((source, offset))
+            case None =>
+              // This shouldn't happen in normal operation, but handle gracefully
+              None
+          }
+        }
+        new StreamProgress ++ sourceOffsetPairs
+      case None =>
+        // Fall back to positional mapping for backward compatibility
+        toStreamProgress(namedSources.values.toSeq)
+    }
+  }
+
+  /**
+   * Creates a new OffsetSeq with named sources from this positional OffsetSeq.
+   * This is used to upgrade legacy checkpoints to the new format.
+   */
+  def withNamedSources(sourceNames: Seq[String]): OffsetSeq = {
+    require(sourceNames.size == offsets.size,
+      s"Number of source names (${sourceNames.size}) must match " +
+      s"number of offsets (${offsets.size})")
+
+    val named = sourceNames.zip(offsets).collect {
+      case (name, Some(offset)) => name -> offset
+    }.toMap
+
+    copy(namedOffsets = Some(named))
+  }
+
+  /**
+   * Returns the named offsets map, creating one from ordinal positions if needed.
+   */
+  def getNamedOffsets: Map[String, OffsetV2] = {
+    namedOffsets.getOrElse {
+      offsets.zipWithIndex.collect {
+        case (Some(offset), index) => index.toString -> offset
+      }.toMap
+    }
+  }
+
+  override def toString: String = {
+    namedOffsets match {
+      case Some(named) =>
+        named.map { case (name, offset) => s"$name: ${offset.json}" }.mkString("{", ", ", "}")
+      case None =>
+        offsets.map(_.map(_.json).getOrElse("-")).mkString("[", ", ", "]")
+    }
+  }
 }
 
 object OffsetSeq {
@@ -63,15 +128,73 @@ object OffsetSeq {
   /**
    * Returns a [[OffsetSeq]] with a variable sequence of offsets.
    * `nulls` in the sequence are converted to `None`s.
+   * This method maintains backward compatibility with V1 checkpoints.
    */
   def fill(offsets: OffsetV2*): OffsetSeq = OffsetSeq.fill(None, offsets: _*)
 
   /**
    * Returns a [[OffsetSeq]] with metadata and a variable sequence of offsets.
    * `nulls` in the sequence are converted to `None`s.
+   * This method maintains backward compatibility with V1 checkpoints.
    */
   def fill(metadata: Option[String], offsets: OffsetV2*): OffsetSeq = {
     OffsetSeq(offsets.map(Option(_)), metadata.map(OffsetSeqMetadata.apply))
+  }
+
+  /**
+   * Creates an OffsetSeq with named sources and metadata.
+   * This is used for new V2 format checkpoints.
+   *
+   * @param metadata Optional metadata string
+   * @param namedOffsets Map from source name to offset
+   * @return OffsetSeq with named sources
+   */
+  def fillNamed(metadata: Option[String], namedOffsets: Map[String, OffsetV2]): OffsetSeq = {
+    // Create empty positional offsets for backward compatibility methods
+    val positionalOffsets = Seq.empty[Option[OffsetV2]]
+    OffsetSeq(positionalOffsets, metadata.map(OffsetSeqMetadata.apply), Some(namedOffsets))
+  }
+
+  /**
+   * Creates an OffsetSeq with named sources.
+   * This is used for new V2 format checkpoints.
+   *
+   * @param namedOffsets Map from source name to offset
+   * @return OffsetSeq with named sources
+   */
+  def fillNamed(namedOffsets: Map[String, OffsetV2]): OffsetSeq = {
+    fillNamed(None, namedOffsets)
+  }
+
+  /**
+   * Creates an OffsetSeq from source names, automatically generating ordinal names
+   * for sources without explicit names.
+   *
+   * @param metadata Optional metadata string
+   * @param sources Sequence of (sourceName, offset) pairs where sourceName may be None
+   * @return OffsetSeq with appropriate naming
+   */
+  def fromSources(metadata: Option[String], sources: Seq[(Option[String], OffsetV2)]): OffsetSeq = {
+    val namedSources = sources.zipWithIndex.collect {
+      case ((Some(name), offset), _) => name -> offset
+      case ((None, offset), index) => index.toString -> offset
+    }.toMap
+
+    fillNamed(metadata, namedSources)
+  }
+
+  /**
+   * Validates a source name according to the naming rules.
+   *
+   * @param name The source name to validate
+   * @throws IllegalArgumentException if the name is invalid
+   */
+  def validateSourceName(name: String): Unit = {
+    require(name != null && name.nonEmpty, "Source name cannot be null or empty")
+    require(name.length <= 64, s"Source name '$name' exceeds maximum length of 64 characters")
+    require(name.matches("^[a-zA-Z0-9_-]+$"),
+      s"Source name '$name' contains invalid characters. Only alphanumeric, underscore, " +
+      "and hyphen characters are allowed")
   }
 }
 

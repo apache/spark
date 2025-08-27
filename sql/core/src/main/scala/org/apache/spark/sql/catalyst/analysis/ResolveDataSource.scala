@@ -43,7 +43,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-    case UnresolvedDataSource(source, userSpecifiedSchema, extraOptions, false, paths) =>
+    case UnresolvedDataSource(
+        source, userSpecifiedSchema, extraOptions, false, paths, userProvidedName) =>
       // Batch data source created from DataFrameReader
       if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
         throw QueryCompilationErrors.cannotOperateOnHiveDataSourceFilesError("read")
@@ -60,7 +61,8 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
           source, paths: _*)
       }.getOrElse(loadV1BatchSource(source, userSpecifiedSchema, extraOptions, paths: _*))
 
-    case UnresolvedDataSource(source, userSpecifiedSchema, extraOptions, true, paths) =>
+    case UnresolvedDataSource(
+        source, userSpecifiedSchema, extraOptions, true, paths, userProvidedName) =>
       // Streaming data source created from DataStreamReader
       if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
         throw QueryCompilationErrors.cannotOperateOnHiveDataSourceFilesError("read")
@@ -83,7 +85,7 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         className = source,
         options = optionsWithPath.originalMap)
       val v1Relation = ds match {
-        case _: StreamSourceProvider => Some(StreamingRelation(v1DataSource))
+        case _: StreamSourceProvider => Some(StreamingRelation(v1DataSource, userProvidedName))
         case _ => None
       }
       ds match {
@@ -107,16 +109,16 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
               import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
               StreamingRelationV2(
                   Some(provider), source, table, dsOptions,
-                  toAttributes(table.columns.asSchema), None, None, v1Relation)
+                  toAttributes(table.columns.asSchema), None, None, v1Relation, userProvidedName)
 
             // fallback to v1
             // TODO (SPARK-27483): we should move this fallback logic to an analyzer rule.
-            case _ => StreamingRelation(v1DataSource)
+            case _ => StreamingRelation(v1DataSource, userProvidedName)
           }
 
         case _ =>
           // Code path for data source v1.
-          StreamingRelation(v1DataSource)
+          StreamingRelation(v1DataSource, userProvidedName)
       }
 
   }

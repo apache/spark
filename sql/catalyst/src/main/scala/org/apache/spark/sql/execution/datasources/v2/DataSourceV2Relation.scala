@@ -180,13 +180,14 @@ case class StreamingDataSourceV2Relation(
     catalog: Option[CatalogPlugin],
     identifier: Option[Identifier],
     options: CaseInsensitiveStringMap,
-    metadataPath: String)
+    metadataPath: String,
+    userProvidedName: Option[String] = None)
   extends DataSourceV2RelationBase(table, output, catalog, identifier, options) {
 
   override def isStreaming: Boolean = true
 
   override def newInstance(): StreamingDataSourceV2Relation = {
-    copy(output = output.map(_.newInstance()))
+    copy(output = output.map(_.newInstance()), userProvidedName = userProvidedName)
   }
 }
 /**
