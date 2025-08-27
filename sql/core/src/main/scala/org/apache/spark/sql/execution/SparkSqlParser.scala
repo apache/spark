@@ -54,6 +54,12 @@ class SparkSqlParser extends AbstractSqlParser {
   private val substitutor = new VariableSubstitution()
   private[execution] val parameterHandler = new ParameterHandler()
 
+  /**
+   * Get the position mapper for parameter substitution if available.
+   * This is used for translating error positions back to original SQL.
+   */
+  def getPositionMapper: Option[PositionMapper] = parameterHandler.getPositionMapper
+
     protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     // Step 1: Check if parameter substitution is enabled and we have a parameterized query context
     val paramSubstituted =
@@ -73,19 +79,16 @@ class SparkSqlParser extends AbstractSqlParser {
     // Step 2: Apply existing variable substitution
     val variableSubstituted = substitutor.substitute(paramSubstituted)
 
-    // Step 3: Set up CurrentOrigin with substituted SQL text for proper error context
-    // and continue with normal parsing, handling position translation for parse errors
+    // Step 3: Set SQL text and indices in CurrentOrigin for proper error context, then parse
     val currentOrigin = org.apache.spark.sql.catalyst.trees.CurrentOrigin.get
-    val originWithSubstitutedSql = if (paramSubstituted != command) {
-      // Parameter substitution occurred, set origin with substituted SQL for proper error context
-      currentOrigin.copy(sqlText = Some(variableSubstituted))
-    } else {
-      // No substitution, ensure original command is in the origin
-      currentOrigin.copy(sqlText = Some(command))
-    }
+    val originWithSqlText = currentOrigin.copy(
+      sqlText = Some(variableSubstituted),
+      startIndex = Some(0),
+      stopIndex = Some(variableSubstituted.length - 1)
+    )
 
     try {
-      org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(originWithSubstitutedSql) {
+      org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(originWithSqlText) {
         super.parse(variableSubstituted)(toResult)
       }
     } catch {
@@ -130,8 +133,6 @@ class SparkSqlParser extends AbstractSqlParser {
       parameterHandler.substituteParametersWithAutoRule(command, context)
     }
   }
-
-
 
 
 }
@@ -1449,4 +1450,5 @@ class SparkSqlAstBuilder extends AstBuilder {
       throw invalidStatement(ctx.getText, ctx)
     }
   }
+
 }

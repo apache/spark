@@ -79,7 +79,7 @@ object SQLExecution extends Logging {
         // Parameter substitution occurred, try to get the position mapper
         queryExecution.sparkSession.sessionState.sqlParser match {
           case sparkParser: org.apache.spark.sql.execution.SparkSqlParser =>
-            sparkParser.parameterHandler.getPositionMapper
+            sparkParser.getPositionMapper
           case _ => None
         }
       case None => None
@@ -90,15 +90,38 @@ object SQLExecution extends Logging {
         // Simply check if the error has WithOrigin and update its context
         error match {
           case e: Throwable with org.apache.spark.sql.catalyst.trees.WithOrigin =>
-            e.updateQueryContext { contexts =>
-              contexts.map { context =>
-                context match {
-                  case sqlContext: SQLQueryContext =>
-                    PositionTranslationUtils.translateSqlContext(sqlContext, positionMapper)
-                  case _ => context
+            // Check if this exception has a getQueryContext method (like AnalysisException)
+            val contexts = e match {
+              case ae: org.apache.spark.sql.AnalysisException => ae.getQueryContext
+              case _ =>
+                Array.empty[org.apache.spark.QueryContext]
+            }
+            if (contexts.isEmpty) {
+              // No query context available - create a default context
+              // spanning the entire original SQL
+              val originalSql = positionMapper.originalText
+              val defaultContext = org.apache.spark.sql.catalyst.trees.SQLQueryContext(
+                line = None,
+                startPosition = None,
+                originStartIndex = Some(0),
+                originStopIndex = Some(originalSql.length - 1),
+                sqlText = Some(originalSql),
+                originObjectType = None,
+                originObjectName = None
+              )
+              e.updateQueryContext(_ => Array(defaultContext)).asInstanceOf[Throwable]
+            } else {
+              // Apply position mapping to existing contexts
+              e.updateQueryContext { contexts =>
+                contexts.map { context =>
+                  context match {
+                    case sqlContext: SQLQueryContext =>
+                      PositionTranslationUtils.translateSqlContext(sqlContext, positionMapper)
+                    case _ => context
+                  }
                 }
-              }
-            }.asInstanceOf[Throwable]
+              }.asInstanceOf[Throwable]
+            }
           case _ =>
             // No WithOrigin trait, return as-is
             error
