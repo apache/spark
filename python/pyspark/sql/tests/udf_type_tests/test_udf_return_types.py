@@ -244,7 +244,11 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
                         else:
                             return pd.Series(value)
 
-                    rows = self.spark.range(0, 2, 1, 1).select(pandas_udf_func("id").alias("result")).collect()
+                    rows = (
+                        self.spark.range(0, 2, 1, 1)
+                        .select(pandas_udf_func("id").alias("result"))
+                        .collect()
+                    )
                     ret_str = repr([row[0] for row in rows])
                 except Exception as e:
                     ret_str = "X"
