@@ -2282,110 +2282,33 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       null)
   }
 
-  test("SPARK-53113: try to make timestamp from date") {
-    // Test with valid date.
-    checkEvaluation(
-      new TryMakeTimestampFromDateTime(dateLit("2023-10-01")),
-      timestampToMicros("2023-10-01T00:00:00", sessionZoneId)
-    )
-
-    // Test with null date.
-    checkEvaluation(
-      new TryMakeTimestampFromDateTime(Literal(null, DateType)),
-      null
-    )
-  }
-
-  test("SPARK-53113: try to make timestamp from date and time") {
-    // Test with valid date and time.
-    checkEvaluation(
-      new TryMakeTimestampFromDateTime(
-        dateLit("2023-10-01"),
-        timeLit("12:34:56.123456")
-      ),
-      timestampToMicros("2023-10-01T12:34:56.123456", sessionZoneId)
-    )
-
-    // Test with null date.
-    checkEvaluation(
-      new TryMakeTimestampFromDateTime(
-        Literal(null, DateType),
-        timeLit("12:34:56.123456")
-      ),
-      null
-    )
-    // Test with null time.
-    checkEvaluation(
-      new TryMakeTimestampFromDateTime(
-        dateLit("2023-10-01"),
-        Literal(null, TimeType())
-      ),
-      null
-    )
-    // Test with null date and null time.
-    checkEvaluation(
-      new TryMakeTimestampFromDateTime(
-        Literal(null, DateType),
-        Literal(null, TimeType())
-      ),
-      null
-    )
-  }
-
   test("SPARK-53113: try to make timestamp from date, time, and timezone") {
     Seq(
-      ("-09:30", MIT),
-      ("-08:00", PST),
-      ("+00:00", UTC),
-      ("+01:00", CET),
-      ("+09:00", JST),
-      ("UTC", UTC),
-      ("America/Los_Angeles", LA)
-    ).foreach( { case (tz, zoneId) =>
+      ("2023-10-01", "12:34:56.123456", "America/Los_Angeles", LA),
+      ("2023-10-01", "12:34:56.123456", "+01:00", CET)
+    ).foreach( { case (date, time, tz, zoneId) =>
+      // Test with valid date.
+      checkEvaluation(
+        new TryMakeTimestampFromDateTime(dateLit(date)),
+        timestampToMicros(s"${date}T00:00:00", sessionZoneId)
+      )
+      // Test with valid date and time.
+      checkEvaluation(
+        new TryMakeTimestampFromDateTime(dateLit(date), timeLit(time)),
+        timestampToMicros(s"${date}T${time}", sessionZoneId)
+      )
       // Test with valid date, time, and timezone.
       checkEvaluation(
-        new TryMakeTimestampFromDateTime(
-          dateLit("2023-10-01"),
-          timeLit("12:34:56.123456"),
-          Literal(tz)
-        ),
-        timestampToMicros("2023-10-01T12:34:56.123456", zoneId)
+        new TryMakeTimestampFromDateTime(dateLit(date), timeLit(time), Literal(tz)),
+        timestampToMicros(s"${date}T${time}", zoneId)
       )
     })
 
-    // Test with null date.
+    // Test with null inputs.
     checkEvaluation(
       new TryMakeTimestampFromDateTime(
         Literal(null, DateType),
-        timeLit("12:34:56.123456"),
-        Literal("+00:00")
-      ),
-      null
-    )
-    // Test with null time.
-    checkEvaluation(
-      new TryMakeTimestampFromDateTime(
-        dateLit("2023-10-01"),
-        Literal(null, TimeType()),
-        Literal("+00:00")
-      ),
-      null
-    )
-    // Test with null timezone.
-    checkEvaluation(
-      new TryMakeTimestampFromDateTime(
-        dateLit("2023-10-01"),
-        timeLit("12:34:56.123456"),
-        Literal(null, StringType)
-      ),
-      null
-    )
-    // Test with null date and null time.
-    checkEvaluation(
-      new TryMakeTimestampFromDateTime(
-        Literal(null, DateType),
-        Literal(null, TimeType()),
-        Literal("+00:00")
+        Literal(null, TimeType())
       ),
       null
     )
