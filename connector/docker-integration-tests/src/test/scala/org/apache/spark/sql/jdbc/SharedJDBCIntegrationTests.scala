@@ -32,16 +32,18 @@ trait SharedJDBCIntegrationTests extends QueryTest {
     assert(e.getCondition.startsWith("JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR"))
   }
 
+  val queryForSemicolonTest: String = "SELECT 1 as id"
+
   test("SPARK-53386: Parameter `query` should work when ending with semicolons") {
     val dfSingle = spark.read.format("jdbc")
       .option("url", jdbcUrl)
-      .option("query", "SELECT 1 as id;")
+      .option("query", s"$queryForSemicolonTest; ")
       .load()
     checkAnswer(dfSingle, Seq(Row(1)))
 
     val dfMultiple = spark.read.format("jdbc")
       .option("url", jdbcUrl)
-      .option("query", "SELECT 1 as id;;;")
+      .option("query", s"$queryForSemicolonTest;;;")
       .load()
     checkAnswer(dfMultiple, Seq(Row(1)))
   }

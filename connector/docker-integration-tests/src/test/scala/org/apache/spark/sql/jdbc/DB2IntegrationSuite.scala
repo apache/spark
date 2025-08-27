@@ -78,10 +78,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with SharedJDBCInte
       .executeUpdate()
   }
 
-  override def excluded: Seq[String] = Seq(
-    // We have to specify a table when querying from DB2
-    s"SPARK-53386: Parameter `query` should work when ending with semicolons"
-  ) ++ super.excluded
+  override val queryForSemicolonTest: String = "SELECT 1 AS id FROM tbl LIMIT 1"
 
   test("Basic test") {
     val df = sqlContext.read.jdbc(jdbcUrl, "tbl", new Properties)
@@ -91,20 +88,6 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with SharedJDBCInte
     assert(types.length == 2)
     assert(types(0).equals("class java.lang.Integer"))
     assert(types(1).equals("class java.lang.String"))
-  }
-
-  test("SPARK-53386: Parameter `query` should work when ending with semicolons db2") {
-    val dfSingle = spark.read.format("jdbc")
-      .option("url", jdbcUrl)
-      .option("query", "SELECT 1 AS id FROM tbl LIMIT 1;")
-      .load()
-    checkAnswer(dfSingle, Seq(Row(1)))
-
-    val dfMultiple = spark.read.format("jdbc")
-      .option("url", jdbcUrl)
-      .option("query", "SELECT 1 AS id FROM tbl LIMIT 1;;;")
-      .load()
-    checkAnswer(dfMultiple, Seq(Row(1)))
   }
 
   test("Numeric types") {
