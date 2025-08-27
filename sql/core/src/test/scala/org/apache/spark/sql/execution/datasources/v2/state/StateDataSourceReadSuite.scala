@@ -23,7 +23,7 @@ import java.util.UUID
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.Assertions
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.{AnalysisException, DataFrame, Encoders, Row}
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, GenericInternalRow}
@@ -630,6 +630,39 @@ class RocksDBWithCheckpointV2StateDataSourceReaderSuite extends StateDataSourceR
       newStateStoreProvider().getClass.getName)
     spark.conf.set("spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled",
       "true")
+  }
+
+  // TODO: Remove this test once we allow migrations from checkpoint v1 to v2
+  test("reading checkpoint v2 store with version 1 should fail") {
+    withTempDir { tmpDir =>
+      val inputData = MemoryStream[(Int, Long)]
+      val query = getStreamStreamJoinQuery(inputData)
+      testStream(query)(
+        StartStream(checkpointLocation = tmpDir.getCanonicalPath),
+        AddData(inputData, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
+        ProcessAllAvailable(),
+        Execute { _ => Thread.sleep(2000) },
+        StopStream
+      )
+
+      // Set the checkpoint version to 1
+      spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 1)
+
+      // Verify reading state throws error when reading checkpoint v2 with version 1
+      val exc = intercept[IllegalStateException] {
+        val stateDf = spark.read.format("statestore")
+          .option(StateSourceOptions.BATCH_ID, 0)
+          .option(StateSourceOptions.OPERATOR_ID, 0)
+          .load(tmpDir.getCanonicalPath)
+        stateDf.collect()
+      }
+
+      checkError(exc.getCause.asInstanceOf[SparkThrowable],
+        "INVALID_LOG_VERSION.EXACT_MATCH_VERSION", "KD002",
+        Map(
+          "version" -> "2",
+          "matchVersion" -> "1"))
+    }
   }
 
   test("check unsupported modes with checkpoint v2") {
