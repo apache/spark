@@ -4500,26 +4500,7 @@ def udtf(
                 "allowed_values": "either positional or keyword, not both"
             }
         )
-    
-    if cls is not None and isinstance(cls, (list, dict, tuple)):
-        raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR", 
-            messageParameters={
-                "arg_name": "first positional argument",
-                "arg_type": type(cls).__name__
-            }
-        )
-    
-    # check for non-StructType DataType
-    if isinstance(cls, DataType) and not isinstance(cls, StructType):
-        raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR", 
-            messageParameters={
-                "arg_name": "returnType", 
-                "arg_type": type(cls).__name__
-            }
-        )
-    
+
     # Handle positional returnType argument
     if cls is None or isinstance(cls, (str, StructType)):
         return_type = cls or returnType
