@@ -111,38 +111,62 @@ private[spark] object ProtoSpecializedArray {
   }
 
   def fromArray(array: Array[Boolean]): proto.Bools = {
-    val builder = proto.Bools.newBuilder()
-    array.foreach(builder.addValues)
-    builder.build()
+    if (array.nonEmpty) {
+      val builder = proto.Bools.newBuilder()
+      array.foreach(builder.addValues)
+      builder.build()
+    } else {
+      proto.Bools.getDefaultInstance
+    }
   }
 
   def fromArray(array: Array[Int]): proto.Ints = {
-    val builder = proto.Ints.newBuilder()
-    array.foreach(builder.addValues)
-    builder.build()
+    if (array.nonEmpty) {
+      val builder = proto.Ints.newBuilder()
+      array.foreach(builder.addValues)
+      builder.build()
+    } else {
+      proto.Ints.getDefaultInstance
+    }
   }
 
   def fromArray(array: Array[Long]): proto.Longs = {
-    val builder = proto.Longs.newBuilder()
-    array.foreach(builder.addValues)
-    builder.build()
+    if (array.nonEmpty) {
+      val builder = proto.Longs.newBuilder()
+      array.foreach(builder.addValues)
+      builder.build()
+    } else {
+      proto.Longs.getDefaultInstance
+    }
   }
 
   def fromArray(array: Array[Float]): proto.Floats = {
-    val builder = proto.Floats.newBuilder()
-    array.foreach(builder.addValues)
-    builder.build()
+    if (array.nonEmpty) {
+      val builder = proto.Floats.newBuilder()
+      array.foreach(builder.addValues)
+      builder.build()
+    } else {
+      proto.Floats.getDefaultInstance
+    }
   }
 
   def fromArray(array: Array[Double]): proto.Doubles = {
-    val builder = proto.Doubles.newBuilder()
-    array.foreach(builder.addValues)
-    builder.build()
+    if (array.nonEmpty) {
+      val builder = proto.Doubles.newBuilder()
+      array.foreach(builder.addValues)
+      builder.build()
+    } else {
+      proto.Doubles.getDefaultInstance
+    }
   }
 
   def fromArray(array: Array[String]): proto.Strings = {
-    val builder = proto.Strings.newBuilder()
-    array.foreach(builder.addValues)
-    builder.build()
+    if (array.nonEmpty) {
+      val builder = proto.Strings.newBuilder()
+      array.foreach(builder.addValues)
+      builder.build()
+    } else {
+      proto.Strings.getDefaultInstance
+    }
   }
 }
