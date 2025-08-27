@@ -330,9 +330,10 @@ class ArrowUDTFTestsMixin:
                 )
                 yield result_table
 
-        with self.assertRaisesRegex(PythonException, "Schema at index 0 was different"):
-            result_df = LongToIntUDTF()
-            result_df.collect()
+        # Should now succeed with automatic coercion
+        result_df = LongToIntUDTF()
+        expected_df = self.spark.createDataFrame([(1,), (2,), (3,)], "id int")
+        assertDataFrameEqual(result_df, expected_df)
 
     def test_arrow_udtf_type_coercion_string_to_int(self):
         @arrow_udtf(returnType="id int")
@@ -346,9 +347,58 @@ class ArrowUDTFTestsMixin:
                 )
                 yield result_table
 
-        with self.assertRaisesRegex(PythonException, "Schema at index 0 was different"):
+        # Should fail with Arrow cast exception since string cannot be cast to int
+        with self.assertRaises(Exception):
             result_df = StringToIntUDTF()
             result_df.collect()
+
+    def test_return_type_coercion_success(self):
+        @arrow_udtf(returnType="value int")
+        class CoercionSuccessUDTF:
+            def eval(self) -> Iterator["pa.Table"]:
+                result_table = pa.table(
+                    {
+                        "value": pa.array([10, 20, 30], type=pa.int64()),  # long -> int coercion
+                    }
+                )
+                yield result_table
+
+        result_df = CoercionSuccessUDTF()
+        expected_df = self.spark.createDataFrame([(10,), (20,), (30,)], "value int")
+        assertDataFrameEqual(result_df, expected_df)
+
+    def test_return_type_coercion_overflow(self):
+        @arrow_udtf(returnType="value int")
+        class CoercionOverflowUDTF:
+            def eval(self) -> Iterator["pa.Table"]:
+                # Return values that will cause overflow when casting long to int
+                result_table = pa.table(
+                    {
+                        "value": pa.array([2147483647 + 1], type=pa.int64()),  # int32 max + 1
+                    }
+                )
+                yield result_table
+
+        # Should fail with PyArrow overflow exception
+        with self.assertRaises(Exception):
+            result_df = CoercionOverflowUDTF()
+            result_df.collect()
+
+    def test_return_type_coercion_multiple_columns(self):
+        @arrow_udtf(returnType="id int, price float")
+        class MultipleColumnCoercionUDTF:
+            def eval(self) -> Iterator["pa.Table"]:
+                result_table = pa.table(
+                    {
+                        "id": pa.array([1, 2, 3], type=pa.int64()),         # long -> int coercion
+                        "price": pa.array([10.5, 20.7, 30.9], type=pa.float64()),  # double -> float coercion
+                    }
+                )
+                yield result_table
+
+        result_df = MultipleColumnCoercionUDTF()
+        expected_df = self.spark.createDataFrame([(1, 10.5), (2, 20.7), (3, 30.9)], "id int, price float")
+        assertDataFrameEqual(result_df, expected_df)
 
     def test_arrow_udtf_with_empty_column_result(self):
         @arrow_udtf(returnType=StructType())

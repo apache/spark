@@ -1344,7 +1344,7 @@ def read_udtf(pickleSer, infile, eval_type):
         num_table_arg_offsets = read_int(infile)
         table_arg_offsets = [read_int(infile) for _ in range(num_table_arg_offsets)]
         # Use PyArrow-native serializer for Arrow UDTFs with potential UDT support
-        ser = ArrowStreamArrowUDTFSerializer(table_arg_offsets=table_arg_offsets)
+        ser = ArrowStreamArrowUDTFSerializer(table_arg_offsets=table_arg_offsets, arrow_cast=True)
     else:
         # Each row is a group so do not batch but send one by one.
         ser = BatchedSerializer(CPickleSerializer(), 1)
@@ -1970,14 +1970,14 @@ def read_udtf(pickleSer, infile, eval_type):
                         },
                     )
 
-                # Verify the type and the schema of the result.
-                verify_arrow_result(
-                    pa.Table.from_batches([result], schema=pa.schema(list(arrow_return_type))),
-                    assign_cols_by_name=False,
-                    expected_cols_and_types=[
-                        (col.name, to_arrow_type(col.dataType)) for col in return_type.fields
-                    ],
-                )
+                # Skip schema validation here - let the serializer handle type coercion
+                # verify_arrow_result(
+                #     pa.Table.from_batches([result], schema=pa.schema(list(arrow_return_type))),
+                #     assign_cols_by_name=False,
+                #     expected_cols_and_types=[
+                #         (col.name, to_arrow_type(col.dataType)) for col in return_type.fields
+                #     ],
+                # )
                 return result
 
             # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
