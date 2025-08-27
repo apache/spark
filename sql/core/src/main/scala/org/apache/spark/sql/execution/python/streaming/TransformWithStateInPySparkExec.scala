@@ -389,7 +389,7 @@ case class TransformWithStateInPySparkExec(
           store.abort()
         }
       }
-      setStoreMetrics(store)
+      setStoreMetrics(store, isStreaming)
       setOperatorMetrics()
     }).map { row =>
       numOutputRows += 1
