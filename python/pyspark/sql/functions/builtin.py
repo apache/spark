@@ -27287,32 +27287,9 @@ def udtf(
                 "allowed_values": "either positional or keyword, not both"
             }
         )
-    
-    # Validation: check for invalid positional argument types (only for obvious non-schema types)
-    # Allow functions, integers and other types to pass through to original validation for proper error messages
-    if cls is not None and isinstance(cls, (list, dict, tuple)):
-        raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR", 
-            messageParameters={
-                "arg_name": "first positional argument",
-                "arg_type": type(cls).__name__
-            }
-        )
-    
-    # Validation: check for non-StructType DataType
-    if isinstance(cls, DataType) and not isinstance(cls, StructType):
-        raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR", 
-            messageParameters={
-                "arg_name": "returnType", 
-                "arg_type": type(cls).__name__
-            }
-        )
-    
-    # Handle positional returnType argument (similar to UDF)
+
+    # Handle positional returnType argument
     if cls is None or isinstance(cls, (str, StructType)):
-        # If StructType or string has been passed as a positional argument
-        # for decorator use it as a returnType
         return_type = cls or returnType
         return functools.partial(
             _create_py_udtf,
