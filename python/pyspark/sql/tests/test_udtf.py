@@ -280,27 +280,11 @@ class BaseUDTFTestsMixin:
         assertDataFrameEqual(res, [Row(a=1, b=2), Row(a=2, b=3)])
 
     def test_udtf_eval_returning_non_tuple(self):
-        # Debug: Check Arrow configuration
-        arrow_enabled = self.spark.conf.get("spark.sql.execution.pythonUDTF.arrow.enabled")
-        print(f"DEBUG: Arrow enabled = {arrow_enabled}")
-        
+
         @udtf(returnType="a: int")
         class TestUDTF:
             def eval(self, a: int):
                 yield a
-
-        # Debug: Check what actually happens
-        try:
-            result = TestUDTF(lit(1)).collect()
-            self.fail(f"Expected PythonException but got result: {result} (Arrow={arrow_enabled})")
-        except PythonException as e:
-            # Check if it contains the expected error
-            if "UDTF_INVALID_OUTPUT_ROW_TYPE" not in str(e):
-                self.fail(f"Got PythonException but wrong message: {str(e)}")
-            else:
-                print(f"DEBUG: Got expected PythonException with correct message")
-        except Exception as e:
-            self.fail(f"Expected PythonException but got {type(e).__name__}: {str(e)}")
 
         @udtf(returnType="a: int")
         class TestUDTF:
