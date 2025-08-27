@@ -773,6 +773,7 @@ object FunctionRegistry {
     expression[AesEncrypt]("aes_encrypt"),
     expression[AesDecrypt]("aes_decrypt"),
     expression[SparkPartitionID]("spark_partition_id"),
+    expression[DirectShufflePartitionID]("direct_shuffle_partition_id"),
     expression[InputFileName]("input_file_name"),
     expression[InputFileBlockStart]("input_file_block_start"),
     expression[InputFileBlockLength]("input_file_block_length"),

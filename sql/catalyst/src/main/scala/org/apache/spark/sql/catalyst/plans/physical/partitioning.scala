@@ -946,3 +946,82 @@ case class ShuffleSpecCollection(specs: Seq[ShuffleSpec]) extends ShuffleSpec {
     specs.head.numPartitions
   }
 }
+
+/**
+ * Represents a partitioning where partition IDs are passed through directly from the
+ * DirectShufflePartitionID expression. This partitioning scheme is used when users
+ * want to directly control partition placement rather than using hash-based partitioning.
+ *
+ * This partitioning maps directly to the PartitionIdPassthrough RDD partitioner.
+ */
+case class ShufflePartitionIdPassThrough(
+    expressions: Seq[Expression],
+    numPartitions: Int) extends Partitioning {
+
+  require(expressions.length == 1,
+    s"ShufflePartitionIdPassThrough expects exactly one expression, but got ${expressions.length}")
+  require(expressions.head.isInstanceOf[DirectShufflePartitionID],
+    s"ShufflePartitionIdPassThrough expects a DirectShufflePartitionID expression, " +
+      s"but got ${expressions.head.getClass.getSimpleName}")
+
+  override def satisfies0(required: Distribution): Boolean = {
+    super.satisfies0(required) || {
+      required match {
+        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+          if (requireAllClusterKeys) {
+            // Since this is a direct partition ID pass-through, it can only satisfy
+            // clustered distribution if the clustering expressions exactly match
+            // the child expression of DirectShufflePartitionID
+            val directShuffleChild = expressions.head.asInstanceOf[DirectShufflePartitionID].child
+            requiredClustering.length == 1 &&
+              requiredClustering.head.semanticEquals(directShuffleChild)
+          } else {
+            // For non-strict clustered distribution, we consider this partitioning
+            // as potentially satisfying the requirement if there's overlap
+            val directShuffleChild = expressions.head.asInstanceOf[DirectShufflePartitionID].child
+            requiredClustering.exists(_.semanticEquals(directShuffleChild))
+          }
+        case _ => false
+      }
+    }
+  }
+
+  override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
+    ShufflePartitionIdPassThroughSpec(this, distribution)
+}
+
+/**
+ * ShuffleSpec for ShufflePartitionIdPassThrough partitioning.
+ */
+case class ShufflePartitionIdPassThroughSpec(
+    partitioning: ShufflePartitionIdPassThrough,
+    distribution: ClusteredDistribution) extends ShuffleSpec {
+
+  override def numPartitions: Int = partitioning.numPartitions
+
+  override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
+    case SinglePartitionShuffleSpec =>
+      numPartitions == 1
+    case otherPassThrough @ ShufflePartitionIdPassThroughSpec(otherPartitioning,
+        otherDistribution) =>
+      // Two ShufflePartitionIdPassThroughSpec are compatible if they have the same number of
+      // partitions and their child expressions are semantically equivalent
+      numPartitions == other.numPartitions &&
+        distribution.clustering.length == otherDistribution.clustering.length && {
+          val thisChild = partitioning.expressions.head.asInstanceOf[DirectShufflePartitionID].child
+          val otherChild =
+            otherPartitioning.expressions.head.asInstanceOf[DirectShufflePartitionID].child
+          thisChild.semanticEquals(otherChild)
+        }
+    case ShuffleSpecCollection(specs) =>
+      specs.exists(isCompatibleWith)
+    case _ =>
+      false
+  }
+
+  override def canCreatePartitioning: Boolean = false
+
+  override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
+    throw SparkUnsupportedOperationException()
+  }
+}

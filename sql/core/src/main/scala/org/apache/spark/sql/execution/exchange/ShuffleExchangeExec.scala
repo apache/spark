@@ -344,6 +344,10 @@ object ShuffleExchangeExec {
         // For HashPartitioning, the partitioning key is already a valid partition ID, as we use
         // `HashPartitioning.partitionIdExpression` to produce partitioning key.
         new PartitionIdPassthrough(n)
+      case ShufflePartitionIdPassThrough(_, n) =>
+        // For ShufflePartitionIdPassThrough, the DirectShufflePartitionID expression directly
+        // produces partition IDs, so we use PartitionIdPassthrough to pass them through directly.
+        new PartitionIdPassthrough(n)
       case RangePartitioning(sortingExpressions, numPartitions) =>
         // Extract only fields used for sorting to avoid collecting large fields that does not
         // affect sorting result when deciding partition bounds in RangePartitioner
@@ -399,6 +403,10 @@ object ShuffleExchangeExec {
       case SinglePartition => identity
       case KeyGroupedPartitioning(expressions, _, _, _) =>
         row => bindReferences(expressions, outputAttributes).map(_.eval(row))
+      case s: ShufflePartitionIdPassThrough =>
+        // For ShufflePartitionIdPassThrough, the expression directly evaluates to the partition ID
+        val projection = UnsafeProjection.create(s.expressions, outputAttributes)
+        row => projection(row).getInt(0)
       case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
     }
 
