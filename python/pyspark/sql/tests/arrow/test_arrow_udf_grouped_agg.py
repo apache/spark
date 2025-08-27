@@ -20,6 +20,7 @@ import unittest
 from pyspark.sql.functions import arrow_udf, ArrowUDFType
 from pyspark.util import PythonEvalType
 from pyspark.sql import Row
+from pyspark.sql.types import ArrayType, YearMonthIntervalType
 from pyspark.sql import functions as sf
 from pyspark.errors import AnalysisException, PythonException
 from pyspark.testing.sqlutils import (
@@ -810,6 +811,31 @@ class GroupedAggArrowUDFTestsMixin:
             # pyarrow.lib.ArrowInvalid:
             # Integer value 2147483657 not in range: -2147483648 to 2147483647
             result3.collect()
+
+    def test_unsupported_return_types(self):
+        import pyarrow as pa
+
+        with self.quiet():
+            with self.assertRaisesRegex(
+                NotImplementedError,
+                "Invalid return type with grouped aggregate "
+                "Arrow UDFs.*ArrayType.*YearMonthIntervalType",
+            ):
+                arrow_udf(
+                    lambda x: x,
+                    ArrayType(ArrayType(YearMonthIntervalType())),
+                    ArrowUDFType.GROUPED_AGG,
+                )
+
+            with self.assertRaisesRegex(
+                NotImplementedError,
+                "Invalid return type with grouped aggregate "
+                "Arrow UDFs.*ArrayType.*YearMonthIntervalType",
+            ):
+
+                @arrow_udf(ArrayType(ArrayType(YearMonthIntervalType())), ArrowUDFType.GROUPED_AGG)
+                def func_a(a: pa.Array) -> pa.Scalar:
+                    return pa.compute.max(a)
 
 
 class GroupedAggArrowUDFTests(GroupedAggArrowUDFTestsMixin, ReusedSQLTestCase):

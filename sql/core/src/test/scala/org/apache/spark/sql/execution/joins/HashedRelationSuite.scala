@@ -293,7 +293,7 @@ class HashedRelationSuite extends SharedSparkSession {
     val key = 0L
     // the page array is initialized with length 1 << 17 (1M bytes),
     // so here we need a value larger than 1 << 18 (2M bytes), to trigger the bug
-    val bigStr = UTF8String.fromString("x" * (1 << 19))
+    val bigStr = UTF8String.fromString("x".repeat(1 << 19))
 
     map.append(key, unsafeProj(InternalRow(bigStr)))
     map.optimize()
@@ -410,7 +410,7 @@ class HashedRelationSuite extends SharedSparkSession {
     val unsafeProj = UnsafeProjection.create(
       Seq(BoundReference(0, IntegerType, false),
         BoundReference(1, StringType, true)))
-    val unsafeRow = unsafeProj(InternalRow(0, UTF8String.fromString(" " * 100)))
+    val unsafeRow = unsafeProj(InternalRow(0, UTF8String.fromString(" ".repeat(100))))
     val key = Seq(BoundReference(0, IntegerType, false))
     val rows = (0 until (1 << 24)).iterator.map { i =>
       unsafeRow.setInt(0, i % 1000000)
@@ -437,7 +437,7 @@ class HashedRelationSuite extends SharedSparkSession {
     val unsafeProj = UnsafeProjection.create(
       Seq(BoundReference(0, IntegerType, false),
         BoundReference(1, StringType, true)))
-    val unsafeRow = unsafeProj(InternalRow(0, UTF8String.fromString(" " * 100)))
+    val unsafeRow = unsafeProj(InternalRow(0, UTF8String.fromString(" ".repeat(100))))
     val key = Seq(BoundReference(0, IntegerType, false))
     val rows = (0 until (1 << 10)).iterator.map { i =>
       unsafeRow.setInt(0, i % 1000000)

@@ -675,7 +675,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       while (rowSet.next()) {
         assert(rowSet.getString("COLUMN_NAME") === "c" + idx)
         assert(rowSet.getInt("DATA_TYPE") === java.sql.Types.TIMESTAMP)
-        assert(rowSet.getString("TYPE_NAME") === "TIMESTAMP" + ("_NTZ" * idx))
+        assert(rowSet.getString("TYPE_NAME") === "TIMESTAMP" + "_NTZ".repeat(idx))
         assert(rowSet.getInt("COLUMN_SIZE") === 8)
         assert(rowSet.getInt("DECIMAL_DIGITS") === 6)
         assert(rowSet.getInt("NUM_PREC_RADIX") === 0)

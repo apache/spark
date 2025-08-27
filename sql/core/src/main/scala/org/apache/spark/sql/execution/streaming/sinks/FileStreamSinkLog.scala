@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.sinks
 
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.MDC
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.streaming.runtime.CompactibleFileStreamLog
 import org.apache.spark.sql.internal.SQLConf
 
 /**

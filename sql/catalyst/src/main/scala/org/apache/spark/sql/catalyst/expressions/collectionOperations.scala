@@ -1004,7 +1004,7 @@ case class MapSort(base: Expression)
        |    ${CodeGenerator.getValue(values, valueType, i)});
        |}
        |
-       |java.util.Arrays.sort($sortArray, new java.util.Comparator<Object>() {
+       |java.util.Arrays.parallelSort($sortArray, new java.util.Comparator<Object>() {
        |  @Override public int compare(Object $o1entry, Object $o2entry) {
        |    Object $o1 = (($simpleEntryType) $o1entry).getKey();
        |    Object $o2 = (($simpleEntryType) $o2entry).getKey();
@@ -1149,7 +1149,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   private def sortEval(array: Any, ascending: Boolean): Any = {
     val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
     if (elementType != NullType) {
-      java.util.Arrays.sort(data, if (ascending) lt else gt)
+      java.util.Arrays.parallelSort(data, if (ascending) lt else gt)
     }
     new GenericArrayData(data.asInstanceOf[Array[Any]])
   }
@@ -1191,7 +1191,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
         s"""
            |if ($order) {
            |  $javaType[] $array = $base.to${primitiveTypeName}Array();
-           |  java.util.Arrays.sort($array);
+           |  java.util.Arrays.parallelSort($array);
            |  ${ev.value} = $unsafeArrayData.fromPrimitiveArray($array);
            |} else
            """.stripMargin
@@ -1203,7 +1203,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
          |{
          |  Object[] $array = $base.toObjectArray($elementTypeTerm);
          |  final int $sortOrder = $order ? 1 : -1;
-         |  java.util.Arrays.sort($array, new java.util.Comparator() {
+         |  java.util.Arrays.parallelSort($array, new java.util.Comparator() {
          |    @Override public int compare(Object $o1, Object $o2) {
          |      if ($o1 == null && $o2 == null) {
          |        return 0;

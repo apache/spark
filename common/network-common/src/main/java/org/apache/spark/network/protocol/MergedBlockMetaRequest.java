@@ -17,7 +17,8 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
 
 /**
@@ -77,7 +78,7 @@ public class MergedBlockMetaRequest extends AbstractMessage implements RequestMe
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(requestId, appId, shuffleId, shuffleMergeId, reduceId);
+    return Objects.hash(requestId, appId, shuffleId, shuffleMergeId, reduceId);
   }
 
   @Override
@@ -85,7 +86,7 @@ public class MergedBlockMetaRequest extends AbstractMessage implements RequestMe
     if (other instanceof MergedBlockMetaRequest o) {
       return requestId == o.requestId && shuffleId == o.shuffleId &&
         shuffleMergeId == o.shuffleMergeId && reduceId == o.reduceId &&
-        Objects.equal(appId, o.appId);
+        Objects.equals(appId, o.appId);
     }
     return false;
   }

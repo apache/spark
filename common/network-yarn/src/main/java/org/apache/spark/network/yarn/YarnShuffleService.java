@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -31,8 +32,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -238,7 +237,7 @@ public class YarnShuffleService extends AuxiliaryService {
         .getResource(SHUFFLE_SERVICE_CONF_OVERLAY_RESOURCE_NAME);
     if (confOverlayUrl != null) {
       logger.info("Initializing Spark YARN shuffle service with configuration overlay from {}",
-        MDC.of(LogKeys.SHUFFLE_SERVICE_CONF_OVERLAY_URL$.MODULE$, confOverlayUrl));
+        MDC.of(LogKeys.SHUFFLE_SERVICE_CONF_OVERLAY_URL, confOverlayUrl));
       _conf.addResource(confOverlayUrl);
     }
 
@@ -263,8 +262,8 @@ public class YarnShuffleService extends AuxiliaryService {
         DBBackend.ROCKSDB.name());
       dbBackend = DBBackend.byName(dbBackendName);
       logger.info("Use {} as the implementation of {}",
-        MDC.of(LogKeys.SHUFFLE_DB_BACKEND_NAME$.MODULE$, dbBackend),
-        MDC.of(LogKeys.SHUFFLE_DB_BACKEND_KEY$.MODULE$, Constants.SHUFFLE_SERVICE_DB_BACKEND));
+        MDC.of(LogKeys.SHUFFLE_DB_BACKEND_NAME, dbBackend),
+        MDC.of(LogKeys.SHUFFLE_DB_BACKEND_KEY, Constants.SHUFFLE_SERVICE_DB_BACKEND));
     }
 
     try {
@@ -291,7 +290,7 @@ public class YarnShuffleService extends AuxiliaryService {
 
       // If authentication is enabled, set up the shuffle server to use a
       // special RPC handler that filters out unauthenticated fetch requests
-      List<TransportServerBootstrap> bootstraps = Lists.newArrayList();
+      List<TransportServerBootstrap> bootstraps = new ArrayList<>();
       boolean authEnabled = _conf.getBoolean(SPARK_AUTHENTICATE_KEY, DEFAULT_SPARK_AUTHENTICATE);
       if (authEnabled) {
         secretManager = new ShuffleSecretManager();
@@ -328,12 +327,12 @@ public class YarnShuffleService extends AuxiliaryService {
           "PushBasedShuffleMergeManager", "Metrics on the push-based shuffle merge manager",
           mergeManagerMetrics);
       logger.info("Registered metrics with Hadoop's DefaultMetricsSystem using namespace '{}'",
-        MDC.of(LogKeys.SHUFFLE_SERVICE_METRICS_NAMESPACE$.MODULE$, metricsNamespace));
+        MDC.of(LogKeys.SHUFFLE_SERVICE_METRICS_NAMESPACE, metricsNamespace));
 
       logger.info("Started YARN shuffle service for Spark on port {}. Authentication is {}. " +
-        "Registered executor file is {}", MDC.of(LogKeys.PORT$.MODULE$, port),
-        MDC.of(LogKeys.AUTH_ENABLED$.MODULE$, authEnabledString),
-        MDC.of(LogKeys.REGISTERED_EXECUTOR_FILE$.MODULE$, registeredExecutorFile));
+        "Registered executor file is {}", MDC.of(LogKeys.PORT, port),
+        MDC.of(LogKeys.AUTH_ENABLED, authEnabledString),
+        MDC.of(LogKeys.REGISTERED_EXECUTOR_FILE, registeredExecutorFile));
     } catch (Exception e) {
       if (stopOnFailure) {
         throw e;
@@ -367,7 +366,7 @@ public class YarnShuffleService extends AuxiliaryService {
         .newInstance(conf, mergeManagerFile);
     } catch (Exception e) {
       defaultSparkLogger.error("Unable to create an instance of {}",
-        MDC.of(LogKeys.CLASS_NAME$.MODULE$, mergeManagerImplClassName));
+        MDC.of(LogKeys.CLASS_NAME, mergeManagerImplClassName));
       return new NoOpMergedShuffleFileManager(conf, mergeManagerFile);
     }
   }
@@ -431,7 +430,7 @@ public class YarnShuffleService extends AuxiliaryService {
         if (metadataStorageVal != null && (Boolean) metadataStorageVal) {
           AppsWithRecoveryDisabled.disableRecoveryOfApp(appId);
           logger.info("Disabling metadata persistence for application {}",
-            MDC.of(LogKeys.APP_ID$.MODULE$, appId));
+            MDC.of(LogKeys.APP_ID, appId));
         }
       } catch (IOException ioe) {
         logger.warn("Unable to parse application data for service: " + payload);
@@ -455,7 +454,7 @@ public class YarnShuffleService extends AuxiliaryService {
       }
     } catch (Exception e) {
       logger.error("Exception when initializing application {}", e,
-        MDC.of(LogKeys.APP_ID$.MODULE$, appId));
+        MDC.of(LogKeys.APP_ID, appId));
     }
   }
 
@@ -470,7 +469,7 @@ public class YarnShuffleService extends AuxiliaryService {
             db.delete(dbAppKey(fullId));
           } catch (IOException e) {
             logger.error("Error deleting {} from executor state db", e,
-              MDC.of(LogKeys.APP_ID$.MODULE$, appId));
+              MDC.of(LogKeys.APP_ID, appId));
           }
         }
         secretManager.unregisterApp(appId);
@@ -478,7 +477,7 @@ public class YarnShuffleService extends AuxiliaryService {
       blockHandler.applicationRemoved(appId, false /* clean up local dirs */);
     } catch (Exception e) {
       logger.error("Exception when stopping application {}", e,
-        MDC.of(LogKeys.APP_ID$.MODULE$, appId));
+        MDC.of(LogKeys.APP_ID, appId));
     } finally {
       AppsWithRecoveryDisabled.removeApp(appId);
     }
@@ -487,13 +486,13 @@ public class YarnShuffleService extends AuxiliaryService {
   @Override
   public void initializeContainer(ContainerInitializationContext context) {
     ContainerId containerId = context.getContainerId();
-    logger.info("Initializing container {}", MDC.of(LogKeys.CONTAINER_ID$.MODULE$, containerId));
+    logger.info("Initializing container {}", MDC.of(LogKeys.CONTAINER_ID, containerId));
   }
 
   @Override
   public void stopContainer(ContainerTerminationContext context) {
     ContainerId containerId = context.getContainerId();
-    logger.info("Stopping container {}", MDC.of(LogKeys.CONTAINER_ID$.MODULE$, containerId));
+    logger.info("Stopping container {}", MDC.of(LogKeys.CONTAINER_ID, containerId));
   }
 
   /**
@@ -546,7 +545,7 @@ public class YarnShuffleService extends AuxiliaryService {
    * and DB exists in the local dir of NM by old version of shuffle service.
    */
   protected File initRecoveryDb(String dbName) {
-    Preconditions.checkNotNull(_recoveryPath,
+    Objects.requireNonNull(_recoveryPath,
       "recovery path should not be null if NM recovery is enabled");
 
     File recoveryFile = new File(_recoveryPath.toUri().getPath(), dbName);
@@ -575,8 +574,8 @@ public class YarnShuffleService extends AuxiliaryService {
           } catch (Exception e) {
             // Fail to move recovery file to new path, just continue on with new DB location
             logger.error("Failed to move recovery file {} to the path {}", e,
-              MDC.of(LogKeys.SHUFFLE_MERGE_RECOVERY_FILE$.MODULE$, dbName),
-              MDC.of(LogKeys.PATH$.MODULE$, _recoveryPath.toString()));
+              MDC.of(LogKeys.SHUFFLE_MERGE_RECOVERY_FILE, dbName),
+              MDC.of(LogKeys.PATH, _recoveryPath.toString()));
           }
         }
         return new File(newLoc.toUri().getPath());

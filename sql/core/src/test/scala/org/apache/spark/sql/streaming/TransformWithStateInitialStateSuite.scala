@@ -19,11 +19,12 @@ package org.apache.spark.sql.streaming
 
 import org.apache.spark.sql.{DataFrame, Dataset, Encoders, KeyValueGroupedDataset}
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.{col, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.tags.SlowSQLTest
 
 case class InitInputRow(key: String, action: String, value: Double)
 case class InputRowForInitialState(
@@ -360,6 +361,7 @@ class StatefulProcessorWithInitialStateEventTimerClass
  * Class that adds tests for transformWithState stateful
  * streaming operator with user-defined initial state
  */
+@SlowSQLTest
 class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
   with AlsoTestWithEncodingTypes with AlsoTestWithRocksDBFeatures {
 

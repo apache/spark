@@ -448,6 +448,15 @@ private[connect] object MLHandler extends Logging {
         val createSummaryCmd = mlCommand.getCreateSummary
         createModelSummary(sessionHolder, createSummaryCmd)
 
+      case proto.MlCommand.CommandCase.GET_MODEL_SIZE =>
+        val modelRefId = mlCommand.getGetModelSize.getModelRef.getId
+        val model = mlCache.get(modelRefId)
+        val modelSize = model.asInstanceOf[Model[_]].estimatedSize
+        proto.MlCommandResult
+          .newBuilder()
+          .setParam(LiteralValueProtoConverter.toLiteralProto(modelSize))
+          .build()
+
       case other => throw MlUnsupportedException(s"$other not supported")
     }
   }

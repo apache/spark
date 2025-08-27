@@ -254,15 +254,15 @@ class KubernetesConfSuite extends SparkFunSuite {
 
   test("SPARK-36566: get app name label") {
     assert(KubernetesConf.getAppNameLabel(" Job+Spark-Pi 2021") === "job-spark-pi-2021")
-    assert(KubernetesConf.getAppNameLabel("a" * 63) === "a" * 63)
-    assert(KubernetesConf.getAppNameLabel("a" * 64) === "a" * 63)
-    assert(KubernetesConf.getAppNameLabel("a" * 253) === "a" * 63)
+    assert(KubernetesConf.getAppNameLabel("a".repeat(63)) === "a".repeat(63))
+    assert(KubernetesConf.getAppNameLabel("a".repeat(64)) === "a".repeat(63))
+    assert(KubernetesConf.getAppNameLabel("a".repeat(253)) === "a".repeat(63))
   }
 
   test("SPARK-38630: K8s label value should start and end with alphanumeric") {
     assert(KubernetesConf.getAppNameLabel("-hello-") === "hello")
-    assert(KubernetesConf.getAppNameLabel("a" * 62 + "-aaa") === "a" * 62)
-    assert(KubernetesConf.getAppNameLabel("-" + "a" * 63) === "a" * 62)
+    assert(KubernetesConf.getAppNameLabel("a".repeat(62) + "-aaa") === "a".repeat(62))
+    assert(KubernetesConf.getAppNameLabel("-" + "a".repeat(63)) === "a".repeat(62))
   }
 
   test("SPARK-40869: Resource name prefix should not start with a hyphen") {

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.binaryfile
 
 import java.sql.Timestamp
 
-import com.google.common.io.{ByteStreams, Closeables}
+import com.google.common.io.Closeables
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.Job
@@ -118,7 +118,7 @@ case class BinaryFileFormat() extends FileFormat with DataSourceRegister {
             }
             val stream = fs.open(status.getPath)
             try {
-              writer.write(i, ByteStreams.toByteArray(stream))
+              writer.write(i, stream.readAllBytes())
             } finally {
               Closeables.close(stream, true)
             }

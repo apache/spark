@@ -423,7 +423,7 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         TimeDiff(Literal(unit), startTimeLit, endTimeLit),
         condition = "INVALID_PARAMETER_VALUE.TIME_UNIT",
         parameters = Map(
-          "functionName" -> "`timediff`",
+          "functionName" -> "`time_diff`",
           "parameter" -> "`unit`",
           "invalidValue" -> s"'$unit'"
         )

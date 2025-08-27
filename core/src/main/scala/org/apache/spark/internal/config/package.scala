@@ -291,14 +291,6 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
-  private[spark] val EVENT_LOG_READER_MAX_STRING_LENGTH =
-    ConfigBuilder("spark.eventLog.readerMaxStringLength")
-      .doc("Limit the maximum string size an eventlog item can have when deserializing it.")
-      .version("4.1.0")
-      .intConf
-      .checkValue(_ > 0, "Maximum string size of an eventLog item should be positive.")
-      .createWithDefault(Int.MaxValue)
-
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite")
       .version("1.0.0")
@@ -499,6 +491,16 @@ package object config {
     .version("1.6.0")
     .doubleConf
     .createWithDefault(0.6)
+
+  private[spark] val UNMANAGED_MEMORY_POLLING_INTERVAL =
+    ConfigBuilder("spark.memory.unmanagedMemoryPollingInterval")
+      .doc("Interval for polling unmanaged memory users to track their memory usage. " +
+        "Unmanaged memory users are components that manage their own memory outside of " +
+        "Spark's core memory management, such as RocksDB for Streaming State Store. " +
+        "Setting this to 0 disables unmanaged memory polling.")
+      .version("4.1.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("0s")
 
   private[spark] val STORAGE_UNROLL_MEMORY_THRESHOLD =
     ConfigBuilder("spark.storage.unrollMemoryThreshold")

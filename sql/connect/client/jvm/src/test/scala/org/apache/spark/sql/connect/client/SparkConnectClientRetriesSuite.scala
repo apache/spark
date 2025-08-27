@@ -96,7 +96,7 @@ class SparkConnectClientRetriesSuite
       val dummyFn = new DummyFn(new StatusRuntimeException(Status.UNAVAILABLE), numFails = 100)
       val retryHandler = new GrpcRetryHandler(RetryPolicy.defaultPolicies(), st.sleep)
 
-      assertThrows[RetriesExceeded] {
+      assertThrows[StatusRuntimeException] {
         retryHandler.retry {
           dummyFn.fn()
         }
@@ -143,7 +143,7 @@ class SparkConnectClientRetriesSuite
     val retryPolicy = RetryPolicy(canRetry = _ => true, maxRetries = Some(1), name = "TestPolicy")
     val retryHandler = new GrpcRetryHandler(retryPolicy, sleep = _ => {})
 
-    assertThrows[RetriesExceeded] {
+    assertThrows[StatusRuntimeException] {
       retryHandler.retry { dummyFn.fn() }
     }
     assert(dummyFn.counter == 2)
@@ -184,7 +184,7 @@ class SparkConnectClientRetriesSuite
     val errors = List.fill(10)(Status.INTERNAL).iterator
     var countAttempted = 0
 
-    assertThrows[RetriesExceeded](
+    assertThrows[StatusRuntimeException](
       new GrpcRetryHandler(List(policy1, policy2), sleep = _ => {}).retry({
         countAttempted += 1
         val e = errors.nextOption()
@@ -202,7 +202,7 @@ class SparkConnectClientRetriesSuite
       new DummyFn(createTestExceptionWithDetails(msg = "Some error message"), numFails = 100)
     val retryPolicies = RetryPolicy.defaultPolicies()
     val retryHandler = new GrpcRetryHandler(retryPolicies, sleep = _ => {})
-    assertThrows[RetriesExceeded] {
+    assertThrows[StatusRuntimeException] {
       retryHandler.retry { dummyFn.fn() }
     }
 
@@ -220,7 +220,7 @@ class SparkConnectClientRetriesSuite
     val retryPolicies = RetryPolicy.defaultPolicies()
     val retryHandler = new GrpcRetryHandler(retryPolicies, sleep = st.sleep)
 
-    assertThrows[RetriesExceeded] {
+    assertThrows[StatusRuntimeException] {
       retryHandler.retry { dummyFn.fn() }
     }
 
@@ -241,7 +241,7 @@ class SparkConnectClientRetriesSuite
     val retryPolicies = RetryPolicy.defaultPolicies()
     val retryHandler = new GrpcRetryHandler(retryPolicies, sleep = st.sleep)
 
-    assertThrows[RetriesExceeded] {
+    assertThrows[StatusRuntimeException] {
       retryHandler.retry { dummyFn.fn() }
     }
 

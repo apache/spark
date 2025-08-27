@@ -32,9 +32,9 @@ import scala.jdk.OptionConverters._
 
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.config.Python.{PYTHON_UNIX_DOMAIN_SOCKET_DIR, PYTHON_UNIX_DOMAIN_SOCKET_ENABLED}
+import org.apache.spark.internal.config.Python.PYTHON_FACTORY_IDLE_WORKER_MAX_POOL_SIZE
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util.{RedirectThread, Utils}
 
@@ -98,8 +98,9 @@ private[spark] class PythonWorkerFactory(
     !Utils.isWindows && useDaemonEnabled
   }
 
-  private val authHelper = new SocketAuthHelper(SparkEnv.get.conf)
-  private val isUnixDomainSock = authHelper.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED)
+  private val conf = SparkEnv.get.conf
+  private val authHelper = new SocketAuthHelper(conf)
+  private val isUnixDomainSock = authHelper.isUnixDomainSock
 
   @GuardedBy("self")
   private var daemon: Process = null
@@ -111,7 +112,11 @@ private[spark] class PythonWorkerFactory(
   @GuardedBy("self")
   private var daemonSockPath: String = _
   @GuardedBy("self")
-  private val idleWorkers = new mutable.Queue[PythonWorker]()
+  // Visible for testing
+  private[spark] val idleWorkers = new mutable.Queue[PythonWorker]()
+  @GuardedBy("self")
+  private val maxIdleWorkerPoolSize =
+    conf.get(PYTHON_FACTORY_IDLE_WORKER_MAX_POOL_SIZE)
   @GuardedBy("self")
   private var lastActivityNs = 0L
   new MonitorThread().start()
@@ -127,7 +132,7 @@ private[spark] class PythonWorkerFactory(
   def create(): (PythonWorker, Option[ProcessHandle]) = {
     if (useDaemon) {
       self.synchronized {
-        // Pull from idle workers until we one that is alive, otherwise create a new one.
+        // Pull from idle workers until we get one that is alive, otherwise create a new one.
         while (idleWorkers.nonEmpty) {
           val worker = idleWorkers.dequeue()
           daemonWorkers.get(worker).foreach { workerHandle =>
@@ -203,8 +208,7 @@ private[spark] class PythonWorkerFactory(
       blockingMode: Boolean): (PythonWorker, Option[ProcessHandle]) = {
     var serverSocketChannel: ServerSocketChannel = null
     lazy val sockPath = new File(
-      authHelper.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_DIR)
-        .getOrElse(System.getProperty("java.io.tmpdir")),
+      authHelper.sockDir,
       s".${UUID.randomUUID()}.sock")
     try {
       if (isUnixDomainSock) {
@@ -307,8 +311,7 @@ private[spark] class PythonWorkerFactory(
         if (isUnixDomainSock) {
           workerEnv.put(
             "PYTHON_WORKER_FACTORY_SOCK_DIR",
-            authHelper.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_DIR)
-              .getOrElse(System.getProperty("java.io.tmpdir")))
+            authHelper.sockDir)
           workerEnv.put("PYTHON_UNIX_DOMAIN_ENABLED", "True")
         } else {
           workerEnv.put("PYTHON_WORKER_FACTORY_SECRET", authHelper.secret)
@@ -483,6 +486,15 @@ private[spark] class PythonWorkerFactory(
     if (useDaemon) {
       self.synchronized {
         lastActivityNs = System.nanoTime()
+        if (maxIdleWorkerPoolSize.exists(idleWorkers.size >= _)) {
+          val oldestWorker = idleWorkers.dequeue()
+          try {
+            stopWorker(oldestWorker)
+          } catch {
+            case e: Exception =>
+              logWarning("Failed to stop evicted worker", e)
+          }
+        }
         idleWorkers.enqueue(worker)
       }
     } else {
