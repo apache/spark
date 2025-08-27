@@ -37,75 +37,75 @@ class UDFCombinationsTestsMixin:
     @property
     def python_udf_add1(self):
         @udf("long")
-        def add_one(v):
+        def py_add1(v):
             assert isinstance(v, int)
             return v + 1
 
-        return add_one
+        return py_add1
 
     @property
     def arrow_opt_python_udf_add1(self):
         @udf("long")
-        def add_one(v, useArrow=True):
+        def py_arrow_opt_add1(v, useArrow=True):
             assert isinstance(v, int)
             return v + 1
 
-        return add_one
+        return py_arrow_opt_add1
 
     @property
     def pandas_udf_add1(self):
         import pandas as pd
 
         @pandas_udf("long")
-        def add_one(s):
+        def pandas_add1(s):
             assert isinstance(s, pd.Series)
             return s + 1
 
-        return add_one
+        return pandas_add1
 
     @property
     def pandas_iter_udf_add1(self):
         import pandas as pd
 
         @pandas_udf("long")
-        def add_one(it: Iterator[pd.Series]) -> Iterator[pd.Series]:
+        def pandas_iter_add1(it: Iterator[pd.Series]) -> Iterator[pd.Series]:
             for s in it:
                 assert isinstance(s, pd.Series)
                 yield s + 1
 
-        return add_one
+        return pandas_iter_add1
 
     @property
     def arrow_udf_add1(self):
         import pyarrow as pa
 
         @arrow_udf("long")
-        def add_one(a):
+        def arrow_add1(a):
             assert isinstance(a, pa.Array)
             return pa.compute.add(a, 1)
 
-        return add_one
+        return arrow_add1
 
     @property
     def arrow_iter_udf_add1(self):
         import pyarrow as pa
 
         @arrow_udf("long")
-        def add_one(it: Iterator[pa.Array]) -> Iterator[pa.Array]:
+        def arrow_iter_add1(it: Iterator[pa.Array]) -> Iterator[pa.Array]:
             for a in it:
                 assert isinstance(a, pa.Array)
                 yield pa.compute.add(a, 1)
 
-        return add_one
+        return arrow_iter_add1
 
     def all_scalar_functions(self):
         return [
-            ("python udf", self.python_udf_add1),
-            ("arrow-optimized python udf", self.arrow_opt_python_udf_add1),
-            ("scalar pandas udf", self.pandas_udf_add1),
-            ("scalar iter pandas udf", self.pandas_iter_udf_add1),
-            ("scalar arrow udf", self.arrow_udf_add1),
-            ("scalar iter arrow udf", self.arrow_iter_udf_add1),
+            self.python_udf_add1,
+            self.arrow_opt_python_udf_add1,
+            self.pandas_udf_add1,
+            self.pandas_iter_udf_add1,
+            self.arrow_udf_add1,
+            self.arrow_iter_udf_add1,
         ]
 
     def test_combination_2(self):
@@ -114,8 +114,11 @@ class UDFCombinationsTestsMixin:
         expected = df.selectExpr("id + 2 AS res").collect()
 
         combs = itertools.combinations(self.all_scalar_functions(), 2)
-        for (t1, f1), (t2, f2) in combs:
-            with self.subTest(udf1=t1, udf2=t2):
+        for f1, f2 in combs:
+            with self.subTest(
+                udf1=f1.__name__,
+                udf2=f2.__name__,
+            ):
                 result = df.select(f1(f2("id")).alias("res"))
                 self.assertEqual(expected, result.collect())
 
@@ -125,8 +128,12 @@ class UDFCombinationsTestsMixin:
         expected = df.selectExpr("id + 3 AS res").collect()
 
         combs = itertools.combinations(self.all_scalar_functions(), 3)
-        for (t1, f1), (t2, f2), (t3, f3) in combs:
-            with self.subTest(udf1=t1, udf2=t2, udf3=t3):
+        for f1, f2, f3 in combs:
+            with self.subTest(
+                udf1=f1.__name__,
+                udf2=f2.__name__,
+                udf3=f3.__name__,
+            ):
                 result = df.select(f1(f2(f3("id"))).alias("res"))
                 self.assertEqual(expected, result.collect())
 
@@ -136,8 +143,13 @@ class UDFCombinationsTestsMixin:
         expected = df.selectExpr("id + 4 AS res").collect()
 
         combs = itertools.combinations(self.all_scalar_functions(), 4)
-        for (t1, f1), (t2, f2), (t3, f3), (t4, f4) in combs:
-            with self.subTest(udf1=t1, udf2=t2, udf3=t3, udf4=t4):
+        for f1, f2, f3, f4 in combs:
+            with self.subTest(
+                udf1=f1.__name__,
+                udf2=f2.__name__,
+                udf3=f3.__name__,
+                udf4=f4.__name__,
+            ):
                 result = df.select(f1(f2(f3(f4("id")))).alias("res"))
                 self.assertEqual(expected, result.collect())
 
@@ -147,8 +159,14 @@ class UDFCombinationsTestsMixin:
         expected = df.selectExpr("id + 5 AS res").collect()
 
         combs = itertools.combinations(self.all_scalar_functions(), 5)
-        for (t1, f1), (t2, f2), (t3, f3), (t4, f4), (t5, f5) in combs:
-            with self.subTest(udf1=t1, udf2=t2, udf3=t3, udf4=t4, udf5=t5):
+        for f1, f2, f3, f4, f5 in combs:
+            with self.subTest(
+                udf1=f1.__name__,
+                udf2=f2.__name__,
+                udf3=f3.__name__,
+                udf4=f4.__name__,
+                udf5=f5.__name__,
+            ):
                 result = df.select(f1(f2(f3(f4(f5("id"))))).alias("res"))
                 self.assertEqual(expected, result.collect())
 
@@ -158,8 +176,15 @@ class UDFCombinationsTestsMixin:
         expected = df.selectExpr("id + 6 AS res").collect()
 
         combs = itertools.combinations(self.all_scalar_functions(), 6)
-        for (t1, f1), (t2, f2), (t3, f3), (t4, f4), (t5, f5), (t6, f6) in combs:
-            with self.subTest(udf1=t1, udf2=t2, udf3=t3, udf4=t4, udf5=t5, udf6=t6):
+        for f1, f2, f3, f4, f5, f6 in combs:
+            with self.subTest(
+                udf1=f1.__name__,
+                udf2=f2.__name__,
+                udf3=f3.__name__,
+                udf4=f4.__name__,
+                udf5=f5.__name__,
+                udf6=f6.__name__,
+            ):
                 result = df.select(f1(f2(f3(f4(f5(f6("id")))))).alias("res"))
                 self.assertEqual(expected, result.collect())
 
