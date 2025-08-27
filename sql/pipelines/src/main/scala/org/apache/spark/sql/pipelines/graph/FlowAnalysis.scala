@@ -103,6 +103,10 @@ object FlowAnalysis {
     // earlier so we only need to apply analysis to a single logical plan.
     val planWithInlinedCTEs = CTESubstitution(plan)
 
+    //scalastyle:off
+    println("dbg 100")
+    println(plan)
+
     val spark = context.spark
     // Traverse the user's query plan and recursively resolve nodes that reference Pipelines
     // features that the Spark analyzer is unable to resolve
@@ -121,14 +125,21 @@ object FlowAnalysis {
 
         // Batch read on another dataset in the pipeline
         case u: UnresolvedRelation =>
-          readBatchInput(
+          val tmp = readBatchInput(
             context,
             name = IdentifierHelper.toQuotedString(u.multipartIdentifier),
             batchReadOptions = BatchReadOptions()
           ).queryExecution.analyzed
+          // scalastyle:off
+          println("dbg 200")
+          println(tmp)
+        tmp
       }
-    Dataset.ofRows(spark, resolvedPlan)
-
+    // scalastyle:off
+    println("dbg 300")
+    println(resolvedPlan)
+    val df = Dataset.ofRows(spark, resolvedPlan)
+    df
   }
 
   /**
@@ -290,6 +301,10 @@ object FlowAnalysis {
 
     val spark = context.spark
     context.externalInputs += inputIdentifier.identifier
+
+    println("dbggg")
+//    spark.read.table(inputIdentifier.identifier.quotedString).explain(true)
+//    throw new RuntimeException(s"dbg ${spark.read.table(inputIdentifier.identifier.quotedString).explain("true")}")
     spark.read.table(inputIdentifier.identifier.quotedString)
   }
 
