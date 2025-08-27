@@ -180,6 +180,61 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
         with self.assertRaises(PythonException):
             df_floating_value.select(udf(lambda x: x, "decimal")("value").alias("res")).collect()
 
+    def test_arrow_udf_int_to_decimal_coercion(self):
+        from decimal import Decimal
+
+        with self.sql_conf(
+            {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": False}
+        ):
+            df = self.spark.range(0, 3)
+
+            @udf(returnType="decimal(10,2)", useArrow=True)
+            def int_to_decimal_udf(val):
+                values = [123, 456, 789]
+                return values[int(val) % len(values)]
+
+            # Test with coercion enabled
+            with self.sql_conf(
+                {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": True}
+            ):
+                result = df.select(int_to_decimal_udf("id").alias("decimal_val")).collect()
+                self.assertEqual(result[0]["decimal_val"], Decimal("123.00"))
+                self.assertEqual(result[1]["decimal_val"], Decimal("456.00"))
+                self.assertEqual(result[2]["decimal_val"], Decimal("789.00"))
+
+            # Test with coercion disabled (should fail)
+            with self.sql_conf(
+                {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
+            ):
+                with self.assertRaisesRegex(
+                    PythonException, "An exception was thrown from the Python worker"
+                ):
+                    df.select(int_to_decimal_udf("id").alias("decimal_val")).collect()
+
+            @udf(returnType="decimal(25,1)", useArrow=True)
+            def high_precision_udf(val):
+                values = [1, 2, 3]
+                return values[int(val) % len(values)]
+
+            # Test high precision decimal with coercion enabled
+            with self.sql_conf(
+                {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": True}
+            ):
+                result = df.select(high_precision_udf("id").alias("decimal_val")).collect()
+                self.assertEqual(len(result), 3)
+                self.assertEqual(result[0]["decimal_val"], Decimal("1.0"))
+                self.assertEqual(result[1]["decimal_val"], Decimal("2.0"))
+                self.assertEqual(result[2]["decimal_val"], Decimal("3.0"))
+
+            # Test high precision decimal with coercion disabled (should fail)
+            with self.sql_conf(
+                {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
+            ):
+                with self.assertRaisesRegex(
+                    PythonException, "An exception was thrown from the Python worker"
+                ):
+                    df.select(high_precision_udf("id").alias("decimal_val")).collect()
+
     def test_err_return_type(self):
         with self.assertRaises(PySparkNotImplementedError) as pe:
             udf(lambda x: x, VarcharType(10), useArrow=True)
