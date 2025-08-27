@@ -386,8 +386,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
     checkError(
       exception = ex,
       condition = "ARTIFACT_ALREADY_EXISTS",
-      parameters = Map("normalizedRemoteRelativePath" -> s"jars/${targetPath.toString}"),
-    )
+      parameters = Map("normalizedRemoteRelativePath" -> s"jars/${targetPath.toString}"))
 
     assert(ex.getSuppressed.length == 1)
     assert(ex.getSuppressed.head.isInstanceOf[SparkRuntimeException])
@@ -396,8 +395,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
     checkError(
       exception = suppressed,
       condition = "ARTIFACT_ALREADY_EXISTS",
-      parameters = Map("normalizedRemoteRelativePath" -> s"jars/${targetPath.toString}"),
-    )
+      parameters = Map("normalizedRemoteRelativePath" -> s"jars/${targetPath.toString}"))
 
     // Artifact1 should have been added
     val expectedFile1 = ArtifactManager.artifactRootDirectory
