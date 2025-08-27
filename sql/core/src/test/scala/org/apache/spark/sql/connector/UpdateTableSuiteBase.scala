@@ -619,7 +619,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       Row(2) :: Nil)
   }
 
-  test("boinkies") {
+  test("update with nondeterministic assignments without wholestage codegen") {
     val extraColCount = SQLConf.get.wholeStageMaxNumFields - 4
     print(s"extra column count is $extraColCount\n")
     val schema = "pk INT NOT NULL, id INT, value DOUBLE, dep STRING, " +
