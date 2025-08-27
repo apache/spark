@@ -645,23 +645,22 @@ class RocksDBWithCheckpointV2StateDataSourceReaderSuite extends StateDataSourceR
         StopStream
       )
 
-      // Set the checkpoint version to 1
-      spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 1)
+      withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "1") {
+        // Verify reading state throws error when reading checkpoint v2 with version 1
+        val exc = intercept[IllegalStateException] {
+          val stateDf = spark.read.format("statestore")
+            .option(StateSourceOptions.BATCH_ID, 0)
+            .option(StateSourceOptions.OPERATOR_ID, 0)
+            .load(tmpDir.getCanonicalPath)
+          stateDf.collect()
+        }
 
-      // Verify reading state throws error when reading checkpoint v2 with version 1
-      val exc = intercept[IllegalStateException] {
-        val stateDf = spark.read.format("statestore")
-          .option(StateSourceOptions.BATCH_ID, 0)
-          .option(StateSourceOptions.OPERATOR_ID, 0)
-          .load(tmpDir.getCanonicalPath)
-        stateDf.collect()
+        checkError(exc.getCause.asInstanceOf[SparkThrowable],
+          "INVALID_LOG_VERSION.EXACT_MATCH_VERSION", "KD002",
+          Map(
+            "version" -> "2",
+            "matchVersion" -> "1"))
       }
-
-      checkError(exc.getCause.asInstanceOf[SparkThrowable],
-        "INVALID_LOG_VERSION.EXACT_MATCH_VERSION", "KD002",
-        Map(
-          "version" -> "2",
-          "matchVersion" -> "1"))
     }
   }
 
