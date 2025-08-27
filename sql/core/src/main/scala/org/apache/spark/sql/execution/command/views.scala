@@ -481,16 +481,19 @@ object ViewHelper extends SQLConfHelper with Logging {
   }
 
   /**
-   * Convert the view SQL configs to `properties`.
+   * Convert the view SQL configs to `properties`. Here we only capture the SQL configs that are
+   * modifiable and should be captured, i.e. not in the denyList and in the allowList. We also
+   * capture `SESSION_LOCAL_TIMEZONE` whose default value relies on the JVM system timezone and
+   * the `ANSI_ENABLED` value.
+   *
+   * We need to always capture them to make sure we apply the same configs when querying the view.
    */
   private def sqlConfigsToProps(conf: SQLConf): Map[String, String] = {
     val modifiedConfs = getModifiedConf(conf)
-    // Some configs have dynamic default values, such as SESSION_LOCAL_TIMEZONE whose
-    // default value relies on the JVM system timezone. We need to always capture them to
-    // to make sure we apply the same configs when reading the view.
-    val alwaysCaptured = Seq(SQLConf.SESSION_LOCAL_TIMEZONE)
+
+    val alwaysCaptured = Seq(SQLConf.SESSION_LOCAL_TIMEZONE, SQLConf.ANSI_ENABLED)
       .filter(c => !modifiedConfs.contains(c.key))
-      .map(c => (c.key, conf.getConf(c)))
+      .map(c => (c.key, conf.getConf(c).toString))
 
     val props = new mutable.HashMap[String, String]
     for ((key, value) <- modifiedConfs ++ alwaysCaptured) {

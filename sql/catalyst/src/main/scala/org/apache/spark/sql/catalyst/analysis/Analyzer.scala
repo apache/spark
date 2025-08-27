@@ -258,7 +258,10 @@ object Analyzer {
     "spark.sql.expressionTreeChangeLog.level"
   )
 
-  def retainResolutionConfigsForAnalysis(newConf: SQLConf, existingConf: SQLConf): Unit = {
+  def retainResolutionConfigsForAnalysis(
+      newConf: SQLConf,
+      existingConf: SQLConf,
+      createSparkVersion: String = ""): Unit = {
     val retainedConfigs = existingConf.getAllConfs.filter { case (key, _) =>
       // Also apply catalog configs
       RETAINED_ANALYSIS_FLAGS.contains(key) || key.startsWith("spark.sql.catalog.")
@@ -266,6 +269,25 @@ object Analyzer {
 
     retainedConfigs.foreach { case (k, v) =>
       newConf.settings.put(k, v)
+    }
+
+    trySetAnsiValue(newConf, createSparkVersion)
+  }
+
+  /**
+   * In case ANSI value wasn't persisted for a view or a UDF, we set it to `true` in case Spark
+   * version used to create the view is 4.0.0 or higher. We set it to `false` in case Spark version
+   * is lower than 4.0.0 or if the Spark version wasn't stored (in that case we assume that the
+   * value is `false`)
+   */
+  def trySetAnsiValue(sqlConf: SQLConf, createSparkVersion: String = ""): Unit = {
+    if (conf.getConf(SQLConf.ASSUME_ANSI_FALSE_IF_NOT_PERSISTED) &&
+      !sqlConf.settings.containsKey(SQLConf.ANSI_ENABLED.key)) {
+      if (createSparkVersion.startsWith("4.")) {
+        sqlConf.settings.put(SQLConf.ANSI_ENABLED.key, "true")
+      } else {
+        sqlConf.settings.put(SQLConf.ANSI_ENABLED.key, "false")
+      }
     }
   }
 }
