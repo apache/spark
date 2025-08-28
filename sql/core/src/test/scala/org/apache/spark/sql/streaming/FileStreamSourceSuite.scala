@@ -19,6 +19,8 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 import java.net.URI
+import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.Files
 import java.time.{LocalDateTime, ZoneOffset}
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicLong
@@ -867,6 +869,103 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         AddTextFileData("keep8", subDir, tmp), // needed to make query detect new data
         CheckAnswer("keep2", "keep3", "keep4", "keep5", "keep8")
       )
+    }
+  }
+
+  test("Named Sources V2 - source evolution with different directories") {
+    import testImplicits._
+
+    val chkptPath = Utils.createTempDir()
+    logError(s"### path: ${chkptPath.getAbsolutePath}")
+    val checkpointLocation = chkptPath.getCanonicalPath
+    withThreeTempDirs { case (srcDir1, srcDir2, tmpDir) =>
+      val outputDir = Utils.createTempDir()
+
+      // Ensure checkpoint directory is truly empty
+      Utils.deleteRecursively(new File(checkpointLocation))
+      new File(checkpointLocation).mkdirs()
+
+      try {
+        // Phase 1: Start with file stream source from first directory
+        val fileQuery1 = spark.readStream
+          .format("text")
+          .option("maxFilesPerTrigger", "1")
+          .name("file-source-1")
+          .load(srcDir1.getCanonicalPath)
+          .selectExpr("value")
+          .dropDuplicates("value")
+          .writeStream
+          .option("checkpointLocation", checkpointLocation)
+          .format("parquet")
+          .option("path", outputDir.getCanonicalPath)
+          .start()
+
+        try {
+          // Add files to first directory after the stream starts
+          (1 to 5).foreach { i =>
+            val tempFile = Utils.tempFileWith(new File(tmpDir, s"text-$i"))
+            val content = s"dir1-file-$i"
+            Files.write(tempFile.toPath, content.getBytes(UTF_8))
+            val finalFile = new File(srcDir1, tempFile.getName)
+            require(tempFile.renameTo(finalFile), s"Failed to rename $tempFile to $finalFile")
+            Thread.sleep(100) // Small delay to ensure files are detected in order
+          }
+
+          // Wait for file stream to process all files
+          fileQuery1.processAllAvailable()
+
+          // Verify first directory data was written
+          val fileData1 = spark.read.parquet(outputDir.getCanonicalPath).as[String].collect().sorted
+          assert(fileData1.length === 5,
+            s"Expected 5 records from dir1 but got ${fileData1.length}")
+          assert(fileData1 === Array(
+            "dir1-file-1", "dir1-file-2", "dir1-file-3", "dir1-file-4", "dir1-file-5"))
+        } finally {
+          fileQuery1.stop()
+        }
+
+        // Phase 2: Add files to second directory before starting the second stream
+        (1 to 3).foreach { i =>
+          val tempFile = Utils.tempFileWith(new File(tmpDir, s"text2-$i"))
+          val content = s"dir2-file-$i"
+          Files.write(tempFile.toPath, content.getBytes(UTF_8))
+          val finalFile = new File(srcDir2, tempFile.getName)
+          require(tempFile.renameTo(finalFile), s"Failed to rename $tempFile to $finalFile")
+        }
+        logError(s"### new source")
+
+        // Phase 3: Restart with file source from second directory using same checkpoint
+        val fileQuery2 = spark.readStream
+          .format("text")
+          .option("maxFilesPerTrigger", "1")
+          .name("file-source-2")
+          .load(srcDir2.getCanonicalPath)
+          .selectExpr("value")
+          .dropDuplicates("value")
+          .writeStream
+          .option("checkpointLocation", checkpointLocation)
+          .format("parquet")
+          .option("path", outputDir.getCanonicalPath)
+          .start()
+
+        try {
+          // Wait for second directory data to be processed
+          fileQuery2.processAllAvailable()
+
+          // Verify both directories' data are present
+          val allData = spark.read.parquet(outputDir.getCanonicalPath).as[String].collect().sorted
+          assert(allData.length === 8,
+            s"Expected 8 total records but got ${allData.length}: ${allData.mkString(", ")}")
+          assert(allData === Array(
+            "dir1-file-1", "dir1-file-2", "dir1-file-3", "dir1-file-4", "dir1-file-5",
+            "dir2-file-1", "dir2-file-2", "dir2-file-3"))
+        } finally {
+          fileQuery2.stop()
+        }
+      } finally {
+        Thread.sleep(120000L)
+        Utils.deleteRecursively(outputDir)
+      }
     }
   }
 

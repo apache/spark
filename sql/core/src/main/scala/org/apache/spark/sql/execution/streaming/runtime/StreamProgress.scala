@@ -30,8 +30,23 @@ class StreamProgress(
         new immutable.HashMap[SparkDataStream, OffsetV2])
   extends scala.collection.immutable.Map[SparkDataStream, OffsetV2] {
 
-  def toOffsetSeq(source: Seq[SparkDataStream], metadata: OffsetSeqMetadata): OffsetSeq = {
-    OffsetSeq(source.map(get), Some(metadata))
+  def toOffsetSeq(
+      sources: Seq[SparkDataStream],
+      sourceNames: Seq[String],
+      metadata: OffsetSeqMetadata): OffsetSeq = {
+    val namedOffsets = sources.zip(sourceNames).flatMap { case (source, name) =>
+      get(source).map(offset => name -> offset)
+    }.toMap
+    OffsetSeq(namedOffsets, Some(metadata))
+  }
+
+  @deprecated("Use toOffsetSeq with sourceNames", "3.6.0")
+  def toOffsetSeq(sources: Seq[SparkDataStream], metadata: OffsetSeqMetadata): OffsetSeq = {
+    // Fallback to index-based names for backward compatibility
+    val namedOffsets = sources.zipWithIndex.flatMap { case (source, index) =>
+      get(source).map(offset => index.toString -> offset)
+    }.toMap
+    OffsetSeq(namedOffsets, Some(metadata))
   }
 
   override def toString: String =

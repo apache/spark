@@ -74,11 +74,11 @@ class OffsetSeqLogSuite extends SharedSparkSession {
       val batch0 = OffsetSeq.fill(LongOffset(0), LongOffset(1), LongOffset(2))
       val batch1 = OffsetSeq.fill(StringOffset("one"), StringOffset("two"), StringOffset("three"))
 
-      val batch0Serialized = OffsetSeq.fill(batch0.offsets.flatMap(_.map(o =>
-        SerializedOffset(o.json))): _*)
+      val batch0Serialized = OffsetSeq.fill(batch0.offsets.values.map(o =>
+        SerializedOffset(o.json)).toSeq: _*)
 
-      val batch1Serialized = OffsetSeq.fill(batch1.offsets.flatMap(_.map(o =>
-        SerializedOffset(o.json))): _*)
+      val batch1Serialized = OffsetSeq.fill(batch1.offsets.values.map(o =>
+        SerializedOffset(o.json)).toSeq: _*)
 
       assert(metadataLog.add(0, batch0))
       assert(metadataLog.getLatest() === Some(0 -> batch0Serialized))

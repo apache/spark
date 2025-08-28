@@ -34,31 +34,29 @@ import org.apache.spark.sql.internal.SQLConf._
 
 
 /**
- * An ordered collection of offsets, used to track the progress of processing data from one or more
+ * A collection of named offsets, used to track the progress of processing data from one or more
  * [[Source]]s that are present in a streaming query. This is similar to simplified, single-instance
  * vector clock that must progress linearly forward.
  *
- * This class supports both positional offsets (legacy V1 format) and named sources (V2 format).
- * Internally, all sources are tracked by name, with ordinal names ("0", "1", "2", etc.) used
- * when explicit names are not provided.
+ * All sources are tracked by name - either user-provided names or auto-generated names
+ * from sourceId.
  */
 case class OffsetSeq(
-    offsets: Seq[Option[OffsetV2]],
-    metadata: Option[OffsetSeqMetadata] = None,
-    namedOffsets: Option[Map[String, OffsetV2]] = None) {
+    offsets: Map[String, OffsetV2],
+    metadata: Option[OffsetSeqMetadata] = None) {
 
   /**
-   * Unpacks an offset into [[StreamProgress]] by associating each offset with the ordered list of
-   * sources.
+   * Unpacks offsets into [[StreamProgress]] by associating each named offset with the
+   * corresponding source from the ordered list.
    *
-   * This method is typically used to associate a serialized offset with actual sources (which
-   * cannot be serialized).
+   * @deprecated Use toStreamProgress(namedSources: Map[String, SparkDataStream]) instead
    */
+  @deprecated("Use toStreamProgress with named sources map", "3.6.0")
   def toStreamProgress(sources: Seq[SparkDataStream]): StreamProgress = {
-    assert(sources.size == offsets.size, s"There are [${offsets.size}] sources in the " +
-      s"checkpoint offsets and now there are [${sources.size}] sources requested by the query. " +
-      s"Cannot continue.")
-    new StreamProgress ++ sources.zip(offsets).collect { case (s, Some(o)) => (s, o) }
+    val sourceOffsetPairs = sources.zipWithIndex.flatMap { case (source, index) =>
+      offsets.get(index.toString).map(offset => (source, offset))
+    }
+    new StreamProgress ++ sourceOffsetPairs
   }
 
   /**
@@ -69,57 +67,34 @@ case class OffsetSeq(
    * @return The StreamProgress containing the offset mapping
    */
   def toStreamProgress(namedSources: Map[String, SparkDataStream]): StreamProgress = {
-    namedOffsets match {
-      case Some(sourceOffsets) =>
-        val sourceOffsetPairs = sourceOffsets.flatMap { case (name, offset) =>
-          namedSources.get(name) match {
-            case Some(source) => Some((source, offset))
-            case None =>
-              // This shouldn't happen in normal operation, but handle gracefully
-              None
-          }
-        }
-        new StreamProgress ++ sourceOffsetPairs
-      case None =>
-        // Fall back to positional mapping for backward compatibility
-        toStreamProgress(namedSources.values.toSeq)
+    // Map existing checkpoint offsets to current sources
+    val existingSourceOffsets = offsets.flatMap { case (name, offset) =>
+      namedSources.get(name) match {
+        case Some(source) => Some((source, offset))
+        case None =>
+          // Source from checkpoint no longer exists in current query - ignore
+          None
+      }
     }
+
+    // For source evolution: identify new sources not in checkpoint and start them from beginning
+    val newSources = namedSources.values.filterNot { source =>
+      offsets.exists { case (name, _) => namedSources.get(name).contains(source) }
+    }
+
+    // New sources start with null offset (beginning)
+    val newSourceOffsets = newSources.map(source => (source, null.asInstanceOf[OffsetV2]))
+
+    new StreamProgress ++ (existingSourceOffsets ++ newSourceOffsets)
   }
 
   /**
-   * Creates a new OffsetSeq with named sources from this positional OffsetSeq.
-   * This is used to upgrade legacy checkpoints to the new format.
+   * Returns the named offsets map.
    */
-  def withNamedSources(sourceNames: Seq[String]): OffsetSeq = {
-    require(sourceNames.size == offsets.size,
-      s"Number of source names (${sourceNames.size}) must match " +
-      s"number of offsets (${offsets.size})")
-
-    val named = sourceNames.zip(offsets).collect {
-      case (name, Some(offset)) => name -> offset
-    }.toMap
-
-    copy(namedOffsets = Some(named))
-  }
-
-  /**
-   * Returns the named offsets map, creating one from ordinal positions if needed.
-   */
-  def getNamedOffsets: Map[String, OffsetV2] = {
-    namedOffsets.getOrElse {
-      offsets.zipWithIndex.collect {
-        case (Some(offset), index) => index.toString -> offset
-      }.toMap
-    }
-  }
+  def getNamedOffsets: Map[String, OffsetV2] = offsets
 
   override def toString: String = {
-    namedOffsets match {
-      case Some(named) =>
-        named.map { case (name, offset) => s"$name: ${offset.json}" }.mkString("{", ", ", "}")
-      case None =>
-        offsets.map(_.map(_.json).getOrElse("-")).mkString("[", ", ", "]")
-    }
+    offsets.map { case (name, offset) => s"$name: ${offset.json}" }.mkString("{", ", ", "}")
   }
 }
 
@@ -127,32 +102,32 @@ object OffsetSeq {
 
   /**
    * Returns a [[OffsetSeq]] with a variable sequence of offsets.
-   * `nulls` in the sequence are converted to `None`s.
-   * This method maintains backward compatibility with V1 checkpoints.
+   * @deprecated Use fillNamed instead for explicit source naming
    */
-  def fill(offsets: OffsetV2*): OffsetSeq = OffsetSeq.fill(None, offsets: _*)
+  @deprecated("Use fillNamed with explicit source names", "3.6.0")
+  def fill(offsets: OffsetV2*): OffsetSeq = fill(None, offsets: _*)
 
   /**
    * Returns a [[OffsetSeq]] with metadata and a variable sequence of offsets.
-   * `nulls` in the sequence are converted to `None`s.
-   * This method maintains backward compatibility with V1 checkpoints.
+   * @deprecated Use fillNamed instead for explicit source naming
    */
+  @deprecated("Use fillNamed with explicit source names", "3.6.0")
   def fill(metadata: Option[String], offsets: OffsetV2*): OffsetSeq = {
-    OffsetSeq(offsets.map(Option(_)), metadata.map(OffsetSeqMetadata.apply))
+    val namedOffsets = offsets.zipWithIndex.filter(_._1 != null).map {
+      case (offset, index) => index.toString -> offset
+    }.toMap
+    OffsetSeq(namedOffsets, metadata.map(OffsetSeqMetadata.apply))
   }
 
   /**
    * Creates an OffsetSeq with named sources and metadata.
-   * This is used for new V2 format checkpoints.
    *
    * @param metadata Optional metadata string
    * @param namedOffsets Map from source name to offset
    * @return OffsetSeq with named sources
    */
   def fillNamed(metadata: Option[String], namedOffsets: Map[String, OffsetV2]): OffsetSeq = {
-    // Create empty positional offsets for backward compatibility methods
-    val positionalOffsets = Seq.empty[Option[OffsetV2]]
-    OffsetSeq(positionalOffsets, metadata.map(OffsetSeqMetadata.apply), Some(namedOffsets))
+    OffsetSeq(namedOffsets, metadata.map(OffsetSeqMetadata.apply))
   }
 
   /**

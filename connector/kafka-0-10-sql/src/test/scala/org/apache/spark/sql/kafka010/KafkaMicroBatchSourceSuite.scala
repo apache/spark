@@ -125,7 +125,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSparkSession with K
 
       val sources: Seq[SparkDataStream] = {
         query.get.logicalPlan.collect {
-          case StreamingExecutionRelation(source: KafkaSource, _, _) => source
+          case StreamingExecutionRelation(source: KafkaSource, _, _, _) => source
           case r: StreamingDataSourceV2ScanRelation
             if r.stream.isInstanceOf[KafkaMicroBatchStream] ||
               r.stream.isInstanceOf[KafkaContinuousStream] =>
@@ -857,7 +857,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
       AssertOnQuery { q =>
         val latestOffset: Option[(Long, OffsetSeq)] = q.offsetLog.getLatest()
         latestOffset.exists { offset =>
-          !offset._2.offsets.exists(_.exists(_.json == "{}"))
+          !offset._2.offsets.values.exists(_.json == "{}")
         }
       }
     )
@@ -1616,7 +1616,7 @@ abstract class KafkaMicroBatchV1SourceSuite extends KafkaMicroBatchSourceSuiteBa
       makeSureGetOffsetCalled,
       AssertOnQuery { query =>
         query.logicalPlan.collectFirst {
-          case StreamingExecutionRelation(_: KafkaSource, _, _) => true
+          case StreamingExecutionRelation(_: KafkaSource, _, _, _) => true
         }.nonEmpty
       }
     )

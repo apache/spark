@@ -251,9 +251,6 @@ class MicroBatchExecution(
     // sources.
     triggerExecutor = getTrigger()
 
-    // Set source names on offsetLog for V2 format serialization
-    offsetLog.setSourceNames(sourceNames)
-
     uniqueSources = triggerExecutor match {
       case _: SingleBatchExecutor =>
         sources.distinct.map {
@@ -978,7 +975,7 @@ class MicroBatchExecution(
    */
   protected def markMicroBatchStart(execCtx: MicroBatchExecutionContext): Unit = {
     if (!offsetLog.add(execCtx.batchId,
-      execCtx.endOffsets.toOffsetSeq(sources, execCtx.offsetSeqMetadata))) {
+      execCtx.endOffsets.toOffsetSeq(sources, sourceNames, execCtx.offsetSeqMetadata))) {
       throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)
     }
 

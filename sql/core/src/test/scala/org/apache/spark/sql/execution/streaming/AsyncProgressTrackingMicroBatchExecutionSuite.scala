@@ -839,7 +839,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
 
       val sourceCommittedOffset: streaming.Offset = inputData.commits(i)
 
-      offsetOnDisk.offsets(0).get.json() should equal(sourceCommittedOffset.json())
+      offsetOnDisk.offsets.get("0").get.json() should equal(sourceCommittedOffset.json())
     }
 
     // make sure that the source commits is being executed by the main stream execution thread

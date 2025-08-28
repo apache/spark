@@ -137,7 +137,8 @@ class AsyncProgressTrackingMicroBatchExecution(
     // Because we are using a thread pool with only one thread, async writes to the offset log
     // are still written in a serial / in order fashion
     offsetLog
-      .addAsync(execCtx.batchId, execCtx.endOffsets.toOffsetSeq(sources, execCtx.offsetSeqMetadata))
+      .addAsync(execCtx.batchId,
+        execCtx.endOffsets.toOffsetSeq(sources, sourceNames, execCtx.offsetSeqMetadata))
       .thenAccept(tuple => {
         val (batchId, persistedToDurableStorage) = tuple
         if (persistedToDurableStorage) {

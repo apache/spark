@@ -215,7 +215,7 @@ class ContinuousExecution(
 
     val withNewSources: LogicalPlan = logicalPlan transform {
       case relation: StreamingDataSourceV2ScanRelation =>
-        val loggedOffset = offsets.offsets(0)
+        val loggedOffset = offsets.offsets.get("0")
         val realOffset = loggedOffset.map(off => relation.stream.deserializeOffset(off.json))
         val startOffset = realOffset.getOrElse(relation.stream.initialOffset)
         relation.copy(startOffset = Some(startOffset))
@@ -391,7 +391,7 @@ class ContinuousExecution(
       if (queryExecutionThread.isAlive) {
         commitLog.add(epoch, CommitMetadata())
         val offset =
-          sources(0).deserializeOffset(offsetLog.get(epoch).get.offsets(0).get.json)
+          sources(0).deserializeOffset(offsetLog.get(epoch).get.offsets.get("0").get.json)
         committedOffsets ++= Seq(sources(0) -> offset)
         sources(0).commit(offset)
       } else {
