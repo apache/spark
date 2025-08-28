@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.util.{Either, Left, Right}
 
+import org.apache.spark.sql.catalyst.analysis.{NamedParameter, PosParameter}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Literal, VariableReference}
 import org.apache.spark.sql.catalyst.parser.{ParameterHandler, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LogicalPlan, SetVariable}
@@ -163,24 +164,45 @@ class SubstituteExecuteImmediate(
         val queryString = extractQueryString(query)
         // Apply parameter substitution to the query string before parsing
         val substitutedQueryString = applyParameterSubstitution(queryString, expressions)
-        val plan = parseStatement(substitutedQueryString, targetVariables)
 
-        val posNodes = plan.collect { case p: LogicalPlan =>
+        // Set the origin to use the inner query string for proper error context
+        val innerOrigin = org.apache.spark.sql.catalyst.trees.Origin(
+          sqlText = Some(substitutedQueryString),
+          startIndex = Some(0),
+          stopIndex = Some(substitutedQueryString.length - 1)
+        )
+        val plan = org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(innerOrigin) {
+          parseStatement(substitutedQueryString, targetVariables)
+        }
+        // Update the origins of any Parameter nodes to use the inner query context
+        val planWithUpdatedOrigins = plan.transformAllExpressions {
+          case np: NamedParameter =>
+            org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(innerOrigin) {
+              NamedParameter(np.name)
+            }
+          case pp: PosParameter =>
+            org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(innerOrigin) {
+              PosParameter(pp.pos)
+            }
+          case other => other
+        }
+
+        val posNodes = planWithUpdatedOrigins.collect { case p: LogicalPlan =>
           p.expressions.flatMap(_.collect { case n: PosParameter => n })
         }.flatten
-        val namedNodes = plan.collect { case p: LogicalPlan =>
+        val namedNodes = planWithUpdatedOrigins.collect { case p: LogicalPlan =>
           p.expressions.flatMap(_.collect { case n: NamedParameter => n })
         }.flatten
 
         val queryPlan = if (expressions.isEmpty || (posNodes.isEmpty && namedNodes.isEmpty)) {
-          plan
+          planWithUpdatedOrigins
         } else if (posNodes.nonEmpty && namedNodes.nonEmpty) {
           throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
         } else {
           if (posNodes.nonEmpty) {
             // Apply constant folding to positional parameters
             val foldedArgs = expressions.map(foldToLiteral)
-            PosParameterizedQuery(plan, foldedArgs)
+            PosParameterizedQuery(planWithUpdatedOrigins, foldedArgs)
           } else {
             val aliases = expressions.collect {
               case e: Alias => e
@@ -200,7 +222,7 @@ class SubstituteExecuteImmediate(
             val values = aliases.map(foldToLiteral)
 
             NameParameterizedQuery(
-              plan,
+              planWithUpdatedOrigins,
               names,
               // We need to resolve arguments before Resolution batch to make sure
               // that some rule does not accidentally resolve our parameters.
@@ -211,10 +233,15 @@ class SubstituteExecuteImmediate(
 
         // Fully analyze the generated plan. AnalysisContext.withExecuteImmediateContext makes sure
         // that SQL scripting local variables will not be accessed from the plan.
-        val finalPlan = AnalysisContext.withExecuteImmediateContext {
-          resolveChild(queryPlan)
+        // Use the inner query origin for proper error context during analysis
+        val finalPlan = org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(innerOrigin) {
+          AnalysisContext.withExecuteImmediateContext {
+            resolveChild(queryPlan)
+          }
         }
-        checkAnalysis(finalPlan)
+        org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(innerOrigin) {
+          checkAnalysis(finalPlan)
+        }
 
         if (targetVariables.nonEmpty) {
           SetVariable(targetVariables, finalPlan)
