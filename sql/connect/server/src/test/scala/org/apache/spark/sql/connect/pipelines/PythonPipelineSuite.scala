@@ -434,31 +434,64 @@ class PythonPipelineSuite
         .map(_.identifier) == Seq(graphIdentifier("a"), graphIdentifier("something")))
   }
 
-  test("groupby and rollup works with internal datasets") {
-    // create src table
-    spark.sql("CREATE TABLE spark_catalog.default.src (id BIGINT) USING PARQUET;")
-    spark.sql("INSERT INTO src VALUES (0), (1), (2);")
-
-
+  test("groupby and rollup works with internal datasets (col, str, index)") {
     val graph = buildGraph("""
-        from pyspark.sql.functions import col, sum, count
+      from pyspark.sql.functions import col, sum, count
 
-        @dp.materialized_view
-        def groupby_result():
-            return spark.read.table("src").groupBy("id").count()
-      """)
+      @dp.materialized_view
+      def src():
+        return spark.range(3)
 
-    val updateContext = new PipelineUpdateContextImpl(graph, e => (
-      // scalastyle:off println
-      println(s"Event: $e")
-    ))
+      @dp.materialized_view
+      def groupby_with_col_result():
+        return spark.read.table("src").groupBy(col("id")).agg(
+          sum("id").alias("sum_id"),
+          count("*").alias("cnt")
+        )
+
+      @dp.materialized_view
+      def groupby_with_str_result():
+        return spark.read.table("src").groupBy("id").agg(
+          sum("id").alias("sum_id"),
+          count("*").alias("cnt")
+        )
+
+      @dp.materialized_view
+      def rollup_with_col_result():
+        return spark.read.table("src").rollup(col("id")).agg(
+          sum("id").alias("sum_id"),
+          count("*").alias("cnt")
+        )
+
+      @dp.materialized_view
+      def rollup_with_str_result():
+        return spark.read.table("src").rollup("id").agg(
+          sum("id").alias("sum_id"),
+          count("*").alias("cnt")
+        )
+    """)
+
+    val updateContext = new PipelineUpdateContextImpl(graph, _ => ())
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
-    val groupbyDf = spark.table("groupby_result")
+    val groupbyDfs =
+      Seq(spark.table("groupby_with_col_result"), spark.table("groupby_with_str_result"))
 
-    // groupBy should have exactly one row per id [0,1,2]
-    assert(groupbyDf.select("id").collect().map(_.getLong(0)).toSet == Set(0L, 1L, 2L))
+    val rollupDfs =
+      Seq(spark.table("rollup_with_col_result"), spark.table("rollup_with_str_result"))
+
+    // groupBy: each variant should have exactly one row per id [0,1,2]
+    groupbyDfs.foreach { df =>
+      assert(df.select("id").collect().map(_.getLong(0)).toSet == Set(0L, 1L, 2L))
+    }
+
+    // rollup: each variant should have groupBy rows + one total row
+    rollupDfs.foreach { df =>
+      assert(df.count() == 3 + 1) // 3 ids + 1 total
+      val totalRow = df.filter("id IS NULL").collect().head
+      assert(totalRow.getLong(1) == 3L && totalRow.getLong(2) == 3L)
+    }
   }
 
   test("create pipeline without table will throw RUN_EMPTY_PIPELINE exception") {
@@ -518,9 +551,6 @@ class PythonPipelineSuite
       sourcePath.toString,
       py4jPath.toString,
       sys.env.getOrElse("PYTHONPATH", ""))
-
-    // scalastyle:off println
-    println(s"Using PYTHONPATH: $pythonPath")
 
     val pb = new ProcessBuilder(pythonExec, "-c", pythonCode)
     pb.redirectErrorStream(true)

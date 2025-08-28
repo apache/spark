@@ -244,7 +244,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
     checkAnswer(
       spark
         .sql(s"SELECT * FROM ${fullyQualifiedIdentifier("c").quotedString}"),
-      Seq(Row(1, 1), Row(2, 2))
+        Seq(Row(1, 1), Row(2, 2))
     )
   }
 
