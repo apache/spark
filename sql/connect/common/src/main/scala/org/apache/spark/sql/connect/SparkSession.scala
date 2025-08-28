@@ -684,6 +684,34 @@ class SparkSession private[sql] (
     }
   }
 
+  /**
+   * Create a clone of this Spark Connect session on the server side. The server-side session
+   * is cloned with all its current state (SQL configurations, temporary views, registered
+   * functions, catalog state) copied over to a new independent session. The returned cloned
+   * session will remain isolated from this session - any subsequent changes to either session's
+   * server-side state will not be reflected in the other.
+   *
+   * @note This creates a new server-side session with a new session ID while preserving
+   * the current session's configuration and state.
+   */
+  def cloneSession(): SparkSession = {
+    SparkSession.builder().client(client.cloneSession()).create()
+  }
+
+  /**
+   * Create a clone of this Spark Connect session on the server side with a custom session ID.
+   * The server-side session is cloned with all its current state (SQL configurations, temporary
+   * views, registered functions, catalog state) copied over to a new independent session with
+   * the specified session ID. The returned cloned session will remain isolated from this session.
+   *
+   * @param sessionId The custom session ID to use for the cloned session (must be a valid UUID)
+   * @note This creates a new server-side session with the specified session ID while preserving
+   * the current session's configuration and state.
+   */
+  def cloneSession(sessionId: String): SparkSession = {
+    SparkSession.builder().client(client.clone(sessionId)).create()
+  }
+
   override private[sql] def isUsable: Boolean = client.isSessionValid
 }
 
