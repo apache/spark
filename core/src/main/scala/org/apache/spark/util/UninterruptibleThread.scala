@@ -102,9 +102,9 @@ private[spark] class UninterruptibleThread(
      */
     def isInterruptible: Boolean = synchronized {
       // SPARK-53394: We should not interrupt the thread when it is already interrupted.
-      // Otherwise, the state of `shouldInterruptThread` becomes inconsistent between
-      // `isInterruptible()` and `isInterruptPending()`, leading to `UninterruptibleThread`
-      // be interruptible under `runUninterruptibly`.
+      // Otherwise, the state of shouldInterruptThread becomes inconsistent between
+      // isInterruptible() and isInterruptPending(), leading to UninterruptibleThread
+      // be interruptible under runUninterruptibly.
       shouldInterruptThread = uninterruptible || UninterruptibleThread.this.isInterrupted
       // as we are releasing uninterruptibleLock before calling super.interrupt() there is a
       // possibility that runUninterruptibly() would be called after lock is released but before
