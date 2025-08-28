@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  * called produces partially-unresolved subtrees. In order to resolve the subtree a callback
  * resolver is called recursively. This callback must ensure that no node is resolved twice in
  * order to not break the single-pass invariant. This is done by tagging the limits of this
- * traversal with [[ExpressionResolver.SINGLE_PASS_SUBTREE_BOUNDARY]] tag. This tag is applied to
- * the original expression's children, which are guaranteed to be resolved at the time of given
+ * traversal with [[ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY]] tag. This tag is applied to the
+ * original expression's children, which are guaranteed to be resolved at the time of given
  * expression's resolution. When callback resolver encounters the node that is tagged, it should
  * return identity instead of trying to resolve it.
  */
@@ -40,20 +40,20 @@ trait ProducesUnresolvedSubtree extends ResolvesExpressionChildren {
    *
    * If the result of the callback is the same object as the source `expression`, we don't perform
    * the downwards traversal. This is both more optimal and a fail-safe mechanism in case we
-   * accidentally lose the [[ExpressionResolver.SINGLE_PASS_SUBTREE_BOUNDARY]] tag.
+   * accidentally lose the [[ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY]] tag.
    */
   protected def withResolvedSubtree(
       expression: Expression,
       expressionResolver: Expression => Expression)(body: => Expression): Expression = {
     expression.children.foreach { child =>
-      child.setTagValue(ExpressionResolver.SINGLE_PASS_SUBTREE_BOUNDARY, ())
+      child.setTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY, ())
     }
 
     val resultExpression = body
 
     if (resultExpression.eq(expression)) {
       expression.children.foreach { child =>
-        child.unsetTagValue(ExpressionResolver.SINGLE_PASS_SUBTREE_BOUNDARY)
+        child.unsetTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY)
       }
       resultExpression
     } else {
@@ -68,9 +68,9 @@ trait ProducesUnresolvedSubtree extends ResolvesExpressionChildren {
    */
   protected def tryPopSinglePassSubtreeBoundary(unresolvedExpression: Expression): Boolean = {
     if (unresolvedExpression
-        .getTagValue(ExpressionResolver.SINGLE_PASS_SUBTREE_BOUNDARY)
+        .getTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY)
         .isDefined) {
-      unresolvedExpression.unsetTagValue(ExpressionResolver.SINGLE_PASS_SUBTREE_BOUNDARY)
+      unresolvedExpression.unsetTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY)
       true
     } else {
       false
