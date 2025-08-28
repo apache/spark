@@ -434,7 +434,7 @@ class PythonPipelineSuite
         .map(_.identifier) == Seq(graphIdentifier("a"), graphIdentifier("something")))
   }
 
-  test("groupby and rollup works with internal datasets (col, str, index)") {
+  test("groupby and rollup works with internal datasets, referencing with (col, str)") {
     val graph = buildGraph("""
       from pyspark.sql.functions import col, sum, count
 
