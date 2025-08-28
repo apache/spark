@@ -42,7 +42,8 @@ import org.apache.spark.util.SerializableConfiguration
 private[sql] class AvroFileFormat extends FileFormat
   with DataSourceRegister
   with SessionStateHelper
-  with Logging with Serializable {
+  with Logging
+  with Serializable {
 
   AvroFileFormat.registerCustomAvroTypes()
 
