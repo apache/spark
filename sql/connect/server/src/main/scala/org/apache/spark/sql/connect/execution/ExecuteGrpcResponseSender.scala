@@ -76,7 +76,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
   }
 
   // For testing
-  private[connect] def setDeadline(deadlineNs: Long): Unit = {
+  private[connect] def setDeadline(deadlineNs: Long) = {
     deadlineTimeNs = deadlineNs
     wakeUp()
   }
@@ -301,7 +301,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
         if (sent) {
           sentResponsesSize += response.get.serializedByteSize
           nextIndex += 1
-          assert(!finished)
+          assert(finished == false)
         } else {
           // If it wasn't sent, time deadline must have been reached before stream became available,
           // or it was interrupted. Will exit in the next loop iteration.
