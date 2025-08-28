@@ -2786,12 +2786,12 @@ class DataFrameSuite extends QueryTest
     checkAnswer(df1, Seq(Row(1), Row(4)))
   }
 
-  test("SPARK-53401: direct_shuffle_partition_id - should partition rows to the specified " +
+  test("SPARK-53401: repartitionById - should partition rows to the specified " +
     "partition ID") {
     val numPartitions = 10
     val df = spark.range(100).withColumn("p_id", col("id") % numPartitions)
 
-    val repartitioned = df.repartition(numPartitions, direct_shuffle_partition_id($"p_id"))
+    val repartitioned = df.repartitionById(numPartitions, $"p_id")
     val result = repartitioned.withColumn("actual_p_id", spark_partition_id())
 
     assert(result.filter(col("p_id") =!= col("actual_p_id")).count() == 0)
@@ -2799,21 +2799,11 @@ class DataFrameSuite extends QueryTest
     assert(result.rdd.getNumPartitions == numPartitions)
   }
 
-  test("SPARK-53401: direct_shuffle_partition_id - should work with expr()") {
-    val numPartitions = 5
-    val df = spark.range(50).withColumn("p_id", col("id") % numPartitions)
-
-    val repartitioned = df.repartition(numPartitions, expr("direct_shuffle_partition_id(p_id)"))
-    val result = repartitioned.withColumn("actual_p_id", spark_partition_id())
-
-    assert(result.filter(col("p_id") =!= col("actual_p_id")).count() == 0)
-  }
-
-  test("SPARK-53401: direct_shuffle_partition_id - should fail when partition ID is null") {
+  test("SPARK-53401: repartitionById - should fail when partition ID is null") {
     val df = spark.range(10).withColumn("p_id",
       when(col("id") < 5, col("id")).otherwise(lit(null).cast("long"))
     )
-    val repartitioned = df.repartition(5, direct_shuffle_partition_id($"p_id"))
+    val repartitioned = df.repartitionById(5, $"p_id")
 
     val e = intercept[SparkException] {
       repartitioned.collect()
@@ -2822,10 +2812,10 @@ class DataFrameSuite extends QueryTest
     assert(e.getCause.getMessage.contains("The partition ID expression must not be null."))
   }
 
-  test("SPARK-53401: direct_shuffle_partition_id - should fail analysis for non-integral types") {
+  test("SPARK-53401: repartitionById - should fail analysis for non-integral types") {
     val df = spark.range(5).withColumn("s", lit("a"))
     val e = intercept[AnalysisException] {
-      df.repartition(5, direct_shuffle_partition_id($"s")).collect()
+      df.repartitionById(5, $"s").collect()
     }
     // Should fail with type error from DirectShufflePartitionID expression
     assert(e.getMessage.contains("requires an integral type"))

@@ -30,21 +30,6 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, LongType}
  * The child expression must evaluate to an integral type and must not be null.
  * The resulting partition ID must be in the range [0, numPartitions).
  */
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the partition ID specified by expr for direct shuffle " +
-    "partitioning.",
-  arguments = """
-    Arguments:
-      * expr - an integral expression that specifies the target partition ID
-  """,
-  examples = """
-    Examples:
-      > df.repartition(10, direct_shuffle_partition_id($"partition_id"))
-      > df.repartition(10, expr("direct_shuffle_partition_id(id % 5)"))
-  """,
-  since = "4.1.0",
-  group = "misc_funcs"
-)
 case class DirectShufflePartitionID(child: Expression)
     extends UnaryExpression
     with ExpectsInputTypes {

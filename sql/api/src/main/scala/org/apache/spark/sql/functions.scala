@@ -2046,19 +2046,6 @@ object functions {
   def spark_partition_id(): Column = Column.fn("spark_partition_id")
 
   /**
-   * Returns the partition ID specified by the given column expression for direct shuffle
-   * partitioning. The input expression must evaluate to an integral type and must not be null.
-   *
-   * This function is used with DataFrame.repartitionByExpr to allow users to directly specify
-   * target partition IDs instead of using hash-based partitioning.
-   *
-   * @group misc_funcs
-   * @since 4.1.0
-   */
-  def direct_shuffle_partition_id(e: Column): Column =
-    Column.fn("direct_shuffle_partition_id", e)
-
-  /**
    * Computes the square root of the specified float value.
    *
    * @group math_funcs
