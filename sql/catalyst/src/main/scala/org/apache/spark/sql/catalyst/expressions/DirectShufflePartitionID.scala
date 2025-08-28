@@ -18,15 +18,14 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.{DataType, IntegerType, IntegralType}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, LongType}
 
 /**
  * Expression that takes a partition ID value and passes it through directly for use in
  * shuffle partitioning. This is used with RepartitionByExpression to allow users to
- * directly specify target partition IDs instead of using hash-based partitioning.
+ * directly specify target partition IDs.
  *
  * The child expression must evaluate to an integral type and must not be null.
  * The resulting partition ID must be in the range [0, numPartitions).
@@ -40,38 +39,23 @@ import org.apache.spark.sql.types.{DataType, IntegerType, IntegralType}
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(0);
-       0
-      > SELECT _FUNC_(col_name % 4);
-       (varies based on col_name value)
+      > df.repartition(10, direct_shuffle_partition_id($"partition_id"))
+      > df.repartition(10, expr("direct_shuffle_partition_id(id % 5)"))
   """,
-  since = "4.0.0",
-  group = "misc_funcs")
-case class DirectShufflePartitionID(child: Expression) extends UnaryExpression {
+  since = "4.1.0",
+  group = "misc_funcs"
+)
+case class DirectShufflePartitionID(child: Expression)
+    extends UnaryExpression
+    with ExpectsInputTypes {
 
-  override def dataType: DataType = IntegerType
+  override def dataType: DataType = child.dataType
+
+  override def inputTypes: Seq[AbstractDataType] = LongType :: Nil
 
   override def nullable: Boolean = false
 
   override val prettyName: String = "direct_shuffle_partition_id"
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (child.dataType.isInstanceOf[IntegralType]) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(
-        s"$prettyName requires an integral type, but got ${child.dataType.catalogString}")
-    }
-  }
-
-  override def nullSafeEval(input: Any): Any = {
-    val partitionId = input.asInstanceOf[Number].intValue()
-    if (partitionId < 0) {
-      throw new IllegalArgumentException(
-        s"The partition ID expression must be non-negative, but got: $partitionId")
-    }
-    partitionId
-  }
 
   override def eval(input: InternalRow): Any = {
     val result = child.eval(input)
@@ -91,14 +75,9 @@ case class DirectShufflePartitionID(child: Expression) extends UnaryExpression {
          |  throw new IllegalArgumentException(
          |    "The partition ID expression must not be null.");
          |}
-         |int ${ev.value} = (int) ${childGen.value};
-         |if (${ev.value} < 0) {
-         |  throw new IllegalArgumentException(
-         |    "The partition ID expression must be non-negative, but got: " + ${ev.value});
-         |}
          |""".stripMargin
 
-    ev.copy(code = code"$resultCode", isNull = FalseLiteral)
+    ev.copy(code = code"$resultCode", isNull = FalseLiteral, value = childGen.value)
   }
 
   override protected def withNewChildInternal(newChild: Expression): DirectShufflePartitionID =

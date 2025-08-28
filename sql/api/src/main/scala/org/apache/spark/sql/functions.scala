@@ -2053,7 +2053,7 @@ object functions {
    * target partition IDs instead of using hash-based partitioning.
    *
    * @group misc_funcs
-   * @since 4.0.0
+   * @since 4.1.0
    */
   def direct_shuffle_partition_id(e: Column): Column =
     Column.fn("direct_shuffle_partition_id", e)

@@ -1878,22 +1878,22 @@ trait HasPartitionExpressions extends SQLConfHelper {
         s"DirectShufflePartitionID can only be used as a single partition expression, " +
           s"but found ${directShuffleExprs.length} DirectShufflePartitionID expressions " +
           s"out of ${partitionExpressions.length} total expressions")
-      ShufflePartitionIdPassThrough(partitionExpressions, numPartitions)
+      ShufflePartitionIdPassThrough(
+        partitionExpressions.head.asInstanceOf[DirectShufflePartitionID], numPartitions)
     } else {
       val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
       require(sortOrder.isEmpty || nonSortOrder.isEmpty,
-        s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of " +
-          s"type `SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, " +
-          s"which means `HashPartitioning`. In this case we have:" +
-          s"""
-             |SortOrder: $sortOrder
-             |NonSortOrder: $nonSortOrder
-         """.stripMargin)
-      if (sortOrder.nonEmpty) {
-        RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
-      } else {
-        HashPartitioning(partitionExpressions, numPartitions)
-      }
+        s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of type " +
+        "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
+        "means `HashPartitioning`. In this case we have:" +
+        s"""
+           |SortOrder: $sortOrder
+           |NonSortOrder: $nonSortOrder
+       """.stripMargin)
+    if (sortOrder.nonEmpty) {
+      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
+    } else {
+      HashPartitioning(partitionExpressions, numPartitions)
     }
   }
 }
