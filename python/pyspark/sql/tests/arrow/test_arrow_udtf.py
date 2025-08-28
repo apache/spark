@@ -437,7 +437,7 @@ class ArrowUDTFTestsMixin:
             def eval(self) -> Iterator["pa.Table"]:
                 yield pa.Table.from_struct_array(pa.array([{}] * 3))
 
-        assertDataFrameEqual(EmptyResultUDTF(), [None, None, None])
+        assertDataFrameEqual(EmptyResultUDTF(), [Row(), Row(), Row()])
 
         @arrow_udtf(returnType="id int")
         class InvalidEmptyResultUDTF:

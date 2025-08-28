@@ -263,26 +263,32 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                     arrow_return_type, pa.StructType
                 ), f"Expected pa.StructType, got {type(arrow_return_type)}"
 
-                # Apply type coercion to each column if needed
-                coerced_arrays = []
-                for i, field in enumerate(arrow_return_type):
-                    if i < batch.num_columns:
-                        original_array = batch.column(i)
-                        coerced_array = self._create_array(original_array, field.type)
-                        coerced_arrays.append(coerced_array)
-                    else:
-                        raise PySparkRuntimeError(
-                            errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
-                            messageParameters={
-                                "expected": str(len(arrow_return_type)),
-                                "actual": str(batch.num_columns),
-                                "func": "ArrowUDTF",
-                            },
-                        )
+                # Handle empty struct case specially
+                if batch.num_columns == 0:
+                    # When batch has no column, it should still create
+                    # an empty batch with the number of rows set.
+                    struct = pa.array([{}] * batch.num_rows)
+                    coerced_batch = pa.RecordBatch.from_arrays([struct], ["_0"])
+                else:
+                    # Apply type coercion to each column if needed
+                    coerced_arrays = []
+                    for i, field in enumerate(arrow_return_type):
+                        if i < batch.num_columns:
+                            original_array = batch.column(i)
+                            coerced_array = self._create_array(original_array, field.type)
+                            coerced_arrays.append(coerced_array)
+                        else:
+                            raise PySparkRuntimeError(
+                                errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
+                                messageParameters={
+                                    "expected": str(len(arrow_return_type)),
+                                    "actual": str(batch.num_columns),
+                                    "func": "ArrowUDTF",
+                                },
+                            )
 
-                # Create new batch with coerced arrays
-                struct = pa.StructArray.from_arrays(coerced_arrays, fields=arrow_return_type)
-                coerced_batch = pa.RecordBatch.from_arrays([struct], ["_0"])
+                    struct = pa.StructArray.from_arrays(coerced_arrays, fields=arrow_return_type)
+                    coerced_batch = pa.RecordBatch.from_arrays([struct], ["_0"])
 
                 # Write the first record batch with initialization
                 if should_write_start_length:
