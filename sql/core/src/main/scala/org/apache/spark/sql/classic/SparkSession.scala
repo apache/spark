@@ -447,17 +447,25 @@ class SparkSession private(
    */
   private[sql] def sql(sqlText: String, args: Array[_], tracker: QueryPlanningTracker): DataFrame =
     withActive {
-      // Always set parameter context for the entire execution cycle, even if args is empty
-      val paramContext = PositionalParameterContext(args.map(lit(_).expr).toSeq)
-      ThreadLocalParameterContext.withContext(paramContext) {
-        val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-          val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-          if (parsedPlan.isInstanceOf[CompoundBody] && args.nonEmpty) {
-            // Positional parameters are not supported for SQL scripting.
-            throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+      // Always set parameter context if we have actual parameters
+      if (args.nonEmpty) {
+        val paramContext = PositionalParameterContext(args.map(lit(_).expr).toSeq)
+        ThreadLocalParameterContext.withContext(paramContext) {
+          val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
+            val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
+            if (parsedPlan.isInstanceOf[CompoundBody] && args.nonEmpty) {
+              // Positional parameters are not supported for SQL scripting.
+              throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+            }
+            // In legacy mode, wrap the parsed plan with PosParameterizedQuery
+            // so that the BindParameters analyzer rule can bind the parameters
+            if (sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
+              import org.apache.spark.sql.catalyst.analysis.PosParameterizedQuery
+              PosParameterizedQuery(parsedPlan, paramContext.params)
+            } else {
+              parsedPlan
+            }
           }
-          parsedPlan
-        }
 
         // Apply position mapping to any exceptions that bubble up from the entire execution cycle
         try {
@@ -527,6 +535,18 @@ class SparkSession private(
             // No WithOrigin trait, throw as-is
             throw e
         }
+        }
+      } else {
+        // No parameters - parse normally without parameter context
+        val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
+          val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
+          if (parsedPlan.isInstanceOf[CompoundBody] && args.nonEmpty) {
+            // Positional parameters are not supported for SQL scripting.
+            throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+          }
+          parsedPlan
+        }
+        Dataset.ofRows(self, plan, tracker)
       }
     }
 
@@ -556,12 +576,20 @@ class SparkSession private(
       args: Map[String, Any],
       tracker: QueryPlanningTracker): DataFrame =
     withActive {
-      // Only set parameter context if we have actual parameters
+      // Always set parameter context if we have actual parameters
       if (args.nonEmpty) {
         val paramContext = NamedParameterContext(args.transform((_, v) => lit(v).expr))
         ThreadLocalParameterContext.withContext(paramContext) {
           val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-            sessionState.sqlParser.parsePlan(sqlText)
+            val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
+            // In legacy mode, wrap the parsed plan with NameParameterizedQuery
+            // so that the BindParameters analyzer rule can bind the parameters
+            if (sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
+              import org.apache.spark.sql.catalyst.analysis.NameParameterizedQuery
+              NameParameterizedQuery(parsedPlan, paramContext.params)
+            } else {
+              parsedPlan
+            }
           }
 
           // Apply position mapping to any exceptions that bubble up from the entire execution cycle

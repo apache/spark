@@ -42,7 +42,7 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.util.Utils.getUriBuilder
 
 /**
@@ -60,7 +60,8 @@ class SparkSqlParser extends AbstractSqlParser {
    */
   def getPositionMapper: Option[PositionMapper] = parameterHandler.getPositionMapper
 
-  // Thread-local flag to track whether we're in a top-level parse operation
+    // Thread-local flag to track whether we're in a top-level parse operation
+  // This is used to prevent parameter substitution during identifier/data type parsing
   private val isTopLevelParse = new ThreadLocal[Boolean] {
     override def initialValue(): Boolean = true
   }
@@ -69,9 +70,9 @@ class SparkSqlParser extends AbstractSqlParser {
     // Step 1: Check if parameter substitution is enabled and we have a parameterized query context
     // Only apply parameter substitution for top-level SQL statements
     val wasTopLevel = isTopLevelParse.get()
-    if (wasTopLevel) {
-      isTopLevelParse.set(false)
-    }
+    // Note: We don't automatically set isTopLevelParse to false here anymore.
+    // Instead, specific parsing methods (parseTableIdentifier, parseDataType, etc.)
+    // will explicitly disable parameter substitution when needed.
     val paramSubstituted =
       if (SQLConf.get.legacyParameterSubstitutionConstantsOnly || !wasTopLevel) {
         // Legacy mode OR nested parsing call: skip parameter substitution
@@ -134,10 +135,8 @@ class SparkSqlParser extends AbstractSqlParser {
         // No WithOrigin trait, throw as-is
         throw e
     } finally {
-      // Restore the thread-local flag
-      if (wasTopLevel) {
-        isTopLevelParse.set(true)
-      }
+      // No need to restore the thread-local flag since we don't modify it automatically anymore
+      // Individual parsing methods handle their own flag management
     }
   }
 
@@ -157,6 +156,47 @@ class SparkSqlParser extends AbstractSqlParser {
     }
   }
 
+  // Override parsing methods that should NOT use parameter substitution
+  // These methods parse identifiers and data types where parameters don't make sense
+  override def parseTableIdentifier(sqlText: String): TableIdentifier = {
+    val wasTopLevel = isTopLevelParse.get()
+    isTopLevelParse.set(false)  // Disable parameter substitution for identifier parsing
+    try {
+      super.parseTableIdentifier(sqlText)
+    } finally {
+      isTopLevelParse.set(wasTopLevel)  // Restore previous state
+    }
+  }
+
+  override def parseFunctionIdentifier(sqlText: String): FunctionIdentifier = {
+    val wasTopLevel = isTopLevelParse.get()
+    isTopLevelParse.set(false)  // Disable parameter substitution for identifier parsing
+    try {
+      super.parseFunctionIdentifier(sqlText)
+    } finally {
+      isTopLevelParse.set(wasTopLevel)  // Restore previous state
+    }
+  }
+
+  override def parseMultipartIdentifier(sqlText: String): Seq[String] = {
+    val wasTopLevel = isTopLevelParse.get()
+    isTopLevelParse.set(false)  // Disable parameter substitution for identifier parsing
+    try {
+      super.parseMultipartIdentifier(sqlText)
+    } finally {
+      isTopLevelParse.set(wasTopLevel)  // Restore previous state
+    }
+  }
+
+  override def parseDataType(sqlText: String): DataType = {
+    val wasTopLevel = isTopLevelParse.get()
+    isTopLevelParse.set(false)  // Disable parameter substitution for data type parsing
+    try {
+      super.parseDataType(sqlText)
+    } finally {
+      isTopLevelParse.set(wasTopLevel)  // Restore previous state
+    }
+  }
 
 }
 

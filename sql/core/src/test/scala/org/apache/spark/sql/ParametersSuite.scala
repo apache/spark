@@ -19,8 +19,8 @@ package org.apache.spark.sql
 
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
-import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Limit
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
@@ -1226,23 +1226,16 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       assert(result2(0).getInt(0) == 42)
     }
 
-    // When legacy mode is enabled, parameter substitution is limited to constants only
-    // Parameter markers should remain unbound in general contexts and cause errors
+    // When legacy mode is enabled, parameter substitution is disabled but parameter binding works
+    // Parameters should work in constant expressions through analyzer binding
     withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
-      // Test that positional parameters cause errors in legacy mode
-      val exception1 = intercept[ExtendedAnalysisException] {
-        spark.sql("SELECT ?", Array(42)).collect()
-      }
-      assert(exception1.getMessage.contains("UNBOUND_SQL_PARAMETER") ||
-             exception1.getMessage.contains("unbound parameter"))
+      // Test that positional parameters work in legacy mode through analyzer binding
+      val result1 = spark.sql("SELECT ?", Array(42)).collect()
+      assert(result1(0).getInt(0) == 42)
 
-      // Test that named parameters cause errors in legacy mode
-      val exception2 = intercept[Exception] {
-        spark.sql("SELECT :param", Map("param" -> 42)).collect()
-      }
-      assert(exception2.getMessage.contains("Parameter marker") ||
-             exception2.getMessage.contains("UNBOUND_SQL_PARAMETER") ||
-             exception2.getMessage.contains("unbound parameter"))
+      // Test that named parameters work in legacy mode through analyzer binding
+      val result2 = spark.sql("SELECT :param", Map("param" -> 42)).collect()
+      assert(result2(0).getInt(0) == 42)
     }
   }
 
@@ -1263,21 +1256,421 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       )
     }
 
-    // Ensure when config is true, param substitution is limited to constants and causes errors
+    // Ensure when config is true, parameter binding works correctly through analyzer
     withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
-      // In legacy mode, parameter markers should remain unbound and cause errors
-      val exception1 = intercept[ExtendedAnalysisException] {
-        spark.sql("SELECT ?", Array(1)).collect()
-      }
-      assert(exception1.getMessage.contains("UNBOUND_SQL_PARAMETER") ||
-             exception1.getMessage.contains("unbound parameter"))
+      // In legacy mode, parameters should work through analyzer binding
+      val result1 = spark.sql("SELECT ?", Array(1)).collect()
+      assert(result1(0).getInt(0) == 1)
 
-      val exception2 = intercept[Exception] {
-        spark.sql("SELECT :test", Map("test" -> "value")).collect()
+      val result2 = spark.sql("SELECT :test", Map("test" -> "value")).collect()
+      assert(result2(0).getString(0) == "value")
+    }
+  }
+
+  // =============================================
+  // Legacy Mode Comprehensive Tests
+  // =============================================
+  // These tests verify that ALL basic parameter functionality works correctly in legacy mode.
+  // In legacy mode (constantsOnly=true):
+  // - Parameter substitution is disabled (no text replacement)
+  // - Parameter context is passed to analyzer for binding
+  // - Parameters should work in constant expressions
+
+  test("legacy mode - bind named parameters") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      val sqlText =
+        """
+          |SELECT id, id % :div as c0
+          |FROM VALUES (0), (1), (2), (3), (4), (5), (6), (7), (8), (9) AS t(id)
+          |WHERE id < :constA
+          |""".stripMargin
+      val args = Map("div" -> 3, "constA" -> 4L)
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(0, 0) :: Row(1, 1) :: Row(2, 2) :: Row(3, 0) :: Nil)
+
+      checkAnswer(
+        spark.sql("""SELECT contains('Spark \'SQL\'', :subStr)""", Map("subStr" -> "SQL")),
+        Row(true))
+    }
+  }
+
+  test("legacy mode - bind positional parameters") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      val sqlText =
+        """
+          |SELECT id, id % ? as c0
+          |FROM VALUES (0), (1), (2), (3), (4), (5), (6), (7), (8), (9) AS t(id)
+          |WHERE id < ?
+          |""".stripMargin
+      val args = Array(3, 4L)
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(0, 0) :: Row(1, 1) :: Row(2, 2) :: Row(3, 0) :: Nil)
+
+      checkAnswer(
+        spark.sql("""SELECT contains('Spark \'SQL\'', ?)""", Array("SQL")),
+        Row(true))
+    }
+  }
+
+  test("legacy mode - parameter binding is case sensitive") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      checkAnswer(
+        spark.sql("SELECT :p, :P", Map("p" -> 1, "P" -> 2)),
+        Row(1, 2)
+      )
+    }
+  }
+
+  test("legacy mode - named parameters in CTE") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      val sqlText =
+        """
+          |WITH w1 AS (SELECT :p1 AS p)
+          |SELECT p + :p2 FROM w1
+          |""".stripMargin
+      val args = Map("p1" -> 1, "p2" -> 2)
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(3))
+    }
+  }
+
+  test("legacy mode - positional parameters in CTE") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      val sqlText =
+        """
+          |WITH w1 AS (SELECT ? AS p)
+          |SELECT p + ? FROM w1
+          |""".stripMargin
+      val args = Array(1, 2)
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(3))
+    }
+  }
+
+  test("legacy mode - named parameters in nested CTE") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      val sqlText =
+        """
+          |WITH w1 AS
+          |  (WITH w2 AS (SELECT :p1 AS p) SELECT p + :p2 AS p2 FROM w2)
+          |SELECT p2 + :p3 FROM w1
+          |""".stripMargin
+      val args = Map("p1" -> 1, "p2" -> 2, "p3" -> 3)
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(6))
+    }
+  }
+
+  test("legacy mode - positional parameters in nested CTE") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      val sqlText =
+        """
+          |WITH w1 AS
+          |  (WITH w2 AS (SELECT ? AS p) SELECT p + ? AS p2 FROM w2)
+          |SELECT p2 + ? FROM w1
+          |""".stripMargin
+      val args = Array(1, 2, 3)
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(6))
+    }
+  }
+
+  test("legacy mode - named parameters in subquery expression") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      val sqlText = "SELECT (SELECT max(id) + :p1 FROM range(10)) + :p2"
+      val args = Map("p1" -> 1, "p2" -> 2)
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(12))
+    }
+  }
+
+  test("legacy mode - positional parameters in subquery expression") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      val sqlText = "SELECT (SELECT max(id) + ? FROM range(10)) + ?"
+      val args = Array(1, 2)
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(12))
+    }
+  }
+
+  test("legacy mode - named parameters in nested subquery expression") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      val sqlText = "SELECT (SELECT (SELECT max(id) + :p1 FROM range(10)) + :p2) + :p3"
+      val args = Map("p1" -> 1, "p2" -> 2, "p3" -> 3)
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(15))
+    }
+  }
+
+  test("legacy mode - positional parameters in nested subquery expression") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      val sqlText = "SELECT (SELECT (SELECT max(id) + ? FROM range(10)) + ?) + ?"
+      val args = Array(1, 2, 3)
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(15))
+    }
+  }
+
+  test("legacy mode - named parameters in subquery expression inside CTE") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      val sqlText =
+        """
+          |WITH w1 AS (SELECT (SELECT max(id) + :p1 FROM range(10)) + :p2 AS p)
+          |SELECT p + :p3 FROM w1
+          |""".stripMargin
+      val args = Map("p1" -> 1, "p2" -> 2, "p3" -> 3)
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(15))
+    }
+  }
+
+  test("legacy mode - positional parameters in subquery expression inside CTE") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      val sqlText =
+        """
+          |WITH w1 AS (SELECT (SELECT max(id) + ? FROM range(10)) + ? AS p)
+          |SELECT p + ? FROM w1
+          |""".stripMargin
+      val args = Array(1, 2, 3)
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(15))
+    }
+  }
+
+  test("legacy mode - named parameter in identifier clause") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      val sqlText =
+        "SELECT IDENTIFIER('T.' || :p1 || '1') FROM VALUES(1) T(c1)"
+      val args = Map("p1" -> "c")
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(1))
+    }
+  }
+
+  test("legacy mode - positional parameter in identifier clause") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      val sqlText =
+        "SELECT IDENTIFIER('T.' || ? || '1') FROM VALUES(1) T(c1)"
+      val args = Array("c")
+      checkAnswer(
+        spark.sql(sqlText, args),
+        Row(1))
+    }
+  }
+
+  test("legacy mode - named parameter in identifier clause in DDL and utility commands") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      spark.sql("CREATE VIEW IDENTIFIER(:p1)(c1) AS SELECT 1", args = Map("p1" -> "v_legacy"))
+      spark.sql("ALTER VIEW IDENTIFIER(:p1) AS SELECT 2 AS c1", args = Map("p1" -> "v_legacy"))
+      checkAnswer(
+        spark.sql("SHOW COLUMNS FROM IDENTIFIER(:p1)", args = Map("p1" -> "v_legacy")),
+        Row("c1"))
+      spark.sql("DROP VIEW IDENTIFIER(:p1)", args = Map("p1" -> "v_legacy"))
+    }
+  }
+
+  test("legacy mode - positional parameter in identifier clause in DDL and utility commands") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      spark.sql("CREATE VIEW IDENTIFIER(?)(c1) AS SELECT 1", args = Array("v_legacy_pos"))
+      spark.sql("ALTER VIEW IDENTIFIER(?) AS SELECT 2 AS c1", args = Array("v_legacy_pos"))
+      checkAnswer(
+        spark.sql("SHOW COLUMNS FROM IDENTIFIER(?)", args = Array("v_legacy_pos")),
+        Row("c1"))
+      spark.sql("DROP VIEW IDENTIFIER(?)", args = Array("v_legacy_pos"))
+    }
+  }
+
+  test("legacy mode - named parameters in INSERT") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      withTable("t_legacy") {
+        sql("CREATE TABLE t_legacy (col INT) USING json")
+        spark.sql("INSERT INTO t_legacy SELECT :p", Map("p" -> 1))
+        checkAnswer(spark.table("t_legacy"), Row(1))
       }
-      assert(exception2.getMessage.contains("Parameter marker") ||
-             exception2.getMessage.contains("UNBOUND_SQL_PARAMETER") ||
-             exception2.getMessage.contains("unbound parameter"))
+    }
+  }
+
+  test("legacy mode - positional parameters in INSERT") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      withTable("t_legacy_pos") {
+        sql("CREATE TABLE t_legacy_pos (col INT) USING json")
+        spark.sql("INSERT INTO t_legacy_pos SELECT ?", Array(1))
+        checkAnswer(spark.table("t_legacy_pos"), Row(1))
+      }
+    }
+  }
+
+  test("legacy mode - named parameters in view body") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      val sqlText = "CREATE VIEW v_legacy AS SELECT :p AS p"
+      val args = Map("p" -> 1)
+      // Parameter markers are not allowed in CREATE VIEW queries
+      checkError(
+        exception = intercept[ParseException] {
+          spark.sql(sqlText, args)
+        },
+        condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+        parameters = Map("statement" -> "the query of CREATE VIEW"),
+        context = ExpectedContext(
+          fragment = "CREATE VIEW v_legacy AS SELECT :p AS p",
+          start = 0,
+          stop = 37)
+      )
+    }
+  }
+
+  test("legacy mode - positional parameters in view body") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      val sqlText = "CREATE VIEW v_legacy_pos AS SELECT ? AS p"
+      val args = Array(1)
+      // Parameter markers are not allowed in CREATE VIEW queries
+      checkError(
+        exception = intercept[ParseException] {
+          spark.sql(sqlText, args)
+        },
+        condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+        parameters = Map("statement" -> "the query of CREATE VIEW"),
+        context = ExpectedContext(
+          fragment = "CREATE VIEW v_legacy_pos AS SELECT ? AS p",
+          start = 0,
+          stop = 40)
+      )
+    }
+  }
+
+  test("legacy mode - arrays as parameters") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      checkAnswer(
+        spark.sql("SELECT array_position(:arrParam, 'abc')",
+          Map("arrParam" -> Array.empty[String])),
+        Row(0))
+      checkAnswer(
+        spark.sql("SELECT array_position(?, 0.1D)", Array(Array.empty[Double])),
+        Row(0))
+      checkAnswer(
+        spark.sql("SELECT array_contains(:arrParam, 10)", Map("arrParam" -> Array(10, 20, 30))),
+        Row(true))
+      checkAnswer(
+        spark.sql("SELECT array_contains(?, ?)", Array(Array("a", "b", "c"), "b")),
+        Row(true))
+      checkAnswer(
+        spark.sql("SELECT :arr[1]", Map("arr" -> Array(10, 20, 30))),
+        Row(20))
+      checkAnswer(
+        spark.sql("SELECT ?[?]", Array(Array(1f, 2f, 3f), 0)),
+        Row(1f))
+    }
+  }
+
+  test("legacy mode - maps as parameters") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      import org.apache.spark.util.ArrayImplicits._
+      def fromArr(keys: Array[_], values: Array[_]): Column = {
+        map_from_arrays(lit(keys), lit(values))
+      }
+      def createMap(keys: Array[_], values: Array[_]): Column = {
+        val zipped = keys.map(k => lit(k)).zip(values.map(v => lit(v)))
+        map(zipped.flatMap { case (k, v) => Array(k, v) }.toImmutableArraySeq: _*)
+      }
+
+      Array(fromArr(_, _), createMap(_, _)).foreach { f =>
+        checkAnswer(
+          spark.sql("SELECT map_contains_key(:mapParam, 0)",
+            Map("mapParam" -> f(Array.empty[Int], Array.empty[String]))),
+          Row(false))
+        checkAnswer(
+          spark.sql("SELECT map_contains_key(?, 'a')",
+            Array(f(Array.empty[String], Array.empty[Double]))),
+          Row(false))
+      }
+      Array(fromArr(_, _), createMap(_, _)).foreach { f =>
+        checkAnswer(
+          spark.sql("SELECT element_at(:mapParam, 'a')",
+            Map("mapParam" -> f(Array("a"), Array(0)))),
+          Row(0))
+        checkAnswer(
+          spark.sql("SELECT element_at(?, 'a')", Array(f(Array("a"), Array(0)))),
+          Row(0))
+        checkAnswer(
+          spark.sql("SELECT :m[10]", Map("m" -> f(Array(10, 20, 30), Array(0, 1, 2)))),
+          Row(0))
+        checkAnswer(
+          spark.sql("SELECT ?[?]", Array(f(Array(1f, 2f, 3f), Array(1, 2, 3)), 2f)),
+          Row(2))
+      }
+    }
+  }
+
+  test("legacy mode - DEFAULT expressions with parameters") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      // Parameter markers are not allowed in DEFAULT expressions
+      checkError(
+        exception = intercept[ParseException] {
+          spark.sql(
+            "CREATE TABLE t_legacy_default(c1 int default :parm) USING parquet",
+            args = Map("parm" -> 5))
+        },
+        condition = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+        parameters = Map("statement" -> "DEFAULT"),
+        context = ExpectedContext(
+          fragment = "default :parm",
+          start = 37,
+          stop = 49)
+      )
+    }
+  }
+
+  test("legacy mode - bind named parameters with IDENTIFIER clause") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      withTable("testtab_legacy") {
+        spark.sql("create table testtab_legacy (id int, name string)")
+        spark.sql("insert into identifier(:tab) values(1, 'test1')", Map("tab" -> "testtab_legacy"))
+        checkAnswer(spark.sql("select * from identifier(:tab)", Map("tab" -> "testtab_legacy")),
+          Array(Row(1, "test1")))
+        spark.sql("insert into identifier(:tab) values(2, :name)",
+          Map("tab" -> "testtab_legacy", "name" -> "test2"))
+        checkAnswer(sql("select * from testtab_legacy"), Array(Row(1, "test1"), Row(2, "test2")))
+      }
+    }
+  }
+
+  test("legacy mode - bind positional parameters with IDENTIFIER clause") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      withTable("testtab_legacy_pos") {
+        spark.sql("create table testtab_legacy_pos (id int, name string)")
+        spark.sql("insert into identifier(?) values(1, 'test1')", Array("testtab_legacy_pos"))
+        checkAnswer(spark.sql("select * from identifier(?)", Array("testtab_legacy_pos")),
+          Array(Row(1, "test1")))
+        spark.sql("insert into identifier(?) values(2, ?)",
+          Array("testtab_legacy_pos", "test2"))
+        checkAnswer(sql("select * from testtab_legacy_pos"),
+          Array(Row(1, "test1"), Row(2, "test2")))
+      }
+    }
+  }
+
+  test("legacy mode - simple constant expressions should work") {
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
+      // Basic constant expressions that should work in legacy mode
+      checkAnswer(spark.sql("SELECT :param", Map("param" -> 42)), Row(42))
+      checkAnswer(spark.sql("SELECT ?", Array(42)), Row(42))
+      checkAnswer(spark.sql("SELECT :str", Map("str" -> "hello")), Row("hello"))
+      checkAnswer(spark.sql("SELECT ?", Array("hello")), Row("hello"))
+      checkAnswer(spark.sql("SELECT :flag", Map("flag" -> true)), Row(true))
+      checkAnswer(spark.sql("SELECT ?", Array(false)), Row(false))
     }
   }
 }

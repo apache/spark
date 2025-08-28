@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -52,66 +51,34 @@ class LegacyParameterSubstitutionSuite extends QueryTest with SharedSparkSession
     assert(result2(0).getString(0) == "world")
   }
 
-  test("legacy config limits param substitution to constants - positional params fail") {
+  test("legacy config limits param substitution - positional params work via analyzer") {
     withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
-      // When legacy mode is enabled, parameter substitution is limited to constants only
-      // This means param markers remain as unbound params in general ctxs and should cause errors
+      // When legacy mode is enabled, parameter substitution is disabled but analyzer binding works
+      // This means param markers are bound by the analyzer and should work correctly
 
-      // Test positional parameter markers cause errors in legacy mode
-      checkError(
-        exception = intercept[ExtendedAnalysisException] {
-          spark.sql("SELECT ? as value", Array(42)).collect()
-        },
-        condition = "UNBOUND_SQL_PARAMETER",
-        parameters = Map("name" -> "_7"),
-        context = ExpectedContext(
-          fragment = "?",
-          start = 7,
-          stop = 7)
-      )
+      // Test positional parameter markers work in legacy mode through analyzer binding
+      val result1 = spark.sql("SELECT ? as value", Array(42)).collect()
+      assert(result1.length == 1)
+      assert(result1(0).getInt(0) == 42)
 
-      // Test that even simple parameter usage fails
-      checkError(
-        exception = intercept[ExtendedAnalysisException] {
-          spark.sql("SELECT ?", Array(1)).collect()
-        },
-        condition = "UNBOUND_SQL_PARAMETER",
-        parameters = Map("name" -> "_7"),
-        context = ExpectedContext(
-          fragment = "?",
-          start = 7,
-          stop = 7)
-      )
+      // Test that simple parameter usage works
+      val result2 = spark.sql("SELECT ?", Array(1)).collect()
+      assert(result2.length == 1)
+      assert(result2(0).getInt(0) == 1)
     }
   }
 
-  test("legacy config limits param substitution to constants - named params fail") {
+  test("legacy config limits param substitution - named params work via analyzer") {
     withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
-      // Test named parameter markers cause errors in legacy mode
-      checkError(
-        exception = intercept[ExtendedAnalysisException] {
-          spark.sql("SELECT :param as value", Map("param" -> "hello")).collect()
-        },
-        condition = "UNBOUND_SQL_PARAMETER",
-        parameters = Map("name" -> "param"),
-        context = ExpectedContext(
-          fragment = ":param",
-          start = 7,
-          stop = 12)
-      )
+      // Test named parameter markers work in legacy mode through analyzer binding
+      val result1 = spark.sql("SELECT :param as value", Map("param" -> "hello")).collect()
+      assert(result1.length == 1)
+      assert(result1(0).getString(0) == "hello")
 
-      // Test simple named parameter usage fails
-      checkError(
-        exception = intercept[ExtendedAnalysisException] {
-          spark.sql("SELECT :test", Map("test" -> 42)).collect()
-        },
-        condition = "UNBOUND_SQL_PARAMETER",
-        parameters = Map("name" -> "test"),
-        context = ExpectedContext(
-          fragment = ":test",
-          start = 7,
-          stop = 11)
-      )
+      // Test simple named parameter usage works
+      val result2 = spark.sql("SELECT :test", Map("test" -> 42)).collect()
+      assert(result2.length == 1)
+      assert(result2(0).getInt(0) == 42)
     }
   }
 
@@ -122,25 +89,16 @@ class LegacyParameterSubstitutionSuite extends QueryTest with SharedSparkSession
       assert(result1(0).getInt(0) == 1)
     }
 
-    // Switch to legacy mode - parameters should now fail
+    // Switch to legacy mode - parameters should still work through analyzer binding
     withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
-      checkError(
-        exception = intercept[ExtendedAnalysisException] {
-          spark.sql("SELECT ? as value", Array(2)).collect()
-        },
-        condition = "UNBOUND_SQL_PARAMETER",
-        parameters = Map("name" -> "_7"),
-        context = ExpectedContext(
-          fragment = "?",
-          start = 7,
-          stop = 7)
-      )
+      val result2 = spark.sql("SELECT ? as value", Array(2)).collect()
+      assert(result2(0).getInt(0) == 2)
     }
 
     // Switch back to enabled
     withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "false") {
-      val result2 = spark.sql("SELECT ? as value", Array(3)).collect()
-      assert(result2(0).getInt(0) == 3)
+      val result3 = spark.sql("SELECT ? as value", Array(3)).collect()
+      assert(result3(0).getInt(0) == 3)
     }
   }
 
@@ -163,35 +121,21 @@ class LegacyParameterSubstitutionSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("legacy config properly blocks parameter substitution") {
+  test("legacy config disables parameter substitution but preserves analyzer binding") {
     withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "true") {
       // When legacy config is enabled, parameter substitution should be disabled
-      // This means parameter markers remain unprocessed and cause unbound parameter errors
+      // but parameter binding through the analyzer should still work
 
-      // Test that positional parameters cause unbound parameter errors
-      checkError(
-        exception = intercept[ExtendedAnalysisException] {
-          spark.sql("SELECT ? FROM VALUES (1)", Array(42))
-        },
-        condition = "UNBOUND_SQL_PARAMETER",
-        parameters = Map("name" -> "_7"),
-        context = ExpectedContext(
-          fragment = "?",
-          start = 7,
-          stop = 7)
+      // Test that positional parameters work through analyzer binding
+      checkAnswer(
+        spark.sql("SELECT ? FROM VALUES (1)", Array(42)),
+        Row(42)
       )
 
-      // Test that named parameters also cause unbound parameter errors
-      checkError(
-        exception = intercept[ExtendedAnalysisException] {
-          spark.sql("SELECT :param FROM VALUES (1)", Map("param" -> "test"))
-        },
-        condition = "UNBOUND_SQL_PARAMETER",
-        parameters = Map("name" -> "param"),
-        context = ExpectedContext(
-          fragment = ":param",
-          start = 7,
-          stop = 12)
+      // Test that named parameters work through analyzer binding
+      checkAnswer(
+        spark.sql("SELECT :param FROM VALUES (1)", Map("param" -> "test")),
+        Row("test")
       )
     }
   }
