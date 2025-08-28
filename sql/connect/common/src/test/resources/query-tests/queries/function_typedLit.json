@@ -409,10 +409,6 @@
             "integer": 6
           }],
           "dataType": {
-            "elementType": {
-              "integer": {
-              }
-            }
           }
         }
       },
@@ -710,10 +706,6 @@
             "integer": 3
           }],
           "dataType": {
-            "elementType": {
-              "integer": {
-              }
-            }
           }
         }
       },
@@ -745,10 +737,6 @@
             "integer": 3
           }],
           "dataType": {
-            "elementType": {
-              "integer": {
-              }
-            }
           }
         }
       },
@@ -786,10 +774,6 @@
             "keyType": {
               "string": {
                 "collation": "UTF8_BINARY"
-              }
-            },
-            "valueType": {
-              "integer": {
               }
             }
           }
@@ -887,10 +871,6 @@
             "integer": 1
           }],
           "dataType": {
-            "elementType": {
-              "integer": {
-              }
-            },
             "containsNull": true
           }
         }
@@ -925,14 +905,6 @@
             }
           }],
           "dataType": {
-            "keyType": {
-              "integer": {
-              }
-            },
-            "valueType": {
-              "integer": {
-              }
-            },
             "valueContainsNull": true
           }
         }
@@ -967,14 +939,6 @@
             }
           }],
           "dataType": {
-            "keyType": {
-              "integer": {
-              }
-            },
-            "valueType": {
-              "integer": {
-              }
-            },
             "valueContainsNull": true
           }
         }
@@ -1009,14 +973,6 @@
             }
           }],
           "dataType": {
-            "keyType": {
-              "integer": {
-              }
-            },
-            "valueType": {
-              "integer": {
-              }
-            },
             "valueContainsNull": true
           }
         }
@@ -1051,10 +1007,6 @@
                 "integer": 3
               }],
               "dataType": {
-                "elementType": {
-                  "integer": {
-                  }
-                }
               }
             }
           }, {
@@ -1067,10 +1019,6 @@
                 "integer": 6
               }],
               "dataType": {
-                "elementType": {
-                  "integer": {
-                  }
-                }
               }
             }
           }, {
@@ -1083,22 +1031,10 @@
                 "integer": 9
               }],
               "dataType": {
-                "elementType": {
-                  "integer": {
-                  }
-                }
               }
             }
           }],
           "dataType": {
-            "elementType": {
-              "array": {
-                "elementType": {
-                  "integer": {
-                  }
-                }
-              }
-            },
             "containsNull": true
           }
         }
@@ -1140,10 +1076,6 @@
                   "string": {
                     "collation": "UTF8_BINARY"
                   }
-                },
-                "valueType": {
-                  "integer": {
-                  }
                 }
               }
             }
@@ -1163,10 +1095,6 @@
                 "keyType": {
                   "string": {
                     "collation": "UTF8_BINARY"
-                  }
-                },
-                "valueType": {
-                  "integer": {
                   }
                 }
               }
@@ -1188,28 +1116,11 @@
                   "string": {
                     "collation": "UTF8_BINARY"
                   }
-                },
-                "valueType": {
-                  "integer": {
-                  }
                 }
               }
             }
           }],
           "dataType": {
-            "elementType": {
-              "map": {
-                "keyType": {
-                  "string": {
-                    "collation": "UTF8_BINARY"
-                  }
-                },
-                "valueType": {
-                  "integer": {
-                  }
-                }
-              }
-            },
             "containsNull": true
           }
         }
@@ -1256,10 +1167,6 @@
                   "string": {
                     "collation": "UTF8_BINARY"
                   }
-                },
-                "valueType": {
-                  "integer": {
-                  }
                 }
               }
             }
@@ -1280,32 +1187,11 @@
                   "string": {
                     "collation": "UTF8_BINARY"
                   }
-                },
-                "valueType": {
-                  "integer": {
-                  }
                 }
               }
             }
           }],
           "dataType": {
-            "keyType": {
-              "integer": {
-              }
-            },
-            "valueType": {
-              "map": {
-                "keyType": {
-                  "string": {
-                    "collation": "UTF8_BINARY"
-                  }
-                },
-                "valueType": {
-                  "integer": {
-                  }
-                }
-              }
-            },
             "valueContainsNull": true
           }
         }
@@ -1340,10 +1226,6 @@
                 "integer": 3
               }],
               "dataType": {
-                "elementType": {
-                  "integer": {
-                  }
-                }
               }
             }
           }, {
@@ -1362,10 +1244,6 @@
                 "keyType": {
                   "string": {
                     "collation": "UTF8_BINARY"
-                  }
-                },
-                "valueType": {
-                  "integer": {
                   }
                 }
               }
@@ -1387,10 +1265,6 @@
                     "string": "b"
                   }],
                   "dataType": {
-                    "keyType": {
-                      "integer": {
-                      }
-                    },
                     "valueType": {
                       "string": {
                         "collation": "UTF8_BINARY"

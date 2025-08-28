@@ -39,6 +39,45 @@ import org.apache.spark.util.SparkClassUtils
 
 object LiteralValueProtoConverter {
 
+  private def setArrayTypeAfterAddingElements(
+      ab: proto.Expression.Literal.Array.Builder,
+      elementType: DataType,
+      containsNull: Boolean,
+      useDeprecatedDataTypeFields: Boolean): Unit = {
+    if (useDeprecatedDataTypeFields) {
+      ab.setElementType(toConnectProtoType(elementType))
+    } else {
+      val dataTypeBuilder = proto.DataType.Array.newBuilder()
+      if (ab.getElementsCount == 0 || getInferredDataType(ab.getElements(0)).isEmpty) {
+        dataTypeBuilder.setElementType(toConnectProtoType(elementType))
+      }
+      dataTypeBuilder.setContainsNull(containsNull)
+      ab.setDataType(dataTypeBuilder.build())
+    }
+  }
+
+  private def setMapTypeAfterAddingKeysAndValues(
+      mb: proto.Expression.Literal.Map.Builder,
+      keyType: DataType,
+      valueType: DataType,
+      valueContainsNull: Boolean,
+      useDeprecatedDataTypeFields: Boolean): Unit = {
+    if (useDeprecatedDataTypeFields) {
+      mb.setKeyType(toConnectProtoType(keyType))
+      mb.setValueType(toConnectProtoType(valueType))
+    } else {
+      val dataTypeBuilder = proto.DataType.Map.newBuilder()
+      if (mb.getKeysCount == 0 || getInferredDataType(mb.getKeys(0)).isEmpty) {
+        dataTypeBuilder.setKeyType(toConnectProtoType(keyType))
+      }
+      if (mb.getValuesCount == 0 || getInferredDataType(mb.getValues(0)).isEmpty) {
+        dataTypeBuilder.setValueType(toConnectProtoType(valueType))
+      }
+      dataTypeBuilder.setValueContainsNull(valueContainsNull)
+      mb.setDataType(dataTypeBuilder.build())
+    }
+  }
+
   @scala.annotation.tailrec
   private def toLiteralProtoBuilderInternal(
       literal: Any,
@@ -58,17 +97,12 @@ object LiteralValueProtoConverter {
 
     def arrayBuilder(array: Array[_]) = {
       val ab = builder.getArrayBuilder
-      if (options.useDeprecatedDataTypeFields) {
-        ab.setElementType(toConnectProtoType(toDataType(array.getClass.getComponentType)))
-      } else {
-        ab.setDataType(
-          proto.DataType.Array
-            .newBuilder()
-            .setElementType(toConnectProtoType(toDataType(array.getClass.getComponentType)))
-            .setContainsNull(true)
-            .build())
-      }
       array.foreach(x => ab.addElements(toLiteralProtoWithOptions(x, None, options)))
+      setArrayTypeAfterAddingElements(
+        ab,
+        toDataType(array.getClass.getComponentType),
+        containsNull = true,
+        options.useDeprecatedDataTypeFields)
       ab
     }
 
@@ -122,16 +156,6 @@ object LiteralValueProtoConverter {
 
     def arrayBuilder(scalaValue: Any, elementType: DataType, containsNull: Boolean) = {
       val ab = builder.getArrayBuilder
-      if (options.useDeprecatedDataTypeFields) {
-        ab.setElementType(toConnectProtoType(elementType))
-      } else {
-        ab.setDataType(
-          proto.DataType.Array
-            .newBuilder()
-            .setElementType(toConnectProtoType(elementType))
-            .setContainsNull(containsNull)
-            .build())
-      }
       scalaValue match {
         case a: Array[_] =>
           a.foreach(item =>
@@ -142,7 +166,11 @@ object LiteralValueProtoConverter {
         case other =>
           throw new IllegalArgumentException(s"literal $other not supported (yet).")
       }
-
+      setArrayTypeAfterAddingElements(
+        ab,
+        elementType,
+        containsNull,
+        options.useDeprecatedDataTypeFields)
       ab
     }
 
@@ -152,19 +180,6 @@ object LiteralValueProtoConverter {
         valueType: DataType,
         valueContainsNull: Boolean) = {
       val mb = builder.getMapBuilder
-      if (options.useDeprecatedDataTypeFields) {
-        mb.setKeyType(toConnectProtoType(keyType))
-        mb.setValueType(toConnectProtoType(valueType))
-      } else {
-        mb.setDataType(
-          proto.DataType.Map
-            .newBuilder()
-            .setKeyType(toConnectProtoType(keyType))
-            .setValueType(toConnectProtoType(valueType))
-            .setValueContainsNull(valueContainsNull)
-            .build())
-      }
-
       scalaValue match {
         case map: scala.collection.Map[_, _] =>
           map.foreach { case (k, v) =>
@@ -174,7 +189,12 @@ object LiteralValueProtoConverter {
         case other =>
           throw new IllegalArgumentException(s"literal $other not supported (yet).")
       }
-
+      setMapTypeAfterAddingKeysAndValues(
+        mb,
+        keyType,
+        valueType,
+        valueContainsNull,
+        options.useDeprecatedDataTypeFields)
       mb
     }
 
@@ -413,6 +433,9 @@ object LiteralValueProtoConverter {
 
       case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
         toCatalystArray(literal.getArray)
+
+      case proto.Expression.Literal.LiteralTypeCase.MAP =>
+        toCatalystMap(literal.getMap)
 
       case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
         toCatalystStruct(literal.getStruct)
