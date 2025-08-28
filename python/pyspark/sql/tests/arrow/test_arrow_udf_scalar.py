@@ -489,6 +489,66 @@ class ScalarArrowUDFTestsMixin:
             result.collect(),
         )
 
+    def test_arrow_udf_input_variant(self):
+        import pyarrow as pa
+
+        @arrow_udf("int")
+        def scalar_f(v: pa.Array) -> pa.Array:
+            assert isinstance(v, pa.Array)
+            assert isinstance(v, pa.StructArray)
+            assert isinstance(v.field("metadata"), pa.BinaryArray)
+            assert isinstance(v.field("value"), pa.BinaryArray)
+            return pa.compute.binary_length(v.field("value"))
+
+        @arrow_udf("int")
+        def iter_f(it: Iterator[pa.Array]) -> Iterator[pa.Array]:
+            for v in it:
+                assert isinstance(v, pa.Array)
+                assert isinstance(v, pa.StructArray)
+                assert isinstance(v.field("metadata"), pa.BinaryArray)
+                assert isinstance(v.field("value"), pa.BinaryArray)
+                yield pa.compute.binary_length(v.field("value"))
+
+        df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
+        expected = [Row(l=2) for i in range(10)]
+
+        for f in [scalar_f, iter_f]:
+            result = df.select(f("v").alias("l")).collect()
+            self.assertEqual(result, expected)
+
+    def test_arrow_udf_output_variant(self):
+        # referring to test_udf_with_variant_output in test_pandas_udf_scalar
+        import pyarrow as pa
+
+        # referring to_arrow_type in to pyspark.sql.pandas.types
+        fields = [
+            pa.field("value", pa.binary(), nullable=False),
+            pa.field("metadata", pa.binary(), nullable=False, metadata={b"variant": b"true"}),
+        ]
+        variant_type = pa.struct(fields)
+
+        @arrow_udf("variant")
+        def scalar_f(v: pa.Array) -> pa.Array:
+            assert isinstance(v, pa.Array)
+            v = pa.array([bytes([12, i.as_py()]) for i in v], pa.binary())
+            m = pa.array([bytes([1, 0, 0]) for i in v], pa.binary())
+            return pa.StructArray.from_arrays([v, m], type=variant_type)
+
+        @arrow_udf("variant")
+        def iter_f(it: Iterator[pa.Array]) -> Iterator[pa.Array]:
+            for v in it:
+                assert isinstance(v, pa.Array)
+                v = pa.array([bytes([12, i.as_py()]) for i in v])
+                m = pa.array([bytes([1, 0, 0]) for i in v])
+                yield pa.StructArray.from_arrays([v, m], type=variant_type)
+
+        df = self.spark.range(0, 10)
+        expected = [Row(l=i) for i in range(10)]
+
+        for f in [scalar_f, iter_f]:
+            result = df.select(f("id").cast("int").alias("l")).collect()
+            self.assertEqual(result, expected)
+
     def test_arrow_udf_null_boolean(self):
         data = [(True,), (True,), (None,), (False,)]
         schema = StructType().add("bool", BooleanType())
