@@ -883,11 +883,9 @@ private[sql] class RocksDBStateStoreProvider
     val statePath = stateStoreId.storeCheckpointLocation()
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
 
-    val fileManager = rocksDB.fileManager
-
     new RocksDBStateStoreChangeDataReader(
       CheckpointFileManager.create(statePath, hadoopConf),
-      fileManager,
+      rocksDB,
       statePath,
       startVersion,
       endVersion,
@@ -1230,7 +1228,7 @@ object RocksDBStateStoreProvider {
 /** [[StateStoreChangeDataReader]] implementation for [[RocksDBStateStoreProvider]] */
 class RocksDBStateStoreChangeDataReader(
     fm: CheckpointFileManager,
-    rocksDBFileManager: RocksDBFileManager,
+    rocksDB: RocksDB,
     stateLocation: Path,
     startVersion: Long,
     endVersion: Long,
@@ -1244,7 +1242,7 @@ class RocksDBStateStoreChangeDataReader(
 
   override protected val versionsAndUniqueIds: Array[(Long, Option[String])] =
     if (endVersionStateStoreCkptId.isDefined) {
-      val fullVersionLineage = rocksDBFileManager.getFullLineage(
+      val fullVersionLineage = rocksDB.getFullLineage(
         startVersion,
         endVersion,
         endVersionStateStoreCkptId)

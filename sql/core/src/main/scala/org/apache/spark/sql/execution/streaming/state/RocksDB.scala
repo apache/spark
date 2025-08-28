@@ -315,6 +315,75 @@ class RocksDB(
   private val snapshotsToUploadQueue = new ConcurrentLinkedQueue[RocksDBSnapshot]()
 
   /**
+   * Read the lineage from the changelog files. It first get the changelog reader
+   * of the correct changelog version and then read the lineage information from the file.
+   * The changelog file is named as version_stateStoreCkptId.changelog
+   * @param version version of the changelog file, used to load changelog file.
+   * @param stateStoreCkptId uniqueId of the changelog file, used to load changelog file.
+   * @return the lineage stored in the changelog file
+   */
+  private def getLineageFromChangelogFile(
+      version: Long,
+      stateStoreCkptId: Option[String]): Array[LineageItem] = {
+    var changelogReader: StateStoreChangelogReader = null
+    var currLineage: Array[LineageItem] = Array.empty
+    try {
+      changelogReader = fileManager.getChangelogReader(version, stateStoreCkptId)
+      currLineage = changelogReader.lineage
+      logInfo(log"Loading lineage: " +
+        log"${MDC(LogKeys.LINEAGE, lineageManager)} from " +
+        log"changelog version: ${MDC(LogKeys.VERSION_NUM, version)} " +
+        log"uniqueId: ${MDC(LogKeys.UUID, stateStoreCkptId.getOrElse(""))}.")
+    } finally {
+      if (changelogReader != null) {
+        changelogReader.closeIfNeeded()
+      }
+    }
+    currLineage
+  }
+
+  /**
+   * Construct the full lineage from startVersion to endVersion (inclusive) by
+   * walking backwards using lineage information embedded in changelog files.
+   */
+  def getFullLineage(
+      startVersion: Long,
+      endVersion: Long,
+      endVersionStateStoreCkptId: Option[String]): Array[LineageItem] = {
+    assert(startVersion <= endVersion,
+      s"startVersion $startVersion should be less than or equal to endVersion $endVersion")
+
+    val buf = mutable.ArrayBuffer[LineageItem]()
+    buf.append(LineageItem(endVersion, endVersionStateStoreCkptId.get))
+
+    while (buf.last.version > startVersion) {
+      val prevSmallestVersion = buf.last.version
+      val lineage = getLineageFromChangelogFile(buf.last.version, Some(buf.last.checkpointUniqueId))
+      val lineageSorted = lineage.filter(_.version >= startVersion).sortBy(_.version).reverse
+      buf.appendAll(lineageSorted)
+
+      if (buf.last.version == prevSmallestVersion) {
+        throw new IllegalStateException(s"Lineage is not complete")
+      }
+    }
+
+    val ret = buf.reverse.toArray
+
+    // Sanity checks
+    assert(ret.head.version == startVersion,
+      s"Expected first lineage version to be $startVersion, but got ${ret.head.version}")
+    assert(ret.last.version == endVersion,
+      s"Expected last lineage version to be $endVersion, but got ${ret.last.version}")
+    // Assert that the lineage array is strictly increasing in version
+    assert(ret.sliding(2).forall {
+      case Array(prev, next) => prev.version + 1== next.version
+      case _ => true
+    }, s"Lineage array is not strictly increasing in version")
+
+    ret
+  }
+
+  /**
    * Load the given version of data in a native RocksDB instance.
    * Note that this will copy all the necessary file from DFS to local disk as needed,
    * and possibly restart the native RocksDB instance.
@@ -345,8 +414,7 @@ class RocksDB(
             currVersionLineage = Array(LineageItem(version, stateStoreCkptId.get))
             (version, stateStoreCkptId)
           } else {
-            currVersionLineage
-              = fileManager.getLineageFromChangelogFile(version, stateStoreCkptId) :+
+            currVersionLineage = getLineageFromChangelogFile(version, stateStoreCkptId) :+
                 LineageItem(version, stateStoreCkptId.get)
             currVersionLineage = currVersionLineage.sortBy(_.version)
 
