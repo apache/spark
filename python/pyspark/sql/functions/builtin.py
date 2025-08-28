@@ -27118,8 +27118,8 @@ def udtf(
 @_try_remote_functions
 def udtf(
     cls: Optional[Union[Type, StructType, str]] = None,
-    *,
     returnType: Optional[Union[StructType, str]] = None,
+    *,
     useArrow: Optional[bool] = None,
 ) -> Union["UserDefinedTableFunction", Callable[[Type], "UserDefinedTableFunction"]]:
     """Creates a user defined table function (UDTF).
