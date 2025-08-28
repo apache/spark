@@ -250,7 +250,7 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
                         .collect()
                     )
                     ret_str = repr([row[0] for row in rows])
-                except Exception as e:
+                except Exception:
                     ret_str = "X"
                 result.append(ret_str)
             results.append(result)
