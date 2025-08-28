@@ -17,14 +17,31 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.sql.Connection
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, Row}
 
 trait SharedJDBCIntegrationTests extends QueryTest {
   protected def jdbcUrl: String
 
+  /**
+   * Create a table with the same name that can be used to test common functionality
+   * in
+   * @param conn
+   */
+  def createSharedTable(conn: Connection): Unit = {
+    val batchStmt = conn.createStatement()
+
+    val stmt = batchStmt.addBatch("CREATE TABLE tbl_shared (x INTEGER)")
+
+    batchStmt.executeBatch()
+    batchStmt.close()
+  }
+
   test("SPARK-52184: Wrap external engine syntax error") {
     val e = intercept[SparkException] {
+
       spark.read.format("jdbc")
         .option("url", jdbcUrl)
         .option("query", "THIS IS NOT VALID SQL").load()
@@ -32,18 +49,16 @@ trait SharedJDBCIntegrationTests extends QueryTest {
     assert(e.getCondition.startsWith("JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR"))
   }
 
-  val queryForSemicolonTest: String = "SELECT 1 as id"
-
   test("SPARK-53386: Parameter `query` should work when ending with semicolons") {
     val dfSingle = spark.read.format("jdbc")
       .option("url", jdbcUrl)
-      .option("query", s"$queryForSemicolonTest; ")
+      .option("query", "SELECT 1 AS id FROM tbl_shared LIMIT 1; ")
       .load()
     checkAnswer(dfSingle, Seq(Row(1)))
 
     val dfMultiple = spark.read.format("jdbc")
       .option("url", jdbcUrl)
-      .option("query", s"$queryForSemicolonTest;;;")
+      .option("query", "SELECT 1 AS id FROM tbl_shared LIMIT 1;;;")
       .load()
     checkAnswer(dfMultiple, Seq(Row(1)))
   }

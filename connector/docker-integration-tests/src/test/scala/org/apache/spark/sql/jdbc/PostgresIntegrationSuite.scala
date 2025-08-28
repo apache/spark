@@ -183,6 +183,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with SharedJDB
     conn.prepareStatement("CREATE DOMAIN myint AS integer CHECK (VALUE > 0)").executeUpdate()
     conn.prepareStatement("CREATE TABLE domain_table (c1 myint)").executeUpdate()
     conn.prepareStatement("INSERT INTO domain_table VALUES (1)").executeUpdate()
+
+    createSharedTable(conn)
   }
 
   test("Type mapping for various types") {

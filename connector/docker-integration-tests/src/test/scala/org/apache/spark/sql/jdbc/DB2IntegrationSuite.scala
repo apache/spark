@@ -76,9 +76,9 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with SharedJDBCInte
     conn.prepareStatement("INSERT INTO binarys VALUES (" +
         "'ABC', 'ABC', BINARY('ABC', 10), VARBINARY('ABC', 10))")
       .executeUpdate()
-  }
 
-  override val queryForSemicolonTest: String = "SELECT 1 AS id FROM tbl LIMIT 1"
+    createSharedTable(conn)
+  }
 
   test("Basic test") {
     val df = sqlContext.read.jdbc(jdbcUrl, "tbl", new Properties)

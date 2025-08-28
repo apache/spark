@@ -147,6 +147,8 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite
       .executeUpdate()
     conn.prepareStatement("""INSERT INTO test_rowversion (myKey, myValue) VALUES (1, 0)""")
       .executeUpdate()
+
+    createSharedTable(conn)
   }
 
   test("Basic test") {
