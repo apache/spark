@@ -19,9 +19,10 @@ package org.apache.spark.metrics.sink
 
 import java.util.Properties
 
+import scala.concurrent.duration.MILLISECONDS
 import scala.jdk.CollectionConverters._
 
-import com.codahale.metrics.{Counter, Gauge, MetricRegistry}
+import com.codahale.metrics.{Counter, Gauge, MetricRegistry, Timer}
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkFunSuite
@@ -65,7 +66,79 @@ class PrometheusServletSuite extends SparkFunSuite with PrivateMethodTester {
     val sink = createPrometheusServlet()
     val suffix = sink invokePrivate PrivateMethod[String](Symbol("normalizeKey"))(key)
     assert(suffix == "metrics_local_1592132938718_driver_LiveListenerBus_" +
-      "listenerProcessingTime_org_apache_spark_HeartbeatReceiver_")
+      "listenerProcessingTime_org_apache_spark_HeartbeatReceiver")
+  }
+
+  test("Counter should emit Prometheus counter") {
+    val sink = createPrometheusServlet()
+    val counter = new Counter
+    sink.registry.register("test.counter", counter)
+    counter.inc(42)
+
+    val snapshot = sink.getMetricsSnapshot()
+
+    assert(snapshot.contains("metrics_test_counter 42"))
+    assert(snapshot.contains("# TYPE metrics_test_counter counter"))
+  }
+
+  test("Gauge should emit Prometheus gauge") {
+    val sink = createPrometheusServlet()
+    val gauge = new Gauge[Double] {
+      override def getValue: Double = 5.123
+    }
+    sink.registry.register("test.gauge", gauge)
+
+    val snapshot = sink.getMetricsSnapshot()
+    assert(snapshot.contains("metrics_test_gauge 5.123"))
+    assert(snapshot.contains("# TYPE metrics_test_gauge gauge"))
+  }
+
+  test("Timer should emit summary and rates") {
+    val sink = createPrometheusServlet()
+    val timer = new Timer
+    timer.update(500, MILLISECONDS)
+    timer.update(1500, MILLISECONDS)
+    sink.registry.register("test.timer", timer)
+
+    val snapshot = sink.getMetricsSnapshot()
+
+    // Summary
+    assert(snapshot.contains("metrics_test_timer_count 2"))
+    assert(snapshot.contains("metrics_test_timer_sum"))
+    assert(snapshot.contains("""metrics_test_timer{quantile="0.5"}"""))
+
+    // Rate
+    assert(snapshot.contains("metrics_test_timer_m1_rate"))
+    assert(snapshot.contains("metrics_test_timer_m5_rate"))
+    assert(snapshot.contains("metrics_test_timer_m15_rate"))
+  }
+
+  test("Histogram should emit summary") {
+    val sink = createPrometheusServlet()
+    val histogram = sink.registry.histogram("test.hist")
+
+    histogram.update(25)
+    histogram.update(75)
+    histogram.update(150)
+
+    val output = sink.getMetricsSnapshot()
+
+    assert(output.contains("metrics_test_hist_count 3"))
+    assert(output.contains("metrics_test_hist_sum"))
+    assert(output.contains("""metrics_test_hist{quantile="0.5"}"""))
+  }
+
+  test("Meter should emit count and rates") {
+    val sink = createPrometheusServlet()
+    val meter = sink.registry.meter("test.meter")
+    meter.mark(5)
+
+    val output = sink.getMetricsSnapshot()
+
+    assert(output.contains("metrics_test_meter_count 5"))
+    assert(output.contains("metrics_test_meter_m1_rate"))
+    assert(output.contains("metrics_test_meter_m5_rate"))
+    assert(output.contains("metrics_test_meter_m15_rate"))
   }
 
   private def createPrometheusServlet(): PrometheusServlet =
