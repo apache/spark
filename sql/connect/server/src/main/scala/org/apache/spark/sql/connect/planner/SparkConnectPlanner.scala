@@ -321,52 +321,45 @@ class SparkConnectPlanner(
   }
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
-    val args = sql.getArgsMap
-    val namedArguments = sql.getNamedArgumentsMap
-    val posArgs = sql.getPosArgsList
-    val posArguments = sql.getPosArgumentsList
-    // Apply text-level parameter substitution if we have parameters
-    val queryText = if (!namedArguments.isEmpty) {
-      // Use named arguments (expressions)
-      val paramMap = namedArguments.asScala.toMap.transform((_, v) => transformExpression(v))
-      substituteNamedParameters(sql.getQuery, paramMap)
-    } else if (!posArguments.isEmpty) {
-      // Use positional arguments (expressions)
-      val paramList = posArguments.asScala.map(transformExpression).toSeq
-      substitutePositionalParameters(sql.getQuery, paramList)
-    } else if (!args.isEmpty) {
-      // Use named arguments (literals)
-      val paramMap = args.asScala.toMap.transform((_, v) => transformLiteral(v))
-      substituteNamedParameters(sql.getQuery, paramMap)
-    } else if (!posArgs.isEmpty) {
-      // Use positional arguments (literals)
-      val paramList = posArgs.asScala.map(transformLiteral).toSeq
-      substitutePositionalParameters(sql.getQuery, paramList)
-    } else {
-      // No parameters to substitute
-      sql.getQuery
-    }
+    val queryText = substituteParametersInQuery(sql)
     // Parse the substituted query
     parser.parsePlan(queryText)
   }
 
   /**
-   * Substitute named parameters in SQL text using unified parameter handler.
+   * Helper method to handle parameter substitution for SQL queries.
+   * Consolidates the logic for handling different parameter types and sources.
    */
-  private def substituteNamedParameters(
-      queryText: String,
-      paramMap: Map[String, Expression]): String = {
-    parameterHandler.substituteNamedParameters(queryText, paramMap)
+  private def substituteParametersInQuery(sql: proto.SQL): String = {
+    val args = sql.getArgsMap
+    val namedArguments = sql.getNamedArgumentsMap
+    val posArgs = sql.getPosArgsList
+    val posArguments = sql.getPosArgumentsList
+
+    // Apply text-level parameter substitution if we have parameters
+    if (!namedArguments.isEmpty) {
+      // Use named arguments (expressions)
+      val paramMap = namedArguments.asScala.toMap.transform((_, v) => transformExpression(v))
+      parameterHandler.substituteNamedParameters(sql.getQuery, paramMap)
+    } else if (!posArguments.isEmpty) {
+      // Use positional arguments (expressions)
+      val paramList = posArguments.asScala.map(transformExpression).toSeq
+      parameterHandler.substitutePositionalParameters(sql.getQuery, paramList)
+    } else if (!args.isEmpty) {
+      // Use named arguments (literals)
+      val paramMap = args.asScala.toMap.transform((_, v) => transformLiteral(v))
+      parameterHandler.substituteNamedParameters(sql.getQuery, paramMap)
+    } else if (!posArgs.isEmpty) {
+      // Use positional arguments (literals)
+      val paramList = posArgs.asScala.map(transformLiteral).toSeq
+      parameterHandler.substitutePositionalParameters(sql.getQuery, paramList)
+    } else {
+      // No parameters to substitute
+      sql.getQuery
+    }
   }
 
-  /**
-   * Substitute positional parameters in SQL text using unified parameter handler.
-   */
-  private def substitutePositionalParameters(
-      queryText: String,
-      paramList: Seq[Expression]): String = {
-    parameterHandler.substitutePositionalParameters(queryText, paramList)
-  }
+
 
 
 

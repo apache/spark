@@ -472,6 +472,7 @@ class SparkSession private(
           Dataset.ofRows(self, plan, tracker)
         } catch {
           case e: Throwable with org.apache.spark.sql.catalyst.trees.WithOrigin =>
+            // Extract contexts once to avoid duplication
             val contexts = e match {
               case ae: org.apache.spark.sql.AnalysisException => ae.getQueryContext
               case _ => Array.empty[org.apache.spark.QueryContext]
@@ -483,10 +484,6 @@ class SparkSession private(
                 case sparkParser: org.apache.spark.sql.execution.SparkSqlParser =>
                   sparkParser.getPositionMapper match {
                     case Some(positionMapper) =>
-                      val contexts = e match {
-                        case ae: org.apache.spark.sql.AnalysisException => ae.getQueryContext
-                        case _ => Array.empty[org.apache.spark.QueryContext]
-                      }
 
                       // Only apply position mapping if we have existing contexts
                       // - don't create artificial ones

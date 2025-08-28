@@ -165,44 +165,49 @@ class SubstituteExecuteImmediate(
         // Apply parameter substitution to the query string before parsing
         val substitutedQueryString = applyParameterSubstitution(queryString, expressions)
 
-        // Set the origin to use the inner query string for proper error context
-        val innerOrigin = org.apache.spark.sql.catalyst.trees.Origin(
+        // Create origin context for the inner query to support proper error reporting
+        val innerQueryOrigin = org.apache.spark.sql.catalyst.trees.Origin(
           sqlText = Some(substitutedQueryString),
           startIndex = Some(0),
           stopIndex = Some(substitutedQueryString.length - 1)
         )
-        val plan = org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(innerOrigin) {
-          parseStatement(substitutedQueryString, targetVariables)
-        }
-        // Update the origins of any Parameter nodes to use the inner query context
-        val planWithUpdatedOrigins = plan.transformAllExpressions {
-          case np: NamedParameter =>
-            org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(innerOrigin) {
-              NamedParameter(np.name)
+        val parsedPlan = org.apache.spark.sql.catalyst.trees.CurrentOrigin
+          .withOrigin(innerQueryOrigin) {
+            parseStatement(substitutedQueryString, targetVariables)
+          }
+        // Attempt to update Parameter node origins for better error context (experimental)
+        // Note: This approach may not fully resolve position mapping issues for EXECUTE IMMEDIATE
+        val planWithUpdatedParameterOrigins = parsedPlan.transformAllExpressions {
+          case namedParam: NamedParameter =>
+            org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(innerQueryOrigin) {
+              NamedParameter(namedParam.name)
             }
-          case pp: PosParameter =>
-            org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(innerOrigin) {
-              PosParameter(pp.pos)
+          case posParam: PosParameter =>
+            org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(innerQueryOrigin) {
+              PosParameter(posParam.pos)
             }
-          case other => other
+          case expr => expr
         }
 
-        val posNodes = planWithUpdatedOrigins.collect { case p: LogicalPlan =>
-          p.expressions.flatMap(_.collect { case n: PosParameter => n })
+        // Collect parameter nodes in a single pass for efficiency
+        val allParameterNodes = planWithUpdatedParameterOrigins.collect { case p: LogicalPlan =>
+          p.expressions.flatMap(_.collect {
+            case n: PosParameter => Left(n)
+            case n: NamedParameter => Right(n)
+          })
         }.flatten
-        val namedNodes = planWithUpdatedOrigins.collect { case p: LogicalPlan =>
-          p.expressions.flatMap(_.collect { case n: NamedParameter => n })
-        }.flatten
+        val posNodes = allParameterNodes.collect { case Left(p) => p }
+        val namedNodes = allParameterNodes.collect { case Right(n) => n }
 
         val queryPlan = if (expressions.isEmpty || (posNodes.isEmpty && namedNodes.isEmpty)) {
-          planWithUpdatedOrigins
+          planWithUpdatedParameterOrigins
         } else if (posNodes.nonEmpty && namedNodes.nonEmpty) {
           throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
         } else {
           if (posNodes.nonEmpty) {
             // Apply constant folding to positional parameters
             val foldedArgs = expressions.map(foldToLiteral)
-            PosParameterizedQuery(planWithUpdatedOrigins, foldedArgs)
+            PosParameterizedQuery(planWithUpdatedParameterOrigins, foldedArgs)
           } else {
             val aliases = expressions.collect {
               case e: Alias => e
@@ -222,7 +227,7 @@ class SubstituteExecuteImmediate(
             val values = aliases.map(foldToLiteral)
 
             NameParameterizedQuery(
-              planWithUpdatedOrigins,
+              planWithUpdatedParameterOrigins,
               names,
               // We need to resolve arguments before Resolution batch to make sure
               // that some rule does not accidentally resolve our parameters.
@@ -234,12 +239,13 @@ class SubstituteExecuteImmediate(
         // Fully analyze the generated plan. AnalysisContext.withExecuteImmediateContext makes sure
         // that SQL scripting local variables will not be accessed from the plan.
         // Use the inner query origin for proper error context during analysis
-        val finalPlan = org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(innerOrigin) {
-          AnalysisContext.withExecuteImmediateContext {
-            resolveChild(queryPlan)
+        val finalPlan = org.apache.spark.sql.catalyst.trees.CurrentOrigin
+          .withOrigin(innerQueryOrigin) {
+            AnalysisContext.withExecuteImmediateContext {
+              resolveChild(queryPlan)
+            }
           }
-        }
-        org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(innerOrigin) {
+        org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(innerQueryOrigin) {
           checkAnalysis(finalPlan)
         }
 
@@ -276,28 +282,8 @@ class SubstituteExecuteImmediate(
 
     // Convert expressions to parameter values based on what the SQL query needs
     if (hasNamed) {
-      // For named parameters, extract names from resolved expressions
-      val namedParamsBuilder = scala.collection.mutable.Map[String, Expression]()
-      val unnamedExprs = scala.collection.mutable.ListBuffer[Expression]()
-
-      resolvedExprs.foreach {
-        case Alias(child, name) =>
-          // Explicit alias provides the name
-          namedParamsBuilder(name) = foldToLiteral(child)
-        case vr: VariableReference =>
-          // Variable reference provides name from variable identifier
-          namedParamsBuilder(vr.identifier.name()) = foldToLiteral(vr)
-        case other =>
-          // Expression that can't provide a name for named parameters
-          unnamedExprs += other
-      }
-
-      // If we have unnamed expressions for named parameters, error
-      if (unnamedExprs.nonEmpty) {
-        throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedExprs.toSeq)
-      }
-
-      parameterHandler.substituteNamedParameters(queryString, namedParamsBuilder.toMap)
+      val namedParams = extractNamedParametersFromExpressions(resolvedExprs)
+      parameterHandler.substituteNamedParameters(queryString, namedParams)
     } else {
       // For positional parameters, process all resolved expressions positionally
       val positionalParams = resolvedExprs.map(foldToLiteral)
@@ -305,7 +291,34 @@ class SubstituteExecuteImmediate(
     }
   }
 
+  /**
+   * Extract named parameters from expressions, handling aliases and variable references.
+   * Throws an error if any expression cannot provide a parameter name.
+   */
+  private def extractNamedParametersFromExpressions(
+      expressions: Seq[Expression]): Map[String, Expression] = {
+    val namedParamsBuilder = scala.collection.mutable.Map[String, Expression]()
+    val unnamedExprs = scala.collection.mutable.ListBuffer[Expression]()
 
+    expressions.foreach {
+      case Alias(child, name) =>
+        // Explicit alias provides the name
+        namedParamsBuilder(name) = foldToLiteral(child)
+      case vr: VariableReference =>
+        // Variable reference provides name from variable identifier
+        namedParamsBuilder(vr.identifier.name()) = foldToLiteral(vr)
+      case other =>
+        // Expression that can't provide a name for named parameters
+        unnamedExprs += other
+    }
+
+    // If we have unnamed expressions for named parameters, error
+    if (unnamedExprs.nonEmpty) {
+      throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedExprs.toSeq)
+    }
+
+    namedParamsBuilder.toMap
+  }
 
   private def parseStatement(
       queryString: String,

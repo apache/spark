@@ -489,8 +489,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 28,
-    "fragment" : "EXECUTE IMMEDIATE 'SELCT Fa'"
+    "stopIndex" : 8,
+    "fragment" : "SELCT Fa"
   } ]
 }
 
@@ -512,8 +512,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 40,
-    "fragment" : "EXECUTE IMMEDIATE 'SELCT Fa' INTO res_id"
+    "stopIndex" : 8,
+    "fragment" : "SELCT Fa"
   } ]
 }
 
@@ -564,8 +564,8 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 70,
-    "stopIndex" : 86,
+    "startIndex" : 51,
+    "stopIndex" : 67,
     "fragment" : "CONCAT(a , \"me1\")"
   } ]
 }
