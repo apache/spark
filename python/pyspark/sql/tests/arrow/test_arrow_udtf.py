@@ -195,7 +195,7 @@ class ArrowUDTFTestsMixin:
                 result_df = MismatchedSchemaUDTF()
                 result_df.collect()
         else:
-            with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CONVERSION_ERROR"):
+            with self.assertRaisesRegex(PythonException, "Failed to parse string: 'wrong_col' as a scalar of type int32"):
                 result_df = MismatchedSchemaUDTF()
                 result_df.collect()
 
@@ -364,7 +364,7 @@ class ArrowUDTFTestsMixin:
                 result_df.collect()
         else:
             # Should fail with Arrow cast exception since string cannot be cast to int
-            with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CONVERSION_ERROR"):
+            with self.assertRaisesRegex(PythonException, "Failed to parse string: 'xyz' as a scalar of type int32"):
                 result_df = StringToIntUDTF()
                 result_df.collect()
 
