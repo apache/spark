@@ -353,20 +353,25 @@ class RocksDB(
     assert(startVersion <= endVersion,
       s"startVersion $startVersion should be less than or equal to endVersion $endVersion")
 
+    // A buffer to collect the lineage information, the entries should be decreasing in version
     val buf = mutable.ArrayBuffer[LineageItem]()
     buf.append(LineageItem(endVersion, endVersionStateStoreCkptId.get))
 
     while (buf.last.version > startVersion) {
       val prevSmallestVersion = buf.last.version
       val lineage = getLineageFromChangelogFile(buf.last.version, Some(buf.last.checkpointUniqueId))
+      // lineage array is sorted in increasing order, we need to reverse it
       val lineageSorted = lineage.filter(_.version >= startVersion).sortBy(_.version).reverse
+      // append to the buffer in reverse order, so the buffer is always decreasing in version
       buf.appendAll(lineageSorted)
 
+      // to prevent infinite loop if we make no progress, throw an exception
       if (buf.last.version == prevSmallestVersion) {
         throw new IllegalStateException(s"Lineage is not complete")
       }
     }
 
+    // we return the lineage in increasing order
     val ret = buf.reverse.toArray
 
     // Sanity checks
@@ -376,7 +381,7 @@ class RocksDB(
       s"Expected last lineage version to be $endVersion, but got ${ret.last.version}")
     // Assert that the lineage array is strictly increasing in version
     assert(ret.sliding(2).forall {
-      case Array(prev, next) => prev.version + 1== next.version
+      case Array(prev, next) => prev.version + 1 == next.version
       case _ => true
     }, s"Lineage array is not strictly increasing in version")
 
