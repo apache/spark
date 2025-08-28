@@ -2101,3 +2101,33 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "INVALID_RECURSIVE_CTE",
   "sqlState" : "42836"
 }
+
+
+-- !query
+WITH RECURSIVE t AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + m
+    FROM (SELECT 2 as m) subq
+             JOIN t ON n = m
+    WHERE n <> m
+)
+SELECT * FROM t
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- UnionLoop xxxx
+:        :- Project [1 AS n#x]
+:        :  +- OneRowRelation
+:        +- Project [(n#x + m#x) AS (n + m)#x]
+:           +- Filter NOT (n#x = m#x)
+:              +- Join Inner, (n#x = m#x)
+:                 :- SubqueryAlias subq
+:                 :  +- Project [2 AS m#x]
+:                 :     +- OneRowRelation
+:                 +- SubqueryAlias t
+:                    +- UnionLoopRef xxxx, [n#x], false
++- Project [n#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [n#x], false, false

@@ -458,6 +458,8 @@ object DataType {
     def transform: PartialFunction[DataType, DataType] = {
       case dt @ (_: CharType | _: VarcharType) => dt
       case _: StringType => StringType
+      // SPARK-53330 (see below)
+      case _: DayTimeIntervalType => DayTimeIntervalType.DEFAULT
     }
 
     if (checkComplexTypes) {
@@ -465,6 +467,10 @@ object DataType {
     } else {
       (from, to) match {
         case (a: StringType, b: StringType) => a.constraint == b.constraint
+        // SPARK-53330: Arrow serialization always returns DayTimeIntervalType(0, 3)
+        // as it has the maximum range, we can always assume that we can match
+        // with the target type.
+        case (x: DayTimeIntervalType, y: DayTimeIntervalType) => true
 
         case (fromDataType, toDataType) => fromDataType == toDataType
       }

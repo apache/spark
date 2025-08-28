@@ -38,6 +38,8 @@ class BaseOrdering extends Ordering[InternalRow] {
  * An interpreted row ordering comparator.
  */
 class InterpretedOrdering(ordering: Seq[SortOrder]) extends BaseOrdering {
+  private val leftEvaluators = ordering.map(_.child)
+  private val rightEvaluators = leftEvaluators.map(_.freshCopyIfContainsStatefulExpression())
   private lazy val physicalDataTypes = ordering.map { order =>
     val dt = order.dataType match {
       case udt: UserDefinedType[_] => udt.sqlType
@@ -54,8 +56,8 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends BaseOrdering {
     val size = ordering.size
     while (i < size) {
       val order = ordering(i)
-      val left = order.child.eval(a)
-      val right = order.child.eval(b)
+      val left = leftEvaluators(i).eval(a)
+      val right = rightEvaluators(i).eval(b)
 
       if (left == null && right == null) {
         // Both null, continue looking.

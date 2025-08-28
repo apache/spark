@@ -37,15 +37,15 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
     extends XMLEventReader
     with Logging {
   // Reader for the XML record parsing.
-  private val in1 = inputStream()
-  private val primaryEventReader = StaxXmlParserUtils.filteredReader(in1, options)
+  private lazy val in1 = inputStream()
+  private lazy val primaryEventReader = StaxXmlParserUtils.filteredReader(in1, options)
 
   private val xsdSchemaValidator = Option(options.rowValidationXSDPath)
     .map(path => ValidatorUtil.getSchema(path).newValidator())
   // Reader for the XSD validation, if an XSD schema is provided.
-  private val in2 = xsdSchemaValidator.map(_ => inputStream())
+  private lazy val in2 = xsdSchemaValidator.map(_ => inputStream())
   // An XMLStreamReader used by StAXSource for XSD validation.
-  private val xsdValidationStreamReader =
+  private lazy val xsdValidationStreamReader =
     in2.map(in => StaxXmlParserUtils.filteredStreamReader(in, options))
 
   final var hasMoreRecord: Boolean = true
@@ -108,11 +108,18 @@ case class StaxXMLRecordReader(inputStream: () => InputStream, options: XmlOptio
   }
 
   override def close(): Unit = {
-    primaryEventReader.close()
-    xsdValidationStreamReader.foreach(_.close())
-    in1.close()
-    in2.foreach(_.close())
     hasMoreRecord = false
+    try {
+      in1.close()
+      in2.foreach(_.close())
+      primaryEventReader.close()
+      xsdValidationStreamReader.foreach(_.close())
+    } catch {
+      case NonFatal(e) =>
+        // If the file is corrupted/missing, we won't be able to close the input streams. We do a
+        // best-effort to close the streams and log the error if closing fails.
+        logWarning("Error closing XML stream", e)
+    }
   }
 
   override def nextEvent(): XMLEvent = primaryEventReader.nextEvent()
