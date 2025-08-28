@@ -33,7 +33,8 @@ trait SharedJDBCIntegrationTests extends QueryTest {
   def createSharedTable(conn: Connection): Unit = {
     val batchStmt = conn.createStatement()
 
-    val stmt = batchStmt.addBatch("CREATE TABLE tbl_shared (x INTEGER)")
+    batchStmt.addBatch("CREATE TABLE tbl_shared (x INTEGER)")
+    batchStmt.addBatch("INSERT INTO tbl_shared VALUES(1)")
 
     batchStmt.executeBatch()
     batchStmt.close()
@@ -52,13 +53,13 @@ trait SharedJDBCIntegrationTests extends QueryTest {
   test("SPARK-53386: Parameter `query` should work when ending with semicolons") {
     val dfSingle = spark.read.format("jdbc")
       .option("url", jdbcUrl)
-      .option("query", "SELECT 1 AS id FROM tbl_shared LIMIT 1; ")
+      .option("query", "SELECT x FROM tbl_shared; ")
       .load()
     checkAnswer(dfSingle, Seq(Row(1)))
 
     val dfMultiple = spark.read.format("jdbc")
       .option("url", jdbcUrl)
-      .option("query", "SELECT 1 AS id FROM tbl_shared LIMIT 1;;;")
+      .option("query", "SELECT x FROM tbl_shared;;;")
       .load()
     checkAnswer(dfMultiple, Seq(Row(1)))
   }
