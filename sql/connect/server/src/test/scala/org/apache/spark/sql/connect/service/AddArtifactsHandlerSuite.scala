@@ -53,8 +53,9 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     override def onCompleted(): Unit = {}
   }
 
-  class TestAddArtifactsHandler(responseObserver: StreamObserver[AddArtifactsResponse],
-                                throwIfArtifactExists: Boolean = false)
+  class TestAddArtifactsHandler(
+      responseObserver: StreamObserver[AddArtifactsResponse],
+      throwIfArtifactExists: Boolean = false)
       extends SparkConnectAddArtifactsHandler(responseObserver) {
 
     // Stop the staged artifacts from being automatically deleted
@@ -68,12 +69,11 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
       // Throw if artifact already exists and has different checksum
       // This mocks the behavior of ArtifactManager.addArtifact without comparing the entire file
       if (throwIfArtifactExists
-          && finalArtifacts.contains(artifact.name)
-          && artifact.getCrc != artifactChecksums(artifact.name)) {
+        && finalArtifacts.contains(artifact.name)
+        && artifact.getCrc != artifactChecksums(artifact.name)) {
         throw new SparkRuntimeException(
           "ARTIFACT_ALREADY_EXISTS",
-          Map("normalizedRemoteRelativePath" -> artifact.name)
-        )
+          Map("normalizedRemoteRelativePath" -> artifact.name))
       }
 
       finalArtifacts.append(artifact.name)
@@ -434,7 +434,6 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
     }
   }
 
-
   def addSingleChunkArtifact(
       handler: SparkConnectAddArtifactsHandler,
       sessionKey: SessionKey,
@@ -472,8 +471,8 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
 
   test("All artifacts are added, even if some fail") {
     val promise = Promise[AddArtifactsResponse]()
-    val handler = new TestAddArtifactsHandler(new DummyStreamObserver(promise),
-                                              throwIfArtifactExists = true)
+    val handler =
+      new TestAddArtifactsHandler(new DummyStreamObserver(promise), throwIfArtifactExists = true)
     try {
       val name1 = "jars/dummy1.jar"
       val name2 = "jars/dummy2.jar"
