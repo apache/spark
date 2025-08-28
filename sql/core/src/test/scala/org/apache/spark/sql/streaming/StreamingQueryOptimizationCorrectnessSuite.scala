@@ -458,11 +458,11 @@ class StreamingQueryOptimizationCorrectnessSuite extends StreamTest {
       withTempView("tv1", "tv2") {
         val inputStream1 = MemoryStream[Int]
         val ds1 = inputStream1.toDS()
-        ds1.registerTempTable("tv1")
+        ds1.createOrReplaceTempView("tv1")
 
         val inputStream2 = MemoryStream[Int]
         val ds2 = inputStream2.toDS()
-        ds2.registerTempTable("tv2")
+        ds2.createOrReplaceTempView("tv2")
 
         // DISTINCT is rewritten to AGGREGATE, hence an AGGREGATEs for each source
         val unioned = spark.sql(
