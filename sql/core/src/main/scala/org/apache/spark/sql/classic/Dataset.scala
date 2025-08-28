@@ -682,7 +682,7 @@ class Dataset[T] private[sql](
     analyzedJoinPlan match {
       case project @ Project(_, join: Join) =>
         // SPARK-53143: Handling edge-cases when `AddMetadataColumns` analyzer rule adds `Project`
-        //   node on top of `Join` node.
+        //              node on top of `Join` node.
         // Check "SPARK-53143: self join edge-case when Join is not returned by the analyzer" in
         //   `DataframeSelfJoinSuite` for more details.
         val newProject = project.copy(child = JoinWith.resolveSelfJoinCondition(
