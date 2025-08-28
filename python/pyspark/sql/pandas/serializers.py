@@ -201,7 +201,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
     Serializer for PyArrow-native UDTFs that work directly with PyArrow RecordBatches and Arrays.
     """
 
-    def __init__(self, table_arg_offsets=None, arrow_cast=False):
+    def __init__(self, table_arg_offsets=None, arrow_cast=True):
         super().__init__()
         self.table_arg_offsets = table_arg_offsets if table_arg_offsets else []
         self._arrow_cast = arrow_cast
