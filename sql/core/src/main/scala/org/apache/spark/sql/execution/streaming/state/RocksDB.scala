@@ -415,7 +415,7 @@ class RocksDB(
             (version, stateStoreCkptId)
           } else {
             currVersionLineage = getLineageFromChangelogFile(version, stateStoreCkptId) :+
-                LineageItem(version, stateStoreCkptId.get)
+              LineageItem(version, stateStoreCkptId.get)
             currVersionLineage = currVersionLineage.sortBy(_.version)
 
             val latestSnapshotVersionsAndUniqueId =

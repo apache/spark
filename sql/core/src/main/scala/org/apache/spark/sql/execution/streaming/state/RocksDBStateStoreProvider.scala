@@ -882,7 +882,6 @@ private[sql] class RocksDBStateStoreProvider
     StateStoreChangeDataReader = {
     val statePath = stateStoreId.storeCheckpointLocation()
     val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
-
     new RocksDBStateStoreChangeDataReader(
       CheckpointFileManager.create(statePath, hadoopConf),
       rocksDB,
