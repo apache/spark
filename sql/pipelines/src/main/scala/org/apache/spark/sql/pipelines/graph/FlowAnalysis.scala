@@ -103,10 +103,6 @@ object FlowAnalysis {
     // earlier so we only need to apply analysis to a single logical plan.
     val planWithInlinedCTEs = CTESubstitution(plan)
 
-    //scalastyle:off
-    println("dbg 100")
-    println(plan)
-
     val spark = context.spark
     // Traverse the user's query plan and recursively resolve nodes that reference Pipelines
     // features that the Spark analyzer is unable to resolve
@@ -116,30 +112,33 @@ object FlowAnalysis {
         // - SELECT ... FROM STREAM(t1)
         // - SELECT ... FROM STREAM t1
         case u: UnresolvedRelation if u.isStreaming =>
-          readStreamInput(
+          val resolved = readStreamInput(
             context,
             name = IdentifierHelper.toQuotedString(u.multipartIdentifier),
             spark.readStream,
             streamingReadOptions = StreamingReadOptions()
           ).queryExecution.analyzed
-
+          // Spark Connect requires the PLAN_ID_TAG to be propagated to the resolved plan
+          // to allow correct analysis of the parent plan that contains this subquery
+          u.getTagValue(LogicalPlan.PLAN_ID_TAG).foreach(
+            id => resolved.setTagValue(LogicalPlan.PLAN_ID_TAG, id)
+          )
+          resolved
         // Batch read on another dataset in the pipeline
         case u: UnresolvedRelation =>
-          val tmp = readBatchInput(
+          val resolved = readBatchInput(
             context,
             name = IdentifierHelper.toQuotedString(u.multipartIdentifier),
             batchReadOptions = BatchReadOptions()
           ).queryExecution.analyzed
-          // scalastyle:off
-          println("dbg 200")
-          println(tmp)
-        tmp
+          // Spark Connect requires the PLAN_ID_TAG to be propagated to the resolved plan
+          // to allow correct analysis of the parent plan that contains this subquery
+          u.getTagValue(LogicalPlan.PLAN_ID_TAG).foreach(
+            id => resolved.setTagValue(LogicalPlan.PLAN_ID_TAG, id)
+          )
+          resolved
       }
-    // scalastyle:off
-    println("dbg 300")
-    println(resolvedPlan)
-    val df = Dataset.ofRows(spark, resolvedPlan)
-    df
+    Dataset.ofRows(spark, resolvedPlan)
   }
 
   /**
@@ -301,10 +300,6 @@ object FlowAnalysis {
 
     val spark = context.spark
     context.externalInputs += inputIdentifier.identifier
-
-    println("dbggg")
-//    spark.read.table(inputIdentifier.identifier.quotedString).explain(true)
-//    throw new RuntimeException(s"dbg ${spark.read.table(inputIdentifier.identifier.quotedString).explain("true")}")
     spark.read.table(inputIdentifier.identifier.quotedString)
   }
 

@@ -184,7 +184,6 @@ case class UnresolvedPipelineException(
        |from an upstream flow which failed to resolve.
        |${additionalHint.getOrElse("")}
        |Flows with errors: ${directFailures.keys.map(_.unquotedString).toSeq.sorted.mkString(", ")}
-       |${directFailures.values.map(_.getStackTrace.mkString("\n")).mkString("\n\n")}
        |Flows that failed due to upstream errors: ${downstreamFailures.keys
            .map(_.unquotedString)
            .toSeq
