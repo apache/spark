@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming.state
+package org.apache.spark.sql.execution.streaming.operators.stateful.join
 
 import java.util.Locale
 
@@ -24,15 +24,16 @@ import scala.annotation.tailrec
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.TaskContext
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{END_INDEX, START_INDEX, STATE_STORE_ID}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SafeProjection, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
-import org.apache.spark.sql.execution.streaming.StatefulOpStateStoreCheckpointInfo
-import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOpStateStoreCheckpointInfo
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper._
+import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, StateSchemaBroadcast, StateStore, StateStoreCheckpointInfo, StateStoreColFamilySchema, StateStoreConf, StateStoreErrors, StateStoreId, StateStoreMetrics, StateStoreProvider, StateStoreProviderId, SupportsFineGrainedReplay}
 import org.apache.spark.sql.types.{BooleanType, LongType, StructField, StructType}
 import org.apache.spark.util.NextIterator
 
@@ -439,7 +440,7 @@ abstract class SymmetricHashJoinStateManager(
    * NOTE: this function is only intended for use in unit tests
    * to simulate null values.
    */
-  private[state] def updateNumValuesTestOnly(key: UnsafeRow, numValues: Long): Unit = {
+  private[streaming] def updateNumValuesTestOnly(key: UnsafeRow, numValues: Long): Unit = {
     keyToNumValues.put(key, numValues)
   }
 
@@ -528,7 +529,7 @@ abstract class SymmetricHashJoinStateManager(
    * Helper class for representing data returned by [[KeyWithIndexToValueStore]].
    * Designed for object reuse.
    */
-  private[state] class KeyAndNumValues(var key: UnsafeRow = null, var numValue: Long = 0) {
+  private[join] class KeyAndNumValues(var key: UnsafeRow = null, var numValue: Long = 0) {
     def withNew(newKey: UnsafeRow, newNumValues: Long): this.type = {
       this.key = newKey
       this.numValue = newNumValues
@@ -595,7 +596,7 @@ abstract class SymmetricHashJoinStateManager(
    * Helper class for representing data returned by [[KeyWithIndexToValueStore]].
    * Designed for object reuse.
    */
-  private[state] class KeyWithIndexAndValue(
+  private[join] class KeyWithIndexAndValue(
     var key: UnsafeRow = null,
     var valueIndex: Long = -1,
     var value: UnsafeRow = null,
@@ -1134,17 +1135,17 @@ object SymmetricHashJoinStateManager {
     val ckptIds = joinCkptInfo.left.keyToNumValues.stateStoreCkptId.map(
       Array(
         _,
-        joinCkptInfo.left.valueToNumKeys.stateStoreCkptId.get,
+        joinCkptInfo.left.keyWithIndexToValue.stateStoreCkptId.get,
         joinCkptInfo.right.keyToNumValues.stateStoreCkptId.get,
-        joinCkptInfo.right.valueToNumKeys.stateStoreCkptId.get
+        joinCkptInfo.right.keyWithIndexToValue.stateStoreCkptId.get
       )
     )
     val baseCkptIds = joinCkptInfo.left.keyToNumValues.baseStateStoreCkptId.map(
       Array(
         _,
-        joinCkptInfo.left.valueToNumKeys.baseStateStoreCkptId.get,
+        joinCkptInfo.left.keyWithIndexToValue.baseStateStoreCkptId.get,
         joinCkptInfo.right.keyToNumValues.baseStateStoreCkptId.get,
-        joinCkptInfo.right.valueToNumKeys.baseStateStoreCkptId.get
+        joinCkptInfo.right.keyWithIndexToValue.baseStateStoreCkptId.get
       )
     )
 
@@ -1157,49 +1158,94 @@ object SymmetricHashJoinStateManager {
 
   /**
    * Stream-stream join has 4 state stores instead of one. So it will generate 4 different
-   * checkpoint IDs. They are translated from each joiners' state store into an array through
-   * mergeStateStoreCheckpointInfo(). This function is used to read it back into individual state
-   * store checkpoint IDs.
-   * @param partitionId
-   * @param stateInfo
-   * @return
+   * checkpoint IDs using stateStoreCkptIds. They are translated from each joiners' state
+   * store into an array through mergeStateStoreCheckpointInfo(). This function is used to read
+   * it back into individual state store checkpoint IDs for each store.
+   * If useColumnFamiliesForJoins is true, then it will always return the first checkpoint ID.
+   *
+   * @param partitionId the partition ID of the state store
+   * @param stateStoreCkptIds the array of checkpoint IDs for all the state stores
+   * @param useColumnFamiliesForJoins whether virtual column families are used for the join
+   *
+   * @return the checkpoint IDs for all state stores used by this joiner
    */
   def getStateStoreCheckpointIds(
       partitionId: Int,
-      stateInfo: StatefulOperatorStateInfo,
+      stateStoreCkptIds: Option[Array[Array[String]]],
       useColumnFamiliesForJoins: Boolean): JoinStateStoreCheckpointId = {
     if (useColumnFamiliesForJoins) {
-      val ckpt = stateInfo.stateStoreCkptIds.map(_(partitionId)).map(_.head)
+      val ckpt = stateStoreCkptIds.map(_(partitionId)).map(_.head)
       JoinStateStoreCheckpointId(
-        left = JoinerStateStoreCheckpointId(keyToNumValues = ckpt, valueToNumKeys = ckpt),
-        right = JoinerStateStoreCheckpointId(keyToNumValues = ckpt, valueToNumKeys = ckpt)
+        left = JoinerStateStoreCheckpointId(keyToNumValues = ckpt, keyWithIndexToValue = ckpt),
+        right = JoinerStateStoreCheckpointId(keyToNumValues = ckpt, keyWithIndexToValue = ckpt)
       )
     } else {
-      val stateStoreCkptIds = stateInfo.stateStoreCkptIds
+      val stateStoreCkptIdsOpt = stateStoreCkptIds
         .map(_(partitionId))
         .map(_.map(Option(_)))
         .getOrElse(Array.fill[Option[String]](4)(None))
       JoinStateStoreCheckpointId(
         left = JoinerStateStoreCheckpointId(
-          keyToNumValues = stateStoreCkptIds(0),
-          valueToNumKeys = stateStoreCkptIds(1)),
+          keyToNumValues = stateStoreCkptIdsOpt(0),
+          keyWithIndexToValue = stateStoreCkptIdsOpt(1)),
         right = JoinerStateStoreCheckpointId(
-          keyToNumValues = stateStoreCkptIds(2),
-          valueToNumKeys = stateStoreCkptIds(3)))
+          keyToNumValues = stateStoreCkptIdsOpt(2),
+          keyWithIndexToValue = stateStoreCkptIdsOpt(3)))
     }
   }
 
-  private[state] sealed trait StateStoreType
+  /**
+   * Stream-stream join has 4 state stores instead of one. So it will generate 4 different
+   * checkpoint IDs when not using virtual column families.
+   * This function is used to get the checkpoint ID for a specific state store
+   * by the name of the store, partition ID and the stateStoreCkptIds array. The expected names
+   * for the stores are generated by getStateStoreName().
+   * If useColumnFamiliesForJoins is true, then it will always return the first checkpoint ID.
+   *
+   * @param storeName the name of the state store
+   * @param partitionId the partition ID of the state store
+   * @param stateStoreCkptIds the array of checkpoint IDs for all the state stores
+   * @param useColumnFamiliesForJoins whether virtual column families are used for the join
+   *
+   * @return the checkpoint ID for the specific state store, or None if not found
+   */
+  def getStateStoreCheckpointId(
+      storeName: String,
+      partitionId: Int,
+      stateStoreCkptIds: Option[Array[Array[String]]],
+      useColumnFamiliesForJoins: Boolean = false) : Option[String] = {
+    if (useColumnFamiliesForJoins || storeName == StateStoreId.DEFAULT_STORE_NAME) {
+      stateStoreCkptIds.map(_(partitionId)).map(_.head)
+    } else {
+      val joinStateStoreCkptIds = getStateStoreCheckpointIds(
+        partitionId, stateStoreCkptIds, useColumnFamiliesForJoins)
 
-  private[state] case object KeyToNumValuesType extends StateStoreType {
+      if (storeName == getStateStoreName(LeftSide, KeyToNumValuesType)) {
+        joinStateStoreCkptIds.left.keyToNumValues
+      } else if (storeName == getStateStoreName(RightSide, KeyToNumValuesType)) {
+        joinStateStoreCkptIds.right.keyToNumValues
+      } else if (storeName == getStateStoreName(LeftSide, KeyWithIndexToValueType)) {
+        joinStateStoreCkptIds.left.keyWithIndexToValue
+      } else if (storeName == getStateStoreName(RightSide, KeyWithIndexToValueType)) {
+        joinStateStoreCkptIds.right.keyWithIndexToValue
+      } else {
+        None
+      }
+    }
+  }
+
+  private[join] sealed trait StateStoreType
+
+  private[join] case object KeyToNumValuesType extends StateStoreType {
     override def toString(): String = "keyToNumValues"
   }
 
-  private[state] case object KeyWithIndexToValueType extends StateStoreType {
+  private[join] case object KeyWithIndexToValueType extends StateStoreType {
     override def toString(): String = "keyWithIndexToValue"
   }
 
-  private[state] def getStateStoreName(joinSide: JoinSide, storeType: StateStoreType): String = {
+  private[join] def getStateStoreName(
+      joinSide: JoinSide, storeType: StateStoreType): String = {
     s"$joinSide-$storeType"
   }
 

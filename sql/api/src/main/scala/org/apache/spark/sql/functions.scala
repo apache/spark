@@ -6293,6 +6293,27 @@ object functions {
     Column.internalFn("timestampadd", lit(unit), quantity, ts)
 
   /**
+   * Returns `time` truncated to the `unit`.
+   *
+   * @param unit
+   *   A STRING representing the unit to truncate the time to. Supported units are: "HOUR",
+   *   "MINUTE", "SECOND", "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
+   * @param time
+   *   A TIME to truncate.
+   * @return
+   *   A TIME truncated to the specified unit.
+   * @note
+   *   If any of the inputs is `NULL`, the result is `NULL`.
+   * @throws IllegalArgumentException
+   *   If the `unit` is not supported.
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def time_trunc(unit: Column, time: Column): Column = {
+    Column.fn("time_trunc", unit, time)
+  }
+
+  /**
    * Parses the `timestamp` expression with the `format` expression to a timestamp without time
    * zone. Returns null with invalid input.
    *
@@ -8599,6 +8620,15 @@ object functions {
     Column.fn("make_timestamp_ntz", years, months, days, hours, mins, secs)
 
   /**
+   * Create a local date-time from date and time fields.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def make_timestamp_ntz(date: Column, time: Column): Column =
+    Column.fn("make_timestamp_ntz", date, time)
+
+  /**
    * Try to create a local date-time from years, months, days, hours, mins, secs fields. The
    * function returns NULL on invalid inputs.
    *
@@ -8613,6 +8643,15 @@ object functions {
       mins: Column,
       secs: Column): Column =
     Column.fn("try_make_timestamp_ntz", years, months, days, hours, mins, secs)
+
+  /**
+   * Try to create a local date-time from date and time fields.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def try_make_timestamp_ntz(date: Column, time: Column): Column =
+    Column.fn("try_make_timestamp_ntz", date, time)
 
   /**
    * Make year-month interval from years, months.

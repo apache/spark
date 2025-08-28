@@ -43,6 +43,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.Utils.createArray
 
 case class AllDataTypesWithNonPrimitiveType(
     stringField: String,
@@ -854,7 +855,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       val df = spark.range(1, 22, 1, 1).map { _ =>
-        val byteData = Array.fill[Byte](1024 * 1024)('X')
+        val byteData = createArray[Byte](1024 * 1024, 'X')
         val mapData = (1 to 100).map(i => (i, byteData))
         mapData
       }.toDF()
@@ -868,7 +869,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
         withTempPath { dir =>
           val path = dir.getCanonicalPath
           val df = spark.range(1, 1024, 1, 1).map { _ =>
-            val byteData = Array.fill[Byte](5 * 1024 * 1024)('X')
+            val byteData = createArray[Byte](5 * 1024 * 1024, 'X')
             byteData
           }.toDF()
           df.write.format("orc").save(path)
@@ -885,9 +886,9 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
         val path = dir.getCanonicalPath
         val df = spark.range(1, 1 + 512, 1, 1).map { i =>
           if (i == 1) {
-            (i, Array.fill[Byte](5 * 1024 * 1024)('X'))
+            (i, createArray[Byte](5 * 1024 * 1024, 'X'))
           } else {
-            (i, Array.fill[Byte](1)('X'))
+            (i, createArray[Byte](1, 'X'))
           }
         }.toDF("c1", "c2")
         df.write.format("orc").save(path)

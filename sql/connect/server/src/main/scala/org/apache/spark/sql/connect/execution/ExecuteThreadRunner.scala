@@ -26,7 +26,7 @@ import com.google.protobuf.Message
 
 import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.planner.InvalidInputErrors
 import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteSessionTag, SparkConnectService}

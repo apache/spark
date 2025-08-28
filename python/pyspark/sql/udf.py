@@ -230,6 +230,19 @@ class UserDefinedFunction:
                     },
                 )
         elif (
+            evalType == PythonEvalType.SQL_SCALAR_ARROW_UDF
+            or evalType == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
+        ):
+            try:
+                to_arrow_type(returnType)
+            except TypeError:
+                raise PySparkNotImplementedError(
+                    errorClass="NOT_IMPLEMENTED",
+                    messageParameters={
+                        "feature": f"Invalid return type with scalar Arrow UDFs: " f"{returnType}"
+                    },
+                )
+        elif (
             evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
             or evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE
         ):
@@ -355,12 +368,23 @@ class UserDefinedFunction:
                         f"{returnType}"
                     },
                 )
+        elif evalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF:
+            try:
+                # Different from SQL_GROUPED_AGG_PANDAS_UDF, StructType is allowed here
+                to_arrow_type(returnType)
+            except TypeError:
+                raise PySparkNotImplementedError(
+                    errorClass="NOT_IMPLEMENTED",
+                    messageParameters={
+                        "feature": f"Invalid return type with grouped aggregate Arrow UDFs: "
+                        f"{returnType}"
+                    },
+                )
 
     @property
     def returnType(self) -> DataType:
         # Make sure this is called after SparkContext is initialized.
         # ``_parse_datatype_string`` accesses to JVM for parsing a DDL formatted string.
-        # TODO: PythonEvalType.SQL_BATCHED_UDF
         if self._returnType_placeholder is None:
             if isinstance(self._returnType, DataType):
                 self._returnType_placeholder = self._returnType
@@ -412,6 +436,7 @@ class UserDefinedFunction:
             # Disable profiling Pandas UDFs with iterators as input/output.
             if self.evalType in [
                 PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+                PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
                 PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
                 PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
             ]:
@@ -654,6 +679,7 @@ class UDFRegistration:
                 PythonEvalType.SQL_SCALAR_PANDAS_UDF,
                 PythonEvalType.SQL_SCALAR_ARROW_UDF,
                 PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+                PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
                 PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
                 PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
             ]:
@@ -661,7 +687,8 @@ class UDFRegistration:
                     errorClass="INVALID_UDF_EVAL_TYPE",
                     messageParameters={
                         "eval_type": "SQL_BATCHED_UDF, SQL_ARROW_BATCHED_UDF, "
-                        "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_PANDAS_ITER_UDF, "
+                        "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_ARROW_UDF, "
+                        "SQL_SCALAR_PANDAS_ITER_UDF, SQL_SCALAR_ARROW_ITER_UDF, "
                         "SQL_GROUPED_AGG_PANDAS_UDF or SQL_GROUPED_AGG_ARROW_UDF"
                     },
                 )

@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql
 
+import java.time.LocalDate
 import java.time.LocalTime
 import java.time.temporal.ChronoUnit
 
-import org.apache.spark.{SparkConf, SparkDateTimeException}
+import org.apache.spark.{SparkConf, SparkDateTimeException, SparkIllegalArgumentException}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -142,6 +143,54 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
     checkAnswer(result2, expected)
   }
 
+  test("SPARK-53109: make_timestamp_ntz function") {
+    // Input data for the function.
+    val schema = StructType(Seq(
+      StructField("date", DateType, nullable = false),
+      StructField("time", TimeType(), nullable = false)
+    ))
+    val data = Seq(
+      Row(LocalDate.parse("2020-01-01"), LocalTime.parse("00:00:00")),
+      Row(LocalDate.parse("2023-10-20"), LocalTime.parse("12:34:56")),
+      Row(LocalDate.parse("2023-12-31"), LocalTime.parse("23:59:59.999999"))
+    )
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+    // Test the function using both `selectExpr` and `select`.
+    val result1 = df.selectExpr(
+      "make_timestamp_ntz(date, time)"
+    )
+    val result2 = df.select(
+      make_timestamp_ntz(col("date"), col("time"))
+    )
+    // Check that both methods produce the same result.
+    checkAnswer(result1, result2)
+
+    // Expected output of the function.
+    val expected = Seq(
+      "2020-01-01 00:00:00",
+      "2023-10-20 12:34:56",
+      "2023-12-31 23:59:59.999999"
+    ).toDF("timestamp_ntz").select(col("timestamp_ntz").cast("timestamp_ntz"))
+    // Check that the results match the expected output.
+    checkAnswer(result1, expected)
+    checkAnswer(result2, expected)
+
+    // NULL result is returned for any NULL input.
+    val nullInputDF = Seq(
+      (null, LocalTime.parse("00:00:00")),
+      (LocalDate.parse("2020-01-01"), null),
+      (null, null)
+    ).toDF("date", "time")
+    val nullResult = Seq[Integer](
+      null, null, null
+    ).toDF("ts").select(col("ts"))
+    checkAnswer(
+      nullInputDF.select(make_timestamp_ntz(col("date"), col("time"))),
+      nullResult
+    )
+  }
+
   test("SPARK-52885: hour function") {
     // Input data for the function.
     val schema = StructType(Seq(
@@ -241,6 +290,60 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
     checkAnswer(result2, expected)
   }
 
+  test("SPARK-53107: time_trunc function") {
+    // Input data for the function (including null values).
+    val schema = StructType(Seq(
+      StructField("unit", StringType),
+      StructField("time", TimeType())
+    ))
+    val data = Seq(
+      Row("HOUR", LocalTime.parse("00:00:00")),
+      Row("second", LocalTime.parse("01:02:03.4")),
+      Row("MicroSecond", LocalTime.parse("23:59:59.999999")),
+      Row(null, LocalTime.parse("01:02:03")),
+      Row("MiNuTe", null),
+      Row(null, null)
+    )
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+    // Test the function using both `selectExpr` and `select`.
+    val result1 = df.selectExpr(
+      "time_trunc(unit, time)"
+    )
+    val result2 = df.select(
+      time_trunc(col("unit"), col("time"))
+    )
+    // Check that both methods produce the same result.
+    checkAnswer(result1, result2)
+
+    // Expected output of the function.
+    val expected = Seq(
+      "00:00:00",
+      "01:02:03",
+      "23:59:59.999999",
+      null,
+      null,
+      null
+    ).toDF("timeString").select(col("timeString").cast("time"))
+    // Check that the results match the expected output.
+    checkAnswer(result1, expected)
+    checkAnswer(result2, expected)
+
+    // Error is thrown for malformed input.
+    val invalidUnitDF = Seq(("invalid_unit", LocalTime.parse("01:02:03"))).toDF("unit", "time")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        invalidUnitDF.select(time_trunc(col("unit"), col("time"))).collect()
+      },
+      condition = "INVALID_PARAMETER_VALUE.TIME_UNIT",
+      parameters = Map(
+        "functionName" -> "`time_trunc`",
+        "parameter" -> "`unit`",
+        "invalidValue" -> "'invalid_unit'"
+      )
+    )
+  }
+
   test("SPARK-52883: to_time function without format") {
     // Input data for the function.
     val schema = StructType(Seq(
@@ -325,6 +428,54 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
       },
       condition = "CANNOT_PARSE_TIME",
       parameters = Map("input" -> "'invalid_time'", "format" -> "'HH.mm.ss'")
+    )
+  }
+
+  test("SPARK-53109: try_make_timestamp_ntz function") {
+    // Input data for the function.
+    val schema = StructType(Seq(
+      StructField("date", DateType, nullable = false),
+      StructField("time", TimeType(), nullable = false)
+    ))
+    val data = Seq(
+      Row(LocalDate.parse("2020-01-01"), LocalTime.parse("00:00:00")),
+      Row(LocalDate.parse("2023-10-20"), LocalTime.parse("12:34:56")),
+      Row(LocalDate.parse("2023-12-31"), LocalTime.parse("23:59:59.999999"))
+    )
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+    // Test the function using both `selectExpr` and `select`.
+    val result1 = df.selectExpr(
+      "try_make_timestamp_ntz(date, time)"
+    )
+    val result2 = df.select(
+      try_make_timestamp_ntz(col("date"), col("time"))
+    )
+    // Check that both methods produce the same result.
+    checkAnswer(result1, result2)
+
+    // Expected output of the function.
+    val expected = Seq(
+      "2020-01-01 00:00:00",
+      "2023-10-20 12:34:56",
+      "2023-12-31 23:59:59.999999"
+    ).toDF("timestamp_ntz").select(col("timestamp_ntz").cast("timestamp_ntz"))
+    // Check that the results match the expected output.
+    checkAnswer(result1, expected)
+    checkAnswer(result2, expected)
+
+    // NULL result is returned for any NULL input.
+    val nullInputDF = Seq(
+      (null, LocalTime.parse("00:00:00")),
+      (LocalDate.parse("2020-01-01"), null),
+      (null, null)
+    ).toDF("date", "time")
+    val nullResult = Seq[Integer](
+      null, null, null
+    ).toDF("ts").select(col("ts"))
+    checkAnswer(
+      nullInputDF.select(try_make_timestamp_ntz(col("date"), col("time"))),
+      nullResult
     )
   }
 

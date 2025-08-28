@@ -28,7 +28,6 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hive.service.CompositeService;
@@ -43,6 +42,7 @@ import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.util.Utils;
 
 /**
@@ -89,14 +89,14 @@ public class SessionManager extends CompositeService {
   private void createBackgroundOperationPool() {
     int poolSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_THREADS);
     LOG.info("HiveServer2: Background operation thread pool size: {}",
-      MDC.of(LogKeys.THREAD_POOL_SIZE$.MODULE$, poolSize));
+      MDC.of(LogKeys.THREAD_POOL_SIZE, poolSize));
     int poolQueueSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_WAIT_QUEUE_SIZE);
     LOG.info("HiveServer2: Background operation thread wait queue size: {}",
-      MDC.of(LogKeys.THREAD_POOL_WAIT_QUEUE_SIZE$.MODULE$, poolQueueSize));
+      MDC.of(LogKeys.THREAD_POOL_WAIT_QUEUE_SIZE, poolQueueSize));
     long keepAliveTime = HiveConf.getTimeVar(
         hiveConf, ConfVars.HIVE_SERVER2_ASYNC_EXEC_KEEPALIVE_TIME, TimeUnit.SECONDS);
     LOG.info("HiveServer2: Background operation thread keepalive time: {} ms",
-      MDC.of(LogKeys.THREAD_POOL_KEEPALIVE_TIME$.MODULE$, keepAliveTime * 1000L));
+      MDC.of(LogKeys.THREAD_POOL_KEEPALIVE_TIME, keepAliveTime * 1000L));
 
     // Create a thread pool with #poolSize threads
     // Threads terminate when they are idle for more than the keepAliveTime
@@ -122,26 +122,26 @@ public class SessionManager extends CompositeService {
 
     if (operationLogRootDir.exists() && !operationLogRootDir.isDirectory()) {
       LOG.warn("The operation log root directory exists, but it is not a directory: {}",
-        MDC.of(LogKeys.PATH$.MODULE$, operationLogRootDir.getAbsolutePath()));
+        MDC.of(LogKeys.PATH, operationLogRootDir.getAbsolutePath()));
       isOperationLogEnabled = false;
     }
 
     if (!operationLogRootDir.exists()) {
       if (!Utils.createDirectory(operationLogRootDir)) {
         LOG.warn("Unable to create operation log root directory: {}",
-          MDC.of(LogKeys.PATH$.MODULE$, operationLogRootDir.getAbsolutePath()));
+          MDC.of(LogKeys.PATH, operationLogRootDir.getAbsolutePath()));
         isOperationLogEnabled = false;
       }
     }
 
     if (isOperationLogEnabled) {
       LOG.info("Operation log root directory is created: {}",
-        MDC.of(LogKeys.PATH$.MODULE$, operationLogRootDir.getAbsolutePath()));
+        MDC.of(LogKeys.PATH, operationLogRootDir.getAbsolutePath()));
       try {
-        FileUtils.forceDeleteOnExit(operationLogRootDir);
+        JavaUtils.forceDeleteOnExit(operationLogRootDir);
       } catch (IOException e) {
         LOG.warn("Failed to schedule cleanup HS2 operation logging root dir: {}", e,
-          MDC.of(LogKeys.PATH$.MODULE$, operationLogRootDir.getAbsolutePath()));
+          MDC.of(LogKeys.PATH, operationLogRootDir.getAbsolutePath()));
       }
     }
   }
@@ -172,13 +172,13 @@ public class SessionManager extends CompositeService {
                 && (!checkOperation || session.getNoOperationTime() > sessionTimeout)) {
               SessionHandle handle = session.getSessionHandle();
               LOG.warn("Session {} is Timed-out (last access : {}) and will be closed",
-                MDC.of(LogKeys.SESSION_HANDLE$.MODULE$, handle),
-                MDC.of(LogKeys.LAST_ACCESS_TIME$.MODULE$, new Date(session.getLastAccessTime())));
+                MDC.of(LogKeys.SESSION_HANDLE, handle),
+                MDC.of(LogKeys.LAST_ACCESS_TIME, new Date(session.getLastAccessTime())));
               try {
                 closeSession(handle);
               } catch (HiveSQLException e) {
                 LOG.warn("Exception is thrown closing session {}", e,
-                  MDC.of(LogKeys.SESSION_HANDLE$.MODULE$, handle));
+                  MDC.of(LogKeys.SESSION_HANDLE, handle));
               }
             } else {
               session.closeExpiredOperations();
@@ -221,7 +221,7 @@ public class SessionManager extends CompositeService {
       } catch (InterruptedException e) {
         LOG.warn("HIVE_SERVER2_ASYNC_EXEC_SHUTDOWN_TIMEOUT = {} ms has been exceeded. " +
           "RUNNING background operations will be shut down", e,
-          MDC.of(LogKeys.TIMEOUT$.MODULE$, timeout * 1000));
+          MDC.of(LogKeys.TIMEOUT, timeout * 1000));
       }
       backgroundOperationPool = null;
     }
@@ -234,7 +234,7 @@ public class SessionManager extends CompositeService {
         Utils.deleteRecursively(operationLogRootDir);
       } catch (Exception e) {
         LOG.warn("Failed to cleanup root dir of HS2 logging: {}", e,
-          MDC.of(LogKeys.PATH$.MODULE$, operationLogRootDir.getAbsolutePath()));
+          MDC.of(LogKeys.PATH, operationLogRootDir.getAbsolutePath()));
       }
     }
   }

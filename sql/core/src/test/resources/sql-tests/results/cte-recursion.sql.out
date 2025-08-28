@@ -2003,3 +2003,19 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "INVALID_RECURSIVE_CTE",
   "sqlState" : "42836"
 }
+
+
+-- !query
+WITH RECURSIVE t AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + m
+    FROM (SELECT 2 as m) subq
+             JOIN t ON n = m
+    WHERE n <> m
+)
+SELECT * FROM t
+-- !query schema
+struct<n:int>
+-- !query output
+1

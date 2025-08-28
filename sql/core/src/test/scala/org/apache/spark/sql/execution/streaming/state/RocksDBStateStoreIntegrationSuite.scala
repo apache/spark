@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters.SetHasAsScala
 import org.scalatest.time.{Millis, Minute, Seconds, Span}
 
 import org.apache.spark.memory.UnifiedMemoryManager
-import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions.{count, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._

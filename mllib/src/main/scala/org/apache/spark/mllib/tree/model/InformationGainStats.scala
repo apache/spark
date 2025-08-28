@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.tree.model
 
+import java.util.Objects
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 
@@ -56,7 +58,7 @@ class InformationGainStats(
   }
 
   override def hashCode: Int = {
-    com.google.common.base.Objects.hashCode(
+    Objects.hash(
       gain: java.lang.Double,
       impurity: java.lang.Double,
       leftImpurity: java.lang.Double,

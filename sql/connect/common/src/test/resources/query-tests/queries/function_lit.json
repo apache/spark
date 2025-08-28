@@ -358,15 +358,18 @@
     }, {
       "literal": {
         "array": {
-          "elementType": {
-            "integer": {
-            }
-          },
           "elements": [{
             "integer": 8
           }, {
             "integer": 6
-          }]
+          }],
+          "dataType": {
+            "elementType": {
+              "integer": {
+              }
+            },
+            "containsNull": true
+          }
         }
       },
       "common": {

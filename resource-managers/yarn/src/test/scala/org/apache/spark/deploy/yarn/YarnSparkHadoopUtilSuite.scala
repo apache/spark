@@ -18,9 +18,8 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{File, IOException}
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
-import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.matchers.must.Matchers
@@ -54,12 +53,12 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with ResetSys
     val args = Array("arg1", "${arg.2}", "\"arg3\"", "'arg4'", "$arg5", "\\arg6")
     try {
       val argLine = args.map(a => YarnSparkHadoopUtil.escapeForShell(a)).mkString(" ")
-      Files.write(("bash -c \"echo " + argLine + "\"").getBytes(StandardCharsets.UTF_8), scriptFile)
+      Files.writeString(scriptFile.toPath, "bash -c \"echo " + argLine + "\"")
       scriptFile.setExecutable(true)
 
       val proc = Runtime.getRuntime().exec(Array(scriptFile.getAbsolutePath()))
-      val out = new String(ByteStreams.toByteArray(proc.getInputStream())).trim()
-      val err = new String(ByteStreams.toByteArray(proc.getErrorStream()))
+      val out = Utils.toString(proc.getInputStream()).trim()
+      val err = Utils.toString(proc.getErrorStream())
       val exitCode = proc.waitFor()
       exitCode should be (0)
       out should be (args.mkString(" "))

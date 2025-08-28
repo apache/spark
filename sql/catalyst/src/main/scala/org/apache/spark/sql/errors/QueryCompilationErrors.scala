@@ -3348,6 +3348,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "change" -> change.toString, "tableName" -> toSQLId(sanitizedTableName)))
   }
 
+  def unsupportedTableChangesInAutoSchemaEvolutionError(
+      changes: Array[TableChange], tableName: Seq[String]): Throwable = {
+    val sanitizedTableName = tableName.map(_.replaceAll("\"", ""))
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_TABLE_CHANGES_IN_AUTO_SCHEMA_EVOLUTION",
+      messageParameters = Map(
+        "changes" -> changes.mkString(","), "tableName" -> toSQLId(sanitizedTableName)))
+  }
+
   def pathOptionNotSetCorrectlyWhenReadingError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1306",
@@ -3754,13 +3763,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def indeterminateCollationInExpressionError(expr: Expression): Throwable = {
-    new AnalysisException(
-      errorClass = "INDETERMINATE_COLLATION",
-      messageParameters = Map("expr" -> toSQLExpr(expr))
-    )
-  }
-
   def indeterminateCollationInSchemaError(columnPaths: Seq[ColumnPath]): Throwable = {
     new AnalysisException(
       errorClass = "INDETERMINATE_COLLATION_IN_SCHEMA",
@@ -4085,12 +4087,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def foundMultipleDataSources(provider: String): Throwable = {
-    new AnalysisException(
-      errorClass = "FOUND_MULTIPLE_DATA_SOURCES",
-      messageParameters = Map("provider" -> provider))
-  }
-
   def foundMultipleXMLDataSourceError(provider: String,
       sourceNames: Seq[String],
       externalSource: String): Throwable = {
@@ -4387,11 +4383,5 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       ),
       origin = origin
     )
-  }
-
-  def unsupportedStreamingTVF(funcName: Seq[String]): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_STREAMING_TABLE_VALUED_FUNCTION",
-      messageParameters = Map("funcName" -> toSQLId(funcName)))
   }
 }

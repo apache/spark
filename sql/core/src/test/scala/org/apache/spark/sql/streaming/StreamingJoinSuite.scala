@@ -35,7 +35,10 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MemoryStream, StatefulOperatorStateInfo, StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.{StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -48,8 +51,34 @@ trait AlsoTestWithVirtualColumnFamilyJoins extends SQLTestUtils {
   /** Tests both with and without join ops using virtual column families */
   override protected def test(testName: String, testTags: Tag*)(testBody: => Any)(
     implicit pos: Position): Unit = {
-    testWithVirtualColumnFamilyJoins(testName, testTags: _*)(testBody)
-    testWithoutVirtualColumnFamilyJoins(testName, testTags: _*)(testBody)
+    // Test with virtual column family joins with changelog checkpointing enabled and disabled
+    // Since virtual column family joins require RocksDB, we only test with RocksDB here.
+    Seq("false", "true").foreach { enabled =>
+      testWithVirtualColumnFamilyJoins(
+        testName + s" with (with changelog checkpointing = $enabled)", testTags: _*) {
+        withSQLConf(
+          "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" -> enabled
+        ) {
+          testBody
+        }
+      }
+    }
+
+    // Test with both RocksDB and HDFS state store providers without virtual column family joins
+    val providers = Seq(
+      classOf[RocksDBStateStoreProvider].getName,
+      classOf[HDFSBackedStateStoreProvider].getName
+    )
+
+    providers.foreach { provider =>
+      testWithoutVirtualColumnFamilyJoins(testName + s" (with $provider)", testTags: _*) {
+        withSQLConf(
+          SQLConf.STATE_STORE_PROVIDER_CLASS.key -> provider
+        ) {
+          testBody
+        }
+      }
+    }
   }
 
   def testWithVirtualColumnFamilyJoins(testName: String, testTags: Tag*)(testBody: => Any): Unit = {

@@ -25,7 +25,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.{CapturesConfig, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, GlobalTempView, LocalTempView, SchemaEvolution, SchemaUnsupported, ViewSchemaMode, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, VariableReference}
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.types.{MetadataBuilder, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
@@ -413,37 +413,7 @@ case class ShowViewsCommand(
   }
 }
 
-object ViewHelper extends SQLConfHelper with Logging {
-
-  private val configPrefixDenyList = Seq(
-    SQLConf.MAX_NESTED_VIEW_DEPTH.key,
-    "spark.sql.optimizer.",
-    "spark.sql.codegen.",
-    "spark.sql.execution.",
-    "spark.sql.shuffle.",
-    "spark.sql.adaptive.",
-    // ignore optimization configs used in `RelationConversions`
-    "spark.sql.hive.convertMetastoreParquet",
-    "spark.sql.hive.convertMetastoreOrc",
-    "spark.sql.hive.convertInsertingPartitionedTable",
-    "spark.sql.hive.convertInsertingUnpartitionedTable",
-    "spark.sql.hive.convertMetastoreCtas",
-    SQLConf.ADDITIONAL_REMOTE_REPOSITORIES.key)
-
-  private val configAllowList = Seq(
-    SQLConf.DISABLE_HINTS.key
-  )
-
-  /**
-   * Capture view config either of:
-   * 1. exists in allowList
-   * 2. do not exists in denyList
-   */
-  private def shouldCaptureConfig(key: String): Boolean = {
-    configAllowList.exists(prefix => key.equals(prefix)) ||
-      !configPrefixDenyList.exists(prefix => key.startsWith(prefix))
-  }
-
+object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
   import CatalogTable._
 
   /**
@@ -469,34 +439,6 @@ object ViewHelper extends SQLConfHelper with Logging {
     properties.filterNot { case (key, _) =>
       key.startsWith(VIEW_QUERY_OUTPUT_PREFIX)
     }
-  }
-
-  /**
-   * Get all configurations that are modifiable and should be captured.
-   */
-  def getModifiedConf(conf: SQLConf): Map[String, String] = {
-    conf.getAllConfs.filter { case (k, _) =>
-      conf.isModifiable(k) && shouldCaptureConfig(k)
-    }
-  }
-
-  /**
-   * Convert the view SQL configs to `properties`.
-   */
-  private def sqlConfigsToProps(conf: SQLConf): Map[String, String] = {
-    val modifiedConfs = getModifiedConf(conf)
-    // Some configs have dynamic default values, such as SESSION_LOCAL_TIMEZONE whose
-    // default value relies on the JVM system timezone. We need to always capture them to
-    // to make sure we apply the same configs when reading the view.
-    val alwaysCaptured = Seq(SQLConf.SESSION_LOCAL_TIMEZONE)
-      .filter(c => !modifiedConfs.contains(c.key))
-      .map(c => (c.key, conf.getConf(c)))
-
-    val props = new mutable.HashMap[String, String]
-    for ((key, value) <- modifiedConfs ++ alwaysCaptured) {
-      props.put(s"$VIEW_SQL_CONFIG_PREFIX$key", value)
-    }
-    props.toMap
   }
 
   /**
@@ -599,7 +541,7 @@ object ViewHelper extends SQLConfHelper with Logging {
     removeReferredTempNames(removeSQLConfigs(removeQueryColumnNames(properties))) ++
       catalogAndNamespaceToProps(
         manager.currentCatalog.name, manager.currentNamespace.toImmutableArraySeq) ++
-      sqlConfigsToProps(conf) ++
+      sqlConfigsToProps(conf, VIEW_SQL_CONFIG_PREFIX) ++
       queryColumnNameProps ++
       referredTempNamesToProps(tempViewNames, tempFunctionNames, tempVariableNames) ++
       viewSchemaModeToProps(viewSchemaMode)

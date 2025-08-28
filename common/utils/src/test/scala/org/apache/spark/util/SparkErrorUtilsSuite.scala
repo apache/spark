@@ -17,6 +17,8 @@
 
 package org.apache.spark.util
 
+import java.io.{Closeable, IOException}
+
 import scala.annotation.nowarn
 
 import org.scalatest.BeforeAndAfterEach
@@ -58,6 +60,22 @@ class SparkErrorUtilsSuite
     assert(SparkErrorUtils.getRootCause(withCause) == withoutCause)
     assert(SparkErrorUtils.getRootCause(jdkNoCause) == jdkNoCause)
     assert(SparkErrorUtils.getRootCause(cyclicCause) == cyclicCause.getCause.getCause)
+  }
+
+  test("tryWithResource / tryInitializeResource") {
+    val closeable = new Closeable {
+      override def close(): Unit = {
+        throw new IOException("Catch me if you can")
+      }
+    }
+    val e1 = intercept[IOException] {
+      SparkErrorUtils.tryWithResource(closeable)(_ => throw new IOException("You got me!"))
+    }
+    assert(e1.getMessage === "You got me!")
+    val e2 = intercept[IOException] {
+      SparkErrorUtils.tryInitializeResource(closeable)(_ => throw new IOException("You got me!"))
+    }
+    assert(e2.getMessage === "You got me!")
   }
 
   private def createExceptionWithoutCause: Throwable =

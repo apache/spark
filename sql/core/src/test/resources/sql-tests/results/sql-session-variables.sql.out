@@ -16,6 +16,46 @@ struct<>
 
 
 -- !query
+DECLARE VARIABLE var1, var2, var3 INT
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE var1, var2 DOUBLE
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE var1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE var2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE var3
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SET VARIABLE title = '-- Basic sanity --'
 -- !query schema
 struct<>
@@ -1367,6 +1407,36 @@ DROP TEMPORARY VARIABLE var3
 struct<>
 -- !query output
 
+
+
+-- !query
+DECLARE VARIABLE var1, var2, vAr1 INT
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE",
+  "sqlState" : "42734",
+  "messageParameters" : {
+    "variableName" : "`system`.`session`.`var1`"
+  }
+}
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE var1, var2, vAr1 INT
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE",
+  "sqlState" : "42734",
+  "messageParameters" : {
+    "variableName" : "`system`.`session`.`var1`"
+  }
+}
 
 
 -- !query

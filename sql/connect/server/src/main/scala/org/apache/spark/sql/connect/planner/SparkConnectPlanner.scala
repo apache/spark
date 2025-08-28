@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.connect.planner
 
-import java.util.Properties
-import java.util.UUID
+import java.util.{HashMap, Properties, UUID}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -26,11 +25,10 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.google.common.base.Throwables
-import com.google.common.collect.{Lists, Maps}
+import com.google.common.collect.Lists
 import com.google.protobuf.{Any => ProtoAny, ByteString}
 import io.grpc.{Context, Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
-import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.{SparkClassNotFoundException, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Since}
@@ -41,7 +39,7 @@ import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Column, Encoders, ForeachWriter, Observation, Row}
@@ -79,8 +77,8 @@ import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDat
 import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.execution.python.streaming.PythonForeachWriter
 import org.apache.spark.sql.execution.stat.StatFunctions
-import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
-import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
+import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl.groupStateTimeoutFromString
+import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
@@ -1191,7 +1189,7 @@ class SparkConnectPlanner(
     SimplePythonFunction(
       command = fun.getCommand.toByteArray.toImmutableArraySeq,
       // Empty environment variables
-      envVars = Maps.newHashMap(),
+      envVars = new HashMap[String, String](),
       pythonIncludes = sessionHolder.artifactManager.getPythonIncludes.asJava,
       pythonExec = pythonExec,
       pythonVer = fun.getPythonVer,
@@ -1205,7 +1203,7 @@ class SparkConnectPlanner(
     SimplePythonFunction(
       command = ds.getCommand.toByteArray.toImmutableArraySeq,
       // Empty environment variables
-      envVars = Maps.newHashMap(),
+      envVars = new HashMap[String, String](),
       pythonIncludes = sessionHolder.artifactManager.getPythonIncludes.asJava,
       pythonExec = pythonExec,
       pythonVer = ds.getPythonVer,
@@ -1443,9 +1441,8 @@ class SparkConnectPlanner(
     }
 
     if (rel.hasData) {
-      val (rows, structType) = ArrowConverters.fromBatchWithSchemaIterator(
-        Iterator(rel.getData.toByteArray),
-        TaskContext.get())
+      val (rows, structType) =
+        ArrowConverters.fromIPCStream(rel.getData.toByteArray, TaskContext.get())
       if (structType == null) {
         throw InvalidInputErrors.inputDataForLocalRelationNoSchema()
       }
@@ -2034,7 +2031,7 @@ class SparkConnectPlanner(
     SimplePythonFunction(
       command = fun.getCommand.toByteArray.toImmutableArraySeq,
       // Empty environment variables
-      envVars = Maps.newHashMap(),
+      envVars = new HashMap[String, String](),
       pythonExec = pythonExec,
       // Merge the user specified includes with the includes managed by the artifact manager.
       pythonIncludes = (fun.getAdditionalIncludesList.asScala.toSeq ++
@@ -2646,12 +2643,16 @@ class SparkConnectPlanner(
     process(command, new MockObserver())
   }
 
-  def transformCommand(
-      command: proto.Command,
-      tracker: QueryPlanningTracker): Option[LogicalPlan] = {
+  def transformCommand(command: proto.Command): Option[QueryPlanningTracker => LogicalPlan] = {
     command.getCommandTypeCase match {
       case proto.Command.CommandTypeCase.WRITE_OPERATION =>
-        Some(transformWriteOperation(command.getWriteOperation, tracker))
+        Some(transformWriteOperation(command.getWriteOperation))
+      case proto.Command.CommandTypeCase.WRITE_OPERATION_V2 =>
+        Some(transformWriteOperationV2(command.getWriteOperationV2))
+      case proto.Command.CommandTypeCase.MERGE_INTO_TABLE_COMMAND =>
+        Some(transformMergeIntoTableCommand(command.getMergeIntoTableCommand))
+      case proto.Command.CommandTypeCase.CREATE_DATAFRAME_VIEW =>
+        Some(_ => transformCreateViewCommand(command.getCreateDataframeView))
       case _ =>
         None
     }
@@ -2660,6 +2661,11 @@ class SparkConnectPlanner(
   def process(
       command: proto.Command,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+    val transformerOpt = transformCommand(command)
+    if (transformerOpt.isDefined) {
+      transformAndRunCommand(transformerOpt.get)
+      return
+    }
     command.getCommandTypeCase match {
       case proto.Command.CommandTypeCase.REGISTER_FUNCTION =>
         handleRegisterUserDefinedFunction(command.getRegisterFunction)
@@ -2667,12 +2673,6 @@ class SparkConnectPlanner(
         handleRegisterUserDefinedTableFunction(command.getRegisterTableFunction)
       case proto.Command.CommandTypeCase.REGISTER_DATA_SOURCE =>
         handleRegisterUserDefinedDataSource(command.getRegisterDataSource)
-      case proto.Command.CommandTypeCase.WRITE_OPERATION =>
-        handleWriteOperation(command.getWriteOperation)
-      case proto.Command.CommandTypeCase.CREATE_DATAFRAME_VIEW =>
-        handleCreateViewCommand(command.getCreateDataframeView)
-      case proto.Command.CommandTypeCase.WRITE_OPERATION_V2 =>
-        handleWriteOperationV2(command.getWriteOperationV2)
       case proto.Command.CommandTypeCase.EXTENSION =>
         handleCommandPlugin(command.getExtension)
       case proto.Command.CommandTypeCase.SQL_COMMAND =>
@@ -2700,8 +2700,6 @@ class SparkConnectPlanner(
         handleCheckpointCommand(command.getCheckpointCommand, responseObserver)
       case proto.Command.CommandTypeCase.REMOVE_CACHED_REMOTE_RELATION_COMMAND =>
         handleRemoveCachedRemoteRelationCommand(command.getRemoveCachedRemoteRelationCommand)
-      case proto.Command.CommandTypeCase.MERGE_INTO_TABLE_COMMAND =>
-        handleMergeIntoTableCommand(command.getMergeIntoTableCommand)
       case proto.Command.CommandTypeCase.ML_COMMAND =>
         handleMlCommand(command.getMlCommand, responseObserver)
       case proto.Command.CommandTypeCase.PIPELINE_COMMAND =>
@@ -3061,7 +3059,8 @@ class SparkConnectPlanner(
     executeHolder.eventsManager.postFinished()
   }
 
-  private def handleCreateViewCommand(createView: proto.CreateDataFrameViewCommand): Unit = {
+  private def transformCreateViewCommand(
+      createView: proto.CreateDataFrameViewCommand): LogicalPlan = {
     val viewType = if (createView.getIsGlobal) GlobalTempView else LocalTempView
 
     val tableIdentifier =
@@ -3072,7 +3071,7 @@ class SparkConnectPlanner(
           throw QueryCompilationErrors.invalidViewNameError(createView.getName)
       }
 
-    val plan = CreateViewCommand(
+    CreateViewCommand(
       name = tableIdentifier,
       userSpecifiedColumns = Nil,
       comment = None,
@@ -3083,14 +3082,18 @@ class SparkConnectPlanner(
       allowExisting = false,
       replace = createView.getReplace,
       viewType = viewType)
-
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
-    Dataset.ofRows(session, plan, tracker).queryExecution.commandExecuted
-    executeHolder.eventsManager.postFinished()
   }
 
-  private def transformWriteOperation(
-      writeOperation: proto.WriteOperation,
+  /**
+   * Transforms the write operation.
+   *
+   * The input write operation contains a reference to the input plan and transforms it to the
+   * corresponding logical plan. Afterwards, creates the DataFrameWriter and translates the
+   * parameters of the WriteOperation into the corresponding methods calls.
+   *
+   * @param writeOperation
+   */
+  private def transformWriteOperation(writeOperation: proto.WriteOperation)(
       tracker: QueryPlanningTracker): LogicalPlan = {
     // Transform the input plan into the logical plan.
     val plan = transformRelation(writeOperation.getInput)
@@ -3149,29 +3152,15 @@ class SparkConnectPlanner(
     }
   }
 
-  private def runCommand(command: LogicalPlan, tracker: QueryPlanningTracker): Unit = {
-    val qe = new QueryExecution(session, command, tracker)
-    qe.assertCommandExecuted()
-  }
-
-  /**
-   * Transforms the write operation and executes it.
-   *
-   * The input write operation contains a reference to the input plan and transforms it to the
-   * corresponding logical plan. Afterwards, creates the DataFrameWriter and translates the
-   * parameters of the WriteOperation into the corresponding methods calls.
-   *
-   * @param writeOperation
-   */
-  private def handleWriteOperation(writeOperation: proto.WriteOperation): Unit = {
+  private def transformAndRunCommand(transformer: QueryPlanningTracker => LogicalPlan): Unit = {
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
-    runCommand(transformWriteOperation(writeOperation, tracker), tracker)
-
+    val qe = new QueryExecution(session, transformer(tracker), tracker)
+    qe.assertCommandExecuted()
     executeHolder.eventsManager.postFinished()
   }
 
   /**
-   * Transforms the write operation and executes it.
+   * Transforms the write operation.
    *
    * The input write operation contains a reference to the input plan and transforms it to the
    * corresponding logical plan. Afterwards, creates the DataFrameWriter and translates the
@@ -3179,11 +3168,11 @@ class SparkConnectPlanner(
    *
    * @param writeOperation
    */
-  private def handleWriteOperationV2(writeOperation: proto.WriteOperationV2): Unit = {
+  private def transformWriteOperationV2(writeOperation: proto.WriteOperationV2)(
+      tracker: QueryPlanningTracker): LogicalPlan = {
     // Transform the input plan into the logical plan.
     val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
-    val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val dataset = Dataset.ofRows(session, plan, tracker)
 
     val w = dataset.writeTo(table = writeOperation.getTableName)
@@ -3214,32 +3203,28 @@ class SparkConnectPlanner(
     writeOperation.getMode match {
       case proto.WriteOperationV2.Mode.MODE_CREATE =>
         if (writeOperation.hasProvider) {
-          w.using(writeOperation.getProvider).create()
-        } else {
-          w.create()
+          w.using(writeOperation.getProvider)
         }
+        w.createCommand()
       case proto.WriteOperationV2.Mode.MODE_OVERWRITE =>
-        w.overwrite(Column(transformExpression(writeOperation.getOverwriteCondition)))
+        w.overwriteCommand(Column(transformExpression(writeOperation.getOverwriteCondition)))
       case proto.WriteOperationV2.Mode.MODE_OVERWRITE_PARTITIONS =>
-        w.overwritePartitions()
+        w.overwritePartitionsCommand()
       case proto.WriteOperationV2.Mode.MODE_APPEND =>
-        w.append()
+        w.appendCommand()
       case proto.WriteOperationV2.Mode.MODE_REPLACE =>
         if (writeOperation.hasProvider) {
-          w.using(writeOperation.getProvider).replace()
-        } else {
-          w.replace()
+          w.using(writeOperation.getProvider)
         }
+        w.replaceCommand(orCreate = false)
       case proto.WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE =>
         if (writeOperation.hasProvider) {
-          w.using(writeOperation.getProvider).createOrReplace()
-        } else {
-          w.createOrReplace()
+          w.using(writeOperation.getProvider)
         }
+        w.replaceCommand(orCreate = true)
       case other =>
         throw InvalidInputErrors.invalidEnum(other)
     }
-    executeHolder.eventsManager.postFinished()
   }
 
   private def handleWriteStreamOperationStart(
@@ -3496,7 +3481,7 @@ class SparkConnectPlanner(
             .setExceptionMessage(e.toString())
             .setErrorClass(e.getCondition)
 
-          val stackTrace = Option(ExceptionUtils.getStackTrace(e))
+          val stackTrace = Option(Utils.stackTraceToString(e))
           stackTrace.foreach { s =>
             exception_builder.setStackTrace(s)
           }
@@ -3769,7 +3754,8 @@ class SparkConnectPlanner(
     executeHolder.eventsManager.postFinished()
   }
 
-  private def handleMergeIntoTableCommand(cmd: proto.MergeIntoTableCommand): Unit = {
+  private def transformMergeIntoTableCommand(cmd: proto.MergeIntoTableCommand)(
+      tracker: QueryPlanningTracker): LogicalPlan = {
     def transformActions(actions: java.util.List[proto.Expression]): Seq[MergeAction] =
       actions.asScala.map(transformExpression).map(_.asInstanceOf[MergeAction]).toSeq
 
@@ -3777,7 +3763,7 @@ class SparkConnectPlanner(
     val notMatchedActions = transformActions(cmd.getNotMatchedActionsList)
     val notMatchedBySourceActions = transformActions(cmd.getNotMatchedBySourceActionsList)
 
-    val sourceDs = Dataset.ofRows(session, transformRelation(cmd.getSourceTablePlan))
+    val sourceDs = Dataset.ofRows(session, transformRelation(cmd.getSourceTablePlan), tracker)
     val mergeInto = sourceDs
       .mergeInto(cmd.getTargetTableName, Column(transformExpression(cmd.getMergeCondition)))
       .asInstanceOf[MergeIntoWriter[Row]]
@@ -3787,8 +3773,7 @@ class SparkConnectPlanner(
     if (cmd.getWithSchemaEvolution) {
       mergeInto.withSchemaEvolution()
     }
-    mergeInto.merge()
-    executeHolder.eventsManager.postFinished()
+    mergeInto.mergeCommand()
   }
 
   private val emptyLocalRelation = LocalRelation(

@@ -22,7 +22,7 @@ import java.util.UUID
 import scala.collection.mutable
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.internal.SQLConf
@@ -394,7 +394,7 @@ private class StateStoreCoordinator(
         batchCommitTrackers.put(key, new BatchCommitTracker(runId, batchId, expectedStores))
         logInfo(s"Started tracking commits for batch $batchId with " +
           s"${expectedStores.values.map(_.values.sum).sum} expected stores")
-        context.reply()
+        context.reply(())
       }
 
     case ReportStateStoreCommit(storeId, version, storeName) =>
@@ -404,10 +404,10 @@ private class StateStoreCoordinator(
       batchCommitTrackers.get(key) match {
         case Some(tracker) =>
           tracker.recordCommit(storeId, storeName)
-          context.reply()
+          context.reply(())
         case None =>
           // In case no commit tracker for this batch was found
-          context.reply()
+          context.reply(())
       }
 
     case ValidateStateStoreCommitForBatch(runId, batchId) =>
@@ -417,7 +417,7 @@ private class StateStoreCoordinator(
           try {
             tracker.validateAllCommitted()
             batchCommitTrackers.remove(key) // Clean up after validation
-            context.reply()
+            context.reply(())
           } catch {
             case e: StateStoreCommitValidationFailed =>
               batchCommitTrackers.remove(key) // Clean up even on failure

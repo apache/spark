@@ -57,7 +57,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
     val conf = session.sessionState.conf
     val shuffleCleanupMode =
-      if (conf.getConf(SQLConf.SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)) {
+      if (conf.getConf(SQLConf.CONNECT_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)) {
         RemoveShuffleFiles
       } else if (conf.getConf(SQLConf.SHUFFLE_DEPENDENCY_SKIP_MIGRATION_ENABLED)) {
         SkipMigration
@@ -81,10 +81,13 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
           dataframe).foreach(responseObserver.onNext)
       case proto.Plan.OpTypeCase.COMMAND =>
         val command = request.getPlan.getCommand
-        planner.transformCommand(command, tracker) match {
-          case Some(plan) =>
-            val qe =
-              new QueryExecution(session, plan, tracker, shuffleCleanupMode = shuffleCleanupMode)
+        planner.transformCommand(command) match {
+          case Some(transformer) =>
+            val qe = new QueryExecution(
+              session,
+              transformer(tracker),
+              tracker,
+              shuffleCleanupMode = shuffleCleanupMode)
             qe.assertCommandExecuted()
             executeHolder.eventsManager.postFinished()
           case None =>
@@ -93,7 +96,6 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       case other =>
         throw InvalidInputErrors.invalidOneOfField(other, request.getPlan.getDescriptorForType)
     }
-
   }
 
   type Batch = (Array[Byte], Long)

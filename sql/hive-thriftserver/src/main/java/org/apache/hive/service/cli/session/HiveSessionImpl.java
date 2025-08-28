@@ -75,7 +75,6 @@ import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.util.Utils;
-import org.apache.spark.util.SparkStringUtils;
 
 import static org.apache.hadoop.hive.conf.SystemVariables.ENV_PREFIX;
 import static org.apache.hadoop.hive.conf.SystemVariables.HIVECONF_PREFIX;
@@ -152,7 +151,7 @@ public class HiveSessionImpl implements HiveSession {
       sessionState.loadReloadableAuxJars();
     } catch (IOException e) {
       String msg = "Failed to load reloadable jar file path.";
-      LOG.error("{}", e, MDC.of(LogKeys.ERROR$.MODULE$, msg));
+      LOG.error("{}", e, MDC.of(LogKeys.ERROR, msg));
       throw new HiveSQLException(msg, e);
     }
     // Process global init file: .hiverc
@@ -203,7 +202,7 @@ public class HiveSessionImpl implements HiveSession {
         }
         if (hivercFile.isFile()) {
           LOG.info("Running global init file: {}",
-            MDC.of(LogKeys.GLOBAL_INIT_FILE$.MODULE$, hivercFile));
+            MDC.of(LogKeys.GLOBAL_INIT_FILE, hivercFile));
           int rc = processor.processFile(hivercFile.getAbsolutePath());
           if (rc != 0) {
             LOG.error("Failed on initializing global .hiverc file");
@@ -304,28 +303,28 @@ public class HiveSessionImpl implements HiveSession {
   public void setOperationLogSessionDir(File operationLogRootDir) {
     if (!operationLogRootDir.exists()) {
       LOG.warn("The operation log root directory is removed, recreating: {}",
-        MDC.of(LogKeys.PATH$.MODULE$, operationLogRootDir.getAbsolutePath()));
+        MDC.of(LogKeys.PATH, operationLogRootDir.getAbsolutePath()));
       if (!Utils.createDirectory(operationLogRootDir)) {
         LOG.warn("Unable to create operation log root directory: {}",
-          MDC.of(LogKeys.PATH$.MODULE$, operationLogRootDir.getAbsolutePath()));
+          MDC.of(LogKeys.PATH, operationLogRootDir.getAbsolutePath()));
       }
     }
     if (!operationLogRootDir.canWrite()) {
       LOG.warn("The operation log root directory is not writable: {}",
-        MDC.of(LogKeys.PATH$.MODULE$, operationLogRootDir.getAbsolutePath()));
+        MDC.of(LogKeys.PATH, operationLogRootDir.getAbsolutePath()));
     }
     sessionLogDir = new File(operationLogRootDir, sessionHandle.getHandleIdentifier().toString());
     isOperationLogEnabled = true;
     if (!sessionLogDir.exists()) {
       if (!sessionLogDir.mkdir()) {
         LOG.warn("Unable to create operation log session directory: {}",
-          MDC.of(LogKeys.PATH$.MODULE$, sessionLogDir.getAbsolutePath()));
+          MDC.of(LogKeys.PATH, sessionLogDir.getAbsolutePath()));
         isOperationLogEnabled = false;
       }
     }
     if (isOperationLogEnabled) {
       LOG.info("Operation log session directory is created: {}",
-        MDC.of(LogKeys.PATH$.MODULE$, sessionLogDir.getAbsolutePath()));
+        MDC.of(LogKeys.PATH, sessionLogDir.getAbsolutePath()));
     }
   }
 
@@ -610,7 +609,7 @@ public class HiveSessionImpl implements HiveSession {
       String tableName, String columnName)  throws HiveSQLException {
     acquire(true);
     String addedJars = Utilities.getResourceFiles(hiveConf, SessionState.ResourceType.JAR);
-    if (SparkStringUtils.isNotBlank(addedJars)) {
+    if (Utils.isNotBlank(addedJars)) {
        IMetaStoreClient metastoreClient = getSession().getMetaStoreClient();
        metastoreClient.setHiveAddedJars(addedJars);
     }
@@ -661,7 +660,7 @@ public class HiveSessionImpl implements HiveSession {
           operationManager.closeOperation(opHandle);
         } catch (Exception e) {
           LOG.warn("Exception is thrown closing operation {}", e,
-            MDC.of(LogKeys.OPERATION_HANDLE$.MODULE$, opHandle));
+            MDC.of(LogKeys.OPERATION_HANDLE, opHandle));
         }
       }
       opHandleSet.clear();
@@ -710,13 +709,13 @@ public class HiveSessionImpl implements HiveSession {
 
     if (fileAry == null) {
       LOG.error("Unable to access pipeout files in {}",
-        MDC.of(LogKeys.LOCAL_SCRATCH_DIR$.MODULE$, lScratchDir));
+        MDC.of(LogKeys.LOCAL_SCRATCH_DIR, lScratchDir));
     } else {
       for (File file : fileAry) {
         try {
           JavaUtils.deleteRecursively(file);
         } catch (Exception e) {
-          LOG.error("Failed to cleanup pipeout file: {}", e, MDC.of(LogKeys.PATH$.MODULE$, file));
+          LOG.error("Failed to cleanup pipeout file: {}", e, MDC.of(LogKeys.PATH, file));
         }
       }
     }
@@ -728,7 +727,7 @@ public class HiveSessionImpl implements HiveSession {
         JavaUtils.deleteRecursively(sessionLogDir);
       } catch (Exception e) {
         LOG.error("Failed to cleanup session log dir: {}", e,
-          MDC.of(LogKeys.SESSION_HANDLE$.MODULE$, sessionHandle));
+          MDC.of(LogKeys.SESSION_HANDLE, sessionHandle));
       }
     }
   }
@@ -778,7 +777,7 @@ public class HiveSessionImpl implements HiveSession {
           operation.close();
         } catch (Exception e) {
           LOG.warn("Exception is thrown closing timed-out operation {}", e,
-            MDC.of(LogKeys.OPERATION_HANDLE$.MODULE$, operation.getHandle()));
+            MDC.of(LogKeys.OPERATION_HANDLE, operation.getHandle()));
         }
       }
     } finally {
