@@ -2735,7 +2735,11 @@ object TryMakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(year, month, day, hour, min, sec[, timezone]) - Create the current timestamp with local time zone from year, month, day, hour, min, sec and timezone fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.",
+  usage = """
+    _FUNC_(year, month, day, hour, min, sec[, timezone]) - Create the current timestamp with local time zone from year, month, day, hour, min, sec and (optional) timezone fields. If the configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs. Otherwise, it will throw an error instead.
+
+    _FUNC_(date, time[, timezone]) - Create a local date-time from date, time and (optional) timezone fields.
+    """,
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
@@ -2747,6 +2751,8 @@ object TryMakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
               0 to 60. If the sec argument equals to 60, the seconds field is set
               to 0 and 1 minute is added to the final timestamp.
       * timezone - the time zone identifier. For example, CET, UTC and etc.
+      * date - a date to represent, from 0001-01-01 to 9999-12-31
+      * time - a local time to represent, from 00:00:00 to 23:59:59.999999
   """,
   examples = """
     Examples:
@@ -2758,6 +2764,10 @@ object TryMakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
        2019-07-01 00:00:00
       > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
        NULL
+      > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887');
+       2014-12-28 06:30:45.887
+      > SELECT _FUNC_(DATE'2014-12-28', TIME'6:30:45.887', 'CET');
+       2014-12-27 21:30:45.887
   """,
   group = "datetime_funcs",
   since = "3.4.0")
@@ -2765,7 +2775,16 @@ object TryMakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
 object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
-    if (numArgs == 6 || numArgs == 7) {
+    if (numArgs == 2 || numArgs == 3) {
+      // Overload for: date, time[, timezone].
+      MakeTimestampFromDateTime(
+        expressions(0),
+        Some(expressions(1)),
+        expressions.drop(2).lastOption
+      )
+    }
+    else if (numArgs == 6 || numArgs == 7) {
+      // Overload for: year, month, day, hour, min, sec[, timezone].
       MakeTimestamp(
         expressions(0),
         expressions(1),
@@ -2776,7 +2795,7 @@ object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
         expressions.drop(6).lastOption,
         dataType = TimestampType)
     } else {
-      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(6), numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2, 6), numArgs)
     }
   }
 }
