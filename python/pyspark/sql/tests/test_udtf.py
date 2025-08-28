@@ -2925,8 +2925,8 @@ class BaseUDTFTestsMixin:
 
     def test_udtf_with_collated_string_types(self):
         @udtf(
-            "out1 string, out2 string collate UTF8_BINARY, out3 string collate UTF8_LCASE,"
-            " out4 string collate UNICODE"
+            returnType="out1 string, out2 string collate UTF8_BINARY, "
+            "out3 string collate UTF8_LCASE, out4 string collate UNICODE"
         )
         class MyUDTF:
             def eval(self, v1, v2, v3, v4):
