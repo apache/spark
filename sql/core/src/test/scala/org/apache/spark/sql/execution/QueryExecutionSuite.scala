@@ -456,6 +456,15 @@ class QueryExecutionSuite extends SharedSparkSession {
     }
   }
 
+  test("determineShuffleCleanupMode should return correct mode based on SQL configuration") {
+    withSQLConf((SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, "false")) {
+      assert(QueryExecution.determineShuffleCleanupMode(conf) === DoNotCleanup)
+    }
+    withSQLConf((SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, "true")) {
+      assert(QueryExecution.determineShuffleCleanupMode(conf) === RemoveShuffleFiles)
+    }
+  }
+
   case class MockCallbackEagerCommand(
       var trackerAnalyzed: QueryPlanningTracker = null,
       var trackerReadyForExecution: QueryPlanningTracker = null)
