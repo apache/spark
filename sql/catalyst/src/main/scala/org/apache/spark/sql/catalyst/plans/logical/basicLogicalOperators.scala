@@ -1883,17 +1883,18 @@ trait HasPartitionExpressions extends SQLConfHelper {
     } else {
       val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
       require(sortOrder.isEmpty || nonSortOrder.isEmpty,
-        s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of type " +
-        "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
-        "means `HashPartitioning`. In this case we have:" +
-        s"""
-           |SortOrder: $sortOrder
-           |NonSortOrder: $nonSortOrder
-       """.stripMargin)
-    if (sortOrder.nonEmpty) {
-      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
-    } else {
-      HashPartitioning(partitionExpressions, numPartitions)
+        s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of " +
+          "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
+          "means `HashPartitioning`. In this case we have:" +
+          s"""
+             |SortOrder: $sortOrder
+             |NonSortOrder: $nonSortOrder
+         """.stripMargin)
+      if (sortOrder.nonEmpty) {
+        RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
+      } else {
+        HashPartitioning(partitionExpressions, numPartitions)
+      }
     }
   }
 }
