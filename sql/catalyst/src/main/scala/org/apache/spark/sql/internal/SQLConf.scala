@@ -4003,14 +4003,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val PYTHON_TABLE_UDF_TYPE_CORERION_ENABLED =
-    buildConf("spark.sql.execution.pythonUDTF.typeCoercion.enabled")
-      .internal()
-      .doc("When true, enable type coercion for Python UDTFs. This means if the output schema " +
-        "is different from the specified schema, it will result in a type coercion.")
-      .version("4.1.0")
-      .booleanConf
-      .createWithDefault(true)
 
   val PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED =
     buildConf("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled")

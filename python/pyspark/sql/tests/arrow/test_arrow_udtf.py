@@ -190,14 +190,9 @@ class ArrowUDTFTestsMixin:
                 )
                 yield result_table
 
-        if self.spark.conf.get("spark.sql.execution.pythonUDTF.typeCoercion.enabled").lower() == "false":
-            with self.assertRaisesRegex(PythonException, "Arrow UDTFs require the return type to match the expected Arrow type. Expected: int32, but got: string."):
-                result_df = MismatchedSchemaUDTF()
-                result_df.collect()
-        else:
-            with self.assertRaisesRegex(PythonException, "Failed to parse string: 'wrong_col' as a scalar of type int32"):
-                result_df = MismatchedSchemaUDTF()
-                result_df.collect()
+        with self.assertRaisesRegex(PythonException, "Failed to parse string: 'wrong_col' as a scalar of type int32"):
+            result_df = MismatchedSchemaUDTF()
+            result_df.collect()
 
     def test_arrow_udtf_sql_with_aggregation(self):
         @arrow_udtf(returnType="category string, count int")
@@ -336,15 +331,10 @@ class ArrowUDTFTestsMixin:
                 )
                 yield result_table
 
-        if self.spark.conf.get("spark.sql.execution.pythonUDTF.typeCoercion.enabled").lower() == "false":
-            with self.assertRaisesRegex(PythonException, "Arrow UDTFs require the return type to match the expected Arrow type. Expected: int32, but got: int64."):
-                result_df = LongToIntUDTF()
-                result_df.collect()
-        else:
-            # Should now succeed with automatic coercion
-            result_df = LongToIntUDTF()
-            expected_df = self.spark.createDataFrame([(1,), (2,), (3,)], "id int")
-            assertDataFrameEqual(result_df, expected_df)
+        # Should succeed with automatic coercion
+        result_df = LongToIntUDTF()
+        expected_df = self.spark.createDataFrame([(1,), (2,), (3,)], "id int")
+        assertDataFrameEqual(result_df, expected_df)
 
     def test_arrow_udtf_type_coercion_string_to_int(self):
         @arrow_udtf(returnType="id int")
@@ -358,15 +348,10 @@ class ArrowUDTFTestsMixin:
                 )
                 yield result_table
         
-        if self.spark.conf.get("spark.sql.execution.pythonUDTF.typeCoercion.enabled").lower() == "false":
-            with self.assertRaisesRegex(PythonException, "Arrow UDTFs require the return type to match the expected Arrow type. Expected: int32, but got: string."):
-                result_df = StringToIntUDTF()
-                result_df.collect()
-        else:
-            # Should fail with Arrow cast exception since string cannot be cast to int
-            with self.assertRaisesRegex(PythonException, "Failed to parse string: 'xyz' as a scalar of type int32"):
-                result_df = StringToIntUDTF()
-                result_df.collect()
+        # Should fail with Arrow cast exception since string cannot be cast to int
+        with self.assertRaisesRegex(PythonException, "Failed to parse string: 'xyz' as a scalar of type int32"):
+            result_df = StringToIntUDTF()
+            result_df.collect()
 
 
     def test_return_type_coercion_success(self):
@@ -380,14 +365,9 @@ class ArrowUDTFTestsMixin:
                 )
                 yield result_table
 
-        if self.spark.conf.get("spark.sql.execution.pythonUDTF.typeCoercion.enabled").lower() == "false":
-            with self.assertRaisesRegex(PythonException, "Arrow UDTFs require the return type to match the expected Arrow type. Expected: int32, but got: int64."):
-                result_df = CoercionSuccessUDTF()
-                result_df.collect()
-        else:
-            result_df = CoercionSuccessUDTF()
-            expected_df = self.spark.createDataFrame([(10,), (20,), (30,)], "value int")
-            assertDataFrameEqual(result_df, expected_df)
+        result_df = CoercionSuccessUDTF()
+        expected_df = self.spark.createDataFrame([(10,), (20,), (30,)], "value int")
+        assertDataFrameEqual(result_df, expected_df)
 
     def test_return_type_coercion_overflow(self):
         @arrow_udtf(returnType="value int")
@@ -420,16 +400,11 @@ class ArrowUDTFTestsMixin:
                 )
                 yield result_table
 
-        if self.spark.conf.get("spark.sql.execution.pythonUDTF.typeCoercion.enabled").lower() == "false":
-            with self.assertRaisesRegex(PythonException, "Arrow UDTFs require the return type to match the expected Arrow type. Expected: int32, but got: int64."):
-                result_df = MultipleColumnCoercionUDTF()
-                result_df.collect()
-        else:
-            result_df = MultipleColumnCoercionUDTF()
-            expected_df = self.spark.createDataFrame(
-                [(1, 10.5), (2, 20.7), (3, 30.9)], "id int, price float"
-            )
-            assertDataFrameEqual(result_df, expected_df)
+        result_df = MultipleColumnCoercionUDTF()
+        expected_df = self.spark.createDataFrame(
+            [(1, 10.5), (2, 20.7), (3, 30.9)], "id int, price float"
+        )
+        assertDataFrameEqual(result_df, expected_df)
 
     def test_arrow_udtf_with_empty_column_result(self):
         @arrow_udtf(returnType=StructType())
@@ -693,18 +668,6 @@ class ArrowUDTFTests(ArrowUDTFTestsMixin, ReusedSQLTestCase):
     pass
 
 
-class ArrowUDTFTestsWithoutTypeCoercion(ArrowUDTFTestsMixin, ReusedSQLTestCase):
-    @classmethod
-    def setUpClass(cls):
-        super(ArrowUDTFTestsWithoutTypeCoercion, cls).setUpClass()
-        cls.spark.conf.set("spark.sql.execution.pythonUDTF.typeCoercion.enabled", "false")
-
-    @classmethod
-    def tearDownClass(cls):
-        try:
-            cls.spark.conf.unset("spark.sql.execution.pythonUDTF.typeCoercion.enabled")
-        finally:
-            super(ArrowUDTFTestsWithoutTypeCoercion, cls).tearDownClass()
 
 if __name__ == "__main__":
     from pyspark.sql.tests.arrow.test_arrow_udtf import *  # noqa: F401

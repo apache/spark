@@ -1344,11 +1344,8 @@ def read_udtf(pickleSer, infile, eval_type):
         num_table_arg_offsets = read_int(infile)
         table_arg_offsets = [read_int(infile) for _ in range(num_table_arg_offsets)]
         # Use PyArrow-native serializer for Arrow UDTFs with potential UDT support
-        returnValuesTypeCorerion = runner_conf.get(
-            "spark.sql.execution.pythonUDTF.typeCoercion.enabled", "true"
-        ).lower() == "true"
         ser = ArrowStreamArrowUDTFSerializer(
-            table_arg_offsets=table_arg_offsets, arrow_cast=returnValuesTypeCorerion
+            table_arg_offsets=table_arg_offsets
         )
     else:
         # Each row is a group so do not batch but send one by one.
