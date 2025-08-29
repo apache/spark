@@ -4036,7 +4036,7 @@ def make_timestamp_ntz(
     ...
 
 
-def make_timestamp_ntz(
+def make_timestamp_ntz(  # type: ignore[misc]
     yearsOrDate: "ColumnOrName",
     monthsOrTime: "ColumnOrName",
     days: Optional["ColumnOrName"] = None,
@@ -4094,7 +4094,7 @@ def try_make_timestamp_ntz(
     ...
 
 
-def try_make_timestamp_ntz(
+def try_make_timestamp_ntz(  # type: ignore[misc]
     yearsOrDate: "ColumnOrName",
     monthsOrTime: "ColumnOrName",
     days: Optional["ColumnOrName"] = None,
