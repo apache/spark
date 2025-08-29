@@ -171,11 +171,11 @@ case class ThetaSketchAgg(
    *   An input row
    */
   override def update(updateBuffer: ThetaSketchState, input: InternalRow): ThetaSketchState = {
-    // Return early return for null values.
+    // Return early for null values.
     val v = left.eval(input)
     if (v == null) return UpdatableSketchBuffer(sketch)
 
-    // Return early return for non-updatable buffers. The return case should never happen here.
+    // Return early for non-updatable buffers. The return case should never happen here.
     val sketch = updateBuffer match {
       case UpdatableSketchBuffer(s) => s
       case _ => return updateBuffer
