@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.{Either, Left, Right}
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.VariableReference
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.EXECUTE_IMMEDIATE
@@ -56,11 +56,25 @@ case class ExecuteExecutableDuringAnalysis(sparkSession: SparkSession) extends R
           sparkSession.sql(queryString)
         }
       } else {
-        // For parameterized queries, substitute parameters manually
-        val paramValues = cmd.args.map(_.eval(null))
-        val substitutedQuery = substituteParameters(queryString, paramValues)
+        // For parameterized queries, build parameter map from USING clause
+        // The args are already resolved by outer parameter resolution
+        val (positionalParams, namedParams) = separateParameters(cmd.args)
+
         AnalysisContext.withExecuteImmediateContext {
-          sparkSession.sql(substitutedQuery)
+          if (namedParams.nonEmpty && positionalParams.isEmpty) {
+            // Only named parameters: use Map overload
+            sparkSession.sql(queryString, namedParams)
+          } else if (positionalParams.nonEmpty && namedParams.isEmpty) {
+            // Only positional parameters: use Array overload
+            sparkSession.sql(queryString, positionalParams.toArray)
+          } else if (namedParams.isEmpty && positionalParams.isEmpty) {
+            // No parameters
+            sparkSession.sql(queryString)
+          } else {
+            // Mixed parameters: not directly supported, need manual substitution
+            val substitutedQuery = substituteNamedParameters(queryString, namedParams)
+            sparkSession.sql(substitutedQuery, positionalParams.toArray)
+          }
         }
       }
 
@@ -115,27 +129,106 @@ case class ExecuteExecutableDuringAnalysis(sparkSession: SparkSession) extends R
   }
 
   private def substituteParameters(queryString: String, paramValues: Seq[Any]): String = {
+    // For now, just handle positional parameters
+    // Named parameters require more complex resolution that involves the original args expressions
     var substituted = queryString
     var paramIndex = 0
 
     // Handle positional parameters (?)
     while (substituted.contains("?") && paramIndex < paramValues.length) {
       val value = paramValues(paramIndex)
-      val sqlLiteral = if (value == null) {
-        "NULL"
-      } else {
-        value match {
-          case s: String => s"'$s'"
-          case n: Number => n.toString
-          case b: Boolean => b.toString
-          case _ => s"'$value'"
-        }
-      }
+      val sqlLiteral = formatSqlLiteral(value)
       substituted = substituted.replaceFirst("\\?", sqlLiteral)
       paramIndex += 1
     }
 
     substituted
+  }
+
+  private def substituteParametersWithNames(
+      queryString: String,
+      args: Seq[Expression]): String = {
+    try {
+      var substituted = queryString
+      val paramMap = scala.collection.mutable.Map[String, Any]()
+      var positionalIndex = 0
+
+      // Build parameter map from args
+      args.foreach {
+        case alias: Alias =>
+          // Named parameter: "value AS paramName"
+          val paramName = alias.name
+          val paramValue = alias.child.eval(null)
+          paramMap(paramName) = paramValue
+        case expr =>
+          // Positional parameter: just a value
+          val paramValue = expr.eval(null)
+          // Handle positional parameters first
+          if (substituted.contains("?")) {
+            val sqlLiteral = formatSqlLiteral(paramValue)
+            substituted = substituted.replaceFirst("\\?", sqlLiteral)
+          }
+          positionalIndex += 1
+      }
+
+      // Substitute named parameters (:paramName)
+      paramMap.foreach { case (paramName, paramValue) =>
+        val sqlLiteral = formatSqlLiteral(paramValue)
+        val pattern = s":$paramName\\b" // Use word boundary to avoid partial matches
+        substituted = substituted.replaceAll(pattern, sqlLiteral)
+      }
+
+      substituted
+    } catch {
+      case e: Exception =>
+        throw new RuntimeException(
+          s"Error in parameter substitution for query '$queryString'", e)
+    }
+  }
+
+  private def separateParameters(args: Seq[Expression]): (Seq[Any], Map[String, Any]) = {
+    val positionalParams = scala.collection.mutable.ListBuffer[Any]()
+    val namedParams = scala.collection.mutable.Map[String, Any]()
+
+    args.foreach {
+      case alias: Alias =>
+        // Named parameter: "value AS paramName"
+        val paramName = alias.name
+        val paramValue = alias.child.eval(null)
+        namedParams(paramName) = paramValue
+      case expr =>
+        // Positional parameter: just a value
+        val paramValue = expr.eval(null)
+        positionalParams += paramValue
+    }
+
+    (positionalParams.toSeq, namedParams.toMap)
+  }
+
+  private def substituteNamedParameters(
+      queryString: String, namedParams: Map[String, Any]): String = {
+    var substituted = queryString
+    // Substitute named parameters (:paramName)
+    namedParams.foreach { case (paramName, paramValue) =>
+      val sqlLiteral = formatSqlLiteral(paramValue)
+      val pattern = s":$paramName\\b" // Use word boundary to avoid partial matches
+      substituted = substituted.replaceAll(pattern, sqlLiteral)
+    }
+
+    substituted
+  }
+
+  private def formatSqlLiteral(value: Any): String = {
+    if (value == null) {
+      "NULL"
+    } else {
+      value match {
+        case s: String => s"'$s'"
+        case n: Number => n.toString
+        case b: Boolean => b.toString
+        case _ => s"'$value'"
+      }
+    }
   }
 
   private def handleTargetVariables(
