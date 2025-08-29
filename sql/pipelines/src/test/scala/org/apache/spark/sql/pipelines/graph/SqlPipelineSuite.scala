@@ -18,6 +18,7 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructType}
@@ -289,13 +290,12 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
       Row(1, 1),
       Row(2, 0)
     )
+    val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
 
     Seq("mv", "st").foreach { tableName =>
       // check table partition columns
-      val tableMeta = spark.sessionState.catalog.getTableMetadata(
-        fullyQualifiedIdentifier(tableName)
-      )
-      assert(tableMeta.partitionColumnNames == Seq("id_mod"))
+      val table = catalog.loadTable(Identifier.of(Array("test_db"), tableName))
+      assert(table.partitioning().map(_.references().head.fieldNames().head) === Array("id_mod"))
 
       // check table data
       checkAnswer(
