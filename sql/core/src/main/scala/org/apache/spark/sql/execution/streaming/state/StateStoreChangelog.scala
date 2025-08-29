@@ -447,7 +447,7 @@ abstract class StateStoreChangelogReader(
     Serialization.read[Array[LineageItem]](lineageStr)
   }
 
-  // The array contains lineage information from [snapShotVersion, version]
+  // The array contains lineage information from [mostRecentSnapShotVersion, version - 1] inclusive
   lazy val lineage: Array[LineageItem] = readLineage()
 
   def version: Short
