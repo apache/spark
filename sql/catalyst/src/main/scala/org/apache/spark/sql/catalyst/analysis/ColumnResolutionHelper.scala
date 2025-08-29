@@ -233,6 +233,70 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
   }
 
+  /**
+   * Look up variable by nameParts.
+   * If in SQL Script, first check local variables, unless in EXECUTE IMMEDIATE
+   * (EXECUTE IMMEDIATE generated query cannot access local variables).
+   * if not found fall back to session variables.
+   * @param nameParts NameParts of the variable.
+   * @return Reference to the variable.
+   */
+  def lookupVariable(nameParts: Seq[String]): Option[VariableReference] = {
+    // The temp variables live in `SYSTEM.SESSION`, and the name can be qualified or not.
+    def maybeTempVariableName(nameParts: Seq[String]): Boolean = {
+      nameParts.length == 1 || {
+        if (nameParts.length == 2) {
+          nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+        } else if (nameParts.length == 3) {
+          nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+            nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+        } else {
+          false
+        }
+      }
+    }
+
+    val namePartsCaseAdjusted = if (conf.caseSensitiveAnalysis) {
+      nameParts
+    } else {
+      nameParts.map(_.toLowerCase(Locale.ROOT))
+    }
+
+    SqlScriptingContextManager.get().map(_.getVariableManager)
+      // In EXECUTE IMMEDIATE context, only allow session variables (system.session.X),
+      // not local variables
+      .filterNot { _ =>
+        AnalysisContext.get.isExecuteImmediate && !maybeTempVariableName(nameParts)
+      }
+      // If variable name is qualified with session.<varName> treat it as a session variable.
+      .filterNot(_ =>
+        nameParts.length > 2
+          || (nameParts.length == 2 && isForbiddenLabelOrForVariableName(nameParts.head)))
+      .flatMap(_.get(namePartsCaseAdjusted))
+      .map { varDef =>
+        VariableReference(
+          nameParts,
+          FakeLocalCatalog,
+          Identifier.of(Array(varDef.identifier.namespace().last), namePartsCaseAdjusted.last),
+          varDef)
+      }
+      .orElse(
+        if (maybeTempVariableName(nameParts)) {
+          catalogManager.tempVariableManager
+            .get(namePartsCaseAdjusted)
+            .map { varDef =>
+              VariableReference(
+                nameParts,
+                FakeSystemCatalog,
+                Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), namePartsCaseAdjusted.last),
+                varDef
+              )}
+        } else {
+          None
+        }
+      )
+  }
+
   // Resolves `UnresolvedAttribute` to its value.
   protected def resolveVariables(e: Expression): Expression = {
     val variableResolution = new VariableResolution(catalogManager.tempVariableManager)

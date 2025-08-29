@@ -31,15 +31,16 @@ import org.apache.spark.sql.types.StringType
 /**
  * Logical plan representing execute immediate query.
  *
- * @param args parameters of query
- * @param query query string or variable
+ * @param queryParam the query expression (first child)
+ * @param args parameters from USING clause (subsequent children)
  * @param targetVariables variables to store the result of the query
  */
 case class ExecuteImmediateQuery(
+    queryParam: Expression,
     args: Seq[Expression],
-    query: Either[String, UnresolvedAttribute],
     targetVariables: Seq[UnresolvedAttribute])
   extends UnresolvedLeafNode {
+
   final override val nodePatterns: Seq[TreePattern] = Seq(EXECUTE_IMMEDIATE)
 }
 
@@ -47,13 +48,13 @@ case class ExecuteImmediateQuery(
  * Logical plan representing a resolved execute immediate command that will recursively
  * invoke SQL execution.
  *
- * @param args parameters of query
- * @param query query string or variable
+ * @param queryParam the resolved query expression
+ * @param args parameters from USING clause
  * @param targetVariables variables to store the result of the query
  */
 case class ExecuteImmediateCommand(
+    queryParam: Expression,
     args: Seq[Expression],
-    query: Either[String, VariableReference],
     targetVariables: Seq[VariableReference])
   extends UnaryNode with ExecutableDuringAnalysis {
 
@@ -140,25 +141,22 @@ class SubstituteExecuteImmediate(
 
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
-      case e @ ExecuteImmediateQuery(expressions, _, _) if expressions.exists(!_.resolved) =>
-        e.copy(args = resolveArguments(expressions))
+      case e @ ExecuteImmediateQuery(queryParam, args, targetVariables) =>
+        // Check if all expressions are resolved (they should be resolved by ResolveReferences now)
+        val queryParamResolved = queryParam.resolved
+        val allArgsResolved = args.forall(_.resolved)
+        val targetVariablesResolved = targetVariables.forall(_.resolved)
 
-      case ExecuteImmediateQuery(expressions, query, targetVariables)
-        if expressions.forall(_.resolved) =>
-        // Resolve query variable reference if it's a variable
-        val resolvedQuery = query match {
-          case Left(str) => Left(str)
-          case Right(attr) =>
-            val variable = getVariableReference(attr, attr.nameParts)
-            Right(variable)
+        if (queryParamResolved && allArgsResolved && targetVariablesResolved) {
+          // All resolved - transform to command
+          val finalTargetVars = targetVariables.map(attr =>
+            getVariableReference(attr, attr.nameParts))
+
+          ExecuteImmediateCommand(queryParam, args, finalTargetVars)
+        } else {
+          // Not all resolved yet - wait for next iteration
+          e
         }
-
-        // Resolve target variables
-        val resolvedTargetVars = targetVariables.map(attr =>
-          getVariableReference(attr, attr.nameParts))
-
-        // Transform into a command that will handle recursive execution
-        ExecuteImmediateCommand(expressions, resolvedQuery, resolvedTargetVars)
     }
 
   private def parseStatement(
@@ -193,6 +191,15 @@ class SubstituteExecuteImmediate(
     }
 
     plan
+  }
+
+
+
+  private def isQueryResolved(query: Either[String, UnresolvedAttribute]): Boolean = {
+    query match {
+      case Left(_) => true // String literals are always resolved
+      case Right(attr) => attr.resolved // Check if the attribute is resolved
+    }
   }
 
   private def getVariableReference(expr: Expression, nameParts: Seq[String]): VariableReference = {
