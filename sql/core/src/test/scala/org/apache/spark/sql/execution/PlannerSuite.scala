@@ -1449,8 +1449,6 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   test("SPARK-53401: groupBy on a superset of partition keys should reuse the shuffle") {
     val df = spark.range(100).select($"id" % 10 as "key1", $"id" as "value")
-    // groupBy adds a literal to the grouping keys. ShufflePartitionIdPassThrough(key1) should still
-    // satisfy ClusteredDistribution(key1, lit(1)).
     val grouped = df.repartitionById(10, $"key1").groupBy($"key1", lit(1)).count()
     checkShuffleCount(grouped, 1)
   }
@@ -1482,11 +1480,8 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       spark.range(100).select($"id" % 10 as "key", $"id" as "v2")
         .repartitionById(10, $"key")
 
-    // The join will be a SortMergeJoin. Each side has a shuffle from the repartition call.
-    // The join's output will be hash-partitioned by "key".
     val joined = df1.join(df2, "key")
 
-    // This groupBy should reuse the partitioning from the join's output.
     val grouped = joined.groupBy("key").count()
 
     // Total shuffles: one for df1, one for df2. The groupBy reuses the output partitioning.
