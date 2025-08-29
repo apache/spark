@@ -850,8 +850,8 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
 
   test("EXEC IMMEDIATE - non string variable as sqlString parameter") {
     val execImmediatePlan = ExecuteImmediateQuery(
+      UnresolvedAttribute("testVarA"),
       Seq.empty,
-      scala.util.Right(UnresolvedAttribute("testVarA")),
       Seq(UnresolvedAttribute("testVarA")))
 
     assertAnalysisErrorCondition(
@@ -864,8 +864,8 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
 
   test("EXEC IMMEDIATE - Null string as sqlString parameter") {
     val execImmediatePlan = ExecuteImmediateQuery(
+      UnresolvedAttribute("testVarNull"),
       Seq.empty,
-      scala.util.Right(UnresolvedAttribute("testVarNull")),
       Seq(UnresolvedAttribute("testVarNull")))
 
     assertAnalysisErrorCondition(
@@ -877,8 +877,8 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
 
   test("EXEC IMMEDIATE - Unsupported expr for parameter") {
     val execImmediatePlan: LogicalPlan = ExecuteImmediateQuery(
+      Literal("SELECT ?"),
       Seq(UnresolvedAttribute("testVarA"), NaNvl(Literal(1), Literal(1))),
-      scala.util.Left("SELECT ?"),
       Seq.empty)
 
     assertAnalysisErrorCondition(
@@ -891,8 +891,8 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
 
   test("EXEC IMMEDIATE - Name Parametrize query with non named parameters") {
     val execImmediateSetVariablePlan = ExecuteImmediateQuery(
+      Literal("SELECT :first"),
       Seq(Literal(2), new Alias(UnresolvedAttribute("testVarA"), "first")(), Literal(3)),
-      scala.util.Left("SELECT :first"),
       Seq.empty)
 
     assertAnalysisErrorCondition(
@@ -905,8 +905,8 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
 
   test("EXEC IMMEDIATE - INTO specified for COMMAND query") {
     val execImmediateSetVariablePlan = ExecuteImmediateQuery(
+      Literal("SET VAR testVarA = 1"),
       Seq.empty,
-      scala.util.Left("SET VAR testVarA = 1"),
       Seq(UnresolvedAttribute("testVarA")))
 
     assertAnalysisErrorCondition(

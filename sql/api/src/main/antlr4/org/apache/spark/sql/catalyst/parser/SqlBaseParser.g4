@@ -397,25 +397,12 @@ setResetStatement
     ;
 
 executeImmediate
-    : EXECUTE IMMEDIATE queryParam=executeImmediateQueryParam (INTO targetVariable=multipartIdentifierList)? executeImmediateUsing?
+    : EXECUTE IMMEDIATE queryParam=expression (INTO targetVariable=multipartIdentifierList)? executeImmediateUsing?
     ;
 
 executeImmediateUsing
     : USING LEFT_PAREN params=namedExpressionSeq RIGHT_PAREN
     | USING params=namedExpressionSeq
-    ;
-
-executeImmediateQueryParam
-    : stringLit
-    | multipartIdentifier
-    ;
-
-executeImmediateArgument
-    : (constant|multipartIdentifier) (AS name=errorCapturingIdentifier)?
-    ;
-
-executeImmediateArgumentSeq
-    : executeImmediateArgument (COMMA executeImmediateArgument)*
     ;
 
 timezone

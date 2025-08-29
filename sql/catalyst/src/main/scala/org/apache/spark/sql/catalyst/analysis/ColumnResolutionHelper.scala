@@ -265,8 +265,11 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
 
     SqlScriptingContextManager.get().map(_.getVariableManager)
-      // If we are in EXECUTE IMMEDIATE lookup only session variables.
-      .filterNot(_ => AnalysisContext.get.isExecuteImmediate)
+      // In EXECUTE IMMEDIATE context, only allow session variables (system.session.X),
+      // not local variables
+      .filterNot { _ =>
+        AnalysisContext.get.isExecuteImmediate && !maybeTempVariableName(nameParts)
+      }
       // If variable name is qualified with session.<varName> treat it as a session variable.
       .filterNot(_ =>
         nameParts.length > 2

@@ -422,6 +422,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       AddMetadataColumns ::
       DeduplicateRelations ::
       ResolveCollationName ::
+      new SubstituteExecuteImmediate(
+        catalogManager,
+        resolveChild = (plan: LogicalPlan) => plan,
+        checkAnalysis = (_: LogicalPlan) => ()) ::
       new ResolveReferences(catalogManager) ::
       // Please do not insert any other rules in between. See the TODO comments in rule
       // ResolveLateralColumnAliasReference for more details.
@@ -472,10 +476,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       RewriteMergeIntoTable ::
       MoveParameterizedQueriesDown ::
       BindParameters ::
-      new SubstituteExecuteImmediate(
-        catalogManager,
-        resolveChild = executeSameContext,
-        checkAnalysis = checkAnalysis) ::
       typeCoercionRules() ++
       Seq(
         ResolveWithCTE,
@@ -1773,8 +1773,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case s: Sort if !s.resolved || s.missingInput.nonEmpty =>
         resolveReferencesInSort(s)
 
-      // Pass for Execute Immediate as arguments will be resolved by [[SubstituteExecuteImmediate]].
-      case e : ExecuteImmediateQuery => e
+      // Remove this case - let ResolveReferences handle ExecuteImmediateQuery expressions normally
 
       case d: DataFrameDropColumns if !d.resolved =>
         resolveDataFrameDropColumns(d)

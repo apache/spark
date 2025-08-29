@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.util.{Either, Left, Right}
-
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, LogicalPlan}
@@ -42,8 +40,8 @@ case class ExecuteExecutableDuringAnalysis(sparkSession: SparkSession) extends R
 
   private def executeImmediate(cmd: ExecuteImmediateCommand): LogicalPlan = {
     try {
-      // Extract the query string
-      val queryString = extractQueryString(cmd.query)
+      // Extract the query string from the queryParam expression
+      val queryString = extractQueryString(cmd.queryParam)
 
       // Parse and validate the query
       val parsedPlan = sparkSession.sessionState.sqlParser.parsePlan(queryString)
@@ -98,22 +96,24 @@ case class ExecuteExecutableDuringAnalysis(sparkSession: SparkSession) extends R
     }
   }
 
-  private def extractQueryString(queryExpr: Either[String, VariableReference]): String = {
-    queryExpr match {
-      case Left(literal) => literal
-      case Right(variable) =>
-        // Evaluate the variable reference
-        if (!variable.dataType.sameType(StringType)) {
-          throw QueryCompilationErrors.invalidExecuteImmediateVariableType(variable.dataType)
-        }
-
-        val value = variable.eval(null)
-        if (value == null) {
-          throw QueryCompilationErrors.nullSQLStringExecuteImmediate(variable.identifier.name())
-        }
-
-        value.toString
+  private def extractQueryString(queryExpr: Expression): String = {
+    // Ensure the expression resolves to string type
+    if (!queryExpr.dataType.sameType(StringType)) {
+      throw QueryCompilationErrors.invalidExecuteImmediateVariableType(queryExpr.dataType)
     }
+
+    // Evaluate the expression to get the query string
+    val value = queryExpr.eval(null)
+    if (value == null) {
+      queryExpr match {
+        case variable: VariableReference =>
+          throw QueryCompilationErrors.nullSQLStringExecuteImmediate(variable.identifier.name())
+        case _ =>
+          throw QueryCompilationErrors.nullSQLStringExecuteImmediate("query expression")
+      }
+    }
+
+    value.toString
   }
 
   private def validateQuery(queryString: String, parsedPlan: LogicalPlan): Unit = {
@@ -187,6 +187,7 @@ case class ExecuteExecutableDuringAnalysis(sparkSession: SparkSession) extends R
   }
 
   private def separateParameters(args: Seq[Expression]): (Seq[Any], Map[String, Any]) = {
+    import org.apache.spark.sql.catalyst.expressions.{EmptyRow, Literal}
     val positionalParams = scala.collection.mutable.ListBuffer[Any]()
     val namedParams = scala.collection.mutable.Map[String, Any]()
 
@@ -194,11 +195,25 @@ case class ExecuteExecutableDuringAnalysis(sparkSession: SparkSession) extends R
       case alias: Alias =>
         // Named parameter: "value AS paramName"
         val paramName = alias.name
-        val paramValue = alias.child.eval(null)
+        // Evaluate the expression (should already be resolved by analyzer)
+        val paramValue = if (alias.child.foldable) {
+          // For foldable expressions, create a literal (similar to ConstantFolding)
+          Literal.create(alias.child.eval(EmptyRow), alias.child.dataType).value
+        } else {
+          // For non-foldable expressions, just evaluate
+          alias.child.eval(EmptyRow)
+        }
         namedParams(paramName) = paramValue
       case expr =>
         // Positional parameter: just a value
-        val paramValue = expr.eval(null)
+        // Evaluate the expression (should already be resolved by analyzer)
+        val paramValue = if (expr.foldable) {
+          // For foldable expressions, create a literal (similar to ConstantFolding)
+          Literal.create(expr.eval(EmptyRow), expr.dataType).value
+        } else {
+          // For non-foldable expressions, just evaluate
+          expr.eval(EmptyRow)
+        }
         positionalParams += paramValue
     }
 
