@@ -360,14 +360,15 @@ class RocksDB(
     while (buf.last.version > startVersion) {
       val prevSmallestVersion = buf.last.version
       val lineage = getLineageFromChangelogFile(buf.last.version, Some(buf.last.checkpointUniqueId))
-      // lineage array is sorted in increasing order, we need to reverse it
-      val lineageSorted = lineage.filter(_.version >= startVersion).sortBy(_.version).reverse
+      // lineage array is sorted in increasing order, we need to make it decreasing
+      val lineageSortedDecreasing = lineage.filter(_.version >= startVersion).sortBy(-_.version)
       // append to the buffer in reverse order, so the buffer is always decreasing in version
-      buf.appendAll(lineageSorted)
+      buf.appendAll(lineageSortedDecreasing)
 
       // to prevent infinite loop if we make no progress, throw an exception
       if (buf.last.version == prevSmallestVersion) {
-        throw new IllegalStateException(s"Lineage is not complete")
+        throw QueryExecutionErrors.invalidCheckpointLineage(printLineageItems(buf.reverse.toArray),
+          s"Cannot find version smaller than ${buf.last.version} in lineage.")
       }
     }
 
@@ -375,15 +376,22 @@ class RocksDB(
     val ret = buf.reverse.toArray
 
     // Sanity checks
-    assert(ret.head.version == startVersion,
-      s"Expected first lineage version to be $startVersion, but got ${ret.head.version}")
-    assert(ret.last.version == endVersion,
-      s"Expected last lineage version to be $endVersion, but got ${ret.last.version}")
-    // Assert that the lineage array is strictly increasing in version
-    assert(ret.sliding(2).forall {
+    if (ret.head.version != startVersion) {
+      throw QueryExecutionErrors.invalidCheckpointLineage(printLineageItems(ret),
+        s"Lineage does not start with startVersion: $startVersion.")
+    }
+    if (ret.last.version != endVersion) {
+      throw QueryExecutionErrors.invalidCheckpointLineage(printLineageItems(ret),
+        s"Lineage does not end with endVersion: $endVersion.")
+    }
+    val increasingByOne = ret.sliding(2).forall {
       case Array(prev, next) => prev.version + 1 == next.version
       case _ => true
-    }, s"Lineage array is not strictly increasing in version")
+    }
+    if (!increasingByOne) {
+      throw QueryExecutionErrors.invalidCheckpointLineage(printLineageItems(ret),
+        "Lineage versions are not increasing by one.")
+    }
 
     ret
   }

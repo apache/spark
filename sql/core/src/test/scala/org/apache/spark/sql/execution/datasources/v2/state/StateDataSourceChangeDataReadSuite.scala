@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2.state
 
+import java.sql.Timestamp
 import java.util.UUID
 
 import org.apache.hadoop.conf.Configuration
@@ -25,7 +26,7 @@ import org.scalatest.Assertions
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.{col, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
@@ -421,6 +422,50 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
 
         checkAnswer(stateDf3, expectedDf3)
       }
+    }
+  }
+
+  test("read change feed with delete entries") {
+    withTempDir { tempDir =>
+      val inputData = MemoryStream[(Int, Timestamp)]
+      val df = inputData.toDF()
+        .selectExpr("_1 as key", "_2 as ts")
+        .withWatermark("ts", "1 second")
+        .groupBy(window(col("ts"), "1 second"))
+        .count()
+
+      val ts0 = Timestamp.valueOf("2025-01-01 00:00:00")
+      val ts1 = Timestamp.valueOf("2025-01-01 00:00:01")
+      val ts2 = Timestamp.valueOf("2025-01-01 00:00:02")
+      val ts3 = Timestamp.valueOf("2025-01-01 00:00:03")
+      val ts4 = Timestamp.valueOf("2025-01-01 00:00:04")
+
+      testStream(df, OutputMode.Append)(
+        StartStream(checkpointLocation = tempDir.getAbsolutePath),
+        AddData(inputData, (1, ts0), (2, ts0)),
+        ProcessAllAvailable(),
+        AddData(inputData, (3, ts2)),
+        ProcessAllAvailable(),
+        AddData(inputData, (4, ts3)),
+        ProcessAllAvailable(),
+        StopStream
+      )
+
+      val stateDf = spark.read.format("statestore")
+        .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+        .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+        .load(tempDir.getAbsolutePath)
+
+      val expectedDf = Seq(
+        Row(0L, "update", Row(Row(ts0, ts1)), Row(2), 4),
+        Row(1L, "update", Row(Row(ts2, ts3)), Row(1), 1),
+        Row(2L, "delete", Row(Row(ts0, ts1)), null, 4),
+        Row(2L, "update", Row(Row(ts3, ts4)), Row(1), 4)
+      )
+
+      checkAnswer(stateDf, expectedDf)
+
+      assert(stateDf.filter("change_type = 'delete'").count() > 0)
     }
   }
 }

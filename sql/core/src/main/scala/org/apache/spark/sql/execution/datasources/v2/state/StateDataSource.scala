@@ -600,8 +600,10 @@ object StateSourceOptions extends DataSourceOptions {
     }
 
     if (startOperatorStateUniqueIds.isDefined != endOperatorStateUniqueIds.isDefined) {
-      throw StateDataSourceErrors.internalError(
-        "Reading source across different checkpoint format versions is not supported.")
+      throw StateDataSourceErrors.mixedCheckpointFormatVersionsNotSupported(
+        startBatchId,
+        endBatchId
+      )
     }
 
     if (startOperatorStateUniqueIds.isDefined) {

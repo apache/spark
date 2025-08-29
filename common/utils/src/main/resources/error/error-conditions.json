@@ -308,6 +308,11 @@
       "An error occurred during loading state."
     ],
     "subClass" : {
+      "INVALID_CHECKPOINT_LINEAGE" : {
+        "message" : [
+          "Invalid checkpoint lineage: <lineage>. <message>"
+        ]
+      },
       "CANNOT_FIND_BASE_SNAPSHOT_CHECKPOINT" : {
         "message" : [
           "Cannot find a base snapshot checkpoint with lineage: <lineage>."
@@ -5432,6 +5437,12 @@
       "The checkpoint seems to be only run with older Spark version(s). Run the streaming query with the recent Spark version, so that Spark constructs the state metadata."
     ],
     "sqlState" : "KD006"
+  },
+  "STDS_MIXED_CHECKPOINT_FORMAT_VERSIONS_NOT_SUPPORTED" : {
+    "message" : [
+      "Reading state across different checkpoint format versions is not supported. startBatchId=<startBatchId>, endBatchId=<endBatchId>."
+    ],
+    "sqlState" : "KD002"
   },
   "STDS_REQUIRED_OPTION_UNSPECIFIED" : {
     "message" : [
