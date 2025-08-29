@@ -86,8 +86,7 @@ private[sql] class SessionState(
     val streamingQueryManagerBuilder: () => StreamingQueryManager,
     val listenerManager: ExecutionListenerManager,
     resourceLoaderBuilder: () => SessionResourceLoader,
-    createQueryExecution: (LogicalPlan, CommandExecutionMode.Value,
-      ShuffleCleanupMode) => QueryExecution,
+    createQueryExecution: (LogicalPlan, CommandExecutionMode.Value) => QueryExecution,
     createClone: (SparkSession, SessionState) => SessionState,
     val columnarRules: Seq[ColumnarRule],
     val adaptiveRulesHolder: AdaptiveRulesHolder,
@@ -136,9 +135,8 @@ private[sql] class SessionState(
 
   def executePlan(
       plan: LogicalPlan,
-      mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
-      shuffleCleanUpMode: ShuffleCleanupMode = DoNotCleanup): QueryExecution =
-    createQueryExecution(plan, mode, shuffleCleanUpMode)
+      mode: CommandExecutionMode.Value = CommandExecutionMode.ALL): QueryExecution =
+    createQueryExecution(plan, mode)
 }
 
 private[sql] object SessionState {
