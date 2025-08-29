@@ -217,6 +217,15 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
     shouldNotCast(checkedType, IntegralType)
   }
 
+  test("implicit type cast - TimeType") {
+    val checkedType = TimeType()
+    checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType) ++ datetimeTypes)
+    shouldCast(checkedType, AnyTimeType, AnyTimeType.defaultConcreteType)
+    shouldNotCast(checkedType, DecimalType)
+    shouldNotCast(checkedType, NumericType)
+    shouldNotCast(checkedType, IntegralType)
+  }
+
   test("implicit type cast between two Map types") {
     val sourceType = MapType(IntegerType, IntegerType, true)
     val castableTypes = numericTypes ++ Seq(StringType).filter(!Cast.forceNullable(IntegerType, _))
@@ -1787,7 +1796,7 @@ object TypeCoercionSuite {
   val fractionalTypes: Seq[DataType] =
     Seq(DoubleType, FloatType, DecimalType.SYSTEM_DEFAULT, DecimalType(10, 2))
   val numericTypes: Seq[DataType] = integralTypes ++ fractionalTypes
-  val datetimeTypes: Seq[DataType] = Seq(DateType, TimestampType, TimestampNTZType)
+  val datetimeTypes: Seq[DataType] = Seq(DateType, TimestampType, TimestampNTZType, TimeType())
   val intervalTypes: Seq[DataType] = Seq(CalendarIntervalType,
     DayTimeIntervalType.defaultConcreteType, YearMonthIntervalType.defaultConcreteType)
   val atomicTypes: Seq[DataType] =
