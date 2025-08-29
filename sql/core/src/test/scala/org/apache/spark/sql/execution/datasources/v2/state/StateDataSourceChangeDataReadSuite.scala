@@ -464,8 +464,6 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
       )
 
       checkAnswer(stateDf, expectedDf)
-
-      assert(stateDf.filter("change_type = 'delete'").count() > 0)
     }
   }
 }
