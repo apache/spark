@@ -422,6 +422,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       WindowsSubstitution,
       EliminateUnions,
       EliminateLazyExpression),
+    Batch("Apply Limit All", Once, ApplyLimitAll),
     Batch("Disable Hints", Once,
       new ResolveHints.DisableHints),
     Batch("Hints", fixedPoint,
@@ -4278,6 +4279,25 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
           t.child
         }
     }
+  }
+}
+
+object ApplyLimitAll extends Rule[LogicalPlan] {
+  def applyLimitAllToPlan(plan: LogicalPlan, isInLimitAll: Boolean = false): LogicalPlan = {
+    plan match {
+      case la: LimitAll =>
+        applyLimitAllToPlan(la.child, isInLimitAll = true)
+      case cteRef: CTERelationRef if isInLimitAll =>
+        cteRef.copy(isUnlimitedRecursion = Some(true))
+      case other =>
+        other.withNewChildren(other.children
+          .map(child => applyLimitAllToPlan(child, isInLimitAll)))
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val ret = applyLimitAllToPlan(plan)
+    ret
   }
 }
 

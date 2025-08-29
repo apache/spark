@@ -3112,11 +3112,10 @@ Offset 1
 table t
 |> limit all offset 0
 -- !query analysis
-LocalLimit limit_all()
-+- Offset 0
-   +- PipeOperator
-      +- SubqueryAlias spark_catalog.default.t
-         +- Relation spark_catalog.default.t[x#x,y#x] csv
+Offset 0
++- PipeOperator
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query

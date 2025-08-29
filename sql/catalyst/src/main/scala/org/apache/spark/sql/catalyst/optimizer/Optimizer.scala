@@ -878,7 +878,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // Note: right now Union means UNION ALL, which does not de-duplicate rows, so it is safe to
     // pushdown Limit through it. Once we add UNION DISTINCT, however, we will not be able to
     // pushdown Limit.
-    case LocalLimit(exp, u: Union) if exp != LimitAllExpr =>
+    case LocalLimit(exp, u: Union) =>
       LocalLimit(exp, u.copy(children = u.children.map(maybePushLocalLimit(exp, _))))
 
     // If limit node is present, we should propagate it down to UnionLoop, so that it is later
@@ -900,10 +900,10 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // not eventually introduce limits on both sides if it is applied multiple times. Therefore:
     //   - If one side is already limited, stack another limit on top if the new limit is smaller.
     //     The redundant limit will be collapsed by the CombineLimits rule.
-    case LocalLimit(exp, join: Join) if exp != LimitAllExpr =>
+    case LocalLimit(exp, join: Join) =>
       LocalLimit(exp, pushLocalLimitThroughJoin(exp, join))
     // There is a Project between LocalLimit and Join if they do not have the same output.
-    case LocalLimit(exp, project @ Project(_, join: Join)) if exp != LimitAllExpr =>
+    case LocalLimit(exp, project @ Project(_, join: Join)) =>
       LocalLimit(exp, project.copy(child = pushLocalLimitThroughJoin(exp, join)))
     // Push down limit 1 through Aggregate and turn Aggregate into Project if it is group only.
     case Limit(le @ IntegerLiteral(1), a: Aggregate) if a.groupOnly =>
@@ -913,37 +913,20 @@ object LimitPushDown extends Rule[LogicalPlan] {
       val newAgg = EliminateSorts(a.copy(child = LocalLimit(le, a.child))).asInstanceOf[Aggregate]
       Limit(le, p.copy(child = Project(newAgg.aggregateExpressions, newAgg.child)))
     // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
-    case LocalLimit(le, Offset(oe, grandChild)) if le != LimitAllExpr =>
+    case LocalLimit(le, Offset(oe, grandChild)) =>
       Offset(oe, LocalLimit(Add(le, oe), grandChild))
     // Push down local limit 1 if join type is LeftSemiOrAnti and join condition is empty.
     case j @ Join(_, right, LeftSemiOrAnti(_), None, _) if !right.maxRows.exists(_ <= 1) =>
       j.copy(right = maybePushLocalLimit(Literal(1, IntegerType), right))
     // Push down limits through Python UDFs.
-    case LocalLimit(le, udf: BatchEvalPython) if le != LimitAllExpr =>
+    case LocalLimit(le, udf: BatchEvalPython) =>
       LocalLimit(le, udf.copy(child = maybePushLocalLimit(le, udf.child)))
-    case LocalLimit(le, p @ Project(_, udf: BatchEvalPython)) if le != LimitAllExpr =>
+    case LocalLimit(le, p @ Project(_, udf: BatchEvalPython)) =>
       LocalLimit(le, p.copy(child = udf.copy(child = maybePushLocalLimit(le, udf.child))))
-    case LocalLimit(le, udf: ArrowEvalPython) if le != LimitAllExpr =>
+    case LocalLimit(le, udf: ArrowEvalPython) =>
       LocalLimit(le, udf.copy(child = maybePushLocalLimit(le, udf.child)))
-    case LocalLimit(le, p @ Project(_, udf: ArrowEvalPython)) if le != LimitAllExpr =>
+    case LocalLimit(le, p @ Project(_, udf: ArrowEvalPython)) =>
       LocalLimit(le, p.copy(child = udf.copy(child = maybePushLocalLimit(le, udf.child))))
-
-    // Logic for pushing down LimitAll node.
-    // This node is no-op for any node that isn't UnionLoop. For UnionLoop it is used to signify an
-    // infinite recursion.
-    case LimitAll(ul @ UnionLoop(_, _, _, _, None, _)) =>
-      ul.copy(limit = Some(-1))
-    // If a limit node is present, the LimitAll shouldn't get pushed down, as the lowest limit node
-    // above a UnionLoop should only be considered.
-    case LimitAll(limit: GlobalLimit) =>
-      limit
-    case LimitAll(limit: LocalLimit) =>
-      limit
-    case LimitAll(ul @ UnionLoop(_, _, _, _, Some(_), _)) =>
-      ul
-     // Propagate LimitAll to all children.
-    case LimitAll(child) =>
-      child.withNewChildren(child.children.map(LimitAll(_)))
   }
 }
 

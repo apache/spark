@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.analysis.DeduplicateRelations
 import org.apache.spark.sql.catalyst.expressions.{Alias, OuterReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, Join, JoinHint, LogicalPlan, Project, Subquery, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, Join, JoinHint, LogicalPlan, Project, Subquery, SubqueryAlias, UnionLoop, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
 
@@ -189,14 +189,27 @@ case class InlineCTE(
 
       case ref: CTERelationRef =>
         val refInfo = cteMap(ref.cteId)
+        val cteBody = refInfo.cteDef.child match {
+          case sa @ SubqueryAlias(_, ul: UnionLoop)
+            if ul.id == ref.cteId && ref.isUnlimitedRecursion.isDefined =>
+            sa.copy(child = ul.copy(limit = Some(-1)))
+          case sa @ SubqueryAlias(_, p @ Project(_, ul: UnionLoop))
+            if ul.id == ref.cteId && ref.isUnlimitedRecursion.isDefined =>
+            sa.copy(child = p.copy(child = ul.copy(limit = Some(-1))))
+          case p @ Project(_, ul: UnionLoop)
+            if ul.id == ref.cteId && ref.isUnlimitedRecursion.isDefined =>
+            p.copy(child = ul.copy(limit = Some(-1)))
+          case body =>
+            body
+        }
         if (refInfo.shouldInline) {
           if (ref.outputSet == refInfo.cteDef.outputSet) {
-            refInfo.cteDef.child
+            cteBody
           } else {
             val ctePlan = DeduplicateRelations(
               Join(
-                refInfo.cteDef.child,
-                refInfo.cteDef.child,
+                cteBody,
+                cteBody,
                 Inner,
                 None,
                 JoinHint(None, None)
