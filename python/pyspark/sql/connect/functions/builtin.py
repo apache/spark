@@ -578,7 +578,7 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("bround", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("bround", col, scale)
 
 
 bround.__doc__ = pysparkfuncs.bround.__doc__
@@ -597,7 +597,7 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("ceil", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("ceil", col, scale)
 
 
 ceil.__doc__ = pysparkfuncs.ceil.__doc__
@@ -609,7 +609,7 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("ceiling", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("ceiling", col, scale)
 
 
 ceiling.__doc__ = pysparkfuncs.ceiling.__doc__
@@ -691,7 +691,7 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("floor", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("floor", col, scale)
 
 
 floor.__doc__ = pysparkfuncs.floor.__doc__
@@ -826,7 +826,7 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     else:
         scale = _enum_to_value(scale)
         scale = lit(scale) if isinstance(scale, int) else scale
-        return _invoke_function_over_columns("round", col, scale)  # type: ignore[arg-type]
+        return _invoke_function_over_columns("round", col, scale)
 
 
 round.__doc__ = pysparkfuncs.round.__doc__
@@ -1571,7 +1571,7 @@ def any_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = 
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
         return _invoke_function_over_columns(
-            "any_value", col, ignoreNulls  # type: ignore[arg-type]
+            "any_value", col, ignoreNulls
         )
 
 
@@ -1585,7 +1585,7 @@ def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] 
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
         return _invoke_function_over_columns(
-            "first_value", col, ignoreNulls  # type: ignore[arg-type]
+            "first_value", col, ignoreNulls
         )
 
 
@@ -1599,7 +1599,7 @@ def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] =
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
         return _invoke_function_over_columns(
-            "last_value", col, ignoreNulls  # type: ignore[arg-type]
+            "last_value", col, ignoreNulls
         )
 
 
