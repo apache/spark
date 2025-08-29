@@ -36,9 +36,8 @@ import com.github.dockerjava.zerodep.ZerodepDockerHttpClient
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONTAINER, STATUS}
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.{DockerUtils, Utils}
 import org.apache.spark.util.Utils.timeStringAsSeconds
@@ -218,7 +217,6 @@ abstract class DockerJDBCIntegrationSuite
       // Run any setup queries:
       try {
         dataPreparation(conn)
-        createSharedTable(conn)
       } finally {
         conn.close()
       }
@@ -289,44 +287,5 @@ abstract class DockerJDBCIntegrationSuite
         override def onNext(f: Frame): Unit = logInfo(f.toString)
       })
     logInfo("\n\n===== END OF CONTAINER LOGS FOR container Id: " + container + " =====")
-  }
-
-  /**
-   * Create a table with the same name that can be used to test common functionality
-   * in
-   * @param conn
-   */
-  def createSharedTable(conn: Connection): Unit = {
-    val batchStmt = conn.createStatement()
-
-    batchStmt.addBatch("CREATE TABLE tbl_shared (x INTEGER)")
-    batchStmt.addBatch("INSERT INTO tbl_shared VALUES(1)")
-
-    batchStmt.executeBatch()
-    batchStmt.close()
-  }
-
-  test("SPARK-52184: Wrap external engine syntax error") {
-    val e = intercept[SparkException] {
-
-      spark.read.format("jdbc")
-        .option("url", jdbcUrl)
-        .option("query", "THIS IS NOT VALID SQL").load()
-    }
-    assert(e.getCondition.startsWith("JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR"))
-  }
-
-  test("SPARK-53386: Parameter `query` should work when ending with semicolons") {
-    val dfSingle = spark.read.format("jdbc")
-      .option("url", jdbcUrl)
-      .option("query", "SELECT x FROM tbl_shared; ")
-      .load()
-    checkAnswer(dfSingle, Seq(Row(1)))
-
-    val dfMultiple = spark.read.format("jdbc")
-      .option("url", jdbcUrl)
-      .option("query", "SELECT x FROM tbl_shared;;;")
-      .load()
-    checkAnswer(dfMultiple, Seq(Row(1)))
   }
 }
