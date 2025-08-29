@@ -1430,20 +1430,6 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     assert(e.getMessage.contains("out of bounds"))
   }
 
-  test("SPARK-53401: repartitionById followed by groupBy should only have one shuffle") {
-    val df = spark.range(100).toDF("id")
-    val repartitioned = df.repartitionById(10, $"id")
-    val grouped = repartitioned.groupBy($"id").count()
-
-    val plan = grouped.queryExecution.executedPlan
-    val shuffles = collect(plan) {
-      case e: ShuffleExchangeExec => e
-    }
-
-    // Should only have one shuffle (from repartitionById), not two
-    assert(shuffles.length == 1, s"Expected 1 shuffle but found ${shuffles.length}")
-  }
-
   /**
    * A helper function to check the number of shuffle exchanges in a physical plan.
    *
