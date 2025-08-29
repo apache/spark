@@ -721,8 +721,8 @@ class BooleanExtensionOpsTest(OpsTestBase):
 
     def test_rxor(self):
         pser, psser = self.boolean_pdf["this"], self.boolean_psdf["this"]
-        self.check_extension(True | pser, True | psser)
-        self.check_extension(False | pser, False | psser)
+        self.check_extension(True ^ pser, True ^ psser)
+        self.check_extension(False ^ pser, False ^ psser)
         with self.assertRaisesRegex(TypeError, "XOR can not be applied to given types."):
             1 ^ psser
 
