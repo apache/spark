@@ -1017,9 +1017,7 @@
                 "integer": 5
               }, {
                 "integer": 6
-              }],
-              "dataType": {
-              }
+              }]
             }
           }, {
             "array": {
@@ -1029,9 +1027,7 @@
                 "integer": 8
               }, {
                 "integer": 9
-              }],
-              "dataType": {
-              }
+              }]
             }
           }],
           "dataType": {
@@ -1090,14 +1086,7 @@
                 "integer": 3
               }, {
                 "integer": 4
-              }],
-              "dataType": {
-                "keyType": {
-                  "string": {
-                    "collation": "UTF8_BINARY"
-                  }
-                }
-              }
+              }]
             }
           }, {
             "map": {
@@ -1110,14 +1099,114 @@
                 "integer": 5
               }, {
                 "integer": 6
+              }]
+            }
+          }],
+          "dataType": {
+            "containsNull": true
+          }
+        }
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "typedLit",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    }, {
+      "literal": {
+        "array": {
+          "elements": [{
+            "map": {
+              "keys": [{
+                "string": "a"
+              }, {
+                "string": "b"
+              }],
+              "values": [{
+                "array": {
+                  "elements": [{
+                    "string": "1"
+                  }, {
+                    "string": "2"
+                  }],
+                  "dataType": {
+                    "elementType": {
+                      "string": {
+                        "collation": "UTF8_BINARY"
+                      }
+                    },
+                    "containsNull": true
+                  }
+                }
+              }, {
+                "array": {
+                  "elements": [{
+                    "string": "3"
+                  }, {
+                    "string": "4"
+                  }]
+                }
               }],
               "dataType": {
                 "keyType": {
                   "string": {
                     "collation": "UTF8_BINARY"
                   }
-                }
+                },
+                "valueContainsNull": true
               }
+            }
+          }, {
+            "map": {
+              "keys": [{
+                "string": "a"
+              }, {
+                "string": "b"
+              }],
+              "values": [{
+                "array": {
+                  "elements": [{
+                    "string": "5"
+                  }, {
+                    "string": "6"
+                  }]
+                }
+              }, {
+                "array": {
+                  "elements": [{
+                    "string": "7"
+                  }, {
+                    "string": "8"
+                  }]
+                }
+              }]
+            }
+          }, {
+            "map": {
+              "keys": [{
+                "string": "a"
+              }, {
+                "string": "b"
+              }],
+              "values": [{
+                "array": {
+                }
+              }, {
+                "array": {
+                }
+              }]
             }
           }],
           "dataType": {
@@ -1181,14 +1270,7 @@
                 "integer": 3
               }, {
                 "integer": 4
-              }],
-              "dataType": {
-                "keyType": {
-                  "string": {
-                    "collation": "UTF8_BINARY"
-                  }
-                }
-              }
+              }]
             }
           }],
           "dataType": {

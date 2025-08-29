@@ -43,10 +43,11 @@ object LiteralValueProtoConverter {
       ab: proto.Expression.Literal.Array.Builder,
       elementType: DataType,
       containsNull: Boolean,
-      useDeprecatedDataTypeFields: Boolean): Unit = {
+      useDeprecatedDataTypeFields: Boolean,
+      needElementType: Boolean): Unit = {
     if (useDeprecatedDataTypeFields) {
       ab.setElementType(toConnectProtoType(elementType))
-    } else {
+    } else if (needElementType) {
       val dataTypeBuilder = proto.DataType.Array.newBuilder()
       if (ab.getElementsCount == 0 || getInferredDataType(ab.getElements(0)).isEmpty) {
         dataTypeBuilder.setElementType(toConnectProtoType(elementType))
@@ -61,11 +62,12 @@ object LiteralValueProtoConverter {
       keyType: DataType,
       valueType: DataType,
       valueContainsNull: Boolean,
-      useDeprecatedDataTypeFields: Boolean): Unit = {
+      useDeprecatedDataTypeFields: Boolean,
+      needKeyAndValueType: Boolean): Unit = {
     if (useDeprecatedDataTypeFields) {
       mb.setKeyType(toConnectProtoType(keyType))
       mb.setValueType(toConnectProtoType(valueType))
-    } else {
+    } else if (needKeyAndValueType) {
       val dataTypeBuilder = proto.DataType.Map.newBuilder()
       if (mb.getKeysCount == 0 || getInferredDataType(mb.getKeys(0)).isEmpty) {
         dataTypeBuilder.setKeyType(toConnectProtoType(keyType))
@@ -78,10 +80,10 @@ object LiteralValueProtoConverter {
     }
   }
 
-  @scala.annotation.tailrec
   private def toLiteralProtoBuilderInternal(
       literal: Any,
-      options: ToLiteralProtoOptions): proto.Expression.Literal.Builder = {
+      options: ToLiteralProtoOptions,
+      needDataType: Boolean): proto.Expression.Literal.Builder = {
     val builder = proto.Expression.Literal.newBuilder()
 
     def decimalBuilder(precision: Int, scale: Int, value: String) = {
@@ -97,12 +99,17 @@ object LiteralValueProtoConverter {
 
     def arrayBuilder(array: Array[_]) = {
       val ab = builder.getArrayBuilder
-      array.foreach(x => ab.addElements(toLiteralProtoWithOptions(x, None, options)))
+      var needElementType = needDataType
+      array.foreach { x =>
+        ab.addElements(toLiteralProtoBuilderInternal(x, options, needElementType).build())
+        needElementType = false
+      }
       setArrayTypeAfterAddingElements(
         ab,
         toDataType(array.getClass.getComponentType),
         containsNull = true,
-        options.useDeprecatedDataTypeFields)
+        options.useDeprecatedDataTypeFields,
+        needDataType)
       ab
     }
 
@@ -122,8 +129,9 @@ object LiteralValueProtoConverter {
       case v: Char => builder.setString(v.toString)
       case v: Array[Char] => builder.setString(String.valueOf(v))
       case v: Array[Byte] => builder.setBinary(ByteString.copyFrom(v))
-      case v: mutable.ArraySeq[_] => toLiteralProtoBuilderInternal(v.array, options)
-      case v: immutable.ArraySeq[_] => toLiteralProtoBuilderInternal(v.unsafeArray, options)
+      case v: mutable.ArraySeq[_] => toLiteralProtoBuilderInternal(v.array, options, needDataType)
+      case v: immutable.ArraySeq[_] =>
+        toLiteralProtoBuilderInternal(v.unsafeArray, options, needDataType)
       case v: LocalDate => builder.setDate(v.toEpochDay.toInt)
       case v: Decimal =>
         builder.setDecimal(decimalBuilder(Math.max(v.precision, v.scale), v.scale, v.toString))
@@ -147,22 +155,29 @@ object LiteralValueProtoConverter {
     }
   }
 
-  @scala.annotation.tailrec
   private def toLiteralProtoBuilderInternal(
       literal: Any,
       dataType: DataType,
-      options: ToLiteralProtoOptions): proto.Expression.Literal.Builder = {
+      options: ToLiteralProtoOptions,
+      needDataType: Boolean): proto.Expression.Literal.Builder = {
     val builder = proto.Expression.Literal.newBuilder()
 
     def arrayBuilder(scalaValue: Any, elementType: DataType, containsNull: Boolean) = {
       val ab = builder.getArrayBuilder
+      var needElementType = needDataType
       scalaValue match {
         case a: Array[_] =>
-          a.foreach(item =>
-            ab.addElements(toLiteralProtoWithOptions(item, Some(elementType), options)))
+          a.foreach { item =>
+            ab.addElements(
+              toLiteralProtoBuilderInternal(item, elementType, options, needElementType).build())
+            needElementType = false
+          }
         case s: scala.collection.Seq[_] =>
-          s.foreach(item =>
-            ab.addElements(toLiteralProtoWithOptions(item, Some(elementType), options)))
+          s.foreach { item =>
+            ab.addElements(
+              toLiteralProtoBuilderInternal(item, elementType, options, needElementType).build())
+            needElementType = false
+          }
         case other =>
           throw new IllegalArgumentException(s"literal $other not supported (yet).")
       }
@@ -170,7 +185,8 @@ object LiteralValueProtoConverter {
         ab,
         elementType,
         containsNull,
-        options.useDeprecatedDataTypeFields)
+        options.useDeprecatedDataTypeFields,
+        needDataType)
       ab
     }
 
@@ -180,11 +196,15 @@ object LiteralValueProtoConverter {
         valueType: DataType,
         valueContainsNull: Boolean) = {
       val mb = builder.getMapBuilder
+      var needKeyAndValueType = needDataType
       scalaValue match {
         case map: scala.collection.Map[_, _] =>
           map.foreach { case (k, v) =>
-            mb.addKeys(toLiteralProtoWithOptions(k, Some(keyType), options))
-            mb.addValues(toLiteralProtoWithOptions(v, Some(valueType), options))
+            mb.addKeys(
+              toLiteralProtoBuilderInternal(k, keyType, options, needKeyAndValueType).build())
+            mb.addValues(
+              toLiteralProtoBuilderInternal(v, valueType, options, needKeyAndValueType).build())
+            needKeyAndValueType = false
           }
         case other =>
           throw new IllegalArgumentException(s"literal $other not supported (yet).")
@@ -194,7 +214,8 @@ object LiteralValueProtoConverter {
         keyType,
         valueType,
         valueContainsNull,
-        options.useDeprecatedDataTypeFields)
+        options.useDeprecatedDataTypeFields,
+        needDataType)
       mb
     }
 
@@ -209,37 +230,42 @@ object LiteralValueProtoConverter {
           if (options.useDeprecatedDataTypeFields) {
             while (idx < structType.size) {
               val field = fields(idx)
-              val literalProto =
-                toLiteralProtoWithOptions(iter.next(), Some(field.dataType), options)
+              // For backward compatibility, we need the data type for each field.
+              val literalProto = toLiteralProtoBuilderInternal(
+                iter.next(),
+                field.dataType,
+                options,
+                needDataType = true).build()
               sb.addElements(literalProto)
               idx += 1
             }
             sb.setStructType(toConnectProtoType(structType))
           } else {
-            val dataTypeStruct = proto.DataType.Struct.newBuilder()
             while (idx < structType.size) {
               val field = fields(idx)
               val literalProto =
-                toLiteralProtoWithOptions(iter.next(), Some(field.dataType), options)
+                toLiteralProtoBuilderInternal(iter.next(), field.dataType, options, needDataType)
+                  .build()
               sb.addElements(literalProto)
 
-              val fieldBuilder = dataTypeStruct
-                .addFieldsBuilder()
-                .setName(field.name)
-                .setNullable(field.nullable)
+              if (needDataType) {
+                val fieldBuilder = sb.getDataTypeStructBuilder
+                  .addFieldsBuilder()
+                  .setName(field.name)
+                  .setNullable(field.nullable)
 
-              if (LiteralValueProtoConverter.getInferredDataType(literalProto).isEmpty) {
-                fieldBuilder.setDataType(toConnectProtoType(field.dataType))
-              }
+                if (LiteralValueProtoConverter.getInferredDataType(literalProto).isEmpty) {
+                  fieldBuilder.setDataType(toConnectProtoType(field.dataType))
+                }
 
-              // Set metadata if available
-              if (field.metadata != Metadata.empty) {
-                fieldBuilder.setMetadata(field.metadata.json)
+                // Set metadata if available
+                if (field.metadata != Metadata.empty) {
+                  fieldBuilder.setMetadata(field.metadata.json)
+                }
               }
 
               idx += 1
             }
-            sb.setDataTypeStruct(dataTypeStruct.build())
           }
         case other =>
           throw new IllegalArgumentException(s"literal $other not supported (yet).")
@@ -250,11 +276,11 @@ object LiteralValueProtoConverter {
 
     (literal, dataType) match {
       case (v: mutable.ArraySeq[_], ArrayType(_, _)) =>
-        toLiteralProtoBuilderInternal(v.array, dataType, options)
+        toLiteralProtoBuilderInternal(v.array, dataType, options, needDataType)
       case (v: immutable.ArraySeq[_], ArrayType(_, _)) =>
-        toLiteralProtoBuilderInternal(v.unsafeArray, dataType, options)
+        toLiteralProtoBuilderInternal(v.unsafeArray, dataType, options, needDataType)
       case (v: Array[Byte], ArrayType(_, _)) =>
-        toLiteralProtoBuilderInternal(v, options)
+        toLiteralProtoBuilderInternal(v, options, needDataType)
       case (v, ArrayType(elementType, containsNull)) =>
         builder.setArray(arrayBuilder(v, elementType, containsNull))
       case (v, MapType(keyType, valueType, valueContainsNull)) =>
@@ -263,7 +289,7 @@ object LiteralValueProtoConverter {
         builder.setStruct(structBuilder(v, structType))
       case (v: Option[_], _: DataType) =>
         if (v.isDefined) {
-          toLiteralProtoBuilderInternal(v.get, options)
+          toLiteralProtoBuilderInternal(v.get, options, needDataType)
         } else {
           builder.setNull(toConnectProtoType(dataType))
         }
@@ -272,7 +298,7 @@ object LiteralValueProtoConverter {
           builder.getTimeBuilder
             .setNano(SparkDateTimeUtils.localTimeToNanos(v))
             .setPrecision(timeType.precision))
-      case _ => toLiteralProtoBuilderInternal(literal, options)
+      case _ => toLiteralProtoBuilderInternal(literal, options, needDataType)
     }
 
   }
@@ -286,7 +312,8 @@ object LiteralValueProtoConverter {
   def toLiteralProtoBuilder(literal: Any): proto.Expression.Literal.Builder = {
     toLiteralProtoBuilderInternal(
       literal,
-      ToLiteralProtoOptions(useDeprecatedDataTypeFields = true))
+      ToLiteralProtoOptions(useDeprecatedDataTypeFields = true),
+      needDataType = true)
   }
 
   def toLiteralProtoBuilder(
@@ -295,7 +322,8 @@ object LiteralValueProtoConverter {
     toLiteralProtoBuilderInternal(
       literal,
       dataType,
-      ToLiteralProtoOptions(useDeprecatedDataTypeFields = true))
+      ToLiteralProtoOptions(useDeprecatedDataTypeFields = true),
+      needDataType = true)
   }
 
   def toLiteralProtoBuilderWithOptions(
@@ -304,9 +332,9 @@ object LiteralValueProtoConverter {
       options: ToLiteralProtoOptions): proto.Expression.Literal.Builder = {
     dataTypeOpt match {
       case Some(dataType) =>
-        toLiteralProtoBuilderInternal(literal, dataType, options)
+        toLiteralProtoBuilderInternal(literal, dataType, options, needDataType = true)
       case None =>
-        toLiteralProtoBuilderInternal(literal, options)
+        toLiteralProtoBuilderInternal(literal, options, needDataType = true)
     }
   }
 
@@ -328,13 +356,15 @@ object LiteralValueProtoConverter {
   def toLiteralProto(literal: Any): proto.Expression.Literal =
     toLiteralProtoBuilderInternal(
       literal,
-      ToLiteralProtoOptions(useDeprecatedDataTypeFields = true)).build()
+      ToLiteralProtoOptions(useDeprecatedDataTypeFields = true),
+      needDataType = true).build()
 
   def toLiteralProto(literal: Any, dataType: DataType): proto.Expression.Literal =
     toLiteralProtoBuilderInternal(
       literal,
       dataType,
-      ToLiteralProtoOptions(useDeprecatedDataTypeFields = true)).build()
+      ToLiteralProtoOptions(useDeprecatedDataTypeFields = true),
+      needDataType = true).build()
 
   def toLiteralProtoWithOptions(
       literal: Any,
@@ -342,9 +372,9 @@ object LiteralValueProtoConverter {
       options: ToLiteralProtoOptions): proto.Expression.Literal = {
     dataTypeOpt match {
       case Some(dataType) =>
-        toLiteralProtoBuilderInternal(literal, dataType, options).build()
+        toLiteralProtoBuilderInternal(literal, dataType, options, needDataType = true).build()
       case None =>
-        toLiteralProtoBuilderInternal(literal, options).build()
+        toLiteralProtoBuilderInternal(literal, options, needDataType = true).build()
     }
   }
 
