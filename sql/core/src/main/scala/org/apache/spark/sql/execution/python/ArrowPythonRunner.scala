@@ -139,12 +139,9 @@ object ArrowPythonRunner {
     val intToDecimalCoercion = Seq(
       SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED.key ->
       conf.getConf(SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED, false).toString)
-    val udtfTypeCoercion = Seq(
-      SQLConf.PYTHON_TABLE_UDF_TYPE_CORERION_ENABLED.key ->
-      conf.getConf(SQLConf.PYTHON_TABLE_UDF_TYPE_CORERION_ENABLED).toString)
     Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++
       arrowAyncParallelism ++ useLargeVarTypes ++
-      intToDecimalCoercion ++ udtfTypeCoercion ++
+      intToDecimalCoercion ++
       legacyPandasConversion ++ legacyPandasConversionUDF: _*)
   }
 }
