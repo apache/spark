@@ -190,7 +190,11 @@ class ArrowUDTFTestsMixin:
                 )
                 yield result_table
 
-        with self.assertRaisesRegex(PythonException, "Failed to parse string: 'wrong_col' as a scalar of type int32"):
+        with self.assertRaisesRegex(
+            PythonException,
+            "Arrow UDTFs require the return type to match the expected Arrow type." +
+            "Expected: int32, but got: string.",
+        ):
             result_df = MismatchedSchemaUDTF()
             result_df.collect()
 
@@ -349,10 +353,28 @@ class ArrowUDTFTestsMixin:
                 yield result_table
         
         # Should fail with Arrow cast exception since string cannot be cast to int
-        with self.assertRaisesRegex(PythonException, "Failed to parse string: 'xyz' as a scalar of type int32"):
+        with self.assertRaisesRegex(
+            PythonException,
+            "Arrow UDTFs require the return type to match the expected Arrow type." +
+            "Expected: int32, but got: string.",
+        ):
             result_df = StringToIntUDTF()
             result_df.collect()
 
+    def test_arrow_udtf_type_corecion_int64_to_int32_safe(self):
+        @arrow_udtf(returnType="id int")
+        class Int64ToInt32UDTF:
+            def eval(self) -> Iterator["pa.Table"]:
+                result_table = pa.table(
+                    {
+                        "id": pa.array([1, 2, 3], type=pa.int64()),  # long values
+                    }
+                )
+                yield result_table
+        
+        result_df = Int64ToInt32UDTF()
+        expected_df = self.spark.createDataFrame([(1,), (2,), (3,)], "id int")
+        assertDataFrameEqual(result_df, expected_df)
 
     def test_return_type_coercion_success(self):
         @arrow_udtf(returnType="value int")

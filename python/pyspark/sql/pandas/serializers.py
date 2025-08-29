@@ -214,13 +214,14 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
 
         if arr.type == arrow_type:
             return arr
-        elif self._arrow_cast:
-            return arr.cast(target_type=arrow_type, safe=True)
         else:
-            raise PySparkTypeError(
-                "Arrow UDTFs require the return type to match the expected Arrow type. "
-                f"Expected: {arrow_type}, but got: {arr.type}."
-            )
+            try:
+                return arr.cast(target_type=arrow_type, safe=True)
+            except (pa.ArrowInvalid, pa.ArrowTypeError):
+                raise PySparkTypeError(
+                    "Arrow UDTFs require the return type to match the expected Arrow type. "
+                    f"Expected: {arrow_type}, but got: {arr.type}."
+                )
 
     def load_stream(self, stream):
         """
@@ -256,9 +257,6 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
             should_write_start_length = True
             for packed in iterator:
                 batch, arrow_return_type = packed
-                assert isinstance(
-                    batch, pa.RecordBatch
-                ), f"Expected pa.RecordBatch, got {type(batch)}"
                 assert isinstance(
                     arrow_return_type, pa.StructType
                 ), f"Expected pa.StructType, got {type(arrow_return_type)}"
