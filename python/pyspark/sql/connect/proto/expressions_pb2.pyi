@@ -490,6 +490,7 @@ class Expression(google.protobuf.message.Message):
                 This field is deprecated since Spark 4.1+ and should only be set
                 if the data_type field is not set. Use data_type field instead.
                 """
+
             @property
             def elements(
                 self,
@@ -497,6 +498,7 @@ class Expression(google.protobuf.message.Message):
                 global___Expression.Literal
             ]:
                 """The literal values that make up the array elements."""
+
             @property
             def data_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType.Array:
                 """The type of the array.
@@ -505,6 +507,7 @@ class Expression(google.protobuf.message.Message):
                 then you don't need to set data_type.element_type to save space. On the other hand,
                 redundant type information is also acceptable.
                 """
+
             def __init__(
                 self,
                 *,
@@ -545,6 +548,7 @@ class Expression(google.protobuf.message.Message):
                 This field is deprecated since Spark 4.1+ and should only be set
                 if the data_type field is not set. Use data_type field instead.
                 """
+
             @property
             def value_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
                 """(Deprecated) The value type of the map.
@@ -552,6 +556,7 @@ class Expression(google.protobuf.message.Message):
                 This field is deprecated since Spark 4.1+ and should only be set
                 if the data_type field is not set. Use data_type field instead.
                 """
+
             @property
             def keys(
                 self,
@@ -559,6 +564,7 @@ class Expression(google.protobuf.message.Message):
                 global___Expression.Literal
             ]:
                 """The literal keys that make up the map."""
+
             @property
             def values(
                 self,
@@ -566,6 +572,7 @@ class Expression(google.protobuf.message.Message):
                 global___Expression.Literal
             ]:
                 """The literal values that make up the map."""
+
             @property
             def data_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType.Map:
                 """The type of the map.
@@ -574,6 +581,7 @@ class Expression(google.protobuf.message.Message):
                 then you don't need to set data_type.key_type/data_type.value_type to save space.
                 On the other hand, redundant type information is also acceptable.
                 """
+
             def __init__(
                 self,
                 *,
