@@ -72,8 +72,8 @@ case class FinalizedSketch(sketch: CompactSketch) extends ThetaSketchState {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, lgNomEntries) - Returns the ThetaSketch's compact binary representation.
-      `lgNomEntries` (optional) the log-base-2 of Nominal Entries, with Nominal Entries deciding
+    _FUNC_(expr, lgNomEntries) - Returns the ThetaSketch compact binary representation.
+      `lgNomEntries` (optional) is the log-base-2 of nominal entries, with nominal entries deciding
       the number buckets or slots for the ThetaSketch. """,
   examples = """
     Examples:
@@ -134,14 +134,14 @@ case class ThetaSketchAgg(
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       TypeCollection(
+        ArrayType(IntegerType),
+        ArrayType(LongType),
+        BinaryType,
+        DoubleType,
+        FloatType,
         IntegerType,
         LongType,
-        FloatType,
-        DoubleType,
-        StringTypeWithCollation(supportsTrimCollation = true),
-        BinaryType,
-        ArrayType(IntegerType),
-        ArrayType(LongType)),
+        StringTypeWithCollation(supportsTrimCollation = true)),
       IntegerType)
 
   override def dataType: DataType = BinaryType
@@ -170,59 +170,62 @@ case class ThetaSketchAgg(
    * @param input
    *   An input row
    */
-  override def update(updateBuffer: ThetaSketchState, input: InternalRow): ThetaSketchState =
-    updateBuffer match {
-      case UpdatableSketchBuffer(sketch) =>
-        val v = left.eval(input)
-        v match {
-          case null => UpdatableSketchBuffer(sketch)
-          case _ =>
-            left.dataType match {
-              case IntegerType =>
-                sketch.update(v.asInstanceOf[Int].toLong) // Promote to long
-              case LongType =>
-                sketch.update(v.asInstanceOf[Long])
-              case DoubleType =>
-                sketch.update(v.asInstanceOf[Double])
-              case FloatType =>
-                sketch.update(v.asInstanceOf[Float].toDouble) // Promote to double
-              case st: StringType =>
-                val cKey =
-                  CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
-                sketch.update(cKey.toString)
-              case BinaryType =>
-                val bytes = v.asInstanceOf[Array[Byte]]
-                if (bytes.nonEmpty) sketch.update(bytes)
-              case ArrayType(IntegerType, _) =>
-                val arr = v.asInstanceOf[ArrayData].toIntArray()
-                if (arr.nonEmpty) sketch.update(arr)
-              case ArrayType(LongType, _) =>
-                val arr = v.asInstanceOf[ArrayData].toLongArray()
-                if (arr.nonEmpty) sketch.update(arr)
-              case _ =>
-                throw new SparkUnsupportedOperationException(
-                  errorClass = "_LEGACY_ERROR_TEMP_3121",
-                  messageParameters = Map("dataType" -> left.dataType.toString))
-            }
-            UpdatableSketchBuffer(sketch) // Return updated sketch wrapped again
-        }
-      case _ =>
-        updateBuffer
+  override def update(updateBuffer: ThetaSketchState, input: InternalRow): ThetaSketchState = {
+    // Return early return for null values.
+    val v = left.eval(input)
+    if (v == null) return UpdatableSketchBuffer(sketch)
+
+    // Return early return for non-updatable buffers. The return case should never happen here.
+    val sketch = updateBuffer match {
+      case UpdatableSketchBuffer(s) => s
+      case _ => return updateBuffer
     }
+
+    // Handle the different data types for sketch updates.
+    left.dataType match {
+      case ArrayType(IntegerType, _) =>
+        val arr = v.asInstanceOf[ArrayData].toIntArray()
+        if (arr.nonEmpty) sketch.update(arr)
+      case ArrayType(LongType, _) =>
+        val arr = v.asInstanceOf[ArrayData].toLongArray()
+        if (arr.nonEmpty) sketch.update(arr)
+      case BinaryType =>
+        val bytes = v.asInstanceOf[Array[Byte]]
+        if (bytes.nonEmpty) sketch.update(bytes)
+      case DoubleType =>
+        sketch.update(v.asInstanceOf[Double])
+      case FloatType =>
+        sketch.update(v.asInstanceOf[Float].toDouble) // Float is promoted to double.
+      case IntegerType =>
+        sketch.update(v.asInstanceOf[Int].toLong) // Int is promoted to Long.
+      case LongType =>
+        sketch.update(v.asInstanceOf[Long])
+      case st: StringType =>
+        val cKey =
+          CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
+        sketch.update(cKey.toString)
+      case _ =>
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3121",
+          messageParameters = Map("dataType" -> left.dataType.toString))
+    }
+
+    UpdatableSketchBuffer(sketch)
+  }
 
   /**
    * Merges an input Compact sketch into the UpdateSketch which is acting as the aggregation
    * buffer.
    *
    * @param updateBuffer
-   *   the UpdateSketch or Union instance used to store the aggregation result
+   *   The UpdateSketch or Union instance used to store the aggregation result
    * @param input
    *   An input UpdateSketch, Union, or Compact sketch instance
    */
   override def merge(
       updateBuffer: ThetaSketchState,
       input: ThetaSketchState): ThetaSketchState = {
-    // Helper function to create union only when needed
+    // This is a helper function to create union only when needed.
     def createUnionWith(sketch1: Sketch, sketch2: Sketch): UnionAggregationBuffer = {
       val union = SetOperation.builder.setLogNominalEntries(lgNomEntries).buildUnion
       union.union(sketch1)
@@ -231,7 +234,7 @@ case class ThetaSketchAgg(
     }
 
     (updateBuffer, input) match {
-      // REUSE existing union - this is the most efficient path
+      // Reuse the existing union in the next iteration. This is the most efficient path.
       case (UnionAggregationBuffer(existingUnion), UpdatableSketchBuffer(sketch)) =>
         existingUnion.union(sketch.compact)
         UnionAggregationBuffer(existingUnion)
@@ -241,12 +244,12 @@ case class ThetaSketchAgg(
       case (UnionAggregationBuffer(union1), UnionAggregationBuffer(union2)) =>
         union1.union(union2.getResult)
         UnionAggregationBuffer(union1)
-      // CREATE new union only when necessary
+      // Create a new union only when necessary.
       case (UpdatableSketchBuffer(sketch1), UpdatableSketchBuffer(sketch2)) =>
         createUnionWith(sketch1.compact, sketch2.compact)
       case (UpdatableSketchBuffer(sketch1), FinalizedSketch(sketch2)) =>
         createUnionWith(sketch1.compact, sketch2)
-      // Should never make it here, but added cases for defensive programming
+      // The program should never make it here, the cases are for defensive programming.
       case (FinalizedSketch(sketch1), UpdatableSketchBuffer(sketch2)) =>
         createUnionWith(sketch1, sketch2.compact)
       case (FinalizedSketch(sketch1), FinalizedSketch(sketch2)) =>
@@ -267,12 +270,12 @@ case class ThetaSketchAgg(
     sketchState.eval()
   }
 
-  /** Convert the underlying UpdateSketch/Union into an Compact byte array */
+  /** Convert the underlying UpdateSketch/Union into an Compact byte array. */
   override def serialize(sketchState: ThetaSketchState): Array[Byte] = {
     sketchState.serialize()
   }
 
-  /** Wrap the byte array into a Compact sketch instance */
+  /** Wrap the byte array into a Compact sketch instance. */
   override def deserialize(buffer: Array[Byte]): ThetaSketchState = {
     if (buffer.nonEmpty) {
       FinalizedSketch(CompactSketch.heapify(Memory.wrap(buffer)))
@@ -284,7 +287,7 @@ case class ThetaSketchAgg(
 
 /**
  * The ThetaUnionAgg function ingests and merges Datasketches ThetaSketch instances previously
- * produced by the ThetaSketchAgg function, and outputs the merged ThetaSketch.
+ * produced by the ThetaSketchAgg function and outputs the merged ThetaSketch.
  *
  * See [[https://datasketches.apache.org/docs/Theta/ThetaSketches.html]] for more information.
  *
@@ -387,36 +390,36 @@ case class ThetaUnionAgg(
    *   An input row
    */
   override def update(unionBuffer: ThetaSketchState, input: InternalRow): ThetaSketchState = {
+    // Return early for null input values.
     val v = left.eval(input)
-    v match {
-      case null => unionBuffer // Input is null, return buffer unchanged
-      case _ =>
-        left.dataType match {
-          case BinaryType =>
-            val memory = try {
-              Memory.wrap(v.asInstanceOf[Array[Byte]])
-            } catch {
-              case _: IllegalArgumentException | _: IndexOutOfBoundsException =>
-                throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-            }
+    if (v == null) return unionBuffer
 
-            val inputSketch = try {
-              CompactSketch.wrap(memory)
-            } catch {
-              case _: SketchesArgumentException =>
-                throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-            }
-
-            val union = unionBuffer match {
-              case UnionAggregationBuffer(existingUnionBuffer) => existingUnionBuffer
-              case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-            }
-            union.union(inputSketch)
-            UnionAggregationBuffer(union)
-          case _ =>
-            throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-        }
+    // Sketches must be in binary form to be aggregated, else error out.
+    left.dataType match {
+      case BinaryType => // Continue processing with a BinaryType.
+      case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
+
+    val memory = try {
+      Memory.wrap(v.asInstanceOf[Array[Byte]])
+    } catch {
+      case _: IllegalArgumentException | _: IndexOutOfBoundsException =>
+        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+
+    val inputSketch = try {
+      CompactSketch.wrap(memory)
+    } catch {
+      case _: SketchesArgumentException =>
+        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+
+    val union = unionBuffer match {
+      case UnionAggregationBuffer(existingUnionBuffer) => existingUnionBuffer
+      case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+    union.union(inputSketch)
+    UnionAggregationBuffer(union)
   }
 
   /**
@@ -429,15 +432,15 @@ case class ThetaUnionAgg(
    */
   override def merge(unionBuffer: ThetaSketchState, input: ThetaSketchState): ThetaSketchState = {
     (unionBuffer, input) match {
-      // Both are unions, merge them directly
+      // If both arguments are union objects, merge them directly.
       case (UnionAggregationBuffer(unionLeft), UnionAggregationBuffer(unionRight)) =>
         unionLeft.union(unionRight.getResult)
         UnionAggregationBuffer(unionLeft)
-      // The input was serialized then deserialized
+      // The input was serialized then deserialized.
       case (UnionAggregationBuffer(union), FinalizedSketch(sketch)) =>
         union.union(sketch)
         UnionAggregationBuffer(union)
-      // Should never make it here, but added cases for defensive programming
+      // The program should never make it here, the cases are for defensive programming.
       case (FinalizedSketch(sketch1), FinalizedSketch(sketch2)) =>
         val union = SetOperation.builder.setLogNominalEntries(lgNomEntries).buildUnion
         union.union(sketch1)
@@ -462,12 +465,12 @@ case class ThetaUnionAgg(
     sketchState.eval()
   }
 
-  /** Convert the underlying Union into an Compact byte array */
+  /** Converts the underlying Union into an Compact byte array. */
   override def serialize(sketchState: ThetaSketchState): Array[Byte] = {
     sketchState.serialize()
   }
 
-  /** Wrap the byte array into a Compact sketch instance */
+  /** Wrap the byte array into a Compact sketch instance. */
   override def deserialize(buffer: Array[Byte]): ThetaSketchState = {
     if (buffer.nonEmpty) {
       FinalizedSketch(CompactSketch.heapify(Memory.wrap(buffer)))
@@ -585,36 +588,36 @@ case class ThetaIntersectionAgg(
   override def update(
       intersectionBuffer: ThetaSketchState,
       input: InternalRow): ThetaSketchState = {
+    // Return early for null input values.
     val v = left.eval(input)
-    v match {
-      case null => intersectionBuffer // Input is null, return buffer unchanged
-      case _ =>
-        left.dataType match {
-          case BinaryType =>
-            val memory = try {
-              Memory.wrap(v.asInstanceOf[Array[Byte]])
-            } catch {
-              case _: IllegalArgumentException | _: IndexOutOfBoundsException =>
-                throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-            }
+    if (v == null) return intersectionBuffer
 
-            val inputSketch = try {
-              CompactSketch.wrap(memory)
-            } catch {
-              case _: SketchesArgumentException =>
-                throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-            }
-
-            val intersection = intersectionBuffer match {
-              case IntersectionAggregationBuffer(existingIntersection) => existingIntersection
-              case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-            }
-            intersection.intersect(inputSketch)
-            IntersectionAggregationBuffer(intersection)
-          case _ =>
-            throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-        }
+    // Sketches must be in binary form to be aggregated, else error out.
+    left.dataType match {
+      case BinaryType => // Continue processing with a BinaryType.
+      case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
+
+    val memory = try {
+      Memory.wrap(v.asInstanceOf[Array[Byte]])
+    } catch {
+      case _: IllegalArgumentException | _: IndexOutOfBoundsException =>
+        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+
+    val inputSketch = try {
+      CompactSketch.wrap(memory)
+    } catch {
+      case _: SketchesArgumentException =>
+        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+
+    val intersection = intersectionBuffer match {
+      case IntersectionAggregationBuffer(existingIntersection) => existingIntersection
+      case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+    intersection.intersect(inputSketch)
+    IntersectionAggregationBuffer(intersection)
   }
 
   /**
@@ -630,17 +633,17 @@ case class ThetaIntersectionAgg(
       intersectionBuffer: ThetaSketchState,
       input: ThetaSketchState): ThetaSketchState = {
     (intersectionBuffer, input) match {
-      // Both are intersections, merge them directly
+      // If both arguments are intersection objects, merge them directly.
       case (
             IntersectionAggregationBuffer(intersectLeft),
             IntersectionAggregationBuffer(intersectRight)) =>
         intersectLeft.intersect(intersectRight.getResult)
         IntersectionAggregationBuffer(intersectLeft)
-      // The input was serialized then deserialized
+      // The input was serialized then deserialized.
       case (IntersectionAggregationBuffer(intersection), FinalizedSketch(sketch)) =>
         intersection.intersect(sketch)
         IntersectionAggregationBuffer(intersection)
-      // Should never make it here, but added cases for defensive programming
+      // The program should never make it here, the cases are for defensive programming.
       case (FinalizedSketch(sketch1), FinalizedSketch(sketch2)) =>
         val intersection =
           SetOperation.builder.setLogNominalEntries(lgNomEntries).buildIntersection
@@ -666,12 +669,12 @@ case class ThetaIntersectionAgg(
     sketchState.eval()
   }
 
-  /** Convert the underlying Intersection into an Compact byte array */
+  /** Convert the underlying Intersection into an Compact byte array. */
   override def serialize(sketchState: ThetaSketchState): Array[Byte] = {
     sketchState.serialize()
   }
 
-  /** Wrap the byte array into a Compact sketch instance */
+  /** Wrap the byte array into a Compact sketch instance. */
   override def deserialize(buffer: Array[Byte]): ThetaSketchState = {
     if (buffer.nonEmpty) {
       FinalizedSketch(CompactSketch.heapify(Memory.wrap(buffer)))

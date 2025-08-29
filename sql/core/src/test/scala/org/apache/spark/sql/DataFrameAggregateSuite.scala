@@ -2226,8 +2226,8 @@ class DataFrameAggregateSuite extends QueryTest
       .toDF("id", "value")
     df2.createOrReplaceTempView("df2")
 
-    // first test theta_sketch_agg, theta_sketch_estimate via dataframe + sql,
-    // with and without configs, via both DF and SQL implementations
+    // First test theta_sketch_agg, theta_sketch_estimate via dataframe + sql,
+    // with and without configs, via both DF and SQL implementations.
     val res1 = df1
       .groupBy("id")
       .agg(
@@ -2259,7 +2259,7 @@ class DataFrameAggregateSuite extends QueryTest
         |""".stripMargin)
     checkAnswer(res2, Row(1, 7, 4, 4))
 
-    // now test theta_union_agg via dataframe + sql, with and without configs,
+    // Now test theta_union_agg via dataframe + sql, with and without configs,
     // unioning together sketches with default, non-default and different configurations
     val df3 = df1
       .groupBy("id")
@@ -2387,7 +2387,7 @@ class DataFrameAggregateSuite extends QueryTest
       .toDF("id", "value")
     df2.createOrReplaceTempView("df2")
 
-    // validate that the functions error out when lgNomEntries < 4 or > 26
+    // Validate that the functions error out when lgNomEntries < 4 or > 26.
     checkError(
       exception = intercept[SparkRuntimeException] {
         df1
@@ -2408,7 +2408,7 @@ class DataFrameAggregateSuite extends QueryTest
       condition = "THETA_INVALID_LG_NOM_ENTRIES",
       parameters = Map("min" -> "4", "max" -> "26", "value" -> "28"))
 
-    // validate that the functions error out when provided unexpected types
+    // Validate that the functions error out when provided unexpected types.
     checkError(
       exception = intercept[AnalysisException] {
         val res = sql("""
@@ -2475,7 +2475,7 @@ class DataFrameAggregateSuite extends QueryTest
       context =
         ExpectedContext(fragment = "theta_union(sketch, 'invalid')", start = 93, stop = 122))
 
-    // Test theta_union with non-sketch input
+    // Test theta_union with non-sketch input.
     checkError(
       exception = intercept[AnalysisException] {
         sql("select theta_union('not_a_sketch', 'also_not_a_sketch')").collect()
@@ -2506,7 +2506,7 @@ class DataFrameAggregateSuite extends QueryTest
     val df3 = Seq((1, "c"), (1, "d"), (1, "g"), (1, "g"), (1, "h")).toDF("id", "value")
     df3.createOrReplaceTempView("df3")
 
-    // Test theta_difference via DataFrame API
+    // Test theta_difference via DataFrame API.
     val sketches1 = df1
       .groupBy("id")
       .agg(
@@ -2529,10 +2529,10 @@ class DataFrameAggregateSuite extends QueryTest
         theta_sketch_estimate(theta_difference("sketch1_20", "sketch2_20")))
       .select("id", "difference_count_1", "difference_count_2")
 
-    // df1 has {a,b,c,d}, df2 has {a,c,d,e,f}, so df1 - df2 should be approximately {b}
+    // df1 has {a,b,c,d}, df2 has {a,c,d,e,f}, so df1 - df2 should be approximately {b}.
     checkAnswer(res1, Row(1, 1, 1))
 
-    // Test theta_difference via SQL
+    // Test theta_difference via SQL.
     val res2 = sql("""with sketches1 as (
       |select
       | id,
@@ -2559,7 +2559,7 @@ class DataFrameAggregateSuite extends QueryTest
       |""".stripMargin)
     checkAnswer(res2, Row(1, 1, 1))
 
-    // Test theta_intersection via DataFrame API
+    // Test theta_intersection via DataFrame API.
     val res3 = sketches1
       .join(sketches2, "id")
       .withColumn(
@@ -2570,10 +2570,10 @@ class DataFrameAggregateSuite extends QueryTest
         theta_sketch_estimate(theta_intersection("sketch1_20", "sketch2_20")))
       .select("id", "intersection_count_1", "intersection_count_2")
 
-    // df1 has {a,b,c,d}, df2 has {a,c,d,e,f}, so intersection should be approximately {a,c,d} = 3
+    // df1 has {a,b,c,d}, df2 has {a,c,d,e,f}, so intersection should be approximately {a,c,d} = 3.
     checkAnswer(res3, Row(1, 3, 3))
 
-    // Test theta_intersection via SQL
+    // Test theta_intersection via SQL.
     val res4 = sql("""with sketches1 as (
       |select
       | id,
@@ -2601,7 +2601,7 @@ class DataFrameAggregateSuite extends QueryTest
       |""".stripMargin)
     checkAnswer(res4, Row(1, 3, 3))
 
-    // Test theta_intersection_agg via DataFrame API
+    // Test theta_intersection_agg via DataFrame API.
     val all_sketches = df1
       .groupBy("id")
       .agg(theta_sketch_agg("value").as("sketch"))
@@ -2623,10 +2623,10 @@ class DataFrameAggregateSuite extends QueryTest
         theta_sketch_estimate(theta_intersection_agg("sketch")).as("intersection_count_1"),
         theta_sketch_estimate(theta_intersection_agg("sketch", 15)).as("intersection_count_2"))
 
-    // df1={a,b,c,d}, df2={a,c,d,e,f}, df3={c,d,g,h}, intersection should be {c,d} = 2
+    // df1={a,b,c,d}, df2={a,c,d,e,f}, df3={c,d,g,h}, so intersection should be {c,d} = 2.
     checkAnswer(res5, Row(1, 2, 2))
 
-    // Test theta_intersection_agg via SQL
+    // Test theta_intersection_agg via SQL.
     val res6 = sql("""with all_sketches as (
       |select id, theta_sketch_agg(value) as sketch, 'df1' as source from df1 group by 1
       |union all
@@ -2644,7 +2644,7 @@ class DataFrameAggregateSuite extends QueryTest
       |""".stripMargin)
     checkAnswer(res6, Row(1, 2, 2))
 
-    // Test with different lgNomEntries parameters
+    // Test with different lgNomEntries parameters.
     val res7 = sql("""with sketches1 as (
       |select id, theta_sketch_agg(value, 12) as sketch1 from df1 group by 1
       |),
@@ -2661,7 +2661,7 @@ class DataFrameAggregateSuite extends QueryTest
       |""".stripMargin)
     checkAnswer(res7, Row(1, 1, 3))
 
-    // Test with null values
+    // Test with null values.
     val df_with_nulls =
       Seq((1, "a"), (1, "b"), (1, null), (2, null), (2, null)).toDF("id", "value")
     df_with_nulls.createOrReplaceTempView("df_with_nulls")
@@ -2680,10 +2680,10 @@ class DataFrameAggregateSuite extends QueryTest
       |from sketch1 s1
       |cross join sketch2 s2
       |""".stripMargin)
-    // sketch1 has {a,b}, sketch2 is empty, so difference = 2, intersection = 0
+    // sketch1 has {a,b}, sketch2 is empty, so difference = 2 and intersection = 0.
     checkAnswer(res8, Row(1, 2, 0))
 
-    // Test empty intersection
+    // Test empty intersection.
     val df_disjoint1 = Seq((1, "a"), (1, "b")).toDF("id", "value")
     val df_disjoint2 = Seq((1, "c"), (1, "d")).toDF("id", "value")
     df_disjoint1.createOrReplaceTempView("df_disjoint1")
@@ -2710,7 +2710,7 @@ class DataFrameAggregateSuite extends QueryTest
     val df1 = Seq((1, "a"), (1, "b"), (1, "c"), (1, "d")).toDF("id", "value")
     df1.createOrReplaceTempView("df1")
 
-    // Test invalid lgNomEntries for theta_intersection_agg
+    // Test invalid lgNomEntries for theta_intersection_agg.
     checkError(
       exception = intercept[SparkRuntimeException] {
         sql("""with sketches as (
@@ -2733,7 +2733,7 @@ class DataFrameAggregateSuite extends QueryTest
       condition = "THETA_INVALID_LG_NOM_ENTRIES",
       parameters = Map("min" -> "4", "max" -> "26", "value" -> "27"))
 
-    // Test invalid parameter types for theta_difference
+    // Test invalid parameter types for theta_difference.
     checkError(
       exception = intercept[AnalysisException] {
         sql("""with sketches as (
@@ -2752,7 +2752,7 @@ class DataFrameAggregateSuite extends QueryTest
       context =
         ExpectedContext(fragment = "theta_difference(sketch, 'invalid')", start = 93, stop = 127))
 
-    // Test invalid parameter types for theta_intersection
+    // Test invalid parameter types for theta_intersection.
     checkError(
       exception = intercept[AnalysisException] {
         sql("""with sketches as (
@@ -2771,7 +2771,7 @@ class DataFrameAggregateSuite extends QueryTest
       context =
         ExpectedContext(fragment = "theta_intersection(sketch, 123)", start = 93, stop = 123))
 
-    // Test invalid parameter types for theta_intersection_agg
+    // Test invalid parameter types for theta_intersection_agg.
     checkError(
       exception = intercept[AnalysisException] {
         sql("""with sketches as (
@@ -2792,7 +2792,7 @@ class DataFrameAggregateSuite extends QueryTest
         start = 93,
         stop = 133))
 
-    // Test theta_difference with non-sketch input
+    // Test theta_difference with non-sketch input.
     checkError(
       exception = intercept[AnalysisException] {
         sql("select theta_difference('not_a_sketch', 'also_not_a_sketch')").collect()
@@ -2809,7 +2809,7 @@ class DataFrameAggregateSuite extends QueryTest
         start = 7,
         stop = 59))
 
-    // Test theta_intersection with non-sketch input
+    // Test theta_intersection with non-sketch input.
     checkError(
       exception = intercept[AnalysisException] {
         sql("select theta_intersection('not_a_sketch', 'also_not_a_sketch')").collect()
@@ -2898,7 +2898,7 @@ class DataFrameAggregateSuite extends QueryTest
         .unionAll(df.selectExpr("theta_sketch_agg(col, 20) as sketch"))
         .unionAll(df.filter(col("col") === 1).selectExpr("theta_sketch_agg(col) as sketch"))
         .selectExpr("theta_sketch_estimate(theta_intersection_agg(sketch, 15))"),
-      Seq(Row(1)) // intersection of {1,2}, {1,2}, {1} = {1}
+      Seq(Row(1)) // The intersection of {1,2}, {1,2}, {1} = {1}.
     )
     checkAnswer(
       df.select(theta_sketch_agg(col("col")).as("sketch"))

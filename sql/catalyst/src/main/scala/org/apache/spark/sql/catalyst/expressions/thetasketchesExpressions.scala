@@ -29,8 +29,8 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, Integ
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr) - Returns the estimated number of unique values given the binary representation
-    of a Datasketches ThetaSketch. """,
+    _FUNC_(expr) - Returns the estimated number of unique values
+    given the binary representation of a Datasketches ThetaSketch. """,
   examples = """
     Examples:
       > SELECT _FUNC_(theta_sketch_agg(col)) FROM VALUES (1), (1), (2), (2), (3) tab(col);
@@ -78,9 +78,9 @@ case class ThetaSketchEstimate(child: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(first, second, lgNomEntries) - Merges two binary representations of
-    Datasketches ThetaSketch objects, using a Datasketches Union object. Set
-    lgNomEntries to a value between 4 and 26 to find the unions of sketches with different
-    union buffer sizes values (defaults to 12). """,
+    Datasketches ThetaSketch objects using a ThetaSketch Union object. Users can set
+    lgNomEntries to a value between 4 and 26 to find the union of sketches with different
+    union buffer size values (defaults to 12). """,
   examples = """
     Examples:
       > SELECT theta_sketch_estimate(_FUNC_(theta_sketch_agg(col1), theta_sketch_agg(col2))) FROM VALUES (1, 4), (1, 4), (2, 5), (2, 5), (3, 6) tab(col1, col2);
@@ -160,9 +160,9 @@ case class ThetaUnion(first: Expression, second: Expression, third: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(first, second, lgNomEntries) - Subtracts two binary representations of
-    Datasketches ThetaSketch objects, using a Datasketches AnotB object. Set
+    Datasketches ThetaSketch objects using a ThetaSketch AnotB object. Users can set
     lgNomEntries to a value between 4 and 26 to find the difference of sketches with different
-    AnotB buffer sizes values (defaults to 12). """,
+    AnotB buffer size values (defaults to 12). """,
   examples = """
     Examples:
       > SELECT theta_sketch_estimate(_FUNC_(theta_sketch_agg(col1), theta_sketch_agg(col2))) FROM VALUES (5, 4), (1, 4), (2, 5), (2, 5), (3, 1) tab(col1, col2);
@@ -242,9 +242,9 @@ case class ThetaDifference(first: Expression, second: Expression, third: Express
 @ExpressionDescription(
   usage = """
     _FUNC_(first, second, lgNomEntries) - Intersects two binary representations of
-    Datasketches ThetaSketch objects, using a Datasketches Intersect object. Set
+    Datasketches ThetaSketch objects using a ThetaSketch Intersect object. Users can set
     lgNomEntries to a value between 4 and 26 to find the intersection of sketches with different
-    intersection buffer sizes values (defaults to 12). """,
+    intersection buffer size values (defaults to 12). """,
   examples = """
     Examples:
       > SELECT theta_sketch_estimate(_FUNC_(theta_sketch_agg(col1), theta_sketch_agg(col2))) FROM VALUES (5, 4), (1, 4), (2, 5), (2, 5), (3, 1) tab(col1, col2);

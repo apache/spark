@@ -18,47 +18,51 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 
-class ThetaSketchUtilsSuite extends SparkFunSuite {
+class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
 
   test("checkLgNomLongs: accepts values within valid range") {
     val validValues =
       Seq(ThetaSketchUtils.MIN_LG_NOM_LONGS, 10, 20, ThetaSketchUtils.MAX_LG_NOM_LONGS)
     validValues.foreach { value =>
-      // Should not throw
+      // There should be no error here.
       ThetaSketchUtils.checkLgNomLongs(value)
     }
   }
 
+
   test("checkLgNomLongs: throws exception for values below minimum") {
     val invalidValues = Seq(ThetaSketchUtils.MIN_LG_NOM_LONGS - 1, 0, -5)
     invalidValues.foreach { value =>
-      val e = intercept[SparkRuntimeException] {
-        ThetaSketchUtils.checkLgNomLongs(value)
-      }
-      assert(
-        e.getMessage.contains(
-          s"must be between ${ThetaSketchUtils.MIN_LG_NOM_LONGS} " +
-          s"and ${ThetaSketchUtils.MAX_LG_NOM_LONGS}"
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          ThetaSketchUtils.checkLgNomLongs(value)
+        },
+        condition = "THETA_INVALID_LG_NOM_ENTRIES",
+        parameters = Map(
+          "min" -> ThetaSketchUtils.MIN_LG_NOM_LONGS.toString,
+          "max" -> ThetaSketchUtils.MAX_LG_NOM_LONGS.toString,
+          "value" -> value.toString
         )
       )
-      assert(e.getMessage.contains(s"$value"))
     }
   }
 
   test("checkLgNomLongs: throws exception for values above maximum") {
     val invalidValues = Seq(ThetaSketchUtils.MAX_LG_NOM_LONGS + 1, 30, 100)
     invalidValues.foreach { value =>
-      val e = intercept[SparkRuntimeException] {
-        ThetaSketchUtils.checkLgNomLongs(value)
-      }
-      assert(
-        e.getMessage.contains(
-          s"must be between ${ThetaSketchUtils.MIN_LG_NOM_LONGS} " +
-          s"and ${ThetaSketchUtils.MAX_LG_NOM_LONGS}"
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          ThetaSketchUtils.checkLgNomLongs(value)
+        },
+        condition = "THETA_INVALID_LG_NOM_ENTRIES",
+        parameters = Map(
+          "min" -> ThetaSketchUtils.MIN_LG_NOM_LONGS.toString,
+          "max" -> ThetaSketchUtils.MAX_LG_NOM_LONGS.toString,
+          "value" -> value.toString
         )
       )
-      assert(e.getMessage.contains(s"$value"))
     }
   }
 }

@@ -34,7 +34,7 @@ class ThetasketchesAggSuite extends SparkFunSuite {
       input: Seq[Any],
       numSketches: Integer = 5): (Long, NumericRange[Long]) = {
 
-    // create a map of agg function instances
+    // Create a map of the agg function instances.
     val aggFunctionMap = Seq
       .tabulate(numSketches)(index => {
         val sketch = new ThetaSketchAgg(BoundReference(0, dataType, nullable = true))
@@ -42,7 +42,7 @@ class ThetasketchesAggSuite extends SparkFunSuite {
       })
       .toMap
 
-    // randomly update agg function instances
+    // Randomly update agg function instances.
     input.map(value => {
       val (aggFunction, aggBuffer) = aggFunctionMap(Random.nextInt(numSketches))
       aggFunction.update(aggBuffer, InternalRow(value))
@@ -55,7 +55,7 @@ class ThetasketchesAggSuite extends SparkFunSuite {
       (agg, agg.deserialize(serialized))
     }
 
-    // simulate serialization -> deserialization -> merge
+    // Simulate serialization -> deserialization -> merge.
     val mapValues = aggFunctionMap.values
     val (mergedAgg, UnionAggregationBuffer(mergedBuf)) =
       mapValues.tail.foldLeft(mapValues.head)((prev, cur) => {
@@ -120,19 +120,19 @@ class ThetasketchesAggSuite extends SparkFunSuite {
   }
 
   test("SPARK-52407: Test lgNomEntries results in downsampling sketches during Union") {
-    // Create sketch with larger configuration (more precise)
+    // Create a sketch with larger configuration (more precise).
     val aggFunc1 = new ThetaSketchAgg(BoundReference(0, IntegerType, nullable = true), 12)
     val sketch1 = aggFunc1.createAggregationBuffer()
     (0 to 100).map(i => aggFunc1.update(sketch1, InternalRow(i)))
     val binary1 = aggFunc1.eval(sketch1)
 
-    // Create sketch with smaller configuration (less precise)
+    // Create a sketch with smaller configuration (less precise).
     val aggFunc2 = new ThetaSketchAgg(BoundReference(0, IntegerType, nullable = true), 10)
     val sketch2 = aggFunc2.createAggregationBuffer()
     (0 to 100).map(i => aggFunc2.update(sketch2, InternalRow(i)))
     val binary2 = aggFunc2.eval(sketch2)
 
-    // Union the sketches
+    // Union the sketches.
     val unionAgg = new ThetaUnionAgg(BoundReference(0, BinaryType, nullable = true), 12)
     val union = unionAgg.createAggregationBuffer()
     unionAgg.update(union, InternalRow(binary1))
@@ -146,19 +146,19 @@ class ThetasketchesAggSuite extends SparkFunSuite {
   }
 
   test("SPARK-52407: Test lgNomEntries results in downsampling sketches during intersection") {
-    // Create sketch with larger configuration (more precise)
+    // Create sketch with a larger configuration (more precise).
     val aggFunc1 = new ThetaSketchAgg(BoundReference(0, IntegerType, nullable = true), 12)
     val sketch1 = aggFunc1.createAggregationBuffer()
     (0 to 150).map(i => aggFunc1.update(sketch1, InternalRow(i)))
     val binary1 = aggFunc1.eval(sketch1)
 
-    // Create sketch with smaller configuration (less precise)
+    // Create a sketch with smaller configuration (less precise).
     val aggFunc2 = new ThetaSketchAgg(BoundReference(0, IntegerType, nullable = true), 10)
     val sketch2 = aggFunc2.createAggregationBuffer()
     (50 to 200).map(i => aggFunc2.update(sketch2, InternalRow(i)))
     val binary2 = aggFunc2.eval(sketch2)
 
-    // Intersect the sketches
+    // Intersect the sketches.
     val intersectionAgg =
       new ThetaIntersectionAgg(BoundReference(0, BinaryType, nullable = true), 12)
     val intersection = intersectionAgg.createAggregationBuffer()
@@ -166,8 +166,8 @@ class ThetasketchesAggSuite extends SparkFunSuite {
     intersectionAgg.update(intersection, InternalRow(binary2))
     val intersectionResult = intersectionAgg.eval(intersection)
 
-    // Verify the estimate is still accurate despite different configurations
-    // Should be around 101 (overlap from 50 to 150)
+    // Verify the estimate is still accurate despite different configurations,
+    // should be around 101 (overlap from 50 to 150).
     val estimate = ThetaSketchEstimate(BoundReference(0, BinaryType, nullable = true))
       .eval(InternalRow(intersectionResult))
     assert(estimate.asInstanceOf[Long] >= 95 && estimate.asInstanceOf[Long] <= 105)
