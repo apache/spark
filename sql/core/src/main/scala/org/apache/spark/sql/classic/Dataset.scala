@@ -1544,19 +1544,6 @@ class Dataset[T] private[sql](
     }
   }
 
-  /**
-   * Repartitions the Dataset using the specified partition ID expression.
-   *
-   * The number of partitions will be configured by `spark.sql.shuffle.partitions`.
-   *
-   * @param partitionIdExpr the expression to be used as the partition ID. Must be an integral type.
-   *
-   * @group typedrel
-   * @since 4.1.0
-   */
-  def repartitionById(partitionIdExpr: Column): Dataset[T] = {
-    repartitionById(sparkSession.sessionState.conf.numShufflePartitions, partitionIdExpr)
-  }
 
   /**
    * Repartitions the Dataset into the given number of partitions using the specified
@@ -1569,8 +1556,14 @@ class Dataset[T] private[sql](
    * @since 4.1.0
    */
   def repartitionById(numPartitions: Int, partitionIdExpr: Column): Dataset[T] = {
-    val directShufflePartitionIdCol = Column(DirectShufflePartitionID(partitionIdExpr.expr))
-    repartitionByExpression(Some(numPartitions), Seq(directShufflePartitionIdCol))
+    withTypedPlan {
+      RepartitionByExpression(
+        partitionExpressions = Seq(partitionIdExpr.expr),
+        child = logicalPlan,
+        optNumPartitions = Some(numPartitions),
+        optAdvisoryPartitionSize = None,
+        directPassthrough = true)
+    }
   }
 
   protected def repartitionByRange(

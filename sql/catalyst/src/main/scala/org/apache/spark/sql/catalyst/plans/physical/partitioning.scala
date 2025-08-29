@@ -949,18 +949,19 @@ case class ShuffleSpecCollection(specs: Seq[ShuffleSpec]) extends ShuffleSpec {
 
 /**
  * Represents a partitioning where partition IDs are passed through directly from the
- * DirectShufflePartitionID expression. This partitioning scheme is used when users
+ * partition ID expression. This partitioning scheme is used when users
  * want to directly control partition placement rather than using hash-based partitioning.
  *
  * This partitioning maps directly to the PartitionIdPassthrough RDD partitioner.
  */
 case class ShufflePartitionIdPassThrough(
-    expr: DirectShufflePartitionID,
+    expr: Expression,
     numPartitions: Int) extends Expression with Partitioning with Unevaluable {
 
   // TODO(SPARK-53401): Support Shuffle Spec in Direct Partition ID Pass Through
   // TODO(SPARK-53432): Support Null Value in Direct Passthrough Partitioning API
-  def partitionIdExpression: Expression = Pmod(expr.child, Literal(numPartitions))
+  def partitionIdExpression: Expression =
+    Pmod(expr, Literal(numPartitions))
 
   def expressions: Seq[Expression] = expr :: Nil
   override def children: Seq[Expression] = expr :: Nil
@@ -972,7 +973,7 @@ case class ShufflePartitionIdPassThrough(
       required match {
         // TODO(SPARK-53428): Support Direct Passthrough Partitioning in the Streaming Joins
         case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
-          val partitioningExpressions = expr.child :: Nil
+          val partitioningExpressions = expr :: Nil
           if (requireAllClusterKeys) {
             c.areAllClusterKeysMatched(partitioningExpressions)
           } else {
@@ -985,5 +986,5 @@ case class ShufflePartitionIdPassThrough(
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): ShufflePartitionIdPassThrough =
-    copy(expr = newChildren.head.asInstanceOf[DirectShufflePartitionID])
+    copy(expr = newChildren.head)
 }

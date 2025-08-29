@@ -1868,33 +1868,30 @@ trait HasPartitionExpressions extends SQLConfHelper {
 
   def optAdvisoryPartitionSize: Option[Long]
 
+  def directPassthrough: Boolean = false
+
   protected def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
     RoundRobinPartitioning(numPartitions)
+  } else if (directPassthrough) {
+    // Direct passthrough mode - use partition ID expression directly
+    require(partitionExpressions.length == 1,
+      s"Direct passthrough partitioning can only be used with a single partition expression, " +
+        s"but found ${partitionExpressions.length} expressions")
+    ShufflePartitionIdPassThrough(partitionExpressions.head, numPartitions)
   } else {
-    // Check if we have DirectShufflePartitionID expressions
-    val directShuffleExprs = partitionExpressions.filter(_.isInstanceOf[DirectShufflePartitionID])
-    if (directShuffleExprs.nonEmpty) {
-      require(directShuffleExprs.length == 1 && partitionExpressions.length == 1,
-        s"DirectShufflePartitionID can only be used as a single partition expression, " +
-          s"but found ${directShuffleExprs.length} DirectShufflePartitionID expressions " +
-          s"out of ${partitionExpressions.length} total expressions")
-      ShufflePartitionIdPassThrough(
-        partitionExpressions.head.asInstanceOf[DirectShufflePartitionID], numPartitions)
+    val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
+    require(sortOrder.isEmpty || nonSortOrder.isEmpty,
+      s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of " +
+        "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
+        "means `HashPartitioning`. In this case we have:" +
+        s"""
+           |SortOrder: $sortOrder
+           |NonSortOrder: $nonSortOrder
+       """.stripMargin)
+    if (sortOrder.nonEmpty) {
+      RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
     } else {
-      val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
-      require(sortOrder.isEmpty || nonSortOrder.isEmpty,
-        s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of " +
-          "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
-          "means `HashPartitioning`. In this case we have:" +
-          s"""
-             |SortOrder: $sortOrder
-             |NonSortOrder: $nonSortOrder
-         """.stripMargin)
-      if (sortOrder.nonEmpty) {
-        RangePartitioning(sortOrder.map(_.asInstanceOf[SortOrder]), numPartitions)
-      } else {
-        HashPartitioning(partitionExpressions, numPartitions)
-      }
+      HashPartitioning(partitionExpressions, numPartitions)
     }
   }
 }
@@ -1910,7 +1907,8 @@ case class RepartitionByExpression(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
     optNumPartitions: Option[Int],
-    optAdvisoryPartitionSize: Option[Long] = None)
+    optAdvisoryPartitionSize: Option[Long] = None,
+    override val directPassthrough: Boolean = false)
   extends RepartitionOperation with HasPartitionExpressions {
 
   require(optNumPartitions.isEmpty || optAdvisoryPartitionSize.isEmpty)
@@ -1935,6 +1933,22 @@ object RepartitionByExpression {
       child: LogicalPlan,
       numPartitions: Int): RepartitionByExpression = {
     RepartitionByExpression(partitionExpressions, child, Some(numPartitions))
+  }
+
+  // 4-parameter apply method for backwards compatibility with existing case matches
+  def apply(
+      partitionExpressions: Seq[Expression],
+      child: LogicalPlan,
+      optNumPartitions: Option[Int],
+      optAdvisoryPartitionSize: Option[Long]): RepartitionByExpression = {
+    RepartitionByExpression(partitionExpressions, child, optNumPartitions,
+      optAdvisoryPartitionSize, directPassthrough = false)
+  }
+
+  // 4-parameter unapply method for backwards compatibility with pattern matching
+  def unapply(r: RepartitionByExpression)
+      : Option[(Seq[Expression], LogicalPlan, Option[Int], Option[Long])] = {
+    Some((r.partitionExpressions, r.child, r.optNumPartitions, r.optAdvisoryPartitionSize))
   }
 }
 

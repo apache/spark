@@ -405,7 +405,7 @@ object ShuffleExchangeExec {
         row => bindReferences(expressions, outputAttributes).map(_.eval(row))
       case s: ShufflePartitionIdPassThrough =>
         // For ShufflePartitionIdPassThrough, the expression directly evaluates to the partition ID
-        val projection = UnsafeProjection.create(s.expressions, outputAttributes)
+        val projection = UnsafeProjection.create(s.partitionIdExpression :: Nil, outputAttributes)
         row => projection(row).getInt(0)
       case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
     }
