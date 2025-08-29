@@ -237,6 +237,8 @@ class BooleanOps(DataTypeOps):
 
     def __and__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        if right is None:
+            raise TypeError("AND can not be applied to given types.")
         if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
             return right.__and__(left)
         else:
@@ -256,6 +258,8 @@ class BooleanOps(DataTypeOps):
 
     def xor(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        if right is None:
+            raise TypeError("XOR can not be applied to given types.")
         if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
             return right ^ left
         elif _is_valid_for_logical_operator(right):
@@ -277,6 +281,8 @@ class BooleanOps(DataTypeOps):
 
     def __or__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        if right is None:
+            raise TypeError("OR can not be applied to given types.")
         if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
             return right.__or__(left)
         else:
