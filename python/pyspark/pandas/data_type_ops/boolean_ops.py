@@ -237,7 +237,7 @@ class BooleanOps(DataTypeOps):
 
     def __and__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        if right is None:
+        if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession) and right is None:
             raise TypeError("AND can not be applied to given types.")
         if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
             return right.__and__(left)
@@ -258,7 +258,7 @@ class BooleanOps(DataTypeOps):
 
     def xor(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        if right is None:
+        if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession) and right is None:
             raise TypeError("XOR can not be applied to given types.")
         if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
             return right ^ left
@@ -281,7 +281,7 @@ class BooleanOps(DataTypeOps):
 
     def __or__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        if right is None:
+        if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession) and right is None:
             raise TypeError("OR can not be applied to given types.")
         if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
             return right.__or__(left)
