@@ -37,7 +37,7 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with SharedJDBCIntegrationTests {
+class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DB2DatabaseOnDocker
 
   override def dataPreparation(conn: Connection): Unit = {
@@ -76,8 +76,6 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with SharedJDBCInte
     conn.prepareStatement("INSERT INTO binarys VALUES (" +
         "'ABC', 'ABC', BINARY('ABC', 10), VARBINARY('ABC', 10))")
       .executeUpdate()
-
-    createSharedTable(conn)
   }
 
   test("Basic test") {

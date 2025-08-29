@@ -40,7 +40,7 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with SharedJDBCIntegrationTests {
+class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new PostgresDatabaseOnDocker
 
   override def dataPreparation(conn: Connection): Unit = {
@@ -183,8 +183,6 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with SharedJDB
     conn.prepareStatement("CREATE DOMAIN myint AS integer CHECK (VALUE > 0)").executeUpdate()
     conn.prepareStatement("CREATE TABLE domain_table (c1 myint)").executeUpdate()
     conn.prepareStatement("INSERT INTO domain_table VALUES (1)").executeUpdate()
-
-    createSharedTable(conn)
   }
 
   test("Type mapping for various types") {

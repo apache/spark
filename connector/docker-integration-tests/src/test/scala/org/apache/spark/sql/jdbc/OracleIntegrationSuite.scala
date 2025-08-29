@@ -62,8 +62,7 @@ import org.apache.spark.tags.DockerTest
  */
 @DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationSuite
-  with SharedSparkSession
-  with SharedJDBCIntegrationTests {
+  with SharedSparkSession {
   import testImplicits._
 
   override val db = new OracleDatabaseOnDocker
@@ -182,8 +181,6 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite
     // insert a row with AL16UTF16 but not UTF8
     // scalastyle:on nonascii
     conn.commit()
-
-    createSharedTable(conn)
   }
 
   test("SPARK-16625: Importing Oracle numeric types") {

@@ -39,7 +39,7 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with SharedJDBCIntegrationTests {
+class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new MySQLDatabaseOnDocker
 
   override def dataPreparation(conn: Connection): Unit = {
@@ -97,8 +97,6 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with SharedJDBCIn
     conn.prepareStatement("CREATE TABLE TBL_GEOMETRY (col0 GEOMETRY)").executeUpdate()
     conn.prepareStatement("INSERT INTO TBL_GEOMETRY VALUES (ST_GeomFromText('POINT(0 0)'))")
       .executeUpdate()
-
-    createSharedTable(conn)
   }
 
   def testConnection(): Unit = {

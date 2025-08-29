@@ -40,8 +40,7 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite
-  with SharedJDBCIntegrationTests {
+class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new MsSQLServerDatabaseOnDocker
 
   override def dataPreparation(conn: Connection): Unit = {
@@ -147,8 +146,6 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite
       .executeUpdate()
     conn.prepareStatement("""INSERT INTO test_rowversion (myKey, myValue) VALUES (1, 0)""")
       .executeUpdate()
-
-    createSharedTable(conn)
   }
 
   test("Basic test") {
