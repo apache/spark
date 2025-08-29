@@ -216,6 +216,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
             return arr
         else:
             try:
+                # when safe is True, the cast will fail if there's a overflow or other unsafe conversion
                 return arr.cast(target_type=arrow_type, safe=True)
             except (pa.ArrowInvalid, pa.ArrowTypeError):
                 raise PySparkTypeError(
