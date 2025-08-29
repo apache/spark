@@ -173,7 +173,7 @@ case class ThetaSketchAgg(
   override def update(updateBuffer: ThetaSketchState, input: InternalRow): ThetaSketchState = {
     // Return early for null values.
     val v = left.eval(input)
-    if (v == null) return UpdatableSketchBuffer(sketch)
+    if (v == null) return updateBuffer
 
     // Return early for non-updatable buffers. The return case should never happen here.
     val sketch = updateBuffer match {
