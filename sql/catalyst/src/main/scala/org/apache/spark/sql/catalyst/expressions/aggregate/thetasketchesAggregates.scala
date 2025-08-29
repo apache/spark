@@ -178,7 +178,7 @@ case class ThetaSketchAgg(
     // Return early for non-updatable buffers. The return case should never happen here.
     val sketch = updateBuffer match {
       case UpdatableSketchBuffer(s) => s
-      case _ => return updateBuffer
+      case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
 
     // Handle the different data types for sketch updates.
