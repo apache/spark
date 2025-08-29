@@ -4053,7 +4053,13 @@ def make_timestamp_ntz(
     if hasDays and hasHours and hasMins and hasSecs:
         # Overload with inputs: years, months, days, hours, mins, secs.
         return _invoke_function_over_columns(
-            "make_timestamp_ntz", yearsOrDate, monthsOrTime, days, hours, mins, secs
+            "make_timestamp_ntz",
+            yearsOrDate,
+            monthsOrTime,
+            days,  # type: ignore[arg-type]
+            hours,  # type: ignore[arg-type]
+            mins,  # type: ignore[arg-type]
+            secs,  # type: ignore[arg-type]
         )
     elif not hasDays and not hasHours and not hasMins and not hasSecs:
         # Overload with inputs: date, time.
@@ -4105,7 +4111,13 @@ def try_make_timestamp_ntz(
     if hasDays and hasHours and hasMins and hasSecs:
         # Overload with inputs: years, months, days, hours, mins, secs.
         return _invoke_function_over_columns(
-            "try_make_timestamp_ntz", yearsOrDate, monthsOrTime, days, hours, mins, secs
+            "try_make_timestamp_ntz",
+            yearsOrDate,
+            monthsOrTime,
+            days,  # type: ignore[arg-type]
+            hours,  # type: ignore[arg-type]
+            mins,  # type: ignore[arg-type]
+            secs,  # type: ignore[arg-type]
         )
     elif not hasDays and not hasHours and not hasMins and not hasSecs:
         # Overload with inputs: date, time.
