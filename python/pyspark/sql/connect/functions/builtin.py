@@ -1570,9 +1570,7 @@ def any_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = 
     else:
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns(
-            "any_value", col, ignoreNulls
-        )
+        return _invoke_function_over_columns("any_value", col, ignoreNulls)
 
 
 any_value.__doc__ = pysparkfuncs.any_value.__doc__
@@ -1584,9 +1582,7 @@ def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] 
     else:
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns(
-            "first_value", col, ignoreNulls
-        )
+        return _invoke_function_over_columns("first_value", col, ignoreNulls)
 
 
 first_value.__doc__ = pysparkfuncs.first_value.__doc__
@@ -1598,9 +1594,7 @@ def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] =
     else:
         ignoreNulls = _enum_to_value(ignoreNulls)
         ignoreNulls = lit(ignoreNulls) if isinstance(ignoreNulls, bool) else ignoreNulls
-        return _invoke_function_over_columns(
-            "last_value", col, ignoreNulls
-        )
+        return _invoke_function_over_columns("last_value", col, ignoreNulls)
 
 
 last_value.__doc__ = pysparkfuncs.last_value.__doc__
