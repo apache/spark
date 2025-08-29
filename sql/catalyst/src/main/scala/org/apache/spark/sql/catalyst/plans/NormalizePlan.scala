@@ -19,10 +19,8 @@ package org.apache.spark.sql.catalyst.plans
 
 import java.util.HashMap
 
-import org.apache.spark.sql.catalyst.analysis.{
-  DeduplicateRelations,
-  NormalizeableRelation
-}
+import org.apache.spark.sql.catalyst.analysis.NormalizeableRelation
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverTag
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
@@ -149,9 +147,7 @@ object NormalizePlan extends PredicateHelper {
             .reduce(And)
         Join(left, right, newJoinType, Some(newCondition), hint)
       case project: Project
-          if project
-            .getTagValue(DeduplicateRelations.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION)
-            .isDefined =>
+          if project.getTagValue(ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION).isDefined =>
         project.child
 
       case aggregate @ Aggregate(_, _, innerProject: Project, _) =>

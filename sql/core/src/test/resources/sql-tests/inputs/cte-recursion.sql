@@ -782,3 +782,14 @@ WITH RECURSIVE t1 AS (
     UNION ALL
     SELECT n+1 FROM t1 WHERE n < 5)
 SELECT * FROM t1;
+
+-- Query with recursion that gets optimized to empty relation
+WITH RECURSIVE t AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + m
+    FROM (SELECT 2 as m) subq
+             JOIN t ON n = m
+    WHERE n <> m
+)
+SELECT * FROM t;

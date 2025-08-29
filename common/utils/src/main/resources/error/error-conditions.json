@@ -1846,12 +1846,6 @@
     ],
     "sqlState" : "39000"
   },
-  "FOUND_MULTIPLE_DATA_SOURCES" : {
-    "message" : [
-      "Detected multiple data sources with the name '<provider>'. Please check the data source isn't simultaneously registered and located in the classpath."
-    ],
-    "sqlState" : "42710"
-  },
   "GENERATED_COLUMN_WITH_DEFAULT_VALUE" : {
     "message" : [
       "A column cannot have both a default value and a generation expression but column <colName> has default value: (<defaultValue>) and generation expression: (<genExpr>)."
@@ -6643,12 +6637,6 @@
       "<outputMode> output mode not supported for <statefulOperator> on streaming DataFrames/DataSets without watermark."
     ],
     "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_STREAMING_TABLE_VALUED_FUNCTION" : {
-    "message" : [
-      "The function <funcName> does not support streaming. Please remove the STREAM keyword"
-    ],
-    "sqlState" : "42000"
   },
   "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
     "message" : [

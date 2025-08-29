@@ -235,26 +235,12 @@ object MultiLineXmlDataSource extends XmlDataSource {
 
     val xmlParserRdd: RDD[StaxXMLRecordReader] =
       xml.flatMap { portableDataStream =>
-        try {
-          val inputStream = () =>
-            CodecStreams.createInputStreamWithCloseResource(
-              portableDataStream.getConfiguration,
-              new Path(portableDataStream.getPath())
-            )
-          StaxXmlParser.convertStream(inputStream, parsedOptions)(identity)
-        } catch {
-          case e: FileNotFoundException if parsedOptions.ignoreMissingFiles =>
-            logWarning("Skipped missing file", e)
-            None
-          case NonFatal(e) =>
-            Utils.getRootCause(e) match {
-              case _: RuntimeException | _: IOException | _: InternalError
-                  if parsedOptions.ignoreCorruptFiles =>
-                logWarning("Skipped the rest of the content in the corrupted file", e)
-                None
-              case o => throw o
-            }
-        }
+        val inputStream = () =>
+          CodecStreams.createInputStreamWithCloseResource(
+            portableDataStream.getConfiguration,
+            new Path(portableDataStream.getPath())
+          )
+        StaxXmlParser.convertStream(inputStream, parsedOptions)(identity)
       }
 
     SQLExecution.withSQLConfPropagated(sparkSession) {

@@ -108,7 +108,8 @@ object RocksDBMemoryManager extends Logging with UnmanagedMemoryConsumer {
    * @return The adjusted memory usage accounting for sharing in bounded memory mode
    */
   def getInstanceMemoryUsage(uniqueId: String, totalMemoryUsage: Long): Long = {
-    val instanceInfo = instanceMemoryMap.get(uniqueId)
+    val instanceInfo = instanceMemoryMap.
+      getOrDefault(uniqueId, InstanceMemoryInfo(0L, isBoundedMemory = false))
     if (instanceInfo.isBoundedMemory) {
       // In bounded memory mode, divide by the number of bounded instances
       // since they share the same memory pool

@@ -3021,6 +3021,13 @@ class XmlSuite
            .xml(inputFile.toURI.toString)
            .collect()
         assert(result.isEmpty)
+
+        val result2 = spark.read
+          .option("rowTag", "ROW")
+          .option("multiLine", true)
+          .xml(inputFile.toURI.toString)
+          .collect()
+        assert(result2.isEmpty)
       }
     })
     withTempPath { dir =>

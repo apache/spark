@@ -69,8 +69,8 @@ import org.apache.spark.sql.types._
  * top-most node itself is not resolved recursively in order to avoid recursive calls to
  * [[BinaryArithmeticResolver]] and other sub-resolvers. To prevent a case where we resolve the
  * same node twice, we need to mark nodes that will act as a limit for the downwards traversal by
- * applying a [[ExpressionResolver.SINGLE_PASS_SUBTREE_BOUNDARY]] tag to them. These children
- * along with all the nodes below them are guaranteed to be resolved at this point. When
+ * applying a [[ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY]] tag to them. These children along with
+ * all the nodes below them are guaranteed to be resolved at this point. When
  * [[ExpressionResolver]] reaches one of the tagged nodes, it returns identity rather than
  * resolving it. Finally, after resolving the subtree, we need to resolve the top-most node itself,
  * which in this case means applying a timezone, if necessary.
