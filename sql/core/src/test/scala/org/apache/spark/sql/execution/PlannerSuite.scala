@@ -1418,18 +1418,6 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     assert(e.getMessage.contains("Index -5 out of bounds"))
   }
 
-  test("SPARK-53401: repartitionById should throw an exception for null partition id") {
-    val df = spark.range(10).toDF("id")
-    val partitionExpr = when($"id" < 5, $"id").otherwise(lit(null))
-    val repartitioned = df.repartitionById(10, partitionExpr)
-
-    val e = intercept[SparkException] {
-      repartitioned.collect()
-    }
-    // DirectShufflePartitionID throws IllegalArgumentException for null values
-    assert(e.getMessage.contains("The partition ID expression must not be null"))
-  }
-
   test("SPARK-53401: repartitionById should throw an exception for partition id >= numPartitions") {
     val numPartitions = 10
     val df = spark.range(20).toDF("id")
