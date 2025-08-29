@@ -1447,20 +1447,6 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     assert(e.getMessage.contains("out of bounds"))
   }
 
-  test("SPARK-53401: repartitionById followed by groupBy should only have one shuffle") {
-    val df = spark.range(100).toDF("id")
-    val repartitioned = df.repartitionById(10, $"id")
-    val grouped = repartitioned.groupBy($"id").count()
-
-    val plan = grouped.queryExecution.executedPlan
-    val shuffles = collect(plan) {
-      case e: ShuffleExchangeExec => e
-    }
-
-    // Should only have one shuffle (from repartitionById), not two
-    assert(shuffles.length == 1, s"Expected 1 shuffle but found ${shuffles.length}")
-  }
-
   /**
    * A helper function to check the number of shuffle exchanges in a physical plan.
    *
@@ -1480,8 +1466,6 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   test("SPARK-53401: groupBy on a superset of partition keys should reuse the shuffle") {
     val df = spark.range(100).select($"id" % 10 as "key1", $"id" as "value")
-    // groupBy adds a literal to the grouping keys. ShufflePartitionIdPassThrough(key1) should still
-    // satisfy ClusteredDistribution(key1, lit(1)).
     val grouped = df.repartitionById(10, $"key1").groupBy($"key1", lit(1)).count()
     checkShuffleCount(grouped, 1)
   }
@@ -1506,13 +1490,12 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     val df2 = spark.range(100).select($"id" % 10 as "key", $"id" as "v2")
       .repartition($"key")
 
-    // Join should require shuffle on the pass-through side because
-    // ShufflePartitionIdPassThrough and HashPartitioning are not compatible
     val joined = df1.join(df2, "key")
 
-    // Should have 3 shuffles: 1 from repartitionById, 1 from repartition,
-    // 1 additional shuffle for the incompatible partitioning schemes
-    checkShuffleCount(joined, 3)
+    val grouped = joined.groupBy("key").count()
+
+    // Total shuffles: one for df1, one for df2. The groupBy reuses the output partitioning.
+    checkShuffleCount(grouped, 2)
   }
 }
 

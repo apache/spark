@@ -1945,7 +1945,6 @@ object RepartitionByExpression {
       optAdvisoryPartitionSize, directPassthrough = false)
   }
 
-  // 4-parameter unapply method for backwards compatibility with pattern matching
   def unapply(r: RepartitionByExpression)
       : Option[(Seq[Expression], LogicalPlan, Option[Int], Option[Long])] = {
     Some((r.partitionExpressions, r.child, r.optNumPartitions, r.optAdvisoryPartitionSize))
