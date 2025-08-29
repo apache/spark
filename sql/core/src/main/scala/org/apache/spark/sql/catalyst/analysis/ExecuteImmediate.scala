@@ -234,6 +234,14 @@ case class ExecuteExecutableDuringAnalysis(sparkSession: SparkSession) extends R
   private def handleTargetVariables(
       result: org.apache.spark.sql.DataFrame,
       targetVariables: Seq[VariableReference]): Unit = {
+    // Ensure all target variables are resolved
+    targetVariables.foreach { variable =>
+      if (!variable.resolved) {
+        throw org.apache.spark.SparkException.internalError(
+          s"Target variable ${variable.identifier} is not resolved")
+      }
+    }
+
     // Collect the results from the query
     val values = result.queryExecution.executedPlan.executeCollect()
 
@@ -244,8 +252,10 @@ case class ExecuteExecutableDuringAnalysis(sparkSession: SparkSession) extends R
       }
     } else if (values.length > 1) {
       // Multiple rows: Error
-      throw new RuntimeException(
-        "EXECUTE IMMEDIATE ... INTO query returned more than one row")
+      throw new org.apache.spark.SparkException(
+        errorClass = "ROW_SUBQUERY_TOO_MANY_ROWS",
+        messageParameters = Map.empty,
+        cause = null)
     } else {
       // Exactly one row: Set each variable to the corresponding column value
       val row = values(0)
@@ -258,11 +268,10 @@ case class ExecuteExecutableDuringAnalysis(sparkSession: SparkSession) extends R
 
   private def setVariable(variable: VariableReference, value: Any): Unit = {
     import java.util.Locale
-    import org.apache.spark.sql.catalyst.{SqlScriptingContextManager}
+    import org.apache.spark.sql.catalyst.SqlScriptingContextManager
     import org.apache.spark.sql.catalyst.analysis.{FakeLocalCatalog, FakeSystemCatalog}
     import org.apache.spark.sql.catalyst.catalog.VariableDefinition
     import org.apache.spark.sql.catalyst.expressions.Literal
-    import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 
     val namePartsCaseAdjusted = if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
       variable.originalNameParts
@@ -270,26 +279,18 @@ case class ExecuteExecutableDuringAnalysis(sparkSession: SparkSession) extends R
       variable.originalNameParts.map(_.toLowerCase(Locale.ROOT))
     }
 
-    val tempVariableManager = sparkSession.sessionState.catalogManager.tempVariableManager
-    val scriptingVariableManager = SqlScriptingContextManager.get().map(_.getVariableManager)
-
+    // Variable should already be resolved, so we can trust its catalog information
     val variableManager = variable.catalog match {
-      case FakeLocalCatalog if scriptingVariableManager.isEmpty =>
-        throw new RuntimeException("SetVariable: Variable has FakeLocalCatalog, " +
-          "but ScriptingVariableManager is None.")
+      case FakeLocalCatalog =>
+        SqlScriptingContextManager.get().map(_.getVariableManager).getOrElse(
+          throw org.apache.spark.SparkException.internalError(
+            "Variable has FakeLocalCatalog but ScriptingVariableManager is None"))
 
-      case FakeLocalCatalog if scriptingVariableManager.get.get(namePartsCaseAdjusted).isEmpty =>
-        throw new RuntimeException("Local variable should be present in SetVariable" +
-          "because ResolveSetVariable has already determined it exists.")
+      case FakeSystemCatalog =>
+        sparkSession.sessionState.catalogManager.tempVariableManager
 
-      case FakeLocalCatalog => scriptingVariableManager.get
-
-      case FakeSystemCatalog if tempVariableManager.get(namePartsCaseAdjusted).isEmpty =>
-        throw unresolvedVariableError(namePartsCaseAdjusted, Seq("SYSTEM", "SESSION"))
-
-      case FakeSystemCatalog => tempVariableManager
-
-      case c => throw new RuntimeException("Unexpected catalog in SetVariable: " + c)
+      case c =>
+        throw org.apache.spark.SparkException.internalError(s"Unexpected catalog: $c")
     }
 
     val varDef = VariableDefinition(
