@@ -175,7 +175,7 @@ case class ThetaSketchAgg(
     val v = left.eval(input)
     if (v == null) return updateBuffer
 
-    // Return early for non-updatable buffers. The return case should never happen here.
+    // Initialized buffer should be UpdatableSketchBuffer, else error out.
     val sketch = updateBuffer match {
       case UpdatableSketchBuffer(s) => s
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
