@@ -956,12 +956,38 @@ case class ShuffleSpecCollection(specs: Seq[ShuffleSpec]) extends ShuffleSpec {
  */
 case class ShufflePartitionIdPassThrough(
     expr: DirectShufflePartitionID,
-    numPartitions: Int) extends HashPartitioningLike {
+    numPartitions: Int) extends Expression with Partitioning with Unevaluable {
 
   // TODO(SPARK-53401): Support Shuffle Spec in Direct Partition ID Pass Through
-  def partitionIdExpression: Expression = Pmod(expr, Literal(numPartitions))
+  def partitionIdExpression: Expression = {
+    val key = expr.child
+    val partitionValueExpr = If(
+      IsNull(key),
+      Literal(0), // If the source column is null, the value is 0.
+      key         // Otherwise, use the source column's value.
+    )
+    Pmod(partitionValueExpr, Literal(numPartitions))
+  }
 
-  override def expressions: Seq[Expression] = expr :: Nil
+  def expressions: Seq[Expression] = expr :: Nil
+  override def children: Seq[Expression] = expr :: Nil
+  override def nullable: Boolean = false
+  override def dataType: DataType = IntegerType
+
+  override def satisfies0(required: Distribution): Boolean = {
+    super.satisfies0(required) || {
+      required match {
+        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+          val partitioningExpressions = expr.child :: Nil
+          if (requireAllClusterKeys) {
+            c.areAllClusterKeysMatched(partitioningExpressions)
+          } else {
+            partitioningExpressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          }
+        case _ => false
+      }
+    }
+  }
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): ShufflePartitionIdPassThrough =

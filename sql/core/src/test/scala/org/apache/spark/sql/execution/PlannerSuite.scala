@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REPARTITION_BY_COL, ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REPARTITION_BY_COL, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.functions._
@@ -1405,6 +1405,118 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     val planned = df.queryExecution.sparkPlan
     assert(planned.exists(_.isInstanceOf[GlobalLimitExec]))
     assert(planned.exists(_.isInstanceOf[LocalLimitExec]))
+  }
+
+  test("SPARK-53401: repartitionById should throw an exception for negative partition id") {
+    val df = spark.range(10).toDF("id")
+    val repartitioned = df.repartitionById(10, $"id" - 5)
+
+    val e = intercept[SparkException] {
+      repartitioned.collect()
+    }
+    // The error is caught as ArrayIndexOutOfBoundsException wrapped in SparkException
+    assert(e.getMessage.contains("Index -5 out of bounds"))
+  }
+
+  test("SPARK-53401: repartitionById should throw an exception for null partition id") {
+    val df = spark.range(10).toDF("id")
+    val partitionExpr = when($"id" < 5, $"id").otherwise(lit(null))
+    val repartitioned = df.repartitionById(10, partitionExpr)
+
+    val e = intercept[SparkException] {
+      repartitioned.collect()
+    }
+    // DirectShufflePartitionID throws IllegalArgumentException for null values
+    assert(e.getMessage.contains("The partition ID expression must not be null"))
+  }
+
+  test("SPARK-53401: repartitionById should throw an exception for partition id >= numPartitions") {
+    val numPartitions = 10
+    val df = spark.range(20).toDF("id")
+    val repartitioned = df.repartitionById(numPartitions, $"id")
+
+    val e = intercept[SparkException] {
+      repartitioned.collect()
+    }
+    // ArrayIndexOutOfBoundsException for partition IDs >= numPartitions
+    assert(e.getMessage.contains("out of bounds"))
+  }
+
+  test("SPARK-53401: repartitionById followed by groupBy should only have one shuffle") {
+    val df = spark.range(100).toDF("id")
+    val repartitioned = df.repartitionById(10, $"id")
+    val grouped = repartitioned.groupBy($"id").count()
+
+    val plan = grouped.queryExecution.executedPlan
+    val shuffles = collect(plan) {
+      case e: ShuffleExchangeExec => e
+    }
+
+    // Should only have one shuffle (from repartitionById), not two
+    assert(shuffles.length == 1, s"Expected 1 shuffle but found ${shuffles.length}")
+  }
+
+  /**
+   * A helper function to check the number of shuffle exchanges in a physical plan.
+   *
+   * @param df The DataFrame whose physical plan will be examined.
+   * @param expectedShuffles The expected number of shuffle exchanges.
+   */
+  private def checkShuffleCount(df: DataFrame, expectedShuffles: Int): Unit = {
+    val plan = df.queryExecution.executedPlan
+    val shuffles = collect(plan) {
+      case s: ShuffleExchangeLike => s
+    }
+    assert(
+      shuffles.size == expectedShuffles,
+      s"Expected $expectedShuffles shuffle(s), but found ${shuffles.size} in the plan:\n$plan"
+    )
+  }
+
+  test("SPARK-53401: groupBy on a superset of partition keys should reuse the shuffle") {
+    val df = spark.range(100).select($"id" % 10 as "key1", $"id" as "value")
+    // groupBy adds a literal to the grouping keys. ShufflePartitionIdPassThrough(key1) should still
+    // satisfy ClusteredDistribution(key1, lit(1)).
+    val grouped = df.repartitionById(10, $"key1").groupBy($"key1", lit(1)).count()
+    checkShuffleCount(grouped, 1)
+  }
+
+  test("SPARK-53401: shuffle reuse is not affected by spark.sql.shuffle.partitions") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+      val df = spark.range(100).select($"id" % 10 as "key", $"id" as "value")
+      val grouped = df.repartitionById(10, $"key").groupBy($"key").count()
+
+      checkShuffleCount(grouped, 1)
+      // The explicit repartition number should be respected, not the config value.
+      assert(grouped.rdd.getNumPartitions == 10)
+    }
+  }
+
+  test("SPARK-53401: shuffle reuse with intervening narrow operations") {
+    val df = spark.range(100).select($"id" % 10 as "key", $"id" as "value")
+    val grouped =
+      df.repartitionById(10, $"key")
+        .filter($"value" > 50).groupBy($"key").count()
+    checkShuffleCount(grouped, 1)
+  }
+
+  test("SPARK-53401: shuffle reuse after a join that preserves partitioning") {
+    val df1 =
+      spark.range(100).select($"id" % 10 as "key", $"id" as "v1")
+        .repartitionById(10, $"key")
+    val df2 =
+      spark.range(100).select($"id" % 10 as "key", $"id" as "v2")
+        .repartitionById(10, $"key")
+
+    // The join will be a SortMergeJoin. Each side has a shuffle from the repartition call.
+    // The join's output will be hash-partitioned by "key".
+    val joined = df1.join(df2, "key")
+
+    // This groupBy should reuse the partitioning from the join's output.
+    val grouped = joined.groupBy("key").count()
+
+    // Total shuffles: one for df1, one for df2. The groupBy reuses the output partitioning.
+    checkShuffleCount(grouped, 2)
   }
 }
 
