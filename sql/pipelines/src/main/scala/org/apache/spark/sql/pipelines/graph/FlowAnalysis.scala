@@ -120,9 +120,7 @@ object FlowAnalysis {
           ).queryExecution.analyzed
           // Spark Connect requires the PLAN_ID_TAG to be propagated to the resolved plan
           // to allow correct analysis of the parent plan that contains this subquery
-          u.getTagValue(LogicalPlan.PLAN_ID_TAG).foreach(
-            id => resolved.setTagValue(LogicalPlan.PLAN_ID_TAG, id)
-          )
+          resolved.mergeTagsFrom(u)
           resolved
         // Batch read on another dataset in the pipeline
         case u: UnresolvedRelation =>
@@ -133,9 +131,7 @@ object FlowAnalysis {
           ).queryExecution.analyzed
           // Spark Connect requires the PLAN_ID_TAG to be propagated to the resolved plan
           // to allow correct analysis of the parent plan that contains this subquery
-          u.getTagValue(LogicalPlan.PLAN_ID_TAG).foreach(
-            id => resolved.setTagValue(LogicalPlan.PLAN_ID_TAG, id)
-          )
+          resolved.mergeTagsFrom(u)
           resolved
       }
     Dataset.ofRows(spark, resolvedPlan)
