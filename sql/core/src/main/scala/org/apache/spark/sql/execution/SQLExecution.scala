@@ -193,7 +193,6 @@ object SQLExecution extends Logging {
                   case command: V2CommandExec =>
                     command.children.flatMap(extractShuffleIds)
                   case dataWritingCommand: DataWritingCommandExec =>
-                    // TODO: Write tests
                     extractShuffleIds(dataWritingCommand.child)
                   case _: ExecutedCommandExec =>
                     // TODO: Discuss

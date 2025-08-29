@@ -330,14 +330,33 @@ class QueryExecutionSuite extends SharedSparkSession {
   test("SPARK-53413: Cleanup shuffle dependencies for commands") {
     Seq(true, false).foreach { adaptiveEnabled => {
       withSQLConf((SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString),
-        (SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, "true")) {
+        (SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, true.toString)) {
         val plan = spark.range(100).repartition(10).logicalPlan
-        val df = Dataset.ofRows(spark, plan, RemoveShuffleFiles)
+        val df = Dataset.ofRows(spark, plan)
         df.write.format("noop").mode(SaveMode.Overwrite).save()
 
         val blockManager = spark.sparkContext.env.blockManager
         assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
         assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
+        }
+      }
+    }
+  }
+
+  test("SPARK-53413: Cleanup shuffle dependencies for DataWritingCommandExec") {
+    withTempDir { dir =>
+      Seq(true, false).foreach { adaptiveEnabled => {
+        withSQLConf((SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptiveEnabled.toString),
+          (SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, true.toString)) {
+          val plan = spark.range(100).repartition(10).logicalPlan
+          val df = Dataset.ofRows(spark, plan)
+          // V1 API write
+          df.write.format("parquet").mode(SaveMode.Overwrite).save(dir.getCanonicalPath)
+
+          val blockManager = spark.sparkContext.env.blockManager
+          assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)
+          assert(blockManager.diskBlockManager.getAllBlocks().isEmpty)
+          }
         }
       }
     }
