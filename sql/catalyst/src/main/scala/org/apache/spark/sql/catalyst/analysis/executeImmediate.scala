@@ -64,7 +64,7 @@ case class ExecuteImmediateCommand(
 
   override lazy val resolved: Boolean = {
     // ExecuteImmediateCommand should not be considered resolved until it has been
-    // executed and replaced by ExecuteExecutableDuringAnalysis rule.
+    // executed and replaced by ExecuteImmediateCommands rule.
     // This ensures that SetVariable waits for execution to complete.
     false
   }
@@ -81,10 +81,10 @@ case class ExecuteImmediateCommand(
 }
 
 /**
- * This rule substitutes execute immediate query node with a command node
+ * This rule resolves execute immediate query node into a command node
  * that will handle recursive SQL execution.
  */
-class SubstituteExecuteImmediate(
+class ResolveExecuteImmediate(
     val catalogManager: CatalogManager,
     resolveChild: LogicalPlan => LogicalPlan,
     checkAnalysis: LogicalPlan => Unit)

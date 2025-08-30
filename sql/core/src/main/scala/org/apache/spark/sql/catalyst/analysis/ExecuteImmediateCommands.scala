@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.StringType
  * Analysis rule that executes ExecuteImmediateCommand during analysis and replaces it
  * with the results, similar to how CALL statements work.
  */
-case class ExecuteExecutableDuringAnalysis(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
