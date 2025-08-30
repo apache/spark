@@ -25905,7 +25905,7 @@ def theta_sketch_estimate(col: "ColumnOrName") -> Column:
     from pyspark.sql.classic.column import _to_java_column
 
     fn = "theta_sketch_estimate"
-    return _invoke_function("theta_sketch_estimate", _to_java_column(col))
+    return _invoke_function(fn, _to_java_column(col))
 
 
 @_try_remote_functions
