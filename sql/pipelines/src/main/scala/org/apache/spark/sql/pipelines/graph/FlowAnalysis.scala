@@ -112,23 +112,29 @@ object FlowAnalysis {
         // - SELECT ... FROM STREAM(t1)
         // - SELECT ... FROM STREAM t1
         case u: UnresolvedRelation if u.isStreaming =>
-          readStreamInput(
+          val resolved = readStreamInput(
             context,
             name = IdentifierHelper.toQuotedString(u.multipartIdentifier),
             spark.readStream,
             streamingReadOptions = StreamingReadOptions()
           ).queryExecution.analyzed
-
+          // Spark Connect requires the PLAN_ID_TAG to be propagated to the resolved plan
+          // to allow correct analysis of the parent plan that contains this subquery
+          resolved.mergeTagsFrom(u)
+          resolved
         // Batch read on another dataset in the pipeline
         case u: UnresolvedRelation =>
-          readBatchInput(
+          val resolved = readBatchInput(
             context,
             name = IdentifierHelper.toQuotedString(u.multipartIdentifier),
             batchReadOptions = BatchReadOptions()
           ).queryExecution.analyzed
+          // Spark Connect requires the PLAN_ID_TAG to be propagated to the resolved plan
+          // to allow correct analysis of the parent plan that contains this subquery
+          resolved.mergeTagsFrom(u)
+          resolved
       }
     Dataset.ofRows(spark, resolvedPlan)
-
   }
 
   /**
