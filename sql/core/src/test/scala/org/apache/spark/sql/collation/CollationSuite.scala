@@ -1885,6 +1885,26 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     })
   }
 
+  test("theta sketch aggregate should respect collation") {
+    case class ThetaSketchAggTestCase[R](c: String, result: R)
+    val testCases = Seq(
+      ThetaSketchAggTestCase("UTF8_BINARY", 5),
+      ThetaSketchAggTestCase("UTF8_BINARY_RTRIM", 4),
+      ThetaSketchAggTestCase("UTF8_LCASE", 4),
+      ThetaSketchAggTestCase("UTF8_LCASE_RTRIM", 3),
+      ThetaSketchAggTestCase("UNICODE", 5),
+      ThetaSketchAggTestCase("UNICODE_RTRIM", 4),
+      ThetaSketchAggTestCase("UNICODE_CI", 4),
+      ThetaSketchAggTestCase("UNICODE_CI_RTRIM", 3)
+    )
+    testCases.foreach(t => {
+      val q = s"SELECT theta_sketch_estimate(theta_sketch_agg(col collate ${t.c})) FROM " +
+        "VALUES ('a'), ('A'), ('b'), ('b'), ('c'), ('c ') tab(col)"
+      val df = sql(q)
+      checkAnswer(df, Seq(Row(t.result)))
+    })
+  }
+
   test("cache table with collated columns") {
     val collations = Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI", "SR_CI_AI")
     val lazyOptions = Seq(false, true)
