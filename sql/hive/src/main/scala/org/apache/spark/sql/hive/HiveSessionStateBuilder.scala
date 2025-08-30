@@ -25,7 +25,7 @@ import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, ExecuteExecutableDuringAnalysis, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveSessionCatalog, ResolveTranspose}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, ExecuteImmediateCommands, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveSessionCatalog, ResolveTranspose}
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverExtension
 import org.apache.spark.sql.catalyst.catalog.{ExternalCatalogWithListener, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExtractSemiStructuredFields}
@@ -133,7 +133,7 @@ class HiveSessionStateBuilder(
         new DetermineTableStats(session) +:
         new ResolveTranspose(session) +:
                   new InvokeProcedures(session) +:
-          ExecuteExecutableDuringAnalysis(session) +:
+          ExecuteImmediateCommands(session) +:
           ExtractSemiStructuredFields +:
         customResolutionRules
 

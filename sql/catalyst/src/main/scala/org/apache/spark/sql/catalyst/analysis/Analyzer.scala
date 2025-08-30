@@ -444,7 +444,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       AddMetadataColumns ::
       DeduplicateRelations ::
       ResolveCollationName ::
-      new SubstituteExecuteImmediate(
+      new ResolveExecuteImmediate(
         catalogManager,
         resolveChild = (plan: LogicalPlan) => plan,
         checkAnalysis = (_: LogicalPlan) => ()) ::
