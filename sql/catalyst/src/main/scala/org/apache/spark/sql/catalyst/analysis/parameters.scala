@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.HashSet
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, LeafExpression, Literal, MapFromArrays, MapFromEntries, SubqueryExpression, Unevaluable, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SupervisingCommand}
@@ -186,7 +188,23 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         }
         val args = argNames.zip(argValues).toMap
         checkArgs(args)
-        bind(child) { case NamedParameter(name) if args.contains(name) => args(name) }
+
+        val boundArguments = new HashSet[String]
+        val childWithBoundArguments = bind(child) {
+          case NamedParameter(name) if args.contains(name) =>
+            boundArguments.add(name)
+            args(name)
+        }
+
+        val missingArguments = args.filterNot { case (argName, _) =>
+          boundArguments.contains(argName)
+        }
+
+        if (missingArguments.nonEmpty) {
+          NameParameterizedQuery(childWithBoundArguments, missingArguments)
+        } else {
+          childWithBoundArguments
+        }
 
       case PosParameterizedQuery(child, args)
         if !child.containsPattern(UNRESOLVED_WITH) &&
@@ -198,9 +216,22 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         bind(child) { case p @ PosParameter(pos) => positions.add(pos); p }
         val posToIndex = positions.toSeq.sorted.zipWithIndex.toMap
 
-        bind(child) {
+        val boundIndices = new HashSet[Int]
+        val childWithBoundArguments = bind(child) {
           case PosParameter(pos) if posToIndex.contains(pos) && args.size > posToIndex(pos) =>
-            args(posToIndex(pos))
+            val index = posToIndex(pos)
+            boundIndices.add(index)
+            args(index)
+        }
+
+        val missingArguments = indexedArgs.collect {
+          case (arg, index) if !boundIndices.contains(index) => arg
+        }
+
+        if (missingArguments.nonEmpty) {
+          PosParameterizedQuery(childWithBoundArguments, missingArguments)
+        } else {
+          childWithBoundArguments
         }
 
       case other => other
