@@ -117,9 +117,9 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
     if (parsedPlan.isInstanceOf[CompoundBody]) {
       throw QueryCompilationErrors.sqlScriptInExecuteImmediate(queryString)
     }
-
-
   }
+
+
 
   private def substituteParameters(queryString: String, paramValues: Seq[Any]): String = {
     // For now, just handle positional parameters
