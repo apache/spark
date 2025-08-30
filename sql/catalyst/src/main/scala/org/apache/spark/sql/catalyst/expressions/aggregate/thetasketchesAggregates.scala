@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.datasketches.common.SketchesArgumentException
 import org.apache.datasketches.memory.Memory
 import org.apache.datasketches.theta.{CompactSketch, Intersection, SetOperation, Sketch, Union, UpdateSketch, UpdateSketchBuilder}
 
@@ -96,7 +95,7 @@ case class ThetaSketchAgg(
 
   lazy val lgNomEntries: Int = {
     val lgNomEntriesInput = right.eval().asInstanceOf[Int]
-    ThetaSketchUtils.checkLgNomLongs(lgNomEntriesInput)
+    ThetaSketchUtils.checkLgNomLongs(lgNomEntriesInput, prettyName)
     lgNomEntriesInput
   }
 
@@ -327,7 +326,7 @@ case class ThetaUnionAgg(
 
   lazy val lgNomEntries: Int = {
     val lgNomEntriesInput = right.eval().asInstanceOf[Int]
-    ThetaSketchUtils.checkLgNomLongs(lgNomEntriesInput)
+    ThetaSketchUtils.checkLgNomLongs(lgNomEntriesInput, prettyName)
     lgNomEntriesInput
   }
 
@@ -400,19 +399,8 @@ case class ThetaUnionAgg(
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
 
-    val memory = try {
-      Memory.wrap(v.asInstanceOf[Array[Byte]])
-    } catch {
-      case _: IllegalArgumentException | _: IndexOutOfBoundsException =>
-        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-    }
-
-    val inputSketch = try {
-      CompactSketch.wrap(memory)
-    } catch {
-      case _: SketchesArgumentException =>
-        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-    }
+    val sketchBytes = v.asInstanceOf[Array[Byte]]
+    val inputSketch = ThetaSketchUtils.wrapCompactSketch(sketchBytes, prettyName)
 
     val union = unionBuffer match {
       case UnionAggregationBuffer(existingUnionBuffer) => existingUnionBuffer
@@ -522,7 +510,7 @@ case class ThetaIntersectionAgg(
 
   lazy val lgNomEntries: Int = {
     val lgNomEntriesInput = right.eval().asInstanceOf[Int]
-    ThetaSketchUtils.checkLgNomLongs(lgNomEntriesInput)
+    ThetaSketchUtils.checkLgNomLongs(lgNomEntriesInput, prettyName)
     lgNomEntriesInput
   }
 
@@ -598,19 +586,8 @@ case class ThetaIntersectionAgg(
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
 
-    val memory = try {
-      Memory.wrap(v.asInstanceOf[Array[Byte]])
-    } catch {
-      case _: IllegalArgumentException | _: IndexOutOfBoundsException =>
-        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-    }
-
-    val inputSketch = try {
-      CompactSketch.wrap(memory)
-    } catch {
-      case _: SketchesArgumentException =>
-        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-    }
+    val sketchBytes = v.asInstanceOf[Array[Byte]]
+    val inputSketch = ThetaSketchUtils.wrapCompactSketch(sketchBytes, prettyName)
 
     val intersection = intersectionBuffer match {
       case IntersectionAggregationBuffer(existingIntersection) => existingIntersection

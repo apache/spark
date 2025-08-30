@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.datasketches.theta.UpdateSketch
+
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 
@@ -27,7 +29,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
       Seq(ThetaSketchUtils.MIN_LG_NOM_LONGS, 10, 20, ThetaSketchUtils.MAX_LG_NOM_LONGS)
     validValues.foreach { value =>
       // There should be no error here.
-      ThetaSketchUtils.checkLgNomLongs(value)
+      ThetaSketchUtils.checkLgNomLongs(value, "test_function")
     }
   }
 
@@ -37,10 +39,11 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     invalidValues.foreach { value =>
       checkError(
         exception = intercept[SparkRuntimeException] {
-          ThetaSketchUtils.checkLgNomLongs(value)
+          ThetaSketchUtils.checkLgNomLongs(value, "test_function")
         },
         condition = "THETA_INVALID_LG_NOM_ENTRIES",
         parameters = Map(
+          "function" -> "`test_function`",
           "min" -> ThetaSketchUtils.MIN_LG_NOM_LONGS.toString,
           "max" -> ThetaSketchUtils.MAX_LG_NOM_LONGS.toString,
           "value" -> value.toString
@@ -54,15 +57,64 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     invalidValues.foreach { value =>
       checkError(
         exception = intercept[SparkRuntimeException] {
-          ThetaSketchUtils.checkLgNomLongs(value)
+          ThetaSketchUtils.checkLgNomLongs(value, "test_function")
         },
         condition = "THETA_INVALID_LG_NOM_ENTRIES",
         parameters = Map(
+          "function" -> "`test_function`",
           "min" -> ThetaSketchUtils.MIN_LG_NOM_LONGS.toString,
           "max" -> ThetaSketchUtils.MAX_LG_NOM_LONGS.toString,
           "value" -> value.toString
         )
       )
     }
+  }
+
+  test("wrapCompactSketch: successfully wraps valid sketch bytes") {
+    // Create a valid sketch and get its bytes.
+    val updateSketch = UpdateSketch.builder().build()
+    updateSketch.update("test1")
+    updateSketch.update("test2")
+    updateSketch.update("test3")
+    val compactSketch = updateSketch.compact
+    val validBytes = compactSketch.toByteArrayCompressed
+
+    // Test that wrapCompactSketch can successfully wrap the valid bytes.
+    val wrappedSketch = ThetaSketchUtils.wrapCompactSketch(validBytes, "test_function")
+
+    assert(wrappedSketch != null)
+    assert(wrappedSketch.getEstimate == compactSketch.getEstimate)
+    assert(wrappedSketch.getRetainedEntries == compactSketch.getRetainedEntries)
+  }
+
+  test("wrapCompactSketch: throws exception for null bytes") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        ThetaSketchUtils.wrapCompactSketch(null, "test_function")
+      },
+      condition = "THETA_INVALID_INPUT_SKETCH_BUFFER",
+      parameters = Map("function" -> "`test_function`")
+    )
+  }
+
+  test("wrapCompactSketch: throws exception for empty bytes") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        ThetaSketchUtils.wrapCompactSketch(Array.empty[Byte], "test_function")
+      },
+      condition = "THETA_INVALID_INPUT_SKETCH_BUFFER",
+      parameters = Map("function" -> "`test_function`")
+    )
+  }
+
+  test("wrapCompactSketch: throws exception for invalid bytes") {
+    val invalidBytes = Array[Byte](1, 2, 3, 4, 5)
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        ThetaSketchUtils.wrapCompactSketch(invalidBytes, "test_function")
+      },
+      condition = "THETA_INVALID_INPUT_SKETCH_BUFFER",
+      parameters = Map("function" -> "`test_function`")
+    )
   }
 }

@@ -25754,10 +25754,11 @@ def theta_sketch_agg(
     |                                                 3|
     +--------------------------------------------------+
     """
+    fn = "theta_sketch_agg"
     if lgNomEntries is None:
-        return _invoke_function_over_columns("theta_sketch_agg", col)
+        return _invoke_function_over_columns(fn, col)
     else:
-        return _invoke_function_over_columns("theta_sketch_agg", col, lit(lgNomEntries))
+        return _invoke_function_over_columns(fn, col, lit(lgNomEntries))
 
 
 @_try_remote_functions
@@ -25805,10 +25806,11 @@ def theta_union_agg(
     |                                                 6|
     +--------------------------------------------------+
     """
+    fn = "theta_union_agg"
     if lgNomEntries is None:
-        return _invoke_function_over_columns("theta_union_agg", col)
+        return _invoke_function_over_columns(fn, col)
     else:
-        return _invoke_function_over_columns("theta_union_agg", col, lit(lgNomEntries))
+        return _invoke_function_over_columns(fn, col, lit(lgNomEntries))
 
 
 @_try_remote_functions
@@ -25856,10 +25858,11 @@ def theta_intersection_agg(
     |                                                        2|
     +---------------------------------------------------------+
     """
+    fn = "theta_intersection_agg"
     if lgNomEntries is None:
-        return _invoke_function_over_columns("theta_intersection_agg", col)
+        return _invoke_function_over_columns(fn, col)
     else:
-        return _invoke_function_over_columns("theta_intersection_agg", col, lit(lgNomEntries))
+        return _invoke_function_over_columns(fn, col, lit(lgNomEntries))
 
 
 @_try_remote_functions
@@ -25901,6 +25904,7 @@ def theta_sketch_estimate(col: "ColumnOrName") -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
+    fn = "theta_sketch_estimate"
     return _invoke_function("theta_sketch_estimate", _to_java_column(col))
 
 
@@ -25949,16 +25953,17 @@ def theta_union(
     +--------------------------------------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
-
+    
+    fn = "theta_union"
     if lgNomEntries is not None:
         return _invoke_function(
-            "theta_union",
+            fn,
             _to_java_column(col1),
             _to_java_column(col2),
             _enum_to_value(lgNomEntries),
         )
     else:
-        return _invoke_function("theta_union", _to_java_column(col1), _to_java_column(col2))
+        return _invoke_function(fn, _to_java_column(col1), _to_java_column(col2))
 
 
 @_try_remote_functions
@@ -26007,15 +26012,16 @@ def theta_intersection(
     """
     from pyspark.sql.classic.column import _to_java_column
 
+    fn = "theta_intersection"
     if lgNomEntries is not None:
         return _invoke_function(
-            "theta_intersection",
+            fn,
             _to_java_column(col1),
             _to_java_column(col2),
             _enum_to_value(lgNomEntries),
         )
     else:
-        return _invoke_function("theta_intersection", _to_java_column(col1), _to_java_column(col2))
+        return _invoke_function(fn, _to_java_column(col1), _to_java_column(col2))
 
 
 @_try_remote_functions
@@ -26065,15 +26071,16 @@ def theta_difference(
     """
     from pyspark.sql.classic.column import _to_java_column
 
+    fn = "theta_difference"
     if lgNomEntries is not None:
         return _invoke_function(
-            "theta_difference",
+            fn,
             _to_java_column(col1),
             _to_java_column(col2),
             _enum_to_value(lgNomEntries),
         )
     else:
-        return _invoke_function("theta_difference", _to_java_column(col1), _to_java_column(col2))
+        return _invoke_function(fn, _to_java_column(col1), _to_java_column(col2))
 
 
 # ---------------------- Predicates functions ------------------------------

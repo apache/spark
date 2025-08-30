@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.datasketches.common.SketchesArgumentException
+import org.apache.datasketches.memory.{Memory, MemoryBoundsException}
+import org.apache.datasketches.theta.CompactSketch
+
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
 object ThetaSketchUtils {
@@ -39,12 +43,38 @@ object ThetaSketchUtils {
    * @param lgNomLongs
    *   Log2 of nominal entries
    */
-  def checkLgNomLongs(lgNomLongs: Int): Unit = {
+  def checkLgNomLongs(lgNomLongs: Int, prettyName: String): Unit = {
     if (lgNomLongs < MIN_LG_NOM_LONGS || lgNomLongs > MAX_LG_NOM_LONGS) {
       throw QueryExecutionErrors.thetaInvalidLgNomEntries(
+        function = prettyName,
         min = MIN_LG_NOM_LONGS,
         max = MAX_LG_NOM_LONGS,
         value = lgNomLongs)
+    }
+  }
+
+  /**
+   * Wraps a byte array into a DataSketches CompactSketch object.
+   * This method safely deserializes a compact Theta sketch from its binary representation,
+   * handling potential deserialization errors by throwing appropriate Spark SQL exceptions.
+   *
+   * @param bytes The binary representation of a compact theta sketch
+   * @param prettyName The display name of the function/expression for error messages
+   * @return A CompactSketch object wrapping the provided bytes
+   */
+  def wrapCompactSketch(bytes: Array[Byte], prettyName: String): CompactSketch = {
+    val memory = try {
+      Memory.wrap(bytes)
+    } catch {
+      case _: NullPointerException | _: MemoryBoundsException =>
+        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+    }
+
+    try {
+      CompactSketch.wrap(memory)
+    } catch {
+      case _: SketchesArgumentException | _: MemoryBoundsException =>
+        throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
   }
 }

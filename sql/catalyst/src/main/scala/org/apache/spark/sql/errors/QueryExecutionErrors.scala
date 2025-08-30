@@ -3108,10 +3108,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("function" -> toSQLId(function)))
   }
 
-  def thetaInvalidLgNomEntries(min: Int, max: Int, value: Int): Throwable = {
+  def thetaInvalidLgNomEntries(function: String, min: Int, max: Int, value: Int): Throwable = {
     new SparkRuntimeException(
       errorClass = "THETA_INVALID_LG_NOM_ENTRIES",
       messageParameters = Map(
+        "function" -> toSQLId(function),
         "min" -> toSQLValue(min, IntegerType),
         "max" -> toSQLValue(max, IntegerType),
         "value" -> toSQLValue(value, IntegerType)))
