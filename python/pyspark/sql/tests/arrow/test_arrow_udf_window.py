@@ -652,6 +652,37 @@ class WindowArrowUDFTestsMixin:
 
         self.assertEqual(expected1.collect(), result1.collect())
 
+    def test_time_min(self):
+        import pyarrow as pa
+
+        df = self.spark.sql(
+            """
+            SELECT * FROM VALUES
+            (1, TIME '12:34:56'),
+            (1, TIME '1:2:3'),
+            (2, TIME '0:58:59'),
+            (2, TIME '10:58:59'),
+            (2, TIME '10:00:03')
+            AS tab(i, t)
+            """
+        )
+        w1 = Window.partitionBy("i").orderBy("t")
+        w2 = Window.orderBy("t")
+
+        @arrow_udf("time", ArrowUDFType.GROUPED_AGG)
+        def agg_min_time(v):
+            assert isinstance(v, pa.Array)
+            assert isinstance(v, pa.Time64Array)
+            return pa.compute.min(v)
+
+        expected1 = df.withColumn("res", sf.min("t").over(w1))
+        result1 = df.withColumn("res", agg_min_time("t").over(w1))
+        self.assertEqual(expected1.collect(), result1.collect())
+
+        expected2 = df.withColumn("res", sf.min("t").over(w2))
+        result2 = df.withColumn("res", agg_min_time("t").over(w2))
+        self.assertEqual(expected2.collect(), result2.collect())
+
     def test_return_type_coercion(self):
         import pyarrow as pa
 
