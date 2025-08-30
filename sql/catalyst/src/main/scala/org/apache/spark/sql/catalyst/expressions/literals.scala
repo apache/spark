@@ -187,6 +187,7 @@ object Literal {
    * Create a literal with default value for given DataType
    */
   def default(dataType: DataType): Literal = dataType match {
+    case _ if LiteralTypeOps.supports(dataType) => LiteralTypeOps(dataType).getDefaultLiteral
     case NullType => create(null, NullType)
     case BooleanType => Literal(false)
     case ByteType => Literal(0.toByte)
@@ -199,7 +200,6 @@ object Literal {
     case DateType => create(0, DateType)
     case TimestampType => create(0L, TimestampType)
     case TimestampNTZType => create(0L, TimestampNTZType)
-    case t: TimeType => create(0L, t)
     case it: DayTimeIntervalType => create(0L, it)
     case it: YearMonthIntervalType => create(0, it)
     case CharType(length) =>
