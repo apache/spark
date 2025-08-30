@@ -148,7 +148,10 @@ trait ExtractValue extends Expression with QueryErrorsBase {
 case class GetStructField(child: Expression, ordinal: Int, name: Option[String] = None)
   extends UnaryExpression with ExtractValue {
 
-  lazy val childSchema = child.dataType.asInstanceOf[StructType]
+  lazy val childSchema = child.dataType match {
+    case structType: StructType => structType
+    case _ => throw QueryCompilationErrors.schemaIsNotStructTypeError(child, child.dataType)
+  }
 
   override lazy val canonicalized: Expression = {
     copy(child = child.canonicalized, name = None)
