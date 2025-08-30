@@ -257,6 +257,10 @@ class BatchTableWrite(
         }
         dataFrameWriter
           .mode("append")
+          // In "append" mode with saveAsTable, partition columns must be specified in query
+          // because the format and options of the existing table is used, and the table could
+          // have been created with partition columns.
+          .partitionBy(destination.partitionCols.getOrElse(Seq.empty): _*)
           .saveAsTable(destination.identifier.unquotedString)
       }
     }
