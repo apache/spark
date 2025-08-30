@@ -755,3 +755,11 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
     }
   }
 }
+
+class TransformWithStateInitialStateSuiteCheckpointV2
+  extends TransformWithStateInitialStateSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 2)
+  }
+}

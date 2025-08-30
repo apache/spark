@@ -1064,8 +1064,15 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   override def getStateStoreChangeDataReader(
       startVersion: Long,
       endVersion: Long,
-      colFamilyNameOpt: Option[String] = None):
+      colFamilyNameOpt: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None):
     StateStoreChangeDataReader = {
+
+    if (endVersionStateStoreCkptId.isDefined) {
+      throw QueryExecutionErrors.cannotLoadStore(new SparkException(
+        "HDFSBackedStateStoreProvider does not support endVersionStateStoreCkptId"))
+    }
+
     // Multiple column families are not supported with HDFSBackedStateStoreProvider
     if (colFamilyNameOpt.isDefined) {
       throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
@@ -1099,7 +1106,7 @@ class HDFSBackedStateStoreChangeDataReader(
   extends StateStoreChangeDataReader(
     fm, stateLocation, startVersion, endVersion, compressionCodec) {
 
-  override protected var changelogSuffix: String = "delta"
+  override protected val changelogSuffix: String = "delta"
 
   override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
     val reader = currentChangelogReader()

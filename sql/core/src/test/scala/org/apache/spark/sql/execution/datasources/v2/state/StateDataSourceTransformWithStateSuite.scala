@@ -1013,6 +1013,8 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
    * the state data.
    */
   testWithChangelogCheckpointingEnabled("snapshotStartBatchId with transformWithState") {
+    // TODO: Remove this line once snapshotStartBatchId is supported for V2 format
+    assume(SQLConf.get.stateStoreCheckpointFormatVersion == 1)
     class AggregationStatefulProcessor extends StatefulProcessor[Int, (Int, Long), (Int, Long)] {
       @transient protected var _countState: ValueState[Long] = _
 
@@ -1148,5 +1150,14 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         }
       }
     }
+  }
+}
+
+class StateDataSourceTransformWithStateSuiteCheckpointV2 extends
+  StateDataSourceTransformWithStateSuite {
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 2)
   }
 }

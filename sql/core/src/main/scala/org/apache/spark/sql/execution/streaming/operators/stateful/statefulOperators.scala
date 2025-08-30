@@ -430,14 +430,14 @@ trait StateStoreWriter
    * Set the SQL metrics related to the state store.
    * This should be called in that task after the store has been updated.
    */
-  protected def setStoreMetrics(store: StateStore): Unit = {
+  protected def setStoreMetrics(store: StateStore, setCheckpointInfo: Boolean = true): Unit = {
     val storeMetrics = store.metrics
     longMetric("numTotalStateRows") += storeMetrics.numKeys
     longMetric("stateMemory") += storeMetrics.memoryUsedBytes
     setStoreCustomMetrics(storeMetrics.customMetrics)
     setStoreInstanceMetrics(storeMetrics.instanceMetrics)
 
-    if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(conf)) {
+    if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(conf) && setCheckpointInfo) {
       // Set the state store checkpoint information for the driver to collect
       val ssInfo = store.getStateStoreCheckpointInfo()
       setStateStoreCheckpointInfo(

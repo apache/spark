@@ -2740,6 +2740,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
+  def invalidCheckpointLineage(lineage: String, message: String): Throwable = {
+    new SparkException(
+      errorClass = "CANNOT_LOAD_STATE_STORE.INVALID_CHECKPOINT_LINEAGE",
+      messageParameters = Map(
+        "lineage" -> lineage,
+        "message" -> message
+      ),
+      cause = null
+    )
+  }
+
   def notEnoughMemoryToLoadStore(
       stateStoreId: String,
       stateStoreProviderName: String,
