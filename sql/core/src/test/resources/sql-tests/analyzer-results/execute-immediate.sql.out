@@ -152,7 +152,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE sql_string USING a, 'name2'
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((name#x = variablereference(system.session.a='name1')) OR (name#x = name2))
++- Filter ((name#x = name1) OR (name#x = name2))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -178,7 +178,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING a, 'name2'
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((name#x = variablereference(system.session.a='name1')) OR (name#x = name2))
++- Filter ((name#x = name1) OR (name#x = name2))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -191,7 +191,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = ? or name = ?' USING (a, 'name2')
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((name#x = variablereference(system.session.a='name1')) OR (name#x = name2))
++- Filter ((name#x = name1) OR (name#x = name2))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -256,7 +256,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE sql_string USING b as second, 'name7' as first
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((name#x = name7) OR (id#x = variablereference(system.session.b=40)))
++- Filter ((name#x = name7) OR (id#x = 40))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -282,7 +282,7 @@ Project [id#x, name#x, data#x]
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first or id = :second' USING 'name7' as first, b as second
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((name#x = name7) OR (id#x = variablereference(system.session.b=40)))
++- Filter ((name#x = name7) OR (id#x = 40))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -356,7 +356,7 @@ SetVariable [variablereference(system.session.res_id=70)]
 +- GlobalLimit 2
    +- LocalLimit 2
       +- Project [id#x]
-         +- Filter (name#x = variablereference(system.session.a='name1'))
+         +- Filter (name#x = name1)
             +- SubqueryAlias tbl_view
                +- View (`tbl_view`, [id#x, name#x, data#x])
                   +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -422,7 +422,7 @@ Project [variablereference(system.session.b=10) AS b#x, variablereference(system
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where id = ? AND name = ?' USING b as first, a
 -- !query analysis
 Project [id#x, name#x, data#x]
-+- Filter ((id#x = variablereference(system.session.b=10)) AND (name#x = variablereference(system.session.a='name1')))
++- Filter ((id#x = 10) AND (name#x = name1))
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -760,7 +760,7 @@ CreateVariable defaultvalueexpression(10, 10), false
 EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :p' USING p
 -- !query analysis
 Project [id#x]
-+- Filter (id#x = variablereference(system.session.p=10))
++- Filter (id#x = 10)
    +- SubqueryAlias tbl_view
       +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
@@ -828,6 +828,1273 @@ org.apache.spark.sql.AnalysisException
     "varName" : "`sql_string`"
   }
 }
+
+
+-- !query
+DECLARE default_val INT
+-- !query analysis
+CreateVariable defaultvalueexpression(null, null), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.default_val
+
+
+-- !query
+SET VAR default_val = 42
+-- !query analysis
+SetVariable [variablereference(system.session.default_val=CAST(NULL AS INT))]
++- Project [42 AS default_val#x]
+   +- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE test_table (id INT, name STRING DEFAULT :default_name, score INT DEFAULT :default_score) USING PARQUET' 
+USING 'unknown' as default_name, default_val as default_score
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_table`, false
+
+
+-- !query
+DESCRIBE EXTENDED test_table
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`test_table`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE test_table2 (id INT, value INT DEFAULT ?) USING PARQUET' USING 100
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`test_table2`, false
+
+
+-- !query
+DESCRIBE EXTENDED test_table2
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`test_table2`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER TABLE test_table ALTER COLUMN score SET DEFAULT :new_default' USING 99 as new_default
+-- !query analysis
+AlterTableChangeColumnCommand `spark_catalog`.`default`.`test_table`, score, StructField(score,IntegerType,true)
+
+
+-- !query
+DESCRIBE EXTENDED test_table
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`test_table`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER TABLE test_table ADD COLUMN status STRING DEFAULT :status_default' USING 'active' as status_default
+-- !query analysis
+AlterTableAddColumnsCommand `spark_catalog`.`default`.`test_table`, [StructField(status,StringType,true)]
+
+
+-- !query
+DESCRIBE EXTENDED test_table
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`test_table`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER TABLE test_table2 ADD COLUMN flag BOOLEAN DEFAULT ?' USING true
+-- !query analysis
+AlterTableAddColumnsCommand `spark_catalog`.`default`.`test_table2`, [StructField(flag,BooleanType,true)]
+
+
+-- !query
+DESCRIBE EXTENDED test_table2
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`test_table2`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE VIEW test_view AS SELECT * FROM test_table WHERE score > :min_score' USING 50 as min_score
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`test_view`, SELECT * FROM test_table WHERE score > 50, false, false, PersistedView, COMPENSATION, true
+   +- Project [id#x, name#x, score#x, status#x]
+      +- Filter (score#x > 50)
+         +- SubqueryAlias spark_catalog.default.test_table
+            +- Relation spark_catalog.default.test_table[id#x,name#x,score#x,status#x] parquet
+
+
+-- !query
+DESCRIBE EXTENDED test_view
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`test_view`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE VIEW test_view2 AS SELECT * FROM test_table WHERE score < ?' USING 80
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`test_view2`, SELECT * FROM test_table WHERE score < 80, false, false, PersistedView, COMPENSATION, true
+   +- Project [id#x, name#x, score#x, status#x]
+      +- Filter (score#x < 80)
+         +- SubqueryAlias spark_catalog.default.test_table
+            +- Relation spark_catalog.default.test_table[id#x,name#x,score#x,status#x] parquet
+
+
+-- !query
+DESCRIBE EXTENDED test_view2
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`test_view2`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER VIEW test_view AS SELECT id, name FROM test_table WHERE score BETWEEN :min_val AND :max_val' 
+USING 30 as min_val, 70 as max_val
+-- !query analysis
+AlterViewAsCommand `spark_catalog`.`default`.`test_view`, SELECT id, name FROM test_table WHERE score BETWEEN 30 AND 70, true
+   +- Project [id#x, name#x]
+      +- Filter between(score#x, 30, 70)
+         +- SubqueryAlias spark_catalog.default.test_table
+            +- Relation spark_catalog.default.test_table[id#x,name#x,score#x,status#x] parquet
+
+
+-- !query
+DESCRIBE EXTENDED test_view
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`test_view`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER VIEW test_view2 AS SELECT * FROM test_table WHERE score > ?' USING 60
+-- !query analysis
+AlterViewAsCommand `spark_catalog`.`default`.`test_view2`, SELECT * FROM test_table WHERE score > 60, true
+   +- Project [id#x, name#x, score#x, status#x]
+      +- Filter (score#x > 60)
+         +- SubqueryAlias spark_catalog.default.test_table
+            +- Relation spark_catalog.default.test_table[id#x,name#x,score#x,status#x] parquet
+
+
+-- !query
+DESCRIBE EXTENDED test_view2
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`test_view2`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE test_var INT DEFAULT :var_default' USING 123 as var_default
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(123 as int), 123), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.test_var
+
+
+-- !query
+SELECT test_var
+-- !query analysis
+Project [variablereference(system.session.test_var=123) AS test_var#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE test_var2 STRING DEFAULT ?' USING 'default_string'
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(default_string as string), 'default_string'), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.test_var2
+
+
+-- !query
+SELECT test_var2
+-- !query analysis
+Project [variablereference(system.session.test_var2='default_string') AS test_var2#x]
++- OneRowRelation
+
+
+-- !query
+SELECT * FROM test_view
+-- !query analysis
+Project [id#x, name#x]
++- SubqueryAlias spark_catalog.default.test_view
+   +- View (`spark_catalog`.`default`.`test_view`, [id#x, name#x])
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x]
+         +- Project [id#x, name#x]
+            +- Filter between(score#x, 30, 70)
+               +- SubqueryAlias spark_catalog.default.test_table
+                  +- Relation spark_catalog.default.test_table[id#x,name#x,score#x,status#x] parquet
+
+
+-- !query
+SELECT test_var, test_var2
+-- !query analysis
+Project [variablereference(system.session.test_var=123) AS test_var#x, variablereference(system.session.test_var2='default_string') AS test_var2#x]
++- OneRowRelation
+
+
+-- !query
+DECLARE expr_val INT
+-- !query analysis
+CreateVariable defaultvalueexpression(null, null), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.expr_val
+
+
+-- !query
+SET VAR expr_val = 10
+-- !query analysis
+SetVariable [variablereference(system.session.expr_val=CAST(NULL AS INT))]
++- Project [10 AS expr_val#x]
+   +- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE expr_test (id INT, computed INT DEFAULT :expr_result) USING PARQUET' 
+USING (expr_val * 5 + 2) as expr_result
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSql" : "\"((expr_val * 5) + 2)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 110,
+    "stopIndex" : 125,
+    "fragment" : "expr_val * 5 + 2"
+  } ]
+}
+
+
+-- !query
+DESCRIBE EXTENDED expr_test
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`expr_test`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 27,
+    "fragment" : "expr_test"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE error_table (id INT DEFAULT ?, name STRING DEFAULT :name_default) USING PARQUET' 
+USING 1, 'test' as name_default
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+  "sqlState" : "42613"
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE error_table2 (id INT DEFAULT :undefined_param) USING PARQUET'
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "The Spark SQL phase analysis failed with an internal error. You hit a bug in Spark or the Spark plugins you use. Please, report this bug to the corresponding communities or vendors, and provide the full stack trace."
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE FUNCTION test_func(x INT DEFAULT :func_default) RETURNS INT RETURN x + :increment' 
+USING 10 as func_default, 5 as increment
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.test_func, x INT DEFAULT 10, INT, x + 5, false, false, false, false
+
+
+-- !query
+DESCRIBE FUNCTION EXTENDED test_func
+-- !query analysis
+DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, true
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE FUNCTION test_func2(x INT DEFAULT ?) RETURNS INT RETURN x * ?' USING 1, 2
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.test_func2, x INT DEFAULT 1, INT, x * 2, false, false, false, false
+
+
+-- !query
+DESCRIBE FUNCTION EXTENDED test_func2
+-- !query analysis
+DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, true
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE FUNCTION multi_param_func(a INT DEFAULT ?, b INT DEFAULT ?) RETURNS INT RETURN a + b + ?' 
+USING 10, 20, 5
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.multi_param_func, a INT DEFAULT 10, b INT DEFAULT 20, INT, a + b + 5, false, false, false, false
+
+
+-- !query
+DESCRIBE FUNCTION EXTENDED multi_param_func
+-- !query analysis
+DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, true
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE FUNCTION table_func(x INT DEFAULT ?, y INT DEFAULT ?) RETURNS TABLE(result INT) RETURN SELECT x + y + ? as result' 
+USING 1, 2, 3
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.table_func, x INT DEFAULT 1, y INT DEFAULT 2, result INT, SELECT x + y + 3 as result, true, false, false, false
+
+
+-- !query
+DESCRIBE FUNCTION EXTENDED table_func
+-- !query analysis
+DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, true
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE multi_col_table (id INT DEFAULT ?, name STRING DEFAULT ?, score INT DEFAULT ?, active BOOLEAN DEFAULT ?) USING PARQUET' 
+USING 1, 'default_name', 100, true
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`multi_col_table`, false
+
+
+-- !query
+DESCRIBE EXTENDED multi_col_table
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`multi_col_table`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE gen_and_default (id INT DEFAULT ?, doubled INT GENERATED ALWAYS AS (id * ?), tripled INT GENERATED ALWAYS AS (id * ?)) USING PARQUET' 
+USING 42, 2, 3
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "operation" : "generated columns",
+    "tableName" : "`spark_catalog`.`default`.`gen_and_default`"
+  }
+}
+
+
+-- !query
+DESCRIBE EXTENDED gen_and_default
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`gen_and_default`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 33,
+    "fragment" : "gen_and_default"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER TABLE multi_col_table ADD COLUMN (status STRING DEFAULT ?, priority INT DEFAULT ?, created_at STRING DEFAULT ?)' 
+USING 'pending', 1, '2023-01-01'
+-- !query analysis
+AlterTableAddColumnsCommand `spark_catalog`.`default`.`multi_col_table`, [StructField(status,StringType,true), StructField(priority,IntegerType,true), StructField(created_at,StringType,true)]
+
+
+-- !query
+DESCRIBE EXTENDED multi_col_table
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`multi_col_table`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER TABLE multi_col_table ALTER COLUMN score SET DEFAULT ?' 
+USING 200
+-- !query analysis
+AlterTableChangeColumnCommand `spark_catalog`.`default`.`multi_col_table`, score, StructField(score,IntegerType,true)
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER TABLE multi_col_table ALTER COLUMN priority SET DEFAULT ?' 
+USING 5
+-- !query analysis
+AlterTableChangeColumnCommand `spark_catalog`.`default`.`multi_col_table`, priority, StructField(priority,IntegerType,true)
+
+
+-- !query
+DESCRIBE EXTENDED multi_col_table
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`multi_col_table`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE FUNCTION complex_func(a INT DEFAULT ?, b STRING DEFAULT ?, c DOUBLE DEFAULT ?) RETURNS STRING RETURN CONCAT(b, CAST(a + c + ? AS STRING))' 
+USING 10, 'prefix_', 3.14, 100
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.complex_func, a INT DEFAULT 10, b STRING DEFAULT 'prefix_', c DOUBLE DEFAULT 3.14BD, STRING, CONCAT(b, CAST(a + c + 100 AS STRING)), false, false, false, false
+
+
+-- !query
+DESCRIBE FUNCTION EXTENDED complex_func
+-- !query analysis
+DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, true
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE mixed_expressions (
+  id INT DEFAULT ?,
+  name STRING DEFAULT ?,
+  base_score INT DEFAULT ?,
+  bonus_score INT GENERATED ALWAYS AS (base_score + ?),
+  total_score INT GENERATED ALWAYS AS (base_score + bonus_score + ?),
+  description STRING DEFAULT ?
+) USING PARQUET' 
+USING 1, 'test', 50, 10, 5, 'default_desc'
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "operation" : "generated columns",
+    "tableName" : "`spark_catalog`.`default`.`mixed_expressions`"
+  }
+}
+
+
+-- !query
+DESCRIBE EXTENDED mixed_expressions
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`mixed_expressions`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 35,
+    "fragment" : "mixed_expressions"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE VIEW param_view AS SELECT * FROM multi_col_table WHERE score > ?' 
+USING 150
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`param_view`, SELECT * FROM multi_col_table WHERE score > 150, false, false, PersistedView, COMPENSATION, true
+   +- Project [id#x, name#x, score#x, active#x, status#x, priority#x, created_at#x]
+      +- Filter (score#x > 150)
+         +- SubqueryAlias spark_catalog.default.multi_col_table
+            +- Relation spark_catalog.default.multi_col_table[id#x,name#x,score#x,active#x,status#x,priority#x,created_at#x] parquet
+
+
+-- !query
+DESCRIBE EXTENDED param_view
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`param_view`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'ALTER VIEW param_view AS SELECT id, name FROM multi_col_table WHERE score > ? AND priority > ?' 
+USING 100, 3
+-- !query analysis
+AlterViewAsCommand `spark_catalog`.`default`.`param_view`, SELECT id, name FROM multi_col_table WHERE score > 100 AND priority > 3, true
+   +- Project [id#x, name#x]
+      +- Filter ((score#x > 100) AND (priority#x > 3))
+         +- SubqueryAlias spark_catalog.default.multi_col_table
+            +- Relation spark_catalog.default.multi_col_table[id#x,name#x,score#x,active#x,status#x,priority#x,created_at#x] parquet
+
+
+-- !query
+DESCRIBE EXTENDED param_view
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`param_view`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE test_var_pos INT DEFAULT ?' 
+USING 999
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(999 as int), 999), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.test_var_pos
+
+
+-- !query
+SELECT test_var_pos
+-- !query analysis
+Project [variablereference(system.session.test_var_pos=999) AS test_var_pos#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE FUNCTION error_func(x INT DEFAULT ?) RETURNS INT RETURN x + ?' 
+USING 10
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNBOUND_SQL_PARAMETER",
+  "sqlState" : "42P02",
+  "messageParameters" : {
+    "name" : "?"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE error_table_pos (id INT DEFAULT ?, name STRING DEFAULT ?) USING PARQUET' 
+USING 1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNBOUND_SQL_PARAMETER",
+  "sqlState" : "42P02",
+  "messageParameters" : {
+    "name" : "?"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE VIEW nested_view AS SELECT test_func(:input_val) as result' USING 20 as input_val
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`nested_view`, SELECT test_func(20) as result, false, false, PersistedView, COMPENSATION, true
+   +- Project [spark_catalog.default.test_func(x#x) AS result#x]
+      +- Project [cast(20 as int) AS x#x]
+         +- OneRowRelation
+
+
+-- !query
+DESCRIBE EXTENDED nested_view
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`nested_view`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE gen_table (id INT, doubled INT GENERATED ALWAYS AS (id * :multiplier)) USING PARQUET' 
+USING 2 as multiplier
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "operation" : "generated columns",
+    "tableName" : "`spark_catalog`.`default`.`gen_table`"
+  }
+}
+
+
+-- !query
+DESCRIBE EXTENDED gen_table
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`gen_table`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 27,
+    "fragment" : "gen_table"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE multi_param (id INT DEFAULT :val, name STRING DEFAULT :name, score INT DEFAULT :val) USING PARQUET' 
+USING 42 as val, 'test' as name
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`multi_param`, false
+
+
+-- !query
+DESCRIBE EXTENDED multi_param
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`multi_param`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE quote_test STRING DEFAULT ?' 
+USING 'It\'s a test with \'embedded\' single quotes'
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(It's a test with 'embedded' single quotes as string), 'It\'s a test with \'embedded\' single quotes'), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.quote_test
+
+
+-- !query
+SELECT quote_test, typeof(quote_test)
+-- !query analysis
+Project [variablereference(system.session.quote_test='It\'s a test with \'embedded\' single quotes') AS quote_test#x, typeof(variablereference(system.session.quote_test='It\'s a test with \'embedded\' single quotes')) AS typeof(variablereference(system.session.quote_test='It\'s a test with \'embedded\' single quotes'))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE mixed_quotes STRING DEFAULT ?' 
+USING 'String with "double" and \'single\' quotes'
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(String with "double" and 'single' quotes as string), 'String with "double" and \'single\' quotes'), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.mixed_quotes
+
+
+-- !query
+SELECT mixed_quotes, typeof(mixed_quotes)
+-- !query analysis
+Project [variablereference(system.session.mixed_quotes='String with "double" and \'single\' quotes') AS mixed_quotes#x, typeof(variablereference(system.session.mixed_quotes='String with "double" and \'single\' quotes')) AS typeof(variablereference(system.session.mixed_quotes='String with "double" and \'single\' quotes'))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE long_string STRING DEFAULT ?' 
+USING 'This is a very long string that contains multiple words and should test the parameter substitution with lengthy content to ensure it works correctly with large parameter values'
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(This is a very long string that contains multiple words and should test the parameter substitution with lengthy content to ensure it works correctly with large parameter values as string), 'This is a very long string that contains multiple words and should test the parameter substitution with lengthy content to ensure it works correctly with large parameter values'), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.long_string
+
+
+-- !query
+SELECT long_string, typeof(long_string)
+-- !query analysis
+Project [variablereference(system.session.long_string='This is a very long string that contains multiple words and should test the parameter substitution with lengthy content to ensure it works correctly with large parameter values') AS long_string#x, typeof(variablereference(system.session.long_string='This is a very long string that contains multiple words and should test the parameter substitution with lengthy content to ensure it works correctly with large parameter values')) AS typeof(variablereference(system.session.long_string='This is a very long string that contains multiple words and should test the parameter substitution with lengthy content to ensure it works correctly with large parameter values'))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE empty_string STRING DEFAULT ?' 
+USING ''
+-- !query analysis
+CreateVariable defaultvalueexpression(cast( as string), ''), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.empty_string
+
+
+-- !query
+SELECT empty_string, typeof(empty_string)
+-- !query analysis
+Project [variablereference(system.session.empty_string='') AS empty_string#x, typeof(variablereference(system.session.empty_string='')) AS typeof(variablereference(system.session.empty_string=''))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE special_chars STRING DEFAULT ?' 
+USING 'Special chars: \\n\\t\\r\\\\ and unicode: café naïve résumé'
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(Special chars: \n\t\r\\ and unicode: café naïve résumé as string), 'Special chars: \\n\\t\\r\\\\ and unicode: café naïve résumé'), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.special_chars
+
+
+-- !query
+SELECT special_chars, typeof(special_chars)
+-- !query analysis
+Project [variablereference(system.session.special_chars='Special chars: \\n\\t\\r\\\\ and unicode: café naïve résumé') AS special_chars#x, typeof(variablereference(system.session.special_chars='Special chars: \\n\\t\\r\\\\ and unicode: café naïve résumé')) AS typeof(variablereference(system.session.special_chars='Special chars: \\n\\t\\r\\\\ and unicode: café naïve résumé'))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE sql_keywords STRING DEFAULT ?' 
+USING 'SELECT INSERT UPDATE DELETE FROM WHERE JOIN'
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(SELECT INSERT UPDATE DELETE FROM WHERE JOIN as string), 'SELECT INSERT UPDATE DELETE FROM WHERE JOIN'), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.sql_keywords
+
+
+-- !query
+SELECT sql_keywords, typeof(sql_keywords)
+-- !query analysis
+Project [variablereference(system.session.sql_keywords='SELECT INSERT UPDATE DELETE FROM WHERE JOIN') AS sql_keywords#x, typeof(variablereference(system.session.sql_keywords='SELECT INSERT UPDATE DELETE FROM WHERE JOIN')) AS typeof(variablereference(system.session.sql_keywords='SELECT INSERT UPDATE DELETE FROM WHERE JOIN'))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE array_param ARRAY<INT> DEFAULT ?' 
+USING ARRAY(1, 2, 3, 4, 5)
+-- !query analysis
+CreateVariable defaultvalueexpression(cast([1,2,3,4,5] as array<int>), ARRAY(1, 2, 3, 4, 5)), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.array_param
+
+
+-- !query
+SELECT array_param, typeof(array_param)
+-- !query analysis
+Project [variablereference(system.session.array_param=ARRAY(1, 2, 3, 4, 5)) AS array_param#x, typeof(variablereference(system.session.array_param=ARRAY(1, 2, 3, 4, 5))) AS typeof(variablereference(system.session.array_param=ARRAY(1, 2, 3, 4, 5)))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE struct_param STRUCT<name: STRING, age: INT, active: BOOLEAN> DEFAULT ?' 
+USING STRUCT('John', 25, true)
+-- !query analysis
+CreateVariable defaultvalueexpression(cast([John,25,true] as struct<name:string,age:int,active:boolean>), NAMED_STRUCT('col1', 'John', 'col2', 25, 'col3', true)), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.struct_param
+
+
+-- !query
+SELECT struct_param, typeof(struct_param)
+-- !query analysis
+Project [variablereference(system.session.struct_param=NAMED_STRUCT('name', 'John', 'age', 25, 'active', true)) AS struct_param#x, typeof(variablereference(system.session.struct_param=NAMED_STRUCT('name', 'John', 'age', 25, 'active', true))) AS typeof(variablereference(system.session.struct_param=NAMED_STRUCT('name', 'John', 'age', 25, 'active', true)))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE map_param MAP<STRING, INT> DEFAULT ?' 
+USING MAP('key1', 100, 'key2', 200, 'key3', 300)
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(map(keys: [key1,key2,key3], values: [100,200,300]) as map<string,int>), MAP('key1', 100, 'key2', 200, 'key3', 300)), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.map_param
+
+
+-- !query
+SELECT map_param, typeof(map_param)
+-- !query analysis
+Project [variablereference(system.session.map_param=MAP('key1', 100, 'key2', 200, 'key3', 300)) AS map_param#x, typeof(variablereference(system.session.map_param=MAP('key1', 100, 'key2', 200, 'key3', 300))) AS typeof(variablereference(system.session.map_param=MAP('key1', 100, 'key2', 200, 'key3', 300)))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE nested_param STRUCT<user:STRUCT<name:STRING, age:INT>, scores:ARRAY<INT>> DEFAULT ?' 
+USING STRUCT(STRUCT('Jane', 30), ARRAY(95, 87, 92))
+-- !query analysis
+CreateVariable defaultvalueexpression(cast([[Jane,30],[95,87,92]] as struct<user:struct<name:string,age:int>,scores:array<int>>), NAMED_STRUCT('col1', NAMED_STRUCT('col1', 'Jane', 'col2', 30), 'col2', ARRAY(95, 87, 92))), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.nested_param
+
+
+-- !query
+SELECT nested_param, typeof(nested_param)
+-- !query analysis
+Project [variablereference(system.session.nested_param=NAMED_STRUCT('user', NAMED_STRUCT('name', 'Jane', 'age', 30), 'scores', ARRAY(95, 87, 92))) AS nested_param#x, typeof(variablereference(system.session.nested_param=NAMED_STRUCT('user', NAMED_STRUCT('name', 'Jane', 'age', 30), 'scores', ARRAY(95, 87, 92)))) AS typeof(variablereference(system.session.nested_param=NAMED_STRUCT('user', NAMED_STRUCT('name', 'Jane', 'age', 30), 'scores', ARRAY(95, 87, 92))))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE json_param STRING DEFAULT ?' 
+USING '{"name": "Alice", "age": 28, "hobbies": ["reading", "swimming"], "address": {"street": "123 Main St", "city": "Boston"}}'
+-- !query analysis
+CreateVariable defaultvalueexpression(cast({"name": "Alice", "age": 28, "hobbies": ["reading", "swimming"], "address": {"street": "123 Main St", "city": "Boston"}} as string), '{"name": "Alice", "age": 28, "hobbies": ["reading", "swimming"], "address": {"street": "123 Main St", "city": "Boston"}}'), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.json_param
+
+
+-- !query
+SELECT json_param, typeof(json_param)
+-- !query analysis
+Project [variablereference(system.session.json_param='{"name": "Alice", "age": 28, "hobbies": ["reading", "swimming"], "address": {"street": "123 Main St", "city": "Boston"}}') AS json_param#x, typeof(variablereference(system.session.json_param='{"name": "Alice", "age": 28, "hobbies": ["reading", "swimming"], "address": {"street": "123 Main St", "city": "Boston"}}')) AS typeof(variablereference(system.session.json_param='{"name": "Alice", "age": 28, "hobbies": ["reading", "swimming"], "address": {"street": "123 Main St", "city": "Boston"}}'))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE big_int INT DEFAULT ?' 
+USING 2147483647
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(2147483647 as int), 2147483647), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.big_int
+
+
+-- !query
+SELECT big_int, typeof(big_int)
+-- !query analysis
+Project [variablereference(system.session.big_int=2147483647) AS big_int#x, typeof(variablereference(system.session.big_int=2147483647)) AS typeof(variablereference(system.session.big_int=2147483647))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE max_long BIGINT DEFAULT ?' 
+USING 9223372036854775807
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(9223372036854775807 as bigint), 9223372036854775807L), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.max_long
+
+
+-- !query
+SELECT max_long, typeof(max_long)
+-- !query analysis
+Project [variablereference(system.session.max_long=9223372036854775807L) AS max_long#xL, typeof(variablereference(system.session.max_long=9223372036854775807L)) AS typeof(variablereference(system.session.max_long=9223372036854775807L))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE tiny_byte TINYINT DEFAULT ?' 
+USING 127
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(127 as tinyint), 127), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.tiny_byte
+
+
+-- !query
+SELECT tiny_byte, typeof(tiny_byte)
+-- !query analysis
+Project [variablereference(system.session.tiny_byte=127Y) AS tiny_byte#x, typeof(variablereference(system.session.tiny_byte=127Y)) AS typeof(variablereference(system.session.tiny_byte=127Y))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE small_short SMALLINT DEFAULT ?' 
+USING 32767
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(32767 as smallint), 32767), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.small_short
+
+
+-- !query
+SELECT small_short, typeof(small_short)
+-- !query analysis
+Project [variablereference(system.session.small_short=32767S) AS small_short#x, typeof(variablereference(system.session.small_short=32767S)) AS typeof(variablereference(system.session.small_short=32767S))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE scientific_double DOUBLE DEFAULT ?' 
+USING 1.23456789e-10
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(1.23456789E-10 as double), 1.23456789E-10D), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.scientific_double
+
+
+-- !query
+SELECT scientific_double, typeof(scientific_double)
+-- !query analysis
+Project [variablereference(system.session.scientific_double=1.23456789E-10D) AS scientific_double#x, typeof(variablereference(system.session.scientific_double=1.23456789E-10D)) AS typeof(variablereference(system.session.scientific_double=1.23456789E-10D))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE float_param FLOAT DEFAULT ?' 
+USING 3.14159
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(3.14159 as float), 3.14159BD), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.float_param
+
+
+-- !query
+SELECT float_param, typeof(float_param)
+-- !query analysis
+Project [variablereference(system.session.float_param=CAST('3.14159' AS FLOAT)) AS float_param#x, typeof(variablereference(system.session.float_param=CAST('3.14159' AS FLOAT))) AS typeof(variablereference(system.session.float_param=CAST('3.14159' AS FLOAT)))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE precise_decimal DECIMAL(20,10) DEFAULT ?' 
+USING 123456789.0123456789
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(123456789.0123456789 as decimal(20,10)), 123456789.0123456789BD), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.precise_decimal
+
+
+-- !query
+SELECT precise_decimal, typeof(precise_decimal)
+-- !query analysis
+Project [variablereference(system.session.precise_decimal=123456789.0123456789BD) AS precise_decimal#x, typeof(variablereference(system.session.precise_decimal=123456789.0123456789BD)) AS typeof(variablereference(system.session.precise_decimal=123456789.0123456789BD))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE bool_true BOOLEAN DEFAULT ?' 
+USING true
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(true as boolean), true), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.bool_true
+
+
+-- !query
+SELECT bool_true, typeof(bool_true)
+-- !query analysis
+Project [variablereference(system.session.bool_true=true) AS bool_true#x, typeof(variablereference(system.session.bool_true=true)) AS typeof(variablereference(system.session.bool_true=true))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE bool_false BOOLEAN DEFAULT ?' 
+USING false
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(false as boolean), false), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.bool_false
+
+
+-- !query
+SELECT bool_false, typeof(bool_false)
+-- !query analysis
+Project [variablereference(system.session.bool_false=false) AS bool_false#x, typeof(variablereference(system.session.bool_false=false)) AS typeof(variablereference(system.session.bool_false=false))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE timestamp_param TIMESTAMP DEFAULT ?' 
+USING TIMESTAMP '2023-12-25 14:30:45.123456'
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT timestamp_param, typeof(timestamp_param)
+-- !query analysis
+Project [variablereference(system.session.timestamp_param=TIMESTAMP '2023-12-25 14:30:45.123456') AS timestamp_param#x, typeof(variablereference(system.session.timestamp_param=TIMESTAMP '2023-12-25 14:30:45.123456')) AS typeof(variablereference(system.session.timestamp_param=TIMESTAMP '2023-12-25 14:30:45.123456'))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE date_param DATE DEFAULT ?' 
+USING DATE '2023-12-25'
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT date_param, typeof(date_param)
+-- !query analysis
+Project [variablereference(system.session.date_param=DATE '2023-12-25') AS date_param#x, typeof(variablereference(system.session.date_param=DATE '2023-12-25')) AS typeof(variablereference(system.session.date_param=DATE '2023-12-25'))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE binary_param BINARY DEFAULT ?' 
+USING X'48656C6C6F20576F726C64'
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(0x48656C6C6F20576F726C64 as binary), X'48656C6C6F20576F726C64'), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.binary_param
+
+
+-- !query
+SELECT binary_param, typeof(binary_param)
+-- !query analysis
+Project [variablereference(system.session.binary_param=X'48656C6C6F20576F726C64') AS binary_param#x, typeof(variablereference(system.session.binary_param=X'48656C6C6F20576F726C64')) AS typeof(variablereference(system.session.binary_param=X'48656C6C6F20576F726C64'))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE escape_test STRING DEFAULT ?' 
+USING 'Path: C:\\\\Users\\\\Name\\\\Documents\\\\file.txt'
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(Path: C:\\Users\\Name\\Documents\\file.txt as string), 'Path: C:\\\\Users\\\\Name\\\\Documents\\\\file.txt'), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.escape_test
+
+
+-- !query
+SELECT escape_test, typeof(escape_test)
+-- !query analysis
+Project [variablereference(system.session.escape_test='Path: C:\\\\Users\\\\Name\\\\Documents\\\\file.txt') AS escape_test#x, typeof(variablereference(system.session.escape_test='Path: C:\\\\Users\\\\Name\\\\Documents\\\\file.txt')) AS typeof(variablereference(system.session.escape_test='Path: C:\\\\Users\\\\Name\\\\Documents\\\\file.txt'))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE multiline_param STRING DEFAULT ?' 
+USING 'Line 1\\nLine 2\\n\\tIndented line\\nLine 4'
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(Line 1\nLine 2\n\tIndented line\nLine 4 as string), 'Line 1\\nLine 2\\n\\tIndented line\\nLine 4'), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.multiline_param
+
+
+-- !query
+SELECT multiline_param, typeof(multiline_param)
+-- !query analysis
+Project [variablereference(system.session.multiline_param='Line 1\\nLine 2\\n\\tIndented line\\nLine 4') AS multiline_param#x, typeof(variablereference(system.session.multiline_param='Line 1\\nLine 2\\n\\tIndented line\\nLine 4')) AS typeof(variablereference(system.session.multiline_param='Line 1\\nLine 2\\n\\tIndented line\\nLine 4'))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE pos_inf DOUBLE DEFAULT ?' 
+USING CAST('Infinity' AS DOUBLE)
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(Infinity as double), CAST('Infinity' AS DOUBLE)), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.pos_inf
+
+
+-- !query
+SELECT pos_inf, typeof(pos_inf)
+-- !query analysis
+Project [variablereference(system.session.pos_inf=CAST('Infinity' AS DOUBLE)) AS pos_inf#x, typeof(variablereference(system.session.pos_inf=CAST('Infinity' AS DOUBLE))) AS typeof(variablereference(system.session.pos_inf=CAST('Infinity' AS DOUBLE)))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE neg_inf DOUBLE DEFAULT ?' 
+USING CAST('-Infinity' AS DOUBLE)
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(-Infinity as double), CAST('-Infinity' AS DOUBLE)), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.neg_inf
+
+
+-- !query
+SELECT neg_inf, typeof(neg_inf)
+-- !query analysis
+Project [variablereference(system.session.neg_inf=CAST('-Infinity' AS DOUBLE)) AS neg_inf#x, typeof(variablereference(system.session.neg_inf=CAST('-Infinity' AS DOUBLE))) AS typeof(variablereference(system.session.neg_inf=CAST('-Infinity' AS DOUBLE)))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE nan_val DOUBLE DEFAULT ?' 
+USING CAST('NaN' AS DOUBLE)
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(NaN as double), CAST('NaN' AS DOUBLE)), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.nan_val
+
+
+-- !query
+SELECT nan_val, typeof(nan_val)
+-- !query analysis
+Project [variablereference(system.session.nan_val=CAST('NaN' AS DOUBLE)) AS nan_val#x, typeof(variablereference(system.session.nan_val=CAST('NaN' AS DOUBLE))) AS typeof(variablereference(system.session.nan_val=CAST('NaN' AS DOUBLE)))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE string_array ARRAY<STRING> DEFAULT ?' 
+USING ARRAY('first\'s value', 'second "quoted" value', 'third\nwith\ttabs')
+-- !query analysis
+CreateVariable defaultvalueexpression(cast([first's value,second "quoted" value,third
+with	tabs] as array<string>), ARRAY('first\'s value', 'second "quoted" value', 'third
+with	tabs')), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.string_array
+
+
+-- !query
+SELECT string_array, typeof(string_array)
+-- !query analysis
+Project [variablereference(system.session.string_array=ARRAY('first\'s value', 'second "quoted" value', 'third
+with	tabs')) AS string_array#x, typeof(variablereference(system.session.string_array=ARRAY('first\'s value', 'second "quoted" value', 'third
+with	tabs'))) AS typeof(variablereference(system.session.string_array=ARRAY('first\'s value', 'second "quoted" value', 'third
+with	tabs')))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE struct_array ARRAY<STRUCT<name:STRING, age:INT>> DEFAULT ?' 
+USING ARRAY(STRUCT('Alice', 25), STRUCT('Bob', 30), STRUCT('Charlie', 35))
+-- !query analysis
+CreateVariable defaultvalueexpression(cast([[Alice,25],[Bob,30],[Charlie,35]] as array<struct<name:string,age:int>>), ARRAY(NAMED_STRUCT('col1', 'Alice', 'col2', 25), NAMED_STRUCT('col1', 'Bob', 'col2', 30), NAMED_STRUCT('col1', 'Charlie', 'col2', 35))), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.struct_array
+
+
+-- !query
+SELECT struct_array, typeof(struct_array)
+-- !query analysis
+Project [variablereference(system.session.struct_array=ARRAY(NAMED_STRUCT('name', 'Alice', 'age', 25), NAMED_STRUCT('name', 'Bob', 'age', 30), NAMED_STRUCT('name', 'Charlie', 'age', 35))) AS struct_array#x, typeof(variablereference(system.session.struct_array=ARRAY(NAMED_STRUCT('name', 'Alice', 'age', 25), NAMED_STRUCT('name', 'Bob', 'age', 30), NAMED_STRUCT('name', 'Charlie', 'age', 35)))) AS typeof(variablereference(system.session.struct_array=ARRAY(NAMED_STRUCT('name', 'Alice', 'age', 25), NAMED_STRUCT('name', 'Bob', 'age', 30), NAMED_STRUCT('name', 'Charlie', 'age', 35))))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE complex_map MAP<STRING, STRUCT<id:INT, active:BOOLEAN>> DEFAULT ?' 
+USING MAP('user1', STRUCT(1, true), 'user2', STRUCT(2, false))
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(map(keys: [user1,user2], values: [[1,true],[2,false]]) as map<string,struct<id:int,active:boolean>>), MAP('user1', NAMED_STRUCT('col1', 1, 'col2', true), 'user2', NAMED_STRUCT('col1', 2, 'col2', false))), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.complex_map
+
+
+-- !query
+SELECT complex_map, typeof(complex_map)
+-- !query analysis
+Project [variablereference(system.session.complex_map=MAP('user1', NAMED_STRUCT('id', 1, 'active', true), 'user2', NAMED_STRUCT('id', 2, 'active', false))) AS complex_map#x, typeof(variablereference(system.session.complex_map=MAP('user1', NAMED_STRUCT('id', 1, 'active', true), 'user2', NAMED_STRUCT('id', 2, 'active', false)))) AS typeof(variablereference(system.session.complex_map=MAP('user1', NAMED_STRUCT('id', 1, 'active', true), 'user2', NAMED_STRUCT('id', 2, 'active', false))))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE deep_nested STRUCT<level1:STRUCT<level2:STRUCT<data:ARRAY<MAP<STRING, INT>>>>> DEFAULT ?' 
+USING STRUCT(STRUCT(STRUCT(ARRAY(MAP('a', 1, 'b', 2), MAP('c', 3, 'd', 4)))))
+-- !query analysis
+CreateVariable defaultvalueexpression(cast([[[[keys: [a,b], values: [1,2],keys: [c,d], values: [3,4]]]]] as struct<level1:struct<level2:struct<data:array<map<string,int>>>>>), NAMED_STRUCT('col1', NAMED_STRUCT('col1', NAMED_STRUCT('col1', ARRAY(MAP('a', 1, 'b', 2), MAP('c', 3, 'd', 4)))))), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.deep_nested
+
+
+-- !query
+SELECT deep_nested, typeof(deep_nested)
+-- !query analysis
+Project [variablereference(system.session.deep_nested=NAMED_STRUCT('level1', NAMED_STRUCT('level2', NAMED_STRUCT('data', ARRAY(MAP('a', 1, 'b', 2), MAP('c', 3, 'd', 4)))))) AS deep_nested#x, typeof(variablereference(system.session.deep_nested=NAMED_STRUCT('level1', NAMED_STRUCT('level2', NAMED_STRUCT('data', ARRAY(MAP('a', 1, 'b', 2), MAP('c', 3, 'd', 4))))))) AS typeof(variablereference(system.session.deep_nested=NAMED_STRUCT('level1', NAMED_STRUCT('level2', NAMED_STRUCT('data', ARRAY(MAP('a', 1, 'b', 2), MAP('c', 3, 'd', 4)))))))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'CREATE TABLE complex_defaults (
+  id INT, 
+  json_data STRING DEFAULT ?,
+  quoted_name STRING DEFAULT ?,
+  large_number BIGINT DEFAULT ?,
+  precise_val DECIMAL(15,5) DEFAULT ?,
+  bool_flag BOOLEAN DEFAULT ?,
+  created_date DATE DEFAULT ?
+) USING PARQUET' 
+USING '{"type": "user", "data": {"name": "Test\'User", "active": true}}',
+      'Name with \'quotes\' and "double quotes"',
+      9223372036854775807,
+      12345.67890,
+      true,
+      DATE '2023-12-25'
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`complex_defaults`, false
+
+
+-- !query
+DESCRIBE EXTENDED complex_defaults
+-- !query analysis
+DescribeTableCommand `spark_catalog`.`default`.`complex_defaults`, true, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE case_sensitive STRING DEFAULT ?' 
+USING 'MiXeD CaSe StRiNg WiTh UPPER and lower'
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(MiXeD CaSe StRiNg WiTh UPPER and lower as string), 'MiXeD CaSe StRiNg WiTh UPPER and lower'), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.case_sensitive
+
+
+-- !query
+SELECT case_sensitive, typeof(case_sensitive)
+-- !query analysis
+Project [variablereference(system.session.case_sensitive='MiXeD CaSe StRiNg WiTh UPPER and lower') AS case_sensitive#x, typeof(variablereference(system.session.case_sensitive='MiXeD CaSe StRiNg WiTh UPPER and lower')) AS typeof(variablereference(system.session.case_sensitive='MiXeD CaSe StRiNg WiTh UPPER and lower'))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE year_interval DEFAULT ?'
+USING INTERVAL '2' years
+-- !query analysis
+CreateVariable defaultvalueexpression(INTERVAL '2' YEAR, INTERVAL '2' YEAR), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.year_interval
+
+
+-- !query
+SELECT year_interval, typeof(year_interval)
+-- !query analysis
+Project [variablereference(system.session.year_interval=INTERVAL '2' YEAR) AS year_interval#x, typeof(variablereference(system.session.year_interval=INTERVAL '2' YEAR)) AS typeof(variablereference(system.session.year_interval=INTERVAL '2' YEAR))#x]
++- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE 'DECLARE VARIABLE day_interval DEFAULT ?'
+USING INTERVAL '10' DAYS
+-- !query analysis
+CreateVariable defaultvalueexpression(INTERVAL '10' DAY, INTERVAL '10' DAY), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.day_interval
+
+
+-- !query
+SELECT day_interval, typeof(day_interval)
+-- !query analysis
+Project [variablereference(system.session.day_interval=INTERVAL '10' DAY) AS day_interval#x, typeof(variablereference(system.session.day_interval=INTERVAL '10' DAY)) AS typeof(variablereference(system.session.day_interval=INTERVAL '10' DAY))#x]
++- OneRowRelation
+
+
+-- !query
+DROP TABLE IF EXISTS complex_defaults
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.complex_defaults
+
+
+-- !query
+DROP FUNCTION IF EXISTS test_func
+-- !query analysis
+DropFunctionCommand spark_catalog.default.test_func, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS test_func2
+-- !query analysis
+DropFunctionCommand spark_catalog.default.test_func2, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS multi_param_func
+-- !query analysis
+DropFunctionCommand spark_catalog.default.multi_param_func, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS table_func
+-- !query analysis
+DropFunctionCommand spark_catalog.default.table_func, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS complex_func
+-- !query analysis
+DropFunctionCommand spark_catalog.default.complex_func, true, false
+
+
+-- !query
+DROP VIEW IF EXISTS nested_view
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`nested_view`, true, true, false
+
+
+-- !query
+DROP VIEW IF EXISTS param_view
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`param_view`, true, true, false
+
+
+-- !query
+DROP TABLE IF EXISTS gen_table
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.gen_table
+
+
+-- !query
+DROP TABLE IF EXISTS multi_param
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.multi_param
+
+
+-- !query
+DROP TABLE IF EXISTS multi_col_table
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.multi_col_table
+
+
+-- !query
+DROP TABLE IF EXISTS gen_and_default
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.gen_and_default
+
+
+-- !query
+DROP TABLE IF EXISTS mixed_expressions
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.mixed_expressions
+
+
+-- !query
+DROP VIEW IF EXISTS test_view
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`test_view`, true, true, false
+
+
+-- !query
+DROP VIEW IF EXISTS test_view2
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`test_view2`, true, true, false
+
+
+-- !query
+DROP TABLE IF EXISTS test_table
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_table
+
+
+-- !query
+DROP TABLE IF EXISTS test_table2
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.test_table2
+
+
+-- !query
+DROP TABLE IF EXISTS expr_test
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.expr_test
 
 
 -- !query
