@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.util.{Either, Left, Right}
-
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, VariableReference}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, ExecutableDuringAnalysis, LocalRelation, LogicalPlan, SetVariable, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{ExecutableDuringAnalysis, LocalRelation, LogicalPlan, SetVariable, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -162,8 +160,6 @@ class ResolveExecuteImmediate(
         validateUsingClauseExpressions(args)
 
         if (queryParamResolved && allArgsResolved && targetVariablesResolved) {
-          // Validate parameter usage patterns
-          validateParameterUsage(queryParam, args)
           // All resolved - transform based on whether we have target variables
           if (targetVariables.nonEmpty) {
             // EXECUTE IMMEDIATE ... INTO should generate SetVariable plan
@@ -204,44 +200,6 @@ class ResolveExecuteImmediate(
           e
         }
     }
-
-  private def parseStatement(
-      queryString: String,
-      targetVariables: Seq[Expression]): LogicalPlan = {
-    // If targetVariables is defined, statement needs to be a query.
-    // Otherwise, it can be anything.
-    val plan = if (targetVariables.nonEmpty) {
-      try {
-        catalogManager.v1SessionCatalog.parser.parseQuery(queryString)
-      } catch {
-        case e: ParseException =>
-          // Since we do not have a way of telling that parseQuery failed because of
-          // actual parsing error or because statement was passed where query was expected,
-          // we need to make sure that parsePlan wouldn't throw
-          catalogManager.v1SessionCatalog.parser.parsePlan(queryString)
-
-          // Plan was successfully parsed, but query wasn't - throw.
-          throw QueryCompilationErrors.invalidStatementForExecuteInto(queryString)
-      }
-    } else {
-      catalogManager.v1SessionCatalog.parser.parsePlan(queryString)
-    }
-
-    if (plan.isInstanceOf[CompoundBody]) {
-      throw QueryCompilationErrors.sqlScriptInExecuteImmediate(queryString)
-    }
-
-    plan
-  }
-
-
-
-  private def isQueryResolved(query: Either[String, UnresolvedAttribute]): Boolean = {
-    query match {
-      case Left(_) => true // String literals are always resolved
-      case Right(attr) => attr.resolved // Check if the attribute is resolved
-    }
-  }
 
   private def getVariableReference(expr: Expression, nameParts: Seq[String]): VariableReference = {
     variableResolution.lookupVariable(
@@ -301,41 +259,5 @@ class ResolveExecuteImmediate(
         case _ => // Other expressions are fine
       }
     }
-  }
-
-  private def validateParameterUsage(queryParam: Expression, args: Seq[Expression]): Unit = {
-    // Extract the query string to validate parameter patterns
-    val queryString = queryParam.eval(null) match {
-      case null => return // Will be caught later by other validation
-      case value => value.toString
-    }
-
-    // Check for positional and named parameter patterns in the query string
-    val positionalParameterPattern = "\\?".r
-    val namedParameterPattern = ":[a-zA-Z_][a-zA-Z0-9_]*".r
-    val queryUsesPositionalParameters =
-      positionalParameterPattern.findFirstIn(queryString).isDefined
-    val queryUsesNamedParameters =
-      namedParameterPattern.findFirstIn(queryString).isDefined
-
-    // Error if query mixes positional and named parameters
-    if (queryUsesPositionalParameters && queryUsesNamedParameters) {
-      throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
-    }
-
-    // If query uses only named parameters, ensure all USING expressions have names
-    if (queryUsesNamedParameters && !queryUsesPositionalParameters) {
-      val unnamedExpressions = args.zipWithIndex.collect {
-        case (expr, index) if !hasName(expr) => expr
-      }
-      if (unnamedExpressions.nonEmpty) {
-        throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedExpressions)
-      }
-    }
-  }
-
-  private def hasName(expr: Expression): Boolean = expr match {
-    case _: Alias => true
-    case _ => false
   }
 }
