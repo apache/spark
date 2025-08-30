@@ -54,38 +54,24 @@ case class ExecuteExecutableDuringAnalysis(sparkSession: SparkSession) extends R
           sparkSession.sql(queryString)
         }
       } else {
-        // For parameterized queries, build parameter map from USING clause
+        // For parameterized queries, build unified parameter arrays
         // The args are already resolved by outer parameter resolution
-        val (positionalParams, namedParams) = separateParameters(cmd.args)
+        val (paramValues, paramNames) = buildUnifiedParameters(cmd.args)
+
+        // Validate parameter usage patterns
+        validateParameterUsage(cmd.queryParam, cmd.args, paramNames.toSeq)
 
         AnalysisContext.withExecuteImmediateContext {
-          if (namedParams.nonEmpty && positionalParams.isEmpty) {
-            // Only named parameters: use Map overload
-            sparkSession.sql(queryString, namedParams)
-          } else if (positionalParams.nonEmpty && namedParams.isEmpty) {
-            // Only positional parameters: use Array overload
-            sparkSession.sql(queryString, positionalParams.toArray)
-          } else if (namedParams.isEmpty && positionalParams.isEmpty) {
-            // No parameters
-            sparkSession.sql(queryString)
-          } else {
-            // Mixed parameters: not directly supported, need manual substitution
-            val substitutedQuery = substituteNamedParameters(queryString, namedParams)
-            sparkSession.sql(substitutedQuery, positionalParams.toArray)
-          }
+          // Use the new unified parameter API - let the inner query decide
+          // whether to use positional or named parameters based on its markers
+          sparkSession.sql(queryString, paramValues, paramNames)
         }
       }
 
-      // Handle target variables if specified
-      if (cmd.targetVariables.nonEmpty) {
-        handleTargetVariables(result, cmd.targetVariables)
-        // Return empty relation for INTO queries
-        LocalRelation(Nil, Nil)
-      } else {
-        // Return the query results as a LocalRelation
-        val internalRows = result.queryExecution.executedPlan.executeCollect()
-        LocalRelation(result.queryExecution.analyzed.output, internalRows.toSeq)
-      }
+      // Return the query results as a LocalRelation
+      // ExecuteImmediateCommand returns query results; SetVariable handles variable assignment
+      val internalRows = result.queryExecution.executedPlan.executeCollect()
+      LocalRelation(result.queryExecution.analyzed.output, internalRows.toSeq)
 
     } catch {
       case e: AnalysisException =>
@@ -99,21 +85,31 @@ case class ExecuteExecutableDuringAnalysis(sparkSession: SparkSession) extends R
   private def extractQueryString(queryExpr: Expression): String = {
     // Ensure the expression resolves to string type
     if (!queryExpr.dataType.sameType(StringType)) {
-      throw QueryCompilationErrors.invalidExecuteImmediateVariableType(queryExpr.dataType)
+      throw QueryCompilationErrors.invalidExecuteImmediateExpressionType(queryExpr.dataType)
     }
 
     // Evaluate the expression to get the query string
     val value = queryExpr.eval(null)
     if (value == null) {
-      queryExpr match {
-        case variable: VariableReference =>
-          throw QueryCompilationErrors.nullSQLStringExecuteImmediate(variable.identifier.name())
-        case _ =>
-          throw QueryCompilationErrors.nullSQLStringExecuteImmediate("query expression")
-      }
+      // Extract the original text from the expression's origin for the error message
+      val originalText = extractOriginalText(queryExpr)
+      throw QueryCompilationErrors.nullSQLStringExecuteImmediate(originalText)
     }
 
     value.toString
+  }
+
+  private def extractOriginalText(queryExpr: Expression): String = {
+    val origin = queryExpr.origin
+    // Try to extract the original text from the origin information
+    (origin.sqlText, origin.startIndex, origin.stopIndex) match {
+      case (Some(sqlText), Some(startIndex), Some(stopIndex)) =>
+        // Extract the substring from the original SQL text
+        sqlText.substring(startIndex, stopIndex + 1)
+      case _ =>
+        // Fallback to the SQL representation if origin information is not available
+        queryExpr.sql
+    }
   }
 
   private def validateQuery(queryString: String, parsedPlan: LogicalPlan): Unit = {
@@ -186,24 +182,181 @@ case class ExecuteExecutableDuringAnalysis(sparkSession: SparkSession) extends R
     }
   }
 
-  private def separateParameters(args: Seq[Expression]): (Seq[Any], Map[String, Any]) = {
+  /**
+   * Builds unified parameter arrays for the new sql() API.
+   * Returns (values, names) where values contains all parameter values
+   * and names contains corresponding parameter names (or empty string for positional).
+   */
+  private def buildUnifiedParameters(args: Seq[Expression]): (Array[Any], Array[String]) = {
     import org.apache.spark.sql.catalyst.expressions.{EmptyRow, Literal}
-    val positionalParams = scala.collection.mutable.ListBuffer[Any]()
-    val namedParams = scala.collection.mutable.Map[String, Any]()
+    import org.apache.spark.sql.catalyst.expressions.VariableReference
+    val values = scala.collection.mutable.ListBuffer[Any]()
+    val names = scala.collection.mutable.ListBuffer[String]()
+
+
 
     args.foreach {
       case alias: Alias =>
-        // Named parameter: "value AS paramName"
-        val paramName = alias.name
-        // Evaluate the expression (should already be resolved by analyzer)
-        val paramValue = if (alias.child.foldable) {
-          // For foldable expressions, create a literal (similar to ConstantFolding)
-          Literal.create(alias.child.eval(EmptyRow), alias.child.dataType).value
-        } else {
-          // For non-foldable expressions, just evaluate
-          alias.child.eval(EmptyRow)
+        // Check if this is an auto-generated alias from variable resolution
+        // or an explicit "value AS paramName" from the user
+        val isAutoGeneratedAlias = alias.child match {
+          case varRef: VariableReference =>
+            // If the alias name matches the variable name, it's auto-generated
+            alias.name == varRef.identifier.name()
+          case _ => false
         }
-        namedParams(paramName) = paramValue
+
+        val paramValue = alias.child match {
+          case varRef: VariableReference =>
+            // Variable references should be evaluated to their values
+            varRef.eval(EmptyRow)
+          case foldable if foldable.foldable =>
+            Literal.create(foldable.eval(EmptyRow), foldable.dataType).value
+          case other =>
+            // Expression is not foldable - this is not supported for parameters
+            // Check for specific unsupported expression types to provide better error messages
+            import org.apache.spark.sql.catalyst.expressions.{ScalarSubquery, Exists, ListQuery, InSubquery}
+            other match {
+              case _: ScalarSubquery | _: Exists | _: ListQuery | _: InSubquery =>
+                throw QueryCompilationErrors.unsupportedParameterExpression(other)
+              case _ if !other.foldable =>
+                throw QueryCompilationErrors.unsupportedParameterExpression(other)
+              case _ =>
+                // This should not happen, but fallback to evaluation
+                other.eval(EmptyRow)
+            }
+        }
+
+        if (isAutoGeneratedAlias) {
+          // This is a session variable without explicit AS clause
+          // Pass the variable name so the inner query can use it for named parameters
+          val varName = alias.child.asInstanceOf[VariableReference].identifier.name()
+
+          values += paramValue
+          names += varName // Use the variable name for named parameter binding
+        } else {
+          // This is a true named parameter: "value AS paramName"
+          val paramName = alias.name
+          values += paramValue
+          names += paramName
+        }
+      case expr =>
+        // Positional parameter: just a value
+        val paramValue = expr match {
+          case varRef: VariableReference =>
+            // Variable references should be evaluated to their values
+            varRef.eval(EmptyRow)
+          case foldable if foldable.foldable =>
+            Literal.create(foldable.eval(EmptyRow), foldable.dataType).value
+          case other =>
+            // Expression is not foldable - this is not supported for parameters
+            // Check for specific unsupported expression types to provide better error messages
+            import org.apache.spark.sql.catalyst.expressions.{ScalarSubquery, Exists, ListQuery, InSubquery}
+            other match {
+              case _: ScalarSubquery | _: Exists | _: ListQuery | _: InSubquery =>
+                throw QueryCompilationErrors.unsupportedParameterExpression(other)
+              case _ if !other.foldable =>
+                throw QueryCompilationErrors.unsupportedParameterExpression(other)
+              case _ =>
+                // This should not happen, but fallback to evaluation
+                other.eval(EmptyRow)
+            }
+        }
+        values += paramValue
+        names += null // null indicates unnamed expression (hole)
+    }
+
+    (values.toArray, names.toArray)
+  }
+
+  private def validateParameterUsage(
+      queryParam: Expression,
+      args: Seq[Expression],
+      names: Seq[String]): Unit = {
+    // Extract the query string to check for parameter patterns
+    val queryString = queryParam.eval(null) match {
+      case null => return // Will be caught later by other validation
+      case value => value.toString
+    }
+
+    // Check what types of parameters the query uses
+    val positionalParameterPattern = "\\?".r
+    val namedParameterPattern = ":[a-zA-Z_][a-zA-Z0-9_]*".r
+
+    val queryUsesPositionalParameters =
+      positionalParameterPattern.findFirstIn(queryString).isDefined
+    val queryUsesNamedParameters = namedParameterPattern.findFirstIn(queryString).isDefined
+
+    // First check: Does the query itself mix positional and named parameters?
+    if (queryUsesPositionalParameters && queryUsesNamedParameters) {
+      throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
+    }
+
+    // Second check: If query uses ONLY named parameters, all USING expressions must have names
+    if (queryUsesNamedParameters && !queryUsesPositionalParameters) {
+      val unnamedExpressions = names.zipWithIndex.collect {
+        case (null, index) => index
+        case ("", index) => index // Also catch empty strings as unnamed
+      }
+      if (unnamedExpressions.nonEmpty) {
+        // Get the actual expressions that don't have names for error reporting
+        val unnamedExprs = unnamedExpressions.map(args(_))
+        throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedExprs)
+      }
+    }
+  }
+
+  private def separateParameters(args: Seq[Expression]): (Seq[Any], Map[String, Any]) = {
+    import org.apache.spark.sql.catalyst.expressions.{EmptyRow, Literal}
+    import org.apache.spark.sql.catalyst.expressions.VariableReference
+    val positionalParams = scala.collection.mutable.ListBuffer[Any]()
+    val namedParams = scala.collection.mutable.Map[String, Any]()
+
+    // scalastyle:off println
+    System.err.println(s"DEBUG: separateParameters called with ${args.length} args")
+    args.zipWithIndex.foreach { case (arg, i) =>
+      System.err.println(s"DEBUG: arg[$i]: ${arg.getClass.getSimpleName} = $arg")
+      System.err.println(s"DEBUG: arg[$i].resolved: ${arg.resolved}")
+      System.err.println(s"DEBUG: arg[$i].foldable: ${arg.foldable}")
+    }
+    // scalastyle:on println
+
+    args.foreach {
+      case alias: Alias =>
+        // Check if this is an auto-generated alias from variable resolution
+        // or an explicit "value AS paramName" from the user
+        val isAutoGeneratedAlias = alias.child match {
+          case varRef: VariableReference =>
+            // If the alias name matches the variable name, it's auto-generated
+            alias.name == varRef.identifier.name()
+          case _ => false
+        }
+
+        if (isAutoGeneratedAlias) {
+          // This is actually a positional parameter (session variable without AS)
+          val paramValue = if (alias.child.foldable) {
+            Literal.create(alias.child.eval(EmptyRow), alias.child.dataType).value
+          } else {
+            alias.child.eval(EmptyRow)
+          }
+          // scalastyle:off println
+          System.err.println(
+            s"DEBUG: Positional param = $paramValue (from auto-generated alias ${alias.name})")
+          // scalastyle:on println
+          positionalParams += paramValue
+        } else {
+          // This is a true named parameter: "value AS paramName"
+          val paramName = alias.name
+          val paramValue = if (alias.child.foldable) {
+            Literal.create(alias.child.eval(EmptyRow), alias.child.dataType).value
+          } else {
+            alias.child.eval(EmptyRow)
+          }
+          // scalastyle:off println
+          System.err.println(s"DEBUG: Named param '$paramName' = $paramValue")
+          // scalastyle:on println
+          namedParams(paramName) = paramValue
+        }
       case expr =>
         // Positional parameter: just a value
         // Evaluate the expression (should already be resolved by analyzer)
@@ -214,6 +367,10 @@ case class ExecuteExecutableDuringAnalysis(sparkSession: SparkSession) extends R
           // For non-foldable expressions, just evaluate
           expr.eval(EmptyRow)
         }
+        // scalastyle:off println
+        System.err.println(
+          s"DEBUG: Positional param = $paramValue (from ${expr.getClass.getSimpleName})")
+        // scalastyle:on println
         positionalParams += paramValue
     }
 

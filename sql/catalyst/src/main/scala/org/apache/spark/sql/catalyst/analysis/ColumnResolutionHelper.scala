@@ -242,6 +242,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
    * @return Reference to the variable.
    */
   def lookupVariable(nameParts: Seq[String]): Option[VariableReference] = {
+
     // The temp variables live in `SYSTEM.SESSION`, and the name can be qualified or not.
     def maybeTempVariableName(nameParts: Seq[String]): Boolean = {
       nameParts.length == 1 || {

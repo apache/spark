@@ -109,8 +109,10 @@ EXECUTE IMMEDIATE b;
 SET VAR sql_string = 'SELECT * from tbl_view where name = :first or id = :second';
 SET VAR a = 'na';
 
--- expressions not supported - feature not supported
+-- constant expressions are supported
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first' USING CONCAT(a , "me1") as first;
+
+-- subquery in using not supported
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first' USING (SELECT 42) as first, 'name2' as second;
 
 -- INTO variables not matching scalar types
@@ -145,5 +147,13 @@ EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \'SELECT id FROM tbl_view WHERE id = ? USIN
 -- sqlString is null
 SET VAR sql_string = null;
 EXECUTE IMMEDIATE sql_string;
+
+-- sqlString is null
+SET VAR sql_string = 5;
+EXECUTE IMMEDIATE sql_string;
+
+-- sqlString is null
+SET VAR sql_string = 'hello';
+EXECUTE IMMEDIATE length(sql_string);
 
 DROP TABLE x;

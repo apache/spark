@@ -102,7 +102,7 @@ case class ExecuteImmediateCommandExec(
       case Right(variable) =>
         // Evaluate the variable reference
         if (!variable.dataType.sameType(StringType)) {
-          throw QueryCompilationErrors.invalidExecuteImmediateVariableType(variable.dataType)
+          throw QueryCompilationErrors.invalidExecuteImmediateExpressionType(variable.dataType)
         }
 
         val value = variable.eval(null)
