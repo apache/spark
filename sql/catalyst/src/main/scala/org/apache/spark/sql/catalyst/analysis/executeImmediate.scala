@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.StringType
 
 /**
  * Logical plan representing execute immediate query.
@@ -110,38 +109,7 @@ class ResolveExecuteImmediate(
     }
   }
 
-  def resolveArguments(expressions: Seq[Expression]): Seq[Expression] = {
-    expressions.map { exp =>
-      if (exp.resolved) {
-        exp
-      } else {
-        resolveVariable(exp)
-      }
-    }
-  }
 
-  def extractQueryString(either: Either[String, UnresolvedAttribute]): String = {
-    either match {
-      case Left(v) => v
-      case Right(u) =>
-        val varReference = getVariableReference(u, u.nameParts)
-
-        if (!varReference.dataType.sameType(StringType)) {
-          throw QueryCompilationErrors.invalidExecuteImmediateExpressionType(varReference.dataType)
-        }
-
-        // Call eval with null value passed instead of a row.
-        // This is ok as this is variable and invoking eval should
-        // be independent of row value.
-        val varReferenceValue = varReference.eval(null)
-
-        if (varReferenceValue == null) {
-          throw QueryCompilationErrors.nullSQLStringExecuteImmediate(u.name)
-        }
-
-        varReferenceValue.toString
-    }
-  }
 
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
