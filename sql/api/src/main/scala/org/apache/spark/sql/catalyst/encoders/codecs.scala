@@ -55,7 +55,7 @@ object JavaSerializationCodec extends (() => Codec[Any, Array[Byte]]) {
  * server (driver & executors) very tricky. As a workaround a user can define their own Codec
  * which internalizes the Kryo configuration.
  */
-object KryoSerializationCodec extends (() => Codec[Any, Array[Byte]]) {
+object KryoSerializationCodec extends (() => Codec[Any, Array[Byte]]) with Serializable {
   private lazy val kryoCodecConstructor: MethodHandle = {
     val cls = SparkClassUtils.classForName(
       "org.apache.spark.sql.catalyst.encoders.KryoSerializationCodecImpl")
