@@ -406,6 +406,10 @@ message ExecutePlanResponse {
     // Pipeline command response
     PipelineCommandResult pipeline_command_result = 22;
 
+    // A signal from the server to the client to execute the query function for a flow, and to
+    // register its result with the server.
+    PipelineQueryFunctionExecutionSignal pipeline_query_function_execution_signal = 23;
+
     // Support arbitrary result objects.
     google.protobuf.Any extension = 999;
   }
