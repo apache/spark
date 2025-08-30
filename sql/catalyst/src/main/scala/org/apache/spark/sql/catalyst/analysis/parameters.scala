@@ -105,6 +105,28 @@ case class PosParameterizedQuery(child: LogicalPlan, args: Seq[Expression])
 }
 
 /**
+ * The logical plan representing a parameterized query with unified parameter support.
+ * This allows the query to use either positional or named parameters based on the
+ * parameter markers found in the query, with optional parameter names provided.
+ *
+ * @param child The parameterized logical plan.
+ * @param args The literal values or collection constructor functions such as `map()`,
+ *             `array()`, `struct()` of parameters.
+ * @param paramNames Optional parameter names corresponding to args. If provided for an argument,
+ *                   that argument can be used for named parameter binding. If not provided or
+ *                   shorter than args, remaining parameters are treated as positional.
+ */
+case class UnifiedParameterizedQuery(
+    child: LogicalPlan,
+    args: Seq[Expression],
+    paramNames: Seq[String])
+  extends ParameterizedQuery(child) {
+  assert(args.nonEmpty)
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(child = newChild)
+}
+
+/**
  * Moves `ParameterizedQuery` inside `SupervisingCommand` for their supervised plans to be
  * resolved later by the analyzer.
  *
@@ -201,6 +223,88 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         bind(child) {
           case PosParameter(pos) if posToIndex.contains(pos) && args.size > posToIndex(pos) =>
             args(posToIndex(pos))
+        }
+
+      case UnifiedParameterizedQuery(child, args, paramNames)
+        if !child.containsPattern(UNRESOLVED_WITH) &&
+          args.forall(_.resolved) =>
+
+        // First pass: collect all parameter types used in the query to determine strategy
+        val namedParams = scala.collection.mutable.Set.empty[String]
+        val positionalParams = scala.collection.mutable.Set.empty[Int]
+        bind(child) {
+          case NamedParameter(name) => namedParams.add(name); NamedParameter(name)
+          case p @ PosParameter(pos) => positionalParams.add(pos); p
+        }
+
+        // Build parameter maps based on what the query actually uses
+        val namedArgsMap = scala.collection.mutable.Map[String, Expression]()
+        val positionalArgs = scala.collection.mutable.ListBuffer[Expression]()
+
+        if (namedParams.nonEmpty && positionalParams.isEmpty) {
+          // Query uses only named parameters - try to match args to named parameters
+          args.zipWithIndex.foreach { case (arg, index) =>
+            val paramName = if (index < paramNames.length && paramNames(index).nonEmpty) {
+              paramNames(index)
+            } else {
+              // For session variables without explicit AS clause, try to infer the name
+              // from the parameter names found in the query
+              namedParams.toSeq.lift(index).getOrElse(s"param_$index")
+            }
+            namedArgsMap(paramName) = arg
+          }
+        } else if (positionalParams.nonEmpty && namedParams.isEmpty) {
+          // Query uses only positional parameters - use all args as positional
+          positionalArgs ++= args
+        } else {
+          // Mixed or no parameters - build both maps
+          args.zipWithIndex.foreach { case (arg, index) =>
+            if (index < paramNames.length && paramNames(index).nonEmpty) {
+              namedArgsMap(paramNames(index)) = arg
+            } else {
+              positionalArgs += arg
+            }
+          }
+        }
+
+        // Check all arguments for validity
+        val allArgs = namedArgsMap.toSeq ++ positionalArgs.zipWithIndex.map {
+          case (arg, idx) => (s"_$idx", arg)
+        }
+        checkArgs(allArgs)
+
+        // Bind named parameters by converting expressions to literals
+        val boundWithNamed = if (namedArgsMap.nonEmpty) {
+          bind(child) {
+            case NamedParameter(name) if namedArgsMap.contains(name) =>
+              val expr = namedArgsMap(name)
+              if (expr.foldable) {
+                Literal.create(expr.eval(), expr.dataType)
+              } else {
+                // For non-foldable expressions, try to convert to SQL and re-parse
+                expr
+              }
+          }
+        } else {
+          child
+        }
+
+        // Bind positional parameters
+        if (positionalArgs.nonEmpty) {
+          val posToIndex = positionalParams.toSeq.sorted.zipWithIndex.toMap
+          bind(boundWithNamed) {
+            case PosParameter(pos) if posToIndex.contains(pos) &&
+              positionalArgs.size > posToIndex(pos) =>
+              val expr = positionalArgs(posToIndex(pos))
+              if (expr.foldable) {
+                Literal.create(expr.eval(), expr.dataType)
+              } else {
+                // For non-foldable expressions, try to convert to SQL and re-parse
+                expr
+              }
+          }
+        } else {
+          boundWithNamed
         }
 
       case other => other
