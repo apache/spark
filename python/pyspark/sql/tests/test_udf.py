@@ -1402,6 +1402,50 @@ class BaseUDFTestsMixin(object):
             result_type = df_result.schema["result"].dataType
             self.assertEqual(result_type, StringType("fr"))
 
+    def test_udf_with_char_varchar_return_type(self):
+        (char_type, char_value) = ("char(10)", "a")
+        (varchar_type, varchar_value) = ("varchar(8)", "a")
+        (array_with_char_type, array_with_char_type_value) = ("array<char(5)>", ["a", "b"])
+        (array_with_varchar_type, array_with_varchar_value) = ("array<varchar(12)>", ["a", "b"])
+        (map_type, map_value) = (f"map<{char_type}, {varchar_type}>", {"a": "b"})
+        (struct_type, struct_value) = (
+            f"struct<f1: {char_type}, f2: {varchar_type}>",
+            {"f1": "a", "f2": "b"},
+        )
+
+        pairs = [
+            (char_type, char_value),
+            (varchar_type, varchar_value),
+            (array_with_char_type, array_with_char_type_value),
+            (array_with_varchar_type, array_with_varchar_value),
+            (map_type, map_value),
+            (struct_type, struct_value),
+            (
+                f"struct<f1: {array_with_char_type}, f2: {array_with_varchar_type}, "
+                f"f3: {map_type}>",
+                f"{{'f1': {array_with_char_type_value}, 'f2': {array_with_varchar_value}, "
+                f"'f3': {map_value}}}",
+            ),
+            (
+                f"map<{array_with_char_type}, {array_with_varchar_type}>",
+                f"{{{array_with_char_type_value}: {array_with_varchar_value}}}",
+            ),
+            (f"array<{struct_type}>", [struct_value, struct_value]),
+        ]
+
+        for return_type, return_value in pairs:
+            with self.assertRaisesRegex(
+                Exception,
+                "(Please use a different output data type for your UDF or DataFrame|"
+                "Invalid return type with Arrow-optimized Python UDF)",
+            ):
+
+                @udf(return_type)
+                def my_udf():
+                    return return_value
+
+                self.spark.range(1).select(my_udf().alias("result")).show()
+
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     @classmethod

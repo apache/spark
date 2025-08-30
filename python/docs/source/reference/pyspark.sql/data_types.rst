@@ -31,6 +31,7 @@ Data Types
     ByteType
     DataType
     DateType
+    TimeType
     DecimalType
     DoubleType
     FloatType

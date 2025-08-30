@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql
 
+import java.time.LocalTime
+
 import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.execution.ColumnarToRowExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.functions._
@@ -327,5 +330,11 @@ class DatasetCacheSuite extends QueryTest
     // Same with df1 except for the Alias metadata
     val df3 = spark.range(5).select(struct($"id".as("name", metadata2)))
     assert(!df3.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+  }
+
+  test("SPARK-53418: Handle TimeType in ColumnAccessor") {
+    val plan = spark.sql("SELECT TIME '13:33:33'").cache().queryExecution.sparkPlan
+    val value = ColumnarToRowExec(plan).executeCollectPublic().head.get(0)
+    assert(value == LocalTime.of(13, 33, 33))
   }
 }

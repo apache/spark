@@ -170,12 +170,26 @@ class BaseUDTFTestsMixin:
 
         self.spark.udtf.register("testUDTF", TestUDTF)
 
-        assertDataFrameEqual(
-            self.spark.sql("values (0, 1), (1, 2) t(a, b)").lateralJoin(
-                TestUDTF(col("a").outer(), col("b").outer())
-            ),
-            self.spark.sql("SELECT * FROM values (0, 1), (1, 2) t(a, b), LATERAL testUDTF(a, b)"),
-        )
+        for i, df in enumerate(
+            [
+                self.spark.sql("values (0, 1), (1, 2) t(a, b)").lateralJoin(
+                    TestUDTF(col("a").outer(), col("b").outer())
+                ),
+                self.spark.sql("values (0, 1), (1, 2) t(a, b)").lateralJoin(
+                    TestUDTF(a=col("a").outer(), b=col("b").outer())
+                ),
+                self.spark.sql("values (0, 1), (1, 2) t(a, b)").lateralJoin(
+                    TestUDTF(b=col("b").outer(), a=col("a").outer())
+                ),
+            ]
+        ):
+            with self.subTest(query_no=i):
+                assertDataFrameEqual(
+                    df,
+                    self.spark.sql(
+                        "SELECT * FROM values (0, 1), (1, 2) t(a, b), LATERAL testUDTF(a, b)"
+                    ),
+                )
 
         @udtf(returnType="a: int")
         class TestUDTF:
@@ -2118,6 +2132,25 @@ class BaseUDTFTestsMixin:
             with self.subTest(query_no=i):
                 assertDataFrameEqual(df, [Row(a=10)])
 
+    def test_udtf_with_named_table_arguments(self):
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, a, b):
+                yield a.id,
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        for i, df in enumerate(
+            [
+                self.spark.sql("SELECT * FROM test_udtf(a => TABLE(FROM range(3)), b => 'x')"),
+                self.spark.sql("SELECT * FROM test_udtf(b => 'x', a => TABLE(FROM range(3)))"),
+                TestUDTF(a=self.spark.range(3).asTable(), b=lit("x")),
+                TestUDTF(b=lit("x"), a=self.spark.range(3).asTable()),
+            ]
+        ):
+            with self.subTest(query_no=i):
+                assertDataFrameEqual(df, [Row(a=i) for i in range(3)])
+
     def test_udtf_with_named_arguments_negative(self):
         @udtf(returnType="a: int")
         class TestUDTF:
@@ -2170,6 +2203,25 @@ class BaseUDTFTestsMixin:
         with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
             self.spark.sql("SELECT * FROM test_udtf(a => 10, 'x')").show()
 
+    def test_udtf_with_table_argument_and_kwargs(self):
+        @udtf(returnType="a: int, b: string")
+        class TestUDTF:
+            def eval(self, **kwargs):
+                yield kwargs["a"].id, kwargs["b"]
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        for i, df in enumerate(
+            [
+                self.spark.sql("SELECT * FROM test_udtf(a => TABLE(FROM range(3)), b => 'x')"),
+                self.spark.sql("SELECT * FROM test_udtf(b => 'x', a => TABLE(FROM range(3)))"),
+                TestUDTF(a=self.spark.range(3).asTable(), b=lit("x")),
+                TestUDTF(b=lit("x"), a=self.spark.range(3).asTable()),
+            ]
+        ):
+            with self.subTest(query_no=i):
+                assertDataFrameEqual(df, [Row(a=i, b="x") for i in range(3)])
+
     def test_udtf_with_analyze_kwargs(self):
         @udtf
         class TestUDTF:
@@ -2203,6 +2255,38 @@ class BaseUDTFTestsMixin:
         ):
             with self.subTest(query_no=i):
                 assertDataFrameEqual(df, [Row(a=10, b="x")])
+
+    def test_udtf_with_table_argument_and_analyze_kwargs(self):
+        @udtf
+        class TestUDTF:
+            @staticmethod
+            def analyze(**kwargs: AnalyzeArgument) -> AnalyzeResult:
+                assert isinstance(kwargs["a"].dataType, StructType)
+                assert kwargs["a"].isTable is True
+                assert isinstance(kwargs["b"].dataType, StringType)
+                assert kwargs["b"].value == "x"
+                assert not kwargs["b"].isTable
+                return AnalyzeResult(
+                    StructType(
+                        [StructField(key, arg.dataType) for key, arg in sorted(kwargs.items())]
+                    )
+                )
+
+            def eval(self, **kwargs):
+                yield tuple(value for _, value in sorted(kwargs.items()))
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        for i, df in enumerate(
+            [
+                self.spark.sql("SELECT * FROM test_udtf(a => TABLE(FROM range(3)), b => 'x')"),
+                self.spark.sql("SELECT * FROM test_udtf(b => 'x', a => TABLE(FROM range(3)))"),
+                TestUDTF(a=self.spark.range(3).asTable(), b=lit("x")),
+                TestUDTF(b=lit("x"), a=self.spark.range(3).asTable()),
+            ]
+        ):
+            with self.subTest(query_no=i):
+                assertDataFrameEqual(df, [Row(a=Row(id=i), b="x") for i in range(3)])
 
     def test_udtf_with_named_arguments_lateral_join(self):
         @udtf
@@ -2923,6 +3007,43 @@ class BaseUDTFTestsMixin:
                     err_type=Exception,
                 )
 
+    def test_udtf_with_collated_string_types(self):
+        @udtf(
+            returnType="out1 string, out2 string collate UTF8_BINARY, "
+            "out3 string collate UTF8_LCASE, out4 string collate UNICODE"
+        )
+        class MyUDTF:
+            def eval(self, v1, v2, v3, v4):
+                yield (v1 + "1", v2 + "2", v3 + "3", v4 + "4")
+
+        schema = StructType(
+            [
+                StructField("col1", StringType(), True),
+                StructField("col2", StringType("UTF8_BINARY"), True),
+                StructField("col3", StringType("UTF8_LCASE"), True),
+                StructField("col4", StringType("UNICODE"), True),
+            ]
+        )
+        df = self.spark.createDataFrame([("hello",) * 4], schema=schema)
+
+        result_df = df.lateralJoin(
+            MyUDTF(
+                col("col1").outer(), col("col2").outer(), col("col3").outer(), col("col4").outer()
+            )
+        ).select("out1", "out2", "out3", "out4")
+
+        expected_row = ("hello1", "hello2", "hello3", "hello4")
+        self.assertEqual(result_df.collect()[0], expected_row)
+
+        expected_output_types = [
+            StringType(),
+            StringType("UTF8_BINARY"),
+            StringType("UTF8_LCASE"),
+            StringType("UNICODE"),
+        ]
+        for idx, field in enumerate(result_df.schema.fields):
+            self.assertEqual(field.dataType, expected_output_types[idx])
+
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod
@@ -3488,41 +3609,6 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
             with self.subTest(ret_type=ret_type):
                 with self.assertRaisesRegex(PythonException, "UDTF_ARROW_TYPE_CONVERSION_ERROR"):
                     udtf(TestUDTF, returnType=ret_type)().collect()
-
-
-def test_udtf_with_collated_string_types(self):
-    @udtf(
-        "out1 string, out2 string collate UTF8_BINARY, out3 string collate UTF8_LCASE,"
-        " out4 string collate UNICODE"
-    )
-    class MyUDTF:
-        def eval(self, v1, v2, v3, v4):
-            yield (v1 + "1", v2 + "2", v3 + "3", v4 + "4")
-
-    schema = StructType(
-        [
-            StructField("col1", StringType(), True),
-            StructField("col2", StringType("UTF8_BINARY"), True),
-            StructField("col3", StringType("UTF8_LCASE"), True),
-            StructField("col4", StringType("UNICODE"), True),
-        ]
-    )
-    df = self.spark.createDataFrame([("hello",) * 4], schema=schema)
-
-    df_out = df.select(MyUDTF(df.col1, df.col2, df.col3, df.col4).alias("out"))
-    result_df = df_out.select("out.*")
-
-    expected_row = ("hello1", "hello2", "hello3", "hello4")
-    self.assertEqual(result_df.collect()[0], expected_row)
-
-    expected_output_types = [
-        StringType(),
-        StringType("UTF8_BINARY"),
-        StringType("UTF8_LCASE"),
-        StringType("UNICODE"),
-    ]
-    for idx, field in enumerate(result_df.schema.fields):
-        self.assertEqual(field.dataType, expected_output_types[idx])
 
 
 class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):

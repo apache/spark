@@ -1846,12 +1846,6 @@
     ],
     "sqlState" : "39000"
   },
-  "FOUND_MULTIPLE_DATA_SOURCES" : {
-    "message" : [
-      "Detected multiple data sources with the name '<provider>'. Please check the data source isn't simultaneously registered and located in the classpath."
-    ],
-    "sqlState" : "42710"
-  },
   "GENERATED_COLUMN_WITH_DEFAULT_VALUE" : {
     "message" : [
       "A column cannot have both a default value and a generation expression but column <colName> has default value: (<defaultValue>) and generation expression: (<genExpr>)."
@@ -4087,6 +4081,13 @@
     ],
     "sqlState" : "42K0L"
   },
+  "LATERAL_JOIN_WITH_ARROW_UDTF_UNSUPPORTED" : {
+    "message" : [
+      "LATERAL JOIN with Arrow-optimized user-defined table functions (UDTFs) is not supported. Arrow UDTFs cannot be used on the right-hand side of a lateral join.",
+      "Please use a regular UDTF instead, or restructure your query to avoid the lateral join."
+    ],
+    "sqlState" : "0A000"
+  },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
     "message" : [
       "LOAD DATA input path does not exist: <path>."
@@ -5161,6 +5162,13 @@
       "Failed to perform column family operation=<operationName> with invalid name=<colFamilyName>. Column family name cannot be empty or include leading/trailing spaces or use the reserved keyword=default"
     ],
     "sqlState" : "42802"
+  },
+  "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY" : {
+    "message" : [
+      "The checkpoint location <checkpointLocation> should be empty on batch 0",
+      "Please either use a new checkpoint location, or delete the existing data in the checkpoint location."
+    ],
+    "sqlState" : "42K03"
   },
   "STATE_STORE_COLUMN_FAMILY_SCHEMA_INCOMPATIBLE" : {
     "message" : [
@@ -6631,12 +6639,6 @@
     ],
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_STREAMING_TABLE_VALUED_FUNCTION" : {
-    "message" : [
-      "The function <funcName> does not support streaming. Please remove the STREAM keyword"
-    ],
-    "sqlState" : "42000"
-  },
   "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY" : {
     "message" : [
       "Unsupported subquery expression:"
@@ -6731,6 +6733,12 @@
       }
     },
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_TABLE_CHANGE_IN_AUTO_SCHEMA_EVOLUTION" : {
+    "message" : [
+      "The table changes <changes> are not supported by the catalog on table <tableName>."
+    ],
+    "sqlState" : "42000"
   },
   "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG" : {
     "message" : [

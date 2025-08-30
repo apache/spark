@@ -196,6 +196,7 @@ class FrameBinaryOpsMixin:
         pser = pd.Series([1.1, 2.2, 3.3], dtype=np.float32)
         psser = ps.from_pandas(pser)
         self.assert_eq(psser / 1, pser / 1)
+        self.assert_eq(psser / 0, pser / 0)
 
         # Negative
         psdf = ps.DataFrame({"a": ["x"], "b": [1]})

@@ -54,7 +54,7 @@ object JDBCRDD extends Logging {
    * @throws java.sql.SQLException if the table specification is garbage.
    * @throws java.sql.SQLException if the table contains an unsupported type.
    */
-  def resolveTable(options: JDBCOptions): StructType = {
+  def resolveTable(options: JDBCOptions, conn: Connection): StructType = {
     val url = options.url
     val prepareQuery = options.prepareQuery
     val table = options.tableOrQuery
@@ -62,7 +62,7 @@ object JDBCRDD extends Logging {
     val fullQuery = prepareQuery + dialect.getSchemaQuery(table)
 
     try {
-      getQueryOutputSchema(fullQuery, options, dialect)
+      getQueryOutputSchema(fullQuery, options, dialect, conn)
     } catch {
       case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
         throw new SparkException(
@@ -72,17 +72,28 @@ object JDBCRDD extends Logging {
     }
   }
 
+  def resolveTable(options: JDBCOptions): StructType = {
+    JdbcUtils.withConnection(options) {
+      resolveTable(options, _)
+    }
+  }
+
+  def getQueryOutputSchema(
+      query: String, options: JDBCOptions, dialect: JdbcDialect, conn: Connection): StructType = {
+    logInfo(log"Generated JDBC query to get scan output schema: ${MDC(SQL_TEXT, query)}")
+    Using.resource(conn.prepareStatement(query)) { statement =>
+      statement.setQueryTimeout(options.queryTimeout)
+      Using.resource(statement.executeQuery()) { rs =>
+        JdbcUtils.getSchema(conn, rs, dialect, alwaysNullable = true,
+          isTimestampNTZ = options.preferTimestampNTZ)
+      }
+    }
+  }
+
   def getQueryOutputSchema(
       query: String, options: JDBCOptions, dialect: JdbcDialect): StructType = {
-    Using.resource(dialect.createConnectionFactory(options)(-1)) { conn =>
-      logInfo(log"Generated JDBC query to get scan output schema: ${MDC(SQL_TEXT, query)}")
-      Using.resource(conn.prepareStatement(query)) { statement =>
-        statement.setQueryTimeout(options.queryTimeout)
-        Using.resource(statement.executeQuery()) { rs =>
-          JdbcUtils.getSchema(conn, rs, dialect, alwaysNullable = true,
-            isTimestampNTZ = options.preferTimestampNTZ)
-        }
-      }
+    JdbcUtils.withConnection(options) {
+      getQueryOutputSchema(query, options, dialect, _)
     }
   }
 

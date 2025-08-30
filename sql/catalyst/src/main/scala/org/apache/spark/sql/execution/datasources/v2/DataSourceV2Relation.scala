@@ -126,6 +126,9 @@ case class DataSourceV2Relation(
       this
     }
   }
+
+  def autoSchemaEvolution(): Boolean =
+    table.capabilities().contains(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION)
 }
 
 /**

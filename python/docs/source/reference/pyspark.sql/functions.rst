@@ -650,6 +650,7 @@ UDF, UDTF and UDT
     :toctree: api/
 
     arrow_udf
+    arrow_udtf
     call_udf
     pandas_udf
     udf

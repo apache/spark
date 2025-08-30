@@ -2027,3 +2027,15 @@ class SparkConnectClient(object):
             return [item.string for item in ml_command_result.param.array.elements]
 
         return []
+
+    def _query_model_size(self, model_ref_id: str) -> int:
+        command = pb2.Command()
+        command.ml_command.get_model_size.CopyFrom(
+            pb2.MlCommand.GetModelSize(model_ref=pb2.ObjectRef(id=model_ref_id))
+        )
+        (_, properties, _) = self.execute_command(command)
+
+        assert properties is not None
+
+        ml_command_result = properties["ml_command_result"]
+        return ml_command_result.param.long

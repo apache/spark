@@ -20,9 +20,8 @@ package org.apache.spark.sql.execution.command
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.{CapturesConfig, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{LanguageSQL, RoutineLanguage, UserDefinedFunctionErrors}
-import org.apache.spark.sql.catalyst.catalog.UserDefinedFunction._
 import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -31,7 +30,7 @@ import org.apache.spark.sql.types.StructType
  * The base class for CreateUserDefinedFunctionCommand
  */
 abstract class CreateUserDefinedFunctionCommand
-  extends LeafRunnableCommand with IgnoreCachedData
+  extends LeafRunnableCommand with IgnoreCachedData with CapturesConfig
 
 
 object CreateUserDefinedFunctionCommand {
@@ -79,18 +78,6 @@ object CreateUserDefinedFunctionCommand {
       case other =>
         throw UserDefinedFunctionErrors.unsupportedUserDefinedFunction(other)
     }
-  }
-
-  /**
-   * Convert SQL configs to properties by prefixing all configs with a key.
-   * When converting a function to [[org.apache.spark.sql.catalyst.catalog.CatalogFunction]] or
-   * [[org.apache.spark.sql.catalyst.expressions.ExpressionInfo]], all SQL configs and other
-   * function properties (such as the function parameters and the function return type)
-   * are saved together in a property map.
-   */
-  def sqlConfigsToProps(conf: SQLConf): Map[String, String] = {
-    val modifiedConfs = ViewHelper.getModifiedConf(conf)
-    modifiedConfs.map { case (key, value) => s"$SQL_CONFIG_PREFIX$key" -> value }
   }
 
   /**

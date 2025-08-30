@@ -324,15 +324,15 @@ object StreamingSymmetricHashJoinHelper extends Logging {
 
   case class JoinerStateStoreCkptInfo(
       keyToNumValues: StateStoreCheckpointInfo,
-      valueToNumKeys: StateStoreCheckpointInfo)
+      keyWithIndexToValue: StateStoreCheckpointInfo)
 
   case class JoinStateStoreCkptInfo(
       left: JoinerStateStoreCkptInfo,
       right: JoinerStateStoreCkptInfo)
 
   case class JoinerStateStoreCheckpointId(
-       keyToNumValues: Option[String],
-       valueToNumKeys: Option[String])
+      keyToNumValues: Option[String],
+      keyWithIndexToValue: Option[String])
 
   case class JoinStateStoreCheckpointId(
        left: JoinerStateStoreCheckpointId,

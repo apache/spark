@@ -20,6 +20,7 @@ import unittest
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.testing.utils import is_ansi_mode_test
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
@@ -46,7 +47,6 @@ class ArithmeticTestsMixin:
             pser, psser = pdf[col], psdf[col]
             self.assert_eq(pser + pser, psser + psser, check_exact=False)
             self.assert_eq(pser + 1, psser + 1, check_exact=False)
-            # self.assert_eq(pser + 0.1, psser + 0.1)
             self.assert_eq(pser + pser.astype(bool), psser + psser.astype(bool), check_exact=False)
             self.assert_eq(pser + True, psser + True, check_exact=False)
             self.assert_eq(pser + False, psser + False, check_exact=False)
@@ -57,13 +57,15 @@ class ArithmeticTestsMixin:
                 else:
                     self.assertRaises(TypeError, lambda: psser + psdf[n_col])
 
+            if is_ansi_mode_test and not col.startswith("decimal"):
+                self.assert_eq(pser + 0.1, psser + 0.1)
+
     def test_sub(self):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
             self.assert_eq(pser - pser, psser - psser, check_exact=False)
             self.assert_eq(pser - 1, psser - 1, check_exact=False)
-            # self.assert_eq(pser - 0.1, psser - 0.1)
             self.assert_eq(pser - pser.astype(bool), psser - psser.astype(bool), check_exact=False)
             self.assert_eq(pser - True, psser - True, check_exact=False)
             self.assert_eq(pser - False, psser - False, check_exact=False)
@@ -73,6 +75,9 @@ class ArithmeticTestsMixin:
                     self.assert_eq(pser - pdf[n_col], psser - psdf[n_col], check_exact=False)
                 else:
                     self.assertRaises(TypeError, lambda: psser - psdf[n_col])
+
+            if is_ansi_mode_test and not col.startswith("decimal"):
+                self.assert_eq(pser - 0.1, psser - 0.1)
 
 
 class ArithmeticTests(

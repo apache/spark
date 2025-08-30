@@ -824,7 +824,8 @@ private[sql] class RocksDBStateStoreProvider
     val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
     createRocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, loggingId,
       useColumnFamilies, storeConf.enableStateStoreCheckpointIds, stateStoreId.partitionId,
-      rocksDBEventForwarder, Some(stateStoreProviderId.toString))
+      rocksDBEventForwarder,
+      Some(s"${stateStoreProviderId.toString}_${UUID.randomUUID().toString}"))
   }
 
   private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,

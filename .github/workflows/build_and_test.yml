@@ -1346,7 +1346,7 @@ jobs:
           elif [[ "${{ inputs.branch }}" == 'branch-4.0' ]]; then
             kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.11.0/installer/volcano-development.yaml || true
           else
-            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.12.1/installer/volcano-development.yaml || true
+            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.12.2/installer/volcano-development.yaml || true
           fi
           eval $(minikube docker-env)
           build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"

@@ -88,7 +88,8 @@ class SubstituteExecuteImmediate(
     val catalogManager: CatalogManager,
     resolveChild: LogicalPlan => LogicalPlan,
     checkAnalysis: LogicalPlan => Unit)
-  extends Rule[LogicalPlan] with ColumnResolutionHelper {
+  extends Rule[LogicalPlan] {
+  private val variableResolution = new VariableResolution(catalogManager.tempVariableManager)
 
   def resolveVariable(e: Expression): Expression = {
 
@@ -246,7 +247,10 @@ class SubstituteExecuteImmediate(
   }
 
   private def getVariableReference(expr: Expression, nameParts: Seq[String]): VariableReference = {
-    lookupVariable(nameParts) match {
+    variableResolution.lookupVariable(
+      nameParts = nameParts,
+      resolvingExecuteImmediate = AnalysisContext.get.isExecuteImmediate
+    ) match {
       case Some(variable) => variable
       case _ =>
         throw QueryCompilationErrors

@@ -187,6 +187,11 @@ object StateStoreErrors {
       numSchemaFiles, schemaFilesThreshold, addedColFamilies, removedColFamilies)
   }
 
+  def streamingStateCheckpointLocationNotEmpty(checkpointLocation: String)
+    : StateStoreCheckpointLocationNotEmpty = {
+    new StateStoreCheckpointLocationNotEmpty(checkpointLocation)
+  }
+
   def stateStoreColumnFamilyMismatch(
       columnFamilyName: String,
       oldColumnFamilySchema: String,
@@ -473,6 +478,13 @@ class StateStoreStateSchemaFilesThresholdExceeded(
       "maxStateSchemaFiles" -> maxStateSchemaFiles.toString,
       "addedColumnFamilies" -> addedColFamilies.mkString("(", ",", ")"),
       "removedColumnFamilies" -> removedColFamilies.mkString("(", ",", ")")))
+
+class StateStoreCheckpointLocationNotEmpty(
+    checkpointLocation: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY",
+    messageParameters = Map(
+      "checkpointLocation" -> checkpointLocation))
 
 class StateStoreSnapshotFileNotFound(fileToRead: String, clazz: String)
   extends SparkRuntimeException(
