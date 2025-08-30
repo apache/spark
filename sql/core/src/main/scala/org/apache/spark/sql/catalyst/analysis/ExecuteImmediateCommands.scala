@@ -118,10 +118,7 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
       throw QueryCompilationErrors.sqlScriptInExecuteImmediate(queryString)
     }
 
-    // Check for nested EXECUTE IMMEDIATE
-    if (parsedPlan.containsPattern(EXECUTE_IMMEDIATE)) {
-      throw QueryCompilationErrors.nestedExecuteImmediate(queryString)
-    }
+
   }
 
   private def substituteParameters(queryString: String, paramValues: Seq[Any]): String = {

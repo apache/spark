@@ -23,7 +23,6 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.AnalysisContext
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LogicalPlan}
-import org.apache.spark.sql.catalyst.trees.TreePattern.EXECUTE_IMMEDIATE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.LeafRunnableCommand
 import org.apache.spark.sql.types.StringType
@@ -134,10 +133,7 @@ case class ExecuteImmediateCommandExec(
       throw QueryCompilationErrors.sqlScriptInExecuteImmediate(queryString)
     }
 
-    // Check for nested EXECUTE IMMEDIATE
-    if (parsedPlan.containsPattern(EXECUTE_IMMEDIATE)) {
-      throw QueryCompilationErrors.nestedExecuteImmediate(queryString)
-    }
+
   }
 
   private def executeQuery(

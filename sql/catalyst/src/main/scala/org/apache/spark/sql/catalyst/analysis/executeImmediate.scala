@@ -162,6 +162,8 @@ class ResolveExecuteImmediate(
         validateUsingClauseExpressions(args)
 
         if (queryParamResolved && allArgsResolved && targetVariablesResolved) {
+          // Validate parameter usage patterns
+          validateParameterUsage(queryParam, args)
           // All resolved - transform based on whether we have target variables
           if (targetVariables.nonEmpty) {
             // EXECUTE IMMEDIATE ... INTO should generate SetVariable plan
@@ -227,11 +229,6 @@ class ResolveExecuteImmediate(
 
     if (plan.isInstanceOf[CompoundBody]) {
       throw QueryCompilationErrors.sqlScriptInExecuteImmediate(queryString)
-    }
-
-    // do not allow nested execute immediate
-    if (plan.containsPattern(EXECUTE_IMMEDIATE)) {
-      throw QueryCompilationErrors.nestedExecuteImmediate(queryString)
     }
 
     plan
@@ -304,5 +301,41 @@ class ResolveExecuteImmediate(
         case _ => // Other expressions are fine
       }
     }
+  }
+
+  private def validateParameterUsage(queryParam: Expression, args: Seq[Expression]): Unit = {
+    // Extract the query string to validate parameter patterns
+    val queryString = queryParam.eval(null) match {
+      case null => return // Will be caught later by other validation
+      case value => value.toString
+    }
+
+    // Check for positional and named parameter patterns in the query string
+    val positionalParameterPattern = "\\?".r
+    val namedParameterPattern = ":[a-zA-Z_][a-zA-Z0-9_]*".r
+    val queryUsesPositionalParameters =
+      positionalParameterPattern.findFirstIn(queryString).isDefined
+    val queryUsesNamedParameters =
+      namedParameterPattern.findFirstIn(queryString).isDefined
+
+    // Error if query mixes positional and named parameters
+    if (queryUsesPositionalParameters && queryUsesNamedParameters) {
+      throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
+    }
+
+    // If query uses only named parameters, ensure all USING expressions have names
+    if (queryUsesNamedParameters && !queryUsesPositionalParameters) {
+      val unnamedExpressions = args.zipWithIndex.collect {
+        case (expr, index) if !hasName(expr) => expr
+      }
+      if (unnamedExpressions.nonEmpty) {
+        throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedExpressions)
+      }
+    }
+  }
+
+  private def hasName(expr: Expression): Boolean = expr match {
+    case _: Alias => true
+    case _ => false
   }
 }

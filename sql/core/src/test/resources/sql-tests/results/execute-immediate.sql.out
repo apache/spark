@@ -732,18 +732,11 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \'SELECT id FROM tbl_view WHERE id = ? USING 10\''
+EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \'SELECT id FROM tbl_view WHERE id = ?\' USING 10'
 -- !query schema
-struct<>
+struct<id:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "NESTED_EXECUTE_IMMEDIATE",
-  "sqlState" : "07501",
-  "messageParameters" : {
-    "sqlString" : "EXECUTE IMMEDIATE 'SELECT ID FROM TBL_VIEW WHERE ID = ? USING 10'"
-  }
-}
+10
 
 
 -- !query
@@ -819,6 +812,117 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "exprType" : "\"INT\""
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT 42 where ? = :first' USING 1, 2 as first
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+  "sqlState" : "42613"
+}
+
+
+-- !query
+DECLARE int_var INT
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET VAR int_var = 42
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+EXECUTE IMMEDIATE int_var
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprType" : "\"INT\""
+  }
+}
+
+
+-- !query
+DECLARE null_var STRING
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET VAR null_var = null
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+EXECUTE IMMEDIATE null_var
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
+  "sqlState" : "22004",
+  "messageParameters" : {
+    "varName" : "`null_var`"
+  }
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT ?' USING (SELECT 1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSql" : "\"scalarsubquery()\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 45,
+    "fragment" : "(SELECT 1)"
+  } ]
+}
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT :first' USING 2, 3
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ALL_PARAMETERS_MUST_BE_NAMED",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "exprs" : "\"2\", \"3\""
   }
 }
 
