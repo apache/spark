@@ -4273,7 +4273,7 @@ theta_intersection_agg.__doc__ = pysparkfuncs.theta_intersection_agg.__doc__
 
 def theta_sketch_estimate(col: "ColumnOrName") -> Column:
     fn = "theta_sketch_estimate"
-    return _invoke_function("theta_sketch_estimate", _to_col(col))
+    return _invoke_function(fn, _to_col(col))
 
 
 theta_sketch_estimate.__doc__ = pysparkfuncs.theta_sketch_estimate.__doc__
