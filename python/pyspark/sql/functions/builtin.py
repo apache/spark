@@ -27063,11 +27063,38 @@ def udf(
         return _create_py_udf(f=f, returnType=returnType, useArrow=useArrow)
 
 
-@_try_remote_functions
+@overload
 def udtf(
-    cls: Optional[Type] = None,
+    cls: Type,
+    *,
+    useArrow: Optional[bool] = None,
+) -> "UserDefinedTableFunction":
+    ...
+
+
+@overload
+def udtf(
     *,
     returnType: Optional[Union[StructType, str]] = None,
+    useArrow: Optional[bool] = None,
+) -> Callable[[Type], "UserDefinedTableFunction"]:
+    ...
+
+
+@overload
+def udtf(
+    returnType: Union[StructType, str],
+    *,
+    useArrow: Optional[bool] = None,
+) -> Callable[[Type], "UserDefinedTableFunction"]:
+    ...
+
+
+@_try_remote_functions
+def udtf(
+    cls: Optional[Union[Type, StructType, str]] = None,
+    returnType: Optional[Union[StructType, str]] = None,
+    *,
     useArrow: Optional[bool] = None,
 ) -> Union["UserDefinedTableFunction", Callable[[Type], "UserDefinedTableFunction"]]:
     """Creates a user defined table function (UDTF).
@@ -27226,9 +27253,26 @@ def udtf(
 
     User-defined table functions do not accept keyword arguments on the calling side.
     """
-    if cls is None:
-        return functools.partial(_create_py_udtf, returnType=returnType, useArrow=useArrow)
+    # Validation: check for conflicting returnType arguments
+    if cls is not None and isinstance(cls, (str, StructType)) and returnType is not None:
+        raise PySparkTypeError(
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={
+                "arg_name": "returnType",
+                "allowed_values": "either positional or keyword, not both",
+            },
+        )
+
+    # Handle positional returnType argument
+    if cls is None or isinstance(cls, (str, StructType)):
+        return_type = cls or returnType
+        return functools.partial(
+            _create_py_udtf,
+            returnType=return_type,
+            useArrow=useArrow,
+        )
     else:
+        # cls is a class type
         return _create_py_udtf(cls=cls, returnType=returnType, useArrow=useArrow)
 
 
