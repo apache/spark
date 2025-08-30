@@ -2396,7 +2396,13 @@ class DataFrameAggregateSuite extends QueryTest
           .collect()
       },
       condition = "THETA_INVALID_LG_NOM_ENTRIES",
-      parameters = Map("min" -> "4", "max" -> "26", "value" -> "1"))
+      parameters = Map(
+        "function" -> "`theta_sketch_agg`",
+        "min" -> "4",
+        "max" -> "26",
+        "value" -> "1"
+      )
+    )
 
     checkError(
       exception = intercept[SparkRuntimeException] {
@@ -2406,7 +2412,13 @@ class DataFrameAggregateSuite extends QueryTest
           .collect()
       },
       condition = "THETA_INVALID_LG_NOM_ENTRIES",
-      parameters = Map("min" -> "4", "max" -> "26", "value" -> "28"))
+      parameters = Map(
+        "function" -> "`theta_sketch_agg`",
+        "min" -> "4",
+        "max" -> "26",
+        "value" -> "28"
+      )
+    )
 
     // Validate that the functions error out when provided unexpected types.
     checkError(
@@ -2720,7 +2732,13 @@ class DataFrameAggregateSuite extends QueryTest
           |""".stripMargin).collect()
       },
       condition = "THETA_INVALID_LG_NOM_ENTRIES",
-      parameters = Map("min" -> "4", "max" -> "26", "value" -> "3"))
+      parameters = Map(
+        "function" -> "`theta_intersection_agg`",
+        "min" -> "4",
+        "max" -> "26",
+        "value" -> "3"
+      )
+    )
 
     checkError(
       exception = intercept[SparkRuntimeException] {
@@ -2731,7 +2749,13 @@ class DataFrameAggregateSuite extends QueryTest
           |""".stripMargin).collect()
       },
       condition = "THETA_INVALID_LG_NOM_ENTRIES",
-      parameters = Map("min" -> "4", "max" -> "26", "value" -> "27"))
+      parameters = Map(
+        "function" -> "`theta_intersection_agg`",
+        "min" -> "4",
+        "max" -> "26",
+        "value" -> "27"
+      )
+    )
 
     // Test invalid parameter types for theta_difference.
     checkError(
