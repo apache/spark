@@ -90,6 +90,21 @@ message PipelineCommand {
     optional string format = 8;
   }
 
+  // Request to define a sink
+  message DefineSink {
+    // The graph to attach this dataset to.
+    optional string dataflow_graph_id = 1;
+
+    // Name of the sink
+    optional string sink_name = 2;
+
+    // Streaming write options
+    map<string, string> options = 3;
+
+    // Streaming write format
+    optional string format = 4;
+  }
+
   // Request to define a flow targeting a dataset.
   message DefineFlow {
     // The graph to attach this flow to.
