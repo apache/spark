@@ -339,9 +339,12 @@ public class TaskMemoryManager {
         MDC.of(LogKeys.MEMORY_SIZE, memoryNotAccountedFor),
         MDC.of(LogKeys.TASK_ATTEMPT_ID, taskAttemptId));
       logger.info(
-        "{} bytes of memory are used for execution and {} bytes of memory are used for storage",
+        "{} bytes of memory are used for execution " +
+                "and {} bytes of memory are used for storage " +
+                "and {} bytes of memory are used but unmanaged",
         MDC.of(LogKeys.EXECUTION_MEMORY_SIZE, memoryManager.executionMemoryUsed()),
-        MDC.of(LogKeys.STORAGE_MEMORY_SIZE,  memoryManager.storageMemoryUsed()));
+        MDC.of(LogKeys.STORAGE_MEMORY_SIZE,  memoryManager.storageMemoryUsed()),
+        MDC.of(LogKeys.MEMORY_SIZE, UnifiedMemoryManager$.MODULE$.getUnmanagedMemoryUsed()));
     }
   }
 
