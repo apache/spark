@@ -4299,9 +4299,7 @@ def theta_intersection(
     if lgNomEntries is None:
         return _invoke_function(fn, _to_col(col1), _to_col(col2))
     else:
-        return _invoke_function(
-            fn, _to_col(col1), _to_col(col2), lit(lgNomEntries)
-        )
+        return _invoke_function(fn, _to_col(col1), _to_col(col2), lit(lgNomEntries))
 
 
 theta_intersection.__doc__ = pysparkfuncs.theta_intersection.__doc__

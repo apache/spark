@@ -15799,7 +15799,8 @@ def regexp_count(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
 
 @_try_remote_functions
 def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
-    r"""Extract a specific group matched by the Java regex `regexp`, from the specified string column.
+    r"""Extract a specific group matched by the Java regex `regexp`, from the specified
+    string column.
     If the regex did not match, or the specified group did not match, an empty string is returned.
 
     .. versionadded:: 1.5.0
@@ -25953,7 +25954,7 @@ def theta_union(
     +--------------------------------------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
-    
+
     fn = "theta_union"
     if lgNomEntries is not None:
         return _invoke_function(
