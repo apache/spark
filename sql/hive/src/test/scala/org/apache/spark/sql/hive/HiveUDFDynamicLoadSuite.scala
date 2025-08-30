@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import java.io.File
+
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
@@ -140,6 +142,8 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
     )
   ).toImmutableArraySeq
 
+  SQLTestUtils.invokeMaven(new File("src/test/noclasspath/pom.xml"))
+
   udfTestInfos.foreach { udfInfo =>
     // The test jars are built from below commit:
     // https://github.com/HeartSaVioR/hive/commit/12f3f036b6efd0299cd1d457c0c0a65e0fd7e5f2
@@ -147,7 +151,6 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
 
     // This jar file should not be placed to the classpath.
     val jarPath = "src/test/noclasspath/hive-test-udfs.jar"
-    assume(new java.io.File(jarPath).exists)
     val jarUrl = s"file://${System.getProperty("user.dir")}/$jarPath"
 
     test("Spark should be able to run Hive UDF using jar regardless of " +

@@ -38,7 +38,7 @@ import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtilsBase}
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtilsBase, TestSparkSession}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -508,7 +508,14 @@ abstract class OrcSuite
       withAllNativeOrcReaders {
         checkAnswer(
           spark.read.orc(path),
-          Seq(Row(Date.valueOf("1001-01-01")), Row(Date.valueOf("1582-10-15"))))
+          Seq(Row(Date.valueOf("1001-01-01")),
+            if (spark.isInstanceOf[TestSparkSession]) {
+              // Spark rebases 1582-10-05 through 1582-10-15 to 1582-10-15
+              Row(Date.valueOf("1582-10-15"))
+            } else {
+              // Hive rebases 1582-10-05 through 1582-10-15 by adding 10 days
+              Row(Date.valueOf("1582-10-20"))
+            }))
       }
     }
   }

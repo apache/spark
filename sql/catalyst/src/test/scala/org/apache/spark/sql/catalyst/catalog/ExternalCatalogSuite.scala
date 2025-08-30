@@ -901,8 +901,12 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
     assert(exists(db.locationUri, "my_table"))
 
     catalog.renameTable("db1", "my_table", "your_table")
-    assert(!exists(db.locationUri, "my_table"))
-    assert(exists(db.locationUri, "your_table"))
+    // Hive does not rename location for managed tables if the location was specified when table
+    // was created.
+    if (this.isInstanceOf[InMemoryCatalogSuite]) {
+      assert(!exists(db.locationUri, "my_table"))
+      assert(exists(db.locationUri, "your_table"))
+    }
 
     catalog.dropTable("db1", "your_table", ignoreIfNotExists = false, purge = false)
     assert(!exists(db.locationUri, "your_table"))

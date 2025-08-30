@@ -3093,7 +3093,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       "escape.delim" -> "y",
       "serialization.format" -> "x",
       "line.delim" -> "\n",
-      "colelction.delim" -> "a", // yes, it's a typo from Hive :)
+      "collection.delim" -> "a",
       "mapkey.delim" -> "b"))
   }
 
