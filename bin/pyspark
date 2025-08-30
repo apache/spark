@@ -22,7 +22,105 @@ if [ -z "${SPARK_HOME}" ]; then
 fi
 
 source "${SPARK_HOME}"/bin/load-spark-env.sh
-export _SPARK_CMD_USAGE="Usage: ./bin/pyspark [options]"
+export _SPARK_CMD_USAGE="Usage: ./bin/pyspark [options]
+
+Options:
+  --validate-installation    Validate Spark installation and environment
+  --help                     Show this help message"
+
+# Function to validate Spark installation
+validate_spark_installation() {
+  echo "Validating Spark installation..."
+  
+  # Check if SPARK_HOME is set and valid
+  if [ -z "${SPARK_HOME}" ]; then
+    echo "❌ Error: SPARK_HOME is not set"
+    return 1
+  fi
+  
+  if [ ! -d "${SPARK_HOME}" ]; then
+    echo "❌ Error: SPARK_HOME directory does not exist: ${SPARK_HOME}"
+    return 1
+  fi
+  
+  echo "✅ SPARK_HOME is set to: ${SPARK_HOME}"
+  
+  # Check essential files and directories
+  local missing_files=()
+  
+  if [ ! -f "${SPARK_HOME}/bin/spark-submit" ]; then
+    missing_files+=("bin/spark-submit")
+  fi
+  
+  if [ ! -f "${SPARK_HOME}/README.md" ]; then
+    missing_files+=("README.md")
+  fi
+  
+  if [ ! -d "${SPARK_HOME}/bin" ]; then
+    missing_files+=("bin/")
+  fi
+  
+  if [ ! -d "${SPARK_HOME}/conf" ]; then
+    missing_files+=("conf/")
+  fi
+  
+  # Check for jar directories
+  if [ ! -d "${SPARK_HOME}/jars" ] && [ ! -d "${SPARK_HOME}/assembly" ]; then
+    missing_files+=("jars/ or assembly/")
+  fi
+  
+  if [ ${#missing_files[@]} -gt 0 ]; then
+    echo "❌ Error: Missing essential Spark files/directories:"
+    for file in "${missing_files[@]}"; do
+      echo "   - ${file}"
+    done
+    return 1
+  fi
+  
+  echo "✅ Essential Spark files and directories found"
+  
+  # Check Python environment
+  if [ -z "$PYSPARK_PYTHON" ]; then
+    echo "⚠️  Warning: PYSPARK_PYTHON not set, using default: python3"
+  else
+    echo "✅ PYSPARK_PYTHON is set to: $PYSPARK_PYTHON"
+  fi
+  
+  # Check Java
+  if [ -n "${JAVA_HOME}" ]; then
+    echo "✅ JAVA_HOME is set to: ${JAVA_HOME}"
+  else
+    echo "⚠️  Warning: JAVA_HOME is not set"
+  fi
+  
+  # Test Python import
+  if command -v python3 &> /dev/null; then
+    if python3 -c "import pyspark" 2>/dev/null; then
+      echo "✅ PySpark can be imported successfully"
+    else
+      echo "❌ Error: PySpark cannot be imported"
+      return 1
+    fi
+  else
+    echo "❌ Error: python3 not found in PATH"
+    return 1
+  fi
+  
+  echo "✅ Spark installation validation completed successfully"
+  return 0
+}
+
+# Check for validation flag
+if [[ "$1" == "--validate-installation" ]]; then
+  validate_spark_installation
+  exit $?
+fi
+
+# Check for help flag
+if [[ "$1" == "--help" ]]; then
+  echo "$_SPARK_CMD_USAGE"
+  exit 0
+fi
 
 # In Spark 2.0, IPYTHON and IPYTHON_OPTS are removed and pyspark fails to launch if either option
 # is set in the user's environment. Instead, users should set PYSPARK_DRIVER_PYTHON=ipython
@@ -99,4 +197,7 @@ if [[ -n "$SPARK_TESTING" ]]; then
   exit
 fi
 
-exec "${SPARK_HOME}"/bin/spark-submit pyspark-shell-main --name "PySparkShell" "$@"
+# disable randomized hash for string in Python 3.3+
+export PYTHONHASHSEED=0
+
+exec "${SPARK_HOME}"/bin/spark-submit pyspark-shell-main "$@"
