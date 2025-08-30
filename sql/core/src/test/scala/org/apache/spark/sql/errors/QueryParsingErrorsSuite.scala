@@ -70,7 +70,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       parameters = Map("error" -> "'SELCT'", "hint" -> ""),
       context = ExpectedContext(
         start = 0,
-        stop = 56,
+        stop = 37,
         fragment = query)
     )
   }
