@@ -290,6 +290,75 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
     checkAnswer(result2, expected)
   }
 
+  test("SPARK-53108: time_diff function") {
+    // Input data for the function.
+    val schema = StructType(Seq(
+      StructField("unit", StringType, nullable = false),
+      StructField("start", TimeType(), nullable = false),
+      StructField("end", TimeType(), nullable = false)
+    ))
+    val data = Seq(
+      Row("HOUR", LocalTime.parse("20:30:29"), LocalTime.parse("21:30:28")),
+      Row("second", LocalTime.parse("09:32:05.359123"), LocalTime.parse("17:23:49.906152")),
+      Row("MicroSecond", LocalTime.parse("09:32:05.359123"), LocalTime.parse("17:23:49.906152"))
+    )
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+    // Test the function using both `selectExpr` and `select`.
+    val result1 = df.selectExpr(
+      "time_diff(unit, start, end)"
+    )
+    val result2 = df.select(
+      time_diff(col("unit"), col("start"), col("end"))
+    )
+    // Check that both methods produce the same result.
+    checkAnswer(result1, result2)
+
+    // Expected output of the function.
+    val expected = Seq(
+      0,
+      28304,
+      28304547029L
+    ).toDF("diff").select(col("diff"))
+    // Check that the results match the expected output.
+    checkAnswer(result1, expected)
+    checkAnswer(result2, expected)
+
+    // NULL result is returned for any NULL input.
+    val nullInputDF = Seq(
+      (null, LocalTime.parse("01:02:03"), LocalTime.parse("01:02:03")),
+      ("HOUR", null, LocalTime.parse("01:02:03")),
+      ("HOUR", LocalTime.parse("01:02:03"), null),
+      ("HOUR", null, null),
+      (null, LocalTime.parse("01:02:03"), null),
+      (null, null, LocalTime.parse("01:02:03")),
+      (null, null, null)
+    ).toDF("unit", "start", "end")
+    val nullResult = Seq[Integer](
+      null, null, null, null, null, null, null
+    ).toDF("diff").select(col("diff"))
+    checkAnswer(
+      nullInputDF.select(time_diff(col("unit"), col("start"), col("end"))),
+      nullResult
+    )
+
+    // Error is thrown for malformed input.
+    val invalidUnitDF = Seq(
+      ("invalid_unit", LocalTime.parse("01:02:03"), LocalTime.parse("01:02:03"))
+    ).toDF("unit", "start", "end")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        invalidUnitDF.select(time_diff(col("unit"), col("start"), col("end"))).collect()
+      },
+      condition = "INVALID_PARAMETER_VALUE.TIME_UNIT",
+      parameters = Map(
+        "functionName" -> "`time_diff`",
+        "parameter" -> "`unit`",
+        "invalidValue" -> "'invalid_unit'"
+      )
+    )
+  }
+
   test("SPARK-53107: time_trunc function") {
     // Input data for the function (including null values).
     val schema = StructType(Seq(
