@@ -40,7 +40,7 @@ import org.apache.spark.sql
 import org.apache.spark.sql.{Artifact, DataSourceRegistration, Encoder, Encoders, ExperimentalMethods, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions, SparkSessionExtensionsProvider, UDTFRegistration}
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnifiedParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.parser.ParserInterface
@@ -508,6 +508,46 @@ class SparkSession private(
   override def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = {
     sql(sqlText, args.asScala.toMap)
   }
+
+  /**
+   * Executes a SQL query substituting parameters by the given arguments with optional names,
+   * returning the result as a `DataFrame`. This method allows the inner query to determine
+   * whether to use positional or named parameters based on its parameter markers.
+   */
+  def sql(sqlText: String, args: Array[_], paramNames: Array[String]): DataFrame = {
+    sql(sqlText, args, paramNames, new QueryPlanningTracker)
+  }
+
+  /**
+   * Internal implementation of unified parameter API with tracker.
+   */
+  private[sql] def sql(
+      sqlText: String,
+      args: Array[_],
+      paramNames: Array[String],
+      tracker: QueryPlanningTracker): DataFrame =
+    withActive {
+      val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
+        val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
+        if (args.nonEmpty) {
+          if (parsedPlan.isInstanceOf[CompoundBody]) {
+            // Positional parameters are not supported for SQL scripting.
+            throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+          }
+
+          // Create a unified parameter query that can handle both positional and named parameters
+          // The query itself will determine which type to use based on its parameter markers
+          UnifiedParameterizedQuery(
+            parsedPlan,
+            args.map(lit(_).expr).toImmutableArraySeq,
+            paramNames.toImmutableArraySeq
+          )
+        } else {
+          parsedPlan
+        }
+      }
+      Dataset.ofRows(self, plan, tracker)
+    }
 
   /** @inheritdoc */
   override def sql(sqlText: String): DataFrame = sql(sqlText, Map.empty[String, Any])

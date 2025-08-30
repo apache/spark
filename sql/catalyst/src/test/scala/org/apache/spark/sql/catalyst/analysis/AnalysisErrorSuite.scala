@@ -856,9 +856,9 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
 
     assertAnalysisErrorCondition(
       inputPlan = execImmediatePlan,
-      expectedErrorCondition = "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+      expectedErrorCondition = "INVALID_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
       expectedMessageParameters = Map(
-        "varType" -> "\"INT\""
+        "exprType" -> "\"INT\""
       ))
   }
 

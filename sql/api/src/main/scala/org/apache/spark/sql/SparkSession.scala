@@ -524,6 +524,24 @@ abstract class SparkSession extends Serializable with Closeable {
   }
 
   /**
+   * Executes a SQL query substituting parameters by the given arguments with optional names,
+   * returning the result as a `DataFrame`. This API eagerly runs DDL/DML commands, but not for
+   * SELECT queries. This method allows the inner query to determine whether to use positional
+   * or named parameters based on its parameter markers.
+   *
+   * @param sqlText
+   *   A SQL statement with named or positional parameters to execute.
+   * @param args
+   *   An array of Java/Scala objects that can be converted to SQL literal expressions.
+   * @param paramNames
+   *   An optional array of parameter names corresponding to args. If provided, enables named
+   *   parameter binding where parameter names are available. If None or shorter than args,
+   *   remaining parameters are treated as positional.
+   * @since 4.0.0
+   */
+  def sql(sqlText: String, args: Array[_], paramNames: Array[String]): DataFrame
+
+  /**
    * Executes a SQL query using Spark, returning the result as a `DataFrame`. This API eagerly
    * runs DDL/DML commands, but not for SELECT queries.
    *

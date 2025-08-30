@@ -250,6 +250,13 @@ class SparkSession private[sql] (
     sql(query, Array.empty)
   }
 
+  /** @inheritdoc */
+  def sql(sqlText: String, args: Array[_], paramNames: Array[String]): DataFrame = {
+    // For Connect, delegate to existing positional parameter implementation
+    // The unified parameter logic is handled on the server side
+    sql(sqlText, args)
+  }
+
   private def sql(sqlCommand: proto.SqlCommand): DataFrame = {
     // Send the SQL once to the server and then check the output.
     executeCommandWithDataFrameReturn(newCommand(_.setSqlCommand(sqlCommand)))

@@ -427,13 +427,12 @@ EXECUTE IMMEDIATE 'SELECT * FROM tbl_view WHERE ? = id' USING id
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
   "messageParameters" : {
-    "searchPath" : "`system`.`session`",
-    "variableName" : "`id`"
+    "objectName" : "`id`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -525,10 +524,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+  "errorClass" : "INVALID_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "varType" : "\"INT\""
+    "exprType" : "\"INT\""
   }
 }
 
@@ -552,23 +551,9 @@ struct<>
 -- !query
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first' USING CONCAT(a , "me1") as first
 -- !query schema
-struct<>
+struct<id:int,name:string,data:struct<f1:int,s2:struct<f2:int,f3:string>>>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
-  "sqlState" : "42K0E",
-  "messageParameters" : {
-    "invalidExprSql" : "\"CONCAT(a, me1)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 70,
-    "stopIndex" : 86,
-    "fragment" : "CONCAT(a , \"me1\")"
-  } ]
-}
+10	name1	{"f1":1,"s2":{"f2":101,"f3":"a"}}
 
 
 -- !query
@@ -780,6 +765,60 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "22004",
   "messageParameters" : {
     "varName" : "`sql_string`"
+  }
+}
+
+
+-- !query
+SET VAR sql_string = 5
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+EXECUTE IMMEDIATE sql_string
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'5'",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 28,
+    "fragment" : "EXECUTE IMMEDIATE sql_string"
+  } ]
+}
+
+
+-- !query
+SET VAR sql_string = 'hello'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+EXECUTE IMMEDIATE length(sql_string)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprType" : "\"INT\""
   }
 }
 
