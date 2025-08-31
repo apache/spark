@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2.state
 
+import java.io.File
 import java.sql.Timestamp
 import java.util.UUID
 
@@ -24,6 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.scalatest.Assertions
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadata}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.{col, window}
@@ -130,6 +132,39 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
           .load(tempDir.getAbsolutePath)
       }
       assert(exc.getCondition === "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE")
+    }
+  }
+
+  test("ERROR: mixed checkpoint format versions not supported") {
+    withTempDir { tempDir =>
+      val commitLog = new CommitLog(spark,
+        new File(tempDir.getAbsolutePath, "commits").getAbsolutePath)
+
+      // Start version: treated as v1 (no operator unique ids)
+      val startMetadata = CommitMetadata(0, None)
+      assert(commitLog.add(0, startMetadata))
+
+      // End version: treated as v2 (operator 0 has unique ids)
+      val endMetadata = CommitMetadata(0,
+        Some(Map[Long, Array[Array[String]]](0L -> Array(Array("uid")))))
+      assert(commitLog.add(1, endMetadata))
+
+      val exc = intercept[StateDataSourceMixedCheckpointFormatVersionsNotSupported] {
+        spark.read.format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.READ_CHANGE_FEED, true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+          .option(StateSourceOptions.CHANGE_END_BATCH_ID, 1)
+          .load()
+      }
+
+      checkError(exc, "STDS_MIXED_CHECKPOINT_FORMAT_VERSIONS_NOT_SUPPORTED", "KD002",
+        Map(
+          "startBatchId" -> "0",
+          "endBatchId" -> "1",
+          "startFormatVersion" -> "1",
+          "endFormatVersion" -> "2"
+        ))
     }
   }
 
