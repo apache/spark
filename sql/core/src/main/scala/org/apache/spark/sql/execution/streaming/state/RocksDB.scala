@@ -352,6 +352,8 @@ class RocksDB(
       endVersionStateStoreCkptId: Option[String]): Array[LineageItem] = {
     assert(startVersion <= endVersion,
       s"startVersion $startVersion should be less than or equal to endVersion $endVersion")
+    assert(endVersionStateStoreCkptId.isDefined,
+      "endVersionStateStoreCkptId should be defined")
 
     // A buffer to collect the lineage information, the entries should be decreasing in version
     val buf = mutable.ArrayBuffer[LineageItem]()
