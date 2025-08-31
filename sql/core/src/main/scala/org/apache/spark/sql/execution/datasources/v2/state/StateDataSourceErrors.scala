@@ -84,8 +84,14 @@ object StateDataSourceErrors {
 
   def mixedCheckpointFormatVersionsNotSupported(
       startBatchId: Long,
-      endBatchId: Long): StateDataSourceException = {
-    new StateDataSourceMixedCheckpointFormatVersionsNotSupported(startBatchId, endBatchId)
+      endBatchId: Long,
+      startFormatVersion: Int,
+      endFormatVersion: Int): StateDataSourceException = {
+    new StateDataSourceMixedCheckpointFormatVersionsNotSupported(
+      startBatchId,
+      endBatchId,
+      startFormatVersion,
+      endFormatVersion)
   }
 }
 
@@ -181,8 +187,15 @@ class StateDataSourceReadOperatorMetadataFailure(
 
 class StateDataSourceMixedCheckpointFormatVersionsNotSupported(
     startBatchId: Long,
-    endBatchId: Long)
+    endBatchId: Long,
+    startFormatVersion: Int,
+    endFormatVersion: Int)
   extends StateDataSourceException(
     "STDS_MIXED_CHECKPOINT_FORMAT_VERSIONS_NOT_SUPPORTED",
-    Map("startBatchId" -> startBatchId.toString, "endBatchId" -> endBatchId.toString),
+    Map(
+      "startBatchId" -> startBatchId.toString,
+      "endBatchId" -> endBatchId.toString,
+      "startFormatVersion" -> startFormatVersion.toString,
+      "endFormatVersion" -> endFormatVersion.toString
+    ),
     cause = null)

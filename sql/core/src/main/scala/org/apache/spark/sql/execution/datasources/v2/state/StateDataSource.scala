@@ -600,9 +600,13 @@ object StateSourceOptions extends DataSourceOptions {
     }
 
     if (startOperatorStateUniqueIds.isDefined != endOperatorStateUniqueIds.isDefined) {
+      val startFormatVersion = if (startOperatorStateUniqueIds.isDefined) 2 else 1
+      val endFormatVersion = if (endOperatorStateUniqueIds.isDefined) 2 else 1
       throw StateDataSourceErrors.mixedCheckpointFormatVersionsNotSupported(
         startBatchId,
-        endBatchId
+        endBatchId,
+        startFormatVersion,
+        endFormatVersion
       )
     }
 

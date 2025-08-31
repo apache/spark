@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkException, TaskContext}
+import org.apache.spark.{SparkConf, SparkEnv, TaskContext}
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -292,9 +292,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   /** Get the state store for making updates to create a new `version` of the store. */
   override def getStore(version: Long, uniqueId: Option[String] = None): StateStore = {
     if (uniqueId.isDefined) {
-      throw QueryExecutionErrors.cannotLoadStore(new SparkException(
+      throw StateStoreErrors.stateStoreCheckpointIdsNotSupported(
         "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1 " +
-        "but a state store checkpointID is passed in"))
+        "but a state store checkpointID is passed in")
     }
     val newMap = getLoadedMapForStore(version)
     logInfo(log"Retrieved version ${MDC(LogKeys.STATE_STORE_VERSION, version)} " +
@@ -369,10 +369,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       hadoopConf: Configuration,
       useMultipleValuesPerKey: Boolean = false,
       stateSchemaProvider: Option[StateSchemaProvider] = None): Unit = {
-    assert(
-      !storeConf.enableStateStoreCheckpointIds,
-      "HDFS State Store Provider doesn't support checkpointFormatVersion >= 2 " +
-        s"checkpointFormatVersion ${storeConf.stateStoreCheckpointFormatVersion}")
+    if (storeConf.enableStateStoreCheckpointIds) {
+      throw StateStoreErrors.stateStoreCheckpointIdsNotSupported(
+        "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1")
+    }
 
     this.stateStoreId_ = stateStoreId
     this.keySchema = keySchema
@@ -1069,8 +1069,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     StateStoreChangeDataReader = {
 
     if (endVersionStateStoreCkptId.isDefined) {
-      throw QueryExecutionErrors.cannotLoadStore(new SparkException(
-        "HDFSBackedStateStoreProvider does not support endVersionStateStoreCkptId"))
+      throw StateStoreErrors.stateStoreCheckpointIdsNotSupported(
+        "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1 " +
+        "but a state store checkpointID is passed in")
     }
 
     // Multiple column families are not supported with HDFSBackedStateStoreProvider
