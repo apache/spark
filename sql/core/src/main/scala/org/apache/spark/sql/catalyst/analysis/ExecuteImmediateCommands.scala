@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{SqlScriptingContextManager}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, EmptyRow, Exists, Expression, InSubquery, ListQuery, Literal, ScalarSubquery, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, CommandResult, CompoundBody, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.EXECUTE_IMMEDIATE
@@ -40,55 +40,46 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
   }
 
   private def executeImmediate(cmd: ExecuteImmediateCommand): LogicalPlan = {
-    try {
-      // Extract the query string from the queryParam expression
-      val queryString = extractQueryString(cmd.queryParam)
+    // Extract the query string from the queryParam expression
+    val queryString = extractQueryString(cmd.queryParam)
 
-      // Parse and validate the query
-      val parsedPlan = sparkSession.sessionState.sqlParser.parsePlan(queryString)
-      validateQuery(queryString, parsedPlan)
+    // Parse and validate the query
+    val parsedPlan = sparkSession.sessionState.sqlParser.parsePlan(queryString)
+    validateQuery(queryString, parsedPlan)
 
-      // Execute the query recursively with isolated local variable context
-      val result = if (cmd.args.isEmpty) {
-        // No parameters - execute directly
-        withIsolatedLocalVariableContext {
-          AnalysisContext.withExecuteImmediateContext {
-            sparkSession.sql(queryString)
-          }
-        }
-      } else {
-        // For parameterized queries, build unified parameter arrays
-        val (paramValues, paramNames) = buildUnifiedParameters(cmd.args)
-
-        // Validate parameter usage patterns
-        validateParameterUsage(cmd.queryParam, cmd.args, paramNames.toSeq)
-
-        withIsolatedLocalVariableContext {
-          AnalysisContext.withExecuteImmediateContext {
-            sparkSession.sql(queryString, paramValues, paramNames)
-          }
+    // Execute the query recursively with isolated local variable context
+    val result = if (cmd.args.isEmpty) {
+      // No parameters - execute directly
+      withIsolatedLocalVariableContext {
+        AnalysisContext.withExecuteImmediateContext {
+          sparkSession.sql(queryString)
         }
       }
+    } else {
+      // For parameterized queries, build unified parameter arrays
+      val (paramValues, paramNames) = buildUnifiedParameters(cmd.args)
 
-      // Check if the executed statement is a Command (like DECLARE, SET VARIABLE, etc.)
-      // Commands should not return result sets
-      result.queryExecution.analyzed match {
-        case cmd: Command =>
-          // Commands don't produce output - return CommandResult to indicate this is a command
-          // For analyzer tests, we don't need the actual executed rows, just the structure
-          CommandResult(cmd.output, cmd, result.queryExecution.executedPlan, Seq.empty)
-        case _ =>
-          // Regular queries - return the results as a LocalRelation
-          val internalRows = result.queryExecution.executedPlan.executeCollect()
-          LocalRelation(result.queryExecution.analyzed.output, internalRows.toSeq)
+      // Validate parameter usage patterns
+      validateParameterUsage(cmd.queryParam, cmd.args, paramNames.toSeq)
+
+      withIsolatedLocalVariableContext {
+        AnalysisContext.withExecuteImmediateContext {
+          sparkSession.sql(queryString, paramValues, paramNames)
+        }
       }
+    }
 
-    } catch {
-      case e: AnalysisException =>
-        // Re-throw AnalysisException as-is to preserve error type for tests
-        throw e
-      case e: Exception =>
-        throw new RuntimeException(s"Failed to execute immediate query: ${e.getMessage}", e)
+    // Check if the executed statement is a Command (like DECLARE, SET VARIABLE, etc.)
+    // Commands should not return result sets
+    result.queryExecution.analyzed match {
+      case cmd: Command =>
+        // Commands don't produce output - return CommandResult to indicate this is a command
+        // For analyzer tests, we don't need the actual executed rows, just the structure
+        CommandResult(cmd.output, cmd, result.queryExecution.executedPlan, Seq.empty)
+      case _ =>
+        // Regular queries - return the results as a LocalRelation
+        val internalRows = result.queryExecution.executedPlan.executeCollect()
+        LocalRelation(result.queryExecution.analyzed.output, internalRows.toSeq)
     }
   }
 
@@ -133,8 +124,6 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
    * Builds unified parameter arrays for the sql() API.
    */
   private def buildUnifiedParameters(args: Seq[Expression]): (Array[Any], Array[String]) = {
-    import org.apache.spark.sql.catalyst.expressions.{EmptyRow, Literal}
-    import org.apache.spark.sql.catalyst.expressions.VariableReference
     val values = scala.collection.mutable.ListBuffer[Any]()
     val names = scala.collection.mutable.ListBuffer[String]()
 
@@ -148,30 +137,11 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
           case _ => false
         }
 
-        val paramValue = alias.child match {
-          case varRef: VariableReference =>
-            // Variable references should be evaluated to their values
-            varRef.eval(EmptyRow)
-          case foldable if foldable.foldable =>
-            Literal.create(foldable.eval(EmptyRow), foldable.dataType).value
-          case other =>
-            // Expression is not foldable - not supported for parameters
-            import org.apache.spark.sql.catalyst.expressions.{ScalarSubquery, Exists, ListQuery, InSubquery}
-            other match {
-              case _: ScalarSubquery | _: Exists | _: ListQuery | _: InSubquery =>
-                throw QueryCompilationErrors.unsupportedParameterExpression(other)
-              case _ if !other.foldable =>
-                throw QueryCompilationErrors.unsupportedParameterExpression(other)
-              case _ =>
-                // This should not happen, but fallback to evaluation
-                other.eval(EmptyRow)
-            }
-        }
+        val paramValue = evaluateParameterExpression(alias.child)
 
         if (isAutoGeneratedAlias) {
           // Session variable without explicit AS clause
           val varName = alias.child.asInstanceOf[VariableReference].identifier.name()
-
           values += paramValue
           names += varName
         } else {
@@ -182,30 +152,37 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
         }
       case expr =>
         // Positional parameter: just a value
-        val paramValue = expr match {
-          case varRef: VariableReference =>
-            // Variable references should be evaluated to their values
-            varRef.eval(EmptyRow)
-          case foldable if foldable.foldable =>
-            Literal.create(foldable.eval(EmptyRow), foldable.dataType).value
-          case other =>
-            // Expression is not foldable - not supported for parameters
-            import org.apache.spark.sql.catalyst.expressions.{ScalarSubquery, Exists, ListQuery, InSubquery}
-            other match {
-              case _: ScalarSubquery | _: Exists | _: ListQuery | _: InSubquery =>
-                throw QueryCompilationErrors.unsupportedParameterExpression(other)
-              case _ if !other.foldable =>
-                throw QueryCompilationErrors.unsupportedParameterExpression(other)
-              case _ =>
-                // This should not happen, but fallback to evaluation
-                other.eval(EmptyRow)
-            }
-        }
+        val paramValue = evaluateParameterExpression(expr)
         values += paramValue
         names += null // unnamed expression
     }
 
     (values.toArray, names.toArray)
+  }
+
+  /**
+   * Evaluates a parameter expression, ensuring it's foldable and doesn't contain
+   * unsupported constructs.
+   */
+  private def evaluateParameterExpression(expr: Expression): Any = {
+    expr match {
+      case varRef: VariableReference =>
+        // Variable references should be evaluated to their values
+        varRef.eval(EmptyRow)
+      case foldable if foldable.foldable =>
+        Literal.create(foldable.eval(EmptyRow), foldable.dataType).value
+      case other =>
+        // Expression is not foldable - not supported for parameters
+        other match {
+          case _: ScalarSubquery | _: Exists | _: ListQuery | _: InSubquery =>
+            throw QueryCompilationErrors.unsupportedParameterExpression(other)
+          case _ if !other.foldable =>
+            throw QueryCompilationErrors.unsupportedParameterExpression(other)
+          case _ =>
+            // This should not happen, but fallback to evaluation
+            other.eval(EmptyRow)
+        }
+    }
   }
 
   private def validateParameterUsage(

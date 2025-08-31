@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, VariableReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Exists, Expression, InSubquery, ListQuery, ScalarSubquery, VariableReference}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{ExecutableDuringAnalysis, LocalRelation, LogicalPlan, SetVariable, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -84,32 +84,8 @@ case class ExecuteImmediateCommand(
 class ResolveExecuteImmediate(
     val catalogManager: CatalogManager,
     resolveChild: LogicalPlan => LogicalPlan,
-    checkAnalysis: LogicalPlan => Unit)
-  extends Rule[LogicalPlan] {
+    checkAnalysis: LogicalPlan => Unit) extends Rule[LogicalPlan] {
   private val variableResolution = new VariableResolution(catalogManager.tempVariableManager)
-
-  def resolveVariable(e: Expression): Expression = {
-
-    /**
-     * We know that the expression is either UnresolvedAttribute, Alias or Parameter, as passed from
-     * the parser. If it is an UnresolvedAttribute, we look it up in the catalog and return it. If
-     * it is an Alias, we resolve the child and return an Alias with the same name. If it is
-     * a Parameter, we leave it as is because the parameter belongs to another parameterized
-     * query and should be resolved later.
-     */
-    e match {
-      case u: UnresolvedAttribute =>
-        getVariableReference(u, u.nameParts)
-      case a: Alias =>
-        Alias(resolveVariable(a.child), a.name)()
-      case p: Parameter => p
-      case varRef: VariableReference => varRef // VariableReference is already resolved
-      case other =>
-        throw QueryCompilationErrors.unsupportedParameterExpression(other)
-    }
-  }
-
-
 
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
@@ -215,7 +191,6 @@ class ResolveExecuteImmediate(
   }
 
   private def validateUsingClauseExpressions(args: Seq[Expression]): Unit = {
-    import org.apache.spark.sql.catalyst.expressions.{ScalarSubquery, Exists, ListQuery, InSubquery}
     args.foreach { expr =>
       // Check the expression and its children for unsupported constructs
       expr.foreach {
@@ -233,8 +208,6 @@ class ResolveExecuteImmediate(
   }
 
   private def validateQueryParameter(queryParam: Expression): Unit = {
-    import org.apache.spark.sql.catalyst.expressions.{ScalarSubquery, Exists, ListQuery, InSubquery}
-
     // Only check for specific unsupported constructs like subqueries
     // Variable references and expressions like stringvar || 'hello' should be allowed
     queryParam.foreach {
