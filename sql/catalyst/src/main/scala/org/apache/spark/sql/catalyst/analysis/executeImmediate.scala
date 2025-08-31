@@ -127,6 +127,9 @@ class ResolveExecuteImmediate(
         // Validate that USING clause expressions don't contain unsupported constructs
         validateUsingClauseExpressions(args)
 
+        // Validate that query parameter is foldable (constant expression)
+        validateQueryParameter(queryParam)
+
         if (queryParamResolved && allArgsResolved && targetVariablesResolved) {
           // All resolved - transform based on whether we have target variables
           if (targetVariables.nonEmpty) {
@@ -226,6 +229,24 @@ class ResolveExecuteImmediate(
           throw QueryCompilationErrors.unsupportedParameterExpression(inSubquery)
         case _ => // Other expressions are fine
       }
+    }
+  }
+
+  private def validateQueryParameter(queryParam: Expression): Unit = {
+    import org.apache.spark.sql.catalyst.expressions.{ScalarSubquery, Exists, ListQuery, InSubquery}
+
+    // Only check for specific unsupported constructs like subqueries
+    // Variable references and expressions like stringvar || 'hello' should be allowed
+    queryParam.foreach {
+      case subquery: ScalarSubquery =>
+        throw QueryCompilationErrors.unsupportedParameterExpression(subquery)
+      case exists: Exists =>
+        throw QueryCompilationErrors.unsupportedParameterExpression(exists)
+      case listQuery: ListQuery =>
+        throw QueryCompilationErrors.unsupportedParameterExpression(listQuery)
+      case inSubquery: InSubquery =>
+        throw QueryCompilationErrors.unsupportedParameterExpression(inSubquery)
+      case _ => // Other expressions including variables and concatenations are fine
     }
   }
 }

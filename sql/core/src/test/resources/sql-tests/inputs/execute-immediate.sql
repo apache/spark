@@ -175,4 +175,7 @@ EXECUTE IMMEDIATE 'SELECT ?' USING (SELECT 1);
 -- named query with unnamed parameters
 EXECUTE IMMEDIATE 'SELECT :first' USING 2, 3;
 
+-- Query is not a constant
+EXECUTE IMMEDIATE (SELECT c FROM (VALUES(1)) AS T(c));
+
 DROP TABLE x;

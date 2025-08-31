@@ -928,6 +928,28 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+EXECUTE IMMEDIATE (SELECT c FROM (VALUES(1)) AS T(c))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSql" : "\"scalarsubquery()\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 53,
+    "fragment" : "(SELECT c FROM (VALUES(1)) AS T(c))"
+  } ]
+}
+
+
+-- !query
 DROP TABLE x
 -- !query schema
 struct<>
