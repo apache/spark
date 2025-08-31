@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.catalyst.{SqlScriptingContextManager}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
-import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CommandResult, CompoundBody, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.EXECUTE_IMMEDIATE
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -47,11 +48,13 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
       val parsedPlan = sparkSession.sessionState.sqlParser.parsePlan(queryString)
       validateQuery(queryString, parsedPlan)
 
-      // Execute the query recursively
+      // Execute the query recursively with isolated local variable context
       val result = if (cmd.args.isEmpty) {
         // No parameters - execute directly
-        AnalysisContext.withExecuteImmediateContext {
-          sparkSession.sql(queryString)
+        withIsolatedLocalVariableContext {
+          AnalysisContext.withExecuteImmediateContext {
+            sparkSession.sql(queryString)
+          }
         }
       } else {
         // For parameterized queries, build unified parameter arrays
@@ -60,14 +63,25 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
         // Validate parameter usage patterns
         validateParameterUsage(cmd.queryParam, cmd.args, paramNames.toSeq)
 
-        AnalysisContext.withExecuteImmediateContext {
-          sparkSession.sql(queryString, paramValues, paramNames)
+        withIsolatedLocalVariableContext {
+          AnalysisContext.withExecuteImmediateContext {
+            sparkSession.sql(queryString, paramValues, paramNames)
+          }
         }
       }
 
-      // Return the query results as a LocalRelation
-      val internalRows = result.queryExecution.executedPlan.executeCollect()
-      LocalRelation(result.queryExecution.analyzed.output, internalRows.toSeq)
+      // Check if the executed statement is a Command (like DECLARE, SET VARIABLE, etc.)
+      // Commands should not return result sets
+      result.queryExecution.analyzed match {
+        case cmd: Command =>
+          // Commands don't produce output - return CommandResult to indicate this is a command
+          val executedRows = result.queryExecution.executedPlan.executeCollect()
+          CommandResult(cmd.output, cmd, result.queryExecution.executedPlan, executedRows.toSeq)
+        case _ =>
+          // Regular queries - return the results as a LocalRelation
+          val internalRows = result.queryExecution.executedPlan.executeCollect()
+          LocalRelation(result.queryExecution.analyzed.output, internalRows.toSeq)
+      }
 
     } catch {
       case e: AnalysisException =>
@@ -229,5 +243,17 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
         throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedExprs)
       }
     }
+  }
+
+  /**
+   * Temporarily isolates the SQL scripting context during EXECUTE IMMEDIATE execution.
+   * This makes withinSqlScript() return false, ensuring that statements within EXECUTE IMMEDIATE
+   * are not affected by the outer SQL script context (e.g., local variables, script-specific
+   * errors).
+   */
+  private def withIsolatedLocalVariableContext[A](f: => A): A = {
+    // Completely clear the SQL scripting context to make withinSqlScript() return false
+    val handle = SqlScriptingContextManager.create(null)
+    handle.runWith(f)
   }
 }
