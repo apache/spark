@@ -1760,6 +1760,14 @@
         <scope>${hive.deps.scope}</scope>
         <exclusions>
           <exclusion>
+            <groupId>org.apache.tez</groupId>
+            <artifactId>tez-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.github.joshelser</groupId>
+            <artifactId>dropwizard-metrics-hadoop-metrics2-reporter</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-standalone-metastore-common</artifactId>
           </exclusion>
@@ -2076,11 +2084,19 @@
         <exclusions>
           <exclusion>
             <groupId>${hive.group}</groupId>
+            <artifactId>hive-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
             <artifactId>hive-serde</artifactId>
           </exclusion>
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-shims</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-standalone-metastore-common</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.apache.thrift</groupId>
@@ -2125,7 +2141,6 @@
           </exclusion>
         </exclusions>
       </dependency>
-
       <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-serde</artifactId>
@@ -2352,6 +2367,35 @@
         <groupId>${hive.group}</groupId>
         <artifactId>hive-udf</artifactId>
         <version>${hive.version}</version>
+        <scope>${hive.deps.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-serde</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>${hive.group}</groupId>
+        <artifactId>hive-standalone-metastore-common</artifactId>
+        <version>${hive.version}</version>
+        <scope>${hive.deps.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>com.github.joshelser</groupId>
+            <artifactId>dropwizard-metrics-hadoop-metrics2-reporter</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>com.github.joshelser</groupId>
+        <artifactId>dropwizard-metrics-hadoop-metrics2-reporter</artifactId>
+        <version>0.1.2</version>
+        <scope>runtime</scope>
       </dependency>
       <dependency>
         <groupId>${hive.group}</groupId>
@@ -2396,6 +2440,16 @@
         <artifactId>hive-parser</artifactId>
         <version>${hive.version}</version>
         <scope>runtime</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-serde</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.calcite</groupId>
