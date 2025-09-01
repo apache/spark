@@ -199,6 +199,9 @@ case class InlineCTE(
           case p @ Project(_, ul: UnionLoop)
             if ul.id == ref.cteId && ref.isUnlimitedRecursion.isDefined =>
             p.copy(child = ul.copy(limit = Some(-1)))
+          case ul: UnionLoop
+            if ul.id == ref.cteId && ref.isUnlimitedRecursion.isDefined =>
+            ul.copy(limit = Some(-1))
           case body =>
             body
         }

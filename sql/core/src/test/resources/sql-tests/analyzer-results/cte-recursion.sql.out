@@ -319,6 +319,29 @@ WithCTE
 
 
 -- !query
+WITH RECURSIVE t MAX RECURSION LEVEL 100 AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + 1 FROM t WHERE n < 60
+    )
+SELECT * FROM t LIMIT ALL
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false, 100
+:  +- SubqueryAlias t
+:     +- UnionLoop xxxx, 100
+:        :- Project [1 AS n#x]
+:        :  +- OneRowRelation
+:        +- Project [(n#x + 1) AS (n + 1)#x]
+:           +- Filter (n#x < 60)
+:              +- SubqueryAlias t
+:                 +- UnionLoopRef xxxx, [n#x], false
++- Project [n#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [n#x], false, false, true
+
+
+-- !query
 WITH RECURSIVE r(level) AS (
   VALUES 0
   UNION ALL

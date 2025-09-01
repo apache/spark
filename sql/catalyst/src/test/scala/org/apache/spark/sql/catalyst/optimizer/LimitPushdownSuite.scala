@@ -357,29 +357,6 @@ class LimitPushdownSuite extends PlanTest {
     }
   }
 
-  test("LimitAll node gets eliminated without UnionLoop") {
-    val originalQuery = x.join(y.limitAll(), RightOuter).limitAll()
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = x.join(y, RightOuter).analyze
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("LimitAll node gets pushed into UnionLoop") {
-    val originalQuery = UnionLoop(0, x, y, Seq.empty).limitAll()
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = UnionLoop(0, x, y, Seq.empty, Some(-1)).analyze
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("LimitAll node gets pushed into UnionLoop through other nodes") {
-    val originalQuery = Union(x, UnionLoop(0, x, y, Seq(ExprId(1), ExprId(2), ExprId(3))
-    )).limitAll()
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = Union(x, UnionLoop(0, x, y, Seq(ExprId(1), ExprId(2), ExprId(3)),
-      Some(-1))).analyze
-    comparePlans(optimized, correctAnswer)
-  }
-
   test("LimitAll node gets eliminated before UnionLoop due to previous Limit") {
     val originalQuery = Union(x, UnionLoop(0, x, y, Seq(ExprId(1), ExprId(2), ExprId(3))
     ).localLimit(5)).limitAll()
