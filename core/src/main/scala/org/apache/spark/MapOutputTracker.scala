@@ -174,10 +174,13 @@ private class ShuffleStatus(
     } else {
       mapIdToMapIndex.remove(currentMapStatus.mapId)
     }
+    logDebug(s"Checksum of map output for task ${status.mapId} is ${status.checksumValue}")
 
     val preStatus =
       if (mapStatuses(mapIndex) != null) mapStatuses(mapIndex) else mapStatusesDeleted(mapIndex)
     if (preStatus != null && preStatus.checksumValue != status.checksumValue) {
+      logInfo(s"Checksum of map output changes from ${preStatus.checksumValue} to " +
+        s"${status.checksumValue} for task ${status.mapId}.")
       checksumMismatchIndices.add(mapIndex)
     }
     mapStatuses(mapIndex) = status

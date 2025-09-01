@@ -61,7 +61,7 @@ private[spark] sealed trait MapStatus extends ShuffleOutputStatus {
 
   /**
    * The checksum value of this shuffle map task, which can be used to evaluate whether the
-   * output data have changed across different map task retries.
+   * output data has changed across different map task retries.
    */
   def checksumValue: Long = 0
 }

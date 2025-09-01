@@ -63,17 +63,18 @@ class UnsafeRowChecksumSuite extends SparkFunSuite {
     assert(rowBasedChecksum.getValue == 0)
   }
 
-  test("Two identical rows should have a checksum of zero with XOR") {
+  test("Two identical rows should not have a checksum of zero") {
     val rowBasedChecksum = new UnsafeRowChecksum()
     assert(rowBasedChecksum.getValue == 0)
 
     // Updates the checksum with one row.
     rowBasedChecksum.update(1, toUnsafeRow(Row(20)))
-    assert(rowBasedChecksum.getValue == 8551541565481898028L)
+    assert(rowBasedChecksum.getValue == -9094624449814316735L)
 
-    // Updates the checksum with the same row again, and the row-based checksum should become 0.
+    // Updates the checksum with the same row again, since we mix the final xor and sum
+    // of the row-based checksum, the result would not be 0.
     rowBasedChecksum.update(1, toUnsafeRow(Row(20)))
-    assert(rowBasedChecksum.getValue == 0)
+    assert(rowBasedChecksum.getValue == -1240577858172431653L)
   }
 
   test("The checksum is independent of row order - two rows") {
