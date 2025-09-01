@@ -959,7 +959,6 @@ case class ShufflePartitionIdPassThrough(
     numPartitions: Int) extends Expression with Partitioning with Unevaluable {
 
   // TODO(SPARK-53401): Support Shuffle Spec in Direct Partition ID Pass Through
-  // TODO(SPARK-53432): Support Null Value in Direct Passthrough Partitioning API
   def partitionIdExpression: Expression =
     Pmod(expr, Literal(numPartitions))
 

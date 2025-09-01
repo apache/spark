@@ -38,7 +38,6 @@ case class DirectShufflePartitionID(child: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = LongType :: Nil
 
-  // TODO(SPARK-53432): Support Null Value in Direct Passthrough Partitioning API
   override def nullable: Boolean = false
 
   override val prettyName: String = "direct_shuffle_partition_id"
