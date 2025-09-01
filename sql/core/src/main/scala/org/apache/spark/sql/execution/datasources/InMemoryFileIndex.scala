@@ -130,13 +130,20 @@ class InMemoryFileIndex(
           pathsToFetch += path
       }
     }
-    val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
-    val discovered = InMemoryFileIndex.bulkListLeafFiles(
-      pathsToFetch.toSeq, hadoopConf, filter, sparkSession, parameters)
-    discovered.foreach { case (path, leafFiles) =>
-      HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
-      fileStatusCache.putLeafFiles(path, leafFiles.toArray)
-      output ++= leafFiles
+
+    if (pathsToFetch.size > 0) {
+      val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
+      val discovered = InMemoryFileIndex.bulkListLeafFiles(
+        pathsToFetch.toSeq,
+        hadoopConf,
+        filter,
+        sparkSession,
+        parameters)
+      discovered.foreach { case (path, leafFiles) =>
+        HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
+        fileStatusCache.putLeafFiles(path, leafFiles.toArray)
+        output ++= leafFiles
+      }
     }
     logInfo(log"It took ${MDC(ELAPSED_TIME, (System.nanoTime() - startTime) / (1000 * 1000))} ms" +
       log" to list leaf files for ${MDC(COUNT, paths.length)} paths.")
