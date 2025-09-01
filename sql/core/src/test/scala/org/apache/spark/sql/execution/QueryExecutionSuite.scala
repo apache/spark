@@ -351,7 +351,7 @@ class QueryExecutionSuite extends SharedSparkSession {
           val plan = spark.range(100).repartition(10).logicalPlan
           val df = Dataset.ofRows(spark, plan)
           // V1 API write
-          df.write.format("parquet").mode(SaveMode.Overwrite).save(dir.getCanonicalPath)
+          df.write.format("csv").mode(SaveMode.Overwrite).save(dir.getCanonicalPath)
 
           val blockManager = spark.sparkContext.env.blockManager
           assert(blockManager.migratableResolver.getStoredShuffles().isEmpty)

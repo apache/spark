@@ -30,7 +30,7 @@ import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PRE
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
-import org.apache.spark.sql.execution.command.{DataWritingCommandExec, ExecutedCommandExec}
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
@@ -194,9 +194,6 @@ object SQLExecution extends Logging {
                     command.children.flatMap(extractShuffleIds)
                   case dataWritingCommand: DataWritingCommandExec =>
                     extractShuffleIds(dataWritingCommand.child)
-                  case _: ExecutedCommandExec =>
-                    // TODO: Discuss
-                    Seq()
                   case plan =>
                     extractShuffleIds(plan)
                 }
