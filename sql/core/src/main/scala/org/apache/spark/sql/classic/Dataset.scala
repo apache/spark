@@ -1543,8 +1543,6 @@ class Dataset[T] private[sql](
       RepartitionByExpression(partitionExprs.map(_.expr), logicalPlan, numPartitions)
     }
   }
-
-
   /**
    * Repartitions the Dataset into the given number of partitions using the specified
    * partition ID expression.
@@ -1556,14 +1554,8 @@ class Dataset[T] private[sql](
    * @since 4.1.0
    */
   def repartitionById(numPartitions: Int, partitionIdExpr: Column): Dataset[T] = {
-    withSameTypedPlan {
-      RepartitionByExpression(
-        partitionExpressions = Seq(partitionIdExpr.expr),
-        child = logicalPlan,
-        optNumPartitions = Some(numPartitions),
-        optAdvisoryPartitionSize = None,
-        directPassthrough = true)
-    }
+    val directShufflePartitionIdCol = Column(DirectShufflePartitionID(partitionIdExpr.expr))
+    repartitionByExpression(Some(numPartitions), Seq(directShufflePartitionIdCol))
   }
 
   protected def repartitionByRange(

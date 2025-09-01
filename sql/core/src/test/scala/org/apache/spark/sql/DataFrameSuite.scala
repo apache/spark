@@ -2785,20 +2785,6 @@ class DataFrameSuite extends QueryTest
     val df1 = df.select("a").orderBy("b").orderBy("all")
     checkAnswer(df1, Seq(Row(1), Row(4)))
   }
-
-  test("SPARK-53401: repartitionById - should partition rows to the specified " +
-    "partition ID") {
-    val numPartitions = 10
-    val df = spark.range(100).withColumn("p_id", col("id") % numPartitions)
-
-    val repartitioned = df.repartitionById(numPartitions, $"p_id")
-    val result = repartitioned.withColumn("actual_p_id", spark_partition_id())
-
-    assert(result.filter(col("p_id") =!= col("actual_p_id")).count() == 0)
-
-    assert(result.rdd.getNumPartitions == numPartitions)
-  }
-
 }
 
 case class GroupByKey(a: Int, b: Int)

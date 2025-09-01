@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, DataFrame, Row}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -28,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REPARTITION_BY_COL, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, EnsureRequirements, REPARTITION_BY_COL, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.functions._
@@ -1407,6 +1408,18 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     assert(planned.exists(_.isInstanceOf[LocalLimitExec]))
   }
 
+    test("SPARK-53401: repartitionById - should partition rows to the specified partition ID") {
+    val numPartitions = 10
+    val df = spark.range(100).withColumn("expected_p_id", col("id") % numPartitions)
+
+    val repartitioned = df.repartitionById(numPartitions, $"expected_p_id")
+    val result = repartitioned.withColumn("actual_p_id", spark_partition_id())
+
+    assert(result.filter(col("expected_p_id") =!= col("actual_p_id")).count() == 0)
+
+    assert(result.rdd.getNumPartitions == numPartitions)
+  }
+
   test("SPARK-53401: repartitionById should handle negative partition ids correctly with pmod") {
     val df = spark.range(10).toDF("id")
     val repartitioned = df.repartitionById(10, $"id" - 5)
@@ -1428,12 +1441,12 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   test("SPARK-53401: repartitionById should fail analysis for non-integral types") {
     val df = spark.range(5).withColumn("s", lit("a"))
-    val e = intercept[SparkException] {
+    val e = intercept[AnalysisException] {
       df.repartitionById(5, $"s").collect()
     }
+    assert(e.getCondition.contains("DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE"))
     assert(e.getMessage.contains(
-      "Binary numeric promotion not possible on types " +
-        "\"org.apache.spark.unsafe.types.UTF8String\" and \"int\""))
+      "The first parameter requires the \"BIGINT\" type, however \"s\" has the type \"STRING\""))
   }
 
   test("SPARK-53401: repartitionById should send null partition ids to partition 0") {
@@ -1478,11 +1491,20 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     val plan = df.queryExecution.executedPlan
     val shuffles = collect(plan) {
       case s: ShuffleExchangeLike => s
+      case s: BroadcastExchangeLike => s
     }
     assert(
       shuffles.size == expectedShuffles,
       s"Expected $expectedShuffles shuffle(s), but found ${shuffles.size} in the plan:\n$plan"
     )
+  }
+
+  test("SPARK-53401: repartitionById followed by groupBy should only have one shuffle") {
+    val df = spark.range(100).toDF("id")
+    val repartitioned = df.repartitionById(10, $"id")
+    val grouped = repartitioned.groupBy($"id").count()
+
+    checkShuffleCount(grouped, 1)
   }
 
   test("SPARK-53401: groupBy on a superset of partition keys should reuse the shuffle") {
@@ -1513,8 +1535,30 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
     val grouped = joined.groupBy("key").count()
 
-    // Total shuffles: one for df1, one for df2. The groupBy reuses the output partitioning.
-    checkShuffleCount(grouped, 2)
+    // Total shuffles: one for df1, one for df2, one for join.
+    // The groupBy reuses the output partitioning.
+    checkShuffleCount(grouped, 3)
+  }
+
+  test("SPARK-53401: shuffle reuse after a join doesn't preserve partitioning") {
+    val df1 =
+      spark
+        .range(100)
+        .select($"id" % 10 as "key", $"id" as "v1")
+        .repartitionById(10, $"key")
+    val df2 =
+      spark
+        .range(100)
+        .select($"id" % 10 as "key", $"id" as "v2")
+        .repartitionById(10, $"key")
+
+    val joined = df1.join(df2, "key")
+
+    val grouped = joined.groupBy("key").count()
+
+    // Total shuffles: one for df1, one for df2, one for join.
+    // The groupBy reuses the output partitioning.
+    checkShuffleCount(grouped, 3)
   }
 }
 
