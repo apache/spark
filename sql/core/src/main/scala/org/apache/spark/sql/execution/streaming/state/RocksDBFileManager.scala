@@ -302,22 +302,32 @@ class RocksDBFileManager(
 
   /**
    * Find orphan files which are not tracked by zip files.
-   * Both sst files and log files can be orphan files.
-   * They are uploaded separately before the zip file of that version is uploaded.
-   * When the zip file of a version get overwritten, the referenced sst and log files become orphan.
-   * Be careful here since sst and log files of the ongoing version
-   * also appear to be orphan before their zip file is uploaded.
+   *
+   * - Both sst files and log files can be orphan files.
+   * - They are uploaded separately before the zip file of that version is uploaded.
+   * - When a version's zip file is overwritten the referenced sst and log files become orphan.
+   * - Ensure sst and log files of the ongoing version are not deleted.
+   *     - These appear before their zip file is uploaded.
+   *     - To protect them we consider the last modification time of the oldest retained zip file.
    *
    * @param trackedFiles files tracked by metadata in versioned zip file
    * @param allFiles all sst or log files in the directory.
+   * @param oldestZipModificationTime modification time of the oldest retained zip
    * @return filenames of orphan files
    */
-  def findOrphanFiles(trackedFiles: Seq[String], allFiles: Seq[FileStatus]): Seq[String] = {
+  private def findOrphanFiles(
+      trackedFiles: Seq[String],
+      allFiles: Seq[FileStatus],
+      oldestZipModificationTime: Long): Seq[String] = {
     val fileModificationTimes = allFiles.map(file =>
       file.getPath.getName -> file.getModificationTime).toMap
+
     if (trackedFiles.nonEmpty && allFiles.size > trackedFiles.size) {
       // Some tracked files may not be in the directory when listing.
-      val oldestTrackedFileModificationTime = trackedFiles.flatMap(fileModificationTimes.get(_)).min
+      val oldestTrackedFileModificationTime = (
+        trackedFiles.flatMap(fileModificationTimes.get) ++ Seq(oldestZipModificationTime)
+      ).min
+
       // If this immutable file is older than any tracked file,
       // then it can't belong to the ongoing version and it should be safe to clean it up.
       val orphanFiles = fileModificationTimes
@@ -425,8 +435,12 @@ class RocksDBFileManager(
     val logDir = new Path(dfsRootDir, RocksDBImmutableFile.LOG_FILES_DFS_SUBDIR)
     val allSstFiles = if (fm.exists(sstDir)) fm.list(sstDir).toSeq else Seq.empty
     val allLogFiles = if (fm.exists(logDir)) fm.list(logDir).toSeq else Seq.empty
-    filesToDelete ++= findOrphanFiles(fileToMaxUsedVersion.keys.toSeq, allSstFiles ++ allLogFiles)
-      .map(_ -> -1L)
+
+    filesToDelete ++= findOrphanFiles(
+      fileToMaxUsedVersion.keys.toSeq,
+      allSstFiles ++ allLogFiles,
+      fs.getFileStatus(dfsBatchZipFile(minVersionToRetain)).getModificationTime
+    ).map(_ -> -1L)
     logInfo(s"Deleting ${filesToDelete.size} files not used in versions >= $minVersionToRetain")
     var failedToDelete = 0
     filesToDelete.foreach { case (dfsFileName, maxUsedVersion) =>
