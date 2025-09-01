@@ -56,19 +56,13 @@
             "array": {
               "elements": [{
                 "integer": 2
-              }],
-              "dataType": {
-                "containsNull": true
-              }
+              }]
             }
           }, {
             "array": {
               "elements": [{
                 "integer": 3
-              }],
-              "dataType": {
-                "containsNull": true
-              }
+              }]
             }
           }],
           "dataType": {
@@ -118,15 +112,9 @@
                 "array": {
                   "elements": [{
                     "integer": 2
-                  }],
-                  "dataType": {
-                    "containsNull": true
-                  }
+                  }]
                 }
-              }],
-              "dataType": {
-                "containsNull": true
-              }
+              }]
             }
           }, {
             "array": {
@@ -134,15 +122,9 @@
                 "array": {
                   "elements": [{
                     "integer": 3
-                  }],
-                  "dataType": {
-                    "containsNull": true
-                  }
+                  }]
                 }
-              }],
-              "dataType": {
-                "containsNull": true
-              }
+              }]
             }
           }],
           "dataType": {
