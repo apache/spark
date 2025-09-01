@@ -2311,6 +2311,15 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
+  private[spark] val SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT =
+    ConfigBuilder("spark.submit.callSystemExitOnMainExit")
+      .doc("If true, SparkSubmit will call System.exit() to initiate JVM shutdown once the " +
+        "user's main method has exited. This can be useful in cases where non-daemon JVM " +
+        "threads might otherwise prevent the JVM from shutting down on its own.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val SCHEDULER_ALLOCATION_FILE =
     ConfigBuilder("spark.scheduler.allocation.file")
       .version("0.8.1")
