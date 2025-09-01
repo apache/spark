@@ -19,8 +19,14 @@ package org.apache.spark.sql.connect.pipelines
 
 import java.util.UUID
 
-import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{DatasetType, Expression, PipelineCommand, Relation, UnresolvedTableValuedFunction}
+import org.apache.spark.connect.{proto, proto => sc}
+import org.apache.spark.connect.proto.{
+  DatasetType,
+  Expression,
+  PipelineCommand,
+  Relation,
+  UnresolvedTableValuedFunction
+}
 import org.apache.spark.connect.proto.PipelineCommand.{DefineDataset, DefineFlow}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
@@ -42,7 +48,9 @@ class SparkDeclarativePipelinesServerSuite
         buildCreateDataflowGraphPlan(
           proto.PipelineCommand.CreateDataflowGraph
             .newBuilder()
-            .build())).getPipelineCommandResult.getCreateDataflowGraphResult.getDataflowGraphId
+            .build()
+        )
+      ).getPipelineCommandResult.getCreateDataflowGraphResult.getDataflowGraphId
       val definition =
         getDefaultSessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(graphId)
       assert(definition.defaultDatabase == "test_db")
@@ -61,16 +69,18 @@ class SparkDeclarativePipelinesServerSuite
                   .newBuilder()
                   .setDataflowGraphId("random-graph-id-that-dne")
                   .setDatasetName("mv")
-                  .setDatasetType(DatasetType.MATERIALIZED_VIEW))
-              .build()))
+                  .setDatasetType(DatasetType.MATERIALIZED_VIEW)
+              )
+              .build()
+          )
+        )
       }
     }
     assert(ex.getMessage.contains("DATAFLOW_GRAPH_NOT_FOUND"))
 
   }
 
-  test(
-    "Cross dependency between SQL dataset and non-SQL dataset is valid and can be registered") {
+  test("Cross dependency between SQL dataset and non-SQL dataset is valid and can be registered") {
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph
       sendPlan(
@@ -82,8 +92,11 @@ class SparkDeclarativePipelinesServerSuite
                 .newBuilder()
                 .setDataflowGraphId(graphId)
                 .setDatasetName("mv")
-                .setDatasetType(DatasetType.MATERIALIZED_VIEW))
-            .build()))
+                .setDatasetType(DatasetType.MATERIALIZED_VIEW)
+            )
+            .build()
+        )
+      )
 
       sendPlan(
         buildPlanFromPipelineCommand(
@@ -102,19 +115,27 @@ class SparkDeclarativePipelinesServerSuite
                       UnresolvedTableValuedFunction
                         .newBuilder()
                         .setFunctionName("range")
-                        .addArguments(Expression
-                          .newBuilder()
-                          .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
-                          .build())
-                        .build())
-                    .build()))
-            .build()))
+                        .addArguments(
+                          Expression
+                            .newBuilder()
+                            .setLiteral(Expression.Literal.newBuilder().setInteger(5).build())
+                            .build()
+                        )
+                        .build()
+                    )
+                    .build()
+                )
+            )
+            .build()
+        )
+      )
       registerGraphElementsFromSql(
         graphId = graphId,
         sql = """
                 |CREATE MATERIALIZED VIEW mv2 AS SELECT 2;
                 |CREATE FLOW f AS INSERT INTO mv2 BY NAME SELECT * FROM mv
-                |""".stripMargin)
+                |""".stripMargin
+      )
 
       val definition =
         getDefaultSessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(graphId)
@@ -153,18 +174,20 @@ class SparkDeclarativePipelinesServerSuite
         createTable(
           name = "tableA",
           datasetType = DatasetType.MATERIALIZED_VIEW,
-          sql = Some("SELECT * FROM RANGE(5)"))
+          sql = Some("SELECT * FROM RANGE(5)")
+        )
         createView(name = "viewB", sql = "SELECT * FROM tableA")
         createTable(
           name = "tableC",
           datasetType = DatasetType.TABLE,
-          sql = Some("SELECT * FROM tableA, viewB"))
+          sql = Some("SELECT * FROM tableA, viewB")
+        )
       }
 
       val definition =
         getDefaultSessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(graphId)
 
-      registerPipelineDatasets(pipeline)
+      registerGraphElements(pipeline)
       val graph = definition.toDataflowGraph
         .resolve()
 
@@ -177,7 +200,8 @@ class SparkDeclarativePipelinesServerSuite
           .filter(_.identifier.unquotedString == "spark_catalog.default.tableC")
           .head
       assert(
-        tableCFlow.inputs.map(_.unquotedString) == Set("viewB", "spark_catalog.default.tableA"))
+        tableCFlow.inputs.map(_.unquotedString) == Set("viewB", "spark_catalog.default.tableA")
+      )
 
       val viewBFlow =
         graph.resolvedFlows.filter(_.identifier.unquotedString == "viewB").head
@@ -199,18 +223,21 @@ class SparkDeclarativePipelinesServerSuite
         createTable(
           name = "tableA",
           datasetType = DatasetType.MATERIALIZED_VIEW,
-          sql = Some("SELECT * FROM RANGE(5)"))
+          sql = Some("SELECT * FROM RANGE(5)")
+        )
         createTable(
           name = "tableB",
           datasetType = DatasetType.TABLE,
-          sql = Some("SELECT * FROM STREAM tableA"))
+          sql = Some("SELECT * FROM STREAM tableA")
+        )
         createTable(
           name = "tableC",
           datasetType = DatasetType.MATERIALIZED_VIEW,
-          sql = Some("SELECT * FROM tableB"))
+          sql = Some("SELECT * FROM tableB")
+        )
       }
 
-      registerPipelineDatasets(pipeline)
+      registerGraphElements(pipeline)
       startPipelineAndWaitForCompletion(graphId)
       // Check that each table has the correct data.
       assert(spark.table("spark_catalog.default.tableA").count() == 5)
@@ -230,19 +257,22 @@ class SparkDeclarativePipelinesServerSuite
         createTable(
           name = "curr.tableA",
           datasetType = proto.DatasetType.MATERIALIZED_VIEW,
-          sql = Some("SELECT * FROM RANGE(5)"))
+          sql = Some("SELECT * FROM RANGE(5)")
+        )
         createTable(
           name = "curr.tableB",
           datasetType = proto.DatasetType.TABLE,
-          sql = Some("SELECT * FROM STREAM curr.tableA"))
+          sql = Some("SELECT * FROM STREAM curr.tableA")
+        )
         createView(name = "viewC", sql = "SELECT * FROM curr.tableB")
         createTable(
           name = "other.tableD",
           datasetType = proto.DatasetType.MATERIALIZED_VIEW,
-          sql = Some("SELECT * FROM viewC"))
+          sql = Some("SELECT * FROM viewC")
+        )
       }
 
-      registerPipelineDatasets(pipeline)
+      registerGraphElements(pipeline)
       startPipelineAndWaitForCompletion(graphId)
 
       // Check that each table has the correct data.
@@ -484,6 +514,49 @@ class SparkDeclarativePipelinesServerSuite
       // Verify the graph is removed
       val graphsAfter = sessionHolder.dataflowGraphRegistry.getAllDataflowGraphs
       assert(graphsAfter.isEmpty, "Graph should be removed after drop")
+    }
+  }
+
+  test("create sink") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      val pipeline = new TestPipelineDefinition(graphId) {
+        createSink(
+          name = "mySink",
+          format = "kafka",
+          options = Map("kafka.bootstrap.servers" -> "host1:port1,host2:port2")
+        )
+        createFlow(
+          "sinkFlow",
+          "mySink",
+          sc.Relation
+            .newBuilder()
+            .setSql(sc.SQL.newBuilder().setQuery("SELECT * FROM STREAM curr.tableA").build())
+            .build()
+        )
+      }
+      registerGraphElements(pipeline)
+
+      val definition =
+        getDefaultSessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(graphId)
+      val graph = definition.toDataflowGraph.resolve()
+
+      assert(graph.flows.size == 1)
+      assert(graph.tables.isEmpty)
+      assert(graph.views.isEmpty)
+      assert(graph.sinks.isEmpty)
+
+      val sink = graph.sinks.head
+      assert(sink.identifier.unquotedString == "spark_catalog.default.mySink")
+      assert(sink.format == "kafka")
+      assert(sink.options == Map("kafka.bootstrap.servers" -> "host1:port1,host2:port2"))
+
+      val sinkFlow =
+        graph.resolvedFlows
+          .filter(_.identifier.unquotedString == "spark_catalog.default.mySink")
+          .head
+      assert(sinkFlow.inputs == Set())
+      assert(sinkFlow.destinationIdentifier.unquotedString == "spark_catalog.default.mySink")
     }
   }
 }

@@ -836,7 +836,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     import session.implicits._
 
     val graph1 =
-      new DataflowGraph(flows = Seq.empty, tables = Seq.empty, views = Seq.empty)
+      new DataflowGraph(flows = Seq.empty, tables = Seq.empty, sinks = Seq.empty, views = Seq.empty)
     val graph2 = new TestGraphRegistrationContext(spark) {
       registerFlow(
         "a",
