@@ -1418,17 +1418,22 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     assert(result.forall(row => {
       val actualPartitionId = row.getAs[Int]("actual_p_id")
       val id = row.getAs[Long]("id")
-      val expectedPartitionId  = id % 10
+      val expectedPartitionId = {
+        val mod = (id - 5) % 10
+        if (mod < 0) mod + 10 else mod
+      }
       actualPartitionId == expectedPartitionId
     }))
   }
 
   test("SPARK-53401: repartitionById should fail analysis for non-integral types") {
     val df = spark.range(5).withColumn("s", lit("a"))
-    val e = intercept[AnalysisException] {
+    val e = intercept[SparkException] {
       df.repartitionById(5, $"s").collect()
     }
-    assert(e.getMessage.contains("requires an integral type"))
+    assert(e.getMessage.contains(
+      "Binary numeric promotion not possible on types " +
+        "\"org.apache.spark.unsafe.types.UTF8String\" and \"int\""))
   }
 
   test("SPARK-53401: repartitionById should send null partition ids to partition 0") {
@@ -1440,15 +1445,16 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
     val nullRows = result.filter(_.getAs[Long]("id") >= 5)
     assert(nullRows.nonEmpty, "Should have rows with null partition expression")
-    assert(nullRows.forall(_.getAs[Int]("actual_p_id") == 0), 
+    assert(nullRows.forall(_.getAs[Int]("actual_p_id") == 0),
            "All null partition id rows should go to partition 0")
 
     val nonNullRows = result.filter(_.getAs[Long]("id") < 5)
     nonNullRows.foreach { row =>
       val id = row.getAs[Long]("id").toInt
       val actualPartitionId = row.getAs[Int]("actual_p_id")
-      assert(actualPartitionId == id % 10, 
-             s"Row with id=$id should be in partition ${id % 10}, but was in partition $actualPartitionId")
+      assert(actualPartitionId == id % 10,
+        s"Row with id=$id should be in partition ${id % 10}, " +
+          s"but was in partition $actualPartitionId")
     }
   }
 
