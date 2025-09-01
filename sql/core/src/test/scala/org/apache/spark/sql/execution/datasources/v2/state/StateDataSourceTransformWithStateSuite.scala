@@ -1013,7 +1013,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
    * the state data.
    */
   testWithChangelogCheckpointingEnabled("snapshotStartBatchId with transformWithState") {
-    // TODO: Remove this line once snapshotStartBatchId is supported for V2 format
+    // TODO(SPARK-53332): Remove this line once snapshotStartBatchId is supported for V2 format
     assume(SQLConf.get.stateStoreCheckpointFormatVersion == 1)
     class AggregationStatefulProcessor extends StatefulProcessor[Int, (Int, Long), (Int, Long)] {
       @transient protected var _countState: ValueState[Long] = _
