@@ -1556,7 +1556,7 @@ class Dataset[T] private[sql](
    * @since 4.1.0
    */
   def repartitionById(numPartitions: Int, partitionIdExpr: Column): Dataset[T] = {
-    withTypedPlan {
+    withSameTypedPlan {
       RepartitionByExpression(
         partitionExpressions = Seq(partitionIdExpr.expr),
         child = logicalPlan,

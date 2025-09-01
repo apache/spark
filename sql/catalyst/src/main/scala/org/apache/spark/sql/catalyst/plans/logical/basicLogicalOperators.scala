@@ -1873,7 +1873,6 @@ trait HasPartitionExpressions extends SQLConfHelper {
   protected def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
     RoundRobinPartitioning(numPartitions)
   } else if (directPassthrough) {
-    // Direct passthrough mode - use partition ID expression directly
     require(partitionExpressions.length == 1,
       s"Direct passthrough partitioning can only be used with a single partition expression, " +
         s"but found ${partitionExpressions.length} expressions")
@@ -1881,7 +1880,7 @@ trait HasPartitionExpressions extends SQLConfHelper {
   } else {
     val (sortOrder, nonSortOrder) = partitionExpressions.partition(_.isInstanceOf[SortOrder])
     require(sortOrder.isEmpty || nonSortOrder.isEmpty,
-      s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of " +
+      s"${getClass.getSimpleName} expects that either all its `partitionExpressions` are of type " +
         "`SortOrder`, which means `RangePartitioning`, or none of them are `SortOrder`, which " +
         "means `HashPartitioning`. In this case we have:" +
         s"""
@@ -1933,16 +1932,6 @@ object RepartitionByExpression {
       child: LogicalPlan,
       numPartitions: Int): RepartitionByExpression = {
     RepartitionByExpression(partitionExpressions, child, Some(numPartitions))
-  }
-
-  // 4-parameter apply method for backwards compatibility with existing case matches
-  def apply(
-      partitionExpressions: Seq[Expression],
-      child: LogicalPlan,
-      optNumPartitions: Option[Int],
-      optAdvisoryPartitionSize: Option[Long]): RepartitionByExpression = {
-    RepartitionByExpression(partitionExpressions, child, optNumPartitions,
-      optAdvisoryPartitionSize, directPassthrough = false)
   }
 
   def unapply(r: RepartitionByExpression)

@@ -2799,27 +2799,6 @@ class DataFrameSuite extends QueryTest
     assert(result.rdd.getNumPartitions == numPartitions)
   }
 
-  test("SPARK-53401: repartitionById - should fail when partition ID is null") {
-    val df = spark.range(10).withColumn("p_id",
-      when(col("id") < 5, col("id")).otherwise(lit(null).cast("long"))
-    )
-    val repartitioned = df.repartitionById(5, $"p_id")
-
-    val e = intercept[SparkException] {
-      repartitioned.collect()
-    }
-    assert(e.getCause.isInstanceOf[IllegalArgumentException])
-    assert(e.getCause.getMessage.contains("The partition ID expression must not be null."))
-  }
-
-  test("SPARK-53401: repartitionById - should fail analysis for non-integral types") {
-    val df = spark.range(5).withColumn("s", lit("a"))
-    val e = intercept[AnalysisException] {
-      df.repartitionById(5, $"s").collect()
-    }
-    // Should fail with type error from DirectShufflePartitionID expression
-    assert(e.getMessage.contains("requires an integral type"))
-  }
 }
 
 case class GroupByKey(a: Int, b: Int)

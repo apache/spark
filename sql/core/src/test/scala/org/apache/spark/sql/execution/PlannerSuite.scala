@@ -1412,16 +1412,23 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     val repartitioned = df.repartitionById(10, $"id" - 5)
 
     // With pmod, negative values should be converted to positive values
-    // (-5) pmod 10 = 5, (-4) pmod 10 = 6, etc.
+    // (-5) pmod 10 = 5, (-4) pmod 10 = 6
     val result = repartitioned.withColumn("actual_p_id", spark_partition_id()).collect()
 
-    // Verify that all rows are assigned to valid partitions (0-9)
     assert(result.forall(row => {
       val actualPartitionId = row.getAs[Int]("actual_p_id")
       val id = row.getAs[Long]("id")
       val expectedPartitionId  = id % 10
       actualPartitionId == expectedPartitionId
     }))
+  }
+
+  test("SPARK-53401: repartitionById should fail analysis for non-integral types") {
+    val df = spark.range(5).withColumn("s", lit("a"))
+    val e = intercept[AnalysisException] {
+      df.repartitionById(5, $"s").collect()
+    }
+    assert(e.getMessage.contains("requires an integral type"))
   }
 
   test("SPARK-53401: repartitionById should send null partition ids to partition 0") {
@@ -1490,11 +1497,9 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-53401: join with id pass-through and hash partitioning requires shuffle") {
-    // Create one DataFrame with id pass-through partitioning
     val df1 = spark.range(100).select($"id" % 10 as "key", $"id" as "v1")
       .repartitionById(10, $"key")
 
-    // Create another DataFrame with regular hash partitioning
     val df2 = spark.range(100).select($"id" % 10 as "key", $"id" as "v2")
       .repartition($"key")
 
