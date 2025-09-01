@@ -743,6 +743,41 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
     )
   }
 
+  test("groupby and rollup works with internal datasets") {
+    val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
+      sqlText = s"""
+                   |CREATE MATERIALIZED VIEW src AS
+                   |    SELECT id
+                   |    FROM range(3);
+                   |
+                   |CREATE MATERIALIZED VIEW groupby_result AS
+                   |    SELECT id, SUM(id) AS sum_id, COUNT(*) AS cnt
+                   |    FROM src
+                   |    GROUP BY id;
+                   |
+                   |CREATE MATERIALIZED VIEW rollup_result AS
+                   |    SELECT id, SUM(id) AS sum_id, COUNT(*) AS cnt
+                   |    FROM src
+                   |    GROUP BY ROLLUP(id);
+                   |""".stripMargin
+    )
+
+    startPipelineAndWaitForCompletion(unresolvedDataflowGraph)
+
+    val groupbyDf = spark.table(fullyQualifiedIdentifier("groupby_result"))
+    val rollupDf = spark.table(fullyQualifiedIdentifier("rollup_result"))
+
+    // groupBy should have exactly one row per id [0,1,2]
+    assert(groupbyDf.select("id").collect().map(_.getLong(0)).toSet == Set(0L, 1L, 2L))
+
+    // rollup should have all groupBy rows + one extra (the total row)
+    assert(rollupDf.count() == groupbyDf.count() + 1)
+
+    // verify the rollup total row: id IS NULL, sum_id=3, cnt=3
+    val totalRow = rollupDf.filter("id IS NULL").collect().head
+    assert(totalRow.getLong(1) == 3L && totalRow.getLong(2) == 3L)
+  }
+
   test("Empty streaming table definition is disallowed") {
     val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
       sqlText = "CREATE STREAMING TABLE st;"
