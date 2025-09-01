@@ -6293,6 +6293,28 @@ object functions {
     Column.internalFn("timestampadd", lit(unit), quantity, ts)
 
   /**
+   * Returns the difference between two times, measured in specified units. Throws a
+   * SparkIllegalArgumentException, in case the specified unit is not supported.
+   *
+   * @param unit
+   *   A STRING representing the unit of the time difference. Supported units are: "HOUR",
+   *   "MINUTE", "SECOND", "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
+   * @param start
+   *   A starting TIME.
+   * @param end
+   *   An ending TIME.
+   * @return
+   *   The difference between `end` and `start` times, measured in specified units.
+   * @note
+   *   If any of the inputs is `NULL`, the result is `NULL`.
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def time_diff(unit: Column, start: Column, end: Column): Column = {
+    Column.fn("time_diff", unit, start, end)
+  }
+
+  /**
    * Returns `time` truncated to the `unit`.
    *
    * @param unit
