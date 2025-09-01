@@ -525,14 +525,13 @@ class ScalarArrowUDFTestsMixin:
             pa.field("value", pa.binary(), nullable=False),
             pa.field("metadata", pa.binary(), nullable=False, metadata={b"variant": b"true"}),
         ]
-        variant_type = pa.struct(fields)
 
         @arrow_udf("variant")
         def scalar_f(v: pa.Array) -> pa.Array:
             assert isinstance(v, pa.Array)
             v = pa.array([bytes([12, i.as_py()]) for i in v], pa.binary())
             m = pa.array([bytes([1, 0, 0]) for i in v], pa.binary())
-            return pa.StructArray.from_arrays([v, m], type=variant_type)
+            return pa.StructArray.from_arrays([v, m], fields=fields)
 
         @arrow_udf("variant")
         def iter_f(it: Iterator[pa.Array]) -> Iterator[pa.Array]:
@@ -540,7 +539,7 @@ class ScalarArrowUDFTestsMixin:
                 assert isinstance(v, pa.Array)
                 v = pa.array([bytes([12, i.as_py()]) for i in v])
                 m = pa.array([bytes([1, 0, 0]) for i in v])
-                yield pa.StructArray.from_arrays([v, m], type=variant_type)
+                yield pa.StructArray.from_arrays([v, m], fields=fields)
 
         df = self.spark.range(0, 10)
         expected = [Row(l=i) for i in range(10)]
