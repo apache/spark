@@ -1948,11 +1948,15 @@ class TransformWithStateInPySparkTests(TransformWithStateInPySparkTestsMixin, Re
     pass
 
 
-class TransformWithStateInPandasWithCheckpointV2Tests(TransformWithStateInPandasWithCheckpointV2TestsMixin, ReusedSQLTestCase):
+class TransformWithStateInPandasWithCheckpointV2Tests(
+    TransformWithStateInPandasWithCheckpointV2TestsMixin, ReusedSQLTestCase
+):
     pass
 
 
-class TransformWithStateInPySparkWithCheckpointV2Tests(TransformWithStateInPySparkWithCheckpointV2TestsMixin, ReusedSQLTestCase):
+class TransformWithStateInPySparkWithCheckpointV2Tests(
+    TransformWithStateInPySparkWithCheckpointV2TestsMixin, ReusedSQLTestCase
+):
     pass
 
 
