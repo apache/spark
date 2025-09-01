@@ -217,35 +217,22 @@ case class CachedRDDBuilder(
   val cachedName = tableName.map(n => s"In-memory table $n")
     .getOrElse(StringUtils.abbreviate(cachedPlan.toString, 1024))
 
-  def cachedColumnBuffers: RDD[CachedBatch] = {
+  def cachedColumnBuffers: RDD[CachedBatch] = synchronized {
     if (_cachedColumnBuffers == null) {
-      synchronized {
-        if (_cachedColumnBuffers == null) {
-          _cachedColumnBuffers = buildBuffers()
-        }
-      }
+      _cachedColumnBuffers = buildBuffers()
     }
     _cachedColumnBuffers
   }
 
-  def clearCache(blocking: Boolean = false): Unit = {
+  def clearCache(blocking: Boolean = false): Unit = synchronized {
     if (_cachedColumnBuffers != null) {
-      synchronized {
-        if (_cachedColumnBuffers != null) {
-          _cachedColumnBuffers.unpersist(blocking)
-          _cachedColumnBuffers = null
-        }
-      }
+      _cachedColumnBuffers.unpersist(blocking)
+      _cachedColumnBuffers = null
     }
   }
 
-  def isCachedColumnBuffersLoaded: Boolean = {
-    if (_cachedColumnBuffers != null) {
-      synchronized {
-        return _cachedColumnBuffers != null && isCachedRDDLoaded
-      }
-    }
-    false
+  def isCachedColumnBuffersLoaded: Boolean = synchronized {
+    _cachedColumnBuffers != null && isCachedRDDLoaded
   }
 
   private def isCachedRDDLoaded: Boolean = {
