@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, KEY, VALUE}
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, VariableResolution}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
@@ -107,7 +108,14 @@ case class SetCommand(kv: Option[(String, Option[String])])
           Seq()
         }
         if (varName.nonEmpty && varName.length <= 3) {
-          if (sparkSession.sessionState.analyzer.lookupVariable(varName).isDefined) {
+          val variableResolution = new VariableResolution(
+            sparkSession.sessionState.analyzer.catalogManager.tempVariableManager
+          )
+          val variable = variableResolution.lookupVariable(
+            nameParts = varName,
+            resolvingExecuteImmediate = AnalysisContext.get.isExecuteImmediate
+          )
+          if (variable.isDefined) {
             throw new AnalysisException(
               errorClass = "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
               messageParameters = Map("variableName" -> toSQLId(varName)))

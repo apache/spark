@@ -19,16 +19,14 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverTag
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, NamedExpression, OuterReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.internal.SQLConf
 
 object DeduplicateRelations extends Rule[LogicalPlan] {
-  val PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION =
-    TreeNodeTag[Unit]("project_for_expression_id_deduplication")
-
   type ExprIdMap = mutable.HashMap[Class[_], mutable.HashSet[Long]]
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
@@ -59,7 +57,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
       case e @ Except(left, right, _) if !e.duplicateResolved && noMissingInput(right) =>
         e.copy(right = dedupRight(left, right))
       // Only after we finish by-name resolution for Union
-      case u: Union if !u.byName && !u.duplicateResolved =>
+      case u: Union if !u.byName && !u.duplicatesResolvedBetweenBranches =>
         val unionWithChildOutputsDeduplicated =
           DeduplicateUnionChildOutput.deduplicateOutputPerChild(u)
         // Use projection-based de-duplication for Union to avoid breaking the checkpoint sharing
@@ -76,7 +74,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
                   }
                   val project = Project(projectList, child)
                   project.setTagValue(
-                    DeduplicateRelations.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION,
+                    ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION,
                     ()
                   )
                   project
@@ -244,8 +242,17 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
       if (planChanged) {
         if (planWithNewSubquery.childrenResolved) {
           val planWithNewChildren = planWithNewSubquery.withNewChildren(newChildren.toSeq)
+          val childrenOutputLookup = AttributeSet.fromAttributeSets(newChildren.map(_.outputSet))
+          val childrenOutput = newChildren.flatMap(_.output)
           val attrMap = AttributeMap(plan.children.flatMap(_.output)
-            .zip(newChildren.flatMap(_.output)).filter { case (a1, a2) => a1.exprId != a2.exprId })
+            .zip(childrenOutput).filter { case (a1, a2) => a1.exprId != a2.exprId })
+          val preventDeduplicationIfOldExprIdStillExists =
+            conf.getConf(SQLConf.DONT_DEDUPLICATE_EXPRESSION_IF_EXPR_ID_IN_OUTPUT)
+          val missingAttributeMap = AttributeMap(attrMap.filter {
+            case (oldAttribute, _) =>
+              !preventDeduplicationIfOldExprIdStillExists ||
+              !childrenOutputLookup.contains(oldAttribute)
+          })
           if (attrMap.isEmpty) {
             planWithNewChildren
           } else {
@@ -289,7 +296,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
                   rightDeserializer = newRightDes, leftGroup = newLeftGroup,
                   rightGroup = newRightGroup, leftAttr = newLeftAttr, rightAttr = newRightAttr,
                   leftOrder = newLeftOrder, rightOrder = newRightOrder)
-              case _ => planWithNewChildren.rewriteAttrs(attrMap)
+              case _ => planWithNewChildren.rewriteAttrs(missingAttributeMap)
             }
           }
         } else {

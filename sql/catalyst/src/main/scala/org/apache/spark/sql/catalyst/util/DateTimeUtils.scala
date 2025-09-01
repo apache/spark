@@ -509,6 +509,30 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Returns time truncated to the unit specified by the level.
+   */
+  private def parseTimeTruncLevel(level: UTF8String): ChronoUnit = {
+    assert(level != null, "Truncation level cannot be null")
+    level.toString.toUpperCase(Locale.ROOT) match {
+      case "HOUR" => ChronoUnit.HOURS
+      case "MINUTE" => ChronoUnit.MINUTES
+      case "SECOND" => ChronoUnit.SECONDS
+      case "MILLISECOND" => ChronoUnit.MILLIS
+      case "MICROSECOND" => ChronoUnit.MICROS
+      case _ =>
+        throw QueryExecutionErrors.invalidTimeUnitError("time_trunc", level.toString)
+    }
+  }
+
+  /**
+   * Returns time truncated to the unit specified by the level. Trunc level is parsed directly to
+   * corresponding ChronoUnits. Note that only levels from 'MICROSECOND' to 'HOUR' are supported.
+   */
+  def timeTrunc(level: UTF8String, nanos: Long): Long = {
+    localTimeToNanos(nanosToLocalTime(nanos).truncatedTo(parseTimeTruncLevel(level)))
+  }
+
+  /**
    * Returns the truncate level, could be from TRUNC_TO_MICROSECOND to TRUNC_TO_YEAR,
    * or TRUNC_INVALID, TRUNC_INVALID means unsupported truncate level.
    */
@@ -680,6 +704,56 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Subtracts two time values expressed as nanoseconds since 00:00:00, and returns
+   * the difference in microseconds.
+   *
+   * @param endNanos The end time as nanoseconds since the midnight, exclusive
+   * @param startNanos The end time as nanoseconds since the midnight, inclusive
+   * @return The difference in microseconds between local time corresponded to the input
+   *         `endNanos` and `startNanos`.
+   */
+  def subtractTimes(endNanos: Long, startNanos: Long): Long = {
+    (endNanos - startNanos) / NANOS_PER_MICROS
+  }
+
+  // Helper method to get the number of nanoseconds per the given time unit, used for calculating
+  // the difference between two time values (timediff function). Supported units are: MICROSECOND,
+  // MILLISECOND, SECOND, MINUTE, HOUR.
+  private def getNanosPerTimeUnit(unit: UTF8String, functionName: String): Long = {
+    val unitStr = unit.toString
+    unitStr.toUpperCase(Locale.ROOT) match {
+      case "MICROSECOND" =>
+        NANOS_PER_MICROS
+      case "MILLISECOND" =>
+        NANOS_PER_MILLIS
+      case "SECOND" =>
+        NANOS_PER_SECOND
+      case "MINUTE" =>
+        NANOS_PER_SECOND * SECONDS_PER_MINUTE
+      case "HOUR" =>
+        NANOS_PER_SECOND * SECONDS_PER_MINUTE * MINUTES_PER_HOUR
+      case _ =>
+        throw QueryExecutionErrors.invalidTimeUnitError(functionName, unitStr)
+    }
+  }
+
+  /**
+   * Gets the difference between two time values in the specified unit.
+   *
+   * @param unit Specifies the interval units in which to express the difference between
+   *             the two time parameters. Supported units are: MICROSECOND, MILLISECOND,
+   *             SECOND, MINUTE, HOUR.
+   * @param startNanos A time value expressed as nanoseconds since the start of the day,
+   *                   which the function subtracts from `endNanos`.
+   * @param endNanos A time value expressed as nanoseconds since the start of the day,
+   *                 from which the function subtracts `startNanos`.
+   * @return The time span between two time values, in the units specified.
+   */
+  def timeDiff(unit: UTF8String, startNanos: Long, endNanos: Long): Long = {
+    (endNanos - startNanos) / getNanosPerTimeUnit(unit, "time_diff")
+  }
+
+  /**
    * Subtracts two timestamps expressed as microseconds since 1970-01-01 00:00:00Z, and returns
    * the difference in microseconds between local timestamps at the given time zone.
    *
@@ -826,12 +900,67 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Makes a timestamp without time zone from a date and a local time.
    *
-   * @param days The number of days since the epoch. 1970-01-01.
+   * @param days The number of days since the epoch 1970-01-01.
    *             Negative numbers represent earlier days.
    * @param nanos The number of nanoseconds within the day since the midnight.
-   * @return The number of microseconds since the epoch of 1970-01-01 00:00:00Z.
+   * @return The number of microseconds since the epoch 1970-01-01 00:00:00Z.
    */
   def makeTimestampNTZ(days: Int, nanos: Long): Long = {
     localDateTimeToMicros(LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos)))
+  }
+
+  /**
+   * Makes a timestamp from a date and a local time.
+   *
+   * @param days The number of days since the epoch 1970-01-01.
+   *             Negative numbers represent earlier days.
+   * @param nanos The number of nanoseconds within the day since the midnight.
+   * @param zoneId The time zone ID at which the operation is performed.
+   * @return The number of microseconds since the epoch 1970-01-01 00:00:00Z.
+   */
+  def makeTimestamp(days: Int, nanos: Long, zoneId: ZoneId): Long = {
+    val ldt = LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos))
+    instantToMicros(ldt.atZone(zoneId).toInstant)
+  }
+
+  /**
+   * Makes a timestamp from a date and a local time with timezone string.
+   *
+   * @param days The number of days since the epoch 1970-01-01.
+   *             Negative numbers represent earlier days.
+   * @param nanos The number of nanoseconds within the day since the midnight.
+   * @param timezone The time zone string.
+   * @return The number of microseconds since the epoch 1970-01-01 00:00:00Z.
+   */
+  def makeTimestamp(days: Int, nanos: Long, timezone: UTF8String): Long = {
+    val zoneId = getZoneId(timezone.toString)
+    makeTimestamp(days, nanos, zoneId)
+  }
+
+  /**
+   * Adds a day-time interval to a time.
+   *
+   * @param time A time in nanoseconds.
+   * @param timePrecision The number of digits of the fraction part of time.
+   * @param interval A day-time interval in microseconds.
+   * @param intervalEndField The rightmost field which the interval comprises of.
+   *                         Valid values: 0 (DAY), 1 (HOUR), 2 (MINUTE), 3 (SECOND).
+   * @param targetPrecision The number of digits of the fraction part of the resulting time.
+   * @return A time value in nanoseconds or throw an arithmetic overflow
+   *         if the result out of valid time range [00:00, 24:00).
+   */
+  def timeAddInterval(
+      time: Long,
+      timePrecision: Int,
+      interval: Long,
+      intervalEndField: Byte,
+      targetPrecision: Int): Long = {
+    val result = MathUtils.addExact(time, MathUtils.multiplyExact(interval, NANOS_PER_MICROS))
+    if (0 <= result && result < NANOS_PER_DAY) {
+      truncateTimeToPrecision(result, targetPrecision)
+    } else {
+      throw QueryExecutionErrors.timeAddIntervalOverflowError(
+        time, timePrecision, interval, intervalEndField)
+    }
   }
 }

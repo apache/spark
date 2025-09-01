@@ -33,9 +33,7 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.python.streaming.TransformWithStateInPySparkStateServer
-import org.apache.spark.sql.execution.streaming.ImplicitGroupingKeyTracker
-import org.apache.spark.sql.execution.streaming.QueryInfoImpl
-import org.apache.spark.sql.execution.streaming.StatefulProcessorHandleImplBase
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{ImplicitGroupingKeyTracker, QueryInfoImpl, StatefulProcessorHandleImplBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.ListState
 import org.apache.spark.sql.streaming.MapState

@@ -159,6 +159,13 @@ private[spark] object History {
       .doubleConf
       .createWithDefault(0.7d)
 
+  val EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED =
+    ConfigBuilder("spark.history.fs.eventLog.rolling.onDemandLoadEnabled")
+      .doc("Whether to look up rolling event log locations on demand manner before listing files.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val DRIVER_LOG_CLEANER_ENABLED = ConfigBuilder("spark.history.fs.driverlog.cleaner.enabled")
     .version("3.0.0")
     .doc("Specifies whether the History Server should periodically clean up driver logs from " +
@@ -227,6 +234,7 @@ private[spark] object History {
       "exceeded, then the oldest applications will be removed from the cache. If an application " +
       "is not in the cache, it will have to be loaded from disk if it is accessed from the UI.")
     .intConf
+    .checkValue(v => v > 0, "The number of applications to retain should be a positive integer.")
     .createWithDefault(50)
 
   val PROVIDER = ConfigBuilder("spark.history.provider")

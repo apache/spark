@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.catalog.SQLFunction.parseDefault
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, Expression, ExpressionInfo, LateralSubquery, NamedArgumentExpression, NamedExpression, OuterReference, ScalarSubquery, UpCast}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter, LateralJoin, LocalRelation, LogicalPlan, NamedParametersSupport, OneRowRelation, Project, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter, LateralJoin, LogicalPlan, NamedParametersSupport, OneRowRelation, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -1002,7 +1002,13 @@ class SessionCatalog(
       objectType = Some("VIEW"),
       objectName = Some(metadata.qualifiedName)
     )
-    val parsedPlan = SQLConf.withExistingConf(View.effectiveSQLConf(viewConfigs, isTempView)) {
+    val parsedPlan = SQLConf.withExistingConf(
+      View.effectiveSQLConf(
+        configs = viewConfigs,
+        isTempView = isTempView,
+        createSparkVersion = metadata.createVersion
+      )
+    ) {
         CurrentOrigin.withOrigin(origin) {
           parser.parseQuery(viewText)
         }
@@ -1030,7 +1036,11 @@ class SessionCatalog(
         // Note that, the column names may have duplication, e.g. `CREATE VIEW v(x, y) AS
         // SELECT 1 col, 2 col`. We need to make sure that the matching attributes have the same
         // number of duplications, and pick the corresponding attribute by ordinal.
-        val viewConf = View.effectiveSQLConf(metadata.viewSQLConfigs, isTempView)
+        val viewConf = View.effectiveSQLConf(
+          configs = metadata.viewSQLConfigs,
+          isTempView = isTempView,
+          createSparkVersion = metadata.createVersion
+        )
         val normalizeColName: String => String = if (viewConf.caseSensitiveAnalysis) {
           identity
         } else {
@@ -1479,7 +1489,12 @@ class SessionCatalog(
     requireDbExists(db)
     val newFuncDefinition = funcDefinition.copy(identifier = qualifiedIdent)
     if (!functionExists(qualifiedIdent)) {
-      externalCatalog.createFunction(db, newFuncDefinition)
+      try {
+        externalCatalog.createFunction(db, newFuncDefinition)
+      } catch {
+        case e: FunctionAlreadyExistsException if ignoreIfExists =>
+          // Ignore the exception as ignoreIfNotExists is set to true
+      }
     } else if (!ignoreIfExists) {
       throw new FunctionAlreadyExistsException(Seq(db, qualifiedIdent.funcName))
     }
@@ -1637,6 +1652,7 @@ class SessionCatalog(
     // Use captured SQL configs when parsing a SQL function.
     val conf = new SQLConf()
     function.getSQLConfigs.foreach { case (k, v) => conf.settings.put(k, v) }
+    Analyzer.trySetAnsiValue(conf)
     SQLConf.withExistingConf(conf) {
       val inputParam = function.inputParam
       val returnType = function.getScalarFuncReturnType
@@ -1668,7 +1684,14 @@ class SessionCatalog(
 
         paddedInput.zip(param.fields).map {
           case (expr, param) =>
-            Alias(Cast(expr, param.dataType), param.name)(
+            // Add outer references to all resolved attributes and outer references in the function
+            // input. Outer references also need to be wrapped because the function input may
+            // already contain outer references.
+            val outer = expr.transform {
+              case a: Attribute if a.resolved => OuterReference(a)
+              case o: OuterReference => OuterReference(o)
+            }
+            Alias(Cast(outer, param.dataType), param.name)(
               qualifier = qualifier,
               // mark the alias as function input
               explicitMetadata = Some(metaForFuncInputAlias))
@@ -1676,8 +1699,7 @@ class SessionCatalog(
       }.getOrElse(Nil)
 
       val body = if (query.isDefined) ScalarSubquery(query.get) else expression.get
-      Project(Alias(Cast(body, returnType), funcName)() :: Nil,
-        Project(inputs, LocalRelation(inputs.flatMap(_.references))))
+      Project(Alias(Cast(body, returnType), funcName)() :: Nil, Project(inputs, OneRowRelation()))
     }
   }
 

@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.columnar
 
 import com.esotericsoftware.kryo.{DefaultSerializer, Kryo, Serializer => KryoSerializer}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
-import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.network.util.JavaUtils
@@ -267,42 +266,29 @@ case class CachedRDDBuilder(
   private val materializedPartitions = cachedPlan.session.sparkContext.longAccumulator
 
   val cachedName = tableName.map(n => s"In-memory table $n")
-    .getOrElse(StringUtils.abbreviate(cachedPlan.toString, 1024))
+    .getOrElse(Utils.abbreviate(cachedPlan.toString, 1024))
 
   val supportsColumnarInput: Boolean = {
     cachedPlan.supportsColumnar &&
       serializer.supportsColumnarInput(cachedPlan.output)
   }
 
-  def cachedColumnBuffers: RDD[CachedBatch] = {
+  def cachedColumnBuffers: RDD[CachedBatch] = synchronized {
     if (_cachedColumnBuffers == null) {
-      synchronized {
-        if (_cachedColumnBuffers == null) {
-          _cachedColumnBuffers = buildBuffers()
-        }
-      }
+      _cachedColumnBuffers = buildBuffers()
     }
     _cachedColumnBuffers
   }
 
-  def clearCache(blocking: Boolean = false): Unit = {
+  def clearCache(blocking: Boolean = false): Unit = synchronized {
     if (_cachedColumnBuffers != null) {
-      synchronized {
-        if (_cachedColumnBuffers != null) {
-          _cachedColumnBuffers.unpersist(blocking)
-          _cachedColumnBuffers = null
-        }
-      }
+      _cachedColumnBuffers.unpersist(blocking)
+      _cachedColumnBuffers = null
     }
   }
 
-  def isCachedColumnBuffersLoaded: Boolean = {
-    if (_cachedColumnBuffers != null) {
-      synchronized {
-        return _cachedColumnBuffers != null && isCachedRDDLoaded
-      }
-    }
-    false
+  def isCachedColumnBuffersLoaded: Boolean = synchronized {
+    _cachedColumnBuffers != null && isCachedRDDLoaded
   }
 
   private def isCachedRDDLoaded: Boolean = {

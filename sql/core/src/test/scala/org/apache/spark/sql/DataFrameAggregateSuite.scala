@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.sql.{Date, Timestamp}
 import java.time.{Duration, LocalDateTime, LocalTime, Period}
 
 import scala.util.Random
@@ -25,9 +24,6 @@ import scala.util.Random
 import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Abs, BoundReference, Literal}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{ApproxTopK, Sum}
 import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
@@ -2368,7 +2364,7 @@ class DataFrameAggregateSuite extends QueryTest
             val expectedAnswer = Row(null)
             assertDecimalSumOverflow(df2, ansiEnabled, fnName, expectedAnswer)
 
-            val decStr = "1" + "0" * 19
+            val decStr = "1" + "0".repeat(19)
             val d1 = spark.range(0, 12, 1, 1)
             val d2 = d1.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(aggFn($"d"))
             assertDecimalSumOverflow(d2, ansiEnabled, fnName, expectedAnswer)
@@ -2572,339 +2568,6 @@ class DataFrameAggregateSuite extends QueryTest
     }
   }
 
-  test("SPARK-52515: test of 1 parameter") {
-    val res = sql(
-      "SELECT approx_top_k(expr) FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"
-    )
-    checkAnswer(res, Row(Seq(Row(0, 2), Row(4, 2), Row(1, 2), Row(2, 1), Row(3, 1))))
-  }
-
-  test("SPARK-52515: test of 2 parameter") {
-    val res = sql(
-      "SELECT approx_top_k(expr, 2) " +
-        "FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);")
-    checkAnswer(res, Row(Seq(Row("c", 4), Row("d", 2))))
-  }
-
-  test("SPARK-52515: test of 3 parameter") {
-    val res = sql(
-      "SELECT approx_top_k(expr, 10, 100) FROM VALUES (0), (1), (1), (2), (2), (2) AS tab(expr);"
-    )
-    checkAnswer(res, Row(Seq(Row(2, 3), Row(1, 2), Row(0, 1))))
-  }
-
-  test("SPARK-52515: test of Integer type") {
-    val res = sql(
-      "SELECT approx_top_k(expr) FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"
-    )
-    checkAnswer(res, Row(Seq(Row(0, 2), Row(4, 2), Row(1, 2), Row(2, 1), Row(3, 1))))
-  }
-
-  test("SPARK-52515: test of String type") {
-    val res = sql(
-      "SELECT approx_top_k(expr, 2)" +
-        "FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);")
-    checkAnswer(res, Row(Seq(Row("c", 4), Row("d", 2))))
-  }
-
-  test("SPARK-52515: test of Boolean type") {
-    Seq(true, true, false, true, true, false, false).toDF("expr").createOrReplaceTempView("t_bool")
-    val res = sql("SELECT approx_top_k(expr, 1) FROM t_bool;")
-    checkAnswer(res, Row(Seq(Row(true, 4))))
-  }
-
-  test("SPARK-52515: test of Byte type") {
-    val res = sql(
-      "SELECT approx_top_k(expr, 2) " +
-        "FROM VALUES cast(0 AS BYTE), cast(0 AS BYTE), cast(1 AS BYTE), cast(1 AS BYTE), " +
-        "cast(2 AS BYTE), cast(3 AS BYTE), cast(4 AS BYTE), cast(4 AS BYTE) AS tab(expr);")
-    checkAnswer(res, Row(Seq(Row(0, 2), Row(4, 2))))
-  }
-
-  test("SPARK-52515: test of Short type") {
-    val res = sql(
-      "SELECT approx_top_k(expr, 2) " +
-        "FROM VALUES cast(0 AS SHORT), cast(0 AS SHORT), cast(1 AS SHORT), cast(1 AS SHORT), " +
-        "cast(2 AS SHORT), cast(3 AS SHORT), cast(4 AS SHORT), cast(4 AS SHORT) AS tab(expr);")
-    checkAnswer(res, Row(Seq(Row(0, 2), Row(4, 2))))
-  }
-
-  test("SPARK-52515: test of Long type") {
-    val res = sql(
-      "SELECT approx_top_k(expr, 2) " +
-        "FROM VALUES cast(0 AS LONG), cast(0 AS LONG), cast(1 AS LONG), cast(1 AS LONG), " +
-        "cast(2 AS LONG), cast(3 AS LONG), cast(4 AS LONG), cast(4 AS LONG) AS tab(expr);")
-    checkAnswer(res, Row(Seq(Row(0, 2), Row(4, 2))))
-  }
-
-  test("SPARK-52515: test of Float type") {
-    val res = sql(
-      "SELECT approx_top_k(expr) " +
-        "FROM VALUES cast(0.0 AS FLOAT), cast(0.0 AS FLOAT), " +
-        "cast(1.0 AS FLOAT), cast(1.0 AS FLOAT), " +
-        "cast(2.0 AS FLOAT), cast(3.0 AS FLOAT), " +
-        "cast(4.0 AS FLOAT), cast(4.0 AS FLOAT) AS tab(expr);")
-    checkAnswer(res, Row(Seq(Row(0.0, 2), Row(1.0, 2), Row(4.0, 2), Row(2.0, 1), Row(3.0, 1))))
-  }
-
-  test("SPARK-52515: test of Double type") {
-    val res = sql(
-      "SELECT approx_top_k(expr, 2) " +
-        "FROM VALUES cast(0.0 AS DOUBLE), cast(0.0 AS DOUBLE), " +
-        "cast(1.0 AS DOUBLE), cast(1.0 AS DOUBLE), " +
-        "cast(2.0 AS DOUBLE), cast(3.0 AS DOUBLE), " +
-        "cast(4.0 AS DOUBLE), cast(4.0 AS DOUBLE) AS tab(expr);")
-    checkAnswer(res, Row(Seq(Row(0.0, 2), Row(4.0, 2))))
-  }
-
-  test("SPARK-52515: test of Date type") {
-    val res = sql(
-      "SELECT approx_top_k(expr, 2) " +
-        "FROM VALUES cast('2023-01-01' AS DATE), cast('2023-01-01' AS DATE), " +
-        "cast('2023-01-02' AS DATE), cast('2023-01-02' AS DATE), " +
-        "cast('2023-01-03' AS DATE), cast('2023-01-04' AS DATE), " +
-        "cast('2023-01-05' AS DATE), cast('2023-01-05' AS DATE) AS tab(expr);")
-    checkAnswer(
-      res,
-      Row(Seq(Row(Date.valueOf("2023-01-02"), 2), Row(Date.valueOf("2023-01-01"), 2))))
-  }
-
-  test("SPARK-52515: test of Timestamp type") {
-    val res = sql(
-      "SELECT approx_top_k(expr, 2) " +
-        "FROM VALUES cast('2023-01-01 00:00:00' AS TIMESTAMP), " +
-        "cast('2023-01-01 00:00:00' AS TIMESTAMP), " +
-        "cast('2023-01-02 00:00:00' AS TIMESTAMP), " +
-        "cast('2023-01-02 00:00:00' AS TIMESTAMP), " +
-        "cast('2023-01-03 00:00:00' AS TIMESTAMP), " +
-        "cast('2023-01-04 00:00:00' AS TIMESTAMP), " +
-        "cast('2023-01-05 00:00:00' AS TIMESTAMP), " +
-        "cast('2023-01-05 00:00:00' AS TIMESTAMP) AS tab(expr);")
-    checkAnswer(
-      res,
-      Row(Seq(Row(Timestamp.valueOf("2023-01-02 00:00:00"), 2),
-        Row(Timestamp.valueOf("2023-01-05 00:00:00"), 2))))
-  }
-
-  test("SPARK-52515: test of Timestamp_ntz type") {
-    val res = sql(
-      "SELECT approx_top_k(expr, 2) " +
-        "FROM VALUES TIMESTAMP_NTZ'2023-01-01 00:00:00', " +
-        "TIMESTAMP_NTZ'2023-01-01 00:00:00', " +
-        "TIMESTAMP_NTZ'2023-01-02 00:00:00', " +
-        "TIMESTAMP_NTZ'2023-01-02 00:00:00', " +
-        "TIMESTAMP_NTZ'2023-01-03 00:00:00', " +
-        "TIMESTAMP_NTZ'2023-01-04 00:00:00', " +
-        "TIMESTAMP_NTZ'2023-01-05 00:00:00', " +
-        "TIMESTAMP_NTZ'2023-01-05 00:00:00' AS tab(expr);")
-    checkAnswer(
-      res,
-      Row(Seq(Row(LocalDateTime.of(2023, 1, 5, 0, 0), 2),
-        Row(LocalDateTime.of(2023, 1, 1, 0, 0), 2))))
-  }
-
-  test("SPARK-52515: test of Decimal type") {
-    val res = sql(
-      "SELECT approx_top_k(expr, 2) AS top_k_result " +
-        "FROM VALUES (0.0), (0.0), (0.0) ,(1.0), (1.0), (2.0), (3.0), (4.0) AS tab(expr);")
-    checkAnswer(
-      res,
-      Row(Seq(Row(new java.math.BigDecimal("0.0"), 3), Row(new java.math.BigDecimal("1.0"), 2))))
-  }
-
-  test("SPARK-52515: test of Decimal(4, 1) type") {
-    val res = sql(
-      "SELECT approx_top_k(expr, 2) AS top_k_result " +
-        "FROM VALUES CAST(0.0 AS DECIMAL(4, 1)), CAST(0.0 AS DECIMAL(4, 1)), " +
-        "CAST(0.0 AS DECIMAL(4, 1)), CAST(1.0 AS DECIMAL(4, 1)), " +
-        "CAST(1.0 AS DECIMAL(4, 1)), CAST(2.0 AS DECIMAL(4, 1)), " +
-        "CAST(3.0 AS DECIMAL(4, 1)), CAST(4.0 AS DECIMAL(4, 1)) AS tab(expr);")
-    checkAnswer(
-      res,
-      Row(Seq(Row(new java.math.BigDecimal("0.0"), 3), Row(new java.math.BigDecimal("1.0"), 2))))
-  }
-
-  test("SPARK-52515: test of Decimal(10, 2) type") {
-    val res = sql(
-      "SELECT approx_top_k(expr, 2) AS top_k_result " +
-        "FROM VALUES CAST(0.0 AS DECIMAL(10, 2)), CAST(0.0 AS DECIMAL(10, 2)), " +
-        "CAST(0.0 AS DECIMAL(10, 2)), CAST(1.0 AS DECIMAL(10, 2)), " +
-        "CAST(1.0 AS DECIMAL(10, 2)), CAST(2.0 AS DECIMAL(10, 2)), " +
-        "CAST(3.0 AS DECIMAL(10, 2)), CAST(4.0 AS DECIMAL(10, 2)) AS tab(expr);")
-    checkAnswer(
-      res,
-      Row(Seq(Row(new java.math.BigDecimal("0.00"), 3), Row(new java.math.BigDecimal("1.00"), 2))))
-  }
-
-  test("SPARK-52515: test of Decimal(20, 3) type") {
-    val res = sql(
-      "SELECT approx_top_k(expr, 2) AS top_k_result " +
-        "FROM VALUES CAST(0.0 AS DECIMAL(20, 3)), CAST(0.0 AS DECIMAL(20, 3)), " +
-        "CAST(0.0 AS DECIMAL(20, 3)), CAST(1.0 AS DECIMAL(20, 3)), " +
-        "CAST(1.0 AS DECIMAL(20, 3)), CAST(2.0 AS DECIMAL(20, 3)), " +
-        "CAST(3.0 AS DECIMAL(20, 3)), CAST(4.0 AS DECIMAL(20, 3)) AS tab(expr);")
-    checkAnswer(
-      res,
-      Row(Seq(Row(new java.math.BigDecimal("0.000"), 3),
-        Row(new java.math.BigDecimal("1.000"), 2))))
-  }
-
-  test("SPARK-52515: invalid k value") {
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        sql("SELECT approx_top_k(expr, 0) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
-      },
-      condition = "APPROX_TOP_K_NON_POSITIVE_ARG",
-      parameters = Map("argName" -> "`k`", "argValue" -> "0")
-    )
-  }
-
-  test("SPARK-52515: invalid k value > Int.MaxValue") {
-    withSQLConf("spark.sql.ansi.enabled" -> true.toString) {
-      val k: Long = Int.MaxValue + 1L
-      checkError(
-        exception = intercept[SparkArithmeticException] {
-          sql(s"SELECT approx_top_k(expr, $k) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
-        },
-        condition = "CAST_OVERFLOW",
-        parameters = Map(
-          "value" -> (k.toString + "L"),
-          "sourceType" -> "\"BIGINT\"",
-          "targetType" -> "\"INT\"",
-          "ansiConfig" -> "\"spark.sql.ansi.enabled\""
-        )
-      )
-    }
-  }
-
-  test("SPARK-52515: invalid k value null") {
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        sql("SELECT approx_top_k(expr, NULL) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
-      },
-      condition = "APPROX_TOP_K_NULL_ARG",
-      parameters = Map("argName" -> "`k`")
-    )
-  }
-
-  test("SPARK-52515: invalid maxItemsTracked value") {
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        sql("SELECT approx_top_k(expr, 10, -1) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
-      },
-      condition = "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K",
-      parameters = Map("maxItemsTracked" -> "-1", "k" -> "10")
-    )
-  }
-
-  test("SPARK-52515: invalid maxItemsTracked value null") {
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        sql("SELECT approx_top_k(expr, 10, NULL) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
-      },
-      condition = "APPROX_TOP_K_NULL_ARG",
-      parameters = Map("argName" -> "`maxItemsTracked`")
-    )
-  }
-
-  test("SPARK-52515: invalid maxItemsTracked < k") {
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        sql("SELECT approx_top_k(expr, 10, 5) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
-      },
-      condition = "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K",
-      parameters = Map("maxItemsTracked" -> "5", "k" -> "10")
-    )
-  }
-
-  test("SPARK-52515: invalid maxItemsTracked > 1000000") {
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        sql("SELECT approx_top_k(expr, 10, 1000001) FROM VALUES (0), (1) AS tab(expr);").collect()
-      },
-      condition = "APPROX_TOP_K_MAX_ITEMS_TRACKED_EXCEEDS_LIMIT",
-      parameters = Map("maxItemsTracked" -> "1000001", "limit" -> "1000000")
-    )
-  }
-
-  test("SPARK-52515: invalid item type array") {
-    checkError(
-      exception = intercept[ExtendedAnalysisException] {
-        sql("SELECT approx_top_k(expr) FROM VALUES array(1, 2), array(2, 3) AS tab(expr);")
-      },
-      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-      parameters = Map(
-        "sqlExpr" -> "\"approx_top_k(expr, 5, 10000)\"",
-        "msg" -> "array columns are not supported",
-        "hint" -> ""
-      ),
-      queryContext = Array(ExpectedContext("approx_top_k(expr)", 7, 24))
-    )
-  }
-
-  test("SPARK-52515: invalid item type struct") {
-    sql("SELECT struct(1, 2) AS expr").createOrReplaceTempView("struct_table")
-    checkError(
-      exception = intercept[ExtendedAnalysisException] {
-        sql("SELECT approx_top_k(expr) FROM struct_table;")
-      },
-      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-      parameters = Map(
-        "sqlExpr" -> "\"approx_top_k(expr, 5, 10000)\"",
-        "msg" -> "struct columns are not supported",
-        "hint" -> ""
-      ),
-      queryContext = Array(ExpectedContext("approx_top_k(expr)", 7, 24))
-    )
-  }
-
-  test("SPARK-52515: invalid item type map") {
-    checkError(
-      exception = intercept[ExtendedAnalysisException] {
-        sql("SELECT approx_top_k(expr) FROM VALUES map('red', 1, 'green', 2) AS tab(expr);")
-      },
-      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-      parameters = Map(
-        "sqlExpr" -> "\"approx_top_k(expr, 5, 10000)\"",
-        "msg" -> "map columns are not supported",
-        "hint" -> ""
-      ),
-      queryContext = Array(ExpectedContext("approx_top_k(expr)", 7, 24))
-    )
-  }
-
-  test("SPARK-52515: does not count NULL values") {
-    val res = sql(
-      "SELECT approx_top_k(expr, 2)" +
-        "FROM VALUES 'a', 'a', 'b', 'b', 'b', NULL, NULL, NULL AS tab(expr);")
-    checkAnswer(res, Row(Seq(Row("b", 3), Row("a", 2))))
-  }
-
-  test("SPARK-52515: Accepts literal and foldable inputs") {
-    val agg = new ApproxTopK(
-      expr = BoundReference(0, LongType, nullable = true),
-      k = Abs(Literal(10)),
-      maxItemsTracked = Abs(Literal(-10))
-    )
-    assert(agg.checkInputDataTypes().isSuccess)
-  }
-
-  test("SPARK-52515: Fail if parameters are not foldable") {
-    val badAgg = new ApproxTopK(
-      expr = BoundReference(0, LongType, nullable = true),
-      k = Sum(BoundReference(1, LongType, nullable = true)),
-      maxItemsTracked = Literal(10)
-    )
-    assert(badAgg.checkInputDataTypes().isFailure)
-
-    val badAgg2 = new ApproxTopK(
-      expr = BoundReference(0, LongType, nullable = true),
-      k = Literal(10),
-      maxItemsTracked = Sum(BoundReference(1, LongType, nullable = true))
-    )
-    assert(badAgg2.checkInputDataTypes().isFailure)
-  }
-
   test("SPARK-52626: Support group by Time column") {
     val ts1 = "15:00:00"
     val ts2 = "22:00:00"
@@ -2930,6 +2593,13 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(
       res,
       Row(LocalTime.of(22, 1, 0), LocalTime.of(3, 0, 0)))
+  }
+
+  test("SPARK-53155: global lower aggregation should not be removed") {
+    val df = emptyTestData
+      .groupBy().agg(lit(1).as("col1"), lit(2).as("col2"), lit(3).as("col3"))
+      .groupBy($"col1").agg(max("col1"))
+    checkAnswer(df, Seq(Row(1, 1)))
   }
 }
 

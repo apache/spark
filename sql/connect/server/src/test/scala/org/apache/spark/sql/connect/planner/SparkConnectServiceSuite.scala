@@ -920,7 +920,11 @@ class SparkConnectServiceSuite
     }
     def onError(throwable: Throwable): Unit = {
       assert(executeHolder.eventsManager.hasCanceled.isEmpty)
-      assert(executeHolder.eventsManager.hasError.isDefined)
+      Eventually.eventually(EVENT_WAIT_TIMEOUT) {
+        assert(
+          executeHolder.eventsManager.hasError.isDefined,
+          s"Error has not been recorded in events manager within $EVENT_WAIT_TIMEOUT")
+      }
     }
     def onCompleted(producedRowCount: Option[Long] = None): Unit = {
       assert(executeHolder.eventsManager.getProducedRowCount == producedRowCount)

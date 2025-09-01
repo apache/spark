@@ -1,81 +1,80 @@
 == Physical Plan ==
-TakeOrderedAndProject (77)
-+- * HashAggregate (76)
-   +- Exchange (75)
-      +- * HashAggregate (74)
-         +- Union (73)
-            :- * Project (24)
-            :  +- * Filter (23)
-            :     +- Window (22)
-            :        +- * Sort (21)
-            :           +- Window (20)
-            :              +- * Sort (19)
-            :                 +- Exchange (18)
-            :                    +- * HashAggregate (17)
-            :                       +- Exchange (16)
-            :                          +- * HashAggregate (15)
-            :                             +- * Project (14)
-            :                                +- * BroadcastHashJoin Inner BuildRight (13)
-            :                                   :- * Project (11)
-            :                                   :  +- * BroadcastHashJoin Inner BuildLeft (10)
-            :                                   :     :- BroadcastExchange (5)
-            :                                   :     :  +- * Project (4)
-            :                                   :     :     +- * Filter (3)
-            :                                   :     :        +- * ColumnarToRow (2)
-            :                                   :     :           +- Scan parquet spark_catalog.default.web_sales (1)
-            :                                   :     +- * Project (9)
-            :                                   :        +- * Filter (8)
-            :                                   :           +- * ColumnarToRow (7)
-            :                                   :              +- Scan parquet spark_catalog.default.web_returns (6)
-            :                                   +- ReusedExchange (12)
-            :- * Project (48)
-            :  +- * Filter (47)
-            :     +- Window (46)
-            :        +- * Sort (45)
-            :           +- Window (44)
-            :              +- * Sort (43)
-            :                 +- Exchange (42)
-            :                    +- * HashAggregate (41)
-            :                       +- Exchange (40)
-            :                          +- * HashAggregate (39)
-            :                             +- * Project (38)
-            :                                +- * BroadcastHashJoin Inner BuildRight (37)
-            :                                   :- * Project (35)
-            :                                   :  +- * BroadcastHashJoin Inner BuildLeft (34)
-            :                                   :     :- BroadcastExchange (29)
-            :                                   :     :  +- * Project (28)
-            :                                   :     :     +- * Filter (27)
-            :                                   :     :        +- * ColumnarToRow (26)
-            :                                   :     :           +- Scan parquet spark_catalog.default.catalog_sales (25)
-            :                                   :     +- * Project (33)
-            :                                   :        +- * Filter (32)
-            :                                   :           +- * ColumnarToRow (31)
-            :                                   :              +- Scan parquet spark_catalog.default.catalog_returns (30)
-            :                                   +- ReusedExchange (36)
-            +- * Project (72)
-               +- * Filter (71)
-                  +- Window (70)
-                     +- * Sort (69)
-                        +- Window (68)
-                           +- * Sort (67)
-                              +- Exchange (66)
-                                 +- * HashAggregate (65)
-                                    +- Exchange (64)
-                                       +- * HashAggregate (63)
-                                          +- * Project (62)
-                                             +- * BroadcastHashJoin Inner BuildRight (61)
-                                                :- * Project (59)
-                                                :  +- * BroadcastHashJoin Inner BuildLeft (58)
-                                                :     :- BroadcastExchange (53)
-                                                :     :  +- * Project (52)
-                                                :     :     +- * Filter (51)
-                                                :     :        +- * ColumnarToRow (50)
-                                                :     :           +- Scan parquet spark_catalog.default.store_sales (49)
-                                                :     +- * Project (57)
-                                                :        +- * Filter (56)
-                                                :           +- * ColumnarToRow (55)
-                                                :              +- Scan parquet spark_catalog.default.store_returns (54)
-                                                +- ReusedExchange (60)
+TakeOrderedAndProject (76)
++- * HashAggregate (75)
+   +- * HashAggregate (74)
+      +- Union (73)
+         :- * Project (24)
+         :  +- * Filter (23)
+         :     +- Window (22)
+         :        +- * Sort (21)
+         :           +- Window (20)
+         :              +- * Sort (19)
+         :                 +- Exchange (18)
+         :                    +- * HashAggregate (17)
+         :                       +- Exchange (16)
+         :                          +- * HashAggregate (15)
+         :                             +- * Project (14)
+         :                                +- * BroadcastHashJoin Inner BuildRight (13)
+         :                                   :- * Project (11)
+         :                                   :  +- * BroadcastHashJoin Inner BuildLeft (10)
+         :                                   :     :- BroadcastExchange (5)
+         :                                   :     :  +- * Project (4)
+         :                                   :     :     +- * Filter (3)
+         :                                   :     :        +- * ColumnarToRow (2)
+         :                                   :     :           +- Scan parquet spark_catalog.default.web_sales (1)
+         :                                   :     +- * Project (9)
+         :                                   :        +- * Filter (8)
+         :                                   :           +- * ColumnarToRow (7)
+         :                                   :              +- Scan parquet spark_catalog.default.web_returns (6)
+         :                                   +- ReusedExchange (12)
+         :- * Project (48)
+         :  +- * Filter (47)
+         :     +- Window (46)
+         :        +- * Sort (45)
+         :           +- Window (44)
+         :              +- * Sort (43)
+         :                 +- Exchange (42)
+         :                    +- * HashAggregate (41)
+         :                       +- Exchange (40)
+         :                          +- * HashAggregate (39)
+         :                             +- * Project (38)
+         :                                +- * BroadcastHashJoin Inner BuildRight (37)
+         :                                   :- * Project (35)
+         :                                   :  +- * BroadcastHashJoin Inner BuildLeft (34)
+         :                                   :     :- BroadcastExchange (29)
+         :                                   :     :  +- * Project (28)
+         :                                   :     :     +- * Filter (27)
+         :                                   :     :        +- * ColumnarToRow (26)
+         :                                   :     :           +- Scan parquet spark_catalog.default.catalog_sales (25)
+         :                                   :     +- * Project (33)
+         :                                   :        +- * Filter (32)
+         :                                   :           +- * ColumnarToRow (31)
+         :                                   :              +- Scan parquet spark_catalog.default.catalog_returns (30)
+         :                                   +- ReusedExchange (36)
+         +- * Project (72)
+            +- * Filter (71)
+               +- Window (70)
+                  +- * Sort (69)
+                     +- Window (68)
+                        +- * Sort (67)
+                           +- Exchange (66)
+                              +- * HashAggregate (65)
+                                 +- Exchange (64)
+                                    +- * HashAggregate (63)
+                                       +- * Project (62)
+                                          +- * BroadcastHashJoin Inner BuildRight (61)
+                                             :- * Project (59)
+                                             :  +- * BroadcastHashJoin Inner BuildLeft (58)
+                                             :     :- BroadcastExchange (53)
+                                             :     :  +- * Project (52)
+                                             :     :     +- * Filter (51)
+                                             :     :        +- * ColumnarToRow (50)
+                                             :     :           +- Scan parquet spark_catalog.default.store_sales (49)
+                                             :     +- * Project (57)
+                                             :        +- * Filter (56)
+                                             :           +- * ColumnarToRow (55)
+                                             :              +- Scan parquet spark_catalog.default.store_returns (54)
+                                             +- ReusedExchange (60)
 
 
 (1) Scan parquet spark_catalog.default.web_sales
@@ -129,7 +128,7 @@ Join condition: None
 Output [6]: [ws_item_sk#1, ws_quantity#3, ws_net_paid#4, ws_sold_date_sk#6, wr_return_quantity#10, wr_return_amt#11]
 Input [9]: [ws_item_sk#1, ws_order_number#2, ws_quantity#3, ws_net_paid#4, ws_sold_date_sk#6, wr_item_sk#8, wr_order_number#9, wr_return_quantity#10, wr_return_amt#11]
 
-(12) ReusedExchange [Reuses operator id: 82]
+(12) ReusedExchange [Reuses operator id: 81]
 Output [1]: [d_date_sk#13]
 
 (13) BroadcastHashJoin [codegen id : 3]
@@ -239,7 +238,7 @@ Join condition: None
 Output [6]: [cs_item_sk#36, cs_quantity#38, cs_net_paid#39, cs_sold_date_sk#41, cr_return_quantity#44, cr_return_amount#45]
 Input [9]: [cs_item_sk#36, cs_order_number#37, cs_quantity#38, cs_net_paid#39, cs_sold_date_sk#41, cr_item_sk#42, cr_order_number#43, cr_return_quantity#44, cr_return_amount#45]
 
-(36) ReusedExchange [Reuses operator id: 82]
+(36) ReusedExchange [Reuses operator id: 81]
 Output [1]: [d_date_sk#47]
 
 (37) BroadcastHashJoin [codegen id : 10]
@@ -349,7 +348,7 @@ Join condition: None
 Output [6]: [ss_item_sk#70, ss_quantity#72, ss_net_paid#73, ss_sold_date_sk#75, sr_return_quantity#78, sr_return_amt#79]
 Input [9]: [ss_item_sk#70, ss_ticket_number#71, ss_quantity#72, ss_net_paid#73, ss_sold_date_sk#75, sr_item_sk#76, sr_ticket_number#77, sr_return_quantity#78, sr_return_amt#79]
 
-(60) ReusedExchange [Reuses operator id: 82]
+(60) ReusedExchange [Reuses operator id: 81]
 Output [1]: [d_date_sk#81]
 
 (61) BroadcastHashJoin [codegen id : 17]
@@ -417,52 +416,48 @@ Functions: []
 Aggregate Attributes: []
 Results [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 
-(75) Exchange
-Input [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
-Arguments: hashpartitioning(channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34, 5), ENSURE_REQUIREMENTS, [plan_id=10]
-
-(76) HashAggregate [codegen id : 23]
+(75) HashAggregate [codegen id : 22]
 Input [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 Keys [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 Functions: []
 Aggregate Attributes: []
 Results [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 
-(77) TakeOrderedAndProject
+(76) TakeOrderedAndProject
 Input [5]: [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 Arguments: 100, [channel#35 ASC NULLS FIRST, return_rank#33 ASC NULLS FIRST, currency_rank#34 ASC NULLS FIRST], [channel#35, item#30, return_ratio#31, return_rank#33, currency_rank#34]
 
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 1 Hosting Expression = ws_sold_date_sk#6 IN dynamicpruning#7
-BroadcastExchange (82)
-+- * Project (81)
-   +- * Filter (80)
-      +- * ColumnarToRow (79)
-         +- Scan parquet spark_catalog.default.date_dim (78)
+BroadcastExchange (81)
++- * Project (80)
+   +- * Filter (79)
+      +- * ColumnarToRow (78)
+         +- Scan parquet spark_catalog.default.date_dim (77)
 
 
-(78) Scan parquet spark_catalog.default.date_dim
+(77) Scan parquet spark_catalog.default.date_dim
 Output [3]: [d_date_sk#13, d_year#104, d_moy#105]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,12), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
-(79) ColumnarToRow [codegen id : 1]
+(78) ColumnarToRow [codegen id : 1]
 Input [3]: [d_date_sk#13, d_year#104, d_moy#105]
 
-(80) Filter [codegen id : 1]
+(79) Filter [codegen id : 1]
 Input [3]: [d_date_sk#13, d_year#104, d_moy#105]
 Condition : ((((isnotnull(d_year#104) AND isnotnull(d_moy#105)) AND (d_year#104 = 2001)) AND (d_moy#105 = 12)) AND isnotnull(d_date_sk#13))
 
-(81) Project [codegen id : 1]
+(80) Project [codegen id : 1]
 Output [1]: [d_date_sk#13]
 Input [3]: [d_date_sk#13, d_year#104, d_moy#105]
 
-(82) BroadcastExchange
+(81) BroadcastExchange
 Input [1]: [d_date_sk#13]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=10]
 
 Subquery:2 Hosting operator id = 25 Hosting Expression = cs_sold_date_sk#41 IN dynamicpruning#7
 

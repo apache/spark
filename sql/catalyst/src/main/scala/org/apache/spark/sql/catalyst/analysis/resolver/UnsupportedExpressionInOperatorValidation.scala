@@ -19,16 +19,7 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, Generator, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{
-  Aggregate,
-  BaseEvalPythonUDTF,
-  CollectMetrics,
-  Generate,
-  LateralJoin,
-  LogicalPlan,
-  Project,
-  Window
-}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 object UnsupportedExpressionInOperatorValidation {

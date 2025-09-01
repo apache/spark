@@ -28,6 +28,25 @@ select * from data order by 3;
 -- sort by ordinal
 select * from data sort by 1 desc;
 
+-- SPARK-52565: Enforce ordinal resolution before other sort order expressions
+set spark.sql.prioritizeOrdinalResolutionInSort.enabled=true;
+SELECT a FROM data ORDER BY 2, b;
+SELECT a FROM data ORDER BY b, 2;
+SELECT a FROM data ORDER BY 'b', 2;
+SELECT a FROM data ORDER BY `b`, 2;
+SELECT a FROM data ORDER BY a, 2;
+SELECT a FROM data ORDER BY b, 3;
+SELECT a, a + 1 FROM data ORDER BY b, 3;
+
+set spark.sql.prioritizeOrdinalResolutionInSort.enabled=false;
+SELECT a FROM data ORDER BY 2, b;
+SELECT a FROM data ORDER BY b, 2;
+SELECT a FROM data ORDER BY 'b', 2;
+SELECT a FROM data ORDER BY `b`, 2;
+SELECT a FROM data ORDER BY a, 2;
+SELECT a FROM data ORDER BY b, 3;
+SELECT a, a + 1 FROM data ORDER BY b, 3;
+
 -- turn off order by ordinal
 set spark.sql.orderByOrdinal=false;
 

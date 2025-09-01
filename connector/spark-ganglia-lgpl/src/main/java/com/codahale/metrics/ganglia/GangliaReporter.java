@@ -295,7 +295,7 @@ public class GangliaReporter extends ScheduledReporter {
             reportMetered(sanitizedName, timer, group, "calls");
         } catch (GangliaException e) {
             LOGGER.warn("Unable to report timer {}", e,
-                MDC.of(LogKeys.METRIC_NAME$.MODULE$, sanitizedName));
+                MDC.of(LogKeys.METRIC_NAME, sanitizedName));
         }
     }
 
@@ -306,7 +306,7 @@ public class GangliaReporter extends ScheduledReporter {
             reportMetered(sanitizedName, meter, group, "events");
         } catch (GangliaException e) {
             LOGGER.warn("Unable to report meter {}", e,
-                MDC.of(LogKeys.METRIC_NAME$.MODULE$, name));
+                MDC.of(LogKeys.METRIC_NAME, name));
         }
     }
 
@@ -338,7 +338,7 @@ public class GangliaReporter extends ScheduledReporter {
             announceIfEnabled(P999, sanitizedName, group, snapshot.get999thPercentile(), "");
         } catch (GangliaException e) {
             LOGGER.warn("Unable to report histogram {}", e,
-                MDC.of(LogKeys.METRIC_NAME$.MODULE$, sanitizedName));
+                MDC.of(LogKeys.METRIC_NAME, sanitizedName));
         }
     }
 
@@ -349,7 +349,7 @@ public class GangliaReporter extends ScheduledReporter {
             announce(prefix(sanitizedName, COUNT.getCode()), group, Long.toString(counter.getCount()), GMetricType.DOUBLE, "");
         } catch (GangliaException e) {
             LOGGER.warn("Unable to report counter {}", e,
-                MDC.of(LogKeys.METRIC_NAME$.MODULE$, name));
+                MDC.of(LogKeys.METRIC_NAME, name));
         }
     }
 
@@ -363,7 +363,7 @@ public class GangliaReporter extends ScheduledReporter {
             announce(name(prefix, sanitizedName), group, value, type, "");
         } catch (GangliaException e) {
             LOGGER.warn("Unable to report gauge {}", e,
-                MDC.of(LogKeys.METRIC_NAME$.MODULE$, name));
+                MDC.of(LogKeys.METRIC_NAME, name));
         }
     }
 

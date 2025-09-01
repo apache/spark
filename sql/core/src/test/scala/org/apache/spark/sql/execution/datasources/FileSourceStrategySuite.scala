@@ -683,7 +683,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
       case (name, size) =>
         val file = new File(tempDir, name)
         assert(file.getParentFile.exists() || Utils.createDirectory(file.getParentFile))
-        util.stringToFile(file, "*" * size)
+        util.stringToFile(file, "*".repeat(size))
     }
 
     val df = spark.read

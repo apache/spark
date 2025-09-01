@@ -20,7 +20,7 @@ import java.io.{EOFException, File, FileOutputStream, StringWriter}
 import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDateTime}
+import java.time.{Instant, LocalDateTime, Year}
 import java.util.TimeZone
 import java.util.concurrent.ConcurrentHashMap
 import javax.xml.stream.{XMLOutputFactory, XMLStreamException}
@@ -30,15 +30,15 @@ import scala.collection.mutable
 import scala.io.Source
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FSDataInputStream
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
 
-import org.apache.spark.{DebugFilesystem, SparkException}
+import org.apache.spark.{DebugFilesystem, SparkConf, SparkException}
 import org.apache.spark.io.ZStdCompressionCodec
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode, YearUDT}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UDTEncoder
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.catalyst.xml.{IndentingXMLStreamWriter, XmlOptions}
@@ -51,6 +51,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 class XmlSuite
     extends QueryTest
@@ -59,7 +60,12 @@ class XmlSuite
     with TestXmlData {
   import testImplicits._
 
-  private val resDir = "test-data/xml-resources/"
+  protected val legacyParserEnabled: Boolean = false
+
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set("spark.sql.xml.legacyXMLParser.enabled", legacyParserEnabled.toString)
+
+  protected val resDir = "test-data/xml-resources/"
 
   private var tempDir: Path = _
 
@@ -214,7 +220,7 @@ class XmlSuite
         .select("year")
         .collect()
     }
-    ExceptionUtils.getRootCause(exception).isInstanceOf[UnsupportedCharsetException]
+    Utils.getRootCause(exception).isInstanceOf[UnsupportedCharsetException]
     assert(exception.getMessage.contains("1-9588-osi"))
   }
 
@@ -333,21 +339,37 @@ class XmlSuite
       .option("columnNameOfCorruptRecord", "_malformed_records")
       .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
     val cars = carsDf.collect()
-    assert(cars.length === 3)
 
-    val malformedRowOne = carsDf.cache().select("_malformed_records").first().get(0).toString
-    val malformedRowTwo = carsDf.cache().select("_malformed_records").take(2).last.get(0).toString
-    val expectedMalformedRowOne = "<ROW><year>2012</year><make>Tesla</make><model>>S" +
-      "<comment>No comment</comment></ROW>"
-    val expectedMalformedRowTwo = "<ROW></year><make>Ford</make><model>E350</model>model></model>" +
-      "<comment>Go get one now they are going fast</comment></ROW>"
+    if (legacyParserEnabled) {
+      assert(cars.length === 3)
+      val malformedRows = carsDf.cache().filter($"_malformed_records".isNotNull)
+      val malformedRowOne = malformedRows.select("_malformed_records").first().get(0).toString
+      val malformedRowTwo = malformedRows.select("_malformed_records").take(2).last.get(0).toString
+      val expectedMalformedRowOne = "<ROW><year>2012</year><make>Tesla</make><model>>S" +
+        "<comment>No comment</comment></ROW>"
+      val expectedMalformedRowTwo = "<ROW></year><make>Ford</make><model>E350</model>" +
+        "model></model><comment>Go get one now they are going fast</comment></ROW>"
+      assert(
+        malformedRowOne.replaceAll("\\s", "") === expectedMalformedRowOne.replaceAll("\\s", ""))
+      assert(
+        malformedRowTwo.replaceAll("\\s", "") === expectedMalformedRowTwo.replaceAll("\\s", ""))
 
-    assert(malformedRowOne.replaceAll("\\s", "") === expectedMalformedRowOne.replaceAll("\\s", ""))
-    assert(malformedRowTwo.replaceAll("\\s", "") === expectedMalformedRowTwo.replaceAll("\\s", ""))
-    assert(cars(2)(0) === null)
-    assert(cars(0).toSeq.takeRight(3) === Seq(null, null, null))
-    assert(cars(1).toSeq.takeRight(3) === Seq(null, null, null))
-    assert(cars(2).toSeq.takeRight(3) === Seq("Chevy", "Volt", 2015))
+      val validRows = carsDf.cache().filter($"_malformed_records".isNull)
+      checkAnswer(validRows, Seq(Row(null, "Chevy", "Volt", 2015)))
+    } else {
+      // Memory efficient parser skips parsing data once malformed-ness is detected.
+      assert(cars.length === 2)
+
+      // Memory efficient parser will put the whole file into _malformed_records column
+      val malformedRows = carsDf.cache().filter($"_malformed_records".isNotNull)
+      assert(
+        malformedRows.first().getString(0).startsWith("<?xml version=\"1.0\"?>")
+          && malformedRows.first().getString(0).endsWith("</ROWSET>\n")
+      )
+
+      val validRows = carsDf.cache().filter($"_malformed_records".isNull)
+      checkAnswer(validRows, Seq(Row(null, "Chevy", "Volt", 2015)))
+    }
   }
 
   test("DSL test with empty file and known schema") {
@@ -1073,9 +1095,15 @@ class XmlSuite
       .xml(getTestResourcePath(resDir + "books-malformed-attributes.xml"))
       .collect()
 
-    assert(results.length === 2)
-    assert(results(0)(0) === "bk111")
-    assert(results(1)(0) === "bk112")
+    if (legacyParserEnabled) {
+      assert(results.length === 2)
+      assert(results(0)(0) === "bk111")
+      assert(results(1)(0) === "bk112")
+    } else {
+      // Memory efficient parser skips parsing data once malformed-ness is detected.
+      assert(results.length === 1)
+      assert(results(0)(0) === "bk111")
+    }
   }
 
   test("read utf-8 encoded file with empty tag") {
@@ -1277,6 +1305,60 @@ class XmlSuite
     val rec = basketDF.select("_malformed_records").collect()(1).getString(0)
     assert(rec.startsWith("<basket>") && rec.indexOf("<extra>123</extra>") != -1 &&
       rec.endsWith("</basket>"))
+  }
+
+  test("test XSD validation where row tag is the root tag") {
+    val basketDF = spark.read
+      .option("rowTag", "baskets")
+      .option("inferSchema", true)
+      .option("mode", "PERMISSIVE")
+      .option("rowValidationXSDPath", getTestResourcePath(resDir + "basket.xsd")
+        .replace("file:/", "/"))
+      .option("columnNameOfCorruptRecord", "_malformed_records")
+      .xml(getTestResourcePath(resDir + "basket.xml"))
+      .cache()
+    assert(basketDF.schema == new StructType().add("_malformed_records", StringType))
+  }
+
+  Seq(
+    "basket_invalid_in_the_beginning.xml",
+    "basket_invalid_in_the_middle.xml",
+    "basket_invalid_at_the_end.xml"
+  ).foreach { file =>
+    test("test XSD validation with invalid XSD records in different places, file: " + file) {
+      val basketDF = spark.read
+        .option("rowTag", "basket")
+        .option("inferSchema", true)
+        .option(
+          "rowValidationXSDPath",
+          getTestResourcePath(resDir + "basket.xsd")
+            .replace("file:/", "/")
+        )
+        .option("mode", "PERMISSIVE")
+        .option("columnNameOfCorruptRecord", "_malformed_records")
+        .xml(getTestResourcePath(resDir + file))
+        .cache()
+
+      // Should have both valid and invalid records
+      assert(basketDF.count() == 4)
+
+      // Check invalid record
+      assert(basketDF.filter($"_malformed_records".isNotNull).count() == 1)
+      val rec = basketDF
+        .filter($"_malformed_records".isNotNull)
+        .select("_malformed_records").collect()(0).getString(0)
+      assert(
+        rec.startsWith("""<basket invalid="true">""") &&
+          rec.indexOf("<extra>123</extra>") != -1 &&
+          rec.endsWith("</basket>"))
+
+      // Check valid records
+      assert(basketDF.filter($"_malformed_records".isNull).count() == 3)
+      checkAnswer(
+        basketDF.filter($"_malformed_records".isNull).select($"entry".getItem(0)),
+        Seq(Row(Row(1, "fork")), Row(Row(3, "apple")), Row(Row(5, "straw")))
+      )
+    }
   }
 
   test("test xmlDataset") {
@@ -2445,10 +2527,12 @@ class XmlSuite
   test("Timestamp type inference for a mix of TIMESTAMP_NTZ and TIMESTAMP_LTZ") {
     withTempPath { path =>
       Seq(
+        "<ROWS>",
         "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
         "<ROW><col0>2020-12-12T17:12:12.000Z</col0></ROW>",
         "<ROW><col0>2020-12-12T17:12:12.000+05:00</col0></ROW>",
-        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>"
+        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
+        "</ROWS>"
       ).toDF("data")
         .coalesce(1)
         .write.text(path.getAbsolutePath)
@@ -2480,10 +2564,12 @@ class XmlSuite
   test("Malformed records when reading TIMESTAMP_LTZ as TIMESTAMP_NTZ") {
     withTempPath { path =>
       Seq(
+        "<ROWS>",
         "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
         "<ROW><col0>2020-12-12T12:12:12.000Z</col0></ROW>",
         "<ROW><col0>2020-12-12T12:12:12.000+05:00</col0></ROW>",
-        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>"
+        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
+        "</ROWS>"
       ).toDF("data")
         .coalesce(1)
         .write.text(path.getAbsolutePath)
@@ -2831,7 +2917,7 @@ class XmlSuite
   test("Find compatible types even if inferred DecimalType is not capable of other IntegralType") {
     val mixedIntegerAndDoubleRecords = Seq(
       """<ROW><a>3</a><b>1.1</b></ROW>""",
-      s"""<ROW><a>3.1</a><b>0.${"0" * 38}1</b></ROW>""").toDS()
+      s"""<ROW><a>3.1</a><b>0.${"0".repeat(38)}1</b></ROW>""").toDS()
     val xmlDF = spark.read
       .option("prefersDecimal", "true")
       .option("rowTag", "ROW")
@@ -2851,9 +2937,8 @@ class XmlSuite
     )
   }
 
-  def bigIntegerRecords: Dataset[String] =
-    spark.createDataset(spark.sparkContext.parallelize(
-      s"""<ROW><a>1${"0" * 38}</a><b>92233720368547758070</b></ROW>""" :: Nil))(Encoders.STRING)
+  def bigIntegerRecords: Dataset[String] = spark.createDataset(spark.sparkContext.parallelize(
+    s"""<ROW><a>1${"0".repeat(38)}</a><b>92233720368547758070</b></ROW>""" :: Nil))(Encoders.STRING)
 
   test("Infer big integers correctly even when it does not fit in decimal") {
     val df = spark.read
@@ -2873,7 +2958,7 @@ class XmlSuite
 
   def floatingValueRecords: Dataset[String] =
     spark.createDataset(spark.sparkContext.parallelize(
-      s"""<ROW><a>0.${"0" * 38}1</a><b>.01</b></ROW>""" :: Nil))(Encoders.STRING)
+      s"""<ROW><a>0.${"0".repeat(38)}1</a><b>.01</b></ROW>""" :: Nil))(Encoders.STRING)
 
   test("Infer floating-point values correctly even when it does not fit in decimal") {
     val df = spark.read
@@ -2917,8 +3002,8 @@ class XmlSuite
             .xml(inputFile.toURI.toString)
             .collect()
         }
-        assert(ExceptionUtils.getRootCause(e).isInstanceOf[EOFException])
-        assert(ExceptionUtils.getRootCause(e).getMessage === "Unexpected end of input stream")
+        assert(Utils.getRootCause(e).isInstanceOf[EOFException])
+        assert(Utils.getRootCause(e).getMessage === "Unexpected end of input stream")
         val e2 = intercept[SparkException] {
           spark.read
             .option("rowTag", "ROW")
@@ -2926,8 +3011,8 @@ class XmlSuite
             .xml(inputFile.toURI.toString)
             .collect()
         }
-        assert(ExceptionUtils.getRootCause(e2).isInstanceOf[EOFException])
-        assert(ExceptionUtils.getRootCause(e2).getMessage === "Unexpected end of input stream")
+        assert(Utils.getRootCause(e2).isInstanceOf[EOFException])
+        assert(Utils.getRootCause(e2).getMessage === "Unexpected end of input stream")
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
         val result = spark.read
@@ -2936,6 +3021,13 @@ class XmlSuite
            .xml(inputFile.toURI.toString)
            .collect()
         assert(result.isEmpty)
+
+        val result2 = spark.read
+          .option("rowTag", "ROW")
+          .option("multiLine", true)
+          .xml(inputFile.toURI.toString)
+          .collect()
+        assert(result2.isEmpty)
       }
     })
     withTempPath { dir =>
@@ -3095,6 +3187,8 @@ class XmlSuite
         assert(dfRead.count() === numRecords)
         assert(XmlSuiteDebugFileSystem.totalFiles() === numFiles)
         assert(XmlSuiteDebugFileSystem.maxFiles() > 1)
+
+        XmlSuiteDebugFileSystem.reset()
       }
     }
   }
@@ -3490,6 +3584,33 @@ class XmlSuite
       }
     }
   }
+
+  test("SPARK-52695: UDT write support for xml file format") {
+    val udt = new YearUDT()
+    val encoder = UDTEncoder(udt, classOf[YearUDT])
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      // Write a dataset of Year objects
+      val df1 = spark.range(2018, 2025).map(y => Year.of(y.toInt))(encoder)
+
+      df1
+      .write
+      .mode(SaveMode.Overwrite)
+      .option("rowTag", "ROW")
+      .xml(path)
+
+      val df = spark.read
+        .option("rowTag", "ROW")
+        .xml(path)
+
+      assert(df.schema === StructType(Seq(StructField("value", LongType))))
+      checkAnswer(df, spark.range(2018, 2025).toDF("value"))
+    }
+  }
+}
+
+class XmlSuiteWithLegacyParser extends XmlSuite {
+  override protected val legacyParserEnabled: Boolean = true
 }
 
 // Mock file system that checks the number of open files

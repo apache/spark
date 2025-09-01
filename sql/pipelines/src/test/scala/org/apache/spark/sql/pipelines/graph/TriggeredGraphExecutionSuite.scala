@@ -23,14 +23,15 @@ import org.apache.spark.sql.{functions, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.pipelines.common.{FlowStatus, RunState}
 import org.apache.spark.sql.pipelines.graph.TriggeredGraphExecution.StreamState
 import org.apache.spark.sql.pipelines.logging.EventLevel
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
-class TriggeredGraphExecutionSuite extends ExecutionTest {
+class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession {
 
   /** Returns a Dataset of Longs from the table with the given identifier. */
   private def getTable(identifier: TableIdentifier): Dataset[Long] = {
@@ -119,13 +120,13 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
 
     val cFlow =
       resolvedGraph.resolvedFlows
-        .filter(_.identifier == fullyQualifiedIdentifier("c", isView = true))
+        .filter(_.identifier == fullyQualifiedIdentifier("c", isTemporaryView = true))
         .head
     assert(cFlow.inputs == Set(fullyQualifiedIdentifier("a")))
 
     val dFlow =
       resolvedGraph.resolvedFlows.filter(_.identifier == fullyQualifiedIdentifier("d")).head
-    assert(dFlow.inputs == Set(fullyQualifiedIdentifier("c", isView = true)))
+    assert(dFlow.inputs == Set(fullyQualifiedIdentifier("c", isTemporaryView = true)))
 
     val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph)
     updateContext.pipelineExecution.runPipeline()
@@ -167,7 +168,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest {
     // no flow progress event for c, as it is a temporary view
     assertNoFlowProgressEvent(
       eventBuffer = updateContext.eventBuffer,
-      identifier = fullyQualifiedIdentifier("c", isView = true),
+      identifier = fullyQualifiedIdentifier("c", isTemporaryView = true),
       flowStatus = FlowStatus.STARTING
     )
     checkAnswer(

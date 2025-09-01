@@ -42,6 +42,7 @@ from pyspark.sql.types import (
     IntegerType,
     FloatType,
     DateType,
+    TimeType,
     TimestampType,
     TimestampNTZType,
     DayTimeIntervalType,
@@ -183,6 +184,7 @@ class TypesTestsMixin:
             "a",
             datetime.date(1970, 1, 1),
             datetime.datetime(1970, 1, 1, 0, 0),
+            datetime.time(hour=1, minute=2, second=3),
             datetime.timedelta(microseconds=123456678),
             1.0,
             array.array("d", [1]),
@@ -206,6 +208,7 @@ class TypesTestsMixin:
             "string",
             "date",
             "timestamp",
+            "time(6)",
             "interval day to second",
             "double",
             "array<double>",
@@ -229,6 +232,7 @@ class TypesTestsMixin:
             "a",
             datetime.date(1970, 1, 1),
             datetime.datetime(1970, 1, 1, 0, 0),
+            datetime.time(hour=1, minute=2, second=3),
             datetime.timedelta(microseconds=123456678),
             1.0,
             [1.0],
@@ -525,7 +529,7 @@ class TypesTestsMixin:
         self.assertEqual(df.first(), Row(key=1, value="1"))
 
     def test_apply_schema(self):
-        from datetime import date, datetime, timedelta
+        from datetime import date, time, datetime, timedelta
 
         rdd = self.sc.parallelize(
             [
@@ -537,6 +541,7 @@ class TypesTestsMixin:
                     2147483647,
                     1.0,
                     date(2010, 1, 1),
+                    time(23, 23, 59, 999999),
                     datetime(2010, 1, 1, 1, 1, 1),
                     timedelta(days=1),
                     {"a": 1},
@@ -555,6 +560,7 @@ class TypesTestsMixin:
                 StructField("int1", IntegerType(), False),
                 StructField("float1", FloatType(), False),
                 StructField("date1", DateType(), False),
+                StructField("time", TimeType(), False),
                 StructField("time1", TimestampType(), False),
                 StructField("daytime1", DayTimeIntervalType(), False),
                 StructField("map1", MapType(StringType(), IntegerType(), False), False),
@@ -573,6 +579,7 @@ class TypesTestsMixin:
                 x.int1,
                 x.float1,
                 x.date1,
+                x.time,
                 x.time1,
                 x.daytime1,
                 x.map1["a"],
@@ -589,6 +596,7 @@ class TypesTestsMixin:
             2147483647,
             1.0,
             date(2010, 1, 1),
+            time(23, 23, 59, 999999),
             datetime(2010, 1, 1, 1, 1, 1),
             timedelta(days=1),
             1,
@@ -642,6 +650,17 @@ class TypesTestsMixin:
         from pyspark.sql.types import _parse_datatype_json_string
 
         unicode_collation = "UNICODE"
+        utf8_lcase_collation = "UTF8_LCASE"
+
+        standalone_string = StringType(unicode_collation)
+
+        standalone_array = ArrayType(StringType(unicode_collation))
+
+        standalone_map = MapType(StringType(utf8_lcase_collation), StringType(unicode_collation))
+
+        standalone_nested = ArrayType(
+            MapType(StringType(utf8_lcase_collation), ArrayType(StringType(unicode_collation)))
+        )
 
         simple_struct = StructType([StructField("c1", StringType(unicode_collation))])
 
@@ -713,6 +732,10 @@ class TypesTestsMixin:
         )
 
         schemas = [
+            standalone_string,
+            standalone_array,
+            standalone_map,
+            standalone_nested,
             simple_struct,
             nested_struct,
             array_in_schema,
@@ -1241,6 +1264,7 @@ class TypesTestsMixin:
             IntegerType(),
             LongType(),
             DateType(),
+            TimeType(5),
             TimestampType(),
             TimestampNTZType(),
             NullType(),
@@ -1291,6 +1315,8 @@ class TypesTestsMixin:
             _parse_datatype_string("a INT, c DOUBLE"),
         )
         self.assertEqual(VariantType(), _parse_datatype_string("variant"))
+        self.assertEqual(TimeType(5), _parse_datatype_string("time(5)"))
+        self.assertEqual(TimeType(), _parse_datatype_string("time( 6 )"))
 
     def test_tree_string(self):
         schema1 = DataType.fromDDL("c1 INT, c2 STRUCT<c3: INT, c4: STRUCT<c5: INT, c6: INT>>")
@@ -1543,6 +1569,7 @@ class TypesTestsMixin:
             .add("bin", BinaryType())
             .add("bool", BooleanType())
             .add("date", DateType())
+            .add("time", TimeType())
             .add("ts", TimestampType())
             .add("ts_ntz", TimestampNTZType())
             .add("dec", DecimalType(10, 2))
@@ -1578,6 +1605,7 @@ class TypesTestsMixin:
                 " |-- bin: binary (nullable = true)",
                 " |-- bool: boolean (nullable = true)",
                 " |-- date: date (nullable = true)",
+                " |-- time: time(6) (nullable = true)",
                 " |-- ts: timestamp (nullable = true)",
                 " |-- ts_ntz: timestamp_ntz (nullable = true)",
                 " |-- dec: decimal(10,2) (nullable = true)",
@@ -1925,6 +1953,7 @@ class TypesTestsMixin:
             BinaryType(),
             BooleanType(),
             DateType(),
+            TimeType(),
             TimestampType(),
             DecimalType(),
             DoubleType(),
@@ -2332,8 +2361,10 @@ class TypesTestsMixin:
         schema = StructType().add("a", ArrayType(DoubleType()), False).add("b", DateType())
         self.assertEqual(schema.toDDL(), "a ARRAY<DOUBLE> NOT NULL,b DATE")
 
-        schema = StructType().add("a", TimestampType()).add("b", TimestampNTZType())
-        self.assertEqual(schema.toDDL(), "a TIMESTAMP,b TIMESTAMP_NTZ")
+        schema = (
+            StructType().add("a", TimestampType()).add("b", TimestampNTZType()).add("c", TimeType())
+        )
+        self.assertEqual(schema.toDDL(), "a TIMESTAMP,b TIMESTAMP_NTZ,c TIME(6)")
 
     def test_from_ddl(self):
         self.assertEqual(DataType.fromDDL("long"), LongType())
@@ -2348,6 +2379,10 @@ class TypesTestsMixin:
         self.assertEqual(
             DataType.fromDDL("a int, v variant"),
             StructType([StructField("a", IntegerType()), StructField("v", VariantType())]),
+        )
+        self.assertEqual(
+            DataType.fromDDL("a time(6)"),
+            StructType([StructField("a", TimeType(6))]),
         )
 
     # Ensures that changing the implementation of `DataType.fromDDL` in PR #47253 does not change
@@ -2602,8 +2637,9 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
             (decimal.Decimal("1.0"), DecimalType()),
             # Binary
             (bytearray([1, 2]), BinaryType()),
-            # Date/Timestamp
+            # Date/Time/Timestamp
             (datetime.date(2000, 1, 2), DateType()),
+            (datetime.time(1, 0, 0), TimeType()),
             (datetime.datetime(2000, 1, 2, 3, 4), DateType()),
             (datetime.datetime(2000, 1, 2, 3, 4), TimestampType()),
             # Array
@@ -2666,8 +2702,9 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
             ("1.0", DecimalType(), TypeError),
             # Binary
             (1, BinaryType(), TypeError),
-            # Date/Timestamp
+            # Date/Time/Timestamp
             ("2000-01-02", DateType(), TypeError),
+            ("23:59:59", TimeType(), TypeError),
             (946811040, TimestampType(), TypeError),
             # Array
             (["1", None], ArrayType(StringType(), containsNull=False), ValueError),

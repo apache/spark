@@ -135,4 +135,8 @@ object TimeFormatter {
   def apply(isParsing: Boolean): TimeFormatter = {
     getFormatter(None, defaultLocale, isParsing)
   }
+
+  def getFractionFormatter(): TimeFormatter = {
+    new FractionTimeFormatter()
+  }
 }

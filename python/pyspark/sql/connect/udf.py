@@ -162,7 +162,6 @@ class UserDefinedFunction:
     def returnType(self) -> DataType:
         # Make sure this is called after Connect Session is initialized.
         # ``_parse_datatype_string`` accesses to Connect Server for parsing a DDL formatted string.
-        # TODO: PythonEvalType.SQL_BATCHED_UDF
         if self._returnType_placeholder is None:
             if isinstance(self._returnType, DataType):
                 self._returnType_placeholder = self._returnType
@@ -280,13 +279,15 @@ class UDFRegistration:
                 PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
                 PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
                 PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+                PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
             ]:
                 raise PySparkTypeError(
                     errorClass="INVALID_UDF_EVAL_TYPE",
                     messageParameters={
                         "eval_type": "SQL_BATCHED_UDF, SQL_ARROW_BATCHED_UDF, "
-                        "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_PANDAS_ITER_UDF or "
-                        "SQL_GROUPED_AGG_PANDAS_UDF"
+                        "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_ARROW_UDF, "
+                        "SQL_SCALAR_PANDAS_ITER_UDF, SQL_SCALAR_ARROW_ITER_UDF, "
+                        "SQL_GROUPED_AGG_PANDAS_UDF or SQL_GROUPED_AGG_ARROW_UDF"
                     },
                 )
             self.sparkSession._client.register_udf(

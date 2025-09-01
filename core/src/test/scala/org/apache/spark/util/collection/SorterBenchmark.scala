@@ -57,6 +57,15 @@ object SorterBenchmark extends BenchmarkBase {
       timer.stopTiming()
     }
 
+    benchmark.addTimerCase("Tuple-sort using Arrays.parallelSort()") { timer =>
+      val kvTupleArray = new Array[AnyRef](numElements)
+      System.arraycopy(kvTuples, 0, kvTupleArray, 0, numElements)
+      timer.startTiming()
+      util.Arrays.parallelSort(kvTupleArray, (x: AnyRef, y: AnyRef) =>
+        x.asInstanceOf[(JFloat, _)]._1.compareTo(y.asInstanceOf[(JFloat, _)]._1))
+      timer.stopTiming()
+    }
+
     // Test Sorter where each element alternates between Float and Integer, non-primitive
     val keyValues = {
       val data = new Array[AnyRef](numElements * 2)
@@ -106,11 +115,27 @@ object SorterBenchmark extends BenchmarkBase {
       timer.stopTiming()
     }
 
+    benchmark.addTimerCase("Java Arrays.parallelSort() on non-primitive int array") { timer =>
+      val intObjectArray = new Array[Integer](numElements)
+      System.arraycopy(intObjects, 0, intObjectArray, 0, numElements)
+      timer.startTiming()
+      util.Arrays.parallelSort(intObjectArray, (x: Integer, y: Integer) => x.compareTo(y))
+      timer.stopTiming()
+    }
+
     benchmark.addTimerCase("Java Arrays.sort() on primitive int array") { timer =>
       val intPrimitiveArray = new Array[Int](numElements)
       System.arraycopy(ints, 0, intPrimitiveArray, 0, numElements)
       timer.startTiming()
       util.Arrays.sort(intPrimitiveArray)
+      timer.stopTiming()
+    }
+
+    benchmark.addTimerCase("Java Arrays.parallelSort() on primitive int array") { timer =>
+      val intPrimitiveArray = new Array[Int](numElements)
+      System.arraycopy(ints, 0, intPrimitiveArray, 0, numElements)
+      timer.startTiming()
+      util.Arrays.parallelSort(intPrimitiveArray)
       timer.stopTiming()
     }
 
