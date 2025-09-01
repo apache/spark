@@ -1412,39 +1412,47 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     val repartitioned = df.repartitionById(10, $"id" - 5)
 
     // With pmod, negative values should be converted to positive values
-    // For example: (-5) pmod 10 = 5, (-4) pmod 10 = 6, etc.
+    // (-5) pmod 10 = 5, (-4) pmod 10 = 6, etc.
     val result = repartitioned.withColumn("actual_p_id", spark_partition_id()).collect()
 
     // Verify that all rows are assigned to valid partitions (0-9)
     assert(result.forall(row => {
       val actualPartitionId = row.getAs[Int]("actual_p_id")
-      actualPartitionId >= 0 && actualPartitionId < 10
+      val id = row.getAs[Long]("id")
+      val expectedPartitionId  = id % 10
+      actualPartitionId == expectedPartitionId
     }))
   }
 
-  test("SPARK-53401: repartitionById should throw an exception for null partition id") {
+  test("SPARK-53401: repartitionById should send null partition ids to partition 0") {
     val df = spark.range(10).toDF("id")
     val partitionExpr = when($"id" < 5, $"id").otherwise(lit(null))
     val repartitioned = df.repartitionById(10, partitionExpr)
 
-    val e = intercept[SparkException] {
-      repartitioned.collect()
+    val result = repartitioned.withColumn("actual_p_id", spark_partition_id()).collect()
+
+    val nullRows = result.filter(_.getAs[Long]("id") >= 5)
+    assert(nullRows.nonEmpty, "Should have rows with null partition expression")
+    assert(nullRows.forall(_.getAs[Int]("actual_p_id") == 0), 
+           "All null partition id rows should go to partition 0")
+
+    val nonNullRows = result.filter(_.getAs[Long]("id") < 5)
+    nonNullRows.foreach { row =>
+      val id = row.getAs[Long]("id").toInt
+      val actualPartitionId = row.getAs[Int]("actual_p_id")
+      assert(actualPartitionId == id % 10, 
+             s"Row with id=$id should be in partition ${id % 10}, but was in partition $actualPartitionId")
     }
-    // Pmod with null should result in an appropriate error
-    assert(e.getMessage.contains("null") || e.getMessage.contains("division by zero") ||
-           e.getMessage.contains("invalid"))
   }
 
-  test("SPARK-53401: repartitionById should throw an exception for partition id >= numPartitions") {
+  test("SPARK-53401: repartitionById should not" +
+    " throw an exception for partition id >= numPartitions") {
     val numPartitions = 10
     val df = spark.range(20).toDF("id")
     val repartitioned = df.repartitionById(numPartitions, $"id")
 
-    val e = intercept[SparkException] {
-      repartitioned.collect()
-    }
-    // ArrayIndexOutOfBoundsException for partition IDs >= numPartitions
-    assert(e.getMessage.contains("out of bounds"))
+    assert(repartitioned.collect().length == 20)
+    assert(repartitioned.rdd.getNumPartitions == numPartitions)
   }
 
   /**
