@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{CLASS_NAME, MAX_NUM_ROWS_IN_MEMORY_BUFFER}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, MAX_NUM_ROWS_IN_MEMORY_BUFFER, NUM_BYTES_MAX}
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -44,7 +44,7 @@ import org.apache.spark.util.collection.unsafe.sort.{UnsafeExternalSorter, Unsaf
  *   excessive disk writes. This may lead to a performance regression compared to the normal case
  *   of using an [[ArrayBuffer]] or [[Array]].
  */
-private[sql] class ExternalAppendOnlyUnsafeRowArray(
+class ExternalAppendOnlyUnsafeRowArray(
     taskMemoryManager: TaskMemoryManager,
     blockManager: BlockManager,
     serializerManager: SerializerManager,
@@ -52,12 +52,15 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
     initialSize: Int,
     pageSizeBytes: Long,
     numRowsInMemoryBufferThreshold: Int,
+    sizeInBytesInMemoryBufferThreshold: Long,
     numRowsSpillThreshold: Int,
-    maxSizeSpillThreshold: Long) extends Logging {
+    sizeInBytesSpillThreshold: Long) extends Logging {
 
-  def this(numRowsInMemoryBufferThreshold: Int,
-    numRowsSpillThreshold: Int,
-    maxSizeSpillThreshold: Long) = {
+  def this(
+      numRowsInMemoryBufferThreshold: Int,
+      sizeInBytesInMemoryBufferThreshold: Long,
+      numRowsSpillThreshold: Int,
+      sizeInBytesSpillThreshold: Long) = {
     this(
       TaskContext.get().taskMemoryManager(),
       SparkEnv.get.blockManager,
@@ -66,8 +69,9 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
       1024,
       SparkEnv.get.memoryManager.pageSizeBytes,
       numRowsInMemoryBufferThreshold,
+      sizeInBytesInMemoryBufferThreshold,
       numRowsSpillThreshold,
-      maxSizeSpillThreshold)
+      sizeInBytesSpillThreshold)
   }
 
   private val initialSizeOfInMemoryBuffer =
@@ -78,6 +82,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
   } else {
     null
   }
+  private var inMemoryBufferSizeInBytes = 0L
 
   private var spillableArray: UnsafeExternalSorter = _
   private var totalSpillBytes: Long = 0
@@ -116,6 +121,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
       spillableArray = null
     } else if (inMemoryBuffer != null) {
       inMemoryBuffer.clear()
+      inMemoryBufferSizeInBytes = 0;
     }
     numFieldsPerRow = 0
     numRows = 0
@@ -123,12 +129,16 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
   }
 
   def add(unsafeRow: UnsafeRow): Unit = {
-    if (numRows < numRowsInMemoryBufferThreshold) {
+    // Once spills, we will switch to UnsafeExternalSorter permanently.
+    if (spillableArray == null && numRows < numRowsInMemoryBufferThreshold &&
+      inMemoryBufferSizeInBytes < sizeInBytesSpillThreshold) {
       inMemoryBuffer += unsafeRow.copy()
+      inMemoryBufferSizeInBytes += unsafeRow.getSizeInBytes
     } else {
       if (spillableArray == null) {
         logInfo(log"Reached spill threshold of " +
           log"${MDC(MAX_NUM_ROWS_IN_MEMORY_BUFFER, numRowsInMemoryBufferThreshold)} rows, " +
+          log"or ${MDC(NUM_BYTES_MAX, sizeInBytesInMemoryBufferThreshold)} bytes, " +
           log"switching to ${MDC(CLASS_NAME, classOf[UnsafeExternalSorter].getName)}")
 
         // We will not sort the rows, so prefixComparator and recordComparator are null
@@ -142,7 +152,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
           initialSize,
           pageSizeBytes,
           numRowsSpillThreshold,
-          maxSizeSpillThreshold,
+          sizeInBytesSpillThreshold,
           false)
 
         // populate with existing in-memory buffered rows
@@ -156,6 +166,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
               false)
           )
           inMemoryBuffer.clear()
+          inMemoryBufferSizeInBytes = 0
         }
         numFieldsPerRow = unsafeRow.numFields()
       }
