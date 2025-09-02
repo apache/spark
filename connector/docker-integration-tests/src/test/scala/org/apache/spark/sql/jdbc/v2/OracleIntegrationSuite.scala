@@ -341,4 +341,6 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     assert(rows10(0).getString(0) === "amy")
     assert(rows10(1).getString(0) === "alex")
   }
+
+  override def dialectTranslatesBooleanLiteralsAsComparison: Boolean = true
 }

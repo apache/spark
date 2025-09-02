@@ -5141,6 +5141,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_JDBC_CONNECTOR_BOOLEAN_LITERAL_TRANSLATION =
+    buildConf("spark.sql.legacy.jdbc.connectorBooleanLiteralTranslation")
+      .internal()
+      .doc("When set to true, boolean literals (true, false) will be translated as " +
+        "such (true, false). When false, boolean 'true' will be translated to '1=1' and" +
+        " boolean 'false' will be translated to 'false'. Some JDBC drivers don't support" +
+        " 'WHERE true' syntax that can be the result of AQE.")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.mssqlserver.numericMapping.enabled")
       .internal()
@@ -6759,6 +6769,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def uiExplainMode: String = getConf(UI_EXPLAIN_MODE)
 
   def addSingleFileInAddFile: Boolean = getConf(LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE)
+
+  def legacyJdbcConnectorBooleanLiteralTranslation: Boolean =
+    getConf(LEGACY_JDBC_CONNECTOR_BOOLEAN_LITERAL_TRANSLATION)
 
   def legacyMsSqlServerNumericMappingEnabled: Boolean =
     getConf(LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED)

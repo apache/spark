@@ -313,6 +313,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     assert(rows10(0).getString(0) === "amy")
     assert(rows10(1).getString(0) === "alex")
   }
+
+  override def dialectTranslatesBooleanLiteralsAsComparison: Boolean = false
 }
 
 /**
