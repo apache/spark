@@ -183,6 +183,16 @@ private[spark] object HiveUtils extends Logging {
     .booleanConf
     .createWithDefault(true)
 
+  val CONVERT_METASTORE_AS_NULLABLE = buildConf("spark.sql.hive.convertMetastoreAsNullable")
+    .doc("When set to true, apply nullable to the schema when Spark use datasource APIs instead " +
+      "of Hive serde to read/write Hive tables in Parquet or ORC formats. This flag is " +
+      "effective only if `convertMetastoreParquet` or `convertMetastoreOrc` is enabled " +
+      "respectively. It's recommended to set to true, when the nullability of table schema " +
+      "is inconsistent between the metastore and the data files.")
+    .version("4.1.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val HIVE_METASTORE_SHARED_PREFIXES = buildStaticConf("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
       "that is shared between Spark SQL and a specific version of Hive. An example of classes " +
