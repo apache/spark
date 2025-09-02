@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.planner
 
+import java.util.concurrent.atomic.AtomicLong
+
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
@@ -24,12 +26,14 @@ import com.google.protobuf.ByteString
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
+import org.apache.spark.connect.proto.SetOperation.SetOpType
+import org.apache.spark.connect.proto.WithRelations.ResolutionMethod
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{analysis, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
-import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.{logical, Inner, UsingJoin}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, JoinHint, LogicalPlan, Project, SubqueryAlias, Union, UnresolvedWith}
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.Dataset
@@ -46,6 +50,27 @@ import org.apache.spark.unsafe.types.UTF8String
  * test cases.
  */
 trait SparkConnectPlanTest extends SharedSparkSession {
+  private val planIdGenerator = new AtomicLong()
+  def newRelationCommon(): proto.RelationCommon = {
+    proto.RelationCommon.newBuilder().setPlanId(planIdGenerator.getAndIncrement()).build()
+  }
+
+  def newRelation(f: proto.Relation.Builder => Unit): proto.Relation = {
+    val builder = proto.Relation.newBuilder().setCommon(newRelationCommon())
+    f(builder)
+    builder.build()
+  }
+
+  def reference(relation: proto.Relation): proto.Relation = {
+    assert(relation.hasCommon)
+    reference(relation.getCommon)
+  }
+
+  def reference(common: proto.RelationCommon): proto.Relation = {
+    assert(common.hasPlanId)
+    proto.Relation.newBuilder().setReferencedPlanId(common.getPlanId).build()
+  }
+
   def transform(rel: proto.Relation): logical.LogicalPlan = {
     SparkConnectPlannerTestUtils.transform(spark, rel)
   }
@@ -54,19 +79,13 @@ trait SparkConnectPlanTest extends SharedSparkSession {
     SparkConnectPlannerTestUtils.transform(spark, cmd)
   }
 
-  def readRel: proto.Relation =
-    proto.Relation
-      .newBuilder()
-      .setRead(
-        proto.Read
-          .newBuilder()
-          .setNamedTable(proto.Read.NamedTable.newBuilder().setUnparsedIdentifier("table"))
-          .build())
-      .build()
+  def readRel(name: String = "table"): proto.Relation = newRelation { builder =>
+    builder.getReadBuilder.getNamedTableBuilder.setUnparsedIdentifier(name)
+  }
 
   /**
-   * Creates a local relation for testing purposes. The local relation is mapped to it's
-   * equivalent in Catalyst and can be easily used for planner testing.
+   * Creates a local relation for testing purposes. The local relation is mapped to its equivalent
+   * in Catalyst and can be easily used for planner testing.
    *
    * @param schema
    *   the schema of LocalRelation
@@ -79,8 +98,8 @@ trait SparkConnectPlanTest extends SharedSparkSession {
   }
 
   /**
-   * Creates a local relation for testing purposes. The local relation is mapped to it's
-   * equivalent in Catalyst and can be easily used for planner testing.
+   * Creates a local relation for testing purposes. The local relation is mapped to its equivalent
+   * in Catalyst and can be easily used for planner testing.
    *
    * @param attrs
    *   the attributes of LocalRelation
@@ -93,8 +112,6 @@ trait SparkConnectPlanTest extends SharedSparkSession {
       data: Seq[InternalRow],
       timeZoneId: String = "UTC",
       schema: Option[StructType] = None): proto.Relation = {
-    val localRelationBuilder = proto.LocalRelation.newBuilder()
-
     val bytes = ArrowConverters
       .toBatchWithSchemaIterator(
         data.iterator,
@@ -105,10 +122,11 @@ trait SparkConnectPlanTest extends SharedSparkSession {
         true,
         false)
       .next()
-
-    localRelationBuilder.setData(ByteString.copyFrom(bytes))
-    schema.foreach(s => localRelationBuilder.setSchema(s.json))
-    proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
+    newRelation { builder =>
+      val localRelationBuilder = builder.getLocalRelationBuilder
+        .setData(ByteString.copyFrom(bytes))
+      schema.foreach(s => localRelationBuilder.setSchema(s.json))
+    }
   }
 }
 
@@ -221,7 +239,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .setSort(
           proto.Sort.newBuilder
             .addAllOrder(Seq(f).asJava)
-            .setInput(readRel)
+            .setInput(readRel())
             .setIsGlobal(true))
         .build())
     assert(res.nodeName == "Sort")
@@ -232,7 +250,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .setSort(
           proto.Sort.newBuilder
             .addAllOrder(Seq(f).asJava)
-            .setInput(readRel)
+            .setInput(readRel())
             .setIsGlobal(false))
         .build())
     assert(res2.nodeName == "Sort")
@@ -244,7 +262,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       transform(proto.Relation.newBuilder.setSetOp(proto.SetOperation.newBuilder.build()).build))
     val union = proto.Relation.newBuilder
       .setSetOp(
-        proto.SetOperation.newBuilder.setLeftInput(readRel).setRightInput(readRel).build())
+        proto.SetOperation.newBuilder.setLeftInput(readRel()).setRightInput(readRel()).build())
       .build()
     val msg = intercept[InvalidPlanInput] {
       transform(union)
@@ -257,8 +275,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       proto.Relation.newBuilder
         .setSetOp(
           proto.SetOperation.newBuilder
-            .setLeftInput(readRel)
-            .setRightInput(readRel)
+            .setLeftInput(readRel())
+            .setRightInput(readRel())
             .setSetOpType(proto.SetOperation.SetOpType.SET_OP_TYPE_UNION)
             .setIsAll(true)
             .build())
@@ -270,8 +288,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val union = proto.Relation.newBuilder
       .setSetOp(
         proto.SetOperation.newBuilder
-          .setLeftInput(readRel)
-          .setRightInput(readRel)
+          .setLeftInput(readRel())
+          .setRightInput(readRel())
           .setSetOpType(proto.SetOperation.SetOpType.SET_OP_TYPE_UNION)
           .setByName(false)
           .setAllowMissingColumns(true)
@@ -287,13 +305,13 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Simple Join") {
     val incompleteJoin =
-      proto.Relation.newBuilder.setJoin(proto.Join.newBuilder.setLeft(readRel)).build()
+      proto.Relation.newBuilder.setJoin(proto.Join.newBuilder.setLeft(readRel())).build()
     intercept[InvalidPlanInput](transform(incompleteJoin))
 
     // Join type JOIN_TYPE_UNSPECIFIED is not supported.
     intercept[InvalidPlanInput] {
       val simpleJoin = proto.Relation.newBuilder
-        .setJoin(proto.Join.newBuilder.setLeft(readRel).setRight(readRel))
+        .setJoin(proto.Join.newBuilder.setLeft(readRel()).setRight(readRel()))
         .build()
       transform(simpleJoin)
     }
@@ -315,8 +333,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val simpleJoin = proto.Relation.newBuilder
       .setJoin(
         proto.Join.newBuilder
-          .setLeft(readRel)
-          .setRight(readRel)
+          .setLeft(readRel())
+          .setRight(readRel())
           .setJoinType(proto.Join.JoinType.JOIN_TYPE_INNER)
           .setJoinCondition(joinCondition)
           .build())
@@ -330,8 +348,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       val simpleJoin = proto.Relation.newBuilder
         .setJoin(
           proto.Join.newBuilder
-            .setLeft(readRel)
-            .setRight(readRel)
+            .setLeft(readRel())
+            .setRight(readRel())
             .addUsingColumns("test_col")
             .setJoinCondition(joinCondition))
         .build()
@@ -344,7 +362,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Simple Projection") {
     val project = proto.Project.newBuilder
-      .setInput(readRel)
+      .setInput(readRel())
       .addExpressions(
         proto.Expression.newBuilder
           .setLiteral(proto.Expression.Literal.newBuilder.setInteger(32))
@@ -373,7 +391,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .build()
 
     val agg = proto.Aggregate.newBuilder
-      .setInput(readRel)
+      .setInput(readRel())
       .addAggregateExpressions(sum)
       .addGroupingExpressions(unresolvedAttribute)
       .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
@@ -386,7 +404,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("Test invalid deduplicate") {
     val deduplicate = proto.Deduplicate
       .newBuilder()
-      .setInput(readRel)
+      .setInput(readRel())
       .setAllColumnsAsKeys(true)
       .addColumnNames("test")
 
@@ -398,7 +416,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     val deduplicate2 = proto.Deduplicate
       .newBuilder()
-      .setInput(readRel)
+      .setInput(readRel())
     val e2 = intercept[InvalidPlanInput] {
       transform(proto.Relation.newBuilder.setDeduplicate(deduplicate2).build())
     }
@@ -408,7 +426,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("Test invalid deduplicateWithinWatermark") {
     val deduplicateWithinWatermark = proto.Deduplicate
       .newBuilder()
-      .setInput(readRel)
+      .setInput(readRel())
       .setAllColumnsAsKeys(true)
       .addColumnNames("test")
       .setWithinWatermark(true)
@@ -424,7 +442,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
     val deduplicateWithinWatermark2 = proto.Deduplicate
       .newBuilder()
-      .setInput(readRel)
+      .setInput(readRel())
       .setWithinWatermark(true)
     val e2 = intercept[InvalidPlanInput] {
       transform(
@@ -439,8 +457,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     // Except with union_by_name=true
     val except = proto.SetOperation
       .newBuilder()
-      .setLeftInput(readRel)
-      .setRightInput(readRel)
+      .setLeftInput(readRel())
+      .setRightInput(readRel())
       .setByName(true)
       .setSetOpType(proto.SetOperation.SetOpType.SET_OP_TYPE_EXCEPT)
     val e =
@@ -450,8 +468,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     // Intersect with union_by_name=true
     val intersect = proto.SetOperation
       .newBuilder()
-      .setLeftInput(readRel)
-      .setRightInput(readRel)
+      .setLeftInput(readRel())
+      .setRightInput(readRel())
       .setByName(true)
       .setSetOpType(proto.SetOperation.SetOpType.SET_OP_TYPE_INTERSECT)
     val e2 = intercept[InvalidPlanInput](
@@ -523,7 +541,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .setWithColumns(
           proto.WithColumns
             .newBuilder()
-            .setInput(readRel)
+            .setInput(readRel())
             .addAliases(
               proto.Expression.Alias
                 .newBuilder()
@@ -548,7 +566,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
           .setWithColumns(
             proto.WithColumns
               .newBuilder()
-              .setInput(readRel)
+              .setInput(readRel())
               .addAliases(
                 proto.Expression.Alias
                   .newBuilder()
@@ -905,7 +923,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       val fn = proto.Expression.UnresolvedFunction.newBuilder.setFunctionName(name)
       isInternal.foreach(fn.setIsInternal)
       val proj = proto.Project.newBuilder
-        .setInput(readRel)
+        .setInput(readRel())
         .addExpressions(proto.Expression.newBuilder.setUnresolvedFunction(fn))
       proto.Relation.newBuilder.setProject(proj).build()
     }
@@ -949,7 +967,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .build()
 
     val aggregate = proto.Aggregate.newBuilder
-      .setInput(readRel)
+      .setInput(readRel())
       .addAggregateExpressions(sum)
       .addGroupingExpressions(ordinal)
       .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_ROLLUP)
@@ -1005,5 +1023,210 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         "23:59:59.999999999",
         "23:59:59.999999999",
         "23:59:59.999999999").toString)
+  }
+
+  private def namedRange(name: String): proto.Relation = {
+    val builder = proto.Relation.newBuilder()
+    builder
+      .setCommon(newRelationCommon())
+      .getSubqueryAliasBuilder
+      .setAlias(name)
+      .getInputBuilder
+      .setCommon(newRelationCommon())
+      .getRangeBuilder
+      .setStart(0)
+      .setEnd(10)
+      .setStep(1)
+      .setNumPartitions(10)
+    builder.build()
+  }
+
+  private def normalize(plan: LogicalPlan): LogicalPlan = {
+    normalizeExprIds(plan).transformWithSubqueries { case w: UnresolvedWith =>
+      w.copy(cteRelations = w.cteRelations.map { case (name, alias, opt) =>
+        (name, normalizeExprIds(alias).asInstanceOf[SubqueryAlias], opt)
+      })
+    }
+  }
+
+  private def compareUnresolvedPlans(actual: LogicalPlan, expected: LogicalPlan): Unit = {
+    assert(normalize(actual) == normalize(expected))
+  }
+
+  test("Missing Reference") {
+    val builder = proto.Relation.newBuilder()
+    builder
+      .setCommon(newRelationCommon())
+      .getSubqueryAliasBuilder
+      .setAlias("nope")
+      .setInput(reference(readRel()))
+    val e = intercept[InvalidPlanInput] {
+      transform(builder.build())
+    }
+    val message = e.getMessageParameters.get("message")
+    assert(message == "Invalid WithRelation reference")
+  }
+
+  test("WithRelation - BY_REFERENCE_ID") {
+    val rel1 = readRel("tbl1")
+    val ref1 = reference(rel1)
+    val rel2 = readRel("tbl2")
+    val ref2 = reference(rel2)
+    val common = newRelationCommon()
+    val builder = proto.Relation.newBuilder()
+    builder
+      .setCommon(common)
+      .getWithRelationsBuilder
+      .setResolutionMethod(ResolutionMethod.BY_REFERENCE_ID)
+      .addReferences(rel1)
+      .addReferences(rel2)
+      .getRootBuilder
+      .setCommon(newRelationCommon())
+      .getSetOpBuilder
+      .setIsAll(true)
+      .setSetOpType(SetOpType.SET_OP_TYPE_UNION)
+      .setLeftInput(ref1)
+      .setRightInput(ref2)
+    val plan = builder.build()
+    val transformed = transform(plan)
+    assert(transformed.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(common.getPlanId))
+    val expected = Project(
+      analysis.UnresolvedStar(None) :: Nil,
+      Union(UnresolvedRelation("tbl1" :: Nil), UnresolvedRelation("tbl2" :: Nil)))
+    compareUnresolvedPlans(transformed, expected)
+  }
+
+  test("WithRelation - BY_REFERENCE_ID - order dependent traversal") {
+    // While this is supported it is not recommended for the sanity of the people who have to look
+    // at such a plan.
+    val rel1 = namedRange("x")
+    val ref1 = reference(rel1)
+    val builder = proto.Relation.newBuilder()
+    val nestedWithRelationsBuilder = proto.Relation.newBuilder()
+    nestedWithRelationsBuilder
+      .setCommon(newRelationCommon())
+      .getWithRelationsBuilder
+      .setResolutionMethod(ResolutionMethod.BY_REFERENCE_ID)
+      .addReferences(rel1)
+      .setRoot(ref1)
+    builder
+      .setCommon(newRelationCommon())
+      .getSetOpBuilder
+      .setIsAll(true)
+      .setSetOpType(SetOpType.SET_OP_TYPE_UNION)
+      .setLeftInput(nestedWithRelationsBuilder)
+      .setRightInput(ref1)
+    val plan = builder.build()
+    val transformed = transform(plan)
+    val shared = logical.SubqueryAlias("x", logical.Range(0, 10, 1, 10))
+    val expected = Union(Project(analysis.UnresolvedStar(None) :: Nil, shared), shared)
+    compareUnresolvedPlans(transformed, expected)
+  }
+
+  test("WithRelation - BY_REFERENCE_ID - Cyclic dependency") {
+    val common = newRelationCommon()
+    val ref = reference(common)
+    val builder = proto.Relation.newBuilder()
+    builder
+      .setCommon(newRelationCommon())
+      .getWithRelationsBuilder
+      .setResolutionMethod(ResolutionMethod.BY_REFERENCE_ID)
+      .setRoot(ref)
+      .addReferencesBuilder() // This has the same plan_id as the input
+      .setCommon(common)
+      .getSubqueryAliasBuilder
+      .setAlias("x")
+      .setInput(ref)
+    val e = intercept[InvalidPlanInput] {
+      transform(builder.build())
+    }
+    val message = e.getMessageParameters.get("message")
+    assert(message == "Cyclic plan reference for plan ID: " + common.getPlanId)
+  }
+
+  test("WithRelation - BY_REFERENCE_ID - Reference without plan_id") {
+    val builder = proto.Relation.newBuilder()
+    builder
+      .setCommon(newRelationCommon())
+      .getWithRelationsBuilder
+      .setResolutionMethod(ResolutionMethod.BY_REFERENCE_ID)
+      .setRoot(namedRange("x"))
+      .addReferencesBuilder() // This has no common, so no plan_id
+      .getLimitBuilder
+      .setLimit(10)
+      .setInput(readRel())
+    val e = intercept[InvalidPlanInput] {
+      transform(builder.build())
+    }
+    val message = e.getMessageParameters.get("message")
+    assert(message == "Invalid WithRelation reference")
+  }
+
+  test("CTE") {
+    val rel1 = namedRange("a")
+    val rel2 = namedRange("b")
+    val common = newRelationCommon()
+    val builder = proto.Relation.newBuilder()
+    val joinBuilder = builder
+      .setCommon(common)
+      .getWithRelationsBuilder
+      .addReferences(rel1)
+      .addReferences(rel2)
+      .getRootBuilder
+      .getJoinBuilder
+      .setRight(readRel("b"))
+      .setJoinType(proto.Join.JoinType.JOIN_TYPE_INNER)
+      .addUsingColumns("id")
+    // Add a nested CTE to the left side. This overwrites the 'a' relation.
+    joinBuilder.getLeftBuilder
+      .setCommon(newRelationCommon())
+      .getWithRelationsBuilder
+      .setResolutionMethod(ResolutionMethod.BY_NAME)
+      .setRoot(readRel("a"))
+      .addReferencesBuilder()
+      .setCommon(newRelationCommon())
+      .getSubqueryAliasBuilder
+      .setAlias("a")
+      .setInput(readRel("aa"))
+    // Make sure we default to BY_NAME resolution.
+    assert(builder.build().getWithRelations.getResolutionMethod == ResolutionMethod.BY_NAME)
+    builder.getWithRelationsBuilder.setResolutionMethod(ResolutionMethod.BY_NAME)
+    val plan = builder.build()
+    val transformed = transform(plan)
+    assert(transformed.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(common.getPlanId))
+    val expected = logical.UnresolvedWith(
+      Join(
+        logical.UnresolvedWith(
+          analysis.UnresolvedRelation("a" :: Nil),
+          (
+            "a",
+            logical.SubqueryAlias("a", analysis.UnresolvedRelation("aa" :: Nil)),
+            None) :: Nil),
+        analysis.UnresolvedRelation("b" :: Nil),
+        UsingJoin(Inner, Seq("id")),
+        None,
+        JoinHint.NONE),
+      Seq(
+        ("a", logical.SubqueryAlias("a", logical.Range(0, 10, 1, 10)), None),
+        ("b", logical.SubqueryAlias("b", logical.Range(0, 10, 1, 10)), None)))
+    compareUnresolvedPlans(transformed, expected)
+  }
+
+  test("CTE without named reference") {
+    val builder = proto.Relation.newBuilder()
+    builder
+      .setCommon(newRelationCommon())
+      .getWithRelationsBuilder
+      .setRoot(readRel("x"))
+      .addReferencesBuilder()
+      .setCommon(newRelationCommon())
+      .getLimitBuilder
+      .setLimit(50)
+      .setInput(namedRange("x"))
+    val e = intercept[InvalidPlanInput] {
+      transform(builder.build())
+    }
+    val message = e.getMessageParameters.get("message")
+    assert(message == "Invalid WithRelation reference")
   }
 }

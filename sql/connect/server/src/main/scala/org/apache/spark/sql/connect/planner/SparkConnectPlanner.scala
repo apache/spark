@@ -4028,40 +4028,32 @@ class SparkConnectPlanner(
   }
 
   private def transformWithRelations(getWithRelations: proto.WithRelations): LogicalPlan = {
-    // Register the plans in the relation cache, so they can be resolved while
-    // transforming the root relation into a LogicalPlan.
-    val namedReferences = mutable.Buffer.empty[(String, proto.Relation)]
-    getWithRelations.getReferencesList.forEach { ref =>
-      val common = ref.getCommon
-      if (!common.hasPlanId && !ref.hasSubqueryAlias) {
-        throw InvalidInputErrors.invalidWithRelationReference()
-      }
-      if (common.hasPlanId) {
-        relationCache.put(common.getPlanId, ref)
-      }
-      if (ref.hasSubqueryAlias) {
-        namedReferences += ref.getSubqueryAlias.getAlias -> ref
-      }
-    }
-
-    val root = transformRelation(getWithRelations.getRoot)
-    if (namedReferences.nonEmpty) {
-      // If WithRelations contains named references we create a CTE. This is needed because it is
-      // allowed to nest WithRelations nodes and names used in a parent node can be reused
-      // (overwritten) by a child node.
-      val ctes = namedReferences.map { case (name, relation) =>
-        assert(relation.hasSubqueryAlias)
-        val plan = if (relation.getCommon.hasPlanId) {
-          getCachedRelation(relation.getCommon.getPlanId)
-        } else {
-          transformRelation(relation)
+    val root = getWithRelations.getRoot
+    getWithRelations.getResolutionMethod match {
+      case proto.WithRelations.ResolutionMethod.BY_NAME =>
+        val cteRelations = getWithRelations.getReferencesList.asScala.map { ref =>
+          transformRelation(ref) match {
+            case alias: SubqueryAlias => (alias.alias, alias, None)
+            case _ => throw InvalidInputErrors.invalidWithRelationReference()
+          }
         }
-        (name, plan.asInstanceOf[SubqueryAlias], None)
-      }
-      UnresolvedWith(root, ctes.toSeq)
-    } else {
-      // Wrap the plan to keep the original planId.
-      Project(Seq(UnresolvedStar(None)), root)
+        UnresolvedWith(transformRelation(root), cteRelations.toSeq)
+
+      case proto.WithRelations.ResolutionMethod.BY_REFERENCE_ID =>
+        // Register the plans in the relation cache, so they can be resolved while transforming the
+        // root relation into a LogicalPlan.
+        getWithRelations.getReferencesList.forEach { ref =>
+          val common = ref.getCommon
+          if (!common.hasPlanId) {
+            throw InvalidInputErrors.invalidWithRelationReference()
+          }
+          relationCache.put(common.getPlanId, ref)
+        }
+        // Wrap the plan to keep the original planId.
+        Project(Seq(UnresolvedStar(None)), transformRelation(root))
+
+      case _ =>
+        throw InvalidInputErrors.invalidWithRelationReference()
     }
   }
 

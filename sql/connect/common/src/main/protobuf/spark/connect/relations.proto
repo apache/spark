@@ -212,6 +212,11 @@ message SQL {
 //
 // This relation can be used to implement CTEs, describe DAGs, or to reduce tree depth.
 message WithRelations {
+  enum ResolutionMethod {
+    BY_NAME = 0;
+    BY_REFERENCE_ID = 1;
+  }
+
   // (Required) Plan at the root of the query tree. This plan is expected to contain one or more
   // references. Those references get expanded later on by the engine.
   Relation root = 1;
@@ -219,6 +224,12 @@ message WithRelations {
   // (Required) Plans referenced by the root plan. Relations in this list are also allowed to
   // contain references to other relations in this list, as long they do not form cycles.
   repeated Relation references = 2;
+
+  // (Optional) Resolution method used to resolve the relations in the root relation. This can
+  // either be by name (like a CTE) or by reference id. The default is by name. For resolution by
+  // name, all references need to be a SubqueryAlias. For resolution by id, all references need to
+  // have a plan_id.
+  ResolutionMethod resolution_method = 3;
 }
 
 // Relation that reads from a file / table or other data source. Does not have additional

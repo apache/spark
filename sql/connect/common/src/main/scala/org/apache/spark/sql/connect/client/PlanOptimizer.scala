@@ -22,6 +22,7 @@ import scala.collection.immutable.SeqMap
 import scala.collection.mutable
 
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.WithRelations.ResolutionMethod
 
 /**
  * Optimizer for Spark Connect plans. This optimizer moves all duplicate subtrees from a query
@@ -159,6 +160,7 @@ private[connect] object PlanOptimizer {
     val builder = proto.Relation.newBuilder()
     builder.getCommonBuilder.setPlanId(nextPlanId())
     val withRelationsBuilder = builder.getWithRelationsBuilder
+      .setResolutionMethod(ResolutionMethod.BY_REFERENCE_ID)
     val referencePlanIds = referenceMap.keySet
     referenceMap.foreach { case (id, reference) =>
       withRelationsBuilder.addReferences(
@@ -174,17 +176,17 @@ private[connect] object PlanOptimizer {
     case PlanId(id) if referencePlanIds(id) =>
       createReference(id)
     case relation if relation.hasWithRelations =>
-      // Rewrite the WithRelations node. We remove all reference plans if they are not a
-      // SubqueryAlias (the reference will be added to the top-level WithRelations node). We replace
-      // all references that are a SubqueryAlias with a reference. The latter is needed because
-      // WithRelations in combination with SubqueryAlias can be used to define named  relations
-      // (like Common Table Expressions); names - unlike plan ids - are not unique.
+      // Rewrite the WithRelations node. If a reference is shared we either remove it (the reference
+      // will be added to the top-level WithRelations node), or we replace it with a reference when
+      // the WithRelation node is a CTE (ResolutionMethod.BY_NAME). The latter is needed because
+      // name based resolution needs to account for nested name reuse (a.k.a. shadowing).
       val withRelations = relation.getWithRelations
+      val resolveByName = withRelations.getResolutionMethod == ResolutionMethod.BY_NAME
       val builder = relation.toBuilder
       val withRelationsBuilder = builder.getWithRelationsBuilder.clearReferences()
       withRelations.getReferencesList.forEach {
         case reference @ PlanId(id) if referencePlanIds(id) =>
-          if (reference.hasSubqueryAlias) {
+          if (resolveByName && reference.hasSubqueryAlias) {
             withRelationsBuilder.addReferences(createReference(id))
           }
         case reference =>

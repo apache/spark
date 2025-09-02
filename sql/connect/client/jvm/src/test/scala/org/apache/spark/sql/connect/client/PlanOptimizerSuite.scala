@@ -29,6 +29,7 @@ import org.apache.commons.lang3.mutable.MutableInt
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.WithRelations.ResolutionMethod
 import org.apache.spark.sql.{Column, Encoder, Encoders}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.agnosticEncoderFor
 import org.apache.spark.sql.connect.{ColumnNodeToProtoConverter, DataFrame, Dataset, SparkSession}
@@ -115,6 +116,9 @@ class PlanOptimizerSuite extends ConnectFunSuite with BeforeAndAfterEach {
     val plan = df.plan
     val optimizedPlan = df.optimizedPlan
     assert(plan != optimizedPlan)
+    assert(optimizedPlan.getRoot.hasWithRelations)
+    val withRelations = optimizedPlan.getRoot.getWithRelations
+    assert(withRelations.getResolutionMethod == ResolutionMethod.BY_REFERENCE_ID)
 
     val planStats = collectPlanStats(plan)
     assert(planStats.numDuplicatePlanIds > 0)
@@ -122,7 +126,6 @@ class PlanOptimizerSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
     // An optimized plan should contain all the plan ids of the original plan.
     val optimizedPlanStats = collectPlanStats(optimizedPlan)
-    assert(optimizedPlan.getRoot.hasWithRelations)
     assert(planStats.planIds.equals(optimizedPlanStats.planIds - PlanId(optimizedPlan.getRoot)))
 
     // Idempotency. Once optimized there should not be any optimization opportunity left.
@@ -265,42 +268,42 @@ class PlanOptimizerSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
   }
 
-  testBinaryOperationDeduplication("join", 5, 26) { case ((left, leftKey), (right, rightKey)) =>
+  testBinaryOperationDeduplication("join", 3, 24) { case ((left, leftKey), (right, rightKey)) =>
     left.join(right, leftKey === rightKey)
   }
 
-  testBinaryOperationDeduplication("lateralJoin", 5, 26) {
+  testBinaryOperationDeduplication("lateralJoin", 3, 24) {
     case ((left, leftKey), (right, rightKey)) =>
       left.lateralJoin(right, leftKey === rightKey)
   }
 
-  testBinaryOperationDeduplication("union", 7, 28) { case ((left, _), (right, _)) =>
+  testBinaryOperationDeduplication("union", 5, 26) { case ((left, _), (right, _)) =>
     left.union(right)
   }
 
-  testBinaryOperationDeduplication("intersect", 7, 28) { case ((left, _), (right, _)) =>
+  testBinaryOperationDeduplication("intersect", 5, 26) { case ((left, _), (right, _)) =>
     left.intersect(right)
   }
 
-  testBinaryOperationDeduplication("except", 7, 28) { case ((left, _), (right, _)) =>
+  testBinaryOperationDeduplication("except", 5, 26) { case ((left, _), (right, _)) =>
     left.except(right)
   }
 
-  testBinaryOperationDeduplication("subquery - exists", 5, 26) {
+  testBinaryOperationDeduplication("subquery - exists", 3, 24) {
     case ((left, leftKey), (right, rightKey)) =>
       left.filter(right.filter(rightKey === leftKey).exists())
   }
 
-  testBinaryOperationDeduplication("subquery - scalar", 5, 26) {
+  testBinaryOperationDeduplication("subquery - scalar", 3, 24) {
     case ((left, _), (right, rightKey)) =>
       left.select(right.agg(min(rightKey)).scalar())
   }
 
-  testBinaryOperationDeduplication("subquery - in", 5, 26) { case ((left, leftKey), (right, _)) =>
+  testBinaryOperationDeduplication("subquery - in", 3, 24) { case ((left, leftKey), (right, _)) =>
     left.filter(!leftKey.isin(right))
   }
 
-  testBinaryOperationDeduplication("groupMap", 5, 24) {
+  testBinaryOperationDeduplication("groupMap", 3, 22) {
     case ((left, leftKey), (right, rightKey)) =>
       val initialState = right.groupBy(rightKey).as[Long, Long]
       left
@@ -312,7 +315,7 @@ class PlanOptimizerSuite extends ConnectFunSuite with BeforeAndAfterEach {
         }
   }
 
-  testBinaryOperationDeduplication("coGroup", 5, 26) {
+  testBinaryOperationDeduplication("coGroup", 3, 24) {
     case ((left, leftKey), (right, rightKey)) =>
       val leftKv = left.groupBy(leftKey).as[Long, Long]
       val rightKv = right.groupBy(rightKey).as[Long, Long]
@@ -337,7 +340,7 @@ class PlanOptimizerSuite extends ConnectFunSuite with BeforeAndAfterEach {
         .setDirection("backward")
         .setAllowExactMatches(true)
     }
-    checkDeduplication(df, numRelationsReduction = -1, sizeReduction = 5)
+    checkDeduplication(df, numRelationsReduction = -1, sizeReduction = 3)
   }
 
   test("optimize plan with duplicated relations - MLRelation - fetch") {
@@ -358,7 +361,7 @@ class PlanOptimizerSuite extends ConnectFunSuite with BeforeAndAfterEach {
         .addArgs(proto.Fetch.Method.Args.newBuilder().setInput(other.plan.getRoot))
         .addArgs(proto.Fetch.Method.Args.newBuilder().setInput(input.plan.getRoot))
     }
-    checkDeduplication(df, numRelationsReduction = -1, sizeReduction = 8)
+    checkDeduplication(df, numRelationsReduction = -1, sizeReduction = 6)
   }
 
   test("optimize plan with duplicated relations - subquery WithRelations rewrite") {
@@ -371,7 +374,7 @@ class PlanOptimizerSuite extends ConnectFunSuite with BeforeAndAfterEach {
         col("id").isin(input1) &&
           col("id").isin(input2) &&
           col("id").isin(input3))
-    checkDeduplication(df, numRelationsReduction = -1, sizeReduction = 16)
+    checkDeduplication(df, numRelationsReduction = -1, sizeReduction = 14)
 
     // Check if the original WithRelations node is retained and has the proper references.
     val root = df.optimizedPlan.getRoot
@@ -417,7 +420,7 @@ class PlanOptimizerSuite extends ConnectFunSuite with BeforeAndAfterEach {
       current.union(current)
     }
     // Optimization reduces size by 98.4%
-    checkDeduplication(df, numRelationsReduction = 107, sizeReduction = 8396068)
+    checkDeduplication(df, numRelationsReduction = 107, sizeReduction = 8396066)
   }
 
   private def join(input: Dataset[_], numJoins: Int): DataFrame = {
@@ -430,26 +433,26 @@ class PlanOptimizerSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
     // A single relation duplicated subtree. Optimization always adds two relations
     val input = spark.range(10)
-    checkDeduplication(join(input, 1), numRelationsReduction = -2, sizeReduction = -5)
-    checkDeduplication(join(input, 2), numRelationsReduction = -2, sizeReduction = 4)
-    checkDeduplication(join(input, 3), numRelationsReduction = -2, sizeReduction = 13)
-    checkDeduplication(join(input, 4), numRelationsReduction = -2, sizeReduction = 22)
-    checkDeduplication(join(input, 5), numRelationsReduction = -2, sizeReduction = 32)
+    checkDeduplication(join(input, 1), numRelationsReduction = -2, sizeReduction = -7)
+    checkDeduplication(join(input, 2), numRelationsReduction = -2, sizeReduction = 2)
+    checkDeduplication(join(input, 3), numRelationsReduction = -2, sizeReduction = 11)
+    checkDeduplication(join(input, 4), numRelationsReduction = -2, sizeReduction = 20)
+    checkDeduplication(join(input, 5), numRelationsReduction = -2, sizeReduction = 30)
 
     // A 2-relation duplicated subtree. Optimization only adds a relation if there is a single
     // relation with 2 duplicates in the tree.
     val input2 = input.as("a")
-    checkDeduplication(join(input2, 1), numRelationsReduction = -1, sizeReduction = 7)
-    checkDeduplication(join(input2, 2), numRelationsReduction = 0, sizeReduction = 28)
-    checkDeduplication(join(input2, 3), numRelationsReduction = 1, sizeReduction = 50)
-    checkDeduplication(join(input2, 4), numRelationsReduction = 2, sizeReduction = 73)
-    checkDeduplication(join(input2, 5), numRelationsReduction = 3, sizeReduction = 96)
+    checkDeduplication(join(input2, 1), numRelationsReduction = -1, sizeReduction = 5)
+    checkDeduplication(join(input2, 2), numRelationsReduction = 0, sizeReduction = 26)
+    checkDeduplication(join(input2, 3), numRelationsReduction = 1, sizeReduction = 48)
+    checkDeduplication(join(input2, 4), numRelationsReduction = 2, sizeReduction = 71)
+    checkDeduplication(join(input2, 5), numRelationsReduction = 3, sizeReduction = 94)
 
     // A 3-relation duplicated subtree. Optimization always reduces the number of relations.
     val input3 = input2.select(col("id"))
-    checkDeduplication(join(input3, 1), numRelationsReduction = 0, sizeReduction = 209)
-    checkDeduplication(join(input3, 2), numRelationsReduction = 2, sizeReduction = 434)
-    checkDeduplication(join(input3, 3), numRelationsReduction = 4, sizeReduction = 659)
+    checkDeduplication(join(input3, 1), numRelationsReduction = 0, sizeReduction = 207)
+    checkDeduplication(join(input3, 2), numRelationsReduction = 2, sizeReduction = 432)
+    checkDeduplication(join(input3, 3), numRelationsReduction = 4, sizeReduction = 657)
   }
 
   test("optimize can increase the size of the plan") {
@@ -465,15 +468,16 @@ class PlanOptimizerSuite extends ConnectFunSuite with BeforeAndAfterEach {
     }
 
     // A single relation duplicated subtree. Optimization initially increases size.
-    checkDeduplication(join(input1, 1), numRelationsReduction = -2, sizeReduction = -10)
-    checkDeduplication(join(input1, 2), numRelationsReduction = -2, sizeReduction = -6)
-    checkDeduplication(join(input1, 3), numRelationsReduction = -2, sizeReduction = -2)
-    checkDeduplication(join(input1, 4), numRelationsReduction = -2, sizeReduction = 2)
+    checkDeduplication(join(input1, 1), numRelationsReduction = -2, sizeReduction = -12)
+    checkDeduplication(join(input1, 2), numRelationsReduction = -2, sizeReduction = -8)
+    checkDeduplication(join(input1, 3), numRelationsReduction = -2, sizeReduction = -4)
+    checkDeduplication(join(input1, 4), numRelationsReduction = -2, sizeReduction = 0)
+    checkDeduplication(join(input1, 5), numRelationsReduction = -2, sizeReduction = 4)
 
-    // A 2-relation duplicated subtree. Optimization always reduces size.
+    // A 2-relation duplicated subtree. Optimization almost always increases size.
     val input2 = input1.as("a")
-    checkDeduplication(join(input2, 1), numRelationsReduction = -1, sizeReduction = 2)
-    checkDeduplication(join(input2, 2), numRelationsReduction = 0, sizeReduction = 18)
-    checkDeduplication(join(input2, 3), numRelationsReduction = 1, sizeReduction = 34)
+    checkDeduplication(join(input2, 1), numRelationsReduction = -1, sizeReduction = 0)
+    checkDeduplication(join(input2, 2), numRelationsReduction = 0, sizeReduction = 16)
+    checkDeduplication(join(input2, 3), numRelationsReduction = 1, sizeReduction = 32)
   }
 }
