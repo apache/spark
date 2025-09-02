@@ -132,9 +132,9 @@ class HiveSessionStateBuilder(
         new EvalSubqueriesForTimeTravel +:
         new DetermineTableStats(session) +:
         new ResolveTranspose(session) +:
-                  new InvokeProcedures(session) +:
-          ExecuteImmediateCommands(session) +:
-          ExtractSemiStructuredFields +:
+        new InvokeProcedures(session) +:
+        ExecuteImmediateCommands(session) +:
+        ExtractSemiStructuredFields +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
