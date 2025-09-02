@@ -204,7 +204,6 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
     def __init__(self, table_arg_offsets=None):
         super().__init__()
         self.table_arg_offsets = table_arg_offsets if table_arg_offsets else []
-        self._arrow_cast = True
 
     def load_stream(self, stream):
         """
@@ -234,7 +233,6 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
         ArrowUDTF returns iterator of (pa.RecordBatch, arrow_return_type) tuples.
         """
         import pyarrow as pa
-        from pyspark.errors import PySparkRuntimeError
 
         def apply_type_coercion():
             for batch, arrow_return_type in iterator:
@@ -267,7 +265,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                                     break
                         
                         if expected_type and actual_type:
-                            error_msg = f"Expected: {expected_type}, but got: {actual_type}."
+                            error_msg = f"Expected: {expected_type}, but got: {actual_type} in field '{expected_field.name}'."
                         else:
                             error_msg = f"Expected: {target_schema}, but got: {batch.schema}."
                             

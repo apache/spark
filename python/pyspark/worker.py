@@ -1970,8 +1970,8 @@ def read_udtf(pickleSer, infile, eval_type):
                         },
                     )
 
-                # We verify the type of the result in the serializer
-                # as we now support type corerion in return values
+                # We verify the type of the result and do type corerion
+                # in the serializer
                 return result
 
             # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.

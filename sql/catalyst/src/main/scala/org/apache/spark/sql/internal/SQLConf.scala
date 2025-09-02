@@ -4018,7 +4018,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-
   val PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED =
     buildConf("spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled")
       .internal()
