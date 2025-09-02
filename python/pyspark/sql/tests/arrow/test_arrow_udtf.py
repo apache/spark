@@ -178,7 +178,6 @@ class ArrowUDTFTestsMixin:
             result_df.collect()
 
     def test_arrow_udtf_error_mismatched_schema(self):
-
         @arrow_udtf(returnType="x int, y int")
         class MismatchedSchemaUDTF:
             def eval(self) -> Iterator["pa.Table"]:
@@ -192,8 +191,8 @@ class ArrowUDTFTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            "Arrow UDTFs require the return type to match the expected Arrow type." +
-            "Expected: int32, but got: string.",
+            "Arrow UDTFs require the return type to match the expected Arrow type."
+            + "Expected: int32, but got: string.",
         ):
             result_df = MismatchedSchemaUDTF()
             result_df.collect()
@@ -351,12 +350,12 @@ class ArrowUDTFTestsMixin:
                     }
                 )
                 yield result_table
-        
+
         # Should fail with Arrow cast exception since string cannot be cast to int
         with self.assertRaisesRegex(
             PythonException,
-            "Arrow UDTFs require the return type to match the expected Arrow type." +
-            "Expected: int32, but got: string.",
+            "Arrow UDTFs require the return type to match the expected Arrow type."
+            + "Expected: int32, but got: string.",
         ):
             result_df = StringToIntUDTF()
             result_df.collect()
@@ -371,7 +370,7 @@ class ArrowUDTFTestsMixin:
                     }
                 )
                 yield result_table
-        
+
         result_df = Int64ToInt32UDTF()
         expected_df = self.spark.createDataFrame([(1,), (2,), (3,)], "id int")
         assertDataFrameEqual(result_df, expected_df)
@@ -688,7 +687,6 @@ class ArrowUDTFTestsMixin:
 
 class ArrowUDTFTests(ArrowUDTFTestsMixin, ReusedSQLTestCase):
     pass
-
 
 
 if __name__ == "__main__":

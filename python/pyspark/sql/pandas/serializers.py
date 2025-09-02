@@ -252,15 +252,28 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
         ArrowUDTF returns iterator of (pa.RecordBatch, arrow_return_type) tuples.
         """
         import pyarrow as pa
-        from pyspark.serializers import write_int, SpecialLengths
+        from pyspark.errors import PySparkRuntimeError
 
-        def wrap_and_init_stream():
-            should_write_start_length = True
+        def apply_type_coercion():
             for packed in iterator:
                 batch, arrow_return_type = packed
                 assert isinstance(
+                    batch, pa.RecordBatch
+                ), f"Expected pa.RecordBatch, got {type(batch)}"
+                assert isinstance(
                     arrow_return_type, pa.StructType
                 ), f"Expected pa.StructType, got {type(arrow_return_type)}"
+
+                # Handle schema mismatch
+                if batch.num_columns != len(arrow_return_type):
+                    raise PySparkRuntimeError(
+                        errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
+                        messageParameters={
+                            "expected": str(len(arrow_return_type)),
+                            "actual": str(batch.num_columns),
+                            "func": "ArrowUDTF",
+                        },
+                    )
 
                 # Handle empty struct case specially
                 if batch.num_columns == 0:
@@ -269,34 +282,16 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                     struct = pa.array([{}] * batch.num_rows)
                     coerced_batch = pa.RecordBatch.from_arrays([struct], ["_0"])
                 else:
-                    # Apply type coercion to each column if needed
-                    coerced_arrays = []
-                    for i, field in enumerate(arrow_return_type):
-                        if i < batch.num_columns:
-                            original_array = batch.column(i)
-                            coerced_array = self._create_array(original_array, field.type)
-                            coerced_arrays.append(coerced_array)
-                        else:
-                            raise PySparkRuntimeError(
-                                errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
-                                messageParameters={
-                                    "expected": str(len(arrow_return_type)),
-                                    "actual": str(batch.num_columns),
-                                    "func": "ArrowUDTF",
-                                },
-                            )
+                    # Use RecordBatch.cast for efficient type coercion
+                    target_schema = pa.schema(arrow_return_type)
+                    coerced_batch = batch.cast(target_schema)
 
-                    struct = pa.StructArray.from_arrays(coerced_arrays, fields=arrow_return_type)
-                    coerced_batch = pa.RecordBatch.from_arrays([struct], ["_0"])
+                yield coerced_batch, arrow_return_type
 
-                # Write the first record batch with initialization
-                if should_write_start_length:
-                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
-                    should_write_start_length = False
-
-                yield coerced_batch
-
-        return ArrowStreamSerializer.dump_stream(self, wrap_and_init_stream(), stream)
+        # Delegate to parent class for stream writing and batch processing
+        return super(ArrowStreamArrowUDTFSerializer, self).dump_stream(
+            apply_type_coercion(), stream
+        )
 
 
 class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
