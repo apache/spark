@@ -138,41 +138,15 @@ class PipelineEventSender(
    */
   private[connect] def sendEventToClient(event: PipelineEvent): Unit = {
     try {
-      val message = if (event.error.nonEmpty) {
-        // Returns the message associated with a Throwable and all its causes
-        def getExceptionMessages(throwable: Throwable): Seq[String] = {
-          throwable.getMessage +:
-            Option(throwable.getCause).map(getExceptionMessages).getOrElse(Nil)
-        }
-        val errorMessages = getExceptionMessages(event.error.get)
-        s"""${event.message}
-           |Error: ${errorMessages.mkString("\n")}""".stripMargin
-      } else {
-        event.message
-      }
+      val protoEvent = constructProtoEvent(event)
       responseObserver.onNext(
         proto.ExecutePlanResponse
           .newBuilder()
           .setSessionId(sessionHolder.sessionId)
           .setServerSideSessionId(sessionHolder.serverSessionId)
-          .setPipelineEventResult(
-            proto.PipelineEventResult.newBuilder
-              .setEvent(
-                proto.PipelineEvent
-                  .newBuilder()
-                  .setTimestamp(
-                    ProtoTimestamp
-                      .newBuilder()
-                      // java.sql.Timestamp normalizes its internal fields: getTime() returns
-                      // the full timestamp in milliseconds, while getNanos() returns the
-                      // fractional seconds (0-999,999,999 ns). This ensures no precision is
-                      // lost or double-counted.
-                      .setSeconds(event.timestamp.getTime / 1000)
-                      .setNanos(event.timestamp.getNanos)
-                      .build())
-                  .setMessage(message)
-                  .build())
-              .build())
+          .setPipelineEventResult(proto.PipelineEventResult.newBuilder
+            .setEvent(protoEvent)
+            .build())
           .build())
     } catch {
       case NonFatal(e) =>
@@ -181,5 +155,34 @@ class PipelineEventSender(
             log"${MDC(LogKeys.ERROR, event.message)}",
           e)
     }
+  }
+
+  private def constructProtoEvent(event: PipelineEvent): proto.PipelineEvent = {
+    val message = if (event.error.nonEmpty) {
+      // Returns the message associated with a Throwable and all its causes
+      def getExceptionMessages(throwable: Throwable): Seq[String] = {
+        throwable.getMessage +:
+          Option(throwable.getCause).map(getExceptionMessages).getOrElse(Nil)
+      }
+      val errorMessages = getExceptionMessages(event.error.get)
+      s"""${event.message}
+         |Error: ${errorMessages.mkString("\n")}""".stripMargin
+    } else {
+      event.message
+    }
+    val protoEventBuilder = proto.PipelineEvent
+      .newBuilder()
+      .setTimestamp(
+        ProtoTimestamp
+          .newBuilder()
+          // java.sql.Timestamp normalizes its internal fields: getTime() returns
+          // the full timestamp in milliseconds, while getNanos() returns the
+          // fractional seconds (0-999,999,999 ns). This ensures no precision is
+          // lost or double-counted.
+          .setSeconds(event.timestamp.getTime / 1000)
+          .setNanos(event.timestamp.getNanos)
+          .build())
+      .setMessage(message)
+    protoEventBuilder.build()
   }
 }
