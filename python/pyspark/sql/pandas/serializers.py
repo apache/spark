@@ -284,7 +284,30 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                 else:
                     # Use RecordBatch.cast for efficient type coercion
                     target_schema = pa.schema(arrow_return_type)
-                    coerced_batch = batch.cast(target_schema)
+                    try:
+                        coerced_batch = batch.cast(target_schema)
+                    except (pa.ArrowInvalid, pa.ArrowTypeError, ValueError) as e:
+                        from pyspark.errors import PySparkTypeError
+                        # Extract specific type mismatch information
+                        expected_type = None
+                        actual_type = None
+                        
+                        # Find the first mismatched field for better error message
+                        if len(target_schema) == len(batch.schema):
+                            for expected_field, actual_field in zip(target_schema, batch.schema):
+                                if expected_field.type != actual_field.type:
+                                    expected_type = expected_field.type
+                                    actual_type = actual_field.type
+                                    break
+                        
+                        if expected_type and actual_type:
+                            error_msg = f"Expected: {expected_type}, but got: {actual_type}."
+                        else:
+                            error_msg = f"Expected: {target_schema}, but got: {batch.schema}."
+                            
+                        raise PySparkTypeError(
+                            "Arrow UDTFs require the return type to match the expected Arrow type." + error_msg
+                        ) from e
 
                 yield coerced_batch, arrow_return_type
 
