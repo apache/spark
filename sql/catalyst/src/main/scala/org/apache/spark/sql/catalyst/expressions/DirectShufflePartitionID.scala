@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.{AbstractDataType, DataType, LongType}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, IntegerType}
 
 /**
  * Expression that takes a partition ID value and passes it through directly for use in

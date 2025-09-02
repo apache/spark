@@ -1412,7 +1412,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     val numPartitions = 10
     val df = spark.range(100).withColumn("expected_p_id", col("id") % numPartitions)
 
-    val repartitioned = df.repartitionById(numPartitions, $"expected_p_id")
+    val repartitioned = df.repartitionById(numPartitions, $"expected_p_id".cast("int"))
     val result = repartitioned.withColumn("actual_p_id", spark_partition_id())
 
     assert(result.filter(col("expected_p_id") =!= col("actual_p_id")).count() == 0)
@@ -1422,7 +1422,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   test("SPARK-53401: repartitionById should handle negative partition ids correctly with pmod") {
     val df = spark.range(10).toDF("id")
-    val repartitioned = df.repartitionById(10, $"id" - 5)
+    val repartitioned = df.repartitionById(10, ($"id" - 5).cast("int"))
 
     // With pmod, negative values should be converted to positive values
     // (-5) pmod 10 = 5, (-4) pmod 10 = 6
@@ -1446,12 +1446,12 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     }
     assert(e.getCondition.contains("DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE"))
     assert(e.getMessage.contains(
-      "The first parameter requires the \"BIGINT\" type, however \"s\" has the type \"STRING\""))
+      "The first parameter requires the \"INT\" type, however \"s\" has the type \"STRING\""))
   }
 
   test("SPARK-53401: repartitionById should send null partition ids to partition 0") {
     val df = spark.range(10).toDF("id")
-    val partitionExpr = when($"id" < 5, $"id").otherwise(lit(null))
+    val partitionExpr = when($"id" < 5, $"id").otherwise(lit(null)).cast("int")
     val repartitioned = df.repartitionById(10, partitionExpr)
 
     val result = repartitioned.withColumn("actual_p_id", spark_partition_id()).collect()
@@ -1475,7 +1475,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     " throw an exception for partition id >= numPartitions") {
     val numPartitions = 10
     val df = spark.range(20).toDF("id")
-    val repartitioned = df.repartitionById(numPartitions, $"id")
+    val repartitioned = df.repartitionById(numPartitions, $"id".cast("int"))
 
     assert(repartitioned.collect().length == 20)
     assert(repartitioned.rdd.getNumPartitions == numPartitions)
@@ -1500,7 +1500,9 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-53401: repartitionById followed by groupBy should only have one shuffle") {
-    val df = spark.range(100).toDF("id")
+    val df = spark.range(100)
+      .withColumn("id", col("id").cast("int"))
+      .toDF("id")
     val repartitioned = df.repartitionById(10, $"id")
     val grouped = repartitioned.groupBy($"id").count()
 
@@ -1508,35 +1510,42 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-53401: groupBy on a superset of partition keys should reuse the shuffle") {
-    val df = spark.range(100).select($"id" % 10 as "key1", $"id" as "value")
+    val df = spark.range(100)
+      .withColumn("id", col("id").cast("int"))
+      .select($"id" % 10 as "key1", $"id" as "value")
     val grouped = df.repartitionById(10, $"key1").groupBy($"key1", lit(1)).count()
     checkShuffleCount(grouped, 1)
   }
 
   test("SPARK-53401: shuffle reuse is not affected by spark.sql.shuffle.partitions") {
     withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
-      val df = spark.range(100).select($"id" % 10 as "key", $"id" as "value")
+      val df = spark.range(100)
+      .withColumn("id", col("id").cast("int"))
+      .select($"id" % 10 as "key", $"id" as "value")
       val grouped = df.repartitionById(10, $"key").groupBy($"key").count()
 
       checkShuffleCount(grouped, 1)
-      // The explicit repartition number should be respected, not the config value.
       assert(grouped.rdd.getNumPartitions == 10)
     }
   }
 
   test("SPARK-53401: join with id pass-through and hash partitioning requires shuffle") {
-    val df1 = spark.range(100).select($"id" % 10 as "key", $"id" as "v1")
+    val df1 = spark.range(100)
+      .withColumn("id", col("id").cast("int"))
+      .select($"id" % 10 as "key", $"id" as "v1")
       .repartitionById(10, $"key")
 
-    val df2 = spark.range(100).select($"id" % 10 as "key", $"id" as "v2")
+    val df2 = spark.range(100)
+      .withColumn("id", col("id").cast("int"))
+      .select($"id" % 10 as "key", $"id" as "v2")
       .repartition($"key")
 
     val joined = df1.join(df2, "key")
 
     val grouped = joined.groupBy("key").count()
 
-    // Total shuffles: one for df1, one for df2, one for join.
-    // The groupBy reuses the output partitioning.
+    // Total shuffles: one for df1, one broadcast for df2, one for groupBy.
+    // The groupBy reuse the output partitioning after DirectShufflePartitionID.
     checkShuffleCount(grouped, 3)
   }
 
@@ -1544,11 +1553,13 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     val df1 =
       spark
         .range(100)
+        .withColumn("id", col("id").cast("int"))
         .select($"id" % 10 as "key", $"id" as "v1")
         .repartitionById(10, $"key")
     val df2 =
       spark
         .range(100)
+        .withColumn("id", col("id").cast("int"))
         .select($"id" % 10 as "key", $"id" as "v2")
         .repartitionById(10, $"key")
 
@@ -1556,8 +1567,8 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
     val grouped = joined.groupBy("key").count()
 
-    // Total shuffles: one for df1, one for df2, one for join.
-    // The groupBy reuses the output partitioning.
+    // Total shuffles: one for df1, one for df2, one for groupBy.
+    // The groupBy reuse the output partitioning after DirectShufflePartitionID.
     checkShuffleCount(grouped, 3)
   }
 }
