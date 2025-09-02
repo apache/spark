@@ -525,7 +525,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+  "errorClass" : "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "exprType" : "\"INT\""
@@ -809,7 +809,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+  "errorClass" : "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "exprType" : "\"INT\""
@@ -852,7 +852,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+  "errorClass" : "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "exprType" : "\"INT\""

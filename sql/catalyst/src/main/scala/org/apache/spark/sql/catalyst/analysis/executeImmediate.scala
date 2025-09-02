@@ -31,7 +31,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * @param args parameters from USING clause (subsequent children)
  * @param targetVariables variables to store the result of the query
  */
-case class ExecuteImmediateQuery(
+case class UnresolvedExecuteImmediate(
     sqlStmtStr: Expression,
     args: Seq[Expression],
     targetVariables: Seq[Expression])
@@ -84,7 +84,7 @@ class ResolveExecuteImmediate(
     val catalogManager: CatalogManager) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
-      case ExecuteImmediateQuery(sqlStmtStr, args, targetVariables)
+      case UnresolvedExecuteImmediate(sqlStmtStr, args, targetVariables)
       if sqlStmtStr.resolved && targetVariables.forall(_.resolved) && args.forall(_.resolved) =>
         // Validate that USING clause expressions don't contain unsupported constructs
         validateUsingClauseExpressions(args)

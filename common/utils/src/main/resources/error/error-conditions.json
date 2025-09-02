@@ -3862,7 +3862,7 @@
     ],
     "sqlState" : "42604"
   },
-  "INVALID_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
+  "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
     "message" : [
       "Expression type must be string type but got <exprType>."
     ],

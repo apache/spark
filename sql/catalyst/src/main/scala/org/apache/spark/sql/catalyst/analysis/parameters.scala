@@ -165,7 +165,7 @@ object MoveParameterizedQueriesDown extends Rule[LogicalPlan] {
 }
 
 /**
- * Finds all named parameters in `ParameterizedQuery` and substitutes them by literals or
+ * Binds all named parameters in `ParameterizedQuery` and substitutes them by literals or
  * by collection constructor functions such as `map()`, `array()`, `struct()`
  * from the user-specified arguments.
  */

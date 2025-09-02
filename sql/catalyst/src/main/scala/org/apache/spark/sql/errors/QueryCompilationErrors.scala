@@ -4133,7 +4133,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def invalidExecuteImmediateExpressionType(dataType: DataType): Throwable = {
     throw new AnalysisException(
-      errorClass = "INVALID_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+      errorClass = "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
       messageParameters = Map("exprType" -> toSQLType(dataType)))
   }
 

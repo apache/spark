@@ -839,7 +839,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
 
 
   test("EXEC IMMEDIATE - INTO specified for COMMAND query") {
-    val execImmediateSetVariablePlan = ExecuteImmediateQuery(
+    val execImmediateSetVariablePlan = UnresolvedExecuteImmediate(
       Literal("SET VAR testVarA = 1"),
       Seq.empty,
       Seq(UnresolvedAttribute("testVarA")))
