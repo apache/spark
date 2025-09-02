@@ -311,7 +311,6 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
 
                 yield coerced_batch, arrow_return_type
 
-        # Delegate to parent class for stream writing and batch processing
         return super(ArrowStreamArrowUDTFSerializer, self).dump_stream(
             apply_type_coercion(), stream
         )
