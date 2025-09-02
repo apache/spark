@@ -148,7 +148,7 @@ EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \'SELECT id FROM tbl_view WHERE id = ?\' US
 SET VAR sql_string = null;
 EXECUTE IMMEDIATE sql_string;
 
--- sqlString is null
+-- sqlString is not a string
 SET VAR sql_string = 5;
 EXECUTE IMMEDIATE sql_string;
 
