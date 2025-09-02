@@ -1687,6 +1687,35 @@ class ClientE2ETestSuite
       assert(df.count() == 100)
     }
   }
+
+  test("SPARK-52930: the nullability of arrays should be preserved using typedlit") {
+    val arrays = Seq(
+      (typedlit(Array[Int]()), false),
+      (typedlit(Array[Int](1)), false),
+      (typedlit(Array[Integer]()), true),
+      (typedlit(Array[Integer](1)), true))
+    for ((array, containsNull) <- arrays) {
+      val df = spark.sql("select 1").select(array)
+      df.createOrReplaceTempView("test_array_nullability")
+      val schema = spark.sql("select * from test_array_nullability").schema
+      assert(schema.fields.head.dataType.asInstanceOf[ArrayType].containsNull === containsNull)
+    }
+  }
+
+  test("SPARK-52930: the nullability of map values should be preserved using typedlit") {
+    val maps = Seq(
+      (typedlit(Map[String, Int]()), false),
+      (typedlit(Map[String, Int]("a" -> 1)), false),
+      (typedlit(Map[String, Integer]()), true),
+      (typedlit(Map[String, Integer]("a" -> 1)), true))
+    for ((map, valueContainsNull) <- maps) {
+      val df = spark.sql("select 1").select(map)
+      df.createOrReplaceTempView("test_map_nullability")
+      val schema = spark.sql("select * from test_map_nullability").schema
+      assert(
+        schema.fields.head.dataType.asInstanceOf[MapType].valueContainsNull === valueContainsNull)
+    }
+  }
 }
 
 private[sql] case class ClassData(a: String, b: Int)

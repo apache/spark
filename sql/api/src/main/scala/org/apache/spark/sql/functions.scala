@@ -8620,6 +8620,15 @@ object functions {
     Column.fn("make_timestamp_ntz", years, months, days, hours, mins, secs)
 
   /**
+   * Create a local date-time from date and time fields.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def make_timestamp_ntz(date: Column, time: Column): Column =
+    Column.fn("make_timestamp_ntz", date, time)
+
+  /**
    * Try to create a local date-time from years, months, days, hours, mins, secs fields. The
    * function returns NULL on invalid inputs.
    *
@@ -8634,6 +8643,15 @@ object functions {
       mins: Column,
       secs: Column): Column =
     Column.fn("try_make_timestamp_ntz", years, months, days, hours, mins, secs)
+
+  /**
+   * Try to create a local date-time from date and time fields.
+   *
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def try_make_timestamp_ntz(date: Column, time: Column): Column =
+    Column.fn("try_make_timestamp_ntz", date, time)
 
   /**
    * Make year-month interval from years, months.

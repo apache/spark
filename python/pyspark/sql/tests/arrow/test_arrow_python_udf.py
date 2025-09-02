@@ -21,7 +21,7 @@ from pyspark.errors import AnalysisException, PythonException, PySparkNotImpleme
 from pyspark.sql import Row
 from pyspark.sql.functions import udf
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
-from pyspark.sql.types import VarcharType
+from pyspark.sql.types import DayTimeIntervalType, VarcharType, StructType, StructField, StringType
 from pyspark.testing.sqlutils import (
     have_pandas,
     have_pyarrow,
@@ -180,6 +180,61 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
         with self.assertRaises(PythonException):
             df_floating_value.select(udf(lambda x: x, "decimal")("value").alias("res")).collect()
 
+    def test_arrow_udf_int_to_decimal_coercion(self):
+        from decimal import Decimal
+
+        with self.sql_conf(
+            {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": False}
+        ):
+            df = self.spark.range(0, 3)
+
+            @udf(returnType="decimal(10,2)", useArrow=True)
+            def int_to_decimal_udf(val):
+                values = [123, 456, 789]
+                return values[int(val) % len(values)]
+
+            # Test with coercion enabled
+            with self.sql_conf(
+                {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": True}
+            ):
+                result = df.select(int_to_decimal_udf("id").alias("decimal_val")).collect()
+                self.assertEqual(result[0]["decimal_val"], Decimal("123.00"))
+                self.assertEqual(result[1]["decimal_val"], Decimal("456.00"))
+                self.assertEqual(result[2]["decimal_val"], Decimal("789.00"))
+
+            # Test with coercion disabled (should fail)
+            with self.sql_conf(
+                {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
+            ):
+                with self.assertRaisesRegex(
+                    PythonException, "An exception was thrown from the Python worker"
+                ):
+                    df.select(int_to_decimal_udf("id").alias("decimal_val")).collect()
+
+            @udf(returnType="decimal(25,1)", useArrow=True)
+            def high_precision_udf(val):
+                values = [1, 2, 3]
+                return values[int(val) % len(values)]
+
+            # Test high precision decimal with coercion enabled
+            with self.sql_conf(
+                {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": True}
+            ):
+                result = df.select(high_precision_udf("id").alias("decimal_val")).collect()
+                self.assertEqual(len(result), 3)
+                self.assertEqual(result[0]["decimal_val"], Decimal("1.0"))
+                self.assertEqual(result[1]["decimal_val"], Decimal("2.0"))
+                self.assertEqual(result[2]["decimal_val"], Decimal("3.0"))
+
+            # Test high precision decimal with coercion disabled (should fail)
+            with self.sql_conf(
+                {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
+            ):
+                with self.assertRaisesRegex(
+                    PythonException, "An exception was thrown from the Python worker"
+                ):
+                    df.select(high_precision_udf("id").alias("decimal_val")).collect()
+
     def test_err_return_type(self):
         with self.assertRaises(PySparkNotImplementedError) as pe:
             udf(lambda x: x, VarcharType(10), useArrow=True)
@@ -242,6 +297,55 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             self.assertEqual(
                 udf(lambda x: str(x), useArrow=False).evalType, PythonEvalType.SQL_BATCHED_UDF
             )
+
+    def test_day_time_interval_type_casting(self):
+        """Test that DayTimeIntervalType UDFs work with Arrow and preserve field specifications."""
+
+        # HOUR TO SECOND
+        @udf(useArrow=True, returnType=DayTimeIntervalType(1, 3))
+        def return_interval(x):
+            return x
+
+        # UDF input: HOUR TO SECOND, UDF output: HOUR TO SECOND
+        df = self.spark.sql("SELECT INTERVAL '200:13:50.3' HOUR TO SECOND as value").select(
+            return_interval("value").alias("result")
+        )
+        self.assertEqual(df.schema.fields[0].dataType, DayTimeIntervalType(1, 3))
+        self.assertIsNotNone(df.collect()[0]["result"])
+
+        # UDF input: DAY TO SECOND, UDF output: HOUR TO SECOND
+        df2 = self.spark.sql("SELECT INTERVAL '1 10:30:45.123' DAY TO SECOND as value").select(
+            return_interval("value").alias("result")
+        )
+        self.assertEqual(df.schema.fields[0].dataType, DayTimeIntervalType(1, 3))
+        self.assertIsNotNone(df2.collect()[0]["result"])
+
+    def test_day_time_interval_in_struct(self):
+        """Test that DayTimeIntervalType works within StructType with Arrow UDFs."""
+
+        struct_type = StructType(
+            [
+                StructField("interval_field", DayTimeIntervalType(1, 3)),
+                StructField("name", StringType()),
+            ]
+        )
+
+        @udf(useArrow=True, returnType=struct_type)
+        def create_struct_with_interval(interval_val, name_val):
+            return Row(interval_field=interval_val, name=name_val)
+
+        df = self.spark.sql(
+            """
+            SELECT INTERVAL '15:30:45.678' HOUR TO SECOND as interval_val,
+                   'test_name' as name_val
+        """
+        ).select(create_struct_with_interval("interval_val", "name_val").alias("result"))
+
+        self.assertEqual(df.schema.fields[0].dataType, struct_type)
+        self.assertEqual(df.schema.fields[0].dataType.fields[0].dataType, DayTimeIntervalType(1, 3))
+        result = df.collect()[0]["result"]
+        self.assertIsNotNone(result["interval_field"])
+        self.assertEqual(result["name"], "test_name")
 
 
 @unittest.skipIf(

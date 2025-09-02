@@ -183,7 +183,10 @@ case class UnionLoopExec(
 
     // Main loop for obtaining the result of the recursive query.
     while (prevCount > 0 && !limitReached) {
-      var prevPlan: LogicalPlan = null
+      // The optimizer might have removed the UnionLoopRef in the recursion node (for example as a
+      // result of an empty join). In this case, prevPlan cannot be defined according to the cases
+      // below, so we set a default value of the previous result here.
+      var prevPlan: LogicalPlan = prevDF.logicalPlan
 
       // If the recursive part contains non-deterministic expressions that depends on a seed, we
       // need to create a new seed since the seed for this expression is set in the analysis, and

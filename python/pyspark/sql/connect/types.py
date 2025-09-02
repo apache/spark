@@ -129,6 +129,10 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     ret = pb2.DataType()
     if isinstance(data_type, NullType):
         ret.null.CopyFrom(pb2.DataType.NULL())
+    elif isinstance(data_type, CharType):
+        ret.char.length = data_type.length
+    elif isinstance(data_type, VarcharType):
+        ret.var_char.length = data_type.length
     elif isinstance(data_type, StringType):
         ret.string.collation = data_type.collation
     elif isinstance(data_type, BooleanType):

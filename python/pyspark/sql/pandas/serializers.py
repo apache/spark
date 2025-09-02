@@ -774,8 +774,6 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
         assert isinstance(arr, pa.Array)
         assert isinstance(arrow_type, pa.DataType)
 
-        # TODO: should we handle timezone here?
-
         if arr.type == arrow_type:
             return arr
         elif arrow_cast:
@@ -830,8 +828,11 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
         A timezone to respect when handling timestamp values
     safecheck : bool
         If True, conversion from Arrow to Pandas checks for overflow/truncation
-    input_types : bool
-        If True, then Pandas DataFrames will get columns by name
+    input_types : list
+        List of input data types for the UDF
+    int_to_decimal_coercion_enabled : bool
+        If True, applies additional coercions in Python before converting to Arrow
+        This has performance penalties.
     """
 
     def __init__(
@@ -839,6 +840,7 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
         timezone,
         safecheck,
         input_types,
+        int_to_decimal_coercion_enabled=False,
     ):
         super().__init__(
             timezone=timezone,
@@ -847,6 +849,7 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
             arrow_cast=True,
         )
         self._input_types = input_types
+        self._int_to_decimal_coercion_enabled = int_to_decimal_coercion_enabled
 
     def load_stream(self, stream):
         """
@@ -897,7 +900,11 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
         import pyarrow as pa
 
         def create_array(results, arrow_type, spark_type):
-            conv = LocalDataToArrowConversion._create_converter(spark_type, none_on_identity=True)
+            conv = LocalDataToArrowConversion._create_converter(
+                spark_type,
+                none_on_identity=True,
+                int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
+            )
             converted = [conv(res) for res in results] if conv is not None else results
             try:
                 return pa.array(converted, type=arrow_type)

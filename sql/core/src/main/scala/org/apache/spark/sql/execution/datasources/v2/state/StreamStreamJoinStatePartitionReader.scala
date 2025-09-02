@@ -71,6 +71,28 @@ class StreamStreamJoinStatePartitionReader(
       throw StateDataSourceErrors.internalError("Unexpected join side for stream-stream read!")
   }
 
+  private val usesVirtualColumnFamilies = StreamStreamJoinStateHelper.usesVirtualColumnFamilies(
+    hadoopConf.value,
+    partition.sourceOptions.stateCheckpointLocation.toString,
+    partition.sourceOptions.operatorId)
+
+  private val stateStoreCheckpointIds = SymmetricHashJoinStateManager.getStateStoreCheckpointIds(
+    partition.partition,
+    partition.sourceOptions.operatorStateUniqueIds,
+    usesVirtualColumnFamilies)
+
+  private val keyToNumValuesStateStoreCkptId = if (joinSide == LeftSide) {
+    stateStoreCheckpointIds.left.keyToNumValues
+  } else {
+    stateStoreCheckpointIds.right.keyToNumValues
+  }
+
+  private val keyWithIndexToValueStateStoreCkptId = if (joinSide == LeftSide) {
+    stateStoreCheckpointIds.left.keyWithIndexToValue
+  } else {
+    stateStoreCheckpointIds.right.keyWithIndexToValue
+  }
+
   /*
    * This is to handle the difference of schema across state format versions. The major difference
    * is whether we have added new field(s) in addition to the fields from input schema.
@@ -85,10 +107,7 @@ class StreamStreamJoinStatePartitionReader(
       // column from the value schema to get the actual fields.
       if (maybeMatchedColumn.name == "matched" && maybeMatchedColumn.dataType == BooleanType) {
         // If checkpoint is using one store and virtual column families, version is 3
-        if (StreamStreamJoinStateHelper.usesVirtualColumnFamilies(
-          hadoopConf.value,
-          partition.sourceOptions.stateCheckpointLocation.toString,
-          partition.sourceOptions.operatorId)) {
+        if (usesVirtualColumnFamilies) {
           (valueSchema.dropRight(1), 3)
         } else {
           (valueSchema.dropRight(1), 2)
@@ -130,8 +149,8 @@ class StreamStreamJoinStatePartitionReader(
         storeConf = storeConf,
         hadoopConf = hadoopConf.value,
         partitionId = partition.partition,
-        keyToNumValuesStateStoreCkptId = None,
-        keyWithIndexToValueStateStoreCkptId = None,
+        keyToNumValuesStateStoreCkptId = keyToNumValuesStateStoreCkptId,
+        keyWithIndexToValueStateStoreCkptId = keyWithIndexToValueStateStoreCkptId,
         formatVersion,
         skippedNullValueCount = None,
         useStateStoreCoordinator = false,

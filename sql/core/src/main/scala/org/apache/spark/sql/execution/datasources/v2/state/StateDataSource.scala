@@ -370,7 +370,8 @@ case class StateSourceOptions(
     readChangeFeedOptions: Option[ReadChangeFeedOptions],
     stateVarName: Option[String],
     readRegisteredTimers: Boolean,
-    flattenCollectionTypes: Boolean) {
+    flattenCollectionTypes: Boolean,
+    operatorStateUniqueIds: Option[Array[Array[String]]] = None) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
 
   override def toString: String = {
@@ -567,10 +568,37 @@ object StateSourceOptions extends DataSourceOptions {
       }
     }
 
+    val startBatchId = if (fromSnapshotOptions.isDefined) {
+      fromSnapshotOptions.get.snapshotStartBatchId
+    } else if (readChangeFeedOptions.isDefined) {
+      readChangeFeedOptions.get.changeStartBatchId
+    } else {
+      batchId.get
+    }
+
+    val operatorStateUniqueIds = getOperatorStateUniqueIds(
+      sparkSession,
+      startBatchId,
+      operatorId,
+      resolvedCpLocation)
+
+    if (operatorStateUniqueIds.isDefined) {
+      if (fromSnapshotOptions.isDefined) {
+        throw StateDataSourceErrors.invalidOptionValue(
+          SNAPSHOT_START_BATCH_ID,
+          "Snapshot reading is currently not supported with checkpoint v2.")
+      }
+      if (readChangeFeedOptions.isDefined) {
+        throw StateDataSourceErrors.invalidOptionValue(
+          READ_CHANGE_FEED,
+          "Read change feed is currently not supported with checkpoint v2.")
+      }
+    }
+
     StateSourceOptions(
       resolvedCpLocation, batchId.get, operatorId, storeName, joinSide,
       readChangeFeed, fromSnapshotOptions, readChangeFeedOptions,
-      stateVarName, readRegisteredTimers, flattenCollectionTypes)
+      stateVarName, readRegisteredTimers, flattenCollectionTypes, operatorStateUniqueIds)
   }
 
   private def resolvedCheckpointLocation(
@@ -587,6 +615,20 @@ object StateSourceOptions extends DataSourceOptions {
       case Some((lastId, _)) => lastId
       case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
     }
+  }
+
+  private def getOperatorStateUniqueIds(
+    session: SparkSession,
+    batchId: Long,
+    operatorId: Long,
+    checkpointLocation: String): Option[Array[Array[String]]] = {
+    val commitLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).commitLog
+    val commitMetadata = commitLog.get(batchId) match {
+      case Some(commitMetadata) => commitMetadata
+      case None => throw StateDataSourceErrors.committedBatchUnavailable(checkpointLocation)
+    }
+
+    commitMetadata.stateUniqueIds.flatMap(_.get(operatorId))
   }
 
   // Modifies options due to external data. Returns modified options.

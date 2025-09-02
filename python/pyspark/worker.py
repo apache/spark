@@ -2307,7 +2307,9 @@ def read_udfs(pickleSer, infile, eval_type):
             input_types = [
                 f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))
             ]
-            ser = ArrowBatchUDFSerializer(timezone, safecheck, input_types)
+            ser = ArrowBatchUDFSerializer(
+                timezone, safecheck, input_types, int_to_decimal_coercion_enabled
+            )
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
             # pandas Series. See SPARK-27240.

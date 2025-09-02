@@ -436,6 +436,7 @@ class UserDefinedFunction:
             # Disable profiling Pandas UDFs with iterators as input/output.
             if self.evalType in [
                 PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+                PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
                 PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
                 PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
             ]:
