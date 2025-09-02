@@ -1548,7 +1548,7 @@ class Dataset[T] private[sql](
    * partition ID expression.
    *
    * @param numPartitions the number of partitions to use.
-   * @param partitionIdExpr the expression to be used as the partition ID. Must be an integral type.
+   * @param partitionIdExpr the expression to be used as the partition ID. Must be an integer type.
    *
    * @group typedrel
    * @since 4.1.0
