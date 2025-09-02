@@ -1408,7 +1408,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     assert(planned.exists(_.isInstanceOf[LocalLimitExec]))
   }
 
-    test("SPARK-53401: repartitionById - should partition rows to the specified partition ID") {
+  test("SPARK-53401: repartitionById - should partition rows to the specified partition ID") {
     val numPartitions = 10
     val df = spark.range(100).withColumn("expected_p_id", col("id") % numPartitions)
 
