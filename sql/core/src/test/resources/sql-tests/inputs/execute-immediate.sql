@@ -152,7 +152,7 @@ EXECUTE IMMEDIATE sql_string;
 SET VAR sql_string = 5;
 EXECUTE IMMEDIATE sql_string;
 
--- sqlString is null
+-- sqlString is not a well formed SQL statement.
 SET VAR sql_string = 'hello';
 EXECUTE IMMEDIATE length(sql_string);
 
