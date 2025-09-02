@@ -690,21 +690,6 @@ class RocksDBWithCheckpointV2StateDataSourceReaderSuite extends StateDataSourceR
         Map(
           "optionName" -> StateSourceOptions.SNAPSHOT_START_BATCH_ID,
           "message" -> "Snapshot reading is currently not supported with checkpoint v2."))
-
-      // Verify reading change feed throws error with checkpoint v2
-      val exc2 = intercept[StateDataSourceInvalidOptionValue] {
-        val stateDf = spark.read.format("statestore")
-          .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
-          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
-          .option(StateSourceOptions.CHANGE_END_BATCH_ID, 1)
-          .load(tmpDir.getAbsolutePath)
-        stateDf.collect()
-      }
-
-      checkError(exc2, "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE", "42616",
-        Map(
-          "optionName" -> StateSourceOptions.READ_CHANGE_FEED,
-          "message" -> "Read change feed is currently not supported with checkpoint v2."))
     }
   }
 }

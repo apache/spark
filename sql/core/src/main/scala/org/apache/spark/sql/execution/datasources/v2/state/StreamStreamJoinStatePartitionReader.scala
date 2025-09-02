@@ -76,21 +76,22 @@ class StreamStreamJoinStatePartitionReader(
     partition.sourceOptions.stateCheckpointLocation.toString,
     partition.sourceOptions.operatorId)
 
-  private val stateStoreCheckpointIds = SymmetricHashJoinStateManager.getStateStoreCheckpointIds(
+  private val startStateStoreCheckpointIds =
+    SymmetricHashJoinStateManager.getStateStoreCheckpointIds(
     partition.partition,
-    partition.sourceOptions.operatorStateUniqueIds,
+    partition.sourceOptions.startOperatorStateUniqueIds,
     usesVirtualColumnFamilies)
 
   private val keyToNumValuesStateStoreCkptId = if (joinSide == LeftSide) {
-    stateStoreCheckpointIds.left.keyToNumValues
+    startStateStoreCheckpointIds.left.keyToNumValues
   } else {
-    stateStoreCheckpointIds.right.keyToNumValues
+    startStateStoreCheckpointIds.right.keyToNumValues
   }
 
   private val keyWithIndexToValueStateStoreCkptId = if (joinSide == LeftSide) {
-    stateStoreCheckpointIds.left.keyWithIndexToValue
+    startStateStoreCheckpointIds.left.keyWithIndexToValue
   } else {
-    stateStoreCheckpointIds.right.keyWithIndexToValue
+    startStateStoreCheckpointIds.right.keyWithIndexToValue
   }
 
   /*

@@ -371,7 +371,8 @@ case class StateSourceOptions(
     stateVarName: Option[String],
     readRegisteredTimers: Boolean,
     flattenCollectionTypes: Boolean,
-    operatorStateUniqueIds: Option[Array[Array[String]]] = None) {
+    startOperatorStateUniqueIds: Option[Array[Array[String]]] = None,
+    endOperatorStateUniqueIds: Option[Array[Array[String]]] = None) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
 
   override def toString: String = {
@@ -576,29 +577,52 @@ object StateSourceOptions extends DataSourceOptions {
       batchId.get
     }
 
-    val operatorStateUniqueIds = getOperatorStateUniqueIds(
+    val endBatchId = if (readChangeFeedOptions.isDefined) {
+      readChangeFeedOptions.get.changeEndBatchId
+    } else {
+      batchId.get
+    }
+
+    val startOperatorStateUniqueIds = getOperatorStateUniqueIds(
       sparkSession,
       startBatchId,
       operatorId,
       resolvedCpLocation)
 
-    if (operatorStateUniqueIds.isDefined) {
+    val endOperatorStateUniqueIds = if (startBatchId == endBatchId) {
+      startOperatorStateUniqueIds
+    } else {
+      getOperatorStateUniqueIds(
+        sparkSession,
+        endBatchId,
+        operatorId,
+        resolvedCpLocation)
+    }
+
+    if (startOperatorStateUniqueIds.isDefined != endOperatorStateUniqueIds.isDefined) {
+      val startFormatVersion = if (startOperatorStateUniqueIds.isDefined) 2 else 1
+      val endFormatVersion = if (endOperatorStateUniqueIds.isDefined) 2 else 1
+      throw StateDataSourceErrors.mixedCheckpointFormatVersionsNotSupported(
+        startBatchId,
+        endBatchId,
+        startFormatVersion,
+        endFormatVersion
+      )
+    }
+
+    if (startOperatorStateUniqueIds.isDefined) {
       if (fromSnapshotOptions.isDefined) {
         throw StateDataSourceErrors.invalidOptionValue(
           SNAPSHOT_START_BATCH_ID,
           "Snapshot reading is currently not supported with checkpoint v2.")
-      }
-      if (readChangeFeedOptions.isDefined) {
-        throw StateDataSourceErrors.invalidOptionValue(
-          READ_CHANGE_FEED,
-          "Read change feed is currently not supported with checkpoint v2.")
       }
     }
 
     StateSourceOptions(
       resolvedCpLocation, batchId.get, operatorId, storeName, joinSide,
       readChangeFeed, fromSnapshotOptions, readChangeFeedOptions,
-      stateVarName, readRegisteredTimers, flattenCollectionTypes, operatorStateUniqueIds)
+      stateVarName, readRegisteredTimers, flattenCollectionTypes,
+      startOperatorStateUniqueIds, endOperatorStateUniqueIds)
   }
 
   private def resolvedCheckpointLocation(
