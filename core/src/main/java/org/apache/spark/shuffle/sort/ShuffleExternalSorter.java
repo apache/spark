@@ -92,7 +92,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
   /**
    * Force this sorter to spill when the in memory size in bytes is beyond this threshold.
    */
-  private final long sizeInBytesForSpillThreshold;
+  private final long sizeInBytesForSpillThreshold ;
 
   /** The buffer size to use when writing spills using DiskBlockObjectWriter */
   private final int fileBufferSizeBytes;
