@@ -178,21 +178,20 @@ class ArrowUDTFTestsMixin:
             result_df.collect()
 
     def test_arrow_udtf_error_mismatched_schema(self):
-        @arrow_udtf(returnType="x int, y int")
+        @arrow_udtf(returnType="x int, y string")
         class MismatchedSchemaUDTF:
             def eval(self) -> Iterator["pa.Table"]:
                 result_table = pa.table(
                     {
-                        "col_with_arrow_cast": pa.array([1], type=pa.int32()),
-                        "wrong_col": pa.array(["wrong_col"], type=pa.string()),
+                        "wrong_col": pa.array([1], type=pa.int32()),
+                        "another_wrong_col": pa.array([2.5], type=pa.float64()),
                     }
                 )
                 yield result_table
 
         with self.assertRaisesRegex(
             PythonException,
-            "Arrow UDTFs require the return type to match the expected Arrow type."
-            + "Expected: int32, but got: string in field 'wrong_col'.",
+            "Target schema's field names are not matching the record batch's field names",
         ):
             result_df = MismatchedSchemaUDTF()
             result_df.collect()
