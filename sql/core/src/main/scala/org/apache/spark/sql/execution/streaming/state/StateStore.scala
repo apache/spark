@@ -801,7 +801,11 @@ trait SupportsFineGrainedReplay {
    * @param endVersion   checkpoint version to end with
    */
   def replayStateFromSnapshot(
-      snapshotVersion: Long, endVersion: Long, readOnly: Boolean = false): StateStore
+      snapshotVersion: Long,
+      endVersion: Long,
+      readOnly: Boolean = false,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None): StateStore
 
   /**
    * Return an instance of [[ReadStateStore]] representing state data of the given version.
@@ -813,8 +817,18 @@ trait SupportsFineGrainedReplay {
    * @param snapshotVersion checkpoint version of the snapshot to start with
    * @param endVersion   checkpoint version to end with
    */
-  def replayReadStateFromSnapshot(snapshotVersion: Long, endVersion: Long): ReadStateStore = {
-    new WrappedReadStateStore(replayStateFromSnapshot(snapshotVersion, endVersion, readOnly = true))
+  def replayReadStateFromSnapshot(
+      snapshotVersion: Long,
+      endVersion: Long,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None): ReadStateStore = {
+    new WrappedReadStateStore(
+      replayStateFromSnapshot(
+        snapshotVersion,
+        endVersion,
+        readOnly = true,
+        snapshotVersionStateStoreCkptId,
+        endVersionStateStoreCkptId))
   }
 
   /**

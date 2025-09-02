@@ -663,35 +663,6 @@ class RocksDBWithCheckpointV2StateDataSourceReaderSuite extends StateDataSourceR
       }
     }
   }
-
-  test("check unsupported modes with checkpoint v2") {
-    withTempDir { tmpDir =>
-      val inputData = MemoryStream[(Int, Long)]
-      val query = getStreamStreamJoinQuery(inputData)
-      testStream(query)(
-        StartStream(checkpointLocation = tmpDir.getCanonicalPath),
-        AddData(inputData, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
-        ProcessAllAvailable(),
-        Execute { _ => Thread.sleep(2000) },
-        StopStream
-      )
-
-      // Verify reading snapshot throws error with checkpoint v2
-      val exc1 = intercept[StateDataSourceInvalidOptionValue] {
-        val stateSnapshotDf = spark.read.format("statestore")
-          .option("snapshotPartitionId", 2)
-          .option("snapshotStartBatchId", 0)
-          .option("joinSide", "left")
-          .load(tmpDir.getCanonicalPath)
-        stateSnapshotDf.collect()
-      }
-
-      checkError(exc1, "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE", "42616",
-        Map(
-          "optionName" -> StateSourceOptions.SNAPSHOT_START_BATCH_ID,
-          "message" -> "Snapshot reading is currently not supported with checkpoint v2."))
-    }
-  }
 }
 
 abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Assertions {
