@@ -36,7 +36,7 @@ case class DirectShufflePartitionID(child: Expression)
 
   override def dataType: DataType = child.dataType
 
-  override def inputTypes: Seq[AbstractDataType] = LongType :: Nil
+  override def inputTypes: Seq[AbstractDataType] = IntegerType :: Nil
 
   override def nullable: Boolean = false
 
