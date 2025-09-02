@@ -27090,7 +27090,7 @@ def udf(
 
 @overload
 def udtf(
-    cls: Type,
+    cls: Type = None,
     *,
     useArrow: Optional[bool] = None,
 ) -> "UserDefinedTableFunction":
@@ -27104,16 +27104,6 @@ def udtf(
     useArrow: Optional[bool] = None,
 ) -> Callable[[Type], "UserDefinedTableFunction"]:
     ...
-
-
-@overload
-def udtf(
-    returnType: Union[StructType, str],
-    *,
-    useArrow: Optional[bool] = None,
-) -> Callable[[Type], "UserDefinedTableFunction"]:
-    ...
-
 
 @_try_remote_functions
 def udtf(
