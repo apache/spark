@@ -87,6 +87,30 @@ class RocksDBLineageSuite extends SharedSparkSession {
     }
   }
 
+  test("getFullLineage: multiple lineages exist for the same version") {
+    withTempDir { remoteDir =>
+      val db = newDB(remoteDir.getAbsolutePath, enableCheckpointIds = true)
+      try {
+        val start = 1L
+        val end = 5L
+        val id1 = "i1"; val id2 = "i2"; val id3 = "i3"; val id4 = "i4"; val id5 = "i5"
+        writeChangelogWithLineage(db, 3, id3, Array(LineageItem(2, id2), LineageItem(1, id1)))
+        writeChangelogWithLineage(db, 5, id5, Array(LineageItem(4, id4), LineageItem(3, id3)))
+        // Insert a bad lineage for version 5
+        // We should not use this lineage since we call getFullLineage with id5
+        val badId4 = id4 + "bad"
+        val badId5 = id5 + "bad"
+        writeChangelogWithLineage(db, 5, badId5, Array(LineageItem(4, badId4)))
+
+        val result = db.getFullLineage(start, end, Some(id5))
+        assert(result.map(_.version).sameElements(Array(1L, 2L, 3L, 4L, 5L)))
+        assert(result.map(_.checkpointUniqueId).sameElements(Array(id1, id2, id3, id4, id5)))
+      } finally {
+        db.close()
+      }
+    }
+  }
+
   test("getFullLineage: start equals end returns single item") {
     withTempDir { remoteDir =>
       val db = newDB(remoteDir.getAbsolutePath, enableCheckpointIds = true)
