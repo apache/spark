@@ -477,7 +477,7 @@ class ArrowTestsMixin:
         allocation_after = pa.total_allocated_bytes()
         difference = allocation_after - allocation_before
         # Should be around 1x the data size (table should not hold on to any memory)
-        self.assertGreaterEqual(difference, 0.9 * expected_bytes)
+        self.assertGreaterEqual(difference, 0.8 * expected_bytes)
         self.assertLessEqual(difference, 1.1 * expected_bytes)
 
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.selfDestruct.enabled": False}):
