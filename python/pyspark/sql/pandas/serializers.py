@@ -206,24 +206,6 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
         self.table_arg_offsets = table_arg_offsets if table_arg_offsets else []
         self._arrow_cast = True
 
-    def _create_array(self, arr, arrow_type):
-        import pyarrow as pa
-
-        assert isinstance(arr, pa.Array)
-        assert isinstance(arrow_type, pa.DataType)
-
-        if arr.type == arrow_type:
-            return arr
-        else:
-            try:
-                # when safe is True, the cast will fail if there's a overflow or other unsafe conversion
-                return arr.cast(target_type=arrow_type, safe=True)
-            except (pa.ArrowInvalid, pa.ArrowTypeError):
-                raise PySparkTypeError(
-                    "Arrow UDTFs require the return type to match the expected Arrow type. "
-                    f"Expected: {arrow_type}, but got: {arr.type}."
-                )
-
     def load_stream(self, stream):
         """
         Flatten the struct into Arrow's record batches.
@@ -255,8 +237,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
         from pyspark.errors import PySparkRuntimeError
 
         def apply_type_coercion():
-            for packed in iterator:
-                batch, arrow_return_type = packed
+            for batch, arrow_return_type in iterator:
                 assert isinstance(
                     arrow_return_type, pa.StructType
                 ), f"Expected pa.StructType, got {type(arrow_return_type)}"
