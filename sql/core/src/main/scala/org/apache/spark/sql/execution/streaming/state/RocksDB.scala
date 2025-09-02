@@ -386,6 +386,8 @@ class RocksDB(
       throw QueryExecutionErrors.invalidCheckpointLineage(printLineageItems(ret),
         s"Lineage does not end with endVersion: $endVersion.")
     }
+    // Verify that the lineage versions are increasing by one
+    // We do this by checking that each entry is one version higher than the previous one
     val increasingByOne = ret.sliding(2).forall {
       case Array(prev, next) => prev.version + 1 == next.version
       case _ => true
