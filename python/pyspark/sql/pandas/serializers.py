@@ -258,22 +258,8 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
             for packed in iterator:
                 batch, arrow_return_type = packed
                 assert isinstance(
-                    batch, pa.RecordBatch
-                ), f"Expected pa.RecordBatch, got {type(batch)}"
-                assert isinstance(
                     arrow_return_type, pa.StructType
                 ), f"Expected pa.StructType, got {type(arrow_return_type)}"
-
-                # Handle schema mismatch
-                if batch.num_columns != len(arrow_return_type):
-                    raise PySparkRuntimeError(
-                        errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
-                        messageParameters={
-                            "expected": str(len(arrow_return_type)),
-                            "actual": str(batch.num_columns),
-                            "func": "ArrowUDTF",
-                        },
-                    )
 
                 # Handle empty struct case specially
                 if batch.num_columns == 0:
@@ -282,7 +268,6 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                     struct = pa.array([{}] * batch.num_rows)
                     coerced_batch = pa.RecordBatch.from_arrays([struct], ["_0"])
                 else:
-                    # Use RecordBatch.cast for efficient type coercion
                     target_schema = pa.schema(arrow_return_type)
                     try:
                         coerced_batch = batch.cast(target_schema)
