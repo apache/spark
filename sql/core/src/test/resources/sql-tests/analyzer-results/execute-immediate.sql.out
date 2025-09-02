@@ -364,10 +364,11 @@ EXECUTE IMMEDIATE 'INSERT INTO x VALUES (?)' INTO res_id USING 1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_STATEMENT_FOR_EXECUTE_INTO",
-  "sqlState" : "07501",
+  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "sqlState" : "42802",
   "messageParameters" : {
-    "sqlString" : "INSERT INTO X VALUES (?)"
+    "numExpr" : "0",
+    "numTarget" : "1"
   }
 }
 
@@ -495,19 +496,19 @@ LocalRelation [id#x, name#x, data#x]
 -- !query
 EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first' USING (SELECT 42) as first, 'name2' as second
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
-  "sqlState" : "42K0E",
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
   "messageParameters" : {
-    "invalidExprSql" : "\"scalarsubquery()\""
+    "message" : "Found the unresolved operator: 'Project [unresolvedalias(42)]"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 70,
-    "stopIndex" : 80,
-    "fragment" : "(SELECT 42)"
+    "startIndex" : 71,
+    "stopIndex" : 79,
+    "fragment" : "SELECT 42"
   } ]
 }
 
@@ -795,19 +796,19 @@ org.apache.spark.sql.AnalysisException
 -- !query
 EXECUTE IMMEDIATE 'SELECT ?' USING (SELECT 1)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
-  "sqlState" : "42K0E",
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
   "messageParameters" : {
-    "invalidExprSql" : "\"scalarsubquery()\""
+    "message" : "Found the unresolved operator: 'Project [unresolvedalias(1)]"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 36,
-    "stopIndex" : 45,
-    "fragment" : "(SELECT 1)"
+    "startIndex" : 37,
+    "stopIndex" : 44,
+    "fragment" : "SELECT 1"
   } ]
 }
 
@@ -828,19 +829,19 @@ org.apache.spark.sql.AnalysisException
 -- !query
 EXECUTE IMMEDIATE (SELECT c FROM (VALUES(1)) AS T(c))
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
-  "sqlState" : "42K0E",
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
   "messageParameters" : {
-    "invalidExprSql" : "\"scalarsubquery()\""
+    "objectName" : "`c`"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 19,
-    "stopIndex" : 53,
-    "fragment" : "(SELECT c FROM (VALUES(1)) AS T(c))"
+    "startIndex" : 27,
+    "stopIndex" : 27,
+    "fragment" : "c"
   } ]
 }
 

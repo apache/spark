@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.{SqlScriptingContextManager}
+import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions.{Alias, EmptyRow, Exists, Expression, InSubquery, ListQuery, Literal, ScalarSubquery, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, CommandResult, CompoundBody, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -41,18 +41,18 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
 
   private def executeImmediate(cmd: ExecuteImmediateCommand): LogicalPlan = {
     // Extract the query string from the queryParam expression
-    val queryString = extractQueryString(cmd.queryParam)
+    val sqlStmtStr = extractQueryString(cmd.sqlStmtStr)
 
     // Parse and validate the query
-    val parsedPlan = sparkSession.sessionState.sqlParser.parsePlan(queryString)
-    validateQuery(queryString, parsedPlan)
+    val parsedPlan = sparkSession.sessionState.sqlParser.parsePlan(sqlStmtStr)
+    validateQuery(sqlStmtStr, parsedPlan)
 
     // Execute the query recursively with isolated local variable context
     val result = if (cmd.args.isEmpty) {
       // No parameters - execute directly
       withIsolatedLocalVariableContext {
         AnalysisContext.withExecuteImmediateContext {
-          sparkSession.sql(queryString)
+          sparkSession.sql(sqlStmtStr)
         }
       }
     } else {
@@ -60,11 +60,11 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
       val (paramValues, paramNames) = buildUnifiedParameters(cmd.args)
 
       // Validate parameter usage patterns
-      validateParameterUsage(cmd.queryParam, cmd.args, paramNames.toSeq)
+      validateParameterUsage(cmd.sqlStmtStr, cmd.args, paramNames.toSeq)
 
       withIsolatedLocalVariableContext {
         AnalysisContext.withExecuteImmediateContext {
-          sparkSession.sql(queryString, paramValues, paramNames)
+          sparkSession.sql(sqlStmtStr, paramValues, paramNames)
         }
       }
     }
