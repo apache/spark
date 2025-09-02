@@ -347,7 +347,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     val inferenceMode = sparkSession.sessionState.conf.caseSensitiveInferenceMode
     val shouldInfer = (inferenceMode != NEVER_INFER) && !tableMeta.schemaPreservesCase
     if (shouldInfer) {
-      val tableName = relation.tableMeta.identifier.unquotedString
+      val tableName = tableMeta.identifier.unquotedString
       logInfo(log"Inferring case-sensitive schema for table ${MDC(TABLE_NAME, tableName)} " +
         log"(inference mode:  ${MDC(INFERENCE_MODE, inferenceMode)})})")
       val fileIndex = fileIndexOpt.getOrElse {
