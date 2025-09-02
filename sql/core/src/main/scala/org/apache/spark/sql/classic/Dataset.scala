@@ -1543,6 +1543,7 @@ class Dataset[T] private[sql](
       RepartitionByExpression(partitionExprs.map(_.expr), logicalPlan, numPartitions)
     }
   }
+
   /**
    * Repartitions the Dataset into the given number of partitions using the specified
    * partition ID expression.
