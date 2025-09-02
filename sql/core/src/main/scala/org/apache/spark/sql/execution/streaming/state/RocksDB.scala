@@ -342,6 +342,63 @@ class RocksDB(
     currLineage
   }
 
+  /**
+   * Construct the full lineage from startVersion to endVersion (inclusive) by
+   * walking backwards using lineage information embedded in changelog files.
+   */
+  def getFullLineage(
+      startVersion: Long,
+      endVersion: Long,
+      endVersionStateStoreCkptId: Option[String]): Array[LineageItem] = {
+    assert(startVersion <= endVersion,
+      s"startVersion $startVersion should be less than or equal to endVersion $endVersion")
+    assert(endVersionStateStoreCkptId.isDefined,
+      "endVersionStateStoreCkptId should be defined")
+
+    // A buffer to collect the lineage information, the entries should be decreasing in version
+    val buf = mutable.ArrayBuffer[LineageItem]()
+    buf.append(LineageItem(endVersion, endVersionStateStoreCkptId.get))
+
+    while (buf.last.version > startVersion) {
+      val prevSmallestVersion = buf.last.version
+      val lineage = getLineageFromChangelogFile(buf.last.version, Some(buf.last.checkpointUniqueId))
+      // lineage array is sorted in increasing order, we need to make it decreasing
+      val lineageSortedDecreasing = lineage.filter(_.version >= startVersion).sortBy(-_.version)
+      // append to the buffer in reverse order, so the buffer is always decreasing in version
+      buf.appendAll(lineageSortedDecreasing)
+
+      // to prevent infinite loop if we make no progress, throw an exception
+      if (buf.last.version == prevSmallestVersion) {
+        throw QueryExecutionErrors.invalidCheckpointLineage(printLineageItems(buf.reverse.toArray),
+          s"Cannot find version smaller than ${buf.last.version} in lineage.")
+      }
+    }
+
+    // we return the lineage in increasing order
+    val ret = buf.reverse.toArray
+
+    // Sanity checks
+    if (ret.head.version != startVersion) {
+      throw QueryExecutionErrors.invalidCheckpointLineage(printLineageItems(ret),
+        s"Lineage does not start with startVersion: $startVersion.")
+    }
+    if (ret.last.version != endVersion) {
+      throw QueryExecutionErrors.invalidCheckpointLineage(printLineageItems(ret),
+        s"Lineage does not end with endVersion: $endVersion.")
+    }
+    // Verify that the lineage versions are increasing by one
+    // We do this by checking that each entry is one version higher than the previous one
+    val increasingByOne = ret.sliding(2).forall {
+      case Array(prev, next) => prev.version + 1 == next.version
+      case _ => true
+    }
+    if (!increasingByOne) {
+      throw QueryExecutionErrors.invalidCheckpointLineage(printLineageItems(ret),
+        "Lineage versions are not increasing by one.")
+    }
+
+    ret
+  }
 
   /**
    * Load the given version of data in a native RocksDB instance.

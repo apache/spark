@@ -368,6 +368,11 @@
           "The change log writer version cannot be <version>."
         ]
       },
+      "INVALID_CHECKPOINT_LINEAGE" : {
+        "message" : [
+          "Invalid checkpoint lineage: <lineage>. <message>"
+        ]
+      },
       "KEY_ROW_FORMAT_VALIDATION_FAILURE" : {
         "message" : [
           "<msg>"
@@ -5162,6 +5167,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_CHECKPOINT_IDS_NOT_SUPPORTED" : {
+    "message" : [
+      "<msg>"
+    ],
+    "sqlState" : "KD002"
+  },
   "STATE_STORE_CHECKPOINT_LOCATION_NOT_EMPTY" : {
     "message" : [
       "The checkpoint location <checkpointLocation> should be empty on batch 0",
@@ -5406,6 +5417,14 @@
       }
     },
     "sqlState" : "42616"
+  },
+  "STDS_MIXED_CHECKPOINT_FORMAT_VERSIONS_NOT_SUPPORTED" : {
+    "message" : [
+      "Reading state across different checkpoint format versions is not supported.",
+      "startBatchId=<startBatchId>, endBatchId=<endBatchId>.",
+      "startFormatVersion=<startFormatVersion>, endFormatVersion=<endFormatVersion>."
+    ],
+    "sqlState" : "KD002"
   },
   "STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE" : {
     "message" : [

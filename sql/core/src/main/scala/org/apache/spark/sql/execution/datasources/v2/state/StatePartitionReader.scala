@@ -96,11 +96,20 @@ abstract class StatePartitionReaderBase(
       schema, "value").asInstanceOf[StructType]
   }
 
-  protected val getStoreUniqueId : Option[String] = {
+  protected def getStoreUniqueId(
+    operatorStateUniqueIds: Option[Array[Array[String]]]) : Option[String] = {
     SymmetricHashJoinStateManager.getStateStoreCheckpointId(
       storeName = partition.sourceOptions.storeName,
       partitionId = partition.partition,
-      stateStoreCkptIds = partition.sourceOptions.operatorStateUniqueIds)
+      stateStoreCkptIds = operatorStateUniqueIds)
+  }
+
+  protected def getStartStoreUniqueId: Option[String] = {
+    getStoreUniqueId(partition.sourceOptions.startOperatorStateUniqueIds)
+  }
+
+  protected def getEndStoreUniqueId: Option[String] = {
+    getStoreUniqueId(partition.sourceOptions.endOperatorStateUniqueIds)
   }
 
   protected lazy val provider: StateStoreProvider = {
@@ -123,7 +132,7 @@ abstract class StatePartitionReaderBase(
     if (useColFamilies) {
       val store = provider.getStore(
         partition.sourceOptions.batchId + 1,
-        getStoreUniqueId)
+        getEndStoreUniqueId)
       require(stateStoreColFamilySchemaOpt.isDefined)
       val stateStoreColFamilySchema = stateStoreColFamilySchemaOpt.get
       require(stateStoreColFamilySchema.keyStateEncoderSpec.isDefined)
@@ -182,9 +191,11 @@ class StatePartitionReader(
   private lazy val store: ReadStateStore = {
     partition.sourceOptions.fromSnapshotOptions match {
       case None =>
+        assert(getStartStoreUniqueId == getEndStoreUniqueId,
+          "Start and end store unique IDs must be the same when not reading from snapshot")
         provider.getReadStore(
           partition.sourceOptions.batchId + 1,
-          getStoreUniqueId
+          getStartStoreUniqueId
         )
 
       case Some(fromSnapshotOptions) =>
@@ -261,7 +272,8 @@ class StateStoreChangeDataPartitionReader(
       .getStateStoreChangeDataReader(
         partition.sourceOptions.readChangeFeedOptions.get.changeStartBatchId + 1,
         partition.sourceOptions.readChangeFeedOptions.get.changeEndBatchId + 1,
-        colFamilyNameOpt)
+        colFamilyNameOpt,
+        getEndStoreUniqueId)
   }
 
   override lazy val iter: Iterator[InternalRow] = {
