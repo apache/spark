@@ -1923,7 +1923,7 @@ class TransformWithStateInPandasWithCheckpointV2TestsMixin(TransformWithStateInP
         cfg.set("spark.sql.streaming.stateStore.checkpointFormatVersion", "2")
         return cfg
 
-    # TODO(SPARK-53332): Add this test back when checkpoint v2 support exists for snapshotStartBatchId
+    # TODO(SPARK-53332): Add test back when checkpoint v2 support exists for snapshotStartBatchId
     def test_transform_with_value_state_metadata(self):
         pass
 
@@ -1935,7 +1935,7 @@ class TransformWithStateInPySparkWithCheckpointV2TestsMixin(TransformWithStateIn
         cfg.set("spark.sql.streaming.stateStore.checkpointFormatVersion", "2")
         return cfg
 
-    # TODO(SPARK-53332): Add this test back when checkpoint v2 support exists for snapshotStartBatchId
+    # TODO(SPARK-53332): Add test back when checkpoint v2 support exists for snapshotStartBatchId
     def test_transform_with_value_state_metadata(self):
         pass
 
