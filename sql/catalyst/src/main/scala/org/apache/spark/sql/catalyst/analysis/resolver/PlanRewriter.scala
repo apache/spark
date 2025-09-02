@@ -59,7 +59,7 @@ class PlanRewriter(
     val planWithRewrittenSubqueries =
       plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
         case subqueryExpression: SubqueryExpression =>
-          val rewrittenSubqueryPlan = rewrite(subqueryExpression.plan)
+          val rewrittenSubqueryPlan = doRewriteWithSubqueries(subqueryExpression.plan)
 
           subqueryExpression.withNewPlan(rewrittenSubqueryPlan)
       }

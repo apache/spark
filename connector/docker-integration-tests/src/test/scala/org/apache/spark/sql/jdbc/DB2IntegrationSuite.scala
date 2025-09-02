@@ -37,7 +37,7 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with SharedJDBCIntegrationTests {
+class DB2IntegrationSuite extends SharedJDBCIntegrationSuite {
   override val db = new DB2DatabaseOnDocker
 
   override def dataPreparation(conn: Connection): Unit = {

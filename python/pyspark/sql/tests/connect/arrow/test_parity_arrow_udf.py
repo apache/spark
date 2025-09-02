@@ -15,12 +15,18 @@
 # limitations under the License.
 #
 
+import os
+import time
+
 from pyspark.sql.tests.arrow.test_arrow_udf import ArrowUDFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class ArrowPythonUDFParityTests(ArrowUDFTestsMixin, ReusedConnectTestCase):
-    pass
+    def setUp(self):
+        tz = "America/Los_Angeles"
+        os.environ["TZ"] = tz
+        time.tzset()
 
 
 if __name__ == "__main__":

@@ -1174,7 +1174,7 @@ class ForStatementExec(
     val defaultExpression = DefaultValueExpression(
       Literal(null, queryColumnNameToDataType(varName)), "null")
     val declareVariable = CreateVariable(
-      UnresolvedIdentifier(Seq(varName)),
+      Seq(UnresolvedIdentifier(Seq(varName))),
       defaultExpression,
       replace = false
     )
@@ -1187,7 +1187,7 @@ class ForStatementExec(
       OneRowRelation()
     )
     val setIdentifierToCurrentRow =
-      SetVariable(Seq(UnresolvedAttribute(varName)), projectNamedStruct)
+      SetVariable(Seq(UnresolvedAttribute.quoted(varName)), projectNamedStruct)
     new SingleStatementExec(
       setIdentifierToCurrentRow,
       Origin(),

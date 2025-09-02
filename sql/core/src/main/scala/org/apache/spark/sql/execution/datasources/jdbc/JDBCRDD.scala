@@ -23,7 +23,7 @@ import scala.util.Using
 import scala.util.control.NonFatal
 
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.SQL_TEXT
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -54,7 +54,7 @@ object JDBCRDD extends Logging {
    * @throws java.sql.SQLException if the table specification is garbage.
    * @throws java.sql.SQLException if the table contains an unsupported type.
    */
-  def resolveTable(options: JDBCOptions): StructType = {
+  def resolveTable(options: JDBCOptions, conn: Connection): StructType = {
     val url = options.url
     val prepareQuery = options.prepareQuery
     val table = options.tableOrQuery
@@ -62,7 +62,7 @@ object JDBCRDD extends Logging {
     val fullQuery = prepareQuery + dialect.getSchemaQuery(table)
 
     try {
-      getQueryOutputSchema(fullQuery, options, dialect)
+      getQueryOutputSchema(fullQuery, options, dialect, conn)
     } catch {
       case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
         throw new SparkException(
@@ -72,16 +72,28 @@ object JDBCRDD extends Logging {
     }
   }
 
+  def resolveTable(options: JDBCOptions): StructType = {
+    JdbcUtils.withConnection(options) {
+      resolveTable(options, _)
+    }
+  }
+
+  def getQueryOutputSchema(
+      query: String, options: JDBCOptions, dialect: JdbcDialect, conn: Connection): StructType = {
+    logInfo(log"Generated JDBC query to get scan output schema: ${MDC(SQL_TEXT, query)}")
+    Using.resource(conn.prepareStatement(query)) { statement =>
+      statement.setQueryTimeout(options.queryTimeout)
+      Using.resource(statement.executeQuery()) { rs =>
+        JdbcUtils.getSchema(conn, rs, dialect, alwaysNullable = true,
+          isTimestampNTZ = options.preferTimestampNTZ)
+      }
+    }
+  }
+
   def getQueryOutputSchema(
       query: String, options: JDBCOptions, dialect: JdbcDialect): StructType = {
-    Using.resource(dialect.createConnectionFactory(options)(-1)) { conn =>
-      Using.resource(conn.prepareStatement(query)) { statement =>
-        statement.setQueryTimeout(options.queryTimeout)
-        Using.resource(statement.executeQuery()) { rs =>
-          JdbcUtils.getSchema(conn, rs, dialect, alwaysNullable = true,
-            isTimestampNTZ = options.preferTimestampNTZ)
-        }
-      }
+    JdbcUtils.withConnection(options) {
+      getQueryOutputSchema(query, options, dialect, _)
     }
   }
 
@@ -130,7 +142,8 @@ object JDBCRDD extends Logging {
       sample: Option[TableSampleInfo] = None,
       limit: Int = 0,
       sortOrders: Array[String] = Array.empty[String],
-      offset: Int = 0): RDD[InternalRow] = {
+      offset: Int = 0,
+      additionalMetrics: Map[String, SQLMetric] = Map()): RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = if (groupByColumns.isEmpty) {
@@ -155,7 +168,8 @@ object JDBCRDD extends Logging {
       sample,
       limit,
       sortOrders,
-      offset)
+      offset,
+      additionalMetrics)
   }
   // scalastyle:on argcount
 }
@@ -179,7 +193,8 @@ class JDBCRDD(
     sample: Option[TableSampleInfo],
     limit: Int,
     sortOrders: Array[String],
-    offset: Int)
+    offset: Int,
+    additionalMetrics: Map[String, SQLMetric])
   extends RDD[InternalRow](sc, Nil) with DataSourceMetricsMixin with ExternalEngineDatasourceRDD {
 
   /**
@@ -188,6 +203,17 @@ class JDBCRDD(
   val queryExecutionTimeMetric: SQLMetric = SQLMetrics.createNanoTimingMetric(
     sparkContext,
     name = "JDBC query execution time")
+
+  /**
+   * Time needed to fetch the data and transform it into Spark's InternalRow format.
+   *
+   * Usually this is spent in network transfer time, but it can be spent in transformation time
+   * as well if we are transforming some more complex datatype such as structs.
+   */
+  val fetchAndTransformToInternalRowsMetric: SQLMetric = SQLMetrics.createNanoTimingMetric(
+    sparkContext,
+    // Message that user sees does not have to leak details about conversion
+    name = "JDBC remote data fetch and translation time")
 
   private lazy val dialect = JdbcDialects.get(url)
 
@@ -296,28 +322,31 @@ class JDBCRDD(
     }
 
     val sqlText = generateJdbcQuery(Some(part))
+    logInfo(log"Generated JDBC query to fetch data: ${MDC(SQL_TEXT, sqlText)}")
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)
     stmt.setQueryTimeout(options.queryTimeout)
 
-    val startTime = System.nanoTime
-    rs = try {
-      stmt.executeQuery()
-    } catch {
-      case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
-        throw new SparkException(
-          errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_QUERY_EXECUTION",
-          messageParameters = Map("jdbcQuery" -> sqlText),
-          cause = e)
+    rs = SQLMetrics.withTimingNs(queryExecutionTimeMetric) {
+      try {
+        stmt.executeQuery()
+      } catch {
+        case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
+          throw new SparkException(
+            errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_QUERY_EXECUTION",
+            messageParameters = Map("jdbcQuery" -> sqlText),
+            cause = e)
+      }
     }
-    val endTime = System.nanoTime
-
-    val executionTime = endTime - startTime
-    queryExecutionTimeMetric.add(executionTime)
 
     val rowsIterator =
-      JdbcUtils.resultSetToSparkInternalRows(rs, dialect, schema, inputMetrics)
+      JdbcUtils.resultSetToSparkInternalRows(
+        rs,
+        dialect,
+        schema,
+        inputMetrics,
+        Some(fetchAndTransformToInternalRowsMetric))
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](
       new InterruptibleIterator(context, rowsIterator), close())
@@ -325,7 +354,8 @@ class JDBCRDD(
 
   override def getMetrics: Seq[(String, SQLMetric)] = {
     Seq(
+      "fetchAndTransformToInternalRowsNs" -> fetchAndTransformToInternalRowsMetric,
       "queryExecutionTime" -> queryExecutionTimeMetric
-    )
+    ) ++ additionalMetrics
   }
 }

@@ -215,20 +215,66 @@ message Expression {
     }
 
     message Array {
-      DataType element_type = 1;
+      // (Deprecated) The element type of the array.
+      //
+      // This field is deprecated since Spark 4.1+ and should only be set
+      // if the data_type field is not set. Use data_type field instead.
+      DataType element_type = 1 [deprecated = true];
+
+      // The literal values that make up the array elements.
       repeated Literal elements = 2;
+
+      // The type of the array.
+      //
+      // If the element type can be inferred from the first element of the elements field,
+      // then you don't need to set data_type.element_type to save space. On the other hand,
+      // redundant type information is also acceptable.
+      DataType.Array data_type = 3;
     }
 
     message Map {
-      DataType key_type = 1;
-      DataType value_type = 2;
+      // (Deprecated) The key type of the map.
+      //
+      // This field is deprecated since Spark 4.1+ and should only be set
+      // if the data_type field is not set. Use data_type field instead.
+      DataType key_type = 1 [deprecated = true];
+
+      // (Deprecated) The value type of the map.
+      //
+      // This field is deprecated since Spark 4.1+ and should only be set
+      // if the data_type field is not set. Use data_type field instead.
+      DataType value_type = 2 [deprecated = true];
+
+      // The literal keys that make up the map.
       repeated Literal keys = 3;
+
+      // The literal values that make up the map.
       repeated Literal values = 4;
+
+      // The type of the map.
+      //
+      // If the key/value types can be inferred from the first element of the keys/values fields,
+      // then you don't need to set data_type.key_type/data_type.value_type to save space.
+      // On the other hand, redundant type information is also acceptable.
+      DataType.Map data_type = 5;
     }
 
     message Struct {
-      DataType struct_type = 1;
+      // (Deprecated) The type of the struct.
+      //
+      // This field is deprecated since Spark 4.1+ because using DataType as the type of a struct
+      // is ambiguous. This field should only be set if the data_type_struct field is not set.
+      // Use data_type_struct field instead.
+      DataType struct_type = 1 [deprecated = true];
+
+      // (Required) The literal values that make up the struct elements.
       repeated Literal elements = 2;
+
+      // The type of the struct.
+      //
+      // Whether data_type_struct.fields.data_type should be set depends on
+      // whether each field's type can be inferred from the elements field.
+      DataType.Struct data_type_struct = 3;
     }
 
     message SpecializedArray {

@@ -103,6 +103,7 @@ class BooleanOpsTestsMixin:
         pdf, psdf = self.pdf, self.psdf
 
         b_pser, b_psser = pdf["bool"], psdf["bool"]
+        self.assert_eq(b_pser / 0, b_psser / 0)
         self.assert_eq(b_pser / 1, b_psser / 1)
         self.assert_eq(b_pser / 0.1, b_psser / 0.1)
         self.assert_eq(b_pser / b_pser.astype(int), b_psser / b_psser.astype(int))
@@ -121,6 +122,7 @@ class BooleanOpsTestsMixin:
 
         # float is always returned in pandas-on-Spark
         self.assert_eq((b_pser // 1).astype("float"), b_psser // 1)
+        self.assert_eq((b_pser // 0).astype("float"), b_psser // 0)
 
         # in pandas, 1 // 0.1 = 9.0; in pandas-on-Spark, 1 // 0.1 = 10.0
         # self.assert_eq(b_pser // 0.1, b_psser // 0.1)
@@ -138,6 +140,7 @@ class BooleanOpsTestsMixin:
         pdf, psdf = self.pdf, self.psdf
 
         b_pser, b_psser = pdf["bool"], psdf["bool"]
+        self.assert_eq(b_pser % 0, b_psser % 0)
         self.assert_eq(b_pser % 1, b_psser % 1)
         self.assert_eq(b_pser % 0.1, b_psser % 0.1)
         self.assert_eq(b_pser % b_pser.astype(float), b_psser % b_psser.astype(float))

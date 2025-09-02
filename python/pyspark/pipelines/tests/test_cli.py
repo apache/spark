@@ -36,6 +36,7 @@ if should_test_connect and have_yaml:
         unpack_pipeline_spec,
         DefinitionsGlob,
         PipelineSpec,
+        run,
     )
     from pyspark.pipelines.tests.local_graph_element_registry import LocalGraphElementRegistry
 
@@ -251,8 +252,8 @@ class CLIUtilityTests(unittest.TestCase):
                 f.write(
                     textwrap.dedent(
                         """
-                        from pyspark import pipelines as sdp
-                        @sdp.materialized_view
+                        from pyspark import pipelines as dp
+                        @dp.materialized_view
                         def mv1():
                             raise NotImplementedError()
                     """
@@ -263,7 +264,7 @@ class CLIUtilityTests(unittest.TestCase):
                 f.write(
                     textwrap.dedent(
                         """
-                        from pyspark import pipelines as sdp
+                        from pyspark import pipelines as dp
                         def mv2():
                             raise NotImplementedError()
                     """
@@ -357,6 +358,98 @@ class CLIUtilityTests(unittest.TestCase):
                         definitions=[DefinitionsGlob(include="defs.py")],
                     ),
                 )
+
+    def test_full_refresh_all_conflicts_with_full_refresh(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create a minimal pipeline spec
+            spec_path = Path(temp_dir) / "pipeline.yaml"
+            with spec_path.open("w") as f:
+                f.write('{"name": "test_pipeline"}')
+
+            # Test that providing both --full-refresh-all and --full-refresh raises an exception
+            with self.assertRaises(PySparkException) as context:
+                run(
+                    spec_path=spec_path,
+                    full_refresh=["table1", "table2"],
+                    full_refresh_all=True,
+                    refresh=[],
+                    dry=False,
+                )
+
+            self.assertEqual(
+                context.exception.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS"
+            )
+            self.assertEqual(
+                context.exception.getMessageParameters(), {"conflicting_option": "--full_refresh"}
+            )
+
+    def test_full_refresh_all_conflicts_with_refresh(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create a minimal pipeline spec
+            spec_path = Path(temp_dir) / "pipeline.yaml"
+            with spec_path.open("w") as f:
+                f.write('{"name": "test_pipeline"}')
+
+            # Test that providing both --full-refresh-all and --refresh raises an exception
+            with self.assertRaises(PySparkException) as context:
+                run(
+                    spec_path=spec_path,
+                    full_refresh=[],
+                    full_refresh_all=True,
+                    refresh=["table1", "table2"],
+                    dry=False,
+                )
+
+            self.assertEqual(
+                context.exception.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS"
+            )
+            self.assertEqual(
+                context.exception.getMessageParameters(),
+                {"conflicting_option": "--refresh"},
+            )
+
+    def test_full_refresh_all_conflicts_with_both(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create a minimal pipeline spec
+            spec_path = Path(temp_dir) / "pipeline.yaml"
+            with spec_path.open("w") as f:
+                f.write('{"name": "test_pipeline"}')
+
+            # Test that providing --full-refresh-all with both other options raises an exception
+            # (it should catch the first conflict - full_refresh)
+            with self.assertRaises(PySparkException) as context:
+                run(
+                    spec_path=spec_path,
+                    full_refresh=["table1"],
+                    full_refresh_all=True,
+                    refresh=["table2"],
+                    dry=False,
+                )
+
+            self.assertEqual(
+                context.exception.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS"
+            )
+
+    def test_parse_table_list_single_table(self):
+        """Test parsing a single table name."""
+        from pyspark.pipelines.cli import parse_table_list
+
+        result = parse_table_list("table1")
+        self.assertEqual(result, ["table1"])
+
+    def test_parse_table_list_multiple_tables(self):
+        """Test parsing multiple table names."""
+        from pyspark.pipelines.cli import parse_table_list
+
+        result = parse_table_list("table1,table2,table3")
+        self.assertEqual(result, ["table1", "table2", "table3"])
+
+    def test_parse_table_list_with_spaces(self):
+        """Test parsing table names with spaces."""
+        from pyspark.pipelines.cli import parse_table_list
+
+        result = parse_table_list("table1, table2 , table3")
+        self.assertEqual(result, ["table1", "table2", "table3"])
 
 
 if __name__ == "__main__":

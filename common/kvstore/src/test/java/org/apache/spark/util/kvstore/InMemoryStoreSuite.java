@@ -17,9 +17,9 @@
 
 package org.apache.spark.util.kvstore;
 
+import java.util.Set;
 import java.util.NoSuchElementException;
 
-import com.google.common.collect.ImmutableSet;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -147,25 +147,25 @@ public class InMemoryStoreSuite {
     assertFalse(store.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       KVIndex.NATURAL_INDEX_NAME,
-      ImmutableSet.of(new int[] {10, 10, 10}, new int[] { 3, 3, 3 })));
+      Set.of(new int[] {10, 10, 10}, new int[] { 3, 3, 3 })));
     assertEquals(9, store.count(ArrayKeyIndexType.class));
 
     assertTrue(store.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       KVIndex.NATURAL_INDEX_NAME,
-      ImmutableSet.of(new int[] {0, 0, 0}, new int[] { 2, 2, 2 })));
+      Set.of(new int[] {0, 0, 0}, new int[] { 2, 2, 2 })));
     assertEquals(7, store.count(ArrayKeyIndexType.class));
 
     assertTrue(store.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       "id",
-      ImmutableSet.of(new String [] { "things" })));
+      Set.<String[]>of(new String [] { "things" })));
     assertEquals(4, store.count(ArrayKeyIndexType.class));
 
     assertTrue(store.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       "id",
-      ImmutableSet.of(new String [] { "more things" })));
+      Set.<String[]>of(new String [] { "more things" })));
     assertEquals(0, store.count(ArrayKeyIndexType.class));
   }
 

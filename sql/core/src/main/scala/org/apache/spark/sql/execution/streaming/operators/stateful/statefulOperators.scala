@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.operators.stateful
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit._
@@ -324,8 +324,11 @@ trait StateStoreWriter
       .map(_._2)
       .toArray
     assert(
-      ret.length == getStateInfo.numPartitions,
-      s"ChekpointInfo length: ${ret.length}, numPartitions: ${getStateInfo.numPartitions}")
+      // Normally, we should have checkpoint info for all partitions.
+      // However, for globalLimit operator, there is only one partition (0) that has state.
+      ret.length == getStateInfo.numPartitions
+        || (outputPartitioning.numPartitions == 1 && ret.length == 1),
+      s"CheckpointInfo length: ${ret.length}, numPartitions: ${getStateInfo.numPartitions}")
     ret
   }
 
@@ -1545,4 +1548,17 @@ trait SchemaValidationUtils extends Logging {
         newSchemaFilePath = Some(newStateSchemaFilePath),
         schemaEvolutionEnabled = usingAvro && schemaEvolutionEnabledForOperator))
   }
+}
+
+object StatefulOperatorsUtils {
+  val TRANSFORM_WITH_STATE_EXEC_OP_NAME = "transformWithStateExec"
+  val TRANSFORM_WITH_STATE_IN_PANDAS_EXEC_OP_NAME = "transformWithStateInPandasExec"
+  val TRANSFORM_WITH_STATE_IN_PYSPARK_EXEC_OP_NAME = "transformWithStateInPySparkExec"
+  // Seq of operator names who uses state schema v3 and TWS related options.
+  val TRANSFORM_WITH_STATE_OP_NAMES: Seq[String] = Seq(
+    TRANSFORM_WITH_STATE_EXEC_OP_NAME,
+    TRANSFORM_WITH_STATE_IN_PANDAS_EXEC_OP_NAME,
+    TRANSFORM_WITH_STATE_IN_PYSPARK_EXEC_OP_NAME
+  )
+  val SYMMETRIC_HASH_JOIN_EXEC_OP_NAME = "symmetricHashJoin"
 }

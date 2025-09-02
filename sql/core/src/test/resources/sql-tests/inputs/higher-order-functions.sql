@@ -103,3 +103,65 @@ select transform(ys, (all, i) -> all + i) as v from values (array(32, 97)) as t(
 
 -- SPARK-32819: Aggregate on nested string arrays
 select aggregate(split('abcdefgh',''), array(array('')), (acc, x) -> array(array(x)));
+
+-- HigherOrderFunctions without lambda variables
+
+select aggregate(array(1, 2, 3), 0, 100) as aggregate_int_literal;
+select aggregate(array(1, 2, 3), map(), map('result', 999)) as aggregate_map_literal;
+select aggregate(array(1, 2, 3), struct('init', 0), struct('final', 999)) as aggregate_struct_literal;
+select aggregate(array(1, 2, 3), array(), array('result')) as aggregate_array_literal;
+
+select array_sort(array(3, 1, 2), 1) as array_sort_int_literal;
+select array_sort(array(3, 1, 2), map('compare', 0)) as array_sort_map_literal;
+select array_sort(array(3, 1, 2), struct('result', 0)) as array_sort_struct_literal;
+select array_sort(array(3, 1, 2), array(0)) as array_sort_array_literal;
+
+select exists(array(1, 2, 3), 1) as exists_int_literal;
+select exists(array(1, 2, 3), map('found', true)) as exists_map_literal;
+select exists(array(1, 2, 3), struct('exists', true)) as exists_struct_literal;
+select exists(array(1, 2, 3), array(true)) as exists_array_literal;
+
+select filter(array(1, 2, 3), 1) as filter_int_literal;
+select filter(array(1, 2, 3), map('key', 'value')) as filter_map_literal;
+select filter(array(1, 2, 3), struct('valid', true)) as filter_struct_literal;
+select filter(array(1, 2, 3), array(true, false)) as filter_array_literal;
+
+select forall(array(1, 2, 3), 1) as forall_int_literal;
+select forall(array(1, 2, 3), map('all', true)) as forall_map_literal;
+select forall(array(1, 2, 3), struct('all', true)) as forall_struct_literal;
+select forall(array(1, 2, 3), array(true, true)) as forall_array_literal;
+
+select map_filter(map('a', 1, 'b', 2), 1) as map_filter_int_literal;
+select map_filter(map('a', 1, 'b', 2), map('keep', true)) as map_filter_map_literal;
+select map_filter(map('a', 1, 'b', 2), struct('filter', true)) as map_filter_struct_literal;
+select map_filter(map('a', 1, 'b', 2), array(true)) as map_filter_array_literal;
+
+select map_zip_with(map('a', 1), map('a', 10), 100) as map_zipwith_int_literal;
+select map_zip_with(map('a', 1), map('a', 10), map('merged', true)) as map_zipwith_map_literal;
+select map_zip_with(map('a', 1), map('a', 10), struct('left', 1, 'right', 10)) as map_zipwith_struct_literal;
+select map_zip_with(map('a', 1), map('a', 10), array('combined')) as map_zipwith_array_literal;
+
+select reduce(array(1, 2, 3), 0, 100) as reduce_int_literal;
+select reduce(array(1, 2, 3), map(), map('result', 999)) as reduce_map_literal;
+select reduce(array(1, 2, 3), struct('init', 0), struct('final', 999)) as reduce_struct_literal;
+select reduce(array(1, 2, 3), array(), array('result')) as reduce_array_literal;
+
+select transform(array(1, 2, 3), 42) as transform_int_literal;
+select transform(array(1, 2, 3), map('key', 'value')) as transform_map_literal;
+select transform(array(1, 2, 3), struct('id', 99, 'name', 'test')) as transform_struct_literal;
+select transform(array(1, 2, 3), array('a', 'b')) as transform_array_literal;
+
+select transform_keys(map('a', 1, 'b', 2), 42) as transform_keys_int_literal;
+select transform_keys(map('a', 1, 'b', 2), map('new', 'key')) as transform_keys_map_literal;
+select transform_keys(map('a', 1, 'b', 2), struct('key', 'value')) as transform_keys_struct_literal;
+select transform_keys(map('a', 1, 'b', 2), array('new_key')) as transform_keys_array_literal;
+
+select transform_values(map('a', 1, 'b', 2), 999) as transform_values_int_literal;
+select transform_values(map('a', 1, 'b', 2), map('new', 'value')) as transform_values_map_literal;
+select transform_values(map('a', 1, 'b', 2), struct('val', 999)) as transform_values_struct_literal;
+select transform_values(map('a', 1, 'b', 2), array('new_value')) as transform_values_array_literal;
+
+select zip_with(array(1, 2, 3), array(4, 5, 6), 100) as zipwith_int_literal;
+select zip_with(array(1, 2, 3), array(4, 5, 6), map('merged', true)) as zipwith_map_literal;
+select zip_with(array(1, 2, 3), array(4, 5, 6), struct('left', 1, 'right', 2)) as zipwith_struct_literal;
+select zip_with(array(1, 2, 3), array(4, 5, 6), array('combined')) as zipwith_array_literal;

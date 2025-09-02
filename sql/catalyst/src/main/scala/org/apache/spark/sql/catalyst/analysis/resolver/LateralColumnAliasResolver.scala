@@ -57,9 +57,13 @@ class LateralColumnAliasResolver(expressionResolver: ExpressionResolver) extends
    *  - In order to be able to resolve [[Sort]] on top of an [[Aggregate]] that has LCAs, we need
    *  to collect all aliases from [[Aggregate]], as well as any aliases from artificially inserted
    *  [[Project]] nodes.
+   *  - Collects all aliases from newly created [[Aggregate]] and [[Project]] nodes and adds them
+   *  to `aliasesToCollect`
    */
   def handleLcaInAggregate(resolvedAggregate: Aggregate): AggregateWithLcaResolutionResult = {
-    extractLcaAndReplaceAggWithProject(resolvedAggregate) match {
+    val aliasesToCollect = new ArrayBuffer[Alias]
+
+    extractLcaAndReplaceAggWithProject(resolvedAggregate, aliasesToCollect) match {
       case _ @Project(projectList: Seq[_], aggregate: Aggregate) =>
         // TODO: This validation function does a post-traversal. This is discouraged in single-pass
         //       Analyzer.
@@ -76,21 +80,17 @@ class LateralColumnAliasResolver(expressionResolver: ExpressionResolver) extends
           scope = scopes.current,
           originalProjectList = projectList,
           firstIterationProjectList = aggregate.aggregateExpressions.map(_.toAttribute),
-          remappedAliases = Some(remappedAliases)
+          remappedAliases = Some(remappedAliases),
+          aliasesToCollect = aliasesToCollect
         )
 
-        val aggregateListAliases =
-          scopes.current.lcaRegistry.getAliasDependencyLevels().asScala.flatMap(_.asScala).toSeq
-
-        scopes.overwriteCurrent(
-          output = Some(finalProject.projectList.map(_.toAttribute)),
-          hasLcaInAggregate = true
-        )
+        scopes.overwriteCurrent(output = Some(finalProject.projectList.map(_.toAttribute)))
 
         AggregateWithLcaResolutionResult(
           resolvedOperator = finalProject,
           outputList = finalProject.projectList,
-          aggregateListAliases = aggregateListAliases
+          aggregateListAliases = aliasesToCollect.toSeq,
+          baseAggregate = aggregate
         )
       case _ =>
         throw SparkException.internalError(
@@ -128,6 +128,8 @@ class LateralColumnAliasResolver(expressionResolver: ExpressionResolver) extends
    *  full definitions ( `attr` as `name` ) have already been defined on lower levels.
    *  - If an attribute is never referenced, it does not show up in multi-level project lists, but
    *  instead only in the top-most [[Project]].
+   *  - Additionally, collect all aliases from newly created [[Project]] nodes and add them to
+   *  `aliasesToCollect`.
    *
    *  For previously given query, following above rules, resolved [[Project]] would look like:
    *
@@ -142,7 +144,8 @@ class LateralColumnAliasResolver(expressionResolver: ExpressionResolver) extends
       scope: NameScope,
       originalProjectList: Seq[NamedExpression],
       firstIterationProjectList: Seq[NamedExpression],
-      remappedAliases: Option[HashMap[ExprId, Alias]] = None): Project = {
+      remappedAliases: Option[HashMap[ExprId, Alias]] = None,
+      aliasesToCollect: ArrayBuffer[Alias] = ArrayBuffer.empty): Project = {
     val aliasDependencyMap = scope.lcaRegistry.getAliasDependencyLevels()
     val (finalChildPlan, _) = aliasDependencyMap.asScala.foldLeft(
       (resolvedChild, firstIterationProjectList)
@@ -159,6 +162,12 @@ class LateralColumnAliasResolver(expressionResolver: ExpressionResolver) extends
 
         if (referencedAliases.nonEmpty) {
           val newProjectList = currentProjectList.map(_.toAttribute) ++ referencedAliases
+
+          newProjectList.foreach {
+            case alias: Alias => aliasesToCollect += alias
+            case _ =>
+          }
+
           (Project(newProjectList, currentPlan), newProjectList)
         } else {
           (currentPlan, currentProjectList)
@@ -173,6 +182,11 @@ class LateralColumnAliasResolver(expressionResolver: ExpressionResolver) extends
       }
     }
 
+    finalProjectList.foreach {
+      case alias: Alias => aliasesToCollect += alias
+      case _ =>
+    }
+
     Project(finalProjectList, finalChildPlan)
   }
 
@@ -184,6 +198,8 @@ class LateralColumnAliasResolver(expressionResolver: ExpressionResolver) extends
    *  [[NamedExpression]] we don't need to alias it again.
    *  - Places a [[Project]] on top of the new [[Aggregate]] operator, where the project list will
    *  be created from [[Alias]] references to original aggregate expressions.
+   *  - Additionally, collect aliases from newly created aggregate expressions and add them to
+   *  `aliasesToCollect`.
    *
    * For example, for a query like:
    *
@@ -198,7 +214,9 @@ class LateralColumnAliasResolver(expressionResolver: ExpressionResolver) extends
    * The [[Project]] is unresolved, which is fine, because it will later be resolved as if we only
    * had a lateral alias reference in [[Project]] and not [[Aggregate]].
    */
-  private def extractLcaAndReplaceAggWithProject(aggregate: Aggregate): Project = {
+  private def extractLcaAndReplaceAggWithProject(
+      aggregate: Aggregate,
+      aliasesToCollect: ArrayBuffer[Alias]): Project = {
     val newAggregateExpressions = new LinkedHashSet[NamedExpression]
     val extractedExpressionAliases = new HashMap[Expression, NamedExpression]()
     val groupingExpressionSemanticComparator = new SemanticComparator(aggregate.groupingExpressions)
@@ -212,9 +230,16 @@ class LateralColumnAliasResolver(expressionResolver: ExpressionResolver) extends
             newAggregateExpressions = newAggregateExpressions
           ).asInstanceOf[NamedExpression]
       )
+
+    val newAggregateExpressionsSeq = newAggregateExpressions.asScala.toSeq
+    newAggregateExpressionsSeq.foreach {
+      case alias: Alias => aliasesToCollect += alias
+      case _ =>
+    }
+
     val result = Project(
       projectList = extractedExpressions,
-      child = aggregate.copy(aggregateExpressions = newAggregateExpressions.asScala.toSeq)
+      child = aggregate.copy(aggregateExpressions = newAggregateExpressionsSeq)
     )
     result
   }

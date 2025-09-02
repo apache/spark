@@ -65,8 +65,7 @@ class FilterResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
     retainOriginalOutput(
       operator = finalFilter,
       missingExpressions = missingAttributes,
-      output = scopes.current.output,
-      hiddenOutput = scopes.current.hiddenOutput
+      scopes = scopes
     )
   }
 }

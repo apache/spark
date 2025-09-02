@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.internal.SQLConf
 
 /** A class that contains configuration parameters for [[StateStore]]s. */
@@ -39,6 +39,8 @@ class StateStoreConf(
    * Timeout for state store maintenance operations to complete on shutdown
    */
   val stateStoreMaintenanceShutdownTimeout: Long = sqlConf.stateStoreMaintenanceShutdownTimeout
+
+  val stateStoreMaintenanceProcessingTimeout: Long = sqlConf.stateStoreMaintenanceProcessingTimeout
 
   /**
    * Minimum number of delta files in a chain after which HDFSBackedStateStore will
@@ -68,6 +70,13 @@ class StateStoreConf(
 
   /** Whether validate the underlying format or not. */
   val formatValidationEnabled: Boolean = sqlConf.stateStoreFormatValidationEnabled
+
+  /**
+   * Whether to validate StateStore commits for ForeachBatch sinks to ensure all partitions
+   * are processed. This helps detect incomplete processing due to operations like show()
+   * or limit().
+   */
+  val commitValidationEnabled = sqlConf.stateStoreCommitValidationEnabled
 
   /**
    * Whether to validate the value side. This config is applied to both validators as below:

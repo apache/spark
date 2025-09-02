@@ -522,7 +522,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-47307: base64 encoding without chunking") {
-    val longString = "a" * 58
+    val longString = "a".repeat(58)
     val encoded = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ=="
     withSQLConf(SQLConf.CHUNK_BASE64_STRING_ENABLED.key -> "false") {
       checkEvaluation(Base64(Literal(longString.getBytes)), encoded)
@@ -954,7 +954,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-22603: FormatString should not generate codes beyond 64KB") {
     val N = 4500
     val args = (1 to N).map(i => Literal.create(i.toString, StringType))
-    val format = "%s" * N
+    val format = "%s".repeat(N)
     val expected = (1 to N).map(i => i.toString).mkString
     checkEvaluation(FormatString(Literal(format) +: args: _*), expected)
   }
@@ -2097,5 +2097,43 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "functionName" -> toSQLId("encode"),
         "parameter" -> toSQLId("charset"),
         "charsets" -> CharsetProvider.VALID_CHARSETS.mkString(", ")))
+  }
+
+  test("context independent foldable string expressions") {
+    Seq(
+      // Basic string literals
+      Literal("hello"),
+      Literal(""),
+      Literal.create(null, StringType),
+
+      // String functions
+      Concat(Seq(Literal("hello"), Literal("world"))),
+      Upper(Literal("hello")),
+      Lower(Literal("WORLD")),
+      Substring(Literal("hello"), Literal(1), Literal(3)),
+
+      // String with other types
+      Concat(Seq(Literal("count: "), Literal(123))),
+      Concat(Seq(Literal("price: "), Literal(Decimal(10.5)))),
+
+      // Pattern matching
+      Like(Literal("hello"), Literal("hel%"), '\\'),
+      RLike(Literal("hello"), Literal("h.*o")),
+
+      // Nested expressions
+      Concat(Seq(
+        Upper(Literal("hello")),
+        Literal(" "),
+        Lower(Literal("WORLD"))
+      ))
+    ).foreach { expr =>
+      assert(expr.foldable, s"Expression $expr should be foldable")
+      assert(expr.deterministic, s"Expression $expr should be deterministic")
+      if (!expr.references.exists(_.name.contains("RAND")) &&
+        !expr.toString.contains("current_")) {
+        assert(expr.contextIndependentFoldable,
+          s"Expression $expr should be context independent foldable")
+      }
+    }
   }
 }

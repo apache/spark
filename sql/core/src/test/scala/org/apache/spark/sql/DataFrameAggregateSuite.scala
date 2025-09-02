@@ -2364,7 +2364,7 @@ class DataFrameAggregateSuite extends QueryTest
             val expectedAnswer = Row(null)
             assertDecimalSumOverflow(df2, ansiEnabled, fnName, expectedAnswer)
 
-            val decStr = "1" + "0" * 19
+            val decStr = "1" + "0".repeat(19)
             val d1 = spark.range(0, 12, 1, 1)
             val d2 = d1.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(aggFn($"d"))
             assertDecimalSumOverflow(d2, ansiEnabled, fnName, expectedAnswer)
@@ -2593,6 +2593,13 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(
       res,
       Row(LocalTime.of(22, 1, 0), LocalTime.of(3, 0, 0)))
+  }
+
+  test("SPARK-53155: global lower aggregation should not be removed") {
+    val df = emptyTestData
+      .groupBy().agg(lit(1).as("col1"), lit(2).as("col2"), lit(3).as("col3"))
+      .groupBy($"col1").agg(max("col1"))
+    checkAnswer(df, Seq(Row(1, 1)))
   }
 }
 

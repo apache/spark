@@ -24,6 +24,7 @@ import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, E
 import org.apache.spark.sql.hive.execution.HiveTableScanExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.tags.SlowHiveTest
 
 abstract class DynamicPartitionPruningHiveScanSuiteBase
     extends DynamicPartitionPruningSuiteBase with TestHiveSingleton with SQLTestUtils {
@@ -43,8 +44,10 @@ abstract class DynamicPartitionPruningHiveScanSuiteBase
   }
 }
 
+@SlowHiveTest
 class DynamicPartitionPruningHiveScanSuiteAEOff extends DynamicPartitionPruningHiveScanSuiteBase
   with DisableAdaptiveExecutionSuite
 
+@SlowHiveTest
 class DynamicPartitionPruningHiveScanSuiteAEOn extends DynamicPartitionPruningHiveScanSuiteBase
   with EnableAdaptiveExecutionSuite

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.jdbc
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{JOIN_CONDITION, JOIN_TYPE, SCHEMA}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.expressions.{FieldReference, SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
@@ -28,13 +29,15 @@ import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownAggrega
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
-import org.apache.spark.sql.jdbc.{JdbcDialects, JdbcSQLQueryBuilder}
+import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.jdbc.{JdbcDialects, JdbcSQLQueryBuilder, JoinPushdownAliasGenerator}
 import org.apache.spark.sql.types.StructType
 
 case class JDBCScanBuilder(
     session: SparkSession,
     schema: StructType,
-    var jdbcOptions: JDBCOptions)
+    var jdbcOptions: JDBCOptions,
+    additionalMetrics: Map[String, SQLMetric] = Map())
   extends ScanBuilder
     with SupportsPushDownV2Filters
     with SupportsPushDownRequiredColumns
@@ -184,14 +187,20 @@ case class JDBCScanBuilder(
 
     val joinTypeStringOption = joinType match {
       case JoinType.INNER_JOIN => Some("INNER JOIN")
+      case JoinType.LEFT_OUTER_JOIN => Some("LEFT JOIN")
+      case JoinType.RIGHT_OUTER_JOIN => Some("RIGHT JOIN")
       case _ => None
     }
     if (!joinTypeStringOption.isDefined) {
+      logError(log"Failed to push down join to JDBC due to unsupported join type " +
+        log"${MDC(JOIN_TYPE, joinType)}")
       return false
     }
 
     val compiledCondition = dialect.compileExpression(condition)
     if (!compiledCondition.isDefined) {
+      logError(log"Failed to push down join to JDBC due to unsupported join condition " +
+        log"${MDC(JOIN_CONDITION, condition)}")
       return false
     }
 
@@ -234,6 +243,8 @@ case class JDBCScanBuilder(
 
     jdbcOptions = new JDBCOptions(newJdbcOptionsMap)
     finalSchema = requiredSchema
+    logInfo(log"Updated JDBC schema due to join pushdown. " +
+      log"New schema: ${MDC(SCHEMA, finalSchema.toDDL)}")
 
     // We need to reset the pushedPredicate because it has already been consumed in previously
     // crafted SQL query.
@@ -330,16 +341,9 @@ case class JDBCScanBuilder(
     // "DEPT","NAME",MAX("SALARY"),MIN("BONUS"), instead of getting column names from
     // prunedSchema and quote them (will become "MAX(SALARY)", "MIN(BONUS)" and can't
     // be used in sql string.
-    JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), finalSchema, pushedPredicate,
-      pushedAggregateList, pushedGroupBys, tableSample, pushedLimit, sortOrders, pushedOffset)
+    JDBCScan(JDBCRelation(schema, parts, jdbcOptions, additionalMetrics)(session),
+      finalSchema, pushedPredicate, pushedAggregateList, pushedGroupBys,
+      tableSample, pushedLimit, sortOrders, pushedOffset)
   }
 
-}
-
-object JoinPushdownAliasGenerator {
-  private val subQueryId = new java.util.concurrent.atomic.AtomicLong()
-
-  def getSubqueryQualifier: String = {
-    "join_subquery_" + subQueryId.getAndIncrement()
-  }
 }

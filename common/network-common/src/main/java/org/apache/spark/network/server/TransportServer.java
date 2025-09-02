@@ -19,13 +19,13 @@ package org.apache.spark.network.server;
 
 import java.io.Closeable;
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricSet;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
@@ -76,7 +76,7 @@ public class TransportServer implements Closeable {
       this.pooledAllocator = NettyUtils.createPooledByteBufAllocator(
           conf.preferDirectBufs(), true /* allowCache */, conf.serverThreads());
     }
-    this.bootstraps = Lists.newArrayList(Preconditions.checkNotNull(bootstraps));
+    this.bootstraps = new ArrayList<>(Objects.requireNonNull(bootstraps));
 
     boolean shouldClose = true;
     try {
@@ -105,7 +105,7 @@ public class TransportServer implements Closeable {
       conf.getModuleName() + "-server");
 
     String name = System.getProperty("os.name");
-    boolean isNotWindows = 7 > name.length() || !name.regionMatches(true, 0, "Windows", 0, 7);
+    boolean isNotWindows = !name.regionMatches(true, 0, "Windows", 0, 7);
     bootstrap = new ServerBootstrap()
       .group(bossGroup, workerGroup)
       .channel(NettyUtils.getServerChannelClass(ioMode))

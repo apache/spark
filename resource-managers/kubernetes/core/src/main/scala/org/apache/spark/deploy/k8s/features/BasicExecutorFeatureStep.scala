@@ -39,9 +39,7 @@ private[spark] class BasicExecutorFeatureStep(
   extends KubernetesFeatureConfigStep with Logging {
 
   // Consider moving some of these fields to KubernetesConf or KubernetesExecutorSpecificConf
-  private val executorContainerImage = kubernetesConf
-    .get(EXECUTOR_CONTAINER_IMAGE)
-    .getOrElse(throw new SparkException("Must specify the executor container image"))
+  private val executorContainerImage = kubernetesConf.image
   private val blockManagerPort = kubernetesConf
     .sparkConf
     .getInt(BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
@@ -228,6 +226,10 @@ private[spark] class BasicExecutorFeatureStep(
     val containerWithLimitCores = if (isDefaultProfile) {
       executorLimitCores.map { limitCores =>
         val executorCpuLimitQuantity = new Quantity(limitCores)
+        if (executorCpuLimitQuantity.compareTo(executorCpuQuantity) < 0) {
+          throw new SparkException(s"The executor cpu request ($executorCpuQuantity) should be " +
+            s"less than or equal to cpu limit ($executorCpuLimitQuantity)")
+        }
         new ContainerBuilder(executorContainerWithConfVolume)
           .editResources()
           .addToLimits("cpu", executorCpuLimitQuantity)
@@ -277,6 +279,8 @@ private[spark] class BasicExecutorFeatureStep(
       .editOrNewSpec()
         .withHostname(hostname)
         .withRestartPolicy(policy)
+        .withTerminationGracePeriodSeconds(
+          kubernetesConf.get(KUBERNETES_EXECUTOR_TERMINATION_GRACE_PERIOD_SECONDS))
         .addToNodeSelector(kubernetesConf.nodeSelector.asJava)
         .addToNodeSelector(kubernetesConf.executorNodeSelector.asJava)
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets: _*)

@@ -100,7 +100,7 @@ class JDBCOptions(
       if (subquery.isEmpty) {
         throw QueryExecutionErrors.emptyOptionError(JDBC_QUERY_STRING)
       } else {
-        s"(${subquery}) SPARK_GEN_SUBQ_${curId.getAndIncrement()}"
+        s"(${subquery.trim.replaceAll(";+$", "")}) SPARK_GEN_SUBQ_${curId.getAndIncrement()}"
       }
   }
 

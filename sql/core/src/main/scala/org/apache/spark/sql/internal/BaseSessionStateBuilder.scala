@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.command.CommandCheck
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
-import org.apache.spark.sql.execution.streaming.ResolveWriteToStream
+import org.apache.spark.sql.execution.streaming.runtime.ResolveWriteToStream
 import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
 import org.apache.spark.sql.util.ExecutionListenerManager
 
@@ -407,7 +407,8 @@ abstract class BaseSessionStateBuilder(
    */
   protected def createQueryExecution:
     (LogicalPlan, CommandExecutionMode.Value) => QueryExecution =
-      (plan, mode) => new QueryExecution(session, plan, mode = mode)
+      (plan, mode) => new QueryExecution(session, plan, mode = mode,
+        shuffleCleanupMode = QueryExecution.determineShuffleCleanupMode(session.sessionState.conf))
 
   /**
    * Interface to start and stop streaming queries.

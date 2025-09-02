@@ -204,3 +204,26 @@ SELECT map(1, '123', 2, '456')[1] :: int;
 SELECT '2147483648' :: BINT;
 SELECT '2147483648' :: SELECT;
 SELECT FALSE IS NOT NULL :: string;
+
+-- SPARK-52619: cast TIME to DECIMAL with sufficient precision and scale.
+SELECT CAST(time '00:00:00' AS decimal(1, 0));
+SELECT CAST(time '12:00:00' AS decimal(7, 2));
+SELECT CAST(time '01:30:45' AS decimal(8, 3));
+SELECT CAST(time '23:59:59' AS decimal(9, 4));
+SELECT CAST(time '01:02:03' AS decimal(15, 9));
+SELECT CAST(time '10:20:30' AS decimal(20, 10));
+SELECT CAST(time '23:59:59.001' AS decimal(8, 3));
+SELECT CAST(time '23:59:59.999999' AS decimal(11, 6));
+SELECT CAST(time '23:59:59.999999999' AS decimal(14, 9));
+SELECT CAST(time '23:59:59.999999999' AS decimal(20, 10));
+
+-- SPARK-52619: cast TIME to DECIMAL with insufficient precision.
+SELECT CAST(time '00:01:00' AS decimal(1, 0));
+SELECT CAST(time '01:00:00' AS decimal(3, 0));
+SELECT CAST(time '10:00:00' AS decimal(5, 2));
+
+-- SPARK-52619: cast TIME to DECIMAL with insufficient scale.
+SELECT CAST(time '23:59:59.9' AS decimal(6, 0));
+SELECT CAST(time '23:59:59.999' AS decimal(8, 2));
+SELECT CAST(time '23:59:59.999999' AS decimal(11, 5));
+SELECT CAST(time '23:59:59.999999999' AS decimal(14, 8));

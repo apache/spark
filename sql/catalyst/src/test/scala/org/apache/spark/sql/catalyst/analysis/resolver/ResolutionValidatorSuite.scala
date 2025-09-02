@@ -33,14 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   TimestampAddInterval
 }
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project}
-import org.apache.spark.sql.types.{
-  BooleanType,
-  DayTimeIntervalType,
-  DecimalType,
-  IntegerType,
-  StringType,
-  TimestampType
-}
+import org.apache.spark.sql.types._
 
 class ResolutionValidatorSuite extends SparkFunSuite with SQLConfHelper {
   private val resolveMethodNamesToIgnore = Seq(

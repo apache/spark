@@ -66,6 +66,7 @@ import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util._
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.collection.Utils.createArray
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTester
@@ -152,7 +153,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   }
 
   // Save modified system properties so that we can restore them after tests.
-  val originalArch = System.getProperty("os.arch")
+  val originalArch = Utils.osArch
   val originalCompressedOops = System.getProperty(TEST_USE_COMPRESSED_OOPS_KEY)
 
   def reinitializeSizeEstimator(arch: String, useCompressedOops: String): Unit = {
@@ -937,7 +938,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       // the local disk of sameHostBm where the block is replicated to.
       // When there is no replication then block must be added via sameHostBm directly.
       val bmToPutBlock = if (storageLevel.replication > 1) otherHostBm else sameHostBm
-      val array = Array.fill(16)(Byte.MinValue to Byte.MaxValue).flatten
+      val array = createArray(16, Byte.MinValue to Byte.MaxValue).flatten
       val blockId = "list"
       bmToPutBlock.putIterator(blockId, List(array).iterator, storageLevel, tellMaster = true)
 
@@ -970,7 +971,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       val store2 = makeBlockManager(8000, "executor2", this.master,
         Some(new MockBlockTransferService(0)))
       val blockId = "list"
-      val array = Array.fill(16)(Byte.MinValue to Byte.MaxValue).flatten
+      val array = createArray(16, Byte.MinValue to Byte.MaxValue).flatten
       store2.putIterator(blockId, List(array).iterator, level, true)
       val expectedBlockData = store2.getLocalBytes(blockId)
       assert(expectedBlockData.isDefined)

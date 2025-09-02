@@ -980,6 +980,69 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       !aggregateExpression.containsPattern(TreePattern.UNRESOLVED_ORDINAL)))
   }
 
+  test("SPARK-51820 Literals in SortOrder should only be replaced under Sort node") {
+    val schema = StructType(Seq(StructField("col1", IntegerType)))
+    val data = Seq(InternalRow(1))
+    val inputRows = data.map { row =>
+      val proj = UnsafeProjection.create(schema)
+      proj(row).copy()
+    }
+    val localRelation = createLocalRelationProto(schema, inputRows)
+
+    val sumFunction = proto.Expression
+      .newBuilder()
+      .setUnresolvedFunction(
+        proto.Expression.UnresolvedFunction
+          .newBuilder()
+          .setFunctionName("sum")
+          .addArguments(
+            proto.Expression
+              .newBuilder()
+              .setUnresolvedAttribute(proto.Expression.UnresolvedAttribute
+                .newBuilder()
+                .setUnparsedIdentifier("col1"))))
+      .build()
+
+    val windowExpression = proto.Expression
+      .newBuilder()
+      .setWindow(
+        proto.Expression.Window
+          .newBuilder()
+          .setWindowFunction(sumFunction)
+          .addOrderSpec(
+            proto.Expression.SortOrder
+              .newBuilder()
+              .setChild(proto.Expression
+                .newBuilder()
+                .setLiteral(proto.Expression.Literal.newBuilder().setInteger(4)))
+              .setDirection(proto.Expression.SortOrder.SortDirection.SORT_DIRECTION_ASCENDING)
+              .setNullOrdering(proto.Expression.SortOrder.NullOrdering.SORT_NULLS_FIRST)))
+      .build()
+
+    val aliasedWindowExpression = proto.Expression
+      .newBuilder()
+      .setAlias(
+        proto.Expression.Alias
+          .newBuilder()
+          .setExpr(windowExpression)
+          .addName("sum_over"))
+      .build()
+
+    val project = proto.Project
+      .newBuilder()
+      .setInput(localRelation)
+      .addExpressions(aliasedWindowExpression)
+      .build()
+
+    val result = transform(proto.Relation.newBuilder().setProject(project).build())
+    val df = Dataset.ofRows(spark, result)
+
+    val collected = df.collect()
+    assert(collected.length == 1)
+    assert(df.schema.fields.head.name == "sum_over")
+    assert(collected(0).getAs[Long]("sum_over") == 1L)
+  }
+
   test("Time literal") {
     val project = proto.Project.newBuilder
       .addExpressions(
