@@ -20,7 +20,14 @@ import unittest
 from pyspark.sql.functions import arrow_udf, ArrowUDFType
 from pyspark.util import PythonEvalType
 from pyspark.sql import Row
-from pyspark.sql.types import ArrayType, YearMonthIntervalType
+from pyspark.sql.types import (
+    ArrayType,
+    YearMonthIntervalType,
+    StructType,
+    StructField,
+    VariantType,
+    VariantVal,
+)
 from pyspark.sql import functions as sf
 from pyspark.errors import AnalysisException, PythonException
 from pyspark.testing.sqlutils import (
@@ -806,6 +813,44 @@ class GroupedAggArrowUDFTestsMixin:
         expected2 = df.groupby("i").agg(sf.min("t").alias("res")).sort("i")
         result2 = df.groupby("i").agg(agg_min_time("t").alias("res")).sort("i")
         self.assertEqual(expected2.collect(), result2.collect())
+
+    def test_input_output_variant(self):
+        import pyarrow as pa
+
+        @arrow_udf("variant")
+        def first_variant(v: pa.Array) -> pa.Scalar:
+            assert isinstance(v, pa.Array)
+            assert isinstance(v, pa.StructArray)
+            assert isinstance(v.field("metadata"), pa.BinaryArray)
+            assert isinstance(v.field("value"), pa.BinaryArray)
+            return v[0]
+
+        @arrow_udf("variant")
+        def last_variant(v: pa.Array) -> pa.Scalar:
+            assert isinstance(v, pa.Array)
+            assert isinstance(v, pa.StructArray)
+            assert isinstance(v.field("metadata"), pa.BinaryArray)
+            assert isinstance(v.field("value"), pa.BinaryArray)
+            return v[-1]
+
+        df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
+        result = df.select(
+            first_variant("v").alias("first"),
+            last_variant("v").alias("last"),
+        )
+        self.assertEqual(
+            result.schema,
+            StructType(
+                [
+                    StructField("first", VariantType(), True),
+                    StructField("last", VariantType(), True),
+                ]
+            ),
+        )
+
+        row = result.first()
+        self.assertIsInstance(row.first, VariantVal)
+        self.assertIsInstance(row.last, VariantVal)
 
     def test_return_type_coercion(self):
         import pyarrow as pa
