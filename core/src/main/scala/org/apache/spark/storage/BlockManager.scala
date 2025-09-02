@@ -288,6 +288,65 @@ private[spark] class BlockManager(
       securityManager.getIOEncryptionKey())
   private val maxRemoteBlockToMem = conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
 
+  // SPARK-53446 Performance optimization: Cache mappings to avoid O(n) scans in remove operations
+  private[this] val rddToBlockIds =
+    new ConcurrentHashMap[Int, ConcurrentHashMap.KeySetView[BlockId, java.lang.Boolean]]()
+  private[this] val broadcastToBlockIds =
+    new ConcurrentHashMap[Long, ConcurrentHashMap.KeySetView[BlockId, java.lang.Boolean]]()
+  private[this] val sessionToBlockIds =
+    new ConcurrentHashMap[String, ConcurrentHashMap.KeySetView[BlockId, java.lang.Boolean]]()
+
+  /**
+   * Add a block ID to the appropriate cache mapping based on its type.
+   */
+  private def addToCache(blockId: BlockId): Unit = {
+    blockId match {
+      case rddBlockId: RDDBlockId =>
+        rddToBlockIds
+          .computeIfAbsent(rddBlockId.rddId, _ => ConcurrentHashMap.newKeySet())
+          .add(blockId)
+      case broadcastBlockId: BroadcastBlockId =>
+        broadcastToBlockIds
+          .computeIfAbsent(broadcastBlockId.broadcastId, _ => ConcurrentHashMap.newKeySet())
+          .add(blockId)
+      case cacheId: CacheId =>
+        sessionToBlockIds
+          .computeIfAbsent(cacheId.sessionUUID, _ => ConcurrentHashMap.newKeySet())
+          .add(blockId)
+      case _ => // Do nothing for other block types
+    }
+  }
+
+  /**
+   * Remove a block ID from the appropriate cache mapping based on its type.
+   */
+  private def removeFromCache(blockId: BlockId): Unit = {
+    blockId match {
+      case rddBlockId: RDDBlockId =>
+        Option(rddToBlockIds.get(rddBlockId.rddId)).foreach { blockSet =>
+          blockSet.remove(blockId)
+          if (blockSet.isEmpty) {
+            rddToBlockIds.remove(rddBlockId.rddId)
+          }
+        }
+      case broadcastBlockId: BroadcastBlockId =>
+        Option(broadcastToBlockIds.get(broadcastBlockId.broadcastId)).foreach { blockSet =>
+          blockSet.remove(blockId)
+          if (blockSet.isEmpty) {
+            broadcastToBlockIds.remove(broadcastBlockId.broadcastId)
+          }
+        }
+      case cacheId: CacheId =>
+        Option(sessionToBlockIds.get(cacheId.sessionUUID)).foreach { blockSet =>
+          blockSet.remove(blockId)
+          if (blockSet.isEmpty) {
+            sessionToBlockIds.remove(cacheId.sessionUUID)
+          }
+        }
+      case _ => // Do nothing for other block types
+    }
+  }
+
   var hostLocalDirManager: Option[HostLocalDirManager] = None
 
   @inline final private def isDecommissioning() = {
@@ -1560,6 +1619,7 @@ private[spark] class BlockManager(
       exceptionWasThrown = false
       if (res.isEmpty) {
         // the block was successfully stored
+        addToCache(blockId)
         if (keepReadLock) {
           blockInfoManager.downgradeLock(blockId)
         } else {
@@ -2028,9 +2088,13 @@ private[spark] class BlockManager(
    * @return The number of blocks removed.
    */
   def removeRdd(rddId: Int): Int = {
-    // TODO: Avoid a linear scan by creating another mapping of RDD.id to blocks.
     logInfo(log"Removing RDD ${MDC(RDD_ID, rddId)}")
-    val blocksToRemove = blockInfoManager.entries.flatMap(_._1.asRDDId).filter(_.rddId == rddId)
+    val blocksToRemove = Option(rddToBlockIds.get(rddId)) match {
+      case Some(blockSet) =>
+        blockSet.asScala.toSeq
+      case None =>
+        Seq.empty
+    }
     blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster = false) }
     blocksToRemove.size
   }
@@ -2064,8 +2128,11 @@ private[spark] class BlockManager(
    */
   def removeBroadcast(broadcastId: Long, tellMaster: Boolean): Int = {
     logDebug(s"Removing broadcast $broadcastId")
-    val blocksToRemove = blockInfoManager.entries.map(_._1).collect {
-      case bid @ BroadcastBlockId(`broadcastId`, _) => bid
+    val blocksToRemove = Option(broadcastToBlockIds.get(broadcastId)) match {
+      case Some(blockSet) =>
+        blockSet.asScala.toSeq
+      case None =>
+        Seq.empty
     }
     blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster) }
     blocksToRemove.size
@@ -2078,8 +2145,11 @@ private[spark] class BlockManager(
    */
   def removeCache(sessionUUID: String): Int = {
     logDebug(s"Removing cache of spark session with UUID: $sessionUUID")
-    val blocksToRemove = blockInfoManager.entries.map(_._1).collect {
-      case cid: CacheId if cid.sessionUUID == sessionUUID => cid
+    val blocksToRemove = Option(sessionToBlockIds.get(sessionUUID)) match {
+      case Some(blockSet) =>
+        blockSet.asScala.toSeq
+      case None =>
+        Seq.empty
     }
     blocksToRemove.foreach { blockId => removeBlock(blockId) }
     blocksToRemove.size
@@ -2122,6 +2192,7 @@ private[spark] class BlockManager(
       }
 
       blockInfoManager.removeBlock(blockId)
+      removeFromCache(blockId)
       hasRemoveBlock = true
       if (tellMaster) {
         // Only update storage level from the captured block status before deleting, so that

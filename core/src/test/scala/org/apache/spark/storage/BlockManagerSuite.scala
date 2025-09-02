@@ -2504,6 +2504,98 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(acc.value === 6)
   }
 
+  test("cache optimization: remove operations with cached mappings") {
+    val store = makeBlockManager(8000)
+
+    // Test removeRdd with cached mappings
+    val rddId = 123
+    val rddBlock1 = RDDBlockId(rddId, 0)
+    val rddBlock2 = RDDBlockId(rddId, 1)
+    store.putSingle(rddBlock1, "rdd_data_1", StorageLevel.MEMORY_ONLY)
+    store.putSingle(rddBlock2, "rdd_data_2", StorageLevel.MEMORY_ONLY)
+
+    assert(store.hasLocalBlock(rddBlock1))
+    assert(store.hasLocalBlock(rddBlock2))
+
+    val removedRddCount = store.removeRdd(rddId)
+    assert(removedRddCount === 2)
+    assert(!store.hasLocalBlock(rddBlock1))
+    assert(!store.hasLocalBlock(rddBlock2))
+
+    // Test removeBroadcast with cached mappings
+    val broadcastId = 456L
+    val broadcastBlock1 = BroadcastBlockId(broadcastId, "piece0")
+    val broadcastBlock2 = BroadcastBlockId(broadcastId, "piece1")
+    store.putSingle(broadcastBlock1, "broadcast_data_1", StorageLevel.MEMORY_ONLY)
+    store.putSingle(broadcastBlock2, "broadcast_data_2", StorageLevel.MEMORY_ONLY)
+
+    assert(store.hasLocalBlock(broadcastBlock1))
+    assert(store.hasLocalBlock(broadcastBlock2))
+
+    val removedBroadcastCount = store.removeBroadcast(broadcastId, tellMaster = false)
+    assert(removedBroadcastCount === 2)
+    assert(!store.hasLocalBlock(broadcastBlock1))
+    assert(!store.hasLocalBlock(broadcastBlock2))
+
+    // Test removeCache with cached mappings
+    val sessionUUID = "test-session-uuid"
+    val cacheBlock1 = CacheId(sessionUUID, "hash1")
+    val cacheBlock2 = CacheId(sessionUUID, "hash2")
+    store.putSingle(cacheBlock1, "cache_data_1", StorageLevel.MEMORY_ONLY)
+    store.putSingle(cacheBlock2, "cache_data_2", StorageLevel.MEMORY_ONLY)
+
+    assert(store.hasLocalBlock(cacheBlock1))
+    assert(store.hasLocalBlock(cacheBlock2))
+
+    val removedCacheCount = store.removeCache(sessionUUID)
+    assert(removedCacheCount === 2)
+    assert(!store.hasLocalBlock(cacheBlock1))
+    assert(!store.hasLocalBlock(cacheBlock2))
+
+    // Test removing non-existent items (should return 0)
+    assert(store.removeRdd(999) === 0)
+    assert(store.removeBroadcast(999L, tellMaster = false) === 0)
+    assert(store.removeCache("non-existent-uuid") === 0)
+  }
+
+  test("cache optimization: performance improvement verification") {
+    val store = makeBlockManager(800000)
+
+    // Create many blocks to test performance difference
+    val numNormalBlocks = 100000
+    val normalBroadcastId = 10000L
+    val numBlocks = 1000
+    val broadcastId = 12345L
+
+    // Add many Broadcast blocks
+    for (i <- 0 until numNormalBlocks) {
+      val blockId = BroadcastBlockId(normalBroadcastId, s"piece_$i")
+      store.putSingle(blockId, s"data_$i", StorageLevel.MEMORY_ONLY)
+    }
+    for (i <- 0 until numBlocks) {
+      val blockId = BroadcastBlockId(broadcastId, s"piece_$i")
+      store.putSingle(blockId, s"data_$i", StorageLevel.MEMORY_ONLY)
+    }
+
+    // Verify all blocks exist
+    assert((0 until numBlocks)
+      .forall(i => store.hasLocalBlock(BroadcastBlockId(broadcastId, s"piece_$i"))))
+
+    // Time the removal operation (should be much faster with O(1) cache lookup)
+    val startTime = System.nanoTime()
+    val removedCount = store.removeBroadcast(broadcastId, tellMaster = false)
+    val endTime = System.nanoTime()
+
+    // Verify correctness
+    assert(removedCount === numBlocks)
+    assert((0 until numBlocks)
+      .forall(i => !store.hasLocalBlock(BroadcastBlockId(broadcastId, s"piece_$i"))))
+
+    val durationMs = (endTime - startTime) / 1000000.0
+    logInfo(s"Removed $numNormalBlocks broadcast blocks in ${durationMs}ms " +
+      s"(avg: ${durationMs/1000}ms per block)")
+  }
+
   private def createKryoSerializerWithDiskCorruptedInputStream(): KryoSerializer = {
     class TestDiskCorruptedInputStream extends InputStream {
       override def read(): Int = throw new IOException("Input/output error")
