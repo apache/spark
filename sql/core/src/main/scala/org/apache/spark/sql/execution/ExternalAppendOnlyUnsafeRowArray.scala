@@ -34,12 +34,13 @@ import org.apache.spark.util.collection.unsafe.sort.{UnsafeExternalSorter, Unsaf
 
 /**
  * An append-only array for [[UnsafeRow]]s that strictly keeps content in an in-memory array
- * until [[numRowsInMemoryBufferThreshold]] is reached post which it will switch to a mode which
- * would flush to disk after [[numRowsSpillThreshold]] is met (or before if there is
- * excessive memory consumption). Setting these threshold involves following trade-offs:
+ * until [[numRowsInMemoryBufferThreshold]] or [[sizeInBytesInMemoryBufferThreshold]] is reached
+ * post which it will switch to a mode (backed by [[UnsafeExternalSorter]]) which would flush to
+ * disk after [[numRowsSpillThreshold]] is met (or before if there is excessive memory consumption).
+ * Setting these threshold involves following trade-offs:
  *
- * - If [[numRowsInMemoryBufferThreshold]] is too high, the in-memory array may occupy more memory
- *   than is available, resulting in OOM.
+ * - If [[numRowsInMemoryBufferThreshold]] and [[sizeInBytesInMemoryBufferThreshold]] are too high,
+ *   the in-memory array may occupy more memory than is available, resulting in OOM.
  * - If [[numRowsSpillThreshold]] is too low, data will be spilled frequently and lead to
  *   excessive disk writes. This may lead to a performance regression compared to the normal case
  *   of using an [[ArrayBuffer]] or [[Array]].
