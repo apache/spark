@@ -1018,6 +1018,7 @@ case class RocksDBCheckpointMetadata(
   def prettyJson: String = Serialization.writePretty(this)(RocksDBCheckpointMetadata.format)
 
   def writeToFile(metadataFile: File): Unit = {
+    val VERSION = SQLConf.get.stateStoreCheckpointFormatVersion
     val writer = Files.newBufferedWriter(metadataFile.toPath, UTF_8)
     try {
       writer.write(s"v$VERSION\n")
