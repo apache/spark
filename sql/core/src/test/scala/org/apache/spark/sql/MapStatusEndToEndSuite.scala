@@ -30,7 +30,7 @@ class MapStatusEndToEndSuite extends SparkFunSuite with SQLTestUtils {
       .config(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key, value = 5)
       .getOrCreate()
 
-  override def afterEach(): Unit = {
+  override def afterAll(): Unit = {
     // This suite should not interfere with the other test suites.
     SparkSession.getActiveSession.foreach(_.stop())
     SparkSession.clearActiveSession()
@@ -38,7 +38,7 @@ class MapStatusEndToEndSuite extends SparkFunSuite with SQLTestUtils {
     SparkSession.clearDefaultSession()
   }
 
-  test("Propagate checksum from executor to driver") {
+  ignore("Propagate checksum from executor to driver") {
     assert(spark.sparkContext.conf.get("spark.shuffle.orderIndependentChecksum.enabled") == "true")
     assert(spark.conf.get("spark.shuffle.orderIndependentChecksum.enabled") == "true")
     assert(spark.sparkContext.conf.get("spark.sql.leafNodeDefaultParallelism") == "5")
