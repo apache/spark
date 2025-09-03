@@ -21,10 +21,11 @@ import scala.collection.mutable
 import scala.reflect.classTag
 
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, LocalTimeEncoder, MapEncoder, NullEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, TimestampEncoder, UDTEncoder, VarcharEncoder, VariantEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, NullEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, TimestampEncoder, UDTEncoder, VarcharEncoder, VariantEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.ops.EncodeTypeOps
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -91,7 +92,6 @@ object RowEncoder extends DataTypeErrorsBase {
       case TimestampNTZType => LocalDateTimeEncoder
       case DateType if SqlApiConf.get.datetimeJava8ApiEnabled => LocalDateEncoder(lenient)
       case DateType => DateEncoder(lenient)
-      case _: TimeType => LocalTimeEncoder
       case CalendarIntervalType => CalendarIntervalEncoder
       case _: DayTimeIntervalType => DayTimeIntervalEncoder
       case _: YearMonthIntervalType => YearMonthIntervalEncoder
@@ -121,6 +121,7 @@ object RowEncoder extends DataTypeErrorsBase {
             field.metadata)
         }.toImmutableArraySeq)
 
+      case _ if EncodeTypeOps.supports(dataType) => EncodeTypeOps(dataType).getEncoder
       case _ =>
         throw new AnalysisException(
           errorClass = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
