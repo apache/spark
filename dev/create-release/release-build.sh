@@ -171,7 +171,7 @@ is_preview = bool(re.search(r'-preview\d*$', release_version))
 base_version = re.sub(r'-preview\d*$', '', release_version)
 
 stable_newline = f'  <li><a href="{{{{site.baseurl}}}}/docs/{release_version}/">Spark {release_version}</a></li>'
-preview_newline = f'  <li><a href="{{{{site.baseurl}}}}/docs/{release_version}/">Spark {release_version} preview</a></li>'
+preview_newline = f'  <li><a href="{{{{site.baseurl}}}}/docs/{release_version}/">Spark {release_version}</a></li>'
 
 inserted = False
 
