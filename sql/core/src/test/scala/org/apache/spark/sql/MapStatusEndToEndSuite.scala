@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.{MapOutputTrackerMaster, SparkFunSuite}
 import org.apache.spark.internal.config.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED
 import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.util.QueryExecutionListener
 
 class MapStatusEndToEndSuite extends SparkFunSuite with SQLTestUtils {
     override def spark: SparkSession = SparkSession.builder()
@@ -30,7 +34,7 @@ class MapStatusEndToEndSuite extends SparkFunSuite with SQLTestUtils {
       .config(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key, value = 5)
       .getOrCreate()
 
-  override def afterEach(): Unit = {
+  override def afterAll(): Unit = {
     // This suite should not interfere with the other test suites.
     SparkSession.getActiveSession.foreach(_.stop())
     SparkSession.clearActiveSession()
@@ -44,17 +48,40 @@ class MapStatusEndToEndSuite extends SparkFunSuite with SQLTestUtils {
     assert(spark.sparkContext.conf.get("spark.sql.leafNodeDefaultParallelism") == "5")
     assert(spark.conf.get("spark.sql.leafNodeDefaultParallelism") == "5")
 
-    withTable("t") {
-      spark.range(1000).repartition(10).write.mode("overwrite").
-        saveAsTable("t")
+    val queryExecutions = new ArrayBuffer[QueryExecution]()
+    val listener = new QueryExecutionListener() {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        queryExecutions.append(qe)
+      }
+
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
     }
+    // Register the listener to keep a reference of shuffle dependency in `QueryExecution`,
+    // avoid shuffle statuses removed due to clean up.
+    spark.listenerManager.register(listener)
 
-    val shuffleStatuses = spark.sparkContext.env.mapOutputTracker.
-      asInstanceOf[MapOutputTrackerMaster].shuffleStatuses
-    assert(shuffleStatuses.size == 1)
+    try {
+      // scalastyle:off println
+      System.out.println("start testing")
 
-    val mapStatuses = shuffleStatuses(0).mapStatuses
-    assert(mapStatuses.length == 5)
-    assert(mapStatuses.forall(_.checksumValue != 0))
+      withTable("t") {
+        spark.range(1000).repartition(10).write.mode("overwrite").
+          saveAsTable("t")
+      }
+
+      System.out.println(s"MapOutputTracker is ${spark.sparkContext.env.mapOutputTracker}")
+      val shuffleStatuses = spark.sparkContext.env.mapOutputTracker.
+        asInstanceOf[MapOutputTrackerMaster].shuffleStatuses
+      assert(shuffleStatuses.size == 1)
+
+      queryExecutions.foreach(System.out.println)
+      // scalastyle:on println
+
+      val mapStatuses = shuffleStatuses(0).mapStatuses
+      assert(mapStatuses.length == 5)
+      assert(mapStatuses.forall(_.checksumValue != 0))
+    } finally {
+      spark.listenerManager.unregister(listener)
+    }
   }
 }

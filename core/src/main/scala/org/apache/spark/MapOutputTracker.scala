@@ -838,6 +838,10 @@ private[spark] class MapOutputTrackerMaster(
         throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
       }
     }
+    // scalastyle:off println
+    System.out.println(s"${this}: shuffle $shuffleId registered and shuffle statuses size" +
+      s" ${shuffleStatuses.size}, ${shuffleStatuses}")
+    // scalastyle:on println
   }
 
   def updateMapOutput(shuffleId: Int, mapId: Long, bmAddress: BlockManagerId): Unit = {
@@ -943,6 +947,10 @@ private[spark] class MapOutputTrackerMaster(
       shuffleStatus.invalidateSerializedMapOutputStatusCache()
       shuffleStatus.invalidateSerializedMergeOutputStatusCache()
     }
+    // scalastyle:off println
+    System.out.println(s"unregister shuffle $shuffleId and shuffle statuses size" +
+      s" ${shuffleStatuses.size}, ${shuffleStatuses}")
+    // scalastyle:on println
   }
 
   /**

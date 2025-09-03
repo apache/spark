@@ -58,6 +58,9 @@ class BlockManagerStorageEndpoint(
     case RemoveShuffle(shuffleId) =>
       doAsync[Boolean](log"removing shuffle ${MDC(SHUFFLE_ID, shuffleId)}", context) {
         if (mapOutputTracker != null) {
+          // scalastyle:off println
+          System.out.println(s"remove shuffle $shuffleId for ${mapOutputTracker}")
+          // scalastyle:on println
           mapOutputTracker.unregisterShuffle(shuffleId)
         }
         val shuffleManager = SparkEnv.get.shuffleManager
