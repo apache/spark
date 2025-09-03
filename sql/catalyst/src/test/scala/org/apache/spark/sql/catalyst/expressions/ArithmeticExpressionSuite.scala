@@ -874,7 +874,9 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
   test("SPARK-33008: division by zero on divide-like operations returns incorrect result") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       // Test division operations
-      val divideOperators: Seq[((Expression, Expression) => Expression, ((Int => Any) => Unit) => Unit)] =
+      val divideOperators: Seq[
+        ((Expression, Expression) => Expression, ((Int => Any) => Unit) => Unit)
+      ] =
         Seq((Divide(_, _), testDecimalAndDoubleType),
           (IntegralDivide(_, _), testDecimalAndLongType))
       divideOperators.foreach { case (operator, testTypesFn) =>
@@ -886,9 +888,11 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
           checkExceptionInExpression[ArithmeticException](operator(one, zero), "Division by zero")
         }
       }
-      
+
       // Test remainder operations
-      val remainderOperators: Seq[((Expression, Expression) => Expression, ((Int => Any) => Unit) => Unit)] =
+      val remainderOperators: Seq[
+        ((Expression, Expression) => Expression, ((Int => Any) => Unit) => Unit)
+      ] =
         Seq((Remainder(_, _), testNumericDataTypes),
           (Pmod(_, _), testNumericDataTypes))
       remainderOperators.foreach { case (operator, testTypesFn) =>
@@ -945,7 +949,9 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
   test("SPARK-34920: error class") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       // Test division operations
-      val divideOperators: Seq[((Expression, Expression) => Expression, ((Int => Any) => Unit) => Unit)] =
+      val divideOperators: Seq[
+        ((Expression, Expression) => Expression, ((Int => Any) => Unit) => Unit)
+      ] =
         Seq((Divide(_, _), testDecimalAndDoubleType),
           (IntegralDivide(_, _), testDecimalAndLongType))
       divideOperators.foreach { case (operator, testTypesFn) =>
@@ -958,9 +964,11 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
             "Division by zero")
         }
       }
-      
+
       // Test remainder operations
-      val remainderOperators: Seq[((Expression, Expression) => Expression, ((Int => Any) => Unit) => Unit)] =
+      val remainderOperators: Seq[
+        ((Expression, Expression) => Expression, ((Int => Any) => Unit) => Unit)
+      ] =
         Seq((Remainder(_, _), testNumericDataTypes),
           (Pmod(_, _), testNumericDataTypes))
       remainderOperators.foreach { case (operator, testTypesFn) =>
