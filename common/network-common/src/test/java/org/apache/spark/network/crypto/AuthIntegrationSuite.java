@@ -22,7 +22,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-import com.google.common.collect.ImmutableMap;
 import io.netty.channel.Channel;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -214,7 +213,7 @@ public class AuthIntegrationSuite {
     }
 
     AuthTestCtx(RpcHandler rpcHandler, String mode) throws Exception {
-      Map<String, String> testConf = ImmutableMap.of(
+      Map<String, String> testConf = Map.of(
               "spark.network.crypto.enabled", "true",
               "spark.network.crypto.cipher", mode);
       this.conf = new TransportConf("rpc", new MapConfigProvider(testConf));

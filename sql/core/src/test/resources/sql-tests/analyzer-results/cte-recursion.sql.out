@@ -409,20 +409,10 @@ WITH RECURSIVE r(level) AS (
 )
 SELECT * FROM r
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`level`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 62,
-    "stopIndex" : 66,
-    "fragment" : "level"
-  } ]
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
 }
 
 
@@ -1376,7 +1366,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`tb`, false
 INSERT INTO tb VALUES (0), (1)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/tb, false, JSON, [path=file:[not included in comparison]/{warehouse_dir}/tb], Append, `spark_catalog`.`default`.`tb`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/tb), [next]
-+- Project [cast(col1#x as int) AS next#x]
++- Project [col1#x AS next#x]
    +- LocalRelation [col1#x]
 
 
@@ -1593,28 +1583,11 @@ WITH RECURSIVE t1(n) AS (
     SELECT n+1 FROM t2 WHERE n < 5)
 SELECT * FROM t1
 -- !query analysis
-WithCTE
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias t1
-:     +- Project [1#x AS n#x]
-:        +- WithCTE
-:           :- CTERelationDef xxxx, false
-:           :  +- SubqueryAlias t2
-:           :     +- Project [n#x AS n#x]
-:           :        +- Project [n#x]
-:           :           +- SubqueryAlias t1
-:           :              +- Project [1#x AS n#x]
-:           :                 +- UnionLoopRef xxxx, [1#x], false
-:           +- UnionLoop xxxx
-:              :- Project [1 AS 1#x]
-:              :  +- OneRowRelation
-:              +- Project [(n#x + 1) AS (n + 1)#x]
-:                 +- Filter (n#x < 5)
-:                    +- SubqueryAlias t2
-:                       +- CTERelationRef xxxx, true, [n#x], false, false
-+- Project [n#x]
-   +- SubqueryAlias t1
-      +- CTERelationRef xxxx, true, [n#x], false, false
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
+}
 
 
 -- !query
@@ -1625,26 +1598,11 @@ WITH RECURSIVE t1 AS (
     SELECT n+1 FROM t2 WHERE n < 5)
 SELECT * FROM t1
 -- !query analysis
-WithCTE
-:- CTERelationDef xxxx, false
-:  +- SubqueryAlias t1
-:     +- WithCTE
-:        :- CTERelationDef xxxx, false
-:        :  +- SubqueryAlias t2
-:        :     +- Project [n#x AS n#x]
-:        :        +- Project [n#x]
-:        :           +- SubqueryAlias t1
-:        :              +- UnionLoopRef xxxx, [n#x], false
-:        +- UnionLoop xxxx
-:           :- Project [1 AS n#x]
-:           :  +- OneRowRelation
-:           +- Project [(n#x + 1) AS (n + 1)#x]
-:              +- Filter (n#x < 5)
-:                 +- SubqueryAlias t2
-:                    +- CTERelationRef xxxx, true, [n#x], false, false
-+- Project [n#x]
-   +- SubqueryAlias t1
-      +- CTERelationRef xxxx, true, [n#x], false, false
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
+}
 
 
 -- !query
@@ -2085,3 +2043,91 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
   "sqlState" : "42836"
 }
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    SELECT 1 FROM t1
+    UNION ALL
+    SELECT n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE t1 AS (
+    SELECT 1 AS n FROM t1
+    UNION ALL
+    SELECT n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE t1(n) AS (
+    WITH t2(m) AS (SELECT 1)
+    SELECT 1 FROM t1
+    UNION ALL
+    SELECT n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE t1 AS (
+    WITH t2(m) AS (SELECT 1)
+    SELECT 1 AS n FROM t1
+    UNION ALL
+    SELECT n+1 FROM t1 WHERE n < 5)
+SELECT * FROM t1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_CTE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE t AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + m
+    FROM (SELECT 2 as m) subq
+             JOIN t ON n = m
+    WHERE n <> m
+)
+SELECT * FROM t
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- UnionLoop xxxx
+:        :- Project [1 AS n#x]
+:        :  +- OneRowRelation
+:        +- Project [(n#x + m#x) AS (n + m)#x]
+:           +- Filter NOT (n#x = m#x)
+:              +- Join Inner, (n#x = m#x)
+:                 :- SubqueryAlias subq
+:                 :  +- Project [2 AS m#x]
+:                 :     +- OneRowRelation
+:                 +- SubqueryAlias t
+:                    +- UnionLoopRef xxxx, [n#x], false
++- Project [n#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [n#x], false, false

@@ -23,13 +23,14 @@ import java.util.UUID
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.Assertions
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.{AnalysisException, DataFrame, Encoders, Row}
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, GenericInternalRow}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.{CommitLog, MemoryStream, OffsetSeqLog, StreamExecution}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, OffsetSeqLog}
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
@@ -526,6 +527,9 @@ class RocksDBStateDataSourceReadSuite extends StateDataSourceReadSuite {
 
 class RocksDBWithChangelogCheckpointStateDataSourceReaderSuite extends
 StateDataSourceReadSuite {
+
+  import testImplicits._
+
   override protected def newStateStoreProvider(): RocksDBStateStoreProvider =
     new RocksDBStateStoreProvider
 
@@ -567,6 +571,126 @@ StateDataSourceReadSuite {
   test("snapshotStartBatchId on join state") {
     testSnapshotOnJoinState("rocksdb", 1)
     testSnapshotOnJoinState("rocksdb", 2)
+  }
+
+  /**
+   * Note that we cannot use the golden files approach for transformWithState. The new schema
+   * format keeps track of the schema file path as an absolute path which cannot be used with
+   * the getResource model used in other similar tests on runbot.
+   */
+  test("snapshotStartBatchId on join state v3") {
+    withTempDir { tmpDir =>
+      withSQLConf(
+        SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3",
+        SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100"
+      ) {
+        val inputData = MemoryStream[(Int, Long)]
+        val query = getStreamStreamJoinQuery(inputData)
+        testStream(query)(
+          StartStream(checkpointLocation = tmpDir.getCanonicalPath),
+          AddData(inputData, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
+          ProcessAllAvailable(),
+          Execute { _ => Thread.sleep(2000) },
+          AddData(inputData, (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L)),
+          ProcessAllAvailable(),
+          Execute { _ => Thread.sleep(2000) },
+          AddData(inputData, (11, 11L), (12, 12L), (13, 13L), (14, 14L), (15, 15L)),
+          ProcessAllAvailable(),
+          Execute { _ => Thread.sleep(5000) },
+          StopStream
+        )
+
+        val stateSnapshotDf = spark.read.format("statestore")
+          .option("snapshotPartitionId", 2)
+          .option("snapshotStartBatchId", 0)
+          .option("joinSide", "left")
+          .load(tmpDir.getCanonicalPath)
+
+        val stateDf = spark.read.format("statestore")
+          .option("joinSide", "left")
+          .load(tmpDir.getCanonicalPath)
+          .filter(col("partition_id") === 2)
+
+        checkAnswer(stateSnapshotDf, stateDf)
+      }
+    }
+  }
+}
+
+class RocksDBWithCheckpointV2StateDataSourceReaderSuite extends StateDataSourceReadSuite {
+  override protected def newStateStoreProvider(): RocksDBStateStoreProvider =
+    new RocksDBStateStoreProvider
+
+  import testImplicits._
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 2)
+    spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
+      newStateStoreProvider().getClass.getName)
+    spark.conf.set("spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled",
+      "true")
+  }
+
+  // TODO: Remove this test once we allow migrations from checkpoint v1 to v2
+  test("reading checkpoint v2 store with version 1 should fail") {
+    withTempDir { tmpDir =>
+      val inputData = MemoryStream[(Int, Long)]
+      val query = getStreamStreamJoinQuery(inputData)
+      testStream(query)(
+        StartStream(checkpointLocation = tmpDir.getCanonicalPath),
+        AddData(inputData, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
+        ProcessAllAvailable(),
+        Execute { _ => Thread.sleep(2000) },
+        StopStream
+      )
+
+      withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "1") {
+        // Verify reading state throws error when reading checkpoint v2 with version 1
+        val exc = intercept[IllegalStateException] {
+          val stateDf = spark.read.format("statestore")
+            .option(StateSourceOptions.BATCH_ID, 0)
+            .option(StateSourceOptions.OPERATOR_ID, 0)
+            .load(tmpDir.getCanonicalPath)
+          stateDf.collect()
+        }
+
+        checkError(exc.getCause.asInstanceOf[SparkThrowable],
+          "INVALID_LOG_VERSION.EXACT_MATCH_VERSION", "KD002",
+          Map(
+            "version" -> "2",
+            "matchVersion" -> "1"))
+      }
+    }
+  }
+
+  test("check unsupported modes with checkpoint v2") {
+    withTempDir { tmpDir =>
+      val inputData = MemoryStream[(Int, Long)]
+      val query = getStreamStreamJoinQuery(inputData)
+      testStream(query)(
+        StartStream(checkpointLocation = tmpDir.getCanonicalPath),
+        AddData(inputData, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
+        ProcessAllAvailable(),
+        Execute { _ => Thread.sleep(2000) },
+        StopStream
+      )
+
+      // Verify reading snapshot throws error with checkpoint v2
+      val exc1 = intercept[StateDataSourceInvalidOptionValue] {
+        val stateSnapshotDf = spark.read.format("statestore")
+          .option("snapshotPartitionId", 2)
+          .option("snapshotStartBatchId", 0)
+          .option("joinSide", "left")
+          .load(tmpDir.getCanonicalPath)
+        stateSnapshotDf.collect()
+      }
+
+      checkError(exc1, "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE", "42616",
+        Map(
+          "optionName" -> StateSourceOptions.SNAPSHOT_START_BATCH_ID,
+          "message" -> "Snapshot reading is currently not supported with checkpoint v2."))
+    }
   }
 }
 
@@ -869,6 +993,10 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
     testStreamStreamJoin(2)
   }
 
+  test("stream-stream join, state ver 3") {
+    testStreamStreamJoin(3)
+  }
+
   private def testStreamStreamJoin(stateVersion: Int): Unit = {
     def assertInternalColumnIsNotExposed(df: DataFrame): Unit = {
       val valueSchema = SchemaUtil.getSchemaAsDataType(df.schema, "value")
@@ -877,6 +1005,12 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
       intercept[AnalysisException] {
         SchemaUtil.getSchemaAsDataType(valueSchema, "matched")
       }
+    }
+
+    // We should only test state version 3 with RocksDBStateStoreProvider
+    if (stateVersion == 3
+      && SQLConf.get.stateStoreProviderClass != classOf[RocksDBStateStoreProvider].getName) {
+      return
     }
 
     withSQLConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> stateVersion.toString) {
@@ -939,7 +1073,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
 
         val stateReadDfForRightKeyWithIndexToValue = stateReaderForRightKeyWithIndexToValue.load()
 
-        if (stateVersion == 2) {
+        if (stateVersion >= 2) {
           val resultDf4 = stateReadDfForRightKeyWithIndexToValue
             .selectExpr("key.field0 AS key_0", "key.index AS key_index",
               "value.rightId AS rightId", "CAST(value.rightTime AS integer) AS rightTime",
@@ -1110,6 +1244,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
       assert(get(result, "a", 2).get == 2)
       assert(get(result, "a", 3).get == 3)
       assert(get(result, "a", 4).isEmpty)
+      result.release()
 
       provider.close()
     }

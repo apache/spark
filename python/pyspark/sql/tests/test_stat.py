@@ -435,12 +435,12 @@ class DataFrameStatTestsMixin:
                     self.assertEqual(
                         actual.collect(),
                         [
-                            Row(var="int", value=10.0),
-                            Row(var="double", value=1.0),
-                            Row(var="int", value=20.0),
-                            Row(var="double", value=2.0),
-                            Row(var="int", value=30.0),
-                            Row(var="double", value=3.0),
+                            Row(var="int", val=10.0),
+                            Row(var="double", val=1.0),
+                            Row(var="int", val=20.0),
+                            Row(var="double", val=2.0),
+                            Row(var="int", val=30.0),
+                            Row(var="double", val=3.0),
                         ],
                     )
 
@@ -455,12 +455,12 @@ class DataFrameStatTestsMixin:
                     self.assertEqual(
                         actual.collect(),
                         [
-                            Row(id=1, var="int", value=10.0),
-                            Row(id=1, var="double", value=1.0),
-                            Row(id=2, var="int", value=20.0),
-                            Row(id=2, var="double", value=2.0),
-                            Row(id=3, var="int", value=30.0),
-                            Row(id=3, var="double", value=3.0),
+                            Row(id=1, var="int", val=10.0),
+                            Row(id=1, var="double", val=1.0),
+                            Row(id=2, var="int", val=20.0),
+                            Row(id=2, var="double", val=2.0),
+                            Row(id=3, var="int", val=30.0),
+                            Row(id=3, var="double", val=3.0),
                         ],
                     )
 
@@ -475,12 +475,12 @@ class DataFrameStatTestsMixin:
                     self.assertEqual(
                         actual.collect(),
                         [
-                            Row(id=1, double=1.0, var="int", value=10.0),
-                            Row(id=1, double=1.0, var="double", value=1.0),
-                            Row(id=2, double=2.0, var="int", value=20.0),
-                            Row(id=2, double=2.0, var="double", value=2.0),
-                            Row(id=3, double=3.0, var="int", value=30.0),
-                            Row(id=3, double=3.0, var="double", value=3.0),
+                            Row(id=1, double=1.0, var="int", val=10.0),
+                            Row(id=1, double=1.0, var="double", val=1.0),
+                            Row(id=2, double=2.0, var="int", val=20.0),
+                            Row(id=2, double=2.0, var="double", val=2.0),
+                            Row(id=3, double=3.0, var="int", val=30.0),
+                            Row(id=3, double=3.0, var="double", val=3.0),
                         ],
                     )
 
@@ -491,15 +491,15 @@ class DataFrameStatTestsMixin:
             self.assertEqual(
                 actual.collect(),
                 [
-                    Row(var="id", value=1.0),
-                    Row(var="int", value=10.0),
-                    Row(var="double", value=1.0),
-                    Row(var="id", value=2.0),
-                    Row(var="int", value=20.0),
-                    Row(var="double", value=2.0),
-                    Row(var="id", value=3.0),
-                    Row(var="int", value=30.0),
-                    Row(var="double", value=3.0),
+                    Row(var="id", val=1.0),
+                    Row(var="int", val=10.0),
+                    Row(var="double", val=1.0),
+                    Row(var="id", val=2.0),
+                    Row(var="int", val=20.0),
+                    Row(var="double", val=2.0),
+                    Row(var="id", val=3.0),
+                    Row(var="int", val=30.0),
+                    Row(var="double", val=3.0),
                 ],
             )
 
@@ -514,12 +514,12 @@ class DataFrameStatTestsMixin:
                     self.assertEqual(
                         actual.collect(),
                         [
-                            Row(id=1, var="int", value=10.0),
-                            Row(id=1, var="double", value=1.0),
-                            Row(id=2, var="int", value=20.0),
-                            Row(id=2, var="double", value=2.0),
-                            Row(id=3, var="int", value=30.0),
-                            Row(id=3, var="double", value=3.0),
+                            Row(id=1, var="int", val=10.0),
+                            Row(id=1, var="double", val=1.0),
+                            Row(id=2, var="int", val=20.0),
+                            Row(id=2, var="double", val=2.0),
+                            Row(id=3, var="int", val=30.0),
+                            Row(id=3, var="double", val=3.0),
                         ],
                     )
 

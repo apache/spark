@@ -1380,7 +1380,7 @@ class PartitionAwareDataSource extends TestingV2Source {
 
 class OrderAndPartitionAwareDataSource extends PartitionAwareDataSource {
 
-  class MyScanBuilder(
+  class OrderAwareScanBuilder(
       val partitionKeys: Option[Seq[String]],
       val orderKeys: Seq[String])
     extends SimpleScanBuilder
@@ -1414,7 +1414,7 @@ class OrderAndPartitionAwareDataSource extends PartitionAwareDataSource {
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new MyScanBuilder(
+      new OrderAwareScanBuilder(
         Option(options.get("partitionKeys")).map(_.split(",").toImmutableArraySeq),
         Option(options.get("orderKeys")).map(_.split(",").toSeq).getOrElse(Seq.empty)
       )
@@ -1518,7 +1518,7 @@ class SupportsExternalMetadataWritableDataSource extends SimpleWritableDataSourc
 
 class ReportStatisticsDataSource extends SimpleWritableDataSource {
 
-  class MyScanBuilder extends SimpleScanBuilder
+  class ReportStatisticsScanBuilder extends SimpleScanBuilder
     with SupportsReportStatistics {
     override def estimateStatistics(): Statistics = {
       new Statistics {
@@ -1536,7 +1536,7 @@ class ReportStatisticsDataSource extends SimpleWritableDataSource {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     new SimpleBatchTable {
       override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-        new MyScanBuilder
+        new ReportStatisticsScanBuilder
       }
     }
   }

@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogManager, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, MultipartIdentifierHelper, NamespaceHelper, TransformHelper}
+import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructType
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{ShowNamespacesCommand, ShowTablesCommand}
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
@@ -408,7 +409,8 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
         val clusteringColumnNames = clusterBySpecOpt.map { clusterBySpec =>
           clusterBySpec.columnNames.map(_.toString)
         }.getOrElse(Nil).toSet
-        schemaToColumns(table.schema(), partitionColumnNames.contains, bucketColumnNames.contains,
+        val schema = v2ColumnsToStructType(table.columns())
+        schemaToColumns(schema, partitionColumnNames.contains, bucketColumnNames.contains,
           clusteringColumnNames.contains)
 
       case ResolvedPersistentView(_, _, metadata) =>

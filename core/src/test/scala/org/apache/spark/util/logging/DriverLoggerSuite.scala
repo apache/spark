@@ -19,7 +19,6 @@ package org.apache.spark.util.logging
 
 import java.io.File
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
@@ -52,7 +51,7 @@ class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
 
     // Assert driver log file exists
     val rootDir = Utils.getLocalDir(sc.getConf)
-    val driverLogsDir = FileUtils.getFile(rootDir, DriverLogger.DRIVER_LOG_DIR)
+    val driverLogsDir = Utils.getFile(rootDir, DriverLogger.DRIVER_LOG_DIR)
     assert(driverLogsDir.exists())
     val files = driverLogsDir.listFiles()
     assert(files.length === 1)
@@ -60,7 +59,7 @@ class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
 
     sc.stop()
     assert(!driverLogsDir.exists())
-    val dfsFile = FileUtils.getFile(sc.getConf.get(DRIVER_LOG_DFS_DIR).get,
+    val dfsFile = Utils.getFile(sc.getConf.get(DRIVER_LOG_DFS_DIR).get,
       app_id + DriverLogger.DRIVER_LOG_FILE_SUFFIX)
     assert(dfsFile.exists())
     assert(dfsFile.length() > 0)
@@ -77,7 +76,7 @@ class DriverLoggerSuite extends SparkFunSuite with LocalSparkContext {
 
     // Assert driver log file exists
     val rootDir = Utils.getLocalDir(sc.getConf)
-    val driverLogsDir = FileUtils.getFile(rootDir, DriverLogger.DRIVER_LOG_DIR)
+    val driverLogsDir = Utils.getFile(rootDir, DriverLogger.DRIVER_LOG_DIR)
     assert(driverLogsDir.exists())
     val files = driverLogsDir.listFiles()
     assert(files.length === 1)

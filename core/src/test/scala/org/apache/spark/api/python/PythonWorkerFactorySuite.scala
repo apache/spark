@@ -19,6 +19,7 @@ package org.apache.spark.api.python
 
 import java.net.SocketTimeoutException
 
+import scala.collection.mutable
 // scalastyle:off executioncontextglobal
 import scala.concurrent.ExecutionContext.Implicits.global
 // scalastyle:on executioncontextglobal
@@ -55,5 +56,57 @@ class PythonWorkerFactorySuite extends SparkFunSuite with SharedSparkContext {
 
     // Timeout ensures that the test fails in 5 minutes if createSimplerWorker() doesn't return.
     ThreadUtils.awaitReady(createFuture, 5.minutes)
+  }
+
+  test("idle worker pool is unbounded when idleWorkerMaxPoolSize is not set") {
+    sc.conf.remove("spark.python.factory.idleWorkerMaxPoolSize")
+
+    val factory = new PythonWorkerFactory("python3", "pyspark.worker", Map.empty, true)
+
+    assert(factory.idleWorkers.size === 0)
+
+    val mockWorkers: mutable.Queue[PythonWorker] = mutable.Queue.empty
+    try {
+      (1 to 3).foreach { _ =>
+        val mockChannel = java.nio.channels.SocketChannel.open()
+        mockChannel.configureBlocking(false)
+        mockWorkers.enqueue(PythonWorker(mockChannel))
+      }
+      mockWorkers.foreach(factory.releaseWorker)
+      assert(factory.idleWorkers.size === 3)
+
+    } finally {
+      mockWorkers.foreach(factory.stopWorker)
+    }
+  }
+
+  test("idle worker pool is bounded when idleWorkerMaxPoolSize is set") {
+    sc.conf.set("spark.python.factory.idleWorkerMaxPoolSize", "2")
+
+    val factory = new PythonWorkerFactory("python3", "pyspark.worker", Map.empty, true)
+
+    assert(factory.idleWorkers.size === 0)
+    val mockWorkers: mutable.Queue[PythonWorker] = mutable.Queue.empty
+    try {
+      (1 to 2).foreach { _ =>
+        val mockChannel = java.nio.channels.SocketChannel.open()
+        mockChannel.configureBlocking(false)
+        mockWorkers.enqueue(PythonWorker(mockChannel))
+      }
+      mockWorkers.foreach(factory.releaseWorker)
+      assert(factory.idleWorkers.size === 2)
+
+
+      val worker3 = {
+        val mockChannel = java.nio.channels.SocketChannel.open()
+        mockChannel.configureBlocking(false)
+        PythonWorker(mockChannel)
+      }
+      mockWorkers.enqueue(worker3)
+      factory.releaseWorker(worker3)
+      assert(factory.idleWorkers.size === 2)
+    } finally {
+      mockWorkers.foreach(factory.stopWorker)
+    }
   }
 }

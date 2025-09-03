@@ -20,9 +20,13 @@ from datetime import datetime
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.loose_version import LooseVersion
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, SPARK_CONF_ARROW_ENABLED
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.pandas.utils import (
+    SPARK_CONF_ARROW_ENABLED,
+    SPARK_CONF_PANDAS_STRUCT_MODE,
+)
 from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.testing.utils import is_ansi_mode_test
 
 
 class ConversionMixin:
@@ -102,15 +106,10 @@ class ConversionMixin:
         self.assert_eq(pmidx, psmidx)
 
         # Specify the `names`
-        # Specify the `names` while Index creating is no longer supported from pandas 2.0.0.
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            pmidx = pd.Index(tuples)
-            pmidx.names = ["Hello", "Koalas"]
-            psmidx = ps.Index(tuples)
-            psmidx.names = ["Hello", "Koalas"]
-        else:
-            pmidx = pd.Index(tuples, names=["Hello", "Koalas"])
-            psmidx = ps.Index(tuples, names=["Hello", "Koalas"])
+        pmidx = pd.Index(tuples)
+        pmidx.names = ["Hello", "Koalas"]
+        psmidx = ps.Index(tuples)
+        psmidx.names = ["Hello", "Koalas"]
 
         self.assertTrue(isinstance(psmidx, ps.MultiIndex))
         self.assert_eq(pmidx, psmidx)
@@ -191,10 +190,28 @@ class ConversionMixin:
 
         self.assert_eq((psidx + 1).to_series(), (pidx + 1).to_series())
 
+        # Multiindex
+        arrays = [[1, 2], ["red", "blue"]]
+        pidx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
+        psidx = ps.from_pandas(pidx)
+
+        if is_ansi_mode_test:
+            with self.sql_conf(
+                {
+                    SPARK_CONF_PANDAS_STRUCT_MODE: "row",
+                }
+            ):
+                self.assert_eq(
+                    list(psidx.to_series().values),
+                    list(pidx.to_series().values),
+                )
+        else:
+            self.assert_eq(list(psidx.to_series().values), [["1", "red"], ["2", "blue"]])
+
         pidx = self.pdf.set_index("b", append=True).index
         psidx = self.psdf.set_index("b", append=True).index
 
-        with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
+        with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False, SPARK_CONF_PANDAS_STRUCT_MODE: "row"}):
             self.assert_eq(psidx.to_series(), pidx.to_series(), check_exact=False)
             self.assert_eq(psidx.to_series(name="a"), pidx.to_series(name="a"), check_exact=False)
 
@@ -243,36 +260,30 @@ class ConversionMixin:
         # non-string names
         self.assert_eq(psidx.to_frame(name=[10, 20]), pidx.to_frame(name=[10, 20]))
         self.assert_eq(psidx.to_frame(name=("x", 10)), pidx.to_frame(name=("x", 10)))
-        if LooseVersion(pd.__version__) < LooseVersion("1.5.0"):
-            self.assert_eq(
-                psidx.to_frame(name=[("x", 10), ("y", 20)]),
-                pidx.to_frame(name=[("x", 10), ("y", 20)]),
-            )
-        else:
-            # Since pandas 1.5.0, the result is changed as below:
-            #      (x, 10)  (y, 20)
-            #   b
-            # 0 4        0        4
-            # 1 5        1        5
-            # 3 6        3        6
-            # 5 3        5        3
-            # 6 2        6        2
-            # 8 1        8        1
-            # 9 0        9        0
-            #   0        9        0
-            #   0        9        0
-            #
-            # The columns should be `Index([('x', 20), ('y', 20)], dtype='object')`,
-            # but pandas API on Spark doesn't support such a way for creating Index.
-            # So, we currently cannot follow the behavior of pandas.
-            expected_result = ps.DataFrame(
-                {("x", 10): [0, 1, 3, 5, 6, 8, 9, 9, 9], ("y", 20): [4, 5, 6, 3, 2, 1, 0, 0, 0]},
-                index=ps.MultiIndex.from_tuples(
-                    [(0, 4), (1, 5), (3, 6), (5, 3), (6, 2), (8, 1), (9, 0), (9, 0), (9, 0)],
-                    names=[None, "b"],
-                ),
-            )
-            self.assert_eq(psidx.to_frame(name=[("x", 10), ("y", 20)]), expected_result)
+        # Since pandas 1.5.0, the result is changed as below:
+        #      (x, 10)  (y, 20)
+        #   b
+        # 0 4        0        4
+        # 1 5        1        5
+        # 3 6        3        6
+        # 5 3        5        3
+        # 6 2        6        2
+        # 8 1        8        1
+        # 9 0        9        0
+        #   0        9        0
+        #   0        9        0
+        #
+        # The columns should be `Index([('x', 20), ('y', 20)], dtype='object')`,
+        # but pandas API on Spark doesn't support such a way for creating Index.
+        # So, we currently cannot follow the behavior of pandas.
+        expected_result = ps.DataFrame(
+            {("x", 10): [0, 1, 3, 5, 6, 8, 9, 9, 9], ("y", 20): [4, 5, 6, 3, 2, 1, 0, 0, 0]},
+            index=ps.MultiIndex.from_tuples(
+                [(0, 4), (1, 5), (3, 6), (5, 3), (6, 2), (8, 1), (9, 0), (9, 0), (9, 0)],
+                names=[None, "b"],
+            ),
+        )
+        self.assert_eq(psidx.to_frame(name=[("x", 10), ("y", 20)]), expected_result)
 
     def test_to_list(self):
         # Index

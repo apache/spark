@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.command
+package org.apache.spark.sql.execution.command.v2
+
+import org.apache.spark.sql.execution.command.CreatePipelineDatasetAsSelectParserSuiteBase
 
 /**
  * The class contains tests for the `CREATE STREAMING TABLE ... AS ...` command

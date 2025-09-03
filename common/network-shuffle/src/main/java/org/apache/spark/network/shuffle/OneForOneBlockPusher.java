@@ -21,8 +21,6 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Map;
 
-import com.google.common.base.Preconditions;
-
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -34,6 +32,7 @@ import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode;
 import org.apache.spark.network.shuffle.protocol.BlockPushReturnCode;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * Similar to {@link OneForOneBlockFetcher}, but for pushing blocks to remote shuffle service to
@@ -90,7 +89,7 @@ public class OneForOneBlockPusher {
       ReturnCode returnCode = BlockPushNonFatalFailure.getReturnCode(pushResponse.returnCode);
       if (returnCode != ReturnCode.SUCCESS) {
         String blockId = pushResponse.failureBlockId;
-        Preconditions.checkArgument(!blockId.isEmpty());
+        JavaUtils.checkArgument(!blockId.isEmpty(), "BlockID should not be empty");
         checkAndFailRemainingBlocks(index, new BlockPushNonFatalFailure(returnCode,
           BlockPushNonFatalFailure.getErrorMsg(blockId, returnCode)));
       } else {

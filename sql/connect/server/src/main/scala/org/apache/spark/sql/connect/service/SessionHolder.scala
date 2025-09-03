@@ -31,13 +31,14 @@ import com.google.common.cache.{Cache, CacheBuilder}
 import org.apache.spark.{SparkEnv, SparkException, SparkSQLException}
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.connect.proto
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.ml.MLCache
+import org.apache.spark.sql.connect.pipelines.DataflowGraphRegistry
 import org.apache.spark.sql.connect.planner.PythonStreamingQueryListener
 import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper
 import org.apache.spark.sql.connect.service.SessionHolder.{ERROR_CACHE_SIZE, ERROR_CACHE_TIMEOUT_SEC}
@@ -124,6 +125,9 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // pipeline executions.
   private lazy val pipelineExecutions =
     new ConcurrentHashMap[String, PipelineUpdateContext]()
+
+  // Registry for dataflow graphs specific to this session
+  private[connect] lazy val dataflowGraphRegistry = new DataflowGraphRegistry()
 
   // Handles Python process clean up for streaming queries. Initialized on first use in a query.
   private[connect] lazy val streamingForeachBatchRunnerCleanerCache =
@@ -320,6 +324,9 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     // Stops all pipeline execution and clears the pipeline execution cache
     removeAllPipelineExecutions()
 
+    // Clean up dataflow graphs
+    dataflowGraphRegistry.dropAllDataflowGraphs()
+
     // if there is a server side listener, clean up related resources
     if (streamingServersideListenerHolder.isServerSideListenerRegistered) {
       streamingServersideListenerHolder.cleanUp()
@@ -514,6 +521,11 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     // We only cache plans that have a plan ID.
     val hasPlanId = rel.hasCommon && rel.getCommon.hasPlanId
 
+    // Always cache a `Read.DataSource` to avoid re-analyzing the same `DataSource` twice.
+    lazy val alwaysCacheDataSourceReadsEnabled = Option(session)
+      .forall(_.conf.get(Connect.CONNECT_ALWAYS_CACHE_DATA_SOURCE_READS_ENABLED, true))
+    lazy val isDataSourceRead = rel.hasRead && rel.getRead.hasDataSource
+
     def getPlanCache(rel: proto.Relation): Option[LogicalPlan] =
       planCache match {
         case Some(cache) if planCacheEnabled && hasPlanId =>
@@ -535,7 +547,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     getPlanCache(rel)
       .getOrElse({
         val plan = transform(rel)
-        if (cachePlan) {
+        if (cachePlan || (alwaysCacheDataSourceReadsEnabled && isDataSourceRead)) {
           putPlanCache(rel, plan)
         }
         plan

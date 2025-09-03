@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.time.LocalTime
+import java.time.{Duration, LocalTime}
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkDateTimeException, SparkFunSuite}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkDateTimeException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLValue}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, StringType, TimeType}
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.localTimeToNanos
+import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, IntegerType, StringType, TimeType}
+import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, SECOND}
 
 class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("ParseToTime") {
@@ -363,5 +365,209 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(
       (child: Expression) => SecondsOfTimeWithFraction(child).replacement,
       TimeType())
+  }
+
+  test("Add ANSI day-time intervals to TIME") {
+    checkEvaluation(
+      TimeAddInterval(Literal.create(null, TimeType()), Literal(Duration.ofHours(1))),
+      null)
+    checkEvaluation(
+      TimeAddInterval(Literal(LocalTime.of(12, 30)), Literal(null, DayTimeIntervalType(SECOND))),
+      null)
+    checkEvaluation(
+      TimeAddInterval(Literal(LocalTime.of(8, 31)), Literal(Duration.ofMinutes(30))),
+      LocalTime.of(8, 31).plusMinutes(30))
+    // Maximum precision of TIME and DAY-TIME INTERVAL
+    assert(TimeAddInterval(
+      Literal(0L, TimeType(0)),
+      Literal(0L, DayTimeIntervalType(DAY))).dataType == TimeType(0))
+    assert(TimeAddInterval(
+      Literal(1L, TimeType(TimeType.MAX_PRECISION)),
+      Literal(1L, DayTimeIntervalType(HOUR))).dataType == TimeType(TimeType.MAX_PRECISION))
+    assert(TimeAddInterval(
+      Literal(2L, TimeType(TimeType.MIN_PRECISION)),
+      Literal(2L, DayTimeIntervalType(SECOND))).dataType == TimeType(TimeType.MICROS_PRECISION))
+    assert(TimeAddInterval(
+      Literal(3L, TimeType(TimeType.MAX_PRECISION)),
+      Literal(3L, DayTimeIntervalType(SECOND))).dataType == TimeType(TimeType.MAX_PRECISION))
+    checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+      (time: Expression, interval: Expression) => TimeAddInterval(time, interval).replacement,
+      TimeType(), DayTimeIntervalType())
+  }
+
+  test("SPARK-51555: Time difference") {
+    // Test cases for various difference units - from 09:32:05.359123 until 17:23:49.906152.
+    val startTime: Long = localTime(9, 32, 5, 359123)
+    val startTimeLit: Expression = Literal(startTime, TimeType())
+    val endTime: Long = localTime(17, 23, 49, 906152)
+    val endTimeLit: Expression = Literal(endTime, TimeType())
+
+    // Test differences for valid units.
+    checkEvaluation(TimeDiff(Literal("HOUR"), startTimeLit, endTimeLit), 7L)
+    checkEvaluation(TimeDiff(Literal("MINUTE"), startTimeLit, endTimeLit), 471L)
+    checkEvaluation(TimeDiff(Literal("SECOND"), startTimeLit, endTimeLit), 28304L)
+    checkEvaluation(TimeDiff(Literal("MILLISECOND"), startTimeLit, endTimeLit), 28304547L)
+    checkEvaluation(TimeDiff(Literal("MICROSECOND"), startTimeLit, endTimeLit), 28304547029L)
+
+    // Test case-insensitive units.
+    checkEvaluation(TimeDiff(Literal("hour"), startTimeLit, endTimeLit), 7L)
+    checkEvaluation(TimeDiff(Literal("Minute"), startTimeLit, endTimeLit), 471L)
+    checkEvaluation(TimeDiff(Literal("seconD"), startTimeLit, endTimeLit), 28304L)
+    checkEvaluation(TimeDiff(Literal("milliSECOND"), startTimeLit, endTimeLit), 28304547L)
+    checkEvaluation(TimeDiff(Literal("mIcRoSeCoNd"), startTimeLit, endTimeLit), 28304547029L)
+
+    // Test invalid units.
+    val invalidUnits: Seq[String] = Seq("MS", "INVALID", "ABC", "XYZ", " ", "")
+    invalidUnits.foreach { unit =>
+      checkErrorInExpression[SparkIllegalArgumentException](
+        TimeDiff(Literal(unit), startTimeLit, endTimeLit),
+        condition = "INVALID_PARAMETER_VALUE.TIME_UNIT",
+        parameters = Map(
+          "functionName" -> "`time_diff`",
+          "parameter" -> "`unit`",
+          "invalidValue" -> s"'$unit'"
+        )
+      )
+    }
+
+    // Test null inputs.
+    val nullUnit = Literal.create(null, StringType)
+    val nullTime = Literal.create(null, TimeType())
+    checkEvaluation(TimeDiff(nullUnit, startTimeLit, endTimeLit), null)
+    checkEvaluation(TimeDiff(Literal("hour"), nullTime, endTimeLit), null)
+    checkEvaluation(TimeDiff(Literal("hour"), startTimeLit, nullTime), null)
+    checkEvaluation(TimeDiff(nullUnit, nullTime, endTimeLit), null)
+    checkEvaluation(TimeDiff(nullUnit, startTimeLit, nullTime), null)
+    checkEvaluation(TimeDiff(Literal("hour"), nullTime, nullTime), null)
+    checkEvaluation(TimeDiff(nullUnit, nullTime, nullTime), null)
+  }
+
+  test("Subtract times") {
+    checkEvaluation(
+      SubtractTimes(Literal.create(null, TimeType()), Literal(LocalTime.MIN)),
+      null)
+    checkEvaluation(
+      SubtractTimes(Literal(LocalTime.MAX), Literal(null, TimeType())),
+      null)
+    checkEvaluation(
+      SubtractTimes(
+        Literal(LocalTime.of(8, 31).plusMinutes(30)),
+        Literal(LocalTime.of(8, 31))),
+      Duration.ofMinutes(30))
+    assert(SubtractTimes(
+      Literal(0L, TimeType(0)),
+      Literal(0L, TimeType(0))).dataType == DayTimeIntervalType(HOUR, SECOND))
+
+    for (i <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+      for (j <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+        checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+          (end: Expression, start: Expression) => SubtractTimes(end, start).replacement,
+          TimeType(i), TimeType(j))
+      }
+    }
+  }
+
+  test("SPARK-51554: TimeTrunc") {
+    // Test cases for different truncation units - 09:32:05.359123.
+    val testTime = localTime(9, 32, 5, 359123)
+
+    // Test HOUR truncation.
+    checkEvaluation(
+      TimeTrunc(Literal("HOUR"), Literal(testTime, TimeType())),
+      localTime(9, 0, 0, 0)
+    )
+    // Test MINUTE truncation.
+    checkEvaluation(
+      TimeTrunc(Literal("MINUTE"), Literal(testTime, TimeType())),
+      localTime(9, 32, 0, 0)
+    )
+    // Test SECOND truncation.
+    checkEvaluation(
+      TimeTrunc(Literal("SECOND"), Literal(testTime, TimeType())),
+      localTime(9, 32, 5, 0)
+    )
+    // Test MILLISECOND truncation.
+    checkEvaluation(
+      TimeTrunc(Literal("MILLISECOND"), Literal(testTime, TimeType())),
+      localTime(9, 32, 5, 359000)
+    )
+    // Test MICROSECOND truncation.
+    checkEvaluation(
+      TimeTrunc(Literal("MICROSECOND"), Literal(testTime, TimeType())),
+      testTime
+    )
+
+    // Test case-insensitive units.
+    checkEvaluation(
+      TimeTrunc(Literal("hour"), Literal(testTime, TimeType())),
+      localTime(9, 0, 0, 0)
+    )
+    checkEvaluation(
+      TimeTrunc(Literal("Hour"), Literal(testTime, TimeType())),
+      localTime(9, 0, 0, 0)
+    )
+    checkEvaluation(
+      TimeTrunc(Literal("hoUR"), Literal(testTime, TimeType())),
+      localTime(9, 0, 0, 0)
+    )
+
+    // Test invalid units.
+    val invalidUnits: Seq[String] = Seq("MS", "INVALID", "ABC", "XYZ", " ", "")
+    invalidUnits.foreach { unit =>
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          TimeTrunc(Literal(unit), Literal(testTime, TimeType())).eval()
+        },
+        condition = "INVALID_PARAMETER_VALUE.TIME_UNIT",
+        parameters = Map(
+          "functionName" -> "`time_trunc`",
+          "parameter" -> "`unit`",
+          "invalidValue" -> s"'$unit'"
+        )
+      )
+    }
+
+    // Test null inputs.
+    checkEvaluation(
+      TimeTrunc(Literal.create(null, StringType), Literal(testTime, TimeType())),
+      null
+    )
+    checkEvaluation(
+      TimeTrunc(Literal("HOUR"), Literal.create(null, TimeType())),
+      null
+    )
+    checkEvaluation(
+      TimeTrunc(Literal.create(null, StringType), Literal.create(null, TimeType())),
+      null
+    )
+
+    // Test edge cases.
+    val midnightTime = localTime(0, 0, 0, 0)
+    val supportedUnits: Seq[String] = Seq("HOUR", "MINUTE", "SECOND", "MILLISECOND", "MICROSECOND")
+    supportedUnits.foreach { unit =>
+      checkEvaluation(
+        TimeTrunc(Literal(unit), Literal(midnightTime, TimeType())),
+        midnightTime
+      )
+    }
+
+    val maxTime = localTimeToNanos(LocalTime.of(23, 59, 59, 999999999))
+    checkEvaluation(
+      TimeTrunc(Literal("HOUR"), Literal(maxTime, TimeType())),
+      localTime(23, 0, 0, 0)
+    )
+    checkEvaluation(
+      TimeTrunc(Literal("MICROSECOND"), Literal(maxTime, TimeType())),
+      localTimeToNanos(LocalTime.of(23, 59, 59, 999999000))
+    )
+
+    // Test precision loss.
+    val timeWithMicroPrecision = localTime(15, 30, 45, 123456)
+    val timeTruncMin = TimeTrunc(Literal("MINUTE"), Literal(timeWithMicroPrecision, TimeType(3)))
+    assert(timeTruncMin.dataType == TimeType(3))
+    checkEvaluation(timeTruncMin, localTime(15, 30, 0, 0))
+    val timeTruncSec = TimeTrunc(Literal("SECOND"), Literal(timeWithMicroPrecision, TimeType(3)))
+    assert(timeTruncSec.dataType == TimeType(3))
+    checkEvaluation(timeTruncSec, localTime(15, 30, 45, 0))
   }
 }

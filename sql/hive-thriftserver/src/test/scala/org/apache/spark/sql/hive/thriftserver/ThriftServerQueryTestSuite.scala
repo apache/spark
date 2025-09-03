@@ -18,18 +18,16 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
+import java.nio.file.Files
 import java.sql.{SQLException, Statement, Timestamp}
 import java.util.{Locale, MissingFormatArgumentException}
 
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.exception.ExceptionUtils
-
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.sql.execution.HiveResult.{getBinaryFormatter, getTimeFormatters, toHiveString, BinaryFormatter, TimeFormatters}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
@@ -105,7 +103,10 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     "timestampNTZ/datetime-special-ansi.sql",
     // SPARK-47264
     "view-with-default-collation.sql",
-    "collations.sql",
+    "collations-basic.sql",
+    "collations-aliases.sql",
+    "collations-padding-trim.sql",
+    "collations-string-functions.sql",
     "listagg-collations.sql",
     "pipe-operators.sql",
     // VARIANT type
@@ -137,11 +138,13 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
       }
 
+      val rowCounts = new Array[Int](queries.size)
       // Run the SQL queries preparing them for comparison.
       val outputs: Seq[QueryTestOutput] = withSQLConf(configSet: _*) {
-        queries.map { sql =>
+        queries.zipWithIndex.map { case (sql, i) =>
           val (_, output) = handleExceptions(getNormalizedResult(statement, sql))
           // We might need to do some query canonicalization in the future.
+          rowCounts(i) = output.length
           ExecutionOutput(
             sql = sql,
             schema = Some(""),
@@ -151,7 +154,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
 
       // Read back the golden file.
       val expectedOutputs: Seq[QueryTestOutput] = {
-        val goldenOutput = fileToString(new File(testCase.resultFile))
+        val goldenOutput = Files.readString(new File(testCase.resultFile).toPath)
         val segments = goldenOutput.split("-- !query.*\n")
 
         // each query has 3 segments, plus the header
@@ -162,11 +165,19 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
           val sql = segments(i * 3 + 1).trim
           val schema = segments(i * 3 + 2).trim
           val originalOut = segments(i * 3 + 3)
-          val output = if (schema != emptySchema && isNeedSort(sql)) {
-            originalOut.split("\n").sorted.mkString("\n")
-          } else {
-            originalOut
-          }
+          val output =
+            if (schema != emptySchema && isNeedSort(sql)) {
+              val splits = originalOut.split("\n")
+              if (splits.length > rowCounts(i)) {
+                // the result is multiline
+                val step = splits.length / rowCounts(i)
+                splits.grouped(step).map(_.mkString("\n")).toSeq.sorted.mkString("\n")
+              } else {
+                splits.sorted.mkString("\n")
+              }
+            } else {
+              originalOut
+            }
           ExecutionOutput(
             sql = sql,
             schema = Some(""),
@@ -298,7 +309,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       try {
         result
       } catch {
-        case NonFatal(e) => throw ExceptionUtils.getRootCause(e)
+        case NonFatal(e) => throw Utils.getRootCause(e)
       }
     }
   }

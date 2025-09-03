@@ -27,7 +27,6 @@ import scala.jdk.CollectionConverters._
 import jline.console.ConsoleReader
 import jline.console.completer.{ArgumentCompleter, Completer, StringsCompleter}
 import jline.console.history.FileHistory
-import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
 import org.apache.hadoop.hive.common.HiveInterruptUtils
@@ -40,7 +39,7 @@ import sun.misc.{Signal, SignalHandler}
 
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
@@ -50,6 +49,7 @@ import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
 import org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver.closeHiveSessionStateIfStarted
 import org.apache.spark.sql.internal.{SharedState, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.LEGACY_EMPTY_CURRENT_DB_IN_CLI
+import org.apache.spark.util.{SparkStringUtils, Utils}
 import org.apache.spark.util.ShutdownHookManager
 import org.apache.spark.util.SparkExitCode._
 
@@ -166,9 +166,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // hive.aux.jars.path, here we add jars augmented by hiveconf to
     // Spark's SessionResourceLoader to obtain these jars.
     val auxJars = HiveConf.getVar(conf, HiveConf.getConfVars("hive.aux.jars.path"))
-    if (StringUtils.isNotBlank(auxJars)) {
+    if (SparkStringUtils.isNotBlank(auxJars)) {
       val resourceLoader = SparkSQLEnv.sparkSession.sessionState.resourceLoader
-      StringUtils.split(auxJars, ",").foreach(resourceLoader.addJar(_))
+      Utils.stringToSeq(auxJars).foreach(resourceLoader.addJar(_))
     }
 
     // The class loader of CliSessionState's conf is current main thread's class loader
@@ -504,7 +504,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             case e: IOException =>
               console.printError(
                 s"""Failed with exception ${e.getClass.getName}: ${e.getMessage}
-                   |${org.apache.hadoop.util.StringUtils.stringifyException(e)}
+                   |${Utils.stringifyException(e)}
                  """.stripMargin)
               ret = 1
           }
@@ -572,11 +572,11 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       val commands = splitSemiColon(line).asScala
       var command: String = ""
       for (oneCmd <- commands) {
-        if (StringUtils.endsWith(oneCmd, "\\")) {
-          command += StringUtils.chop(oneCmd) + ";"
+        if (oneCmd.endsWith("\\")) {
+          command += oneCmd.dropRight(1) + ";"
         } else {
           command += oneCmd
-          if (!StringUtils.isBlank(command)) {
+          if (!SparkStringUtils.isBlank(command)) {
             val ret = processCmd(command)
             command = ""
             lastRet = ret

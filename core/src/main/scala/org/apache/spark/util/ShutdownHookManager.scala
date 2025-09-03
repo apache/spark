@@ -26,7 +26,7 @@ import scala.util.Try
 import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.internal.config.SPARK_SHUTDOWN_TIMEOUT_MS
 

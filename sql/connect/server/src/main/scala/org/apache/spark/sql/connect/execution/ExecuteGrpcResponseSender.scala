@@ -24,7 +24,7 @@ import io.grpc.stub.{ServerCallStreamObserver, StreamObserver}
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto.ExecutePlanResponse
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.connect.common.ProtoUtils
@@ -232,7 +232,8 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       // 2. has a response to send
       def gotResponse = response.nonEmpty
       // 3. sent everything from the stream and the stream is finished
-      def streamFinished = executionObserver.getLastResponseIndex().exists(nextIndex > _)
+      def streamFinished = executionObserver.getLastResponseIndex().exists(nextIndex > _) ||
+        executionObserver.isCleaned()
       // 4. time deadline or size limit reached
       def deadlineLimitReached =
         sentResponsesSize > maximumResponseSize || deadlineTimeNs < System.nanoTime()

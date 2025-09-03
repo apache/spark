@@ -21,7 +21,6 @@ import java.io.{File, FileInputStream, FileOutputStream, IOException, ObjectInpu
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, StreamCapabilities}
-import org.apache.hadoop.io.IOUtils
 import org.apache.hadoop.mapreduce.{Job, JobStatus, MRJobConfig, TaskAttemptContext, TaskAttemptID}
 import org.apache.hadoop.mapreduce.lib.output.{BindingPathOutputCommitter, FileOutputFormat}
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
@@ -29,6 +28,7 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.io.{FileCommitProtocol, FileNameSpec}
 import org.apache.spark.internal.io.cloud.PathOutputCommitProtocol.{CAPABILITY_DYNAMIC_PARTITIONING, OUTPUTCOMMITTER_FACTORY_SCHEME}
+import org.apache.spark.network.util.JavaUtils
 
 class CommitterBindingSuite extends SparkFunSuite {
 
@@ -130,7 +130,8 @@ class CommitterBindingSuite extends SparkFunSuite {
       assert(committer.destPath === committer2.destPath,
         "destPath mismatch on round trip")
     } finally {
-      IOUtils.closeStreams(out, in)
+      JavaUtils.closeQuietly(out)
+      JavaUtils.closeQuietly(in)
       serData.delete()
     }
   }

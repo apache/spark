@@ -50,6 +50,13 @@ class GraphRegistrationContext(
   }
 
   def toDataflowGraph: DataflowGraph = {
+    if (tables.isEmpty && views.collect { case v: PersistedView =>
+        v
+      }.isEmpty) {
+      throw new AnalysisException(
+        errorClass = "RUN_EMPTY_PIPELINE",
+        messageParameters = Map.empty)
+    }
     val qualifiedTables = tables.toSeq.map { t =>
       t.copy(
         identifier = GraphIdentifierManager

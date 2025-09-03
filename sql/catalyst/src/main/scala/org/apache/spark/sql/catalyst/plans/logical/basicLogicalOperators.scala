@@ -97,8 +97,9 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     val noSemanticChange = projectList.length == child.output.length &&
       projectList.zip(child.output).forall {
         case (alias: Alias, attr) =>
-          alias.child.semanticEquals(attr) && alias.explicitMetadata.isEmpty &&
-            alias.qualifier.isEmpty && alias.nonInheritableMetadataKeys.isEmpty
+          alias.qualifier.isEmpty &&
+            alias.metadata == attr.metadata &&
+            alias.child.semanticEquals(attr)
         case (attr1: Attribute, attr2) => attr1.semanticEquals(attr2)
         case _ => false
       }
@@ -614,13 +615,20 @@ case class Union(
     Some(sum.toLong)
   }
 
-  def duplicateResolved: Boolean = {
+  private def duplicatesResolvedPerBranch: Boolean =
+    children.forall(child => child.outputSet.size == child.output.size)
+
+  def duplicatesResolvedBetweenBranches: Boolean = {
     children.map(_.outputSet.size).sum ==
       AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
   }
 
   override lazy val resolved: Boolean = {
-    children.length > 1 && !(byName || allowMissingCol) && childrenResolved && allChildrenCompatible
+    children.length > 1 &&
+    !(byName || allowMissingCol) &&
+    childrenResolved &&
+    allChildrenCompatible &&
+    (!conf.unionIsResolvedWhenDuplicatesPerChildResolved || duplicatesResolvedPerBranch)
   }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): Union =
@@ -856,7 +864,10 @@ case class View(
 }
 
 object View {
-  def effectiveSQLConf(configs: Map[String, String], isTempView: Boolean): SQLConf = {
+  def effectiveSQLConf(
+      configs: Map[String, String],
+      isTempView: Boolean,
+      createSparkVersion: String = ""): SQLConf = {
     val activeConf = SQLConf.get
     // For temporary view, we always use captured sql configs
     if (activeConf.useCurrentSQLConfigsForView && !isTempView) return activeConf
@@ -865,7 +876,12 @@ object View {
     for ((k, v) <- configs) {
       sqlConf.settings.put(k, v)
     }
-    Analyzer.retainResolutionConfigsForAnalysis(newConf = sqlConf, existingConf = activeConf)
+    Analyzer.retainResolutionConfigsForAnalysis(
+      newConf = sqlConf,
+      existingConf = activeConf,
+      createSparkVersion = createSparkVersion
+    )
+
     sqlConf
   }
 }
@@ -2106,6 +2122,15 @@ case class LateralJoin(
     copy(left = newChild)
   }
 }
+
+
+object LateralJoin {
+  /**
+   * A tag to identify if a Lateral Join is added by resolving table argument.
+   */
+  val BY_TABLE_ARGUMENT = TreeNodeTag[Unit]("by_table_argument")
+}
+
 
 /**
  * A logical plan for as-of join.

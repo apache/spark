@@ -24,7 +24,6 @@ import java.util.{Locale, UUID}
 
 import scala.util.Random
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.Path
 import org.scalactic.source.Position
 import org.scalatest.{BeforeAndAfter, Tag}
@@ -36,7 +35,10 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MemoryStream, StatefulOperatorStateInfo, StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.{StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -49,8 +51,34 @@ trait AlsoTestWithVirtualColumnFamilyJoins extends SQLTestUtils {
   /** Tests both with and without join ops using virtual column families */
   override protected def test(testName: String, testTags: Tag*)(testBody: => Any)(
     implicit pos: Position): Unit = {
-    testWithVirtualColumnFamilyJoins(testName, testTags: _*)(testBody)
-    testWithoutVirtualColumnFamilyJoins(testName, testTags: _*)(testBody)
+    // Test with virtual column family joins with changelog checkpointing enabled and disabled
+    // Since virtual column family joins require RocksDB, we only test with RocksDB here.
+    Seq("false", "true").foreach { enabled =>
+      testWithVirtualColumnFamilyJoins(
+        testName + s" with (with changelog checkpointing = $enabled)", testTags: _*) {
+        withSQLConf(
+          "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" -> enabled
+        ) {
+          testBody
+        }
+      }
+    }
+
+    // Test with both RocksDB and HDFS state store providers without virtual column family joins
+    val providers = Seq(
+      classOf[RocksDBStateStoreProvider].getName,
+      classOf[HDFSBackedStateStoreProvider].getName
+    )
+
+    providers.foreach { provider =>
+      testWithoutVirtualColumnFamilyJoins(testName + s" (with $provider)", testTags: _*) {
+        withSQLConf(
+          SQLConf.STATE_STORE_PROVIDER_CLASS.key -> provider
+        ) {
+          testBody
+        }
+      }
+    }
   }
 
   def testWithVirtualColumnFamilyJoins(testName: String, testTags: Tag*)(testBody: => Any): Unit = {
@@ -696,9 +724,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
       })
   }
 
-  // This does not need to be run with virtual column family joins as it restores the state store
-  // provider to HDFS and join version to 1, effectively disabling the virtual column family join.
-  testWithoutVirtualColumnFamilyJoins(
+  test(
     "SPARK-26187 restore the stream-stream inner join query from Spark 2.4") {
     val inputStream = MemoryStream[(Int, Long)]
     val df = inputStream.toDS()
@@ -726,7 +752,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
     inputStream.addData((1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L))
 
     testStream(query)(
@@ -792,7 +818,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
     inputStream.addData((1, 1L, "a"), (2, 2L, "b"), (3, 3L, "c"), (4, 4L, "d"), (5, 5L, "e"))
 
     val ex = intercept[StreamingQueryException] {
@@ -862,7 +888,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
     inputStream.addData((1, 1L, "a"), (2, 2L, "b"), (3, 3L, "c"), (4, 4L, "d"), (5, 5L, "e"))
 
     val ex = intercept[StreamingQueryException] {
@@ -1524,9 +1550,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
     )
   }
 
-  // This does not need to be run with virtual column family joins as it restores the state store
-  // provider to HDFS and join version to 1, effectively disabling the virtual column family join.
-  testWithoutVirtualColumnFamilyJoins(
+  test(
     "SPARK-26187 restore the stream-stream outer join query from Spark 2.4") {
     val inputStream = MemoryStream[(Int, Long)]
     val df = inputStream.toDS()
@@ -1554,7 +1578,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
     val checkpointDir = Utils.createTempDir().getCanonicalFile
     // Copy the checkpoint to a temp dir to prevent changes to the original.
     // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
-    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
     inputStream.addData((1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L))
 
     /*

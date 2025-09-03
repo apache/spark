@@ -63,7 +63,6 @@ from google.rpc import error_details_pb2
 
 from pyspark.util import is_remote_only
 from pyspark.accumulators import SpecialAccumulatorIds
-from pyspark.loose_version import LooseVersion
 from pyspark.version import __version__
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql.metrics import MetricValue, PlanMetrics, ExecutionInfo, ObservedMetrics
@@ -968,7 +967,7 @@ class SparkConnectClient(object):
             # Rename columns to avoid duplicated column names.
             renamed_table = table.rename_columns([f"col_{i}" for i in range(table.num_columns)])
 
-            pandas_options = {}
+            pandas_options = {"coerce_temporal_nanoseconds": True}
             if self_destruct:
                 # Configure PyArrow to use as little memory as possible:
                 # self_destruct - free columns as they are converted
@@ -979,15 +978,6 @@ class SparkConnectClient(object):
                         "self_destruct": True,
                         "split_blocks": True,
                         "use_threads": False,
-                    }
-                )
-            if LooseVersion(pa.__version__) >= LooseVersion("13.0.0"):
-                # A legacy option to coerce date32, date64, duration, and timestamp
-                # time units to nanoseconds when converting to pandas.
-                # This option can only be added since 13.0.0.
-                pandas_options.update(
-                    {
-                        "coerce_temporal_nanoseconds": True,
                     }
                 )
             pdf = renamed_table.to_pandas(**pandas_options)
@@ -2037,3 +2027,15 @@ class SparkConnectClient(object):
             return [item.string for item in ml_command_result.param.array.elements]
 
         return []
+
+    def _query_model_size(self, model_ref_id: str) -> int:
+        command = pb2.Command()
+        command.ml_command.get_model_size.CopyFrom(
+            pb2.MlCommand.GetModelSize(model_ref=pb2.ObjectRef(id=model_ref_id))
+        )
+        (_, properties, _) = self.execute_command(command)
+
+        assert properties is not None
+
+        ml_command_result = properties["ml_command_result"]
+        return ml_command_result.param.long

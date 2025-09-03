@@ -33,7 +33,7 @@ SDP is designed for both batch and streaming data processing, supporting common 
 
 The key advantage of SDP is its declarative approach - you define what tables should exist and what their contents should be, and SDP handles the orchestration, compute management, and error handling automatically.
 
-![Dataflow Graph](../img/declarative-pipelines-dataflow-graph.png)
+![Dataflow Graph](img/declarative-pipelines-dataflow-graph.png)
 
 ## Key Concepts
 
@@ -75,6 +75,7 @@ A YAML-formatted pipeline spec file contains the top-level configuration for the
 An example pipeline spec file:
 
 ```yaml
+name: my_pipeline
 definitions:
   - glob:
       include: transformations/**/*.py
@@ -93,34 +94,41 @@ The `spark-pipelines init` command, described below, makes it easy to generate a
 
 ## The `spark-pipelines` Command Line Interface
 
-The `spark-pipelines` command line interface (CLI) is the primary way to execute a pipeline. It also contains an `init` subcommand for generating a pipeline project.
+The `spark-pipelines` command line interface (CLI) is the primary way to execute a pipeline. It also contains an `init` subcommand for generating a pipeline project and a `dry-run` subcommand for validating a pipeline.
 
 `spark-pipelines` is built on top of `spark-submit`, meaning that it supports all cluster managers supported by `spark-submit`. It supports all `spark-submit` arguments except for `--class`.
 
 ### `spark-pipelines init`
 
-`spark-pipelines init` generates a simple pipeline project, including a spec file and example definitions.
+`spark-pipelines init --name my_pipeline` generates a simple pipeline project, inside a directory named "my_pipeline", including a spec file and example definitions.
 
 ### `spark-pipelines run`
 
 `spark-pipelines run` launches an execution of a pipeline and monitors its progress until it completes. The `--spec` parameter allows selecting the pipeline spec file. If not provided, the CLI will look in the current directory and parent directories for a file named `pipeline.yml` or `pipeline.yaml`.
 
+### `spark-pipelines dry-run`
+
+`spark-pipelines dry-run` launches an execution of a pipeline that doesn't write or read any data, but catches many kinds of errors that would be caught if the pipeline were to actually run. E.g.
+- Syntax errors – e.g. invalid Python or SQL code
+- Analysis errors – e.g. selecting from a table that doesn't exist or selecting a column that doesn't exist
+- Graph validation errors - e.g. cyclic dependencies
+
 ## Programming with SDP in Python
 
-SDP Python functions are defined in the `pyspark.pipelines` module. Your pipelines implemented with the Python API must import this module. It's common to alias the module to `sdp` to limit the number of characters you need to type when using its APIs.
+SDP Python functions are defined in the `pyspark.pipelines` module. Your pipelines implemented with the Python API must import this module. It's common to alias the module to `dp` to limit the number of characters you need to type when using its APIs.
 
 ```python
-from pyspark import pipelines as sdp
+from pyspark import pipelines as dp
 ```
 
 ### Creating a Materialized View with Python
 
-The `@sdp.materialized_view` decorator tells SDP to create a materialized view based on the results returned by a function that performs a batch read:
+The `@dp.materialized_view` decorator tells SDP to create a materialized view based on the results returned by a function that performs a batch read:
 
 ```python
-from pyspark import pipelines as sdp
+from pyspark import pipelines as dp
 
-@sdp.materialized_view
+@dp.materialized_view
 def basic_mv():
     return spark.table("samples.nyctaxi.trips")
 ```
@@ -128,21 +136,21 @@ def basic_mv():
 Optionally, you can specify the table name using the `name` argument:
 
 ```python
-from pyspark import pipelines as sdp
+from pyspark import pipelines as dp
 
-@sdp.materialized_view(name="trips_mv")
+@dp.materialized_view(name="trips_mv")
 def basic_mv():
     return spark.table("samples.nyctaxi.trips")
 ```
 
 ### Creating a Temporary View with Python
 
-The `@sdp.temporary_view` decorator tells SDP to create a temporary view based on the results returned by a function that performs a batch read:
+The `@dp.temporary_view` decorator tells SDP to create a temporary view based on the results returned by a function that performs a batch read:
 
 ```python
-from pyspark import pipelines as sdp
+from pyspark import pipelines as dp
 
-@sdp.temporary_view
+@dp.temporary_view
 def basic_tv():
     return spark.table("samples.nyctaxi.trips")
 ```
@@ -151,12 +159,12 @@ This temporary view can be read by other queries within the pipeline, but can't 
 
 ### Creating a Streaming Table with Python
 
-Similarly, you can create a streaming table by using the `@sdp.table` decorator with a function that performs a streaming read:
+Similarly, you can create a streaming table by using the `@dp.table` decorator with a function that performs a streaming read:
 
 ```python
-from pyspark import pipelines as sdp
+from pyspark import pipelines as dp
 
-@sdp.table
+@dp.table
 def basic_st():
     return spark.readStream.table("samples.nyctaxi.trips")
 ```
@@ -166,9 +174,9 @@ def basic_st():
 SDP supports loading data from all formats supported by Spark. For example, you can create a streaming table whose query reads from a Kafka topic:
 
 ```python
-from pyspark import pipelines as sdp
+from pyspark import pipelines as dp
 
-@sdp.table
+@dp.table
 def ingestion_st():
     return (
         spark.readStream.format("kafka")
@@ -181,9 +189,9 @@ def ingestion_st():
 For batch reads:
 
 ```python
-from pyspark import pipelines as sdp
+from pyspark import pipelines as dp
 
-@sdp.materialized_view
+@dp.materialized_view
 def batch_mv():
     return spark.read.format("json").load("/datasets/retail-org/sales_orders")
 ```
@@ -193,10 +201,10 @@ def batch_mv():
 You can reference other tables defined in your pipeline in the same way you'd reference tables defined outside your pipeline:
 
 ```python
-from pyspark import pipelines as sdp
+from pyspark import pipelines as dp
 from pyspark.sql.functions import col
 
-@sdp.table
+@dp.table
 def orders():
     return (
         spark.readStream.format("kafka")
@@ -205,11 +213,11 @@ def orders():
         .load()
     )
 
-@sdp.materialized_view
+@dp.materialized_view
 def customers():
     return spark.read.format("csv").option("header", True).load("/datasets/retail-org/customers")
 
-@sdp.materialized_view
+@dp.materialized_view
 def customer_orders():
     return (spark.table("orders")
         .join(spark.table("customers"), "customer_id")
@@ -220,7 +228,7 @@ def customer_orders():
         )
     )
 
-@sdp.materialized_view
+@dp.materialized_view
 def daily_orders_by_state():
     return (spark.table("customer_orders")
         .groupBy("state", "order_date")
@@ -233,10 +241,10 @@ def daily_orders_by_state():
 You can use Python `for` loops to create multiple tables programmatically:
 
 ```python
-from pyspark import pipelines as sdp
+from pyspark import pipelines as dp
 from pyspark.sql.functions import collect_list, col
 
-@sdp.temporary_view()
+@dp.temporary_view()
 def customer_orders():
     orders = spark.table("samples.tpch.orders")
     customer = spark.table("samples.tpch.customer")
@@ -253,7 +261,7 @@ def customer_orders():
             col("o_orderdate").alias("orderdate"))
     )
 
-@sdp.temporary_view()
+@dp.temporary_view()
 def nation_region():
     nation = spark.table("samples.tpch.nation")
     region = spark.table("samples.tpch.region")
@@ -271,7 +279,7 @@ region_list = spark.table("samples.tpch.region").select(collect_list("r_name")).
 
 # Iterate through region names to create new region-specific materialized views
 for region in region_list:
-    @sdp.table(name=f"{region.lower().replace(' ', '_')}_customer_orders")
+    @dp.table(name=f"{region.lower().replace(' ', '_')}_customer_orders")
     def regional_customer_orders(region_filter=region):
         customer_orders = spark.table("customer_orders")
         nation_region = spark.table("nation_region")
@@ -296,18 +304,18 @@ for region in region_list:
 You can create multiple flows that append data to the same target:
 
 ```python
-from pyspark import pipelines as sdp
+from pyspark import pipelines as dp
 
 # create a streaming table
-sdp.create_streaming_table("customers_us")
+dp.create_streaming_table("customers_us")
 
 # add the first append flow
-@sdp.append_flow(target = "customers_us")
+@dp.append_flow(target = "customers_us")
 def append1():
     return spark.readStream.table("customers_us_west")
 
 # add the second append flow
-@sdp.append_flow(target = "customers_us")
+@dp.append_flow(target = "customers_us")
 def append2():
     return spark.readStream.table("customers_us_east")
 ```

@@ -298,7 +298,9 @@ statement
         RETURN (query | expression)                                    #createUserDefinedFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? identifierReference        #dropFunction
     | DECLARE (OR REPLACE)? variable?
-        identifierReference dataType? variableDefaultExpression?       #createVariable
+        identifierReferences+=identifierReference
+        (COMMA identifierReferences+=identifierReference)*
+        dataType? variableDefaultExpression?                           #createVariable
     | DROP TEMPORARY variable (IF EXISTS)? identifierReference         #dropVariable
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         (statement|setResetStatement)                                  #explain
@@ -374,8 +376,8 @@ createPipelineDatasetHeader
     ;
 
 streamRelationPrimary
-    : STREAM multipartIdentifier tableAlias optionsClause?                           #streamTableName
-    | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN tableAlias optionsClause?    #streamTableName
+    : STREAM multipartIdentifier optionsClause? tableAlias                             #streamTableName
+    | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN optionsClause? tableAlias     #streamTableName
     ;
 
 setResetStatement
@@ -1340,7 +1342,20 @@ collateClause
     : COLLATE collationName=multipartIdentifier
     ;
 
-type
+nonTrivialPrimitiveType
+    : STRING collateClause?
+    | (CHARACTER | CHAR) (LEFT_PAREN length=INTEGER_VALUE RIGHT_PAREN)?
+    | VARCHAR (LEFT_PAREN length=INTEGER_VALUE RIGHT_PAREN)?
+    | (DECIMAL | DEC | NUMERIC)
+        (LEFT_PAREN precision=INTEGER_VALUE (COMMA scale=INTEGER_VALUE)? RIGHT_PAREN)?
+    | INTERVAL
+        (fromYearMonth=(YEAR | MONTH) (TO to=MONTH)? |
+         fromDayTime=(DAY | HOUR | MINUTE | SECOND) (TO to=(HOUR | MINUTE | SECOND))?)?
+    | TIMESTAMP (WITHOUT TIME ZONE)?
+    | TIME (LEFT_PAREN precision=INTEGER_VALUE RIGHT_PAREN)? (WITHOUT TIME ZONE)?
+    ;
+
+trivialPrimitiveType
     : BOOLEAN
     | TINYINT | BYTE
     | SMALLINT | SHORT
@@ -1349,32 +1364,23 @@ type
     | FLOAT | REAL
     | DOUBLE
     | DATE
-    | TIME
-    | TIMESTAMP | TIMESTAMP_NTZ | TIMESTAMP_LTZ
-    | STRING collateClause?
-    | CHARACTER | CHAR
-    | VARCHAR
+    | TIMESTAMP_LTZ | TIMESTAMP_NTZ
     | BINARY
-    | DECIMAL | DEC | NUMERIC
     | VOID
-    | INTERVAL
     | VARIANT
-    | ARRAY | STRUCT | MAP
-    | unsupportedType=identifier
+    ;
+
+primitiveType
+    : nonTrivialPrimitiveType
+    | trivialPrimitiveType
+    | unsupportedType=identifier (LEFT_PAREN INTEGER_VALUE(COMMA INTEGER_VALUE)* RIGHT_PAREN)?
     ;
 
 dataType
-    : complex=ARRAY LT dataType GT                              #complexDataType
-    | complex=MAP LT dataType COMMA dataType GT                 #complexDataType
-    | complex=STRUCT (LT complexColTypeList? GT | NEQ)          #complexDataType
-    | INTERVAL from=(YEAR | MONTH) (TO to=MONTH)?               #yearMonthIntervalDataType
-    | INTERVAL from=(DAY | HOUR | MINUTE | SECOND)
-      (TO to=(HOUR | MINUTE | SECOND))?                         #dayTimeIntervalDataType
-    | TIME (LEFT_PAREN precision=INTEGER_VALUE RIGHT_PAREN)?
-      (WITHOUT TIME ZONE)?                                      #timeDataType
-    | (TIMESTAMP_NTZ | TIMESTAMP WITHOUT TIME ZONE)             #timestampNtzDataType
-    | type (LEFT_PAREN INTEGER_VALUE
-      (COMMA INTEGER_VALUE)* RIGHT_PAREN)?                      #primitiveDataType
+    : complex=ARRAY (LT dataType GT)?                           #complexDataType
+    | complex=MAP (LT dataType COMMA dataType GT)?              #complexDataType
+    | complex=STRUCT ((LT complexColTypeList? GT) | NEQ)?       #complexDataType
+    | primitiveType                                             #primitiveDataType
     ;
 
 qualifiedColTypeWithPositionList

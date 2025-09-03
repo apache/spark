@@ -84,10 +84,6 @@
     <!-- Netty End -->
 
     <dependency>
-      <groupId>org.apache.commons</groupId>
-      <artifactId>commons-lang3</artifactId>
-    </dependency>
-    <dependency>
       <groupId>${leveldbjni.group}</groupId>
       <artifactId>leveldbjni-all</artifactId>
       <version>1.8</version>
@@ -174,7 +170,7 @@
 
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-common-utils_${scala.binary.version}</artifactId>
+      <artifactId>spark-common-utils-java_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
 

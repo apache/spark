@@ -26,12 +26,15 @@ import java.util.concurrent.TimeUnit
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.{SparkDateTimeException, SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorianMicros
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLConf
+import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -763,6 +766,43 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("SPARK-51554: time truncation using timeTrunc") {
+    // 01:02:03.400500600
+    val input = localTimeToNanos(LocalTime.of(1, 2, 3, 400500600))
+    // Truncate the minutes, seconds, and fractions of seconds. Result is: 01:00:00.
+    assert(DateTimeUtils.timeTrunc(UTF8String.fromString("HOUR"), input) === 3600000000000L)
+    // Truncate the seconds and fractions of seconds. Result is: 01:02:00.
+    assert(DateTimeUtils.timeTrunc(UTF8String.fromString("MINUTE"), input) === 3720000000000L)
+    // Truncate the fractions of seconds. Result is: 01:02:03.
+    assert(DateTimeUtils.timeTrunc(UTF8String.fromString("SECOND"), input) === 3723000000000L)
+    // Truncate the milliseconds. Result is: 01:02:03.400.
+    assert(DateTimeUtils.timeTrunc(UTF8String.fromString("MILLISECOND"), input) === 3723400000000L)
+    // Truncate the microseconds. Result is: 01:02:03.400500.
+    assert(DateTimeUtils.timeTrunc(UTF8String.fromString("MICROSECOND"), input) === 3723400500000L)
+
+    // 00:00:00
+    val midnight = localTimeToNanos(LocalTime.MIDNIGHT)
+    // Midnight time remains the same for any truncation.
+    assert(DateTimeUtils.timeTrunc(UTF8String.fromString("HOUR"), midnight) === 0)
+    assert(DateTimeUtils.timeTrunc(UTF8String.fromString("MINUTE"), midnight) === 0)
+    assert(DateTimeUtils.timeTrunc(UTF8String.fromString("SECOND"), midnight) === 0)
+    assert(DateTimeUtils.timeTrunc(UTF8String.fromString("MILLISECOND"), midnight) === 0)
+    assert(DateTimeUtils.timeTrunc(UTF8String.fromString("MICROSECOND"), midnight) === 0)
+
+    // Unsupported truncation levels.
+    Seq("DAY", "WEEK", "MONTH", "QUARTER", "YEAR", "INVALID", "ABC", "XYZ", "MS", " ", "").
+        map(UTF8String.fromString).foreach { level =>
+      intercept[IllegalArgumentException] {
+        DateTimeUtils.timeTrunc(level, input)
+        DateTimeUtils.timeTrunc(level, midnight)
+      }
+    }
+    // Null truncation level is not allowed.
+    intercept[AssertionError] {
+      DateTimeUtils.timeTrunc(null, input)
+    }
+  }
+
   test("SPARK-35664: microseconds to LocalDateTime") {
     assert(microsToLocalDateTime(0) == LocalDateTime.parse("1970-01-01T00:00:00"))
     assert(microsToLocalDateTime(100) == LocalDateTime.parse("1970-01-01T00:00:00.0001"))
@@ -1135,6 +1175,9 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       assert(stringToTime(UTF8String.fromString(str)) === expected)
     }
 
+    // Existing 24-hour format tests.
+
+    // Various valid 24-hour format tests.
     checkStringToTime("00:00", Some(localTime()))
     checkStringToTime("00:00:00", Some(localTime()))
     checkStringToTime("00:00:00.1", Some(localTime(micros = 100000)))
@@ -1150,9 +1193,98 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkStringToTime("1:2:3.0", Some(localTime(hour = 1, minute = 2, sec = 3)))
     checkStringToTime("T1:02:3.04", Some(localTime(hour = 1, minute = 2, sec = 3, micros = 40000)))
 
-    // Negative tests
-    Seq("2025-03-09 00:00:00", "00", "00:01:02 UTC").foreach { invalidTime =>
-      checkStringToTime(invalidTime, None)
+    checkStringToTime("00:00 ", Some(localTime()))
+    checkStringToTime(" 00:00", Some(localTime()))
+    checkStringToTime(" 00:00 ", Some(localTime()))
+    checkStringToTime("1:2:3.0 ", Some(localTime(hour = 1, minute = 2, sec = 3)))
+    checkStringToTime(" 1:2:3.0", Some(localTime(hour = 1, minute = 2, sec = 3)))
+    checkStringToTime(" 1:2:3.0 ", Some(localTime(hour = 1, minute = 2, sec = 3)))
+
+    // Invalid 24-hour format tests (out of range).
+    Seq("24:00:00", "25:00:00", "-1:00:00", "23:60:00", "23:00:60", "99:99:99").foreach {
+      invalidTime =>
+        checkStringToTime(invalidTime, None)
+    }
+
+    // 12-hour format tests (with AM/PM).
+
+    // Midnight hour [12 AM, 1 AM).
+    checkStringToTime("12:00:00 AM",
+      Some(localTime(0, 0, 0, 0)))
+    checkStringToTime("12:30:45 AM",
+      Some(localTime(0, 30, 45, 0)))
+    checkStringToTime("12:59:59.999 AM",
+      Some(localTime(0, 59, 59, 999000)))
+    checkStringToTime("12:59:59.999999 AM",
+      Some(localTime(0, 59, 59, 999999)))
+
+    // Morning hours [1AM, 12PM).
+    checkStringToTime("1:00:00 AM",
+      Some(localTime(hour = 1, minute = 0, sec = 0)))
+    checkStringToTime("11:59:59 AM",
+      Some(localTime(hour = 11, minute = 59, sec = 59)))
+    checkStringToTime("5:30:15.123456 AM",
+      Some(localTime(hour = 5, minute = 30, sec = 15, micros = 123456)))
+
+    // Noon hour [12 PM, 1PM).
+    checkStringToTime("12:00:00 PM",
+      Some(localTime(hour = 12, minute = 0, sec = 0)))
+    checkStringToTime("12:30:45 PM",
+      Some(localTime(hour = 12, minute = 30, sec = 45)))
+    checkStringToTime("12:59:59.999 PM",
+      Some(localTime(hour = 12, minute = 59, sec = 59, micros = 999000)))
+    checkStringToTime("12:59:59.999999 PM",
+      Some(localTime(hour = 12, minute = 59, sec = 59, micros = 999999)))
+
+    // Afternoon hours [1PM, 12AM).
+    checkStringToTime("1:00:00 PM",
+      Some(localTime(hour = 13, minute = 0, sec = 0)))
+    checkStringToTime("11:59:59 PM",
+      Some(localTime(hour = 23, minute = 59, sec = 59)))
+    checkStringToTime("6:45:30.987654 PM",
+      Some(localTime(hour = 18, minute = 45, sec = 30, micros = 987654)))
+    checkStringToTime("11:59:59.999 PM",
+      Some(localTime(hour = 23, minute = 59, sec = 59, micros = 999000)))
+    checkStringToTime("11:59:59.999999 PM",
+      Some(localTime(hour = 23, minute = 59, sec = 59, micros = 999999)))
+
+    // Test without space before AM/PM.
+    checkStringToTime("12:00:00AM", Some(localTime(hour = 0, minute = 0, sec = 0)))
+    checkStringToTime("12:00:00PM", Some(localTime(hour = 12, minute = 0, sec = 0)))
+    checkStringToTime("3:30:45AM", Some(localTime(hour = 3, minute = 30, sec = 45)))
+    checkStringToTime("9:15:20PM", Some(localTime(hour = 21, minute = 15, sec = 20)))
+
+    // Test case insensitive.
+    checkStringToTime("10:30:00Am ", Some(localTime(hour = 10, minute = 30, sec = 0)))
+    checkStringToTime("10:30:00 am", Some(localTime(hour = 10, minute = 30, sec = 0)))
+    checkStringToTime("2:45:30 Pm", Some(localTime(hour = 14, minute = 45, sec = 30)))
+    checkStringToTime("2:45:30pm ", Some(localTime(hour = 14, minute = 45, sec = 30)))
+    checkStringToTime("7:00:00aM", Some(localTime(hour = 7, minute = 0, sec = 0)))
+    checkStringToTime("8:00:00Pm", Some(localTime(hour = 20, minute = 0, sec = 0)))
+
+    // Invalid 12-hour format tests (out of range).
+    Seq(
+      "0:00:00 AM",
+      "0:00:00 PM",
+      "13:00:00 AM",
+      "13:00:00 PM",
+      "24:00:00 AM",
+      "24:00:00 PM",
+      "12:60:00 AM",
+      "12:60:00 PM",
+      "12:00:60 AM",
+      "12:00:60 PM",
+      "99:99:99 AM",
+      "99:99:99 PM"
+    ).foreach {
+      invalidTime =>
+        checkStringToTime(invalidTime, None)
+    }
+
+    // Negative tests (invalid time string).
+    Seq("2025-03-09 00:00:00", "00", "00:01:02 UTC", "XYZ", "ABCD", " ", "").foreach {
+      invalidTime =>
+        checkStringToTime(invalidTime, None)
     }
   }
 
@@ -1179,13 +1311,13 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     val secAndMicros = Decimal(sec + (micros / MICROS_PER_SECOND.toFloat), 16, 6)
 
     // Valid case
-    val microSecsTime = timeToMicros(hour, min, secAndMicros)
-    assert(microSecsTime === localTime(hour.toByte, min.toByte, sec.toByte, micros))
+    val nanoSecsTime = makeTime(hour, min, secAndMicros)
+    assert(nanoSecsTime === localTime(hour.toByte, min.toByte, sec.toByte, micros))
 
     // Invalid hour
     checkError(
       exception = intercept[SparkDateTimeException] {
-        timeToMicros(-1, min, secAndMicros)
+        makeTime(-1, min, secAndMicros)
       },
       condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
       parameters = Map("rangeMessage" -> "Invalid value for HourOfDay (valid values 0 - 23): -1"))
@@ -1193,7 +1325,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     // Invalid minute
     checkError(
       exception = intercept[SparkDateTimeException] {
-        timeToMicros(hour, -1, secAndMicros)
+        makeTime(hour, -1, secAndMicros)
       },
       condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
       parameters = Map("rangeMessage" ->
@@ -1209,12 +1341,39 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     ).foreach { invalidSecond =>
       checkError(
         exception = intercept[SparkDateTimeException] {
-          timeToMicros(hour, min, Decimal(invalidSecond, 16, 6))
+          makeTime(hour, min, Decimal(invalidSecond, 16, 6))
         },
         condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
         parameters = Map("rangeMessage" ->
           s"Invalid value for SecondOfMinute (valid values 0 - 59): ${invalidSecond.toLong}"))
     }
+  }
+
+  test("SPARK-51415: makeTimestamp with days, nanos, and zoneId") {
+    Seq(
+      (MIT, -34200000000L), // -09:30
+      (PST, -28800000000L), // -08:00
+      (UTC, 0L), // +00:00
+      (CET, 3600000000L), // +01:00
+      (JST, 32400000000L) // +09:00
+    ).foreach({ case (zoneId: ZoneId, microsOffset: Long) =>
+      assert(makeTimestamp(0, 0, zoneId) ==
+        0 - microsOffset)
+      assert(makeTimestamp(0, localTime(23, 59, 59), zoneId) * NANOS_PER_MICROS ==
+        localTime(23, 59, 59) - microsOffset * NANOS_PER_MICROS)
+      assert(makeTimestamp(-1, 0, zoneId) ==
+        -1 * MICROS_PER_DAY - microsOffset)
+      assert(makeTimestamp(-1, localTime(23, 59, 59, 999999), zoneId) ==
+        -1 - microsOffset)
+      assert(makeTimestamp(days(9999, 12, 31), localTime(23, 59, 59, 999999), zoneId) ==
+        date(9999, 12, 31, 23, 59, 59, 999999) - microsOffset)
+      assert(makeTimestamp(days(1, 1, 1), localTime(0, 0, 0), zoneId) ==
+        date(1, 1, 1, 0, 0, 0) - microsOffset)
+      val msg = intercept[DateTimeException] {
+        makeTimestamp(0, -1, zoneId)
+      }.getMessage
+      assert(msg.contains("Invalid value"))
+    })
   }
 
   test("makeTimestampNTZ") {
@@ -1250,4 +1409,120 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(truncateTimeToPrecision(localTime(23, 59, 59, 987654), 1) ==
       localTime(23, 59, 59, 900000))
   }
+
+  test("add day-time interval to time") {
+    assert(timeAddInterval(0, 0, 0, SECOND, 6) == localTime())
+    assert(timeAddInterval(0, 6, MICROS_PER_DAY - 1, SECOND, 6) ==
+      localTime(23, 59, 59, 999999))
+    assert(timeAddInterval(localTime(23, 59, 59, 999999), 0, -MICROS_PER_DAY + 1, SECOND, 6) ==
+      localTime(0, 0))
+    assert(timeAddInterval(localTime(12, 30, 43, 123400), 4, 10 * MICROS_PER_MINUTE, SECOND, 6) ==
+      localTime(12, 40, 43, 123400))
+    assert(timeAddInterval(localTime(19, 31, 45, 123450), 5, 6, SECOND, 6) ==
+      localTime(19, 31, 45, 123456))
+    assert(timeAddInterval(localTime(1, 2, 3, 1), 6, MICROS_PER_HOUR, HOUR, 6) ==
+      localTime(2, 2, 3, 1))
+
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        timeAddInterval(1, 6, MICROS_PER_DAY, SECOND, 6)
+      },
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" ->
+        "add INTERVAL '86400' SECOND to the time value TIME '00:00:00.000000001'")
+    )
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        timeAddInterval(0, 0, -1, SECOND, 6)
+      },
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" ->
+        "add INTERVAL '-00.000001' SECOND to the time value TIME '00:00:00'")
+    )
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        timeAddInterval(0, 0, Long.MaxValue, SECOND, 6)
+      },
+      condition = "ARITHMETIC_OVERFLOW",
+      parameters = Map(
+        "message" -> "long overflow",
+        "alternative" -> "",
+        "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY))
+    )
+  }
+
+  // Helper methods to assert results of the timeDiff method and verify execution symmetry.
+  private def testTimeDiff(unit: String, start: Long, end: Long, expected: Long): Unit = {
+    val unitStr = UTF8String.fromString(unit)
+    assert(timeDiff(unitStr, start, end) === expected)
+    assert(timeDiff(unitStr, end, start) === -expected)
+  }
+
+  test("SPARK-51555: time difference calculation using timeDiff") {
+    // Helper variables to express various units of time in nanoseconds.
+    val zero = 0L
+    val nano = zero + 1
+    val micro = 1000 * nano
+    val milli = 1000 * micro
+    val sec = 1000 * milli
+    val min = 60 * sec
+    val hour = 60 * min
+    val day = 24 * hour
+    val maxTime = day - nano
+
+    // Tests that return the same results for all supported units.
+    val supportedUnits = Seq("HOUR", "MINUTE", "SECOND", "MILLISECOND", "MICROSECOND")
+    supportedUnits.foreach(unit => {
+      testTimeDiff(unit, zero, zero, 0)
+      testTimeDiff(unit, zero, nano, 0)
+      testTimeDiff(unit, zero, nano * 999, 0)
+      testTimeDiff(unit, nano, nano, 0)
+      testTimeDiff(unit, nano, nano * 999, 0)
+      testTimeDiff(unit, maxTime, maxTime, 0)
+      testTimeDiff(unit, maxTime, maxTime - 999, 0)
+    })
+
+    // Tests that return different results for various supported units.
+    testTimeDiff("HOUR", hour, hour, 0)
+    testTimeDiff("MINUTE", min, min, 0)
+    testTimeDiff("SECOND", sec, sec, 0)
+    testTimeDiff("MILLISECOND", milli, milli, 0)
+    testTimeDiff("MICROSECOND", micro, micro, 0)
+    testTimeDiff("HOUR", zero, hour, 1)
+    testTimeDiff("MINUTE", zero, min, 1)
+    testTimeDiff("SECOND", zero, sec, 1)
+    testTimeDiff("MILLISECOND", zero, milli, 1)
+    testTimeDiff("MICROSECOND", zero, micro, 1)
+    testTimeDiff("HOUR", zero, maxTime, 23)
+    testTimeDiff("MINUTE", zero, maxTime, 1439)
+    testTimeDiff("SECOND", zero, maxTime, 86399)
+    testTimeDiff("MILLISECOND", zero, maxTime, 86399999)
+    testTimeDiff("MICROSECOND", zero, maxTime, 86399999999L)
+    val start = 10 * hour + 53 * min + 45 * sec + 123 * milli + 456 * micro // 10:53:45.123456
+    val end = 11 * hour + 54 * min + 46 * sec + 654 * milli + 321 * micro // 11:54:46.654321
+    testTimeDiff("HOUR", start, end, 1)
+    testTimeDiff("MINUTE", start, end, 61)
+    testTimeDiff("SECOND", start, end, 3661)
+    testTimeDiff("MILLISECOND", start, end, 3661530)
+    testTimeDiff("MICROSECOND", start, end, 3661530865L)
+  }
+
+  test("subtract times") {
+      Seq(
+        (LocalTime.MIDNIGHT, LocalTime.MIDNIGHT) -> 0,
+        (LocalTime.MAX, LocalTime.MIN) -> (TimeUnit.DAYS.toMicros(1) - 1),
+        (LocalTime.MIN, LocalTime.MAX) -> -(TimeUnit.DAYS.toMicros(1) - 1),
+        (LocalTime.of(12, 0, 0, 999999000), LocalTime.of(0, 0, 0, 999999000)) ->
+          TimeUnit.HOURS.toMicros(12),
+        (LocalTime.of(0, 0, 0, 1000), LocalTime.of(0, 0, 0, 999999000)) -> -999998,
+        (LocalTime.of(0, 0, 0, 123456789), LocalTime.of(0, 0, 0, 123)) -> 123456,
+        (LocalTime.of(20, 30, 45, 321000), LocalTime.of(10, 20, 15, 123000)) ->
+          (localTime(20, 30, 45, 321) - localTime(10, 20, 15, 123)) / 1000
+      ).foreach { case ((end, start), expected) =>
+        val endNanos = localTimeToNanos(end)
+        val startNanos = localTimeToNanos(start)
+        val result = subtractTimes(endNanos, startNanos)
+        assert(result === expected)
+      }
+    }
 }

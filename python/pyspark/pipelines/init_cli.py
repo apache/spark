@@ -18,6 +18,7 @@
 from pathlib import Path
 
 SPEC = """
+name: {{ name }}
 definitions:
   - glob:
       include: transformations/**/*.py
@@ -25,12 +26,12 @@ definitions:
       include: transformations/**/*.sql
 """
 
-PYTHON_EXAMPLE = """from pyspark import pipelines as sdp
+PYTHON_EXAMPLE = """from pyspark import pipelines as dp
 from pyspark.sql import DataFrame, SparkSession
 
 spark = SparkSession.active()
 
-@sdp.materialized_view
+@dp.materialized_view
 def example_python_materialized_view() -> DataFrame:
     return spark.range(10)
 """
@@ -49,7 +50,7 @@ def init(name: str) -> None:
     # Write the spec file to the project directory
     spec_file = project_dir / "pipeline.yml"
     with open(spec_file, "w") as f:
-        f.write(SPEC)
+        f.write(SPEC.replace("{{ name }}", name))
 
     # Create the transformations directory
     transformations_dir = project_dir / "transformations"

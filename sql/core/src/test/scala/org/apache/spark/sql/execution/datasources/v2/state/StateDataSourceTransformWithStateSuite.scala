@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.{Encoders, Row}
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, RocksDBFileManager, RocksDBStateStoreProvider, TestClass}
 import org.apache.spark.sql.functions.{col, explode, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
@@ -1013,6 +1013,8 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
    * the state data.
    */
   testWithChangelogCheckpointingEnabled("snapshotStartBatchId with transformWithState") {
+    // TODO(SPARK-53332): Remove this line once snapshotStartBatchId is supported for V2 format
+    assume(SQLConf.get.stateStoreCheckpointFormatVersion == 1)
     class AggregationStatefulProcessor extends StatefulProcessor[Int, (Int, Long), (Int, Long)] {
       @transient protected var _countState: ValueState[Long] = _
 
@@ -1148,5 +1150,14 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         }
       }
     }
+  }
+}
+
+class StateDataSourceTransformWithStateSuiteCheckpointV2 extends
+  StateDataSourceTransformWithStateSuite {
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 2)
   }
 }

@@ -22,17 +22,20 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Expressions
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.pipelines.graph.DatasetManager.TableMaterializationException
 import org.apache.spark.sql.pipelines.utils.{BaseCoreExecutionTest, TestGraphRegistrationContext}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils.exceptionString
+
+class DefaultMaterializeTablesSuite extends MaterializeTablesSuite with SharedSparkSession
 
 /**
  * Local integration tests for materialization of `Table`s in a `DataflowGraph` to make sure
  * tables are written with the appropriate schemas.
  */
-class MaterializeTablesSuite extends BaseCoreExecutionTest {
+abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   test("basic") {
     val session = spark
     import session.implicits._

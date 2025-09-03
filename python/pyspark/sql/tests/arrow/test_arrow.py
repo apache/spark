@@ -477,7 +477,7 @@ class ArrowTestsMixin:
         allocation_after = pa.total_allocated_bytes()
         difference = allocation_after - allocation_before
         # Should be around 1x the data size (table should not hold on to any memory)
-        self.assertGreaterEqual(difference, 0.9 * expected_bytes)
+        self.assertGreaterEqual(difference, 0.8 * expected_bytes)
         self.assertLessEqual(difference, 1.1 * expected_bytes)
 
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.selfDestruct.enabled": False}):
@@ -707,8 +707,8 @@ class ArrowTestsMixin:
     def test_createDataFrame_does_not_modify_input(self):
         # Some series get converted for Spark to consume, this makes sure input is unchanged
         pdf = self.create_pandas_data_frame()
-        # Use a nanosecond value to make sure it is not truncated
-        pdf.iloc[0, 7] = pd.Timestamp(1)
+        # Use a nanosecond value that converts to microseconds without precision loss
+        pdf.iloc[0, 7] = pd.Timestamp(1000)
         # Integers with nulls will get NaNs filled with 0 and will be casted
         pdf.iloc[1, 1] = None
         pdf_copy = pdf.copy(deep=True)
@@ -736,6 +736,18 @@ class ArrowTestsMixin:
         arrow_schema = to_arrow_schema(self.schema, prefers_large_types=True)
         schema_rt = from_arrow_schema(arrow_schema, prefer_timestamp_ntz=True)
         self.assertEqual(self.schema, schema_rt)
+
+    def test_map_type_conversion_roundtrip(self):
+        from pyspark.sql.pandas.types import from_arrow_type, to_arrow_type
+
+        m1 = MapType(StringType(), IntegerType(), True)
+        m2 = MapType(StringType(), IntegerType(), False)
+
+        for t in [m1, m2]:
+            with self.subTest(map_type=t):
+                arrow_type = to_arrow_type(t)
+                t2 = from_arrow_type(arrow_type)
+                self.assertEqual(t, t2)
 
     def test_createDataFrame_with_ndarray(self):
         for arrow_enabled in [True, False]:
@@ -1713,13 +1725,8 @@ class ArrowTestsMixin:
     def test_createDataFrame_arrow_fixed_size_list(self):
         a = pa.array([[-1, 3]] * 5, type=pa.list_(pa.int32(), 2))
         t = pa.table([a], ["fsl"])
-        if LooseVersion(pa.__version__) < LooseVersion("14.0.0"):
-            # PyArrow versions before 14.0.0 do not support casting FixedSizeListArray to ListArray
-            with self.assertRaises(PySparkTypeError):
-                df = self.spark.createDataFrame(t)
-        else:
-            df = self.spark.createDataFrame(t)
-            self.assertIsInstance(df.schema["fsl"].dataType, ArrayType)
+        df = self.spark.createDataFrame(t)
+        self.assertIsInstance(df.schema["fsl"].dataType, ArrayType)
 
 
 @unittest.skipIf(
