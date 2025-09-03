@@ -28,6 +28,7 @@ class MapStatusEndToEndSuite extends SparkFunSuite with SQLTestUtils {
       .master("local")
       .config(SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED.key, value = true)
       .config(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key, value = 5)
+      .config(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, value = false)
       .getOrCreate()
 
   override def afterAll(): Unit = {
@@ -38,11 +39,14 @@ class MapStatusEndToEndSuite extends SparkFunSuite with SQLTestUtils {
     SparkSession.clearDefaultSession()
   }
 
-  ignore("Propagate checksum from executor to driver") {
+  test("Propagate checksum from executor to driver") {
     assert(spark.sparkContext.conf.get("spark.shuffle.orderIndependentChecksum.enabled") == "true")
     assert(spark.conf.get("spark.shuffle.orderIndependentChecksum.enabled") == "true")
     assert(spark.sparkContext.conf.get("spark.sql.leafNodeDefaultParallelism") == "5")
     assert(spark.conf.get("spark.sql.leafNodeDefaultParallelism") == "5")
+    assert(spark.sparkContext.conf.get("spark.sql.classic.shuffleDependency.fileCleanup.enabled")
+      == "false")
+    assert(spark.conf.get("spark.sql.classic.shuffleDependency.fileCleanup.enabled") == "false")
 
     withTable("t") {
       spark.range(1000).repartition(10).write.mode("overwrite").
