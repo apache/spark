@@ -2737,6 +2737,12 @@
     ],
     "sqlState" : "42001"
   },
+  "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
+    "message" : [
+      "Expression type must be string type but got <exprType>."
+    ],
+    "sqlState" : "42K09"
+  },
   "INVALID_EXTERNAL_TYPE" : {
     "message" : [
       "The external type <externalType> is not valid for the type <type> at the expression <expr>."
@@ -3861,12 +3867,6 @@
       "The value of the typed literal <valueType> is invalid: <value>."
     ],
     "sqlState" : "42604"
-  },
-  "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE" : {
-    "message" : [
-      "Expression type must be string type but got <exprType>."
-    ],
-    "sqlState" : "42K09"
   },
   "INVALID_UDF_IMPLEMENTATION" : {
     "message" : [
