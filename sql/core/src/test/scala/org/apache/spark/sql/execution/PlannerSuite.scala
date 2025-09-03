@@ -1448,9 +1448,10 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"direct_shuffle_partition_id(s)\"",
+        "paramIndex" -> "first",
         "requiredType" -> "\"INT\"",
-        "actualType" -> "\"STRING\"",
-        "inputExpr" -> "\"s\""
+        "inputType" -> "\"STRING\"",
+        "inputSql" -> "\"s\""
       )
     )
   }
