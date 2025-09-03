@@ -1323,7 +1323,7 @@ jobs:
           sudo apt update
           sudo apt-get install r-base
       - name: Start Minikube
-        uses: medyagh/setup-minikube@v0.0.19
+        uses: medyagh/setup-minikube@v0.0.20
         with:
           kubernetes-version: "1.33.0"
           # Github Action limit cpu:2, memory: 6947MB, limit to 2U6G for better resource statistic
