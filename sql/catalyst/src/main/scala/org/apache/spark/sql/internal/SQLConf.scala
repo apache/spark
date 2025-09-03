@@ -3961,7 +3961,7 @@ object SQLConf {
         "and DataSource against the expected schema to ensure that they are compatible.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val PYTHON_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.arrow.enabled")
