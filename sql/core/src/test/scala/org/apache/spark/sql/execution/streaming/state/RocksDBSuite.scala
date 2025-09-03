@@ -676,8 +676,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       // the orphan then the state will be corrupted.
       fileManagerB.deleteOldVersions(2)
 
-      // Passes, but behavior is incorrect. Both files should be protected to prevent corruption.
-      assert(sstCounts === Map("003" -> 1), sstCounts)
+      // Both files are protected to prevent corruption.
+      assert(sstCounts === Map("003" -> 2), sstCounts)
     }
   }
 

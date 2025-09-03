@@ -315,28 +315,36 @@ class RocksDBFileManager(
 
     fileToMaxUsedVersion.toMap
   }
+
   /**
    * Find orphan files which are not tracked by zip files.
+   *
    * Both sst files and log files can be orphan files.
    * They are uploaded separately before the zip file of that version is uploaded.
-   * When the zip file of a version get overwritten, the referenced sst and log files become orphan.
-   * Be careful here since sst and log files of the ongoing version
-   * also appear to be orphan before their zip file is uploaded.
+   * When a version's zip file is overwritten the referenced sst and log files become orphan.
+   * Ensure sst and log files of any ongoing versions are not deleted.
    *
    * @param trackedFiles files tracked by metadata in versioned zip file
    * @param allFiles all sst or log files in the directory.
+   * @param minRetainedZipModified modification time of the min retained zip
    * @return filenames of orphan files
    */
-  def findOrphanFiles(trackedFiles: Seq[String], allFiles: Seq[FileStatus]): Seq[String] = {
+  private def findOrphanFiles(
+      trackedFiles: Seq[String],
+      allFiles: Seq[FileStatus],
+      minRetainedZipModified: Long): Seq[String] = {
     val fileModificationTimes = allFiles.map(file =>
       file.getPath.getName -> file.getModificationTime).toMap
     if (trackedFiles.nonEmpty && allFiles.size > trackedFiles.size) {
       // Some tracked files may not be in the directory when listing.
       val oldestTrackedFileModificationTime = trackedFiles.flatMap(fileModificationTimes.get(_)).min
-      // If this immutable file is older than any tracked file,
-      // then it can't belong to the ongoing version and it should be safe to clean it up.
+
+      // Will not delete files modified after this time to prevent state store corruption.
+      val orphanModificationTimeThreshold = Seq(
+        minRetainedZipModified, oldestTrackedFileModificationTime).min
+
       val orphanFiles = fileModificationTimes
-        .filter(_._2 < oldestTrackedFileModificationTime).keys.toSeq
+        .filter(_._2 < orphanModificationTimeThreshold).keys.toSeq
       if (orphanFiles.nonEmpty) {
         logInfo(s"Found ${orphanFiles.size} orphan files: ${orphanFiles.take(20).mkString(", ")}" +
           "... (display at most 20 filenames) that should be deleted.")
@@ -426,13 +434,25 @@ class RocksDBFileManager(
       case (_, v) => snapshotVersionsToDelete.contains(v)
     }
 
+    // Modified time of the min version to retain zip file.
+    val minRetainedZipModified = fs.getFileStatus(dfsBatchZipFile(minVersionToRetain))
+      .getModificationTime
+
+    // All the sst and log files present in the DFS directory.
     val sstDir = new Path(dfsRootDir, RocksDBImmutableFile.SST_FILES_DFS_SUBDIR)
     val logDir = new Path(dfsRootDir, RocksDBImmutableFile.LOG_FILES_DFS_SUBDIR)
     val allSstFiles = if (fm.exists(sstDir)) fm.list(sstDir).toSeq else Seq.empty
     val allLogFiles = if (fm.exists(logDir)) fm.list(logDir).toSeq else Seq.empty
-    val orphanedFiles = findOrphanFiles(fileToMaxUsedVersion.keys.toSeq, allSstFiles ++ allLogFiles)
-      .map(_ -> -1L)
+
+    val orphanedFiles = findOrphanFiles(
+      trackedFiles.keys.toSeq,
+      allSstFiles ++ allLogFiles,
+      minRetainedZipModified
+    ).map(_ -> -1L)
+
     val filesToDelete = unretainedFiles ++ orphanedFiles
+
+    // Best effort attempt to delete SST files last used in to-be-deleted versions or orphaned
     logInfo(s"Deleting ${filesToDelete.size} files not used in versions >= $minVersionToRetain")
     var failedToDelete = 0
     filesToDelete.foreach { case (dfsFileName, maxUsedVersion) =>
