@@ -359,6 +359,21 @@ class ArrowUDTFTestsMixin:
             result_df = StringToIntUDTF()
             result_df.collect()
 
+    def test_arrow_udtf_type_coercion_string_to_int_safe(self):
+        @arrow_udtf(returnType="id int")
+        class StringToIntUDTF:
+            def eval(self) -> Iterator["pa.Table"]:
+                result_table = pa.table(
+                    {
+                        "id": pa.array(["1", "2", "3"], type=pa.string()),
+                    }
+                )
+                yield result_table
+                
+        result_df = StringToIntUDTF()
+        expected_df = self.spark.createDataFrame([(1,), (2,), (3,)], "id int")
+        assertDataFrameEqual(result_df, expected_df)
+
     def test_arrow_udtf_type_corecion_int64_to_int32_safe(self):
         @arrow_udtf(returnType="id int")
         class Int64ToInt32UDTF:
