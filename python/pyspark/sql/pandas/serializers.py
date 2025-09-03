@@ -261,7 +261,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                 if batch.num_columns == 0:
                     coerced_batch = batch  # skip type coercion
                 else:
-                    expected_field_names = [field.name for field in arrow_return_type]
+                    expected_field_names = arrow_return_type.names
                     actual_field_names = batch.schema.names
 
                     if expected_field_names != actual_field_names:
