@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, FalseLiteral}
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types.{AbstractDataType, DataType, IntegerType}
 
 /**
@@ -31,8 +28,9 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, IntegerType}
  * The resulting partition ID must be in the range [0, numPartitions).
  */
 case class DirectShufflePartitionID(child: Expression)
-    extends UnaryExpression
-    with ExpectsInputTypes {
+  extends UnaryExpression
+  with ExpectsInputTypes
+  with Unevaluable {
 
   override def dataType: DataType = child.dataType
 
@@ -42,28 +40,6 @@ case class DirectShufflePartitionID(child: Expression)
 
   override val prettyName: String = "direct_shuffle_partition_id"
 
-  override def eval(input: InternalRow): Any = {
-    val result = child.eval(input)
-    if (result == null) {
-      throw new IllegalArgumentException(
-        "The partition ID expression must not be null.")
-    }
-    result
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val childGen = child.genCode(ctx)
-    val resultCode =
-      s"""
-         |${childGen.code}
-         |if (${childGen.isNull}) {
-         |  throw new IllegalArgumentException(
-         |    "The partition ID expression must not be null.");
-         |}
-         |""".stripMargin
-
-    ev.copy(code = code"$resultCode", isNull = FalseLiteral, value = childGen.value)
-  }
 
   override protected def withNewChildInternal(newChild: Expression): DirectShufflePartitionID =
     copy(child = newChild)

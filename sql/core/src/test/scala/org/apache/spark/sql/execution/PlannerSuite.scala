@@ -1441,12 +1441,18 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   test("SPARK-53401: repartitionById should fail analysis for non-integral types") {
     val df = spark.range(5).withColumn("s", lit("a"))
-    val e = intercept[AnalysisException] {
-      df.repartitionById(5, $"s").collect()
-    }
-    assert(e.getCondition.contains("DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE"))
-    assert(e.getMessage.contains(
-      "The first parameter requires the \"INT\" type, however \"s\" has the type \"STRING\""))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.repartitionById(5, $"s").collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"direct_shuffle_partition_id(s)\"",
+        "requiredType" -> "\"INT\"",
+        "actualType" -> "\"STRING\"",
+        "inputExpr" -> "\"s\""
+      )
+    )
   }
 
   test("SPARK-53401: repartitionById should send null partition ids to partition 0") {

@@ -1873,7 +1873,7 @@ trait HasPartitionExpressions extends SQLConfHelper {
   } else {
     val directShuffleExprs = partitionExpressions.filter(_.isInstanceOf[DirectShufflePartitionID])
     if (directShuffleExprs.nonEmpty) {
-      require(directShuffleExprs.length == 1 && partitionExpressions.length == 1,
+      assert(directShuffleExprs.length == 1 && partitionExpressions.length == 1,
         s"DirectShufflePartitionID can only be used as a single partition expression, " +
           s"but found ${directShuffleExprs.length} DirectShufflePartitionID expressions " +
           s"out of ${partitionExpressions.length} total expressions")
