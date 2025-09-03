@@ -1916,11 +1916,47 @@ class TransformWithStateInPandasTestsMixin(TransformWithStateTestsMixin):
         return cfg
 
 
+class TransformWithStateInPandasWithCheckpointV2TestsMixin(TransformWithStateInPandasTestsMixin):
+    @classmethod
+    def conf(cls):
+        cfg = super().conf()
+        cfg.set("spark.sql.streaming.stateStore.checkpointFormatVersion", "2")
+        return cfg
+
+    # TODO(SPARK-53332): Add test back when checkpoint v2 support exists for snapshotStartBatchId
+    def test_transform_with_value_state_metadata(self):
+        pass
+
+
+class TransformWithStateInPySparkWithCheckpointV2TestsMixin(TransformWithStateInPySparkTestsMixin):
+    @classmethod
+    def conf(cls):
+        cfg = super().conf()
+        cfg.set("spark.sql.streaming.stateStore.checkpointFormatVersion", "2")
+        return cfg
+
+    # TODO(SPARK-53332): Add test back when checkpoint v2 support exists for snapshotStartBatchId
+    def test_transform_with_value_state_metadata(self):
+        pass
+
+
 class TransformWithStateInPandasTests(TransformWithStateInPandasTestsMixin, ReusedSQLTestCase):
     pass
 
 
 class TransformWithStateInPySparkTests(TransformWithStateInPySparkTestsMixin, ReusedSQLTestCase):
+    pass
+
+
+class TransformWithStateInPandasWithCheckpointV2Tests(
+    TransformWithStateInPandasWithCheckpointV2TestsMixin, ReusedSQLTestCase
+):
+    pass
+
+
+class TransformWithStateInPySparkWithCheckpointV2Tests(
+    TransformWithStateInPySparkWithCheckpointV2TestsMixin, ReusedSQLTestCase
+):
     pass
 
 

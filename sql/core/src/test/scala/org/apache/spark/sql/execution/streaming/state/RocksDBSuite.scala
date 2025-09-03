@@ -3254,6 +3254,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  test("Calling getInstanceMemoryUsage on an ID " +
+    "that doesn't exist doesn't throw an error") {
+    RocksDBMemoryManager.getInstanceMemoryUsage("This ID doesn't exist", 0L)
+  }
+
   testWithChangelogCheckpointingEnabled(
     "SPARK-51717 - validate that RocksDB file mapping is cleared " +
       "when we reload version 0 after we have created a snapshot to avoid SST mismatch") {

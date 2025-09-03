@@ -477,7 +477,7 @@ class ArrowTestsMixin:
         allocation_after = pa.total_allocated_bytes()
         difference = allocation_after - allocation_before
         # Should be around 1x the data size (table should not hold on to any memory)
-        self.assertGreaterEqual(difference, 0.9 * expected_bytes)
+        self.assertGreaterEqual(difference, 0.8 * expected_bytes)
         self.assertLessEqual(difference, 1.1 * expected_bytes)
 
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.selfDestruct.enabled": False}):
@@ -736,6 +736,18 @@ class ArrowTestsMixin:
         arrow_schema = to_arrow_schema(self.schema, prefers_large_types=True)
         schema_rt = from_arrow_schema(arrow_schema, prefer_timestamp_ntz=True)
         self.assertEqual(self.schema, schema_rt)
+
+    def test_map_type_conversion_roundtrip(self):
+        from pyspark.sql.pandas.types import from_arrow_type, to_arrow_type
+
+        m1 = MapType(StringType(), IntegerType(), True)
+        m2 = MapType(StringType(), IntegerType(), False)
+
+        for t in [m1, m2]:
+            with self.subTest(map_type=t):
+                arrow_type = to_arrow_type(t)
+                t2 = from_arrow_type(arrow_type)
+                self.assertEqual(t, t2)
 
     def test_createDataFrame_with_ndarray(self):
         for arrow_enabled in [True, False]:

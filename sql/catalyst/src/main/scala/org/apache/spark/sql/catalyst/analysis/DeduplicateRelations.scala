@@ -19,17 +19,14 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverTag
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, NamedExpression, OuterReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.internal.SQLConf
 
 object DeduplicateRelations extends Rule[LogicalPlan] {
-  val PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION =
-    TreeNodeTag[Unit]("project_for_expression_id_deduplication")
-
   type ExprIdMap = mutable.HashMap[Class[_], mutable.HashSet[Long]]
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
@@ -77,7 +74,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
                   }
                   val project = Project(projectList, child)
                   project.setTagValue(
-                    DeduplicateRelations.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION,
+                    ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION,
                     ()
                   )
                   project

@@ -23,7 +23,6 @@ import java.sql.{Date, Timestamp}
 import java.time._
 
 import scala.collection.{immutable, mutable}
-import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
@@ -491,13 +490,16 @@ object LiteralValueProtoConverter {
         builder.setCalendarInterval(proto.DataType.CalendarInterval.newBuilder.build())
       case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
         if (recursive) {
-          val structType = literal.getStruct.getDataTypeStruct
-          val structData = literal.getStruct.getElementsList.asScala
+          val struct = literal.getStruct
+          val size = struct.getElementsCount
           val structTypeBuilder = proto.DataType.Struct.newBuilder
-          for ((element, field) <- structData.zip(structType.getFieldsList.asScala)) {
+          var i = 0
+          while (i < size) {
+            val field = struct.getDataTypeStruct.getFields(i)
             if (field.hasDataType) {
               structTypeBuilder.addFields(field)
             } else {
+              val element = struct.getElements(i)
               getInferredDataType(element, recursive = true) match {
                 case Some(dataType) =>
                   val fieldBuilder = structTypeBuilder.addFieldsBuilder()
@@ -510,6 +512,7 @@ object LiteralValueProtoConverter {
                 case None => return None
               }
             }
+            i += 1
           }
           builder.setStruct(structTypeBuilder.build())
         } else {
@@ -675,16 +678,12 @@ object LiteralValueProtoConverter {
       }
     }
 
-    val elements = struct.getElementsList.asScala
-    val dataTypes = structType.getFieldsList.asScala.map(_.getDataType)
-    val structData = elements
-      .zip(dataTypes)
-      .map { case (element, dataType) =>
-        getConverter(dataType)(element)
-      }
-      .asInstanceOf[scala.collection.Seq[Object]]
-      .toSeq
-
+    val size = struct.getElementsCount
+    val structData = Seq.tabulate(size) { i =>
+      val element = struct.getElements(i)
+      val dataType = structType.getFields(i).getDataType
+      getConverter(dataType)(element).asInstanceOf[Object]
+    }
     toTuple(structData)
   }
 

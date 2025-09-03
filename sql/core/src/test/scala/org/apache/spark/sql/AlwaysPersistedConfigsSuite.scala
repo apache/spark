@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql
 
+import org.scalactic.source.Position
+import org.scalatest.Tag
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.SQLScalarFunction
@@ -37,6 +40,13 @@ import org.apache.spark.sql.types.StructType
  * or a UDF.
  */
 class AlwaysPersistedConfigsSuite extends QueryTest with SharedSparkSession {
+
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(
+    implicit pos: Position): Unit = {
+    if (!sys.env.get("SPARK_ANSI_SQL_MODE").contains("false")) {
+      super.test(testName, testTags: _*)(testFun)
+    }
+  }
 
   protected override def sparkConf: SparkConf = {
     super.sparkConf

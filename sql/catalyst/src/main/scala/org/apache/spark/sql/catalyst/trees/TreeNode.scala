@@ -181,6 +181,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     }
   }
 
+  def mergeTagsFrom(other: BaseType): Unit = {
+    if (!other.isTagsEmpty) {
+      // Merge all tags from the other node into this node.
+      // Unlike copyTagsFrom which only copies when this node has no tags,
+      // mergeTagsFrom will always merge tags regardless of existing state.
+      // If both nodes have the same tag with different values, the value
+      // from the other node will overwrite the existing value in this node.
+      tags ++= other.tags
+    }
+  }
+
   def setTagValue[T](tag: TreeNodeTag[T], value: T): Unit = {
     tags(tag) = value
   }

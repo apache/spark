@@ -33,6 +33,7 @@ import org.apache.spark.sql.types.IntegerType
  */
 class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[LogicalPlan]
   with ColumnResolutionHelper {
+  private val variableResolution = new VariableResolution(catalogManager.tempVariableManager)
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(COMMAND), ruleId) {
@@ -40,7 +41,10 @@ class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[Logica
     case setVariable: SetVariable if !setVariable.targetVariables.forall(_.resolved) =>
       val resolvedVars = setVariable.targetVariables.map {
         case u: UnresolvedAttribute =>
-          lookupVariable(u.nameParts) match {
+          variableResolution.lookupVariable(
+            nameParts = u.nameParts,
+            resolvingExecuteImmediate = AnalysisContext.get.isExecuteImmediate
+          ) match {
             case Some(variable) => variable.copy(canFold = false)
             case _ => throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))
           }
