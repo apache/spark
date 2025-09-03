@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
-abstract class BaseArrowPythonRunner(
+abstract class BaseArrowPythonRunner[IN, OUT <: AnyRef](
     funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
     argOffsets: Array[Array[Int]],
@@ -37,10 +37,10 @@ abstract class BaseArrowPythonRunner(
     protected override val workerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
-  extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
+  extends BasePythonRunner[IN, OUT](
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
-  with BasicPythonArrowInput
-  with BasicPythonArrowOutput {
+  with PythonArrowInput[IN]
+  with PythonArrowOutput[OUT] {
 
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
@@ -68,6 +68,23 @@ abstract class BaseArrowPythonRunner(
       s"Please change '${SQLConf.PANDAS_UDF_BUFFER_SIZE.key}'.")
 }
 
+abstract class RowInputArrowPythonRunner(
+    funcs: Seq[(ChainedPythonFunctions, Long)],
+    evalType: Int,
+    argOffsets: Array[Array[Int]],
+    _schema: StructType,
+    _timeZoneId: String,
+    largeVarTypes: Boolean,
+    workerConf: Map[String, String],
+    pythonMetrics: Map[String, SQLMetric],
+    jobArtifactUUID: Option[String],
+    profiler: Option[String])
+  extends BaseArrowPythonRunner[Iterator[InternalRow], ColumnarBatch](
+    funcs, evalType, argOffsets, _schema, _timeZoneId, largeVarTypes, workerConf,
+    pythonMetrics, jobArtifactUUID)
+  with BasicPythonArrowInput
+  with BasicPythonArrowOutput
+
 /**
  * Similar to `PythonUDFRunner`, but exchange data with Python worker via Arrow stream.
  */
@@ -82,9 +99,9 @@ class ArrowPythonRunner(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     profiler: Option[String])
-  extends BaseArrowPythonRunner(
+  extends RowInputArrowPythonRunner(
     funcs, evalType, argOffsets, _schema, _timeZoneId, largeVarTypes, workerConf,
-    pythonMetrics, jobArtifactUUID) {
+    pythonMetrics, jobArtifactUUID, profiler) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit =
     PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, profiler)
@@ -105,9 +122,9 @@ class ArrowPythonWithNamedArgumentRunner(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     profiler: Option[String])
-  extends BaseArrowPythonRunner(
+  extends RowInputArrowPythonRunner(
     funcs, evalType, argMetas.map(_.map(_.offset)), _schema, _timeZoneId, largeVarTypes, workerConf,
-    pythonMetrics, jobArtifactUUID) {
+    pythonMetrics, jobArtifactUUID, profiler) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
