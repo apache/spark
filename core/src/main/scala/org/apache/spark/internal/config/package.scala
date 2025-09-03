@@ -609,7 +609,7 @@ package object config {
       .doc("The location for fallback storage during block manager decommissioning. " +
         "For example, `s3a://spark-storage/`. In case of empty, fallback storage is disabled. " +
         "The storage will not be cleaned up by Spark unless " +
-        "spark.storage.decommission.fallbackStorage.cleanUp is true. " +
+        s"${STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP.key} is true. " +
         "Use an external clean up mechanism when false, for instance a TTL.")
       .version("3.1.0")
       .stringConf
