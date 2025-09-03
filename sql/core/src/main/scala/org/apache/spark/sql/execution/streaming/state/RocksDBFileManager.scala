@@ -318,10 +318,9 @@ class RocksDBFileManager(
 
   /**
    * Find orphan files which are not tracked by zip files.
-   *
    * Both sst files and log files can be orphan files.
    * They are uploaded separately before the zip file of that version is uploaded.
-   * When a version's zip file is overwritten the referenced sst and log files become orphan.
+   * When the zip file of a version get overwritten, the referenced sst and log files become orphan.
    * Ensure sst and log files of any ongoing versions are not deleted.
    *
    * @param trackedFiles files tracked by metadata in versioned zip file
