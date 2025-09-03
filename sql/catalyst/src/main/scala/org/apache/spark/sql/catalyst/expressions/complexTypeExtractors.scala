@@ -211,8 +211,8 @@ case class GetArrayStructFields(
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
     case ArrayType(_: StructType, _) => TypeCheckResult.TypeCheckSuccess
     // This should never happen, unless we hit a bug.
-    case other =>
-      TypeCheckResult.TypeCheckFailure("GetArrayStructFields.child must be array of struct type")
+    case other => TypeCheckResult.TypeCheckFailure(
+      "GetArrayStructFields.child must be array of struct type, but got " + other)
   }
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
@@ -498,8 +498,8 @@ case class GetMapValue(child: Expression, key: Expression)
           TypeUtils.checkForOrderingExpr(keyType, prettyName)
       }
     // This should never happen, unless we hit a bug.
-    case other =>
-      TypeCheckResult.TypeCheckFailure("GetMapValue.child must be map type")
+    case other => TypeCheckResult.TypeCheckFailure(
+      "GetMapValue.child must be map type, but got " + other)
   }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(MapType, keyType)
