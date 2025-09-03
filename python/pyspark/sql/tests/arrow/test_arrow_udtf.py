@@ -369,7 +369,7 @@ class ArrowUDTFTestsMixin:
                     }
                 )
                 yield result_table
-                
+
         result_df = StringToIntUDTF()
         expected_df = self.spark.createDataFrame([(1,), (2,), (3,)], "id int")
         assertDataFrameEqual(result_df, expected_df)
