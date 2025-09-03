@@ -131,7 +131,7 @@ class ExternalAppendOnlyUnsafeRowArray(
   def add(unsafeRow: UnsafeRow): Unit = {
     // Once spills, we will switch to UnsafeExternalSorter permanently.
     if (spillableArray == null && numRows < numRowsInMemoryBufferThreshold &&
-      inMemoryBufferSizeInBytes < sizeInBytesSpillThreshold) {
+      inMemoryBufferSizeInBytes < sizeInBytesInMemoryBufferThreshold) {
       inMemoryBuffer += unsafeRow.copy()
       inMemoryBufferSizeInBytes += unsafeRow.getSizeInBytes
     } else {
