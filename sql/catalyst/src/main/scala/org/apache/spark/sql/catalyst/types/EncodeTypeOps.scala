@@ -18,21 +18,20 @@
 package org.apache.spark.sql.catalyst.types
 
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.LocalTimeEncoder
-import org.apache.spark.sql.catalyst.expressions.{Literal, MutableLong, MutableValue}
-import org.apache.spark.sql.types.TimeType
+import org.apache.spark.sql.types.{DataType, TimeType}
 
-case class TimeTypeOps (t: TimeType)
-  extends TypeOps
-  with PhyTypeOps
-  with LiteralTypeOps
-  with EncodeTypeOps {
+// Encode type values to external types, for instance to Java types.
+trait EncodeTypeOps {
+  // Gets an agnostic encoder which contains all info needed to convert internal row
+  // values of the given type to a specific objects.
+  def getEncoder: AgnosticEncoder[_]
+}
 
-  override def getPhysicalType: PhysicalDataType = PhysicalLongType
-  override def getJavaClass: Class[_] = classOf[PhysicalLongType.InternalType]
-  override def getMutableValue: MutableValue = new MutableLong
+object EncodeTypeOps {
+  private val supportedDataTypes: Set[DataType] =
+    Set(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*)
 
-  override def getDefaultLiteral: Literal = Literal.create(0L, t)
+  def supports(dt: DataType): Boolean = supportedDataTypes.contains(dt)
 
-  override def getEncoder: AgnosticEncoder[_] = LocalTimeEncoder
+  def apply(dt: DataType): EncodeTypeOps = TypeOps(dt).asInstanceOf[EncodeTypeOps]
 }
