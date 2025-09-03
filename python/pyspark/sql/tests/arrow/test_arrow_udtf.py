@@ -354,7 +354,7 @@ class ArrowUDTFTestsMixin:
         with self.assertRaisesRegex(
             PythonException,
             "Arrow UDTFs require the return type to match the expected Arrow type."
-            + "Expected: int32, but got: string in field 'id'.",
+            + " Expected: int32, but got: string.",
         ):
             result_df = StringToIntUDTF()
             result_df.collect()

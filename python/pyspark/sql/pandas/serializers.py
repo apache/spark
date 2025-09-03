@@ -226,7 +226,23 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                     # Keep the column as it is for non-table columns
                     result_batches.append(batch.column(i))
             yield result_batches
-
+            
+    def _create_array(self, arr, arrow_type):
+        import pyarrow as pa
+        assert isinstance(arr, pa.Array)
+        assert isinstance(arrow_type, pa.DataType)
+        if arr.type == arrow_type:
+            return arr
+        else:
+            try:
+                # when safe is True, the cast will fail if there's a overflow or other unsafe conversion
+                return arr.cast(target_type=arrow_type, safe=True)
+            except (pa.ArrowInvalid, pa.ArrowTypeError):
+                raise PySparkTypeError(
+                    "Arrow UDTFs require the return type to match the expected Arrow type. "
+                    f"Expected: {arrow_type}, but got: {arr.type}."
+                )
+                
     def dump_stream(self, iterator, stream):
         """
         Override to handle type coercion for ArrowUDTF outputs.
@@ -242,39 +258,23 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
 
                 # Handle empty struct case specially
                 if batch.num_columns == 0:
-                    # When batch has no column, it should still create
-                    # an empty batch with the number of rows set.
-                    struct = pa.array([{}] * batch.num_rows)
-                    coerced_batch = pa.RecordBatch.from_arrays([struct], ["_0"])
+                    coerced_batch = batch # skip type coercion
                 else:
-                    target_schema = pa.schema(arrow_return_type)
-                    try:
-                        coerced_batch = batch.cast(target_schema)
-                    except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
-                        from pyspark.errors import PySparkTypeError
-
-                        # Extract specific type mismatch information
-                        expected_type = None
-                        actual_type = None
-
-                        # Find the first mismatched field for better error message
-                        if len(target_schema) == len(batch.schema):
-                            for expected_field, actual_field in zip(target_schema, batch.schema):
-                                if expected_field.type != actual_field.type:
-                                    expected_type = expected_field.type
-                                    actual_type = actual_field.type
-                                    break
-
-                        if expected_type and actual_type:
-                            error_msg = f"Expected: {expected_type}, but got: {actual_type} in field '{expected_field.name}'."
-                        else:
-                            error_msg = f"Expected: {target_schema}, but got: {batch.schema}."
-
+                    expected_field_names = [field.name for field in arrow_return_type]
+                    actual_field_names = batch.schema.names
+                    
+                    if expected_field_names != actual_field_names:
                         raise PySparkTypeError(
-                            "Arrow UDTFs require the return type to match the expected Arrow type."
-                            + error_msg
-                        ) from e
-
+                            "Target schema's field names are not matching the record batch's field names. "
+                            f"Expected: {expected_field_names}, but got: {actual_field_names}."
+                        )
+                    
+                    coerced_arrays = []
+                    for i, field in enumerate(arrow_return_type):
+                        original_array = batch.column(i)
+                        coerced_array = self._create_array(original_array, field.type)
+                        coerced_arrays.append(coerced_array)
+                    coerced_batch = pa.RecordBatch.from_arrays(coerced_arrays, names=arrow_return_type.names)
                 yield coerced_batch, arrow_return_type
 
         return super(ArrowStreamArrowUDTFSerializer, self).dump_stream(
