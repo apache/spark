@@ -31,8 +31,7 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, IntegerType}
  * The resulting partition ID must be in the range [0, numPartitions).
  */
 case class DirectShufflePartitionID(child: Expression)
-    extends UnaryExpression
-    with ExpectsInputTypes {
+    extends UnaryExpression with ExpectsInputTypes {
 
   override def dataType: DataType = child.dataType
 
