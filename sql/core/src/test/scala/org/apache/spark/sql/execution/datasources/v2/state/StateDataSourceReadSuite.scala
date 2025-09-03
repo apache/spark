@@ -527,9 +527,6 @@ class RocksDBStateDataSourceReadSuite extends StateDataSourceReadSuite {
 
 class RocksDBWithChangelogCheckpointStateDataSourceReaderSuite extends
 StateDataSourceReadSuite {
-
-  import testImplicits._
-
   override protected def newStateStoreProvider(): RocksDBStateStoreProvider =
     new RocksDBStateStoreProvider
 
@@ -579,41 +576,7 @@ StateDataSourceReadSuite {
    * the getResource model used in other similar tests on runbot.
    */
   test("snapshotStartBatchId on join state v3") {
-    withTempDir { tmpDir =>
-      withSQLConf(
-        SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3",
-        SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100"
-      ) {
-        val inputData = MemoryStream[(Int, Long)]
-        val query = getStreamStreamJoinQuery(inputData)
-        testStream(query)(
-          StartStream(checkpointLocation = tmpDir.getCanonicalPath),
-          AddData(inputData, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
-          ProcessAllAvailable(),
-          Execute { _ => Thread.sleep(2000) },
-          AddData(inputData, (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L)),
-          ProcessAllAvailable(),
-          Execute { _ => Thread.sleep(2000) },
-          AddData(inputData, (11, 11L), (12, 12L), (13, 13L), (14, 14L), (15, 15L)),
-          ProcessAllAvailable(),
-          Execute { _ => Thread.sleep(5000) },
-          StopStream
-        )
-
-        val stateSnapshotDf = spark.read.format("statestore")
-          .option("snapshotPartitionId", 2)
-          .option("snapshotStartBatchId", 0)
-          .option("joinSide", "left")
-          .load(tmpDir.getCanonicalPath)
-
-        val stateDf = spark.read.format("statestore")
-          .option("joinSide", "left")
-          .load(tmpDir.getCanonicalPath)
-          .filter(col("partition_id") === 2)
-
-        checkAnswer(stateSnapshotDf, stateDf)
-      }
-    }
+    testSnapshotOnJoinStateV3()
   }
 }
 
@@ -662,6 +625,59 @@ class RocksDBWithCheckpointV2StateDataSourceReaderSuite extends StateDataSourceR
             "matchVersion" -> "1"))
       }
     }
+  }
+}
+
+class RocksDBWithCheckpointV2StateDataSourceReaderSnapshotSuite extends StateDataSourceReadSuite {
+  // import testImplicits._
+
+  override protected def newStateStoreProvider(): RocksDBStateStoreProvider =
+    new RocksDBStateStoreProvider
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 2)
+    spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
+      newStateStoreProvider().getClass.getName)
+    spark.conf.set("spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled",
+      "true")
+    // make sure we have a snapshot for every two delta files
+    // HDFS maintenance task will not count the latest delta file, which has the same version
+    // as the snapshot version
+    spark.conf.set(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key, 1)
+  }
+
+  test("ERROR: snapshot of version not found") {
+    testSnapshotNotFound()
+  }
+
+  test("provider.getReadStore(snapshotVersion, endVersion)") {
+    testGetReadStoreWithStartVersion()
+  }
+
+  test("option snapshotPartitionId") {
+    testSnapshotPartitionId()
+  }
+
+  test("snapshotStartBatchId on limit state") {
+    testSnapshotOnLimitState("rocksdb", checkpointFormatVersion = 2)
+  }
+
+  test("snapshotStartBatchId on aggregation state") {
+    testSnapshotOnAggregateState("rocksdb", checkpointFormatVersion = 2)
+  }
+
+  test("snapshotStartBatchId on deduplication state") {
+    testSnapshotOnDeduplicateState("rocksdb", checkpointFormatVersion = 2)
+  }
+
+  test("snapshotStartBatchId on join state") {
+    testSnapshotOnJoinState("rocksdb", 1, checkpointFormatVersion = 2)
+    testSnapshotOnJoinState("rocksdb", 2, checkpointFormatVersion = 2)
+  }
+
+  test("snapshotStartBatchId on join state v3") {
+    testSnapshotOnJoinStateV3()
   }
 }
 
@@ -1199,17 +1215,23 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
 
   protected def testGetReadStoreWithStartVersion(): Unit = {
     withTempDir { tempDir =>
+      val versionToCkptId = scala.collection.mutable.Map[Long, Option[String]]()
       val provider = getNewStateStoreProvider(tempDir.getAbsolutePath)
       for (i <- 1 to 4) {
-        val store = provider.getStore(i - 1)
+        val store = provider.getStore(i - 1, versionToCkptId.getOrElse(i - 1, None))
         put(store, "a", i, i)
         store.commit()
+
+        val ssInfo = store.getStateStoreCheckpointInfo()
+        versionToCkptId(ssInfo.batchVersion) = ssInfo.stateStoreCkptId
+
         provider.doMaintenance()
       }
 
       val result =
         provider.asInstanceOf[SupportsFineGrainedReplay]
-          .replayReadStateFromSnapshot(2, 3)
+          .replayReadStateFromSnapshot(2, 3,
+            versionToCkptId.getOrElse(2, None), versionToCkptId.getOrElse(3, None))
 
       assert(get(result, "a", 1).get == 1)
       assert(get(result, "a", 2).get == 2)
@@ -1269,10 +1291,13 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
     checkAnswer(stateSnapshotDf, stateDf)
   }
 
-  protected def testSnapshotOnLimitState(providerName: String): Unit = {
+  protected def testSnapshotOnLimitState(
+      providerName: String,
+      checkpointFormatVersion: Int = 1): Unit = {
     /** The golden files are generated by:
       withSQLConf({
         SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100"
+        SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> checkFormatVersion.toString
       }) {
         val inputData = MemoryStream[(Int, Long)]
         val query = inputData.toDF().limit(10)
@@ -1293,14 +1318,23 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
         )
       }
      */
+
+    val versionSuffix = if (checkpointFormatVersion == 2) {
+      "-checkpoint-v2"
+    } else {
+      ""
+    }
+
     val resourceUri = this.getClass.getResource(
-      s"/structured-streaming/checkpoint-version-4.0.0/$providerName/limit/"
+      s"/structured-streaming/checkpoint-version-4.0.0$versionSuffix/$providerName/limit/"
     ).toURI
 
     testSnapshotStateDfAgainstStateDf(new File(resourceUri))
   }
 
-  protected def testSnapshotOnAggregateState(providerName: String): Unit = {
+  protected def testSnapshotOnAggregateState(
+      providerName: String,
+      checkpointFormatVersion: Int = 1): Unit = {
     /** The golden files are generated by:
       withSQLConf({
         SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100"
@@ -1324,14 +1358,22 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
         )
       }
      */
+    val versionSuffix = if (checkpointFormatVersion == 2) {
+      "-checkpoint-v2"
+    } else {
+      ""
+    }
+
     val resourceUri = this.getClass.getResource(
-      s"/structured-streaming/checkpoint-version-4.0.0/$providerName/dedup/"
+      s"/structured-streaming/checkpoint-version-4.0.0$versionSuffix/$providerName/dedup/"
     ).toURI
 
     testSnapshotStateDfAgainstStateDf(new File(resourceUri))
   }
 
-  protected def testSnapshotOnDeduplicateState(providerName: String): Unit = {
+  protected def testSnapshotOnDeduplicateState(
+      providerName: String,
+      checkpointFormatVersion: Int = 1): Unit = {
     /** The golden files are generated by:
       withSQLConf({
         SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100"
@@ -1355,14 +1397,23 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
         )
       }
      */
+    val versionSuffix = if (checkpointFormatVersion == 2) {
+      "-checkpoint-v2"
+    } else {
+      ""
+    }
+
     val resourceUri = this.getClass.getResource(
-      s"/structured-streaming/checkpoint-version-4.0.0/$providerName/dedup/"
+      s"/structured-streaming/checkpoint-version-4.0.0$versionSuffix/$providerName/dedup/"
     ).toURI
 
     testSnapshotStateDfAgainstStateDf(new File(resourceUri))
   }
 
-  protected def testSnapshotOnJoinState(providerName: String, stateVersion: Int): Unit = {
+  protected def testSnapshotOnJoinState(
+      providerName: String,
+      stateVersion: Int,
+      checkpointFormatVersion: Int = 1): Unit = {
     /** The golden files are generated by:
       withSQLConf({
         SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> stateVersion.toString
@@ -1384,8 +1435,15 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
         )
       }
      */
+    val versionSuffix = if (checkpointFormatVersion == 2) {
+      "-checkpoint-v2"
+    } else {
+      ""
+    }
+
     val resourceUri = this.getClass.getResource(
-      s"/structured-streaming/checkpoint-version-4.0.0/$providerName/join$stateVersion/"
+      s"/structured-streaming/checkpoint-version-4.0.0$versionSuffix/" +
+        s"$providerName/join$stateVersion/"
     ).toURI
 
     val resourceDir = new File(resourceUri)
@@ -1402,5 +1460,43 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
       .filter(col("partition_id") === 2)
 
     checkAnswer(stateSnapshotDf, stateDf)
+  }
+
+  protected def testSnapshotOnJoinStateV3(): Unit = {
+    withTempDir { tmpDir =>
+      withSQLConf(
+        SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3",
+        SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100"
+      ) {
+        val inputData = MemoryStream[(Int, Long)]
+        val query = getStreamStreamJoinQuery(inputData)
+        testStream(query)(
+          StartStream(checkpointLocation = tmpDir.getCanonicalPath),
+          AddData(inputData, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
+          ProcessAllAvailable(),
+          Execute { _ => Thread.sleep(2000) },
+          AddData(inputData, (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L)),
+          ProcessAllAvailable(),
+          Execute { _ => Thread.sleep(2000) },
+          AddData(inputData, (11, 11L), (12, 12L), (13, 13L), (14, 14L), (15, 15L)),
+          ProcessAllAvailable(),
+          Execute { _ => Thread.sleep(5000) },
+          StopStream
+        )
+
+        val stateSnapshotDf = spark.read.format("statestore")
+          .option("snapshotPartitionId", 2)
+          .option("snapshotStartBatchId", 0)
+          .option("joinSide", "left")
+          .load(tmpDir.getCanonicalPath)
+
+        val stateDf = spark.read.format("statestore")
+          .option("joinSide", "left")
+          .load(tmpDir.getCanonicalPath)
+          .filter(col("partition_id") === 2)
+
+        checkAnswer(stateSnapshotDf, stateDf)
+      }
+    }
   }
 }
