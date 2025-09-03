@@ -1695,10 +1695,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               case UpdateStarAction(updateCondition) =>
                 // Use only source columns.  Missing columns in target will be handled in
                 // ResolveRowLevelCommandAssignments.
-                val assignments = targetTable.output.flatMap{ targetAttr =>
-                  sourceTable.output.find(
-                      sourceCol => conf.resolver(sourceCol.name, targetAttr.name))
-                    .map(Assignment(targetAttr, _))}
+                val sourceAttrs = DataTypeUtils.nestedAttributes(sourceTable.output)
+                val assignments = sourceAttrs.map{ sourceAttr =>
+                  Assignment(UnresolvedAttribute(sourceAttr.name),
+                    UnresolvedAttribute(sourceAttr.name))}
                 UpdateAction(
                   updateCondition.map(resolveExpressionByPlanChildren(_, m)),
                   // For UPDATE *, the value must be from source table.
@@ -1721,10 +1721,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   resolveExpressionByPlanOutput(_, m.sourceTable))
                 // Use only source columns.  Missing columns in target will be handled in
                 // ResolveRowLevelCommandAssignments.
-                val assignments = targetTable.output.flatMap{ targetAttr =>
-                  sourceTable.output.find(
-                      sourceCol => conf.resolver(sourceCol.name, targetAttr.name))
-                    .map(Assignment(targetAttr, _))}
+                val sourceAttrs = DataTypeUtils.nestedAttributes(sourceTable.output)
+                val assignments = sourceAttrs.map{ sourceAttr =>
+                  Assignment(UnresolvedAttribute(sourceAttr.name),
+                    UnresolvedAttribute(sourceAttr.name))}
                 InsertAction(
                   resolvedInsertCondition,
                   resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE))
