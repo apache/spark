@@ -655,7 +655,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       def sstCounts: Map[String, Int] = listFiles(sstDir)
         .map(_.getName.split("-").head)
         .groupBy(identity)
-        .mapValues(_.size)
+        .map { case (k, v) => k -> v.size }
 
       // Two copies of 003.sst exist.
       assert(sstCounts === Map("003" -> 2), sstCounts)
