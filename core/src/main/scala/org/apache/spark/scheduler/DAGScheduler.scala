@@ -2022,10 +2022,6 @@ private[spark] class DAGScheduler(
                 // The epoch of the task is acceptable (i.e., the task was launched after the most
                 // recent failure we're aware of for the executor), so mark the task's output as
                 // available.
-
-                // scalastyle:off println
-                System.out.println(s"registered map output for ${shuffleStage.shuffleDep.shuffleId}")
-                // scalastyle:on println
                 mapOutputTracker.registerMapOutput(
                   shuffleStage.shuffleDep.shuffleId, smt.partitionId, status)
               }

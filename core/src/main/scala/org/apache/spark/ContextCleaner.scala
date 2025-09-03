@@ -235,9 +235,6 @@ private[spark] class ContextCleaner(
   def doCleanupShuffle(shuffleId: Int, blocking: Boolean): Unit = {
     try {
       if (mapOutputTrackerMaster.containsShuffle(shuffleId)) {
-        // scalastyle:off println
-        System.out.println(s"Cleaning shuffle ${shuffleId}")
-        // scalastyle:on println
         logDebug("Cleaning shuffle " + shuffleId)
         // Shuffle must be removed before it's unregistered from the output tracker
         // to find blocks served by the shuffle service on deallocated executors
