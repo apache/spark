@@ -1233,6 +1233,10 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       producers: Seq[NamedExpression],
       alwaysInline: Boolean): (Seq[NamedExpression], Seq[NamedExpression]) = {
     lazy val producerAttributes = AttributeSet(producers.collect { case a: Alias => a.toAttribute })
+
+    // A map from producer attributes to tuples of:
+    // - how many times the producer is referenced from consumers and
+    // - the set of consumers that reference the producer.
     lazy val producerReferences = AttributeMap(consumers
       .flatMap(e => collectReferences(e).filter(producerAttributes.contains).map(_ -> e))
       .groupMap(_._1)(_._2)
