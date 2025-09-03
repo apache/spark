@@ -29,6 +29,7 @@ import java.math.{BigDecimal => JavaBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period, ZoneOffset}
+
 import java.util
 import java.util.{HexFormat, Objects}
 
@@ -55,6 +56,7 @@ import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, perio
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.ops.FormatTypeOps
 import org.apache.spark.unsafe.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
@@ -438,8 +440,6 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       dataType match {
         case DateType =>
           DateFormatter().format(value.asInstanceOf[Int])
-        case _: TimeType =>
-          new FractionTimeFormatter().format(value.asInstanceOf[Long])
         case TimestampType =>
           TimestampFormatter.getFractionFormatter(timeZoneId).format(value.asInstanceOf[Long])
         case TimestampNTZType =>
@@ -448,6 +448,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           toDayTimeIntervalString(value.asInstanceOf[Long], ANSI_STYLE, startField, endField)
         case YearMonthIntervalType(startField, endField) =>
           toYearMonthIntervalString(value.asInstanceOf[Int], ANSI_STYLE, startField, endField)
+        case _ if FormatTypeOps.supports(dataType) => FormatTypeOps(dataType).format(value)
         case _ =>
           other.toString
       }

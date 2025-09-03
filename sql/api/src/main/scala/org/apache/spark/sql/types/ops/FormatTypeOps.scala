@@ -17,15 +17,20 @@
 
 package org.apache.spark.sql.types.ops
 
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.LocalTimeEncoder
-import org.apache.spark.sql.catalyst.util.TimeFormatter
-import org.apache.spark.sql.types.TimeType
+import org.apache.spark.sql.types.{DataType, TimeType}
 
-class TimeTypeApiOps(t: TimeType) extends TypeApiOps with EncodeTypeOps with FormatTypeOps {
-  private lazy val fracFormatter = TimeFormatter.getFractionFormatter()
-
-  override def getEncoder: AgnosticEncoder[_] = LocalTimeEncoder
-
-  override def format(v: Any): String = fracFormatter.format(v.asInstanceOf[Long])
+// Format type values to strings
+trait FormatTypeOps {
+  def format(v: Any): String
 }
+
+object FormatTypeOps {
+  private val supportedDataTypes: Set[DataType] =
+    Set(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*)
+
+  def supports(dt: DataType): Boolean = supportedDataTypes.contains(dt)
+
+  def apply(dt: DataType): FormatTypeOps = TypeApiOps(dt).asInstanceOf[FormatTypeOps]
+}
+
+
