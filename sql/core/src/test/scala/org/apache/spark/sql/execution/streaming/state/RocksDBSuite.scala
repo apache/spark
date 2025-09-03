@@ -631,6 +631,56 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  test("RocksDBFileManager: delete orphan files protect with timestamps") {
+    withTempDir { dir =>
+      val dfsRootDir = dir.getAbsolutePath
+      val sstDir = s"$dfsRootDir/SSTs"
+
+      // Save versions 1, 2, and 3.
+      // We need 3 versions otherwise or else deleteOldVersions(retain=2) will exit early.
+      // The first two versions must be empty so SST file timestamps do not protect
+      // orphan files on version 3.
+      val fileManagerA = new RocksDBFileManager(
+        dfsRootDir, Utils.createTempDir(), new Configuration)
+      saveCheckpointFiles(fileManagerA, Seq(), version = 1, numKeys = 101)
+      saveCheckpointFiles(fileManagerA, Seq(), version = 2, numKeys = 101)
+      saveCheckpointFiles(fileManagerA, Seq("003.sst" -> 10), version = 3, numKeys = 101)
+
+      // Overwrite version 3 with another file manager. This creates the orphan.
+      val fileManagerB = new RocksDBFileManager(
+        dfsRootDir, Utils.createTempDir(), new Configuration)
+      saveCheckpointFiles(fileManagerB, Seq("003.sst" -> 10), version = 3, numKeys = 101)
+
+      // Helper function. Counts number of copies of each SST file.
+      def sstCounts: Map[String, Int] = listFiles(sstDir)
+        .map(_.getName.split("-").head)
+        .groupBy(identity)
+        .mapValues(_.size)
+
+      // Two copies of 003.sst exist.
+      assert(sstCounts === Map("003" -> 2), sstCounts)
+
+      // Example of what we have at ths point according to fileManagerB:
+      //
+      //  All modification times:
+      //    003-3b60ee7b-131c-4c4c-8f3d-a299b008f5b0.sst -> 1756860610932
+      //    003-dfaf1b88-5676-46b9-be32-e7d353c07f97.sst -> 1756860610820
+      //  Tracked files:
+      //     003-3b60ee7b-131c-4c4c-8f3d-a299b008f5b0.sst -> Some(1756860610932)
+      //  Oldest tracked file modification time:
+      //    1756860610932
+
+      // Deleting with fileManagerB results in 1756860610932 as the oldest tracked file modified
+      // time. So the other 003 copy is an orphan according to B. This is incorrect. In a race
+      // between fileManagers A and B it could be that 3.zip from A is last to land. If B deletes
+      // the orphan then the state will be corrupted.
+      fileManagerB.deleteOldVersions(2)
+
+      // Passes, but behavior is incorrect. Both files should be protected to prevent corruption.
+      assert(sstCounts === Map("003" -> 1), sstCounts)
+    }
+  }
+
   test("RocksDBFileManager: don't delete orphan files when there is only 1 version") {
     withTempDir { dir =>
       val dfsRootDir = dir.getAbsolutePath
