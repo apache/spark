@@ -1032,8 +1032,6 @@ case class RocksDBCheckpointMetadata(
 
 /** Helper class for [[RocksDBCheckpointMetadata]] */
 object RocksDBCheckpointMetadata {
-  val VERSION = SQLConf.get.stateStoreCheckpointFormatVersion
-
   implicit val format: Formats = Serialization.formats(NoTypeHints)
 
   /** Used to convert between classes and JSON. */
@@ -1048,6 +1046,7 @@ object RocksDBCheckpointMetadata {
   def readFromFile(metadataFile: File): RocksDBCheckpointMetadata = {
     val reader = Files.newBufferedReader(metadataFile.toPath, UTF_8)
     try {
+      val VERSION = SQLConf.get.stateStoreCheckpointFormatVersion
       val versionLine = reader.readLine()
       if (versionLine != s"v$VERSION") {
         throw QueryExecutionErrors.cannotReadCheckpoint(s"v$VERSION", versionLine)
