@@ -1546,13 +1546,19 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       .select($"id" % 10 as "key", $"id" as "v2")
       .repartition($"key")
 
-    val joined = df1.join(df2, "key")
+    val joined1 = df1.join(df2, "key")
 
-    val grouped = joined.groupBy("key").count()
+    val grouped = joined1.groupBy("key").count()
 
     // Total shuffles: one for df1, one broadcast for df2, one for groupBy.
     // The groupBy reuse the output partitioning after DirectShufflePartitionID.
     checkShuffleCount(grouped, 3)
+
+    val joined2 = df2.join(df1, "key")
+
+    val grouped2 = joined2.groupBy("key").count()
+
+    checkShuffleCount(grouped2, 3)
   }
 
   test("SPARK-53401: shuffle reuse after a join doesn't preserve partitioning") {
