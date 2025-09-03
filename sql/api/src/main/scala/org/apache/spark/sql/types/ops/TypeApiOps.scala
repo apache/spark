@@ -27,7 +27,8 @@ trait TypeApiOps
 object TypeApiOps {
   def apply(dt: DataType): TypeApiOps = dt match {
     case tt: TimeType => new TimeTypeApiOps(tt)
-    case other => throw SparkException.internalError(
-      s"Cannot create an operation object of the type ${other.sql}")
+    case other =>
+      throw SparkException.internalError(
+        s"Cannot create an operation object of the type ${other.sql}")
   }
 }

@@ -21,8 +21,6 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.LocalTimeEncoder
 import org.apache.spark.sql.types.TimeType
 
-class TimeTypeApiOps(t: TimeType)
-  extends TypeApiOps
-  with EncodeTypeOps {
+class TimeTypeApiOps(t: TimeType) extends TypeApiOps with EncodeTypeOps {
   override def getEncoder: AgnosticEncoder[_] = LocalTimeEncoder
 }
