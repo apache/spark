@@ -184,6 +184,7 @@ object PythonForeachWriter {
     }
 
     def add(row: UnsafeRow): Unit = withLock {
+      queue.add(row)
       count += 1
       unblockRemove.signal()
       logTrace(s"Added $row, $count left")
