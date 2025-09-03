@@ -236,7 +236,8 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
             return arr
         else:
             try:
-                # when safe is True, the cast will fail if there's a overflow or other unsafe conversion
+                # when safe is True, the cast will fail if there's a overflow or other
+                # unsafe conversion
                 return arr.cast(target_type=arrow_type, safe=True)
             except (pa.ArrowInvalid, pa.ArrowTypeError):
                 raise PySparkTypeError(
@@ -266,7 +267,8 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
 
                     if expected_field_names != actual_field_names:
                         raise PySparkTypeError(
-                            "Target schema's field names are not matching the record batch's field names. "
+                            "Target schema's field names are not matching the record batch's "
+                            "field names. "
                             f"Expected: {expected_field_names}, but got: {actual_field_names}."
                         )
 
