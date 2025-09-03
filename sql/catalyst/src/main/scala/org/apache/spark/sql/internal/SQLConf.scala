@@ -3961,7 +3961,7 @@ object SQLConf {
         "and DataSource against the expected schema to ensure that they are compatible.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val PYTHON_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.arrow.enabled")
@@ -6205,6 +6205,16 @@ object SQLConf {
       .version("4.1.0")
       .intConf
       .createWithDefault(2)
+  }
+
+  val PIPELINES_EVENT_QUEUE_CAPACITY = {
+    buildConf("spark.sql.pipelines.event.queue.capacity")
+      .doc("Capacity of the event queue used in pipelined execution. When the queue is full, " +
+        "non-terminal FlowProgressEvents will be dropped.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(v => v > 0, "Event queue capacity must be positive.")
+      .createWithDefault(1000)
   }
 
   val HADOOP_LINE_RECORD_READER_ENABLED =

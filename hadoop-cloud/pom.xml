@@ -105,6 +105,12 @@
       </exclusions>
     </dependency>
     <dependency>
+      <groupId>software.amazon.s3.analyticsaccelerator</groupId>
+      <artifactId>analyticsaccelerator-s3</artifactId>
+      <version>${analyticsaccelerator-s3.version}</version>
+      <scope>${hadoop.deps.scope}</scope>
+    </dependency>
+    <dependency>
       <groupId>com.google.cloud.bigdataoss</groupId>
       <artifactId>gcs-connector</artifactId>
       <version>${gcs-connector.version}</version>
