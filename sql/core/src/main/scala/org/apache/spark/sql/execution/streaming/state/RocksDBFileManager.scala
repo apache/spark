@@ -300,6 +300,21 @@ class RocksDBFileManager(
     }
   }
 
+  /** Find files referenced in versions and store the max version each file is used in. */
+  private def filesTrackedInVersions(versions: Seq[Long]): Map[String, Long] = {
+    val fileToMaxUsedVersion = new mutable.HashMap[String, Long]
+    versions.foreach { version =>
+      val files = Option(fileMappings.versionToRocksDBFiles.get(version)).getOrElse {
+        val newResolvedFiles = getImmutableFilesFromVersionZip(version)
+        fileMappings.versionToRocksDBFiles.put(version, newResolvedFiles)
+        newResolvedFiles
+      }
+      files.foreach(f => fileToMaxUsedVersion(f.dfsFileName) =
+        math.max(version, fileToMaxUsedVersion.getOrElse(f.dfsFileName, version)))
+    }
+
+    fileToMaxUsedVersion.toMap
+  }
   /**
    * Find orphan files which are not tracked by zip files.
    * Both sst files and log files can be orphan files.
@@ -403,21 +418,11 @@ class RocksDBFileManager(
     val snapshotVersionsToDelete = sortedSnapshotVersions.filter(_ < minVersionToRetain)
     if (snapshotVersionsToDelete.isEmpty) return
 
+    // Tracked files with the max version in which they are used.
+    val trackedFiles: Map[String, Long] = filesTrackedInVersions(sortedSnapshotVersions)
 
-    // Resolve RocksDB files for all the versions and find the max version each file is used
-    val fileToMaxUsedVersion = new mutable.HashMap[String, Long]
-    sortedSnapshotVersions.foreach { version =>
-      val files = Option(fileMappings.versionToRocksDBFiles.get(version)).getOrElse {
-        val newResolvedFiles = getImmutableFilesFromVersionZip(version)
-        fileMappings.versionToRocksDBFiles.put(version, newResolvedFiles)
-        newResolvedFiles
-      }
-      files.foreach(f => fileToMaxUsedVersion(f.dfsFileName) =
-        math.max(version, fileToMaxUsedVersion.getOrElse(f.dfsFileName, version)))
-    }
-
-    // Best effort attempt to delete SST files that were last used in to-be-deleted versions
-    val filesToDelete = fileToMaxUsedVersion.filter {
+    // Files that can be deleted because they were last used in to-be-deleted versions.
+    val unretainedFiles = trackedFiles.filter{
       case (_, v) => snapshotVersionsToDelete.contains(v)
     }
 
@@ -425,8 +430,9 @@ class RocksDBFileManager(
     val logDir = new Path(dfsRootDir, RocksDBImmutableFile.LOG_FILES_DFS_SUBDIR)
     val allSstFiles = if (fm.exists(sstDir)) fm.list(sstDir).toSeq else Seq.empty
     val allLogFiles = if (fm.exists(logDir)) fm.list(logDir).toSeq else Seq.empty
-    filesToDelete ++= findOrphanFiles(fileToMaxUsedVersion.keys.toSeq, allSstFiles ++ allLogFiles)
+    val orphanedFiles = findOrphanFiles(fileToMaxUsedVersion.keys.toSeq, allSstFiles ++ allLogFiles)
       .map(_ -> -1L)
+    val filesToDelete = unretainedFiles ++ orphanedFiles
     logInfo(s"Deleting ${filesToDelete.size} files not used in versions >= $minVersionToRetain")
     var failedToDelete = 0
     filesToDelete.foreach { case (dfsFileName, maxUsedVersion) =>
