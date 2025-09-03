@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.pipelines.graph
 
+import scala.jdk.CollectionConverters._
 import scala.util.control.{NonFatal, NoStackTrace}
 
 import org.apache.spark.SparkException
@@ -24,9 +25,11 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connector.catalog.{
+  CatalogV2Util,
   Identifier,
   TableCatalog,
-  TableChange
+  TableChange,
+  TableInfo
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructType
 import org.apache.spark.sql.connector.expressions.Expressions
@@ -195,7 +198,23 @@ object DatasetManager extends Logging {
       catalog.alterTable(identifier, (columnChanges ++ setProperties).toArray: _*)
     }
 
-    table
+    // Create the table if we need to
+    if (existingTableOpt.isEmpty) {
+      catalog.createTable(
+        identifier,
+        new TableInfo.Builder()
+          .withProperties(mergedProperties.asJava)
+          .withColumns(CatalogV2Util.structTypeToV2Columns(outputSchema))
+          .withPartitions(partitioning.toArray)
+          .build()
+      )
+    }
+
+    table.copy(
+      normalizedPath = Option(
+        catalog.loadTable(identifier).properties().get(TableCatalog.PROP_LOCATION)
+      )
+    )
   }
 
   /**
