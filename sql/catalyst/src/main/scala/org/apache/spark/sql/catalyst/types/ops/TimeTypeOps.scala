@@ -15,28 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.types
+package org.apache.spark.sql.catalyst.types.ops
 
-import org.apache.spark.sql.catalyst.expressions.MutableValue
-import org.apache.spark.sql.types.{DataType, TimeType}
+import org.apache.spark.sql.catalyst.expressions.{Literal, MutableLong, MutableValue}
+import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalLongType}
+import org.apache.spark.sql.types.TimeType
+import org.apache.spark.sql.types.ops.TimeTypeApiOps
 
-// Base operations over Catalyst's types.
-trait PhyTypeOps extends TypeOps {
-  // Gets the underlying physical type
-  def getPhysicalType: PhysicalDataType
+case class TimeTypeOps(t: TimeType)
+  extends TimeTypeApiOps(t)
+  with TypeOps
+  with PhyTypeOps
+  with LiteralTypeOps {
 
-  // Gets the Java class of the physical type
-  def getJavaClass: Class[_]
+  override def getPhysicalType: PhysicalDataType = PhysicalLongType
+  override def getJavaClass: Class[_] = classOf[PhysicalLongType.InternalType]
+  override def getMutableValue: MutableValue = new MutableLong
 
-  // Gets a mutable container for the physical type
-  def getMutableValue: MutableValue
-}
-
-object PhyTypeOps {
-  private val supportedDataTypes: Set[DataType] =
-    Set(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*)
-
-  def supports(dt: DataType): Boolean = supportedDataTypes.contains(dt)
-
-  def apply(dt: DataType): PhyTypeOps = TypeOps(dt).asInstanceOf[PhyTypeOps]
+  override def getDefaultLiteral: Literal = Literal.create(0L, t)
 }

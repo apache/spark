@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.annotation.tailrec
 
-import org.apache.spark.sql.catalyst.types.PhyTypeOps
+import org.apache.spark.sql.catalyst.types.ops.PhyTypeOps
 import org.apache.spark.sql.types._
 
 /**

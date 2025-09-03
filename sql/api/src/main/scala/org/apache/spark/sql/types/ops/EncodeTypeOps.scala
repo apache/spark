@@ -15,19 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.types
+package org.apache.spark.sql.types.ops
 
-import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.types.{DataType, TimeType}
 
-// Operations over a data type
-trait TypeOps
+// Encode type values to external types, for instance to Java types.
+trait EncodeTypeOps {
+  // Gets an agnostic encoder which contains all info needed to convert internal row
+  // values of the given type to a specific objects.
+  def getEncoder: AgnosticEncoder[_]
+}
 
-// The factory of type operation objects.
-object TypeOps {
-  def apply(dt: DataType): TypeOps = dt match {
-    case tt: TimeType => TimeTypeOps(tt)
-    case other => throw SparkException.internalError(
-      s"Cannot create an operation object of the type ${other.sql}")
-  }
+object EncodeTypeOps {
+  private val supportedDataTypes: Set[DataType] =
+    Set(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*)
+
+  def supports(dt: DataType): Boolean = supportedDataTypes.contains(dt)
+
+  def apply(dt: DataType): EncodeTypeOps = TypeApiOps(dt).asInstanceOf[EncodeTypeOps]
 }

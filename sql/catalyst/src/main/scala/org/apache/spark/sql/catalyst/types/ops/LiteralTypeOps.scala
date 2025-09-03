@@ -15,24 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.types
+package org.apache.spark.sql.catalyst.types.ops
 
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.LocalTimeEncoder
-import org.apache.spark.sql.catalyst.expressions.{Literal, MutableLong, MutableValue}
-import org.apache.spark.sql.types.TimeType
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.types.{DataType, TimeType}
 
-case class TimeTypeOps (t: TimeType)
-  extends TypeOps
-  with PhyTypeOps
-  with LiteralTypeOps
-  with EncodeTypeOps {
+// Literal operations over Catalyst's types
+trait LiteralTypeOps {
+  // Gets a literal with default value of the type
+  def getDefaultLiteral: Literal
+}
 
-  override def getPhysicalType: PhysicalDataType = PhysicalLongType
-  override def getJavaClass: Class[_] = classOf[PhysicalLongType.InternalType]
-  override def getMutableValue: MutableValue = new MutableLong
+object LiteralTypeOps {
+  private val supportedDataTypes: Set[DataType] =
+    Set(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*)
 
-  override def getDefaultLiteral: Literal = Literal.create(0L, t)
+  def supports(dt: DataType): Boolean = supportedDataTypes.contains(dt)
 
-  override def getEncoder: AgnosticEncoder[_] = LocalTimeEncoder
+  def apply(dt: DataType): LiteralTypeOps = TypeOps(dt).asInstanceOf[LiteralTypeOps]
 }
