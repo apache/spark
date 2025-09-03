@@ -280,9 +280,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                     )
                 yield coerced_batch, arrow_return_type
 
-        return super(ArrowStreamArrowUDTFSerializer, self).dump_stream(
-            apply_type_coercion(), stream
-        )
+        return super().dump_stream(apply_type_coercion(), stream)
 
 
 class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
