@@ -262,8 +262,11 @@ trait AlsoTestWithRocksDBFeatures
     Seq(true, false).foreach { enableStateStoreCheckpointIds =>
       val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
         s"$enableStateStoreCheckpointIds"
+      val checkpointFormatVersion = if (enableStateStoreCheckpointIds) "2" else "1"
       testWithColumnFamilies(newTestName, testMode, testTags: _*) { colFamiliesEnabled =>
-        testBody(enableStateStoreCheckpointIds, colFamiliesEnabled)
+        withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> checkpointFormatVersion) {
+          testBody(enableStateStoreCheckpointIds, colFamiliesEnabled)
+        }
       }
     }
   }
@@ -275,8 +278,11 @@ trait AlsoTestWithRocksDBFeatures
     Seq(true, false).foreach { enableStateStoreCheckpointIds =>
       val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
         s"$enableStateStoreCheckpointIds"
-      test(newTestName, testTags: _*) { enableStateStoreCheckpointIds =>
-        testBody(enableStateStoreCheckpointIds)
+      val checkpointFormatVersion = if (enableStateStoreCheckpointIds) "2" else "1"
+      test(newTestName, testTags: _*) { enableStateStoreCheckpointIds: Boolean =>
+        withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> checkpointFormatVersion) {
+          testBody(enableStateStoreCheckpointIds)
+        }
       }
     }
   }
@@ -288,8 +294,11 @@ trait AlsoTestWithRocksDBFeatures
     Seq(true, false).foreach { enableStateStoreCheckpointIds =>
       val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
         s"$enableStateStoreCheckpointIds"
+      val checkpointFormatVersion = if (enableStateStoreCheckpointIds) "2" else "1"
       testWithChangelogCheckpointingDisabled(newTestName, testTags: _*) {
-        enableStateStoreCheckpointIds => testBody(enableStateStoreCheckpointIds)
+        withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> checkpointFormatVersion) {
+          enableStateStoreCheckpointIds => testBody(enableStateStoreCheckpointIds)
+        }
       }
     }
   }
