@@ -240,9 +240,12 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                 # unsafe conversion
                 return arr.cast(target_type=arrow_type, safe=True)
             except (pa.ArrowInvalid, pa.ArrowTypeError):
-                raise PySparkTypeError(
-                    "Arrow UDTFs require the return type to match the expected Arrow type. "
-                    f"Expected: {arrow_type}, but got: {arr.type}."
+                raise PySparkRuntimeError(
+                    errorClass="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF",
+                    messageParameters={
+                        "expected": arrow_type,
+                        "actual": arr.type,
+                    },
                 )
 
     def dump_stream(self, iterator, stream):
