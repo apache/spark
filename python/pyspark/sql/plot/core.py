@@ -329,7 +329,7 @@ class PySparkPlotAccessor:
             Name of column to be used as the category labels for the pie plot.
         y : str, optional
             Name of the column to plot. If not provided, `subplots=True` must be passed at `kwargs`.
-        subplots : bool, default False, optional (passed via **kwargs)
+        subplots : bool, default False, optional (passed via `kwargs`)
             If True, create a separate subplot for each numeric column in the DataFrame.
         **kwargs
             Additional keyword arguments. See also `subplots` above.
