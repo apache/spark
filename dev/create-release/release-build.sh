@@ -147,7 +147,6 @@ if [[ "$1" == "finalize" ]]; then
   echo "Uploading release docs to spark-website"
   cd spark-website
 
-  # TODO: Test it in the actual release
   # 1. Add download link to documentation.md
   python3 <<EOF
 import re
@@ -530,7 +529,6 @@ EOF
 
   echo "Done."
 
-  # TODO: Test it in the actual official release
   # Remove old releases from the mirror
   # Extract major.minor prefix
   RELEASE_SERIES=$(echo "$RELEASE_VERSION" | cut -d. -f1-2)
