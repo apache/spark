@@ -1659,7 +1659,13 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
     copy(child = newChild)
 }
 
-case class LimitAll(child: LogicalPlan) extends OrderPreservingUnaryNode {
+/** Logical node that represents the LIMIT ALL operation. This operation is usually no-op and exists
+ *  to provide compatability with other databases. However, in case of recursive CTEs, Limit nodes
+ *  serve another purpose, to override the default row limit which is determined by a flag. As a
+ *  result, LIMIT ALL should also be used to completely negate the row limit, which is exactly what
+ *  this node is used for.
+ */
+case class LimitAll(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
   final override val nodePatterns: Seq[TreePattern] = Seq(LIMIT)

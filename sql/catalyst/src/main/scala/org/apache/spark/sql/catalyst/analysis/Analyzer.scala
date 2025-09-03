@@ -4289,15 +4289,19 @@ object ApplyLimitAll extends Rule[LogicalPlan] {
         applyLimitAllToPlan(la.child, isInLimitAll = true)
       case cteRef: CTERelationRef if isInLimitAll =>
         cteRef.copy(isUnlimitedRecursion = Some(true))
-      case other =>
-        other.withNewChildren(other.children
+      // Allow-list for pushing down Limit All.
+      case _: Project | _: Filter | _: Join | _: Union | _: Offset |
+           _: BatchEvalPython | _: ArrowEvalPython | _: SubqueryAlias =>
+        plan.withNewChildren(plan.children
           .map(child => applyLimitAllToPlan(child, isInLimitAll)))
+      case other =>
+        other.withNewChildren(plan.children
+          .map(child => applyLimitAllToPlan(child, isInLimitAll = false)))
     }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val ret = applyLimitAllToPlan(plan)
-    ret
+    applyLimitAllToPlan(plan)
   }
 }
 

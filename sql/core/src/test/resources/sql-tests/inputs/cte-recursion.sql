@@ -112,6 +112,22 @@ WITH RECURSIVE t MAX RECURSION LEVEL 100 AS (
     )
 SELECT * FROM t LIMIT ALL;
 
+-- One reference is limit all but other isn't. Should fail.
+WITH RECURSIVE t MAX RECURSION LEVEL 100 AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + 1 FROM t WHERE n < 60
+    )
+   (SELECT n FROM t LIMIT ALL) UNION ALL (SELECT n FROM t);
+
+-- One references are limit all.
+WITH RECURSIVE t MAX RECURSION LEVEL 100 AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + 1 FROM t WHERE n < 60
+    )
+   (SELECT n FROM t LIMIT ALL) UNION ALL (SELECT n FROM t LIMIT ALL);
+
 -- terminate recursion with LIMIT
 WITH RECURSIVE r(level) AS (
   VALUES 0

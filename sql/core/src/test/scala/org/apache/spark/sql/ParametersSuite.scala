@@ -792,7 +792,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
          |  SELECT 1
          |  UNION ALL
          |  SELECT n+1 FROM IDENTIFIER($p) WHERE n < 5)
-         |SELECT * FROM t1 LIMIT ALL""".stripMargin
+         |SELECT * FROM t1""".stripMargin
     }
 
     checkAnswer(spark.sql(query(":cte"), args = Map("cte" -> "t1")),
