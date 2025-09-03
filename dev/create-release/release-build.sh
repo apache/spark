@@ -303,10 +303,10 @@ meta:
   _wpas_done_all: '1'
 ---
 To enable wide-scale community testing of the upcoming Spark ${BASE_VERSION} release, the Apache Spark community has posted a
-<a href="https://archive.apache.org/dist/spark/spark-${RELEASE_VERSION}/">Spark ${RELEASE_VERSION} release</a>.
+<a href="${RELEASE_LOCATION}/spark-${RELEASE_VERSION}">Spark ${RELEASE_VERSION} release</a>.
 This preview is not a stable release in terms of either API or functionality, but it is meant to give the community early
 access to try the code that will become Spark ${BASE_VERSION}. If you would like to test the release,
-please <a href="https://archive.apache.org/dist/spark/spark-${RELEASE_VERSION}/">download</a> it, and send feedback using either
+please <a href="${RELEASE_LOCATION}/spark-${RELEASE_VERSION}">download</a> it, and send feedback using either
 <a href="https://spark.apache.org/community.html">mailing lists</a> or
 <a href="https://issues.apache.org/jira/browse/SPARK/?selectedTab=com.atlassian.jira.jira-projects-plugin:summary-panel">JIRA</a>.
 The documentation is available at the <a href="https://spark.apache.org/docs/${RELEASE_VERSION}/">link</a>.
