@@ -27105,6 +27105,7 @@ def udtf(
 ) -> Callable[[Type], "UserDefinedTableFunction"]:
     ...
 
+
 @_try_remote_functions
 def udtf(
     cls: Optional[Union[Type, StructType, str]] = None,
