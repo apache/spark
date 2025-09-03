@@ -40,7 +40,6 @@ case class DirectShufflePartitionID(child: Expression)
 
   override val prettyName: String = "direct_shuffle_partition_id"
 
-
   override protected def withNewChildInternal(newChild: Expression): DirectShufflePartitionID =
     copy(child = newChild)
 }

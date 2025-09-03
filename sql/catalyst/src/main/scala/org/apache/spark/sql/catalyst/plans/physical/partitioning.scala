@@ -987,4 +987,3 @@ case class ShuffleSpecCollection(specs: Seq[ShuffleSpec]) extends ShuffleSpec {
     specs.head.numPartitions
   }
 }
-
