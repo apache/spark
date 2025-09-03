@@ -14,34 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.v2.rabbitmq
+package org.apache.spark.sql.rabbitmq.v2
 
-import java.util
-
-import org.apache.spark.sql.connector.catalog.TableProvider
-import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.rabbitmq.RmqStreamingSchema
-import org.apache.spark.sql.sources.DataSourceRegister
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class RmqStreamingSourceProviderV2 extends TableProvider with DataSourceRegister{
-  override def inferSchema(options: CaseInsensitiveStringMap):
-  StructType = RmqStreamingSchema.default
-  override def supportsExternalMetadata(): Boolean = true
-
-  override def getTable(schema: StructType,
-                        transforms: Array[Transform],
-                        map: util.Map[String, String]): RmqTable =
-    new RmqTable(schema, new CaseInsensitiveStringMap(map))
-
-
-  override def shortName(): String = "RmqStreamQueueSourceV2"
+class RmqScanBuilder(options: CaseInsensitiveStringMap, schema: StructType)
+  extends ScanBuilder {
+  override def build(): Scan = new RmqScan(options, schema)
 }
-
-
-
-
-
-
-

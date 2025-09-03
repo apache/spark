@@ -14,13 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.v2.rabbitmq
+package org.apache.spark.sql.rabbitmq.v2
 
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.connector.read.streaming.Offset
 
-class RmqScanBuilder(options: CaseInsensitiveStringMap, schema: StructType)
-  extends ScanBuilder {
-  override def build(): Scan = new RmqScan(options, schema)
+case class RmqLongOffset(value: Long) extends Offset {
+  override def json(): String = String.valueOf(value)
+}
+
+object RmqLongOffset {
 }

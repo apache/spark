@@ -14,14 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.v2.rabbitmq
+package org.apache.spark.sql.rabbitmq.v1
 
-import org.apache.spark.sql.connector.read.streaming.Offset
+trait RmqOffsetManagerTrait {
+  def saveLongToFile(value: Long): Unit
 
-case class RmqLongOffset(value: Long) extends Offset {
-  override def json(): String = String.valueOf(value)
-}
-
-object RmqLongOffset {
-  def parse(s: String): RmqLongOffset = RmqLongOffset(s.trim.toLong)
+  def readLongFromFile(): Option[Long]
 }

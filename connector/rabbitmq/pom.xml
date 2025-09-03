@@ -33,8 +33,6 @@
   <name>Spark Rabbitmq</name>
   <url>https://spark.apache.org/</url>
 
-
-
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -77,13 +75,23 @@
       <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.tukaani</groupId>
-      <artifactId>xz</artifactId>
-    </dependency>
-    <dependency>
       <groupId>com.rabbitmq</groupId>
       <artifactId>stream-client</artifactId>
       <version>0.20.0</version>
+      <exclusions>
+        <exclusion>
+          <artifactId>netty-handler</artifactId>
+          <groupId>io.netty</groupId>
+        </exclusion>
+        <exclusion>
+          <artifactId>netty-codec</artifactId>
+          <groupId>io.netty</groupId>
+        </exclusion>
+        <exclusion>
+          <artifactId>netty-transport</artifactId>
+          <groupId>io.netty</groupId>
+        </exclusion>
+      </exclusions>
     </dependency>
 
   </dependencies>

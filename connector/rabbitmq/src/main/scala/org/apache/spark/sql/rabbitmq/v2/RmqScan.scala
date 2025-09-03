@@ -14,26 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.rabbitmq
+package org.apache.spark.sql.rabbitmq.v2
 
-import java.util.Locale
+import org.apache.spark.sql.connector.read.Scan
+import org.apache.spark.sql.connector.read.streaming.MicroBatchStream
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-object PathUtil {
-  def convertToSystemPath(path: String): String = {
-    val os = System.getProperty("os.name").toLowerCase(Locale.ROOT)
-    val isWindows = os.startsWith("windows")
-    // Normalize path for the operating system
-    var finalPath: String = path
-    if (isWindows) {
-      finalPath = finalPath.replace('/', '\\') // Ensure backslashes for Windows
+final class RmqScan(options: CaseInsensitiveStringMap, schema: StructType)
+  extends Scan {
 
-      if (finalPath.startsWith("\\") && finalPath.length > 2 && finalPath.charAt(2) == ':') {
-        // Strip leading slash in front of Windows drive letter
-        finalPath = finalPath.substring(1)
-      }
-    }
-    else finalPath = finalPath.replace('\\', '/') // Ensure forward slashes for Linux
-    finalPath
-  }
+  override def readSchema(): StructType = schema
+
+  override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
+    new RmqMicroBatchStream(options, checkpointLocation)
 
 }

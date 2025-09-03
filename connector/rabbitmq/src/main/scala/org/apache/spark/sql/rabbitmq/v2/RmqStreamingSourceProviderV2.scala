@@ -14,31 +14,37 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.v2.rabbitmq
+package org.apache.spark.sql.rabbitmq.v2
 
 import java.util
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
-import org.apache.spark.sql.connector.read.ScanBuilder
+import scala.jdk.CollectionConverters.MapHasAsScala
+
+import org.apache.spark.sql.connector.catalog.TableProvider
+import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.rabbitmq.common.RmqStreamingSchema
+import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 
-class RmqTable(structType: StructType, props: util.Map[String, String])
-  extends Table with SupportsRead with Logging {
+class RmqStreamingSourceProviderV2 extends TableProvider with DataSourceRegister{
+  override def inferSchema(options: CaseInsensitiveStringMap):
+  StructType = RmqStreamingSchema.default
+  override def supportsExternalMetadata(): Boolean = true
 
-  override def name(): String = s"rmq-stream:${props.get("rmq.queuename")}"
+  override def getTable(schema: StructType,
+                        transforms: Array[Transform],
+                        map: util.Map[String, String]): RmqTable = new RmqTable(
+    schema, org.apache.spark.sql.rabbitmq.common.RmqPropsHolder(map.asScala.toMap, ""))
 
-  override def schema(): StructType = structType
 
-  override def capabilities(): util.Set[TableCapability] =
-    new java.util.HashSet[TableCapability](java.util.Arrays.asList(
-      TableCapability.MICRO_BATCH_READ,
-    ))
-
-  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    logInfo(s"[RMQ V2] newScanBuilder: queue=${options.get("rmq.queuename")}")
-    new RmqScanBuilder(options, structType)
-  }
+  override def shortName(): String = "RmqStreamQueueSourceV2"
 }
+
+
+
+
+
+
+

@@ -14,19 +14,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.v2.rabbitmq
+package org.apache.spark.sql.rabbitmq.v1
 
-import org.apache.spark.sql.connector.read.Scan
-import org.apache.spark.sql.connector.read.streaming.MicroBatchStream
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import com.rabbitmq.stream.{Address, Environment}
 
-final class RmqScan(options: CaseInsensitiveStringMap, schema: StructType)
-  extends Scan {
+import org.apache.spark.sql.rabbitmq.common.RmqPropsHolder
 
-  override def readSchema(): StructType = schema
 
-  override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
-    new RmqMicroBatchStream(options, checkpointLocation)
+object RmqEnvironmentFactory {
 
+  def getEnvironment(rmqPropsHolder: RmqPropsHolder): Environment = synchronized {
+    Environment.builder()
+      .virtualHost(rmqPropsHolder.getVhost)
+      .username(rmqPropsHolder.getUsername)
+      .password(rmqPropsHolder.getPassword)
+      .host(rmqPropsHolder.getHost)
+      .port(rmqPropsHolder.getPort)
+      .addressResolver { _: Address =>
+        new Address(rmqPropsHolder.getHost, rmqPropsHolder.getPort)
+      }
+      .build()
+  }
 }

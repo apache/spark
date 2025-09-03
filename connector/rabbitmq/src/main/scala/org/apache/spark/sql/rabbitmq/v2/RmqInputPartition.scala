@@ -14,8 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.rabbitmq
+package org.apache.spark.sql.rabbitmq.v2
 
-trait Named {
-  def getName: String
-}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.read.InputPartition
+
+
+
+case class RmqInputPartition(rows: java.util.ArrayList[InternalRow]) extends InputPartition

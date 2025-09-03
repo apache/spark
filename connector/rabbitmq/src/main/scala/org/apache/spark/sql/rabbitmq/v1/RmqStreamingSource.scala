@@ -14,64 +14,50 @@
 * See the License for the specific language governing permissions and
 * limitations under the License.
 */
-package org.apache.spark.sql.rabbitmq
+package org.apache.spark.sql.rabbitmq.v1
 
-
-import java.net.URI
-import java.nio.file.Paths
 import java.util.concurrent.{ConcurrentNavigableMap, ConcurrentSkipListMap, CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.convert.ImplicitConversions.{`map AsJavaMap`, `map AsScala`, `map AsScalaConcurrentMap`}
-
 import com.rabbitmq.stream._
 import com.rabbitmq.stream.MessageHandler.Context
-import org.apache.qpid.proton.amqp.messaging.Data
 
 import org.apache.spark.api.java.JavaSparkContext.fromSparkContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.execution.streaming.{Offset, Source}
 import org.apache.spark.sql.execution.streaming.runtime.LongOffset
+import org.apache.spark.sql.rabbitmq.common.{RmqPropsHolder, RmqStreamingSchema, RmqUtils}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.unsafe.types.UTF8String
 
 
 
 class RmqStreamingSource(sqlContext: SQLContext,
                          metadataPath: String, parameters: Map[String, String])
   extends Source with Logging {
-  private val prefetch: Long = parameters.getOrElse("rmq.fetchsize", "2001").toLong
-  private val readLimit: Long = parameters.getOrElse("rmq.maxbatchsize", "1000").toLong
-  private val queueName: String = parameters("rmq.queuename")
+  private val propsHolder: RmqPropsHolder = RmqPropsHolder(parameters, metadataPath)
+
   private val fetchedCount: AtomicLong = new AtomicLong(0)
-  private val readTimeoutSecond: Long = parameters.getOrElse("rmq.readtimeout", "300").toLong
-
-  private val checkpointPath: String =
-    PathUtil.convertToSystemPath(
-      parameters.getOrDefault("rmq.offsetcheckpointpath",
-        new URI(metadataPath).getPath))
-  private val customOffsetCheckpointPath =
-    Paths.get(checkpointPath).resolve("customOffset")
   private val offsetManager: RmqOffsetManagerTrait =
-    new RmqFileSystemRmqOffsetManager(customOffsetCheckpointPath)
-
-  private val rmqEnv: Environment = RmqEnvironmentFactory.getEnvironment(parameters)
-  private val rmqRetryEnv: Environment = RmqEnvironmentFactory.getEnvironment(parameters)
+    new RmqFileSystemRmqOffsetManager(propsHolder.getCheckpointFile)
+  private val rmqEnv: Environment = RmqEnvironmentFactory.getEnvironment(propsHolder)
+  private val rmqRetryEnv: Environment = RmqEnvironmentFactory.getEnvironment(propsHolder)
+  @volatile private var lastReadOffset: Long = offsetManager.readLongFromFile().getOrElse(-1L)
 
   private val buffer: ConcurrentNavigableMap[Long, (Message, Context)]
   = new ConcurrentSkipListMap[Long, (Message, Context)]()
   private val deliveredTotal: AtomicLong = new AtomicLong(0)
   private val consumer: Consumer = startConsume(lastReadOffset + 1)
-  logInfo(s"[RMQ] init: queue=$queueName, prefetch=$prefetch, readLimit=$readLimit," +
-    s" readTimeoutSec=$readTimeoutSecond")
-  logInfo(s"[RMQ] init: checkpointPath=$checkpointPath," +
-    s" offsetFile=$customOffsetCheckpointPath, persistedLastReadOffset=$lastReadOffset")
-  @volatile private var lastReadOffset: Long = offsetManager.readLongFromFile().getOrElse(-1L)
+
+  logInfo(s"[RMQ] init: queue=$propsHolder.getQueueName, " +
+    s"prefetch=$propsHolder.getFetchSize, readLimit=$propsHolder.getMaxBatch," +
+    s" readTimeoutSec=$propsHolder.getReadTimeoutSec")
+  logInfo(s"[RMQ] init: checkpointPath=$propsHolder.getCheckpointPath," +
+    s" offsetFile=$propsHolder.getCheckpointFile, persistedLastReadOffset=$lastReadOffset")
+
 
   override def schema: StructType = RmqStreamingSchema.default
 
@@ -81,10 +67,11 @@ class RmqStreamingSource(sqlContext: SQLContext,
     val unread = unreadMsg.size()
     logDebug(s"[RMQ] getOffset: lastReadOffset=$lastReadOffset," +
       s" bufferSize=${buffer.size()}, unread=$unread")
-    getKeyByIndexOrLast(unreadMsg, readLimit) match {
+    getKeyByIndexOrLast(unreadMsg, propsHolder.getMaxBatch) match {
       case None => None
       case Some(offsetValue) =>
-        logDebug(s"[RMQ] getOffset: selecting endOffset=$offsetValue (limit=$readLimit)")
+        logDebug(s"[RMQ] getOffset: selecting endOffset=$offsetValue" +
+          s" (limit=$propsHolder.getMaxBatch)")
         Some(LongOffset(offsetValue))
     }
   }
@@ -146,13 +133,13 @@ class RmqStreamingSource(sqlContext: SQLContext,
     logError("cache missed, read again from: " + fromOffset +
       " to: " + toOffset + ". Huge performance impact if this happened frequently")
     logInfo(s"[RMQ] re-read: start from offset=${fromOffset + 1}" +
-      s" up to $toOffset, timeoutSec=$readTimeoutSecond")
+      s" up to $toOffset, timeoutSec=$propsHolder.getReadTimeoutSec")
     val latch: CountDownLatch = new CountDownLatch(1)
     val tempBuffer: ConcurrentNavigableMap[Long, (Message, Context)] =
       new ConcurrentSkipListMap[Long, (Message, Context)]()
     val tempConsumer = rmqRetryEnv.consumerBuilder()
       .offset(OffsetSpecification.offset(fromOffset + 1))
-      .stream(queueName)
+      .stream(propsHolder.getQueueName)
       .flow()
       .strategy(ConsumerFlowStrategy.creditOnProcessedMessageCount(1, 1))
       .builder()
@@ -165,9 +152,9 @@ class RmqStreamingSource(sqlContext: SQLContext,
         }
       })
       .build()
-    val awaited = latch.await(readTimeoutSecond, TimeUnit.SECONDS)
+    val awaited = latch.await(propsHolder.getReadTimeoutSec, TimeUnit.SECONDS)
     if (!awaited) logWarning(s"[RMQ] re-read:" +
-      s" timeout after $readTimeoutSecond sec; tempBufferSize=${tempBuffer.size()}")
+      s" timeout after $propsHolder.getReadTimeoutSec sec; tempBufferSize=${tempBuffer.size()}")
     tempConsumer.close()
     logInfo(s"[RMQ] re-read: collected=${tempBuffer.size()} messages")
     toInternalDf(tempBuffer)
@@ -198,60 +185,23 @@ class RmqStreamingSource(sqlContext: SQLContext,
     } else {
       logDebug(s"[RMQ] toInternalDf: empty subMap")
     }
-    val internalRows = subMap.map(item => {
-      val message: Message = item._2._1
-      val context: Context = item._2._2
-      val routingKey: UTF8String = getRoutingKey(message)
-      val headers: ArrayBasedMapData = getHeaders(message).orNull
-      val body: UTF8String = getBody(message)
-      InternalRow(routingKey, headers, body, context.timestamp() * 1000)
-    })
-    val internalRdd = sqlContext.sparkContext parallelize(internalRows.toList, internalRows.size)
+    val internalRows: java.util.List[InternalRow] = subMap.entrySet().stream().map(item => {
+      val message: Message = item.getValue._1
+      val context: Context = item.getValue._2
+      RmqUtils.toInternalRow(message, context)
+    }).toList.asInstanceOf
+    val internalRdd : RDD[InternalRow] =
+      sqlContext.sparkContext parallelize(internalRows, internalRows.size)
     sqlContext.internalCreateDataFrame(internalRdd, RmqStreamingSchema.default, isStreaming = true)
   }
 
-  private def getBody(message: Message) = {
-    val body: UTF8String = message.getBody match {
-      case data: Data => UTF8String.fromBytes(data.getValue.getArray)
-      case other =>
-        logWarning(s"[RMQ] getBody: unexpected body type=${Option(other)
-          .map(_.getClass.getName).orNull}, returning null")
-        null
-    }
-    body
-  }
-
-  private def getRoutingKey(message: Message) = {
-    val routingKey: UTF8String = message.getMessageAnnotations.get("x-routing-key") match {
-      case null => null
-      case key: String => UTF8String.fromString(key)
-      case other =>
-        logWarning(s"[RMQ] getRoutingKey: unexpected type=${other.getClass.getName}," +
-          s" value=$other; returning null")
-        null
-      case _ => null
-    }
-    routingKey
-  }
-
-  private def getHeaders(message: Message): Option[ArrayBasedMapData] = {
-    Option(message.getApplicationProperties).map { properties =>
-      val headerTuples = properties.toList.map { case (key, value) =>
-        val utf8Key = UTF8String.fromString(key)
-        val utf8Value = UTF8String.fromString(value.toString)
-        (utf8Key, utf8Value)
-      }
-      val keyArray = ArrayData.toArrayData(headerTuples.map(_._1))
-      val valueArray = ArrayData.toArrayData(headerTuples.map(_._2))
-      new ArrayBasedMapData(keyArray, valueArray)
-    }
-  }
 
   private def startConsume(startOffset: Long): Consumer = {
-    logInfo(s"[RMQ] startConsume: stream=$queueName, startOffset=$startOffset, prefetch=$prefetch")
+    logInfo(s"[RMQ] startConsume: stream=$propsHolder.getQueueName, " +
+      s"startOffset=$startOffset, prefetch=$propsHolder.getFetchSize")
     rmqEnv.consumerBuilder()
       .offset(OffsetSpecification.offset(startOffset))
-      .stream(queueName)
+      .stream(propsHolder.getQueueName)
       .flow()
       .strategy(ConsumerFlowStrategy.creditWhenHalfMessagesProcessed(3))
       .builder()
@@ -260,10 +210,10 @@ class RmqStreamingSource(sqlContext: SQLContext,
         buffer.put(off, (message, context))
         val cur = fetchedCount.incrementAndGet()
         deliveredTotal.incrementAndGet()
-        if (cur >= prefetch) {
-          val over = cur - prefetch
+        if (cur >= propsHolder.getFetchSize) {
+          val over = cur - propsHolder.getFetchSize
           val sleepMs = 100L * Math.max(0, over)
-          logDebug(s"[RMQ] handler: fetched=$cur > prefetch=$prefetch," +
+          logDebug(s"[RMQ] handler: fetched=$cur > prefetch=$propsHolder.getFetchSize," +
             s" sleep=${sleepMs}ms, lastReadOffset=$lastReadOffset, bufferSize=${buffer.size()}")
           Thread.sleep(sleepMs)
         }

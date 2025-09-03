@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.v2.rabbitmq
+package org.apache.spark.sql.rabbitmq.v2
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
