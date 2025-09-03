@@ -42,8 +42,8 @@ import org.apache.spark.util.collection.unsafe.sort.{UnsafeExternalSorter, Unsaf
  * - If [[numRowsInMemoryBufferThreshold]] and [[sizeInBytesInMemoryBufferThreshold]] are too high,
  *   the in-memory array may occupy more memory than is available, resulting in OOM.
  * - If [[numRowsSpillThreshold]] or [[sizeInBytesSpillThreshold]] is too low, data will be spilled
- *   frequently and lead to excessive disk writes. This may lead to a performance regression compared
- *   to the normal case of using an [[ArrayBuffer]] or [[Array]].
+ *   frequently and lead to excessive disk writes. This may lead to a performance regression
+ *   compared to the normal case of using an [[ArrayBuffer]] or [[Array]].
  */
 class ExternalAppendOnlyUnsafeRowArray(
     taskMemoryManager: TaskMemoryManager,
