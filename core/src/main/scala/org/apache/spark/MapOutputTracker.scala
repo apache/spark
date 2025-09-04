@@ -101,8 +101,9 @@ private class ShuffleStatus(
 
   /**
    * Keep the indices of the Map tasks whose checksums are different across retries.
+   * Exposed for testing.
    */
-  private[this] val checksumMismatchIndices : Set[Int] = Set()
+  private[spark] val checksumMismatchIndices : Set[Int] = Set()
 
   /**
    * MergeStatus for each shuffle partition when push-based shuffle is enabled. The index of the

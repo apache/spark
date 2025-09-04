@@ -4858,7 +4858,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
    * of the task in its previous stage. The two attempts of the same task in the previous stage
    * produce different shuffle checksums.
    */
-  test("Output usage log for tasks that produce different checksum across retries") {
+  test("Tasks that produce different checksum across retries") {
     setupStageAbortTest(sc)
 
     val parts = 8
@@ -4885,6 +4885,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     sc.listenerBus.waitUntilEmpty()
     assert(ended)
     assert(results == (0 until parts).map { idx => idx -> 42 }.toMap)
+    assert(
+      mapOutputTracker.shuffleStatuses(shuffleDep.shuffleId).checksumMismatchIndices.size == 1)
     assertDataStructuresEmpty()
     mapOutputTracker.unregisterShuffle(shuffleDep.shuffleId)
   }

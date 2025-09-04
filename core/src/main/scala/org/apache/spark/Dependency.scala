@@ -108,7 +108,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
       aggregator,
       mapSideCombine,
       shuffleWriterProcessor,
-      Array.empty
+      ShuffleDependency.EMPTY_ROW_BASED_CHECKSUMS
     )
   }
 

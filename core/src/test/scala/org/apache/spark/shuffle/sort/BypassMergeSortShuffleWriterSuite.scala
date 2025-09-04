@@ -75,7 +75,7 @@ class BypassMergeSortShuffleWriterSuite
     )
     val memoryManager = new TestMemoryManager(conf)
     val taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
-    resetDependency(conf)
+    resetDependency(conf, rowBasedCheckSumEnabled = false)
     when(taskContext.taskMetrics()).thenReturn(taskMetrics)
     when(blockResolver.getDataFile(0, 0)).thenReturn(outputFile)
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)
@@ -145,14 +145,17 @@ class BypassMergeSortShuffleWriterSuite
     }
   }
 
-  private def resetDependency(sc: SparkConf): Unit = {
+  private def resetDependency(sc: SparkConf, rowBasedCheckSumEnabled: Boolean): Unit = {
     reset(dependency)
     val numPartitions = 7
     when(dependency.partitioner).thenReturn(new HashPartitioner(numPartitions))
     when(dependency.serializer).thenReturn(new JavaSerializer(sc))
-    val checksumSize =
-      if (sc.get(config.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED)) numPartitions else 0
-    val checksumAlgorithm = conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
+    val checksumSize = if (rowBasedCheckSumEnabled) {
+      numPartitions
+    } else {
+      0
+    }
+    val checksumAlgorithm = sc.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
     val rowBasedChecksums = createPartitionRowBasedChecksums(checksumSize, checksumAlgorithm)
     when(dependency.rowBasedChecksums).thenReturn(rowBasedChecksums)
   }
@@ -308,8 +311,6 @@ class BypassMergeSortShuffleWriterSuite
   }
 
   test("Row-based checksums are independent of input row order") {
-    val transferConf =
-      conf.clone.set(config.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED.key, true.toString)
     val records: List[(Int, Int)] = List(
       (1, 1), (1, 2), (1, 3), (1, 4), (1, 5),
       (2, 2), (2, 3), (2, 4), (2, 5), (2, 6),
@@ -322,12 +323,12 @@ class BypassMergeSortShuffleWriterSuite
     var checksumValues : Array[Long] = Array[Long]()
     var aggregatedChecksumValue = 0L
     for (i <- 1 to 100) {
-      resetDependency(transferConf);
+      resetDependency(conf, rowBasedCheckSumEnabled = true)
       val writer = new BypassMergeSortShuffleWriter[Int, Int](
         blockManager,
         shuffleHandle,
         0L, // MapId
-        transferConf,
+        conf,
         taskContext.taskMetrics().shuffleWriteMetrics,
         shuffleExecutorComponents)
 

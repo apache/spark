@@ -24,7 +24,8 @@ import org.apache.spark.internal.Logging
 /**
  * A class for computing checksum for input (key, value) pairs. The checksum is independent of
  * the order of the input (key, value) pairs. It is done by computing a checksum for each row
- * first, and then computing the XOR for all the row checksums.
+ * first, then computing the XOR and SUM for all the row checksums and mixing these two values
+ * as the final checksum.
  */
 abstract class RowBasedChecksum() extends Serializable with Logging {
   private val ROTATE_POSITIONS = 27
@@ -32,19 +33,21 @@ abstract class RowBasedChecksum() extends Serializable with Logging {
   private var checksumXor: Long = 0
   private var checksumSum: Long = 0
 
-  /** Returns the checksum value. It returns the default checksum value (0) if there
+  /**
+   * Returns the checksum value. It returns the default checksum value (0) if there
    * are any errors encountered during the checksum computation.
    */
   def getValue: Long = {
     if (!hasError) {
-      val res = checksumXor ^ rotateLeft(checksumSum)
-      res
+      // Here we rotate the `checksumSum` to transforms these two values into a single, strong
+      // composite checksum by ensuring their bit patterns are thoroughly mixed.
+      checksumXor ^ rotateLeft(checksumSum)
     } else {
       0
     }
   }
 
-  /** Updates the row-based checksum with the given (key, value) pair */
+  /** Updates the row-based checksum with the given (key, value) pair. Not thread safe. */
   def update(key: Any, value: Any): Unit = {
     if (!hasError) {
       try {
