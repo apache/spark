@@ -414,11 +414,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
-  "sqlState" : "42802",
+  "errorClass" : "INVALID_STATEMENT_FOR_EXECUTE_INTO",
+  "sqlState" : "07501",
   "messageParameters" : {
-    "numExpr" : "0",
-    "numTarget" : "1"
+    "sqlString" : "INSERT INTO X VALUES (?)"
   }
 }
 

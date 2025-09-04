@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
-import org.apache.spark.sql.catalyst.expressions.{Alias, EmptyRow, Exists, Expression, InSubquery, ListQuery, Literal, ScalarSubquery, VariableReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, EmptyRow, Expression, Literal, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, CommandResult, CompoundBody, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.EXECUTE_IMMEDIATE
@@ -51,9 +51,7 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
     val result = if (cmd.args.isEmpty) {
       // No parameters - execute directly
       withIsolatedLocalVariableContext {
-        AnalysisContext.withExecuteImmediateContext {
-          sparkSession.sql(sqlStmtStr)
-        }
+        sparkSession.sql(sqlStmtStr)
       }
     } else {
       // For parameterized queries, build unified parameter arrays
@@ -63,9 +61,7 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
       validateParameterUsage(cmd.sqlStmtStr, cmd.args, paramNames.toSeq)
 
       withIsolatedLocalVariableContext {
-        AnalysisContext.withExecuteImmediateContext {
-          sparkSession.sql(sqlStmtStr, paramValues, paramNames)
-        }
+        sparkSession.sql(sqlStmtStr, paramValues, paramNames)
       }
     }
 
@@ -161,8 +157,8 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
   }
 
   /**
-   * Evaluates a parameter expression, ensuring it's foldable and doesn't contain
-   * unsupported constructs.
+   * Evaluates a parameter expression. Validation for unsupported constructs like subqueries
+   * is already done during analysis in ResolveExecuteImmediate.validateExpressions().
    */
   private def evaluateParameterExpression(expr: Expression): Any = {
     expr match {
@@ -173,15 +169,7 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
         Literal.create(foldable.eval(EmptyRow), foldable.dataType).value
       case other =>
         // Expression is not foldable - not supported for parameters
-        other match {
-          case _: ScalarSubquery | _: Exists | _: ListQuery | _: InSubquery =>
-            throw QueryCompilationErrors.unsupportedParameterExpression(other)
-          case _ if !other.foldable =>
-            throw QueryCompilationErrors.unsupportedParameterExpression(other)
-          case _ =>
-            // This should not happen, but fallback to evaluation
-            other.eval(EmptyRow)
-        }
+        throw QueryCompilationErrors.unsupportedParameterExpression(other)
     }
   }
 

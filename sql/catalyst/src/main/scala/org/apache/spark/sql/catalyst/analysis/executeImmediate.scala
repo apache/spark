@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Exists, Expression, InSubquery, ListQuery, ScalarSubquery, VariableReference}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, EmptyRow, Expression, InSubquery, SubqueryExpression, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{ExecutableDuringAnalysis, LocalRelation, LogicalPlan, SetVariable, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Logical plan representing execute immediate query.
@@ -84,38 +87,42 @@ class ResolveExecuteImmediate(
     val catalogManager: CatalogManager) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
-      case UnresolvedExecuteImmediate(sqlStmtStr, args, targetVariables)
-      if sqlStmtStr.resolved && targetVariables.forall(_.resolved) && args.forall(_.resolved) =>
-        // Validate that USING clause expressions don't contain unsupported constructs
-        validateUsingClauseExpressions(args)
-
-        // Validate that query parameter is foldable (constant expression)
-        validateSqlStmt(sqlStmtStr)
+      case node @ UnresolvedExecuteImmediate(sqlStmtStr, args, targetVariables) =>
+        if (sqlStmtStr.resolved && targetVariables.forall(_.resolved) && args.forall(_.resolved)) {
+        // Validate that expressions don't contain unsupported constructs (like subqueries)
+        validateExpressions(args :+ sqlStmtStr)
 
         // All resolved - transform based on whether we have target variables
         if (targetVariables.nonEmpty) {
           // EXECUTE IMMEDIATE ... INTO should generate SetVariable plan
-          // SetVariable expects UnresolvedAttribute objects that ResolveSetVariable will resolve
+          // First validate that the SQL statement is not a command (commands don't return results)
+          validateNotCommandForInto(sqlStmtStr)
+          // At this point, all targetVariables are resolved, so we only expect VariableReference
+          // or Alias containing VariableReference
           val finalTargetVars = targetVariables.map {
-            case attr: UnresolvedAttribute =>
-              // Keep as UnresolvedAttribute for ResolveSetVariable to handle
-              attr
             case alias: Alias =>
-              // Extract the UnresolvedAttribute from the alias
+              // Extract the VariableReference from the alias
               alias.child match {
-                case attr: UnresolvedAttribute =>
-                  attr
                 case varRef: VariableReference =>
-                  // Convert back to UnresolvedAttribute for ResolveSetVariable
-                  UnresolvedAttribute(varRef.originalNameParts)
+                  // Use resolved VariableReference directly with canFold = false
+                  varRef.copy(canFold = false)
                 case _ =>
                   throw QueryCompilationErrors.unsupportedParameterExpression(alias.child)
               }
             case varRef: VariableReference =>
-              // Convert back to UnresolvedAttribute for ResolveSetVariable
-              UnresolvedAttribute(varRef.originalNameParts)
+              // Use resolved VariableReference directly with canFold = false
+              varRef.copy(canFold = false)
             case other =>
               throw QueryCompilationErrors.unsupportedParameterExpression(other)
+          }
+
+          // Check for duplicate variable names (same logic as ResolveSetVariable)
+          val dups = finalTargetVars.groupBy(_.identifier).filter(kv => kv._2.length > 1)
+          if (dups.nonEmpty) {
+            throw new AnalysisException(
+              errorClass = "DUPLICATE_ASSIGNMENTS",
+              messageParameters = Map("nameList" ->
+                dups.keys.map(key => toSQLId(key.name())).mkString(", ")))
           }
 
           // Create SetVariable plan with the execute immediate query as source
@@ -125,40 +132,55 @@ class ResolveExecuteImmediate(
           // Regular EXECUTE IMMEDIATE without INTO
           ExecuteImmediateCommand(sqlStmtStr, args)
         }
-      case other => other
+        } else {
           // Not all resolved yet - wait for next iteration
+          node
+        }
     }
 
-  private def validateUsingClauseExpressions(args: Seq[Expression]): Unit = {
-    args.foreach { expr =>
+  /**
+   * Validates that expressions don't contain unsupported constructs like subqueries.
+   * Variable references and expressions like string concatenation are allowed.
+   */
+  private def validateExpressions(expressions: Seq[Expression]): Unit = {
+    expressions.foreach { expr =>
       // Check the expression and its children for unsupported constructs
       expr.foreach {
-        case subquery: ScalarSubquery =>
+        case subquery: SubqueryExpression =>
           throw QueryCompilationErrors.unsupportedParameterExpression(subquery)
-        case exists: Exists =>
-          throw QueryCompilationErrors.unsupportedParameterExpression(exists)
-        case listQuery: ListQuery =>
-          throw QueryCompilationErrors.unsupportedParameterExpression(listQuery)
         case inSubquery: InSubquery =>
+          // InSubquery doesn't extend SubqueryExpression directly but contains a subquery
           throw QueryCompilationErrors.unsupportedParameterExpression(inSubquery)
-        case _ => // Other expressions are fine
+        case _ => // Other expressions including variables and concatenations are fine
       }
     }
   }
 
-  private def validateSqlStmt(sqlStmtStr: Expression): Unit = {
-    // Only check for specific unsupported constructs like subqueries
-    // Variable references and expressions like stringvar || 'hello' should be allowed
-    sqlStmtStr.foreach {
-      case subquery: ScalarSubquery =>
-        throw QueryCompilationErrors.unsupportedParameterExpression(subquery)
-      case exists: Exists =>
-        throw QueryCompilationErrors.unsupportedParameterExpression(exists)
-      case listQuery: ListQuery =>
-        throw QueryCompilationErrors.unsupportedParameterExpression(listQuery)
-      case inSubquery: InSubquery =>
-        throw QueryCompilationErrors.unsupportedParameterExpression(inSubquery)
-      case _ => // Other expressions including variables and concatenations are fine
+  private def validateNotCommandForInto(sqlStmtStr: Expression): Unit = {
+    // Extract the query string to check if it's a command
+    val queryString = sqlStmtStr.eval(EmptyRow) match {
+      case null =>
+        // Use a generic AnalysisException for null query
+        throw new AnalysisException("NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
+          Map.empty[String, String])
+      case s: UTF8String =>
+        // scalastyle:off caselocale
+        s.toString.trim.toUpperCase
+        // scalastyle:on caselocale
+      case other =>
+        // Use a generic AnalysisException for wrong type
+        throw new AnalysisException("INVALID_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+          Map("actualType" -> other.getClass.getSimpleName))
+    }
+    // Check if the SQL statement starts with common command keywords
+    // Commands don't return results, so INTO clause is invalid
+    val commandKeywords = Set(
+      "SET", "CREATE", "DROP", "ALTER", "INSERT", "UPDATE", "DELETE",
+      "DECLARE", "CALL", "GRANT", "REVOKE", "TRUNCATE", "MERGE", "USE"
+    )
+    val firstWord = queryString.split("\\s+").headOption.getOrElse("")
+    if (commandKeywords.contains(firstWord)) {
+      throw QueryCompilationErrors.invalidStatementForExecuteInto(queryString)
     }
   }
 }
