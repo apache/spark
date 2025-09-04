@@ -1168,13 +1168,50 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
   }
 
   def apply(plan: LogicalPlan, alwaysInline: Boolean): LogicalPlan = {
-    plan.transformUpWithPruning(_.containsPattern(PROJECT), ruleId) {
+    traverse(plan, alwaysInline, Set.empty)
+  }
+
+  private def traverse(
+      plan: LogicalPlan,
+      alwaysInline: Boolean,
+      pythonUDFEvalTypesInUpperProjects: Set[Int]): LogicalPlan = {
+    if (!plan.containsPattern(PROJECT)) {
+      return plan
+    }
+
+    // Collapsing projects is a classic bottom-up transformation, but while we recurse down the plan
+    // we can collect the Python UDF eval types that appear in the current project group (i.e.
+    // multiple adjacent project nodes).
+    // We use this set of eval types during the bottom-up traversal as when we encounter a Python
+    // UDF in a lower project node and either the upper or any parent in the group contains another
+    // UDF with the same eval type, then it makes sense to force collapsing the nodes.
+    val newPythonUDFEvalTypesInUpperProjects = plan match {
+      // Extend the set of types with the new types found in the current project node
+      case p: Project =>
+        pythonUDFEvalTypesInUpperProjects ++ p.projectList.flatMap(_.collect {
+          case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf) =>
+            PythonUDF.correctEvalType(udf)
+        }).toSet
+
+      // Project group end so reset the set of types
+      case _ => Set.empty[Int]
+    }
+
+    plan.mapChildren(traverse(_, alwaysInline, newPythonUDFEvalTypesInUpperProjects)) match {
       case p1 @ Project(_, p2: Project)
-          if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline) =>
+          if canCollapseExpressions(
+            p1.projectList,
+            getAliasMap(p2.projectList),
+            alwaysInline,
+            newPythonUDFEvalTypesInUpperProjects) =>
         p2.copy(projectList = buildCleanedProjectList(p1.projectList, p2.projectList))
       case p @ Project(_, agg: Aggregate)
-          if canCollapseExpressions(p.projectList, agg.aggregateExpressions, alwaysInline) &&
-             canCollapseAggregate(p, agg) =>
+          if canCollapseExpressions(
+            p.projectList,
+            getAliasMap(agg.aggregateExpressions),
+            alwaysInline,
+            newPythonUDFEvalTypesInUpperProjects)
+          && canCollapseAggregate(p, agg) =>
         agg.copy(aggregateExpressions = buildCleanedProjectList(
           p.projectList, agg.aggregateExpressions))
       case Project(l1, g @ GlobalLimit(_, limit @ LocalLimit(_, p2 @ Project(l2, _))))
@@ -1188,6 +1225,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
         r.copy(child = p.copy(projectList = buildCleanedProjectList(l1, p.projectList)))
       case Project(l1, s @ Sample(_, _, _, _, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
         s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
+      case o => o
     }
   }
 
@@ -1207,7 +1245,15 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
   def canCollapseExpressions(
       consumers: Seq[Expression],
       producerMap: Map[Attribute, Expression],
-      alwaysInline: Boolean = false): Boolean = {
+      alwaysInline: Boolean = false,
+      pythonUDFEvalTypesInUpperProjects: Set[Int] = Set.empty): Boolean = {
+    val inline = alwaysInline || producerMap.values.exists(_.exists {
+      case udf: PythonUDF =>
+        PythonUDF.isScalarPythonUDF(udf) &&
+          pythonUDFEvalTypesInUpperProjects.contains(PythonUDF.correctEvalType(udf))
+      case _ => false
+    })
+
     // We can only collapse expressions if all input expressions meet the following criteria:
     // - The input is deterministic.
     // - The input is only consumed once OR the underlying input expression is cheap.
@@ -1252,7 +1298,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
             case other => isCheap(other)
           }
 
-          producer.deterministic && (count == 1 || alwaysInline || cheapToInlineProducer)
+          producer.deterministic && (count == 1 || inline || cheapToInlineProducer)
       }
   }
 

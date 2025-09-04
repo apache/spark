@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.types._
 
 
 /**
@@ -196,8 +195,9 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
   @scala.annotation.tailrec
   private def shouldExtractUDFExpressionTree(e: PythonUDF): Boolean = {
     e.children match {
-      case Seq(child: PythonUDF) => correctEvalType(e) == correctEvalType(child) &&
-        shouldExtractUDFExpressionTree(child)
+      case Seq(child: PythonUDF) =>
+        PythonUDF.correctEvalType(e) == PythonUDF.correctEvalType(child) &&
+          shouldExtractUDFExpressionTree(child)
       // Python UDF can't be evaluated directly in JVM
       case children => !children.exists(hasScalarPythonUDF)
     }
@@ -247,11 +247,11 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
       case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf)
         && shouldExtractUDFExpressionTree(udf)
         && firstVisitedScalarUDFEvalType.isEmpty =>
-        firstVisitedScalarUDFEvalType = Some(correctEvalType(udf))
+        firstVisitedScalarUDFEvalType = Some(PythonUDF.correctEvalType(udf))
         Seq(udf)
       case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf)
         && shouldExtractUDFExpressionTree(udf)
-        && canChainWithParallelUDFs(correctEvalType(udf)) =>
+        && canChainWithParallelUDFs(PythonUDF.correctEvalType(udf)) =>
         Seq(udf)
       case e => e.children.flatMap(collectEvaluableUDFs)
     }
@@ -286,27 +286,6 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
     }
   }
 
-  private def correctEvalType(udf: PythonUDF): Int = {
-    if (udf.evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
-      if (conf.pythonUDFArrowFallbackOnUDT &&
-        (containsUDT(udf.dataType) || udf.children.exists(expr => containsUDT(expr.dataType)))) {
-        PythonEvalType.SQL_BATCHED_UDF
-      } else {
-        PythonEvalType.SQL_ARROW_BATCHED_UDF
-      }
-    } else {
-      udf.evalType
-    }
-  }
-
-  private def containsUDT(dataType: DataType): Boolean = dataType match {
-    case _: UserDefinedType[_] => true
-    case ArrayType(elementType, _) => containsUDT(elementType)
-    case StructType(fields) => fields.exists(field => containsUDT(field.dataType))
-    case MapType(keyType, valueType, _) => containsUDT(keyType) || containsUDT(valueType)
-    case _ => false
-  }
-
   /**
    * Extract all the PythonUDFs from the current operator and evaluate them before the operator.
    */
@@ -336,7 +315,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
             AttributeReference(s"pythonUDF$i", u.dataType)()
           }
 
-          val evalTypes = validUdfs.map(correctEvalType).toSet
+          val evalTypes = validUdfs.map(PythonUDF.correctEvalType).toSet
           if (evalTypes.size != 1) {
             throw SparkException.internalError(
               "Expected udfs have the same evalType but got different evalTypes: " +

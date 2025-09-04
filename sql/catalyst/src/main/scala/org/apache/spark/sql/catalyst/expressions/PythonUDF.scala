@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkException.internalError
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
 /**
  * Helper functions for [[PythonUDF]]
  */
-object PythonUDF {
+object PythonUDF extends SQLConfHelper {
   private[this] val SCALAR_TYPES = Set(
     PythonEvalType.SQL_BATCHED_UDF,
     PythonEvalType.SQL_ARROW_BATCHED_UDF,
@@ -50,6 +50,27 @@ object PythonUDF {
     // SQL_GROUPED_AGG_ARROW_UDF), but we might
     // support new types in the future, e.g, N -> N transform.
     e.isInstanceOf[PythonUDAF]
+  }
+
+  def correctEvalType(udf: PythonUDF): Int = {
+    if (udf.evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
+      if (conf.pythonUDFArrowFallbackOnUDT &&
+        (containsUDT(udf.dataType) || udf.children.exists(expr => containsUDT(expr.dataType)))) {
+        PythonEvalType.SQL_BATCHED_UDF
+      } else {
+        PythonEvalType.SQL_ARROW_BATCHED_UDF
+      }
+    } else {
+      udf.evalType
+    }
+  }
+
+  private def containsUDT(dataType: DataType): Boolean = dataType match {
+    case _: UserDefinedType[_] => true
+    case ArrayType(elementType, _) => containsUDT(elementType)
+    case StructType(fields) => fields.exists(field => containsUDT(field.dataType))
+    case MapType(keyType, valueType, _) => containsUDT(keyType) || containsUDT(valueType)
+    case _ => false
   }
 }
 
