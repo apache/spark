@@ -140,7 +140,6 @@ class ClassificationTestsMixin:
                     torch.nn.modules.container.Sequential,
                     torch.nn.modules.linear.Linear,
                     torch.nn.modules.activation.Softmax,
-                    torch.nn.modules.container.Sequential,
                 ]
             ):
                 loaded_estimator = LORV2.loadFromLocal(local_path)
@@ -159,7 +158,6 @@ class ClassificationTestsMixin:
                     torch.nn.modules.container.Sequential,
                     torch.nn.modules.linear.Linear,
                     torch.nn.modules.activation.Softmax,
-                    torch.nn.modules.container.Sequential,
                 ]
             ):
                 loaded_estimator2 = LORV2.loadFromLocal(local_path)
@@ -221,7 +219,6 @@ class ClassificationTestsMixin:
                     torch.nn.modules.container.Sequential,
                     torch.nn.modules.linear.Linear,
                     torch.nn.modules.activation.Softmax,
-                    torch.nn.modules.container.Sequential,
                 ]
             ):
                 loaded_model = LORV2Model.loadFromLocal(local_model_path)
@@ -243,7 +240,15 @@ class ClassificationTestsMixin:
 
             fs_model_path = os.path.join(tmp_dir, "fs", "model")
             model.save(fs_model_path)
-            loaded_model = LORV2Model.load(fs_model_path)
+
+            with torch.serialization.safe_globals(
+                [
+                    torch.nn.modules.container.Sequential,
+                    torch.nn.modules.linear.Linear,
+                    torch.nn.modules.activation.Softmax,
+                ]
+            ):
+                loaded_model = LORV2Model.load(fs_model_path)
             assert loaded_model.numFeatures == 2
             assert loaded_model.numClasses == 2
             assert loaded_model.getOrDefault(loaded_model.maxIter) == 2
