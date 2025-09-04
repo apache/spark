@@ -144,8 +144,9 @@ class ApplyInPandasWithStatePythonRunner(
     if (pandasWriter == null) {
       pandasWriter = new ApplyInPandasWithStateWriter(root, writer, arrowMaxRecordsPerBatch)
     }
-    if (inputIterator.hasNext) {
-      val startData = dataOut.size()
+
+    val startData = dataOut.size()
+    val hasInput = if (inputIterator.hasNext) {
       val (keyRow, groupState, dataIter) = inputIterator.next()
       assert(dataIter.hasNext, "should have at least one data row!")
       pandasWriter.startNewGroup(keyRow, groupState)
@@ -156,14 +157,16 @@ class ApplyInPandasWithStatePythonRunner(
       }
 
       pandasWriter.finalizeGroup()
-      val deltaData = dataOut.size() - startData
-      pythonMetrics("pythonDataSent") += deltaData
       true
     } else {
       pandasWriter.finalizeData()
       super[PythonArrowInput].close()
       false
     }
+
+    val deltaData = dataOut.size() - startData
+    pythonMetrics("pythonDataSent") += deltaData
+    hasInput
   }
 
   /**
