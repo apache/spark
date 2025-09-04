@@ -69,10 +69,10 @@ if TYPE_CHECKING:
 
 
 def to_arrow_type(
-        dt: DataType,
-        error_on_duplicated_field_names_in_struct: bool = False,
-        timestamp_utc: bool = True,
-        prefers_large_types: bool = False,
+    dt: DataType,
+    error_on_duplicated_field_names_in_struct: bool = False,
+    timestamp_utc: bool = True,
+    prefers_large_types: bool = False,
 ) -> "pa.DataType":
     """
     Convert Spark data type to PyArrow type
@@ -237,10 +237,10 @@ def to_arrow_type(
 
 
 def to_arrow_schema(
-        schema: StructType,
-        error_on_duplicated_field_names_in_struct: bool = False,
-        timestamp_utc: bool = True,
-        prefers_large_types: bool = False,
+    schema: StructType,
+    error_on_duplicated_field_names_in_struct: bool = False,
+    timestamp_utc: bool = True,
+    prefers_large_types: bool = False,
 ) -> "pa.Schema":
     """
     Convert a schema from Spark to Arrow
@@ -289,10 +289,10 @@ def is_variant(at: "pa.DataType") -> bool:
 
     return any(
         (
-                field.name == "metadata"
-                and field.metadata is not None
-                and b"variant" in field.metadata
-                and field.metadata[b"variant"] == b"true"
+            field.name == "metadata"
+            and field.metadata is not None
+            and b"variant" in field.metadata
+            and field.metadata[b"variant"] == b"true"
         )
         for field in at
     ) and any(field.name == "value" for field in at)
@@ -460,10 +460,10 @@ def _get_local_timezone() -> str:
 
 
 def _check_arrow_array_timestamps_localize(
-        a: Union["pa.Array", "pa.ChunkedArray"],
-        dt: DataType,
-        truncate: bool = True,
-        timezone: Optional[str] = None,
+    a: Union["pa.Array", "pa.ChunkedArray"],
+    dt: DataType,
+    truncate: bool = True,
+    timezone: Optional[str] = None,
 ) -> Union["pa.Array", "pa.ChunkedArray"]:
     """
     Convert Arrow timestamps to timezone-naive in the specified timezone if the specified Spark
@@ -521,10 +521,10 @@ def _check_arrow_array_timestamps_localize(
     if types.is_map(a.type):
         # Return the MapArray as-is if it contains no nested fields or timestamps
         if (
-                not types.is_nested(a.type.key_type)
-                and not types.is_nested(a.type.item_type)
-                and not types.is_timestamp(a.type.key_type)
-                and not types.is_timestamp(a.type.item_type)
+            not types.is_nested(a.type.key_type)
+            and not types.is_nested(a.type.item_type)
+            and not types.is_timestamp(a.type.key_type)
+            and not types.is_timestamp(a.type.item_type)
         ):
             return a
 
@@ -546,11 +546,11 @@ def _check_arrow_array_timestamps_localize(
     if types.is_struct(a.type):
         # Return the StructArray as-is if it contains no nested fields or timestamps
         if all(
-                [
-                    not types.is_nested(a.type.field(i).type)
-                    and not types.is_timestamp(a.type.field(i).type)
-                    for i in range(a.type.num_fields)
-                ]
+            [
+                not types.is_nested(a.type.field(i).type)
+                and not types.is_timestamp(a.type.field(i).type)
+                for i in range(a.type.num_fields)
+            ]
         ):
             return a
 
@@ -576,7 +576,7 @@ def _check_arrow_array_timestamps_localize(
 
 
 def _check_arrow_table_timestamps_localize(
-        table: "pa.Table", schema: StructType, truncate: bool = True, timezone: Optional[str] = None
+    table: "pa.Table", schema: StructType, truncate: bool = True, timezone: Optional[str] = None
 ) -> "pa.Table":
     """
     Convert timestamps in a PyArrow Table to timezone-naive in the specified timezone if the
@@ -648,7 +648,7 @@ def _check_series_localize_timestamps(s: "PandasSeriesLike", timezone: str) -> "
 
 
 def _check_series_convert_timestamps_internal(
-        s: "PandasSeriesLike", timezone: str
+    s: "PandasSeriesLike", timezone: str
 ) -> "PandasSeriesLike":
     """
     Convert a tz-naive timestamp in the specified timezone or local timezone to UTC normalized for
@@ -715,7 +715,7 @@ def _check_series_convert_timestamps_internal(
 
 
 def _check_series_convert_timestamps_localize(
-        s: "PandasSeriesLike", from_timezone: Optional[str], to_timezone: Optional[str]
+    s: "PandasSeriesLike", from_timezone: Optional[str], to_timezone: Optional[str]
 ) -> "PandasSeriesLike":
     """
     Convert timestamp to timezone-naive in the specified timezone or local timezone
@@ -764,7 +764,7 @@ def _check_series_convert_timestamps_localize(
 
 
 def _check_series_convert_timestamps_local_tz(
-        s: "PandasSeriesLike", timezone: str
+    s: "PandasSeriesLike", timezone: str
 ) -> "PandasSeriesLike":
     """
     Convert timestamp to timezone-naive in the specified timezone or local timezone
@@ -784,7 +784,7 @@ def _check_series_convert_timestamps_local_tz(
 
 
 def _check_series_convert_timestamps_tz_local(
-        s: "PandasSeriesLike", timezone: str
+    s: "PandasSeriesLike", timezone: str
 ) -> "PandasSeriesLike":
     """
     Convert timestamp to timezone-naive in the specified timezone or local timezone
@@ -856,14 +856,14 @@ def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
 
 
 def _create_converter_to_pandas(
-        data_type: DataType,
-        nullable: bool = True,
-        *,
-        timezone: Optional[str] = None,
-        struct_in_pandas: Optional[str] = None,
-        error_on_duplicated_field_names: bool = True,
-        timestamp_utc_localized: bool = True,
-        ndarray_as_list: bool = False,
+    data_type: DataType,
+    nullable: bool = True,
+    *,
+    timezone: Optional[str] = None,
+    struct_in_pandas: Optional[str] = None,
+    error_on_duplicated_field_names: bool = True,
+    timestamp_utc_localized: bool = True,
+    ndarray_as_list: bool = False,
 ) -> Callable[["pd.Series"], "pd.Series"]:
     """
     Create a converter of pandas Series that is created from Spark's Python objects,
@@ -940,7 +940,7 @@ def _create_converter_to_pandas(
         return correct_dtype
 
     def _converter(
-            dt: DataType, _struct_in_pandas: Optional[str], _ndarray_as_list: bool
+        dt: DataType, _struct_in_pandas: Optional[str], _ndarray_as_list: bool
     ) -> Optional[Callable[[Any], Any]]:
         if isinstance(dt, ArrayType):
             _element_conv = _converter(dt.elementType, _struct_in_pandas, _ndarray_as_list)
@@ -1160,9 +1160,9 @@ def _create_converter_to_pandas(
                 if isinstance(value, VariantVal):
                     return value
                 if (
-                        isinstance(value, dict)
-                        and all(key in value for key in ["value", "metadata"])
-                        and all(isinstance(value[key], bytes) for key in ["value", "metadata"])
+                    isinstance(value, dict)
+                    and all(key in value for key in ["value", "metadata"])
+                    and all(isinstance(value[key], bytes) for key in ["value", "metadata"])
                 ):
                     return VariantVal(value["value"], value["metadata"])
                 else:
@@ -1217,11 +1217,11 @@ def _create_converter_to_pandas(
 
 
 def _create_converter_from_pandas(
-        data_type: DataType,
-        *,
-        timezone: Optional[str] = None,
-        error_on_duplicated_field_names: bool = True,
-        ignore_unexpected_complex_type_values: bool = False,
+    data_type: DataType,
+    *,
+    timezone: Optional[str] = None,
+    error_on_duplicated_field_names: bool = True,
+    ignore_unexpected_complex_type_values: bool = False,
 ) -> Callable[["pd.Series"], "pd.Series"]:
     """
     Create a converter of pandas Series to create Spark DataFrame with Arrow optimization.
@@ -1564,22 +1564,22 @@ def _to_numpy_type(type: DataType) -> Optional["np.dtype"]:
 
 
 def convert_pandas_using_numpy_type(
-        df: "PandasDataFrameLike", schema: StructType
+    df: "PandasDataFrameLike", schema: StructType
 ) -> "PandasDataFrameLike":
     for field in schema.fields:
         if isinstance(
-                field.dataType,
-                (
-                        ByteType,
-                        ShortType,
-                        IntegerType,
-                        LongType,
-                        FloatType,
-                        DoubleType,
-                        TimestampType,
-                        TimestampNTZType,
-                        DayTimeIntervalType,
-                ),
+            field.dataType,
+            (
+                ByteType,
+                ShortType,
+                IntegerType,
+                LongType,
+                FloatType,
+                DoubleType,
+                TimestampType,
+                TimestampNTZType,
+                DayTimeIntervalType,
+            ),
         ):
             np_type = _to_numpy_type(field.dataType)
             df[field.name] = df[field.name].astype(np_type)
