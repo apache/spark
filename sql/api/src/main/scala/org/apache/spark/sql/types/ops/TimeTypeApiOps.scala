@@ -28,4 +28,5 @@ class TimeTypeApiOps(t: TimeType) extends TypeApiOps with EncodeTypeOps with For
   override def getEncoder: AgnosticEncoder[_] = LocalTimeEncoder
 
   override def format(v: Any): String = fracFormatter.format(v.asInstanceOf[Long])
+  override def toSQLValue(v: Any): String = s"TIME '${format(v)}'"
 }

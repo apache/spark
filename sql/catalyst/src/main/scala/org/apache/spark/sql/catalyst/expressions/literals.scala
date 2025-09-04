@@ -572,8 +572,6 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case (v: Decimal, t: DecimalType) => s"${v}BD"
     case (v: Int, DateType) =>
       s"DATE '$toString'"
-    case (_: Long, _: TimeType) =>
-      s"TIME '$toString'"
     case (v: Long, TimestampType) =>
       s"TIMESTAMP '$toString'"
     case (v: Long, TimestampNTZType) =>
@@ -611,6 +609,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         }
       s"MAP(${keysAndValues.mkString(", ")})"
     case (v: VariantVal, variantType: VariantType) => s"PARSE_JSON('${v.toJson(timeZoneId)}')"
+    case _ if FormatTypeOps.supports(dataType) => FormatTypeOps(dataType).toSQLValue(value)
     case _ => value.toString
   }
 }

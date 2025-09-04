@@ -21,7 +21,11 @@ import org.apache.spark.sql.types.{DataType, TimeType}
 
 // Format type values to strings
 trait FormatTypeOps {
+  // Formats times according to the pattern `HH:mm:ss.[..fff..]` where `[..fff..]` is a fraction
+  // of second up to microsecond resolution. It doesn't output trailing zeros in the fraction.
   def format(v: Any): String
+  // Converts given value to a SQL typed literal
+  def toSQLValue(v: Any): String
 }
 
 object FormatTypeOps {
