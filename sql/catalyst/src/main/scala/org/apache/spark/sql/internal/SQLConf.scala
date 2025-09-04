@@ -3029,7 +3029,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val ENABLE_SORT_MERGE_JOIN_CODEGEN =
-    buildConf("spark.sql.codegen.join.SortMergeJoin.enabled")
+    buildConf("spark.sql.codegen.join.sortMergeJoin.enabled")
       .internal()
       .doc("When true, enables code-gen for sort merge join other than FULL OUTER and Existence.")
       .version("4.1.0")
