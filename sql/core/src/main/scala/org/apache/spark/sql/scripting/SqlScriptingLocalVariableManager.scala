@@ -37,11 +37,8 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
       overrideIfExists: Boolean): Unit = {
     val name = nameParts.last
 
-    // overrideIfExists should not be supported because local variables don't support
-    // DECLARE OR REPLACE. However ForStatementExec currently uses this to handle local vars,
-    // so we support it for now.
-    // TODO [SPARK-50785]: Refactor ForStatementExec to use local variables properly.
-    if (!overrideIfExists && context.currentScope.variables.contains(name)) {
+    // Sanity check, this should already be thrown by CreateVariableExec.run
+    if (context.currentScope.variables.contains(name)) {
       throw new AnalysisException(
         errorClass = "VARIABLE_ALREADY_EXISTS",
         messageParameters = Map(
