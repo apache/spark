@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap,
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SupervisingCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
-import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.types.DataType
 
 sealed trait Parameter extends LeafExpression with Unevaluable {
@@ -113,8 +113,8 @@ case class PosParameterizedQuery(child: LogicalPlan, args: Seq[Expression])
  * @param args The literal values or collection constructor functions such as `map()`,
  *             `array()`, `struct()` of parameters.
  * @param paramNames Optional parameter names corresponding to args. If provided for an argument,
- *                   that argument can be used for named parameter binding. If not provided or
- *                   shorter than args, remaining parameters are treated as positional.
+ *                   that argument can be used for named parameter binding. If not provided
+ *                   parameters are treated as positional.
  */
 case class UnifiedParameterizedQuery(
     child: LogicalPlan,
@@ -237,6 +237,24 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
           case p @ PosParameter(pos) => positionalParams.add(pos); p
         }
 
+        // Check: Does the query mix positional and named parameters?
+        if (namedParams.nonEmpty && positionalParams.nonEmpty) {
+          throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
+        }
+
+        // If query uses only named parameters, all USING expressions must have names
+        if (namedParams.nonEmpty && positionalParams.isEmpty) {
+          val unnamedExpressions = paramNames.zipWithIndex.collect {
+            case (null, index) => index
+            case ("", index) => index // empty strings are unnamed
+          }
+          if (unnamedExpressions.nonEmpty) {
+            // Get the actual expressions that don't have names for error reporting
+            val unnamedExprs = unnamedExpressions.map(args(_))
+            throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedExprs)
+          }
+        }
+
         // Build parameter maps based on what the query actually uses
         val namedArgsMap = scala.collection.mutable.Map[String, Expression]()
         val positionalArgs = scala.collection.mutable.ListBuffer[Expression]()
@@ -257,14 +275,8 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
           // Query uses only positional parameters - use all args as positional
           positionalArgs ++= args
         } else {
-          // Mixed or no parameters - build both maps
-          args.zipWithIndex.foreach { case (arg, index) =>
-            if (index < paramNames.length && paramNames(index).nonEmpty) {
-              namedArgsMap(paramNames(index)) = arg
-            } else {
-              positionalArgs += arg
-            }
-          }
+          // No parameters in query - treat all args as positional for backward compatibility
+          positionalArgs ++= args
         }
 
         // Check all arguments for validity

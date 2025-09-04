@@ -57,9 +57,6 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
       // For parameterized queries, build unified parameter arrays
       val (paramValues, paramNames) = buildUnifiedParameters(cmd.args)
 
-      // Validate parameter usage patterns
-      validateParameterUsage(cmd.sqlStmtStr, cmd.args, paramNames.toSeq)
-
       withIsolatedLocalVariableContext {
         sparkSession.sql(sqlStmtStr, paramValues, paramNames)
       }
@@ -177,42 +174,6 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
     }
   }
 
-  private def validateParameterUsage(
-      queryParam: Expression,
-      args: Seq[Expression],
-      names: Seq[String]): Unit = {
-    // Extract the query string to check for parameter patterns
-    val queryString = queryParam.eval(null) match {
-      case null => return // Will be caught later by other validation
-      case value => value.toString
-    }
-
-    // Check what types of parameters the query uses
-    val positionalParameterPattern = "\\?".r
-    val namedParameterPattern = ":[a-zA-Z_][a-zA-Z0-9_]*".r
-
-    val queryUsesPositionalParameters =
-      positionalParameterPattern.findFirstIn(queryString).isDefined
-    val queryUsesNamedParameters = namedParameterPattern.findFirstIn(queryString).isDefined
-
-    // Check: Does the query mix positional and named parameters?
-    if (queryUsesPositionalParameters && queryUsesNamedParameters) {
-      throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
-    }
-
-    // If query uses only named parameters, all USING expressions must have names
-    if (queryUsesNamedParameters && !queryUsesPositionalParameters) {
-      val unnamedExpressions = names.zipWithIndex.collect {
-        case (null, index) => index
-        case ("", index) => index // empty strings are unnamed
-      }
-      if (unnamedExpressions.nonEmpty) {
-        // Get the actual expressions that don't have names for error reporting
-        val unnamedExprs = unnamedExpressions.map(args(_))
-        throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedExprs)
-      }
-    }
-  }
 
   /**
    * Temporarily isolates the SQL scripting context during EXECUTE IMMEDIATE execution.
