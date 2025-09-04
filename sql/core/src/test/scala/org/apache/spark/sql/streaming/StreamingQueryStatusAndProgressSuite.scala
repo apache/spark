@@ -400,6 +400,35 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
     assert(data(0).getAs[Timestamp](0).equals(validValue))
   }
 
+  test("SPARK-53491: `inputRowsPerSecond` and  `processedRowsPerSecond` " +
+    "should never be with scientific notation") {
+    import testImplicits._
+
+    val inputData = MemoryStream[Int]
+    val df = inputData.toDF()
+    val query = df.writeStream
+      .format("memory")
+      .queryName("TestFormatting")
+      .start()
+
+    try {
+      val bigBatch = 1 to 900000
+      inputData.addData(bigBatch: _*)
+
+      query.processAllAvailable()
+
+      val progress = query.lastProgress.jsonValue
+
+      print(progress)
+
+      assert(!(progress \ "inputRowsPerSecond").values.toString.contains("E"))
+      assert(!(progress \ "processedRowsPerSecond").values.toString.contains("E"))
+    } finally {
+      query.stop()
+      spark.streams.awaitAnyTermination(1000) // Waiting to allow cleaning all threads
+    }
+  }
+
   def waitUntilBatchProcessed: AssertOnQuery = Execute { q =>
     eventually(Timeout(streamingTimeout)) {
       if (q.exception.isEmpty) {
