@@ -243,9 +243,9 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                 raise PySparkRuntimeError(
                     errorClass="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF",
                     messageParameters={
-                        "expected": arrow_type,
-                        "actual": arr.type,
-                    },
+                        "expected": str(arrow_type),
+                        "actual": str(arr.type),
+                    }
                 )
 
     def dump_stream(self, iterator, stream):

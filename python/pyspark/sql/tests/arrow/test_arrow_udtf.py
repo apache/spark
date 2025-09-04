@@ -18,6 +18,7 @@ import unittest
 from typing import Iterator
 
 from pyspark.errors import PySparkAttributeError
+from pyspark.errors import PySparkRuntimeError
 from pyspark.errors import PythonException
 from pyspark.sql.functions import arrow_udtf, lit
 from pyspark.sql.types import Row, StructType, StructField, IntegerType
@@ -351,15 +352,14 @@ class ArrowUDTFTestsMixin:
                 yield result_table
 
         # Should fail with Arrow cast exception since string cannot be cast to int
-        with self.assertRaises(PythonException) as e:
+        with self.assertRaisesRegex(
+            PythonException,
+            "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF\\] "
+            "Column names of the returned pyarrow.Table do not match "
+            "specified schema. Expected: int32 Actual: string",
+        ):
             result_df = StringToIntUDTF()
             result_df.collect()
-
-        self.check_error(
-            exception=e.exception,
-            errorClass="RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF",
-            messageParameters={"expected": "int", "actual": "string"},
-        )
 
     def test_arrow_udtf_type_coercion_string_to_int_safe(self):
         @arrow_udtf(returnType="id int")
