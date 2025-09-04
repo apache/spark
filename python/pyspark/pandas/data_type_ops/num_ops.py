@@ -16,7 +16,7 @@
 #
 
 import numbers
-from typing import Any, Union, Callable
+from typing import Any, Union, Callable, cast
 
 import numpy as np
 import pandas as pd
@@ -264,7 +264,7 @@ class NumericOps(DataTypeOps):
                         return left_scol.rename(None)  # type: ignore[attr-defined]
                     else:
                         # When comparing with scalar-like, keep the name of left operand
-                        return left_scol
+                        return cast(SeriesOrIndex, left_scol)
                 if _is_boolean_type(right):  # numeric vs. bool
                     right = transform_boolean_operand_to_numeric(
                         right, spark_type=left.spark.data_type
