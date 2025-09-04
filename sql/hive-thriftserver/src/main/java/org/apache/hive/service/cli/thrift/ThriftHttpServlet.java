@@ -19,13 +19,10 @@ package org.apache.hive.service.cli.thrift;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-import java.nio.charset.Charset;
 import java.security.PrivilegedExceptionAction;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import jakarta.servlet.ServletException;
@@ -556,7 +553,7 @@ public class ThriftHttpServlet extends TServlet {
     if (queryString == null) {
       return null;
     }
-    List<NameValuePair> params = org.apache.http.client.utils.URLEncodedUtils.parse( queryString, Charset.defaultCharset());
+    List<NameValuePair> params = org.apache.http.client.utils.URLEncodedUtils.parse( queryString, StandardCharsets.UTF_8 );
     for (NameValuePair param: params) {
       if (param.getName().equalsIgnoreCase("doAs")) {
         return param.getValue();
