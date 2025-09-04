@@ -66,7 +66,7 @@ class SortShuffleWriterSuite
     shuffleHandle = {
       new BaseShuffleHandle(shuffleId, dependency)
     }
-    resetDependency()
+    resetDependency(rowBasedCheckSumEnabled = false)
     shuffleExecutorComponents = new LocalDiskShuffleExecutorComponents(
       conf, blockManager, shuffleBlockResolver)
   }
@@ -79,14 +79,17 @@ class SortShuffleWriterSuite
     }
   }
 
-  private def resetDependency(): Unit = {
-    reset(dependency);
+  private def resetDependency(rowBasedCheckSumEnabled: Boolean): Unit = {
+    reset(dependency)
     when(dependency.partitioner).thenReturn(partitioner)
     when(dependency.serializer).thenReturn(serializer)
     when(dependency.aggregator).thenReturn(None)
     when(dependency.keyOrdering).thenReturn(None)
-    val checksumSize =
-      if (conf.get(config.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED)) numMaps else 0
+    val checksumSize = if (rowBasedCheckSumEnabled) {
+      numMaps
+    } else {
+      0
+    }
     val checksumAlgorithm = conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
     val rowBasedChecksums = createPartitionRowBasedChecksums(checksumSize, checksumAlgorithm)
     when(dependency.rowBasedChecksums).thenReturn(rowBasedChecksums)
@@ -128,13 +131,8 @@ class SortShuffleWriterSuite
   }
 
   test("Row-based checksums are independent of input row order") {
-    conf.set("spark.shuffle.orderIndependentChecksum.enabled", true.toString)
-    // FIXME: this can affect other tests (if any) after this set of tests
-    // since `sc` is global.
-    sc.stop()
-    val localSC = new SparkContext("local[4]", "test", conf)
     val shuffleBlockResolver = new IndexShuffleBlockResolver(conf)
-    val context = MemoryTestingUtils.fakeTaskContext(localSC.env)
+    val context = MemoryTestingUtils.fakeTaskContext(sc.env)
     val records: List[(Int, Int)] = List(
       (1, 1), (1, 2), (1, 3), (1, 4), (1, 5),
       (2, 2), (2, 3), (2, 4), (2, 5), (2, 6),
@@ -145,7 +143,7 @@ class SortShuffleWriterSuite
     var checksumValues : Array[Long] = Array[Long]()
     var aggregatedChecksumValue = 0L
     for (i <- 1 to 100) {
-      resetDependency()
+      resetDependency(rowBasedCheckSumEnabled = true)
       val writer = new SortShuffleWriter[Int, Int, Int](
         shuffleHandle,
         mapId = 2,
@@ -168,7 +166,6 @@ class SortShuffleWriterSuite
       }
       writer.stop(success = true)
     }
-    localSC.stop()
   }
 
   Seq((true, false, false),
