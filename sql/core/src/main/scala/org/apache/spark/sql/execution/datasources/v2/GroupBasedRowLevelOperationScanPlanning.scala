@@ -69,7 +69,7 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
             |Pushing operators to ${MDC(LogKeys.RELATION_NAME, relation.name)}
             |Pushed filters: ${MDC(LogKeys.PUSHED_FILTERS, pushedFiltersStr)}
             |Filters evaluated on data source side: ${MDC(LogKeys.EVALUATED_FILTERS, evaluatedFilters.mkString(", "))}
-            |Filters evaluated on Spark side: ${MDC(LogKeys.POST_SCAN_FILTERS, postScanFilters.mkString(", "))}}
+            |Filters evaluated on Spark side: ${MDC(LogKeys.POST_SCAN_FILTERS, postScanFilters.mkString(", "))}
             |Output: ${MDC(LogKeys.RELATION_OUTPUT, output.mkString(", "))}
            """.stripMargin)
       // scalastyle:on line.size.limit
