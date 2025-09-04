@@ -138,7 +138,28 @@ abstract class HybridQueue[T, Q <: Queue[T]](
     }
   }
 
-  def remove(): T
+  def remove(): T = {
+    var item: T = null.asInstanceOf[T]
+    if (reading != null) {
+      item = reading.remove()
+    }
+    if (item == null) {
+      if (reading != null) {
+        reading.close()
+      }
+      synchronized {
+        reading = queues.remove()
+      }
+      assert(reading != null, s"queue should not be empty")
+      item = reading.remove()
+      assert(item != null, s"$reading should have at least one element")
+    }
+    if (!isInMemoryQueue(reading)) {
+      numElementsQueuedOnDisk -= 1
+    }
+    numElementsQueued -= 1
+    item
+  }
 
   def close(): Unit = {
     if (reading != null) {

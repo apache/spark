@@ -159,30 +159,6 @@ case class HybridRowQueue(
     serMgr: SerializerManager)
   extends HybridQueue[UnsafeRow, RowQueue](memManager, tempDir, serMgr) {
 
-  override def remove(): UnsafeRow = {
-    var item: UnsafeRow = null
-    if (reading != null) {
-      item = reading.remove()
-    }
-    if (item == null) {
-      if (reading != null) {
-        reading.close()
-      }
-      synchronized {
-        reading = queues.remove()
-      }
-      assert(reading != null, s"queue should not be empty")
-      item = reading.remove()
-      assert(item != null, s"$reading should have at least one row")
-    }
-    if (!isInMemoryQueue(reading)) {
-      numElementsQueuedOnDisk -= 1
-    }
-    numElementsQueued -= 1
-    item
-  }
-
-
   override protected def createDiskQueue(): RowQueue = {
     DiskRowQueue(File.createTempFile("buffer", "", tempDir), numFields, serMgr)
   }
