@@ -198,10 +198,16 @@ class ClassificationTestsMixin:
             model.saveToLocal(local_model_path)
 
             # test saved torch model can be loaded by pytorch solely
-            lor_torch_model = torch.load(
-                os.path.join(local_model_path, "LogisticRegressionModel.torch"),
-                weights_only=False,
-            )
+            with torch.serialization.safe_globals(
+                [
+                    torch.nn.modules.container.Sequential,
+                    torch.nn.modules.linear.Linear,
+                    torch.nn.modules.activation.Softmax,
+                ]
+            ):
+                lor_torch_model = torch.load(
+                    os.path.join(local_model_path, "LogisticRegressionModel.torch")
+                )
 
             with torch.inference_mode():
                 torch_infer_result = lor_torch_model(
