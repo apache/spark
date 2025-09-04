@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import decimal
 import numbers
 from typing import Any, Union, Callable
 
@@ -51,6 +52,7 @@ from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import (
     BooleanType,
     DataType,
+    DecimalType,
     StringType,
 )
 from pyspark.errors import PySparkValueError
@@ -91,6 +93,21 @@ def _cast_back_float(
     if is_left_float and is_right_numeric:
         return expr.cast(as_spark_type(left_dtype))
     return expr
+
+
+def _is_decimal_float_mixed(left: IndexOpsLike, right: Any) -> bool:
+    left_is_decimal = isinstance(left.spark.data_type, DecimalType)
+    left_is_float = is_float_dtype(left.dtype)
+
+    if isinstance(right, IndexOpsMixin):
+        right_is_float = is_float_dtype(right.dtype)
+        right_is_decimal = isinstance(right.spark.data_type, DecimalType)
+    else:
+        # scalar
+        right_is_float = isinstance(right, (float, np.floating))
+        right_is_decimal = isinstance(right, decimal.Decimal)
+
+    return (left_is_decimal and right_is_float) or (left_is_float and right_is_decimal)
 
 
 class NumericOps(DataTypeOps):
@@ -433,12 +450,14 @@ class FractionalOps(NumericOps):
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Multiplication can not be applied to given types.")
 
-        spark_session = left._internal.spark_frame.sparkSession
+        is_ansi = is_ansi_mode_enabled(left._internal.spark_frame.sparkSession)
+        if is_ansi and _is_decimal_float_mixed(left, right):
+            raise TypeError("Multiplication can not be applied to given types.")
         new_right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
 
         def wrapped_mul(lc: PySparkColumn, rc: Any) -> PySparkColumn:
             expr = PySparkColumn.__mul__(lc, rc)
-            if is_ansi_mode_enabled(spark_session):
+            if is_ansi:
                 expr = _cast_back_float(expr, left.dtype, right)
             return expr
 
@@ -448,12 +467,14 @@ class FractionalOps(NumericOps):
         _sanitize_list_like(right)
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("True division can not be applied to given types.")
-        spark_session = left._internal.spark_frame.sparkSession
+        is_ansi = is_ansi_mode_enabled(left._internal.spark_frame.sparkSession)
+        if is_ansi and _is_decimal_float_mixed(left, right):
+            raise TypeError("True division can not be applied to given types.")
         new_right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
         left_dtype = left.dtype
 
         def truediv(lc: PySparkColumn, rc: Any) -> PySparkColumn:
-            if is_ansi_mode_enabled(spark_session):
+            if is_ansi:
                 expr = F.when(
                     F.lit(rc == 0),
                     F.when(lc < 0, F.lit(float("-inf")))
@@ -477,15 +498,16 @@ class FractionalOps(NumericOps):
         _sanitize_list_like(right)
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Floor division can not be applied to given types.")
-        spark_session = left._internal.spark_frame.sparkSession
-        use_try_divide = is_ansi_mode_enabled(spark_session)
+        is_ansi = is_ansi_mode_enabled(left._internal.spark_frame.sparkSession)
+        if is_ansi and _is_decimal_float_mixed(left, right):
+            raise TypeError("Floor division can not be applied to given types.")
         left_dtype = left.dtype
 
         def fallback_div(x: PySparkColumn, y: PySparkColumn) -> PySparkColumn:
             return x.__div__(y)
 
         safe_div: Callable[[PySparkColumn, PySparkColumn], PySparkColumn] = (
-            F.try_divide if use_try_divide else fallback_div
+            F.try_divide if is_ansi else fallback_div
         )
 
         def floordiv(lc: PySparkColumn, rc: Any) -> PySparkColumn:
@@ -509,6 +531,10 @@ class FractionalOps(NumericOps):
         if not isinstance(right, numbers.Number):
             raise TypeError("True division can not be applied to given types.")
 
+        is_ansi = is_ansi_mode_enabled(left._internal.spark_frame.sparkSession)
+        if is_ansi and _is_decimal_float_mixed(left, right):
+            raise TypeError("True division can not be applied to given types.")
+
         def rtruediv(left: PySparkColumn, right: Any) -> PySparkColumn:
             return F.when(left == 0, F.lit(np.inf).__div__(right)).otherwise(
                 F.lit(right).__truediv__(left)
@@ -522,6 +548,10 @@ class FractionalOps(NumericOps):
         if not isinstance(right, numbers.Number):
             raise TypeError("Floor division can not be applied to given types.")
 
+        is_ansi = is_ansi_mode_enabled(left._internal.spark_frame.sparkSession)
+        if is_ansi and _is_decimal_float_mixed(left, right):
+            raise TypeError("Floor division can not be applied to given types.")
+
         def rfloordiv(left: PySparkColumn, right: Any) -> PySparkColumn:
             return F.when(F.lit(left == 0), F.lit(np.inf).__div__(right)).otherwise(
                 F.when(F.lit(left) == np.nan, np.nan).otherwise(F.floor(F.lit(right).__div__(left)))
@@ -529,6 +559,12 @@ class FractionalOps(NumericOps):
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
         return numpy_column_op(rfloordiv)(left, right)
+
+    def rmul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        is_ansi = is_ansi_mode_enabled(left._internal.spark_frame.sparkSession)
+        if is_ansi and _is_decimal_float_mixed(left, right):
+            raise TypeError("Multiplication can not be applied to given types.")
+        return super().rmul(left, right)
 
     def isnull(self, index_ops: IndexOpsLike) -> IndexOpsLike:
         return index_ops._with_new_scol(
