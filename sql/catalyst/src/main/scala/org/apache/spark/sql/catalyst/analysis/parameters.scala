@@ -229,7 +229,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         if !child.containsPattern(UNRESOLVED_WITH) &&
           args.forall(_.resolved) =>
 
-        // First pass: collect all parameter types used in the query to determine strategy
+        // Collect parameter types used in the query and validate no mixing
         val namedParams = scala.collection.mutable.Set.empty[String]
         val positionalParams = scala.collection.mutable.Set.empty[Int]
         bind(child) {
@@ -237,86 +237,50 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
           case p @ PosParameter(pos) => positionalParams.add(pos); p
         }
 
-        // Check: Does the query mix positional and named parameters?
+        // Validate: no mixing of positional and named parameters
         if (namedParams.nonEmpty && positionalParams.nonEmpty) {
           throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
         }
 
-        // If query uses only named parameters, all USING expressions must have names
+        // Validate: if query uses named parameters, all USING expressions must have names
         if (namedParams.nonEmpty && positionalParams.isEmpty) {
           val unnamedExpressions = paramNames.zipWithIndex.collect {
             case (null, index) => index
             case ("", index) => index // empty strings are unnamed
           }
           if (unnamedExpressions.nonEmpty) {
-            // Get the actual expressions that don't have names for error reporting
             val unnamedExprs = unnamedExpressions.map(args(_))
             throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedExprs)
           }
         }
 
-        // Build parameter maps based on what the query actually uses
-        val namedArgsMap = scala.collection.mutable.Map[String, Expression]()
-        val positionalArgs = scala.collection.mutable.ListBuffer[Expression]()
-
-        if (namedParams.nonEmpty && positionalParams.isEmpty) {
-          // Query uses only named parameters - try to match args to named parameters
-          args.zipWithIndex.foreach { case (arg, index) =>
-            val paramName = if (index < paramNames.length && paramNames(index).nonEmpty) {
-              paramNames(index)
-            } else {
-              // For session variables without explicit AS clause, try to infer the name
-              // from the parameter names found in the query
-              namedParams.toSeq.lift(index).getOrElse(s"param_$index")
-            }
-            namedArgsMap(paramName) = arg
+        // Check all arguments for validity (args are already evaluated expressions/literals)
+        val allArgs = args.zipWithIndex.map { case (arg, idx) =>
+          val name = if (idx < paramNames.length && paramNames(idx) != null) {
+            paramNames(idx)
+          } else {
+            s"_$idx"
           }
-        } else if (positionalParams.nonEmpty && namedParams.isEmpty) {
-          // Query uses only positional parameters - use all args as positional
-          positionalArgs ++= args
-        } else {
-          // No parameters in query - treat all args as positional for backward compatibility
-          positionalArgs ++= args
-        }
-
-        // Check all arguments for validity
-        val allArgs = namedArgsMap.toSeq ++ positionalArgs.zipWithIndex.map {
-          case (arg, idx) => (s"_$idx", arg)
+          (name, arg)
         }
         checkArgs(allArgs)
 
-        // Bind named parameters by converting expressions to literals
-        val boundWithNamed = if (namedArgsMap.nonEmpty) {
-          bind(child) {
-            case NamedParameter(name) if namedArgsMap.contains(name) =>
-              val expr = namedArgsMap(name)
-              if (expr.foldable) {
-                Literal.create(expr.eval(), expr.dataType)
-              } else {
-                // For non-foldable expressions, try to convert to SQL and re-parse
-                expr
-              }
-          }
-        } else {
-          child
-        }
+        // Single pass binding - args are already literals/evaluated expressions
+        val namedArgsMap = paramNames.zipWithIndex.collect {
+          case (name, index) if name != null => name -> args(index)
+        }.toMap
+        val positionalArgsMap = if (positionalParams.nonEmpty) {
+          val sortedPositions = positionalParams.toSeq.sorted
+          sortedPositions.zipWithIndex.map { case (pos, index) =>
+            pos -> (if (index < args.length) args(index) else args.last)
+          }.toMap
+        } else Map.empty[Int, Expression]
 
-        // Bind positional parameters
-        if (positionalArgs.nonEmpty) {
-          val posToIndex = positionalParams.toSeq.sorted.zipWithIndex.toMap
-          bind(boundWithNamed) {
-            case PosParameter(pos) if posToIndex.contains(pos) &&
-              positionalArgs.size > posToIndex(pos) =>
-              val expr = positionalArgs(posToIndex(pos))
-              if (expr.foldable) {
-                Literal.create(expr.eval(), expr.dataType)
-              } else {
-                // For non-foldable expressions, try to convert to SQL and re-parse
-                expr
-              }
-          }
-        } else {
-          boundWithNamed
+        bind(child) {
+          case NamedParameter(name) if namedArgsMap.contains(name) =>
+            namedArgsMap(name)
+          case PosParameter(pos) if positionalArgsMap.contains(pos) =>
+            positionalArgsMap(pos)
         }
 
       case other => other
