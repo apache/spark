@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.types.ops
 
+import java.time.LocalTime
+
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.LocalTimeEncoder
 import org.apache.spark.sql.catalyst.util.TimeFormatter
@@ -27,6 +30,12 @@ class TimeTypeApiOps(t: TimeType) extends TypeApiOps with EncodeTypeOps with For
 
   override def getEncoder: AgnosticEncoder[_] = LocalTimeEncoder
 
-  override def format(v: Any): String = fracFormatter.format(v.asInstanceOf[Long])
+  override def format(v: Any): String = v match {
+    case l: Long => fracFormatter.format(l)
+    case lt: LocalTime => fracFormatter.format(lt)
+    case other =>
+      throw SparkException.internalError(
+        s"Unsupported external type ${other.getClass.getName} for the type ${t.sql}")
+  }
   override def toSQLValue(v: Any): String = s"TIME '${format(v)}'"
 }
