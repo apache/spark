@@ -167,7 +167,7 @@ case class SortMergeJoinExec(
   override def supportCodegen: Boolean = joinType match {
     case FullOuter => conf.getConf(SQLConf.ENABLE_FULL_OUTER_SORT_MERGE_JOIN_CODEGEN)
     case _: ExistenceJoin => conf.getConf(SQLConf.ENABLE_EXISTENCE_SORT_MERGE_JOIN_CODEGEN)
-    case _ => true
+    case _ => conf.getConf(SQLConf.ENABLE_SORT_MERGE_JOIN_CODEGEN)
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {

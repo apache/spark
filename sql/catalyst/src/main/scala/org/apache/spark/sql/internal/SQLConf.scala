@@ -3028,6 +3028,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_SORT_MERGE_JOIN_CODEGEN =
+    buildConf("spark.sql.codegen.join.SortMergeJoin.enabled")
+      .internal()
+      .doc("When true, enables code-gen for sort merge join other than FULL OUTER and Existence.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val MAX_NESTED_VIEW_DEPTH =
     buildConf("spark.sql.view.maxNestedViewDepth")
       .internal()
@@ -3605,7 +3613,7 @@ object SQLConf {
         "join operator")
       .version("2.2.1")
       .intConf
-      .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
+      .createWithDefault(4096)
 
   val SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.spill.threshold")
