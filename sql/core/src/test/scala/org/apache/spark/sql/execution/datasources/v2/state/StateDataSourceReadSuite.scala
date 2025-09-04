@@ -642,7 +642,7 @@ class RocksDBWithCheckpointV2StateDataSourceReaderSnapshotSuite extends StateDat
     // make sure we have a snapshot for every two delta files
     // HDFS maintenance task will not count the latest delta file, which has the same version
     // as the snapshot version
-    spark.conf.set(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key, 1)
+    spark.conf.set(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key, 2)
   }
 
   test("ERROR: snapshot of version not found") {

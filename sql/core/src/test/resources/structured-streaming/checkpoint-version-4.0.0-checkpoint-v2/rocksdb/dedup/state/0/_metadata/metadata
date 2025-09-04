@@ -1,2 +1,2 @@
 v1
-{"operatorInfo":{"operatorId":0,"operatorName":"stateStoreSave"},"stateStoreInfo":[{"storeName":"default","numColsPrefixKey":0,"numPartitions":5}]}
+{"operatorInfo":{"operatorId":0,"operatorName":"dedupe"},"stateStoreInfo":[{"storeName":"default","numColsPrefixKey":0,"numPartitions":5}]}
