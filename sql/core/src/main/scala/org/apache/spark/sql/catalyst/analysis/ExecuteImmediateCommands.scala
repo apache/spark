@@ -68,10 +68,14 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
     // Check if the executed statement is a Command (like DECLARE, SET VARIABLE, etc.)
     // Commands should not return result sets
     result.queryExecution.analyzed match {
-      case cmd: Command =>
+      case command: Command =>
+        // If this EXECUTE IMMEDIATE has an INTO clause, commands are not allowed
+        if (cmd.hasIntoClause) {
+          throw QueryCompilationErrors.invalidStatementForExecuteInto(sqlStmtStr)
+        }
         // Commands don't produce output - return CommandResult to indicate this is a command
         // For analyzer tests, we don't need the actual executed rows, just the structure
-        CommandResult(cmd.output, cmd, result.queryExecution.executedPlan, Seq.empty)
+        CommandResult(command.output, command, result.queryExecution.executedPlan, Seq.empty)
       case _ =>
         // Regular queries - return the results as a LocalRelation
         val internalRows = result.queryExecution.executedPlan.executeCollect()

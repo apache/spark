@@ -18,14 +18,13 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, EmptyRow, Expression, InSubquery, SubqueryExpression, VariableReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, InSubquery, SubqueryExpression, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{ExecutableDuringAnalysis, LocalRelation, LogicalPlan, SetVariable, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Logical plan representing execute immediate query.
@@ -49,10 +48,12 @@ case class UnresolvedExecuteImmediate(
  *
  * @param sqlStmtStr the resolved query expression
  * @param args parameters from USING clause
+ * @param hasIntoClause whether this EXECUTE IMMEDIATE has an INTO clause
  */
 case class ExecuteImmediateCommand(
     sqlStmtStr: Expression,
-    args: Seq[Expression])
+    args: Seq[Expression],
+    hasIntoClause: Boolean = false)
   extends UnaryNode with ExecutableDuringAnalysis {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(EXECUTE_IMMEDIATE)
@@ -95,8 +96,6 @@ class ResolveExecuteImmediate(
         // All resolved - transform based on whether we have target variables
         if (targetVariables.nonEmpty) {
           // EXECUTE IMMEDIATE ... INTO should generate SetVariable plan
-          // First validate that the SQL statement is not a command (commands don't return results)
-          validateNotCommandForInto(sqlStmtStr)
           // At this point, all targetVariables are resolved, so we only expect VariableReference
           // or Alias containing VariableReference
           val finalTargetVars = targetVariables.map {
@@ -126,11 +125,11 @@ class ResolveExecuteImmediate(
           }
 
           // Create SetVariable plan with the execute immediate query as source
-          val sourceQuery = ExecuteImmediateCommand(sqlStmtStr, args)
+          val sourceQuery = ExecuteImmediateCommand(sqlStmtStr, args, hasIntoClause = true)
           SetVariable(finalTargetVars, sourceQuery)
         } else {
           // Regular EXECUTE IMMEDIATE without INTO
-          ExecuteImmediateCommand(sqlStmtStr, args)
+          ExecuteImmediateCommand(sqlStmtStr, args, hasIntoClause = false)
         }
         } else {
           // Not all resolved yet - wait for next iteration
@@ -156,31 +155,4 @@ class ResolveExecuteImmediate(
     }
   }
 
-  private def validateNotCommandForInto(sqlStmtStr: Expression): Unit = {
-    // Extract the query string to check if it's a command
-    val queryString = sqlStmtStr.eval(EmptyRow) match {
-      case null =>
-        // Use a generic AnalysisException for null query
-        throw new AnalysisException("NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
-          Map.empty[String, String])
-      case s: UTF8String =>
-        // scalastyle:off caselocale
-        s.toString.trim.toUpperCase
-        // scalastyle:on caselocale
-      case other =>
-        // Use a generic AnalysisException for wrong type
-        throw new AnalysisException("INVALID_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
-          Map("actualType" -> other.getClass.getSimpleName))
-    }
-    // Check if the SQL statement starts with common command keywords
-    // Commands don't return results, so INTO clause is invalid
-    val commandKeywords = Set(
-      "SET", "CREATE", "DROP", "ALTER", "INSERT", "UPDATE", "DELETE",
-      "DECLARE", "CALL", "GRANT", "REVOKE", "TRUNCATE", "MERGE", "USE"
-    )
-    val firstWord = queryString.split("\\s+").headOption.getOrElse("")
-    if (commandKeywords.contains(firstWord)) {
-      throw QueryCompilationErrors.invalidStatementForExecuteInto(queryString)
-    }
-  }
 }
