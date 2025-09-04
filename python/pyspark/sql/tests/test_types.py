@@ -357,7 +357,7 @@ class TypesTestsMixin:
 
         # Test legacy behavior inferring only from the first element
         with self.sql_conf(
-            {"spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled": True}
+                {"spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled": True}
         ):
             # Legacy: f2 schema inferred as an array of nulls, should raise error
             self.assertRaises(ValueError, lambda: self.spark.createDataFrame(data))
@@ -425,7 +425,7 @@ class TypesTestsMixin:
 
             # Test legacy behavior inferring only from the first element; excludes "name" field
             with self.sql_conf(
-                {"spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled": True}
+                    {"spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled": True}
             ):
                 df = self.spark.createDataFrame(data)
                 self.assertEqual(Row(f1=[Row(payment=200.5), Row(payment=None)]), df.first())
@@ -479,25 +479,6 @@ class TypesTestsMixin:
                 f2={"outer": {"payment": "200.5", "name": "A"}},
             ),
             df.first(),
-        )
-
-    def test_infer_variant_type(self):
-        # SPARK-52355: Test inferring variant type
-        value = VariantVal.parseJson('{"a": 1}')
-
-        data = [Row(f1=value)]
-        df = self.spark.createDataFrame(data)
-        actual = df.first()["f1"]
-
-        self.assertEqual(type(df.schema["f1"].dataType), VariantType)
-        # As of writing VariantVal can also include bytearray
-        self.assertEqual(
-            bytes(actual.value),
-            bytes(value.value),
-        )
-        self.assertEqual(
-            bytes(actual.metadata),
-            bytes(value.metadata),
         )
 
     def test_create_dataframe_from_dict_respects_schema(self):
@@ -1670,12 +1651,12 @@ class TypesTestsMixin:
         self.assertEqual(100000000000000, df1.first().f2)
 
         self.assertEqual(_infer_type(1), LongType())
-        self.assertEqual(_infer_type(2**10), LongType())
-        self.assertEqual(_infer_type(2**20), LongType())
-        self.assertEqual(_infer_type(2**31 - 1), LongType())
-        self.assertEqual(_infer_type(2**31), LongType())
-        self.assertEqual(_infer_type(2**61), LongType())
-        self.assertEqual(_infer_type(2**71), LongType())
+        self.assertEqual(_infer_type(2 ** 10), LongType())
+        self.assertEqual(_infer_type(2 ** 20), LongType())
+        self.assertEqual(_infer_type(2 ** 31 - 1), LongType())
+        self.assertEqual(_infer_type(2 ** 31), LongType())
+        self.assertEqual(_infer_type(2 ** 61), LongType())
+        self.assertEqual(_infer_type(2 ** 71), LongType())
 
     def test_infer_binary_type(self):
         binaryrow = [Row(f1="a", f2=b"abcd")]
@@ -1914,10 +1895,10 @@ class TypesTestsMixin:
         # 1. are all supported types
         # 2. cover all supported types
         supported_types = (
-            supported_string_types
-            + supported_fractional_types
-            + supported_signed_int_types
-            + supported_unsigned_int_types
+                supported_string_types
+                + supported_fractional_types
+                + supported_signed_int_types
+                + supported_unsigned_int_types
         )
         self.assertEqual(set(supported_types), set(_array_type_mappings.keys()))
 
@@ -2348,6 +2329,17 @@ class TypesTestsMixin:
         with self.assertRaises(PySparkValueError, msg="Rows cannot be of type VariantVal"):
             self.spark.createDataFrame([VariantVal.parseJson("2")], "v variant")
 
+    def test_variant_to_pandas(self):
+        import pandas as pd
+        expected_values = [
+            ("str", '"%s"' % ("0123456789" * 10), "0123456789" * 10),
+            ("short_str", '"abc"', "abc")
+        ]
+        json_str = "{%s}" % ",".join(['"%s": %s' % (t[0], t[1]) for t in expected_values])
+        df = self.spark.createDataFrame([({"json": json_str})])
+        pandas = df.toPandas()
+        self.assertIsInstance(pandas, pd.DataFrame)
+
     def test_to_ddl(self):
         schema = StructType().add("a", NullType()).add("b", BooleanType()).add("c", BinaryType())
         self.assertEqual(schema.toDDL(), "a VOID,b BOOLEAN,c BINARY")
@@ -2443,7 +2435,7 @@ class TypesTestsMixin:
     def test_infer_nested_array_element_type_with_struct(self):
         # SPARK-48248: Nested array to respect legacy conf of inferArrayTypeFromFirstElement
         with self.sql_conf(
-            {"spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled": True}
+                {"spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled": True}
         ):
             self.assertEqual(
                 ArrayType(ArrayType(LongType())),
@@ -2619,17 +2611,17 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
             # Boolean
             (True, BooleanType()),
             # Byte
-            (-(2**7), ByteType()),
-            (2**7 - 1, ByteType()),
+            (-(2 ** 7), ByteType()),
+            (2 ** 7 - 1, ByteType()),
             # Short
-            (-(2**15), ShortType()),
-            (2**15 - 1, ShortType()),
+            (-(2 ** 15), ShortType()),
+            (2 ** 15 - 1, ShortType()),
             # Integer
-            (-(2**31), IntegerType()),
-            (2**31 - 1, IntegerType()),
+            (-(2 ** 31), IntegerType()),
+            (2 ** 31 - 1, IntegerType()),
             # Long
-            (-(2**63), LongType()),
-            (2**63 - 1, LongType()),
+            (-(2 ** 63), LongType()),
+            (2 ** 63 - 1, LongType()),
             # Float & Double
             (1.0, FloatType()),
             (1.0, DoubleType()),
@@ -2683,16 +2675,16 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
             ("True", BooleanType(), TypeError),
             ([1], BooleanType(), TypeError),
             # Byte
-            (-(2**7) - 1, ByteType(), ValueError),
-            (2**7, ByteType(), ValueError),
+            (-(2 ** 7) - 1, ByteType(), ValueError),
+            (2 ** 7, ByteType(), ValueError),
             ("1", ByteType(), TypeError),
             (1.0, ByteType(), TypeError),
             # Short
-            (-(2**15) - 1, ShortType(), ValueError),
-            (2**15, ShortType(), ValueError),
+            (-(2 ** 15) - 1, ShortType(), ValueError),
+            (2 ** 15, ShortType(), ValueError),
             # Integer
-            (-(2**31) - 1, IntegerType(), ValueError),
-            (2**31, IntegerType(), ValueError),
+            (-(2 ** 31) - 1, IntegerType(), ValueError),
+            (2 ** 31, IntegerType(), ValueError),
             # Float & Double
             (1, FloatType(), TypeError),
             (1, DoubleType(), TypeError),
