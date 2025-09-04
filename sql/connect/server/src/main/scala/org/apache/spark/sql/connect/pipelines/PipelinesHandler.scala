@@ -36,8 +36,8 @@ import org.apache.spark.sql.pipelines.graph.{AllTables, FlowAnalysis, GraphIdent
 import org.apache.spark.sql.pipelines.logging.{PipelineEvent, RunProgress}
 import org.apache.spark.sql.types.StructType
 
-/** Handler for SparkConnect PipelineCommands */
-private[connect] object PipelinesHandler extends Logging {
+/** Trait for handling SparkConnect PipelineCommands */
+trait PipelinesHandler extends Logging {
 
   /**
    * Handles the pipeline command
@@ -47,14 +47,27 @@ private[connect] object PipelinesHandler extends Logging {
    *   Command to be handled
    * @param responseObserver
    *   The response observer where the response will be sent
-   * @param sparkSession
-   *   The spark session
    * @param transformRelationFunc
    *   Function used to convert a relation to a LogicalPlan. This is used when determining the
    *   LogicalPlan that a flow returns.
    * @return
    *   The response after handling the command
    */
+  def handlePipelinesCommand(
+      sessionHolder: SessionHolder,
+      cmd: proto.PipelineCommand,
+      responseObserver: StreamObserver[ExecutePlanResponse],
+      transformRelationFunc: Relation => LogicalPlan): PipelineCommandResult
+
+  /**
+   * A case class to hold the table filters for full refresh and refresh operations.
+   */
+  protected case class TableFilters(fullRefresh: TableFilter, refresh: TableFilter)
+}
+
+/** Handler for SparkConnect PipelineCommands */
+private[connect] object SparkPipelinesHandler extends PipelinesHandler {
+
   def handlePipelinesCommand(
       sessionHolder: SessionHolder,
       cmd: proto.PipelineCommand,
@@ -358,9 +371,4 @@ private[connect] object PipelinesHandler extends Logging {
           refresh = SomeTables(refreshTableNames))
     }
   }
-
-  /**
-   * A case class to hold the table filters for full refresh and refresh operations.
-   */
-  private case class TableFilters(fullRefresh: TableFilter, refresh: TableFilter)
 }

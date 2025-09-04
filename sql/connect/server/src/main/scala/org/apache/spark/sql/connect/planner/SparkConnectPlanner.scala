@@ -63,7 +63,7 @@ import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.ml.MLHandler
-import org.apache.spark.sql.connect.pipelines.PipelinesHandler
+import org.apache.spark.sql.connect.pipelines.SparkPipelinesHandler
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectService}
 import org.apache.spark.sql.connect.utils.MetricGenerator
@@ -2739,7 +2739,7 @@ class SparkConnectPlanner(
   private def handlePipelineCommand(
       command: proto.PipelineCommand,
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
-    val res = PipelinesHandler.handlePipelinesCommand(
+    val res = SparkPipelinesHandler.handlePipelinesCommand(
       sessionHolder,
       command,
       responseObserver,
