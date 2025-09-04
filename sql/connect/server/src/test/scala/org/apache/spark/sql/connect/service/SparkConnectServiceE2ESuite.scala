@@ -310,4 +310,34 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       }
     }
   }
+
+  test("reusing operation ID after completion throws OPERATION_ALREADY_EXISTS") {
+    val fixedOperationId = UUID.randomUUID().toString
+
+    withRawBlockingStub { stub =>
+      val request1 = buildExecutePlanRequest(
+        buildPlan("SELECT 1"),
+        operationId = fixedOperationId)
+
+      val iter1 = stub.executePlan(request1)
+
+      // Consume all results to complete the operation
+      while (iter1.hasNext) {
+        iter1.next()
+      }
+
+      val request2 = buildExecutePlanRequest(
+        buildPlan("SELECT 2"),
+        operationId = fixedOperationId)
+
+      val error = intercept[io.grpc.StatusRuntimeException] {
+        val iter2 = stub.executePlan(request2)
+        iter2.hasNext
+      }
+
+      // Verify the error is OPERATION_ALREADY_EXISTS
+      assert(error.getMessage.contains("INVALID_HANDLE.OPERATION_ALREADY_EXISTS"))
+      assert(error.getMessage.contains(fixedOperationId))
+    }
+  }
 }
