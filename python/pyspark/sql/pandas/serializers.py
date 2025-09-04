@@ -245,7 +245,7 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
                     messageParameters={
                         "expected": str(arrow_type),
                         "actual": str(arr.type),
-                    }
+                    },
                 )
 
     def dump_stream(self, iterator, stream):
