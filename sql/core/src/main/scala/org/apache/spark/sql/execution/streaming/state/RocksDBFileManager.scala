@@ -295,8 +295,7 @@ class RocksDBFileManager(
     val metadata = RocksDBCheckpointMetadata(rocksDBFiles, numKeys, numInternalKeys,
       colFamilyIdMapping, colFamilyTypeMapping, maxColumnFamilyId)
     val metadataFile = localMetadataFile(checkpointDir)
-    val checkpointFormatVersion = if (checkpointUniqueId.isDefined) 2 else 1
-    metadata.writeToFile(metadataFile, checkpointFormatVersion)
+    metadata.writeToFile(metadataFile)
     logDebug(log"Written metadata for version ${MDC(LogKeys.VERSION_NUM, version)}:\n" +
       log"${MDC(LogKeys.METADATA_JSON, metadata.prettyJson)}")
 
@@ -1018,10 +1017,10 @@ case class RocksDBCheckpointMetadata(
 
   def prettyJson: String = Serialization.writePretty(this)(RocksDBCheckpointMetadata.format)
 
-  def writeToFile(metadataFile: File, checkpointFormatVersion: Int): Unit = {
+  def writeToFile(metadataFile: File): Unit = {
     val writer = Files.newBufferedWriter(metadataFile.toPath, UTF_8)
     try {
-      writer.write(s"v$checkpointFormatVersion\n")
+      writer.write(s"v$VERSION\n")
       writer.write(this.json)
     } finally {
       writer.close()
@@ -1033,6 +1032,8 @@ case class RocksDBCheckpointMetadata(
 
 /** Helper class for [[RocksDBCheckpointMetadata]] */
 object RocksDBCheckpointMetadata {
+  val VERSION = SQLConf.get.stateStoreCheckpointFormatVersion
+
   implicit val format: Formats = Serialization.formats(NoTypeHints)
 
   /** Used to convert between classes and JSON. */
@@ -1047,7 +1048,6 @@ object RocksDBCheckpointMetadata {
   def readFromFile(metadataFile: File): RocksDBCheckpointMetadata = {
     val reader = Files.newBufferedReader(metadataFile.toPath, UTF_8)
     try {
-      val VERSION = SQLConf.get.stateStoreCheckpointFormatVersion
       val versionLine = reader.readLine()
       if (versionLine != s"v$VERSION") {
         throw QueryExecutionErrors.cannotReadCheckpoint(s"v$VERSION", versionLine)

@@ -86,10 +86,8 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
       val hadoopConf = new Configuration()
       hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fileManagerClassName)
       withTempDirAllowFailureInjection { (remoteDir, injectionState) =>
-        val checkpointFormatVersion = if (testConf.ifEnableStateStoreCheckpointIds) "2" else "1"
         withSQLConf(
-          RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "false",
-          SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> checkpointFormatVersion) {
+          RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "false") {
           val conf = RocksDBConf(StateStoreConf(SQLConf.get))
           withDB(
             remoteDir.getAbsolutePath,
@@ -158,10 +156,8 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
       val hadoopConf = new Configuration()
       hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fileManagerClassName)
       withTempDirAllowFailureInjection { (remoteDir, injectionState) =>
-        val checkpointFormatVersion = if (ifEnableStateStoreCheckpointIds) "2" else "1"
         withSQLConf(
-          RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "false",
-          SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> checkpointFormatVersion) {
+          RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "false") {
           val conf = RocksDBConf(StateStoreConf(SQLConf.get))
 
           var checkpointId2: Option[String] = None
@@ -229,11 +225,9 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
       val hadoopConf = new Configuration()
       hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fileManagerClassName)
       withTempDirAllowFailureInjection { (remoteDir, injectionState) =>
-        val checkpointFormatVersion = if (ifEnableStateStoreCheckpointIds) "2" else "1"
         withSQLConf(
           RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
-          SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "5",
-          SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> checkpointFormatVersion) {
+          SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "5") {
           val conf = RocksDBConf(StateStoreConf(SQLConf.get))
 
           var checkpointId2: Option[String] = None
@@ -306,8 +300,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
     withTempDirAllowFailureInjection { (remoteDir, _) =>
       withSQLConf(
         RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true",
-        SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "2",
-        SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
+        SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "2") {
         val conf = RocksDBConf(StateStoreConf(SQLConf.get))
         var checkpointId3: Option[String] = None
         withDB(
