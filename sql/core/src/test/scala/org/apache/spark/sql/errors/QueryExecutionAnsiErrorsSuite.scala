@@ -102,7 +102,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       condition = "REMAINDER_BY_ZERO",
       sqlState = "22012",
       parameters = Map("config" -> ansiConf),
-      context = ExpectedContext(fragment = "pmod(6, 0)", start = 7, stop = 17))
+      context = ExpectedContext(fragment = "pmod(6, 0)", start = 7, stop = 16))
   }
 
   test("INTERVAL_DIVIDED_BY_ZERO: interval divided by zero") {
