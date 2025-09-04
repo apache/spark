@@ -140,6 +140,7 @@ class ClassificationTestsMixin:
                     torch.nn.modules.container.Sequential,
                     torch.nn.modules.linear.Linear,
                     torch.nn.modules.activation.Softmax,
+                    torch.nn.modules.container.Sequential,
                 ]
             ):
                 loaded_estimator = LORV2.loadFromLocal(local_path)
@@ -158,6 +159,7 @@ class ClassificationTestsMixin:
                     torch.nn.modules.container.Sequential,
                     torch.nn.modules.linear.Linear,
                     torch.nn.modules.activation.Softmax,
+                    torch.nn.modules.container.Sequential,
                 ]
             ):
                 loaded_estimator2 = LORV2.loadFromLocal(local_path)
@@ -219,6 +221,7 @@ class ClassificationTestsMixin:
                     torch.nn.modules.container.Sequential,
                     torch.nn.modules.linear.Linear,
                     torch.nn.modules.activation.Softmax,
+                    torch.nn.modules.container.Sequential,
                 ]
             ):
                 loaded_model = LORV2Model.loadFromLocal(local_model_path)
