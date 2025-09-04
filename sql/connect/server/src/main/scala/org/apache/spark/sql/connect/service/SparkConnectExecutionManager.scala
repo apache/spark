@@ -151,7 +151,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
 
     // Remove the execution from the map *after* putting it in abandonedTombstones.
     executions.remove(key)
-    executeHolder.sessionHolder.removeOperationId(executeHolder.operationId)
+    executeHolder.sessionHolder.closeOperation(executeHolder.operationId)
 
     updateLastExecutionTime()
 

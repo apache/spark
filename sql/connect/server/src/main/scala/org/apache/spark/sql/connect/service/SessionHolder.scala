@@ -93,6 +93,10 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // Setting it to -1 indicated forever.
   @volatile private var customInactiveTimeoutMs: Option[Long] = None
 
+  // Mapping from operation ID to a boolean indicating whether the operation is complete.
+  // Used to track the status of operations in the session.
+  // The boolean is true if the operation is active, false if the operation has completed
+  // execution.
   private val operationIds: ConcurrentMap[String, Boolean] =
     new ConcurrentHashMap[String, Boolean]()
 
@@ -171,12 +175,24 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   /**
-   * Remove an operation ID from this session.
+    * Returns the status of the operation in this session given the operation id.
+    *
+    * @param operationId
+    * @return None if no operation with this id is found in this session,
+    *     Some(true) if the operation is active,
+    *     Some(false) if the operation has completed execution.
+    */
+  private[service] def getOperationStatus(operationId: String): Option[Boolean] = {
+    Option(operationIds.get(operationId))
+  }
+
+  /**
+   * Close an operation in this session by removing its operation ID.
    *
    * Called only by SparkConnectExecutionManager when an execution is ended.
    */
-  private[service] def removeOperationId(operationId: String): Unit = {
-    operationIds.remove(operationId)
+  private[service] def closeOperation(operationId: String): Unit = {
+    operationIds.put(operationId, false)
   }
 
   /**
@@ -208,7 +224,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     val interruptedIds = new mutable.ArrayBuffer[String]()
     val queries = SparkConnectService.streamingSessionManager.getTaggedQuery(tag, session)
     queries.foreach(q => Future(q.query.stop())(ExecutionContext.global))
-    operationIds.asScala.foreach { case (operationId, _) =>
+    operationIds.asScala.filter(_._2).foreach { case (operationId, _) =>
       val executeKey = ExecuteKey(userId, sessionId, operationId)
       SparkConnectService.executionManager.getExecuteHolder(executeKey).foreach { executeHolder =>
         if (executeHolder.sparkSessionTags.contains(tag)) {

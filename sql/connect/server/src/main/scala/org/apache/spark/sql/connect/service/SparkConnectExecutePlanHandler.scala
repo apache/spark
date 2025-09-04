@@ -21,7 +21,7 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 
 class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.ExecutePlanResponse])
     extends Logging {
@@ -35,16 +35,27 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
       .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId, previousSessionId)
     val executeKey = ExecuteKey(v, sessionHolder)
 
-    SparkConnectService.executionManager.getExecuteHolder(executeKey) match {
-      case None =>
+    val executeHolder = SparkConnectService.executionManager.getExecuteHolder(executeKey)
+    val opStatus = sessionHolder.getOperationStatus(executeKey.operationId)
+
+    (executeHolder, opStatus) match {
+      case (None, None) =>
         // Create a new execute holder and attach to it.
         SparkConnectService.executionManager
           .createExecuteHolderAndAttach(executeKey, v, sessionHolder, responseObserver)
-      case Some(executeHolder) if executeHolder.request.getPlan.equals(v.getPlan) =>
+      case (Some(executeHolder), _) if executeHolder.request.getPlan.equals(v.getPlan) =>
         // If the execute holder already exists with the same plan, reattach to it.
         SparkConnectService.executionManager
           .reattachExecuteHolder(executeHolder, responseObserver, None)
-      case Some(_) =>
+      case (Some(_), _) =>
+        logInfo(log"ExecuteHolder ${MDC(LogKeys.EXECUTE_KEY, executeKey)} already exists with " +
+          "different plan.")
+        throw new SparkSQLException(
+          errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
+          messageParameters = Map("handle" -> executeKey.operationId))
+      case (None, Some(_)) =>
+        logInfo(log"Operation ${MDC(LogKeys.EXECUTE_KEY, executeKey)} already exists " +
+          "but ExecuteHolder not found.")
         throw new SparkSQLException(
           errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
           messageParameters = Map("handle" -> executeKey.operationId))
