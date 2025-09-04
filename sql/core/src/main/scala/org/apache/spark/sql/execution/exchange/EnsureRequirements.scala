@@ -179,8 +179,13 @@ case class EnsureRequirements(
         newChildren.isDefined
       }
 
+      val isShufflePassThroughCompatible = !isKeyGroupCompatible &&
+        parent.isDefined && children.length == 2 && childrenIndexes.length == 2 &&
+        checkShufflePartitionIdPassThroughCompatible(
+          children.head, children(1), requiredChildDistributions)
+
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
-        case ((child, _), idx) if isKeyGroupCompatible || !childrenIndexes.contains(idx) =>
+        case ((child, _), idx) if isKeyGroupCompatible || isShufflePassThroughCompatible || !childrenIndexes.contains(idx) =>
           child
         case ((child, dist), idx) =>
           if (bestSpecOpt.isDefined && bestSpecOpt.get.isCompatibleWith(specs(idx))) {
@@ -598,6 +603,22 @@ case class EnsureRequirements(
     }
 
     if (isCompatible) Some(Seq(newLeft, newRight)) else None
+  }
+
+  private def checkShufflePartitionIdPassThroughCompatible(
+      left: SparkPlan,
+      right: SparkPlan,
+    requiredChildDistribution: Seq[Distribution]): Boolean = {
+      (left.outputPartitioning, right.outputPartitioning) match {
+        case (p1: ShufflePartitionIdPassThrough, p2: ShufflePartitionIdPassThrough) =>
+          val leftSpec = p1.createShuffleSpec(
+            requiredChildDistribution.head.asInstanceOf[ClusteredDistribution])
+          val rightSpec = p2.createShuffleSpec(
+            requiredChildDistribution(1).asInstanceOf[ClusteredDistribution])
+          leftSpec.isCompatibleWith(rightSpec)
+        case _ =>
+          false
+      }
   }
 
   // Similar to `OptimizeSkewedJoin.canSplitRightSide`

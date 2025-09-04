@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.exchange
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.DirectShufflePartitionID
 import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
 import org.apache.spark.sql.catalyst.optimizer.BuildRight
 import org.apache.spark.sql.catalyst.plans.Inner
@@ -1194,6 +1195,117 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
   def buckets(numBuckets: Int, expr: Seq[Expression]): TransformExpression = {
     TransformExpression(BucketFunction, expr, Some(numBuckets))
+  }
+
+  test("ShufflePartitionIdPassThrough - always shuffles due to canCreatePartitioning=false") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      // Even with identical partitioning and join keys, shuffles are added
+      // because ShufflePartitionIdPassThroughSpec.canCreatePartitioning = false
+      val plan1 = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprA), 5))
+      val plan2 = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprA), 5))
+      val smjExec = SortMergeJoinExec(exprA :: Nil, exprA :: Nil, Inner, None, plan1, plan2)
+
+      EnsureRequirements.apply(smjExec) match {
+        case SortMergeJoinExec(
+            leftKeys,
+            rightKeys,
+            _,
+            _,
+            SortExec(_, _, DummySparkPlan(_, _, _: ShufflePartitionIdPassThrough, _, _), _),
+            SortExec(_, _, DummySparkPlan(_, _, _: ShufflePartitionIdPassThrough, _, _), _),
+            _
+            ) =>
+          assert(leftKeys === Seq(exprA))
+          assert(rightKeys === Seq(exprA))
+        case other => fail(s"We don't expect shuffle on neither sides, but got: $other")
+      }
+    }
+  }
+
+  test("ShufflePartitionIdPassThrough incompatibility - different partitions") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      // Different number of partitions - should add shuffles
+      val plan1 = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprA), 5))
+      val plan2 = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprB), 8))
+      val smjExec = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, Inner, None, plan1, plan2)
+
+      EnsureRequirements.apply(smjExec) match {
+        case SortMergeJoinExec(_, _, _, _,
+          SortExec(_, _, ShuffleExchangeExec(p1: HashPartitioning, _, _, _), _),
+          SortExec(_, _, ShuffleExchangeExec(p2: HashPartitioning, _, _, _), _), _) =>
+          // Both sides should be shuffled to default partitions
+          assert(p1.numPartitions == 10)
+          assert(p2.numPartitions == 10)
+          assert(p1.expressions == Seq(exprA))
+          assert(p2.expressions == Seq(exprB))
+        case other => fail(s"Expected shuffles on both sides, but got: $other")
+      }
+    }
+  }
+
+  test("ShufflePartitionIdPassThrough incompatibility - key position mismatch") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      // Key position mismatch - should add shuffles
+      val plan1 = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprA), 5))
+      val plan2 = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprC), 5))
+      // Join on different keys than partitioning keys
+      val smjExec = SortMergeJoinExec(exprB :: Nil, exprD :: Nil, Inner, None, plan1, plan2)
+
+      EnsureRequirements.apply(smjExec) match {
+        case SortMergeJoinExec(_, _, _, _,
+          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _),
+          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _), _) =>
+          // Both sides shuffled due to key mismatch
+        case other => fail(s"Expected shuffles on both sides, but got: $other")
+      }
+    }
+  }
+
+  test("ShufflePartitionIdPassThrough vs HashPartitioning - always shuffles") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      // ShufflePartitionIdPassThrough vs HashPartitioning - always adds shuffles
+      val plan1 = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprA), 5))
+      val plan2 = DummySparkPlan(
+        outputPartitioning = HashPartitioning(exprB :: Nil, 5))
+      val smjExec = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, Inner, None, plan1, plan2)
+
+      EnsureRequirements.apply(smjExec) match {
+        case SortMergeJoinExec(_, _, _, _,
+          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _),
+          SortExec(_, _, _: DummySparkPlan, _), _) =>
+          // Left side shuffled, right side kept as-is
+        case SortMergeJoinExec(_, _, _, _,
+          SortExec(_, _, _: DummySparkPlan, _),
+          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _), _) =>
+          // Right side shuffled, left side kept as-is
+        case other => fail(s"Expected shuffle on at least one side, but got: $other")
+      }
+    }
+  }
+
+  test("ShufflePartitionIdPassThrough vs SinglePartition - shuffles added") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+      // Even when compatible (numPartitions=1), shuffles added due to canCreatePartitioning=false
+      val plan1 = DummySparkPlan(
+        outputPartitioning = ShufflePartitionIdPassThrough(DirectShufflePartitionID(exprA), 1))
+      val plan2 = DummySparkPlan(outputPartitioning = SinglePartition)
+      val smjExec = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, Inner, None, plan1, plan2)
+
+      EnsureRequirements.apply(smjExec) match {
+        case SortMergeJoinExec(_, _, _, _,
+          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _),
+          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _), _) =>
+          // Both sides shuffled due to canCreatePartitioning = false
+        case other => fail(s"Expected shuffles on both sides, but got: $other")
+      }
+    }
   }
 
   def years(expr: Expression): TransformExpression = {
