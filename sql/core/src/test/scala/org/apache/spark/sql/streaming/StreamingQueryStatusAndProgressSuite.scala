@@ -27,6 +27,7 @@ import scala.jdk.CollectionConverters._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.Row
@@ -40,7 +41,7 @@ import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
 
-class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
+class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually with Matchers {
   test("StreamingQueryProgress - prettyJson") {
     val json1 = testProgress1.prettyJson
     assertJson(
@@ -400,7 +401,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
     assert(data(0).getAs[Timestamp](0).equals(validValue))
   }
 
-  test("SPARK-53491: `inputRowsPerSecond` and  `processedRowsPerSecond` " +
+  test("SPARK-53491: inputRowsPerSecond and processedRowsPerSecond " +
     "should never be with scientific notation") {
     import testImplicits._
 
@@ -419,10 +420,8 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
 
       val progress = query.lastProgress.jsonValue
 
-      print(progress)
-
-      assert(!(progress \ "inputRowsPerSecond").values.toString.contains("E"))
-      assert(!(progress \ "processedRowsPerSecond").values.toString.contains("E"))
+      (progress \ "inputRowsPerSecond").values.toString should not include "E"
+      (progress \ "processedRowsPerSecond").values.toString should not include "E"
     } finally {
       query.stop()
       spark.streams.awaitAnyTermination(1000) // Waiting to allow cleaning all threads
