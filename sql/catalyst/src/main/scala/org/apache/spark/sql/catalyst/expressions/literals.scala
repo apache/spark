@@ -529,8 +529,10 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           }
         case ByteType | ShortType =>
           ExprCode.forNonNullValue(JavaCode.expression(s"($javaType)$value", dataType))
-        case TimestampType | TimestampNTZType | LongType | _: DayTimeIntervalType | _: TimeType =>
+        case TimestampType | TimestampNTZType | LongType | _: DayTimeIntervalType =>
           toExprCode(s"${value}L")
+        case _ if LiteralTypeOps.supports(dataType) =>
+          toExprCode(LiteralTypeOps(dataType).getJavaLiteral(value))
         case _ =>
           val constRef = ctx.addReferenceObj("literal", value, javaType)
           ExprCode.forNonNullValue(JavaCode.global(constRef, dataType))

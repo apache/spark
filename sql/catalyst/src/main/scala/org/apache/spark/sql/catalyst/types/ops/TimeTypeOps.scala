@@ -33,4 +33,5 @@ case class TimeTypeOps(t: TimeType)
   override def getMutableValue: MutableValue = new MutableLong
 
   override def getDefaultLiteral: Literal = Literal.create(0L, t)
+  override def getJavaLiteral(v: Any): String = s"${v}L"
 }

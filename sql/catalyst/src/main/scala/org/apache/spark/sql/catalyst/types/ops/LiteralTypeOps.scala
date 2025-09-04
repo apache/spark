@@ -24,6 +24,8 @@ import org.apache.spark.sql.types.{DataType, TimeType}
 trait LiteralTypeOps {
   // Gets a literal with default value of the type
   def getDefaultLiteral: Literal
+  // Gets an Java literal as a string. It can be used in codegen
+  def getJavaLiteral(v: Any): String
 }
 
 object LiteralTypeOps {
