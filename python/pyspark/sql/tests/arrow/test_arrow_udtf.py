@@ -18,7 +18,6 @@ import unittest
 from typing import Iterator
 
 from pyspark.errors import PySparkAttributeError
-from pyspark.errors import PySparkRuntimeError
 from pyspark.errors import PythonException
 from pyspark.sql.functions import arrow_udtf, lit
 from pyspark.sql.types import Row, StructType, StructField, IntegerType
