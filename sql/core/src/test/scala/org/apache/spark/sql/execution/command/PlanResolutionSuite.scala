@@ -1624,10 +1624,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
 
       if (starInUpdate) {
         assert(updateAssigns.size == 2)
-        assert(updateAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ti))
-        assert(updateAssigns(0).value.asInstanceOf[AttributeReference].sameRef(si))
-        assert(updateAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ts))
-        assert(updateAssigns(1).value.asInstanceOf[AttributeReference].sameRef(ss))
+        assert(updateAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ts))
+        assert(updateAssigns(0).value.asInstanceOf[AttributeReference].sameRef(ss))
+        assert(updateAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ti))
+        assert(updateAssigns(1).value.asInstanceOf[AttributeReference].sameRef(si))
       } else {
         assert(updateAssigns.size == 1)
         assert(updateAssigns.head.key.asInstanceOf[AttributeReference].sameRef(ts))
@@ -1639,15 +1639,23 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         target: LogicalPlan,
         source: LogicalPlan,
         insertCondAttr: Option[AttributeReference],
-        insertAssigns: Seq[Assignment]): Unit = {
+        insertAssigns: Seq[Assignment],
+        starInInsert: Boolean = false): Unit = {
       val (si, ss) = getAttributes(source)
       val (ti, ts) = getAttributes(target)
       insertCondAttr.foreach(a => assert(a.sameRef(ss)))
       assert(insertAssigns.size == 2)
-      assert(insertAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ti))
-      assert(insertAssigns(0).value.asInstanceOf[AttributeReference].sameRef(si))
-      assert(insertAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ts))
-      assert(insertAssigns(1).value.asInstanceOf[AttributeReference].sameRef(ss))
+      if (starInInsert) {
+        assert(insertAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ts))
+        assert(insertAssigns(0).value.asInstanceOf[AttributeReference].sameRef(ss))
+        assert(insertAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ti))
+        assert(insertAssigns(1).value.asInstanceOf[AttributeReference].sameRef(si))
+      } else {
+        assert(insertAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ti))
+        assert(insertAssigns(0).value.asInstanceOf[AttributeReference].sameRef(si))
+        assert(insertAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ts))
+        assert(insertAssigns(1).value.asInstanceOf[AttributeReference].sameRef(ss))
+      }
     }
 
     def checkNotMatchedBySourceClausesResolution(
@@ -1726,7 +1734,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, Some(dl), Some(ul), updateAssigns,
               starInUpdate = true)
-            checkNotMatchedClausesResolution(target, source, Some(il), insertAssigns)
+            checkNotMatchedClausesResolution(target, source, Some(il), insertAssigns,
+              starInInsert = true)
             assert(withSchemaEvolution === false)
 
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
@@ -1753,7 +1762,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, None, None, updateAssigns,
               starInUpdate = true)
-            checkNotMatchedClausesResolution(target, source, None, insertAssigns)
+            checkNotMatchedClausesResolution(target, source, None, insertAssigns,
+              starInInsert = true)
             assert(withSchemaEvolution === false)
 
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
