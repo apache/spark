@@ -18,12 +18,14 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.PythonUDF.{correctEvalType, isScalarPythonUDF}
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression.hasCorrelatedSubquery
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -1168,13 +1170,62 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
   }
 
   def apply(plan: LogicalPlan, alwaysInline: Boolean): LogicalPlan = {
-    plan.transformUpWithPruning(_.containsPattern(PROJECT), ruleId) {
-      case p1 @ Project(_, p2: Project)
-          if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline) =>
-        p2.copy(projectList = buildCleanedProjectList(p1.projectList, p2.projectList))
+    val pythonUDFArrowFallbackOnUDT = conf.pythonUDFArrowFallbackOnUDT
+
+    traverse(plan, alwaysInline, Set.empty, pythonUDFArrowFallbackOnUDT)
+  }
+
+  private def traverse(
+      plan: LogicalPlan,
+      alwaysInline: Boolean,
+      pythonUDFEvalTypesInUpperProjects: Set[Int],
+      pythonUDFArrowFallbackOnUDT: Boolean): LogicalPlan = {
+    if (!plan.containsPattern(PROJECT)) {
+      return plan
+    }
+
+    // Collapsing projects is a classic bottom-up transformation, but while we recurse down the plan
+    // we can collect the Python UDF eval types that appear in the current project group (i.e.
+    // multiple adjacent project nodes).
+    // We use this set of eval types during the bottom-up traversal as when we encounter a Python
+    // UDF in a lower project node and either the upper or any parent in the group contains another
+    // UDF with the same eval type, then it makes sense to force collapsing the nodes.
+    val newPythonUDFEvalTypesInUpperProjects = plan match {
+      // Extend the set of types with the new types found in the current project node
+      case p: Project =>
+        pythonUDFEvalTypesInUpperProjects ++ p.projectList.flatMap(_.collect {
+          case udf: PythonUDF if isScalarPythonUDF(udf) =>
+            correctEvalType(udf, pythonUDFArrowFallbackOnUDT)
+        }).toSet
+
+      // Project group end so reset the set of types
+      case _ => Set.empty[Int]
+    }
+
+    plan.mapChildren(traverse(
+      _,
+      alwaysInline,
+      newPythonUDFEvalTypesInUpperProjects,
+      pythonUDFArrowFallbackOnUDT)) match {
+      case p1 @ Project(_, p2: Project) =>
+        mergeProjectExpressions(
+          p1.projectList,
+          p2.projectList,
+          alwaysInline,
+          newPythonUDFEvalTypesInUpperProjects,
+          pythonUDFArrowFallbackOnUDT) match {
+            case (Seq(), merged) => p2.copy(projectList = merged)
+            case (newUpper, newLower) =>
+              p1.copy(projectList = newUpper, child = p2.copy(projectList = newLower))
+        }
       case p @ Project(_, agg: Aggregate)
-          if canCollapseExpressions(p.projectList, agg.aggregateExpressions, alwaysInline) &&
-             canCollapseAggregate(p, agg) =>
+          if canCollapseExpressions(
+            p.projectList,
+            getAliasMap(agg.aggregateExpressions),
+            alwaysInline,
+            newPythonUDFEvalTypesInUpperProjects,
+            pythonUDFArrowFallbackOnUDT)
+          && canCollapseAggregate(p, agg) =>
         agg.copy(aggregateExpressions = buildCleanedProjectList(
           p.projectList, agg.aggregateExpressions))
       case Project(l1, g @ GlobalLimit(_, limit @ LocalLimit(_, p2 @ Project(l2, _))))
@@ -1188,6 +1239,103 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
         r.copy(child = p.copy(projectList = buildCleanedProjectList(l1, p.projectList)))
       case Project(l1, s @ Sample(_, _, _, _, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
         s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
+      case o => o
+    }
+  }
+
+  private def cheapToInlineProducer(
+      producer: NamedExpression,
+      relatedConsumers: Iterable[Expression]) = trimAliases(producer) match {
+    // These collection creation functions are not cheap as a producer, but we have
+    // optimizer rules that can optimize them out if they are only consumed by
+    // ExtractValue (See SimplifyExtractValueOps), so we need to allow to inline them to
+    // avoid perf regression. As an example:
+    //   Project(s.a, s.b, Project(create_struct(a, b, c) as s, child))
+    // We should collapse these two projects and eventually get Project(a, b, child)
+    case e @ (_: CreateNamedStruct | _: UpdateFields | _: CreateMap | _: CreateArray) =>
+      // We can inline the collection creation producer if at most one of its access
+      // is non-cheap. Cheap access here means the access can be optimized by
+      // `SimplifyExtractValueOps` and become a cheap expression. For example,
+      // `create_struct(a, b, c).a` is a cheap access as it can be optimized to `a`.
+      // For a query:
+      //   Project(s.a, s, Project(create_struct(a, b, c) as s, child))
+      // We should collapse these two projects and eventually get
+      //   Project(a, create_struct(a, b, c) as s, child)
+      var nonCheapAccessSeen = false
+      def nonCheapAccessVisitor(): Boolean = {
+        // Returns true for all calls after the first.
+        try {
+          nonCheapAccessSeen
+        } finally {
+          nonCheapAccessSeen = true
+        }
+      }
+
+      !relatedConsumers
+        .exists(findNonCheapAccesses(_, producer.toAttribute, e, nonCheapAccessVisitor))
+
+    case other => isCheap(other)
+  }
+
+  private def mergeProjectExpressions(
+      consumers: Seq[NamedExpression],
+      producers: Seq[NamedExpression],
+      alwaysInline: Boolean,
+      pythonUDFEvalTypesInUpperProjects: Set[Int],
+      pythonUDFArrowFallbackOnUDT: Boolean): (Seq[NamedExpression], Seq[NamedExpression]) = {
+    lazy val producerAttributes = AttributeSet(producers.collect { case a: Alias => a.toAttribute })
+
+    // A map from producer attributes to tuples of:
+    // - how many times the producer is referenced from consumers and
+    // - the set of consumers that reference the producer.
+    lazy val producerReferences = AttributeMap(consumers
+      .flatMap(e => collectReferences(e).filter(producerAttributes.contains).map(_ -> e))
+      .groupMap(_._1)(_._2)
+      .view.mapValues(v => v.size -> ExpressionSet(v)))
+
+    val mustInlines = ListBuffer.empty[NamedExpression]
+    val maybeInlines = ListBuffer.empty[NamedExpression]
+    val neverInlines = ListBuffer.empty[NamedExpression]
+    val others = ListBuffer.empty[NamedExpression]
+    producers.foreach {
+      case a: Alias =>
+        producerReferences.get(a.toAttribute).foreach { case (count, relatedConsumers) =>
+          lazy val containsUDF = a.child.exists {
+            case udf: PythonUDF =>
+              isScalarPythonUDF(udf) &&
+                pythonUDFEvalTypesInUpperProjects.contains(
+                  correctEvalType(udf, pythonUDFArrowFallbackOnUDT))
+            case _ => false
+          }
+
+          if (!a.deterministic) {
+            neverInlines += a
+          } else if (alwaysInline || containsUDF) {
+            mustInlines += a
+          } else if (count == 1 || cheapToInlineProducer(a, relatedConsumers)) {
+            maybeInlines += a
+          } else {
+            neverInlines += a
+          }
+        }
+
+      case o => others += o
+    }
+
+    if (neverInlines.isEmpty) {
+      (Seq.empty, buildCleanedProjectList(consumers, producers))
+    } else if (mustInlines.isEmpty) {
+      // Let's keep `maybeInlines` in the lower node for now.
+      (consumers, producers)
+    } else {
+      val newConsumers = buildCleanedProjectList(consumers, mustInlines)
+      val passthroughAttributes = AttributeSet(others.flatMap(_.references))
+      val newPassthroughAttributes =
+        mustInlines.flatMap(_.references).filterNot(passthroughAttributes.contains)
+      val newOthers = others ++ newPassthroughAttributes
+      // Let's keep `maybeInlines` in the lower node for now.
+      val newProducers = neverInlines ++ maybeInlines ++ newOthers
+      (newConsumers, newProducers.toSeq)
     }
   }
 
@@ -1206,8 +1354,18 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
    */
   def canCollapseExpressions(
       consumers: Seq[Expression],
-      producerMap: Map[Attribute, Expression],
-      alwaysInline: Boolean = false): Boolean = {
+      producerMap: Map[Attribute, NamedExpression],
+      alwaysInline: Boolean = false,
+      pythonUDFEvalTypesInUpperProjects: Set[Int] = Set.empty,
+      pythonUDFArrowFallbackOnUDT: Boolean = conf.pythonUDFArrowFallbackOnUDT): Boolean = {
+    val inline = alwaysInline || producerMap.values.exists(_.exists {
+      case udf: PythonUDF =>
+        isScalarPythonUDF(udf) &&
+          pythonUDFEvalTypesInUpperProjects.contains(
+            correctEvalType(udf, pythonUDFArrowFallbackOnUDT))
+      case _ => false
+    })
+
     // We can only collapse expressions if all input expressions meet the following criteria:
     // - The input is deterministic.
     // - The input is only consumed once OR the underlying input expression is cheap.
@@ -1215,44 +1373,14 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       .filter(_.references.exists(producerMap.contains))
       .flatMap(collectReferences)
       .groupBy(identity)
-      .transform((_, v) => v.size)
+      .view.mapValues(v => v.size)
       .forall {
         case (reference, count) =>
           val producer = producerMap.getOrElse(reference, reference)
           val relatedConsumers = consumers.filter(_.references.contains(reference))
 
-          def cheapToInlineProducer: Boolean = trimAliases(producer) match {
-            // These collection creation functions are not cheap as a producer, but we have
-            // optimizer rules that can optimize them out if they are only consumed by
-            // ExtractValue (See SimplifyExtractValueOps), so we need to allow to inline them to
-            // avoid perf regression. As an example:
-            //   Project(s.a, s.b, Project(create_struct(a, b, c) as s, child))
-            // We should collapse these two projects and eventually get Project(a, b, child)
-            case e @ (_: CreateNamedStruct | _: UpdateFields | _: CreateMap | _: CreateArray) =>
-              // We can inline the collection creation producer if at most one of its access
-              // is non-cheap. Cheap access here means the access can be optimized by
-              // `SimplifyExtractValueOps` and become a cheap expression. For example,
-              // `create_struct(a, b, c).a` is a cheap access as it can be optimized to `a`.
-              // For a query:
-              //   Project(s.a, s, Project(create_struct(a, b, c) as s, child))
-              // We should collapse these two projects and eventually get
-              //   Project(a, create_struct(a, b, c) as s, child)
-              var nonCheapAccessSeen = false
-              def nonCheapAccessVisitor(): Boolean = {
-                // Returns true for all calls after the first.
-                try {
-                  nonCheapAccessSeen
-                } finally {
-                  nonCheapAccessSeen = true
-                }
-              }
-
-              !relatedConsumers.exists(findNonCheapAccesses(_, reference, e, nonCheapAccessVisitor))
-
-            case other => isCheap(other)
-          }
-
-          producer.deterministic && (count == 1 || alwaysInline || cheapToInlineProducer)
+          producer.deterministic &&
+            (count == 1 || inline || cheapToInlineProducer(producer, relatedConsumers))
       }
   }
 
@@ -1319,7 +1447,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
 
   def buildCleanedProjectList(
       upper: Seq[NamedExpression],
-      lower: Seq[NamedExpression]): Seq[NamedExpression] = {
+      lower: Iterable[NamedExpression]): Seq[NamedExpression] = {
     val explicitlyPreserveAliasMetadata =
       conf.getConf(SQLConf.PRESERVE_ALIAS_METADATA_WHEN_COLLAPSING_PROJECTS)
     val aliases = getAliasMap(lower)
