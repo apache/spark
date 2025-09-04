@@ -1395,12 +1395,6 @@
     ],
     "sqlState" : "22012"
   },
-  "REMAINDER_BY_ZERO" : {
-    "message" : [
-      "Remainder by zero. Use `try_mod` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
-    ],
-    "sqlState" : "22012"
-  },
   "DUPLICATED_CTE_NAMES" : {
     "message" : [
       "CTE definition can't have duplicate names: <duplicateNames>."
@@ -4925,6 +4919,12 @@
       "References to DEFAULT column values are not allowed within the PARTITION clause."
     ],
     "sqlState" : "42601"
+  },
+  "REMAINDER_BY_ZERO" : {
+    "message" : [
+      "Remainder by zero. Use `try_mod` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
+    ],
+    "sqlState" : "22012"
   },
   "RENAME_SRC_PATH_NOT_FOUND" : {
     "message" : [
