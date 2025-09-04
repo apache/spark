@@ -2481,7 +2481,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           .createOrReplaceTempView("source")
 
         val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
-        val mergeStmt =
+        sql(
           s"""MERGE $schemaEvolutionClause
              |INTO $tableNameAsString t
              |USING source src
@@ -2490,22 +2490,16 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
              | UPDATE SET *
              |WHEN NOT MATCHED THEN
              | INSERT *
-             |""".stripMargin
+             |""".stripMargin)
 
-        if (withSchemaEvolution) {
-          sql(mergeStmt)
-          checkAnswer(
-            sql(s"SELECT * FROM $tableNameAsString"),
-            Seq(Row(1, Row(10, Row(Seq(3, 4), Map("c" -> "d"), false)), "sales"),
-              Row(2, Row(20, Row(Seq(4, 5), Map("e" -> "f"), true)), "engineering")))
+        val expectedAnswer = if (withSchemaEvolution) {
+          Seq(Row(1, Row(10, Row(Seq(3, 4), Map("c" -> "d"), false)), "sales"),
+            Row(2, Row(20, Row(Seq(4, 5), Map("e" -> "f"), true)), "engineering"))
         } else {
-          val exception = intercept[org.apache.spark.sql.AnalysisException] {
-            sql(mergeStmt)
-          }
-          assert(exception.errorClass.get == "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS")
-          assert(exception.getMessage.contains(
-            "Cannot write extra fields `c3` to the struct `s`.`c2`"))
+          Seq(Row(1, Row(10, Row(Seq(3, 4), Map("c" -> "d"))), "sales"),
+            Row(2, Row(20, Row(Seq(4, 5), Map("e" -> "f"))), "engineering"))
         }
+        checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), expectedAnswer)
       }
       sql(s"DROP TABLE IF EXISTS $tableNameAsString")
     }
@@ -2546,7 +2540,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
              |USING source src
              |ON t.pk = src.pk
              |WHEN MATCHED THEN
-             | UPDATE SET s.c1 = -1, s.c2.m = map('k', 'v'), s.c2.a = array(-1)
+             | UPDATE SET s.c1 = -1, s.c2.m = map('k', 'v'), s.c2.a = array(-1),
+             | s.c2.c3 = src.s.c2.c3
              |WHEN NOT MATCHED THEN
              | INSERT (pk, s, dep) VALUES (src.pk,
              |   named_struct('c1', src.s.c1,
@@ -2600,28 +2595,25 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           .createOrReplaceTempView("source")
 
         val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
-        val mergeStmt = s"""MERGE $schemaEvolutionClause
-                           |INTO $tableNameAsString t
-                           |USING source src
-                           |ON t.pk = src.pk
-                           |WHEN MATCHED THEN
-                           | UPDATE SET *
-                           |WHEN NOT MATCHED THEN
-                           | INSERT *
-                           |""".stripMargin
-        if (withSchemaEvolution) {
-          sql(mergeStmt)
-          checkAnswer(
-            sql(s"SELECT * FROM $tableNameAsString"),
-            Seq(Row(1, Row(10, Row(Seq(1, 2), Map("c" -> "d"), false)), "sales"),
-              Row(2, Row(20, Row(null, Map("e" -> "f"), true)), "engineering")))
+        sql(
+          s"""MERGE $schemaEvolutionClause
+             |INTO $tableNameAsString t
+             |USING source src
+             |ON t.pk = src.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET *
+             |WHEN NOT MATCHED THEN
+             | INSERT *
+             |""".stripMargin)
+
+        val expectedAnswer = if (withSchemaEvolution) {
+          Seq(Row(1, Row(10, Row(Seq(1, 2), Map("c" -> "d"), false)), "sales"),
+            Row(2, Row(20, Row(null, Map("e" -> "f"), true)), "engineering"))
         } else {
-          val exception = intercept[org.apache.spark.sql.AnalysisException] {
-            sql(mergeStmt)
-          }
-          assert(exception.errorClass.get == "FIELD_NOT_FOUND")
-          assert(exception.getMessage.contains("No such struct field `c3` in `a`, `m`. "))
+          Seq(Row(1, Row(10, Row(Seq(1, 2), Map("c" -> "d"))), "sales"),
+            Row(2, Row(20, Row(null, Map("e" -> "f"))), "engineering"))
         }
+        checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), expectedAnswer)
       }
       sql(s"DROP TABLE IF EXISTS $tableNameAsString")
     }
