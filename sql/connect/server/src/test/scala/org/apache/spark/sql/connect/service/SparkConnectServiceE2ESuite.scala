@@ -315,9 +315,8 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
     val fixedOperationId = UUID.randomUUID().toString
 
     withRawBlockingStub { stub =>
-      val request1 = buildExecutePlanRequest(
-        buildPlan("SELECT 1"),
-        operationId = fixedOperationId)
+      val request1 =
+        buildExecutePlanRequest(buildPlan("SELECT 1"), operationId = fixedOperationId)
 
       val iter1 = stub.executePlan(request1)
 
@@ -326,9 +325,8 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
         iter1.next()
       }
 
-      val request2 = buildExecutePlanRequest(
-        buildPlan("SELECT 2"),
-        operationId = fixedOperationId)
+      val request2 =
+        buildExecutePlanRequest(buildPlan("SELECT 2"), operationId = fixedOperationId)
 
       val error = intercept[io.grpc.StatusRuntimeException] {
         val iter2 = stub.executePlan(request2)

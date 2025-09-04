@@ -175,13 +175,13 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   /**
-    * Returns the status of the operation in this session given the operation id.
-    *
-    * @param operationId
-    * @return None if no operation with this id is found in this session,
-    *     Some(true) if the operation is active,
-    *     Some(false) if the operation has completed execution.
-    */
+   * Returns the status of the operation in this session given the operation id.
+   *
+   * @param operationId
+   * @return
+   *   None if no operation with this id is found in this session, Some(true) if the operation is
+   *   active, Some(false) if the operation has completed execution.
+   */
   private[service] def getOperationStatus(operationId: String): Option[Boolean] = {
     Option(operationIds.get(operationId))
   }

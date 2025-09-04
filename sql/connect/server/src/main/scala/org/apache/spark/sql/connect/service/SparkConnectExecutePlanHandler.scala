@@ -48,14 +48,16 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
         SparkConnectService.executionManager
           .reattachExecuteHolder(executeHolder, responseObserver, None)
       case (Some(_), _) =>
-        logInfo(log"ExecuteHolder ${MDC(LogKeys.EXECUTE_KEY, executeKey)} already exists with " +
-          "different plan.")
+        logInfo(
+          log"ExecuteHolder ${MDC(LogKeys.EXECUTE_KEY, executeKey)} already exists " +
+            log"with different plan.")
         throw new SparkSQLException(
           errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
           messageParameters = Map("handle" -> executeKey.operationId))
       case (None, Some(_)) =>
-        logInfo(log"Operation ${MDC(LogKeys.EXECUTE_KEY, executeKey)} already exists " +
-          "but ExecuteHolder not found.")
+        logInfo(
+          log"Operation ${MDC(LogKeys.EXECUTE_KEY, executeKey)} already exists " +
+            log"but ExecuteHolder not found.")
         throw new SparkSQLException(
           errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
           messageParameters = Map("handle" -> executeKey.operationId))
