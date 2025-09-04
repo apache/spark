@@ -381,11 +381,8 @@ class LogisticRegressionModel(
     def _load_core_model(self, path: str) -> None:
         import torch
 
-        with torch.serialization.safe_globals(
-            [torch.nn.modules.container.Sequential, torch.nn.modules.linear.Linear]
-        ):
-            lor_torch_model = torch.load(path, weights_only=True)
-            self.torch_model = lor_torch_model[0]
+        lor_torch_model = torch.load(path)
+        self.torch_model = lor_torch_model[0]
 
     def _get_extra_metadata(self) -> Dict[str, Any]:
         return {

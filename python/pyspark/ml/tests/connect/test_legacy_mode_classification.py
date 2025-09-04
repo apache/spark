@@ -134,7 +134,11 @@ class ClassificationTestsMixin:
             estimator = LORV2(maxIter=2, numTrainWorkers=2, learningRate=0.001)
             local_path = os.path.join(tmp_dir, "estimator")
             estimator.saveToLocal(local_path)
-            loaded_estimator = LORV2.loadFromLocal(local_path)
+
+            with torch.serialization.safe_globals(
+                [torch.nn.modules.container.Sequential, torch.nn.modules.linear.Linear]
+            ):
+                loaded_estimator = LORV2.loadFromLocal(local_path)
             assert loaded_estimator.uid == estimator.uid
             assert loaded_estimator.getOrDefault(loaded_estimator.maxIter) == 2
             assert loaded_estimator.getOrDefault(loaded_estimator.numTrainWorkers) == 2
@@ -144,7 +148,11 @@ class ClassificationTestsMixin:
             estimator2 = estimator.copy()
             estimator2.set(estimator2.maxIter, 10)
             estimator2.saveToLocal(local_path, overwrite=True)
-            loaded_estimator2 = LORV2.loadFromLocal(local_path)
+
+            with torch.serialization.safe_globals(
+                [torch.nn.modules.container.Sequential, torch.nn.modules.linear.Linear]
+            ):
+                loaded_estimator2 = LORV2.loadFromLocal(local_path)
             assert loaded_estimator2.getOrDefault(loaded_estimator2.maxIter) == 10
 
             fs_path = os.path.join(tmp_dir, "fs", "estimator")
@@ -198,7 +206,10 @@ class ClassificationTestsMixin:
                 rtol=1e-4,
             )
 
-            loaded_model = LORV2Model.loadFromLocal(local_model_path)
+            with torch.serialization.safe_globals(
+                [torch.nn.modules.container.Sequential, torch.nn.modules.linear.Linear]
+            ):
+                loaded_model = LORV2Model.loadFromLocal(local_model_path)
             assert loaded_model.numFeatures == 2
             assert loaded_model.numClasses == 2
             assert loaded_model.getOrDefault(loaded_model.maxIter) == 2
