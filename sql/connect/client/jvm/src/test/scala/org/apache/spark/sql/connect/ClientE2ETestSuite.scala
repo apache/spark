@@ -1716,6 +1716,44 @@ class ClientE2ETestSuite
         schema.fields.head.dataType.asInstanceOf[MapType].valueContainsNull === valueContainsNull)
     }
   }
+
+  test("SPARK-54043: DirectShufflePartitionID should be supported") {
+    val df = spark.range(100).withColumn("expected_p_id", col("id") % 10)
+    val repartitioned = df.repartitionById(10, col("expected_p_id").cast("int"))
+    val result = repartitioned.withColumn("actual_p_id", spark_partition_id())
+
+    assert(result.filter(col("expected_p_id") =!= col("actual_p_id")).count() == 0)
+
+//    val negativeDf = spark.range(10).toDF("id")
+//    val negativeRepartitioned = negativeDf.repartitionById(10, ($"id" - 5).cast("int"))
+//    val negativeResult =
+//     negativeRepartitioned
+//     .withColumn("actual_p_id", spark_partition_id())
+//     .collect()
+//
+//    assert(negativeResult.forall(row => {
+//      val actualPartitionId = row.getAs[Int]("actual_p_id")
+//      val id = row.getAs[Long]("id")
+//      val expectedPartitionId = {
+//        val mod = (id - 5) % 10
+//        if (mod < 0) mod + 10 else mod
+//      }.toInt
+//      actualPartitionId == expectedPartitionId
+//    }))
+//
+//    val nullDf = spark.range(10).toDF("id")
+//    val nullExpr = when($"id" < 5, $"id").otherwise(lit(null)).cast("int")
+//    val nullRepartitioned = nullDf.repartitionById(10, nullExpr)
+//    val nullResult = nullRepartitioned.withColumn("actual_p_id", spark_partition_id()).collect()
+//
+//    val nullRows = nullResult.filter(_.getAs[Long]("id") >= 5)
+//    assert(nullRows.forall(_.getAs[Int]("actual_p_id") == 0))
+//
+//    val outOfBoundsDf = spark.range(20).toDF("id")
+//    val outOfBoundsRepartitioned = outOfBoundsDf.repartitionById(10, $"id".cast("int"))
+//    assert(outOfBoundsRepartitioned.collect().length == 20)
+//    assert(outOfBoundsRepartitioned.rdd.getNumPartitions == 10)
+  }
 }
 
 private[sql] case class ClassData(a: String, b: Int)

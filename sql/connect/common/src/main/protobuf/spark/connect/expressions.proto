@@ -143,6 +143,14 @@ message Expression {
     }
   }
 
+  // Expression that takes a partition ID value and passes it through directly for use in
+  // shuffle partitioning. This is used with RepartitionByExpression to allow users to
+  // directly specify target partition IDs.
+  message DirectShufflePartitionID {
+    // (Required) The expression that evaluates to the partition ID.
+    Expression child = 1;
+  }
+
   message Cast {
     // (Required) the expression to be casted.
     Expression expr = 1;
@@ -559,12 +567,4 @@ message SubqueryExpression {
     // (Optional) Whether this is a single partition.
     optional bool with_single_partition = 3;
   }
-}
-
-// Expression that takes a partition ID value and passes it through directly for use in
-// shuffle partitioning. This is used with RepartitionByExpression to allow users to
-// directly specify target partition IDs.
-message DirectShufflePartitionID {
-  // (Required) The expression that evaluates to the partition ID.
-  Expression child = 1;
 }

@@ -673,3 +673,21 @@ case class SubqueryExpression(
   }
   override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
 }
+
+private[sql] case class DirectShufflePartitionID(
+    child: ColumnNode,
+    override val origin: Origin = CurrentOrigin.get)
+  extends ColumnNode {
+
+  override private[internal] def normalize(): DirectShufflePartitionID =
+    copy(child = child.normalize(), origin = NO_ORIGIN)
+
+  override def sql: String = s"direct_shuffle_partition_id(${child.sql})"
+
+  override private[internal] def children: Seq[ColumnNodeLike] = Seq(child)
+}
+
+object DirectShufflePartitionID {
+  def apply(child: ColumnNode): DirectShufflePartitionID =
+    new DirectShufflePartitionID(child, CurrentOrigin.get)
+}
