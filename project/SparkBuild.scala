@@ -400,7 +400,7 @@ object SparkBuild extends PomBuild {
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, pipelines, connectCommon, connect,
-      connectClient, variant, connectShims, profiler, commonUtilsJava
+      connectJdbc, connectClient, variant, connectShims, profiler, commonUtilsJava
     ).contains(x)
   }
 
