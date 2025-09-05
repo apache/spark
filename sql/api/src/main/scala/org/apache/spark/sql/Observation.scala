@@ -58,12 +58,12 @@ class Observation(val name: String) {
 
   private val isRegistered = new AtomicBoolean()
 
-  private val promise = Promise[Map[String, Any]]()
+  private val promise = Promise[Row]()
 
   /**
    * Future holding the (yet to be completed) observation.
    */
-  val future: Future[Map[String, Any]] = promise.future
+  val future: Future[Row] = promise.future
 
   /**
    * (Scala-specific) Get the observed metrics. This waits for the observed dataset to finish its
@@ -76,7 +76,10 @@ class Observation(val name: String) {
    *   interrupted while waiting
    */
   @throws[InterruptedException]
-  def get: Map[String, Any] = SparkThreadUtils.awaitResult(future, Duration.Inf)
+  def get: Map[String, Any] = {
+    val row = SparkThreadUtils.awaitResult(future, Duration.Inf)
+    row.getValuesMap(row.schema.map(_.name))
+  }
 
   /**
    * (Java-specific) Get the observed metrics. This waits for the observed dataset to finish its
@@ -99,7 +102,8 @@ class Observation(val name: String) {
    */
   @throws[InterruptedException]
   private[sql] def getOrEmpty: Map[String, Any] = {
-    Try(SparkThreadUtils.awaitResult(future, 100.millis)).getOrElse(Map.empty)
+    val row = getRowOrEmpty.getOrElse(Row.empty)
+    row.getValuesMap(row.schema.map(_.name))
   }
 
   /**
@@ -118,8 +122,17 @@ class Observation(val name: String) {
    *   `true` if all waiting threads were notified, `false` if otherwise.
    */
   private[sql] def setMetricsAndNotify(metrics: Row): Boolean = {
-    val metricsMap = metrics.getValuesMap(metrics.schema.map(_.name))
-    promise.trySuccess(metricsMap)
+    promise.trySuccess(metrics)
+  }
+
+  /**
+   * Get the observed metrics as a Row.
+   *
+   * @return
+   *   the observed metrics as a `Row`, or None if the metrics are not available.
+   */
+  private[sql] def getRowOrEmpty: Option[Row] = {
+    Try(SparkThreadUtils.awaitResult(future, 100.millis)).toOption
   }
 }
 

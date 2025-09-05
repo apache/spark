@@ -109,7 +109,7 @@ object DataTypeProtoConverter {
     ArrayType(toCatalystType(t.getElementType), t.getContainsNull)
   }
 
-  private def toCatalystStructType(t: proto.DataType.Struct): StructType = {
+  private[common] def toCatalystStructType(t: proto.DataType.Struct): StructType = {
     val fields = t.getFieldsList.asScala.toSeq.map { protoField =>
       val metadata = if (protoField.hasMetadata) {
         Metadata.fromJson(protoField.getMetadata)
