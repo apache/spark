@@ -24,6 +24,7 @@ from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas import option_context
+from pyspark.testing.utils import is_ansi_mode_test
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import (
@@ -258,11 +259,15 @@ class BooleanOpsTestsMixin:
         self.assert_eq(pser & pser, psser & psser)
         self.assert_eq(pser & other_pser, psser & other_psser)
         self.assert_eq(other_pser & pser, other_psser & psser)
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: psser & None)
 
     def test_rand(self):
         pser, psser = self.pdf["bool"], self.psdf["bool"]
         self.assert_eq(True & pser, True & psser)
         self.assert_eq(False & pser, False & psser)
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: None & psser)
 
     def test_or(self):
         pdf, psdf = self.bool_pdf, self.bool_psdf
@@ -272,16 +277,18 @@ class BooleanOpsTestsMixin:
         self.assert_eq(pser | True, psser | True)
         self.assert_eq(pser | False, psser | False)
         self.assert_eq(pser | pser, psser | psser)
-        self.assert_eq(True | pser, True | psser)
-        self.assert_eq(False | pser, False | psser)
 
         self.assert_eq(pser | other_pser, psser | other_psser)
         self.assert_eq(other_pser | pser, other_psser | psser)
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: psser | None)
 
     def test_ror(self):
         pser, psser = self.pdf["bool"], self.psdf["bool"]
         self.assert_eq(True | pser, True | psser)
         self.assert_eq(False | pser, False | psser)
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: None | psser)
 
     def test_xor(self):
         pdf, psdf = self.bool_pdf, self.bool_psdf
@@ -296,6 +303,8 @@ class BooleanOpsTestsMixin:
 
         with self.assertRaisesRegex(TypeError, "XOR can not be applied to given types."):
             psser ^ "a"
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: psser ^ None)
 
         with option_context("compute.ops_on_diff_frames", True):
             pser, other_pser = self.pdf["bool"], self.integral_pdf["this"]
@@ -308,6 +317,8 @@ class BooleanOpsTestsMixin:
         self.assert_eq(True ^ pser, True ^ psser)
         self.assert_eq(False ^ pser, False ^ psser)
         self.assert_eq(1 ^ pser, 1 ^ psser)
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: None ^ psser)
 
     def test_isnull(self):
         self.assert_eq(self.pdf["bool"].isnull(), self.psdf["bool"].isnull())
@@ -724,8 +735,8 @@ class BooleanExtensionOpsTest(OpsTestBase):
 
     def test_rxor(self):
         pser, psser = self.boolean_pdf["this"], self.boolean_psdf["this"]
-        self.check_extension(True | pser, True | psser)
-        self.check_extension(False | pser, False | psser)
+        self.check_extension(True ^ pser, True ^ psser)
+        self.check_extension(False ^ pser, False ^ psser)
         with self.assertRaisesRegex(TypeError, "XOR can not be applied to given types."):
             1 ^ psser
 
