@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{MapOutputTrackerMaster, SparkFunSuite}
-import org.apache.spark.internal.config.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -26,7 +25,7 @@ import org.apache.spark.sql.test.SQLTestUtils
 class MapStatusEndToEndSuite extends SparkFunSuite with SQLTestUtils {
     override def spark: SparkSession = SparkSession.builder()
       .master("local")
-      .config(SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED.key, value = true)
+      .config(SQLConf.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED.key, value = true)
       .config(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key, value = 5)
       .config(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, value = false)
       .getOrCreate()

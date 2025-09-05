@@ -472,7 +472,7 @@ object ShuffleExchangeExec {
     // are in the form of (partitionId, row) and every partitionId is in the expected range
     // [0, part.numPartitions - 1]. The partitioner of this is a PartitionIdPassthrough.
     val checksumSize =
-      if (SparkEnv.get.conf.get(config.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED)) {
+      if (SQLConf.get.shuffleOrderIndependentChecksumEnabled) {
         part.numPartitions
       } else {
         0

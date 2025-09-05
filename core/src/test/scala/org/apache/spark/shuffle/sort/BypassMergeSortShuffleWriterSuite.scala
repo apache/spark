@@ -75,7 +75,7 @@ class BypassMergeSortShuffleWriterSuite
     )
     val memoryManager = new TestMemoryManager(conf)
     val taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
-    resetDependency(conf, rowBasedCheckSumEnabled = false)
+    resetDependency(conf, rowBasedChecksumEnabled = false)
     when(taskContext.taskMetrics()).thenReturn(taskMetrics)
     when(blockResolver.getDataFile(0, 0)).thenReturn(outputFile)
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)
@@ -150,13 +150,12 @@ class BypassMergeSortShuffleWriterSuite
     val numPartitions = 7
     when(dependency.partitioner).thenReturn(new HashPartitioner(numPartitions))
     when(dependency.serializer).thenReturn(new JavaSerializer(sc))
-    val checksumSize = if (rowBasedCheckSumEnabled) {
+    val checksumSize = if (rowBasedChecksumEnabled) {
       numPartitions
     } else {
       0
     }
-    val checksumAlgorithm = sc.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
-    val rowBasedChecksums = createPartitionRowBasedChecksums(checksumSize, checksumAlgorithm)
+    val rowBasedChecksums = createPartitionRowBasedChecksums(checksumSize)
     when(dependency.rowBasedChecksums).thenReturn(rowBasedChecksums)
   }
 
@@ -323,7 +322,7 @@ class BypassMergeSortShuffleWriterSuite
     var checksumValues : Array[Long] = Array[Long]()
     var aggregatedChecksumValue = 0L
     for (i <- 1 to 100) {
-      resetDependency(conf, rowBasedCheckSumEnabled = true)
+      resetDependency(conf, rowBasedChecksumEnabled = true)
       val writer = new BypassMergeSortShuffleWriter[Int, Int](
         blockManager,
         shuffleHandle,

@@ -875,6 +875,21 @@ object SQLConf {
     .checkValue(_ > 0, "The value of spark.sql.shuffle.partitions must be positive")
     .createWithDefault(200)
 
+  val SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED =
+    buildConf("spark.sql.shuffle.orderIndependentChecksum.enabled")
+      .doc("Whether to calculate order independent checksum for the shuffle data or not. If " +
+        "enabled, Spark will calculate a checksum that is independent of the input row order for " +
+        "each mapper and returns the checksums from executors to driver. This is different from " +
+        "the checksum computed when spark.shuffle.checksum.enabled is enabled which is sensitive " +
+        "to shuffle data ordering to detect file corruption. While this checksum will be the " +
+        "same even if the shuffle row order changes and it is used to detect whether different " +
+        "task attempts of the same partition produce different output data or not (same set of " +
+        "keyValue pairs). In case the output data has changed across retries, Spark will need to " +
+        "retry all tasks of the consumer stages to avoid correctness issues.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
     buildConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize")
       .internal()
@@ -6612,6 +6627,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
       defaultNumShufflePartitions
     }
   }
+
+  def shuffleOrderIndependentChecksumEnabled: Boolean =
+    getConf(SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED)
 
   def allowCollationsInMapKeys: Boolean = getConf(ALLOW_COLLATIONS_IN_MAP_KEYS)
 

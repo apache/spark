@@ -183,10 +183,9 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   private void resetDependency(boolean rowBasedChecksumEnabled) {
     when(shuffleDep.serializer()).thenReturn(serializer);
     when(shuffleDep.partitioner()).thenReturn(hashPartitioner);
-    final int checksumSize = rowBasedCheckSumEnabled ? NUM_PARTITIONS : 0;
-    final String checksumAlgorithm = conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM());
+    final int checksumSize = rowBasedChecksumEnabled ? NUM_PARTITIONS : 0;
     final RowBasedChecksum[] rowBasedChecksums =
-        createPartitionRowBasedChecksums(checksumSize, checksumAlgorithm);
+        createPartitionRowBasedChecksums(checksumSize);
     when(shuffleDep.rowBasedChecksums()).thenReturn(rowBasedChecksums);
   }
 

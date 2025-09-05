@@ -48,9 +48,7 @@ trait ShuffleChecksumTestHelper {
     }
   }
 
-  def createPartitionRowBasedChecksums(
-      numPartitions: Int,
-      checksumAlgorithm: String): Array[RowBasedChecksum] = {
-    Array.tabulate(numPartitions)(_ => new OutputStreamRowBasedChecksum(checksumAlgorithm))
+  def createPartitionRowBasedChecksums(numPartitions: Int): Array[RowBasedChecksum] = {
+    Array.tabulate(numPartitions)(_ => new OutputStreamRowBasedChecksum("ADLER32"))
   }
 }

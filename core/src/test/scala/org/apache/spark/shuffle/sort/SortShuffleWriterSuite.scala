@@ -31,7 +31,6 @@ import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleChecksumTestHelper}
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
-import org.apache.spark.shuffle.checksum.RowBasedChecksum
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents
 import org.apache.spark.storage.BlockManager
 import org.apache.spark.util.Utils
@@ -66,7 +65,7 @@ class SortShuffleWriterSuite
     shuffleHandle = {
       new BaseShuffleHandle(shuffleId, dependency)
     }
-    resetDependency(rowBasedCheckSumEnabled = false)
+    resetDependency(rowBasedChecksumEnabled = false)
     shuffleExecutorComponents = new LocalDiskShuffleExecutorComponents(
       conf, blockManager, shuffleBlockResolver)
   }
@@ -85,13 +84,12 @@ class SortShuffleWriterSuite
     when(dependency.serializer).thenReturn(serializer)
     when(dependency.aggregator).thenReturn(None)
     when(dependency.keyOrdering).thenReturn(None)
-    val checksumSize = if (rowBasedCheckSumEnabled) {
+    val checksumSize = if (rowBasedChecksumEnabled) {
       numMaps
     } else {
       0
     }
-    val checksumAlgorithm = conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
-    val rowBasedChecksums = createPartitionRowBasedChecksums(checksumSize, checksumAlgorithm)
+    val rowBasedChecksums = createPartitionRowBasedChecksums(checksumSize)
     when(dependency.rowBasedChecksums).thenReturn(rowBasedChecksums)
   }
 
@@ -143,7 +141,7 @@ class SortShuffleWriterSuite
     var checksumValues : Array[Long] = Array[Long]()
     var aggregatedChecksumValue = 0L
     for (i <- 1 to 100) {
-      resetDependency(rowBasedCheckSumEnabled = true)
+      resetDependency(rowBasedChecksumEnabled = true)
       val writer = new SortShuffleWriter[Int, Int, Int](
         shuffleHandle,
         mapId = 2,
@@ -195,12 +193,7 @@ class SortShuffleWriterSuite
         when(dependency.serializer).thenReturn(serializer)
         when(dependency.aggregator).thenReturn(aggregator)
         when(dependency.keyOrdering).thenReturn(order)
-        val checksumSize =
-          if (conf.get(config.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED)) numMaps else 0
-        val checksumAlgorithm = conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
-        val rowBasedChecksums: Array[RowBasedChecksum] =
-          createPartitionRowBasedChecksums(checksumSize, checksumAlgorithm)
-        when(dependency.rowBasedChecksums).thenReturn(rowBasedChecksums)
+        when(dependency.rowBasedChecksums).thenReturn(Array.empty)
         new BaseShuffleHandle[Int, Int, Int](shuffleId, dependency)
       }
 
