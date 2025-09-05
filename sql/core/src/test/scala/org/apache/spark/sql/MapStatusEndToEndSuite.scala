@@ -39,8 +39,9 @@ class MapStatusEndToEndSuite extends SparkFunSuite with SQLTestUtils {
   }
 
   test("Propagate checksum from executor to driver") {
-    assert(spark.sparkContext.conf.get("spark.shuffle.orderIndependentChecksum.enabled") == "true")
-    assert(spark.conf.get("spark.shuffle.orderIndependentChecksum.enabled") == "true")
+    assert(spark.sparkContext.conf
+      .get("spark.sql.shuffle.orderIndependentChecksum.enabled") == "true")
+    assert(spark.conf.get("spark.sql.shuffle.orderIndependentChecksum.enabled") == "true")
     assert(spark.sparkContext.conf.get("spark.sql.leafNodeDefaultParallelism") == "5")
     assert(spark.conf.get("spark.sql.leafNodeDefaultParallelism") == "5")
     assert(spark.sparkContext.conf.get("spark.sql.classic.shuffleDependency.fileCleanup.enabled")
