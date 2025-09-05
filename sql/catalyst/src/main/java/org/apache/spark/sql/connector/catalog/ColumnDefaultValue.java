@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector.catalog;
 
 import java.util.Objects;
-import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
@@ -52,10 +52,13 @@ public class ColumnDefaultValue extends DefaultValue {
 
   /**
    * Returns the default value literal. This is the literal value corresponding to
-   * {@link #getSql()}. For the example in the doc of {@link #getSql()}, this returns a literal
-   * integer with a value of 42.
+   * {@link #getSql()}. For example if the SQL is "current_date()", this literal value
+   * will be the evaluated current_date() at the time the column was added/altered.
+   * Spark always sets this value when passing ColumnDefaultValue to createTable/alterTable,
+   * but {@link Table#columns()} may not do so as some data sources have its own system to do
+   * back-fill.
    */
-  @Nonnull
+  @Nullable
   public Literal<?> getValue() {
     return value;
   }
