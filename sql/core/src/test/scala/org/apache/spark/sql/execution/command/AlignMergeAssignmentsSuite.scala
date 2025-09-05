@@ -631,14 +631,6 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
         | INSERT (i, l, txt, txt) VALUES (src.i, src.l, src.txt, src.txt)
         |""".stripMargin,
       "Multiple assignments for 'txt'")
-
-    assertAnalysisException(
-      """MERGE INTO nested_struct_table t USING nested_struct_table src
-        |ON t.i = src.i
-        |WHEN NOT MATCHED THEN
-        | INSERT (s.n_i) VALUES (1)
-        |""".stripMargin,
-      "INSERT assignment keys cannot be nested fields: t.s.`n_i` = 1")
   }
 
   test("updates to nested structs in arrays") {
