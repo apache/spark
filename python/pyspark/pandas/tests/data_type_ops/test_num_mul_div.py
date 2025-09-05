@@ -128,7 +128,6 @@ class NumMulDivTestsMixin:
             # modulo with non-numeric columns
             for n_col in self.non_numeric_df_cols:
                 if n_col == "bool":
-                    # follow pandas semantics for modulo with a boolean Series
                     self.assert_eq(pdf["float"] % pdf["bool"], psdf["float"] % psdf["bool"])
                 else:
                     self.assertRaises(TypeError, lambda: psser % psdf[n_col])
