@@ -19,10 +19,10 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, LeafExpression, Literal, MapFromArrays, MapFromEntries, SubqueryExpression, Unevaluable, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SupervisingCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LogicalPlan, SupervisingCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, SqlScriptingErrors}
 import org.apache.spark.sql.types.DataType
 
 sealed trait Parameter extends LeafExpression with Unevaluable {
@@ -105,7 +105,7 @@ case class PosParameterizedQuery(child: LogicalPlan, args: Seq[Expression])
 }
 
 /**
- * The logical plan representing a parameterized query with unified parameter support.
+ * The logical plan representing a parameterized query with general parameter support.
  * This allows the query to use either positional or named parameters based on the
  * parameter markers found in the query, with optional parameter names provided.
  *
@@ -116,7 +116,7 @@ case class PosParameterizedQuery(child: LogicalPlan, args: Seq[Expression])
  *                   that argument can be used for named parameter binding. If not provided
  *                   parameters are treated as positional.
  */
-case class UnifiedParameterizedQuery(
+case class GeneralParameterizedQuery(
     child: LogicalPlan,
     args: Seq[Expression],
     paramNames: Seq[String])
@@ -213,6 +213,12 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
       case PosParameterizedQuery(child, args)
         if !child.containsPattern(UNRESOLVED_WITH) &&
           args.forall(_.resolved) =>
+
+        // Validate: positional parameters are not supported for SQL scripting
+        if (child.isInstanceOf[CompoundBody]) {
+          throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+        }
+
         val indexedArgs = args.zipWithIndex
         checkArgs(indexedArgs.map(arg => (s"_${arg._2}", arg._1)))
 
@@ -225,7 +231,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
             args(posToIndex(pos))
         }
 
-      case UnifiedParameterizedQuery(child, args, paramNames)
+      case GeneralParameterizedQuery(child, args, paramNames)
         if !child.containsPattern(UNRESOLVED_WITH) &&
           args.forall(_.resolved) =>
 
@@ -240,6 +246,11 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         // Validate: no mixing of positional and named parameters
         if (namedParams.nonEmpty && positionalParams.nonEmpty) {
           throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
+        }
+
+        // Validate: positional parameters are not supported for SQL scripting
+        if (positionalParams.nonEmpty && child.isInstanceOf[CompoundBody]) {
+          throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
         }
 
         // Validate: if query uses named parameters, all USING expressions must have names

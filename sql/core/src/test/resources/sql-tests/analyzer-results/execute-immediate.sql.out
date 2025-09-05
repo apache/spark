@@ -48,14 +48,14 @@ SetVariable [variablereference(system.session.sql_string=CAST(NULL AS STRING))]
 -- !query
 EXECUTE IMMEDIATE 'SET spark.sql.ansi.enabled=true'
 -- !query analysis
-CommandResult [key#x, value#x], CommandResult [key#x, value#x]
+CommandResult [key, value], data=[[spark.sql.ansi.enabled, true]]
    +- SetCommand (spark.sql.ansi.enabled,Some(true))
 
 
 -- !query
 EXECUTE IMMEDIATE 'CREATE TEMPORARY VIEW IDENTIFIER(:tblName) AS SELECT id, name FROM tbl_view' USING 'tbl_view_tmp' as tblName
 -- !query analysis
-CommandResult CommandResult <empty>
+CommandResult []
    +- CreateViewCommand `tbl_view_tmp`, SELECT id, name FROM tbl_view, false, false, LocalTempView, UNSUPPORTED, true
          +- Project [id#x, name#x]
             +- SubqueryAlias tbl_view
@@ -75,7 +75,7 @@ LocalRelation [id#x, name#x]
 -- !query
 EXECUTE IMMEDIATE 'REFRESH TABLE IDENTIFIER(:tblName)' USING 'x' as tblName
 -- !query analysis
-CommandResult CommandResult <empty>
+CommandResult []
    +- RefreshTableCommand `spark_catalog`.`default`.`x`
 
 
@@ -147,7 +147,7 @@ LocalRelation [id#x, name#x, data#x]
 -- !query
 EXECUTE IMMEDIATE 'INSERT INTO x VALUES(?)' USING 1
 -- !query analysis
-CommandResult CommandResult <empty>
+CommandResult []
    +- InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/x, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/x], Append, `spark_catalog`.`default`.`x`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/x), [id]
       +- Project [col1#x AS id#x]
          +- LocalRelation [col1#x]
@@ -217,7 +217,7 @@ LocalRelation [id#x, name#x, data#x, p#x]
 -- !query
 EXECUTE IMMEDIATE 'SET VAR sql_string = ?' USING 'SELECT id from tbl_view where name = :first'
 -- !query analysis
-CommandResult CommandResult <empty>
+CommandResult []
    +- SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view where name = :first or id = :second')]
       +- Project [SELECT id from tbl_view where name = :first AS sql_string#x]
          +- OneRowRelation

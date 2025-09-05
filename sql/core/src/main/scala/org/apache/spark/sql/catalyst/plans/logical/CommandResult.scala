@@ -40,4 +40,23 @@ case class CommandResult(
 
   override def computeStats(): Statistics =
     Statistics(sizeInBytes = EstimationUtils.getSizePerRow(output) * rows.length)
+
+  override def simpleString(maxFields: Int): String = {
+    val outputStr = output.map(_.name).mkString("[", ", ", "]")
+    val dataStr = if (rows.nonEmpty) {
+      val formattedRows = rows.take(maxFields).map { row =>
+        output.zipWithIndex.map { case (attr, i) =>
+          val value = row.get(i, attr.dataType)
+          if (value == null) "null" else value.toString
+        }.mkString("[", ", ", "]")
+      }
+      s", data=[${formattedRows.mkString(", ")}]"
+    } else {
+      ""
+    }
+    s"CommandResult $outputStr$dataStr"
+  }
+
+  // Don't override toString - let the default TreeNode.toString handle tree structure
+  // override def toString: String = simpleString(conf.maxToStringFields)
 }

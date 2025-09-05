@@ -40,15 +40,14 @@ import org.apache.spark.sql
 import org.apache.spark.sql.{Artifact, DataSourceRegistration, Encoder, Encoders, ExperimentalMethods, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions, SparkSessionExtensionsProvider, UDTFRegistration}
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnifiedParameterizedQuery, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{GeneralParameterizedQuery, NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.SparkSession.applyAndLoadExtensions
-import org.apache.spark.sql.errors.SqlScriptingErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExternalCommandExecutor
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -450,10 +449,6 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
         if (args.nonEmpty) {
-          if (parsedPlan.isInstanceOf[CompoundBody]) {
-            // Positional parameters are not supported for SQL scripting.
-            throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
-          }
           PosParameterizedQuery(parsedPlan, args.map(lit(_).expr).toImmutableArraySeq)
         } else {
           parsedPlan
@@ -530,14 +525,9 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
         if (args.nonEmpty) {
-          if (parsedPlan.isInstanceOf[CompoundBody]) {
-            // Positional parameters are not supported for SQL scripting.
-            throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
-          }
-
           // Create a unified parameter query that can handle both positional and named parameters
           // The query itself will determine which type to use based on its parameter markers
-          UnifiedParameterizedQuery(
+          GeneralParameterizedQuery(
             parsedPlan,
             args.map(lit(_).expr).toImmutableArraySeq,
             paramNames.toImmutableArraySeq

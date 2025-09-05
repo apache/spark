@@ -523,7 +523,6 @@ abstract class SparkSession extends Serializable with Closeable {
     sql(sqlText, args.asScala.toMap)
   }
 
-
   /**
    * Executes a SQL query using Spark, returning the result as a `DataFrame`. This API eagerly
    * runs DDL/DML commands, but not for SELECT queries.
