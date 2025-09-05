@@ -409,18 +409,26 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
     val df = inputData.toDF()
     val query = df.writeStream
       .format("memory")
-      .queryName("TestFormatting")
+      .queryName("SPARK_53491_test_formatting")
       .start()
 
     try {
-      val bigBatch = 1 to 900000
+      // Submitting a very large batch to inputStream
+      // Using bigger range may repro the issue easily
+      // However, that will also cause OOM while running the test case.
+      // Hence limiting the range.
+      val bigBatch = 1 to 600000
       inputData.addData(bigBatch: _*)
 
       query.processAllAvailable()
 
+      // JSON representation of the latest query progress
       val progress = query.lastProgress.jsonValue
 
+      // This should fail if inputRowsPerSecond contains E notiation
       (progress \ "inputRowsPerSecond").values.toString should not include "E"
+
+      // This should fail if processedRowsPerSecond contains E notiation
       (progress \ "processedRowsPerSecond").values.toString should not include "E"
     } finally {
       query.stop()
