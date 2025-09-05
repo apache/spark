@@ -109,17 +109,6 @@
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-connect-jdbc_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-      <exclusions>
-        <exclusion>
-          <groupId>org.apache.spark</groupId>
-          <artifactId>spark-connect-shims_${scala.binary.version}</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
     <!--
       Included so Spark Connect client was compiled before triggering assembly.
       See 'get-connect-client-jar' below. This will not be included in the packaging output.
@@ -127,6 +116,18 @@
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-connect-client-jvm_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-connect-shims_${scala.binary.version}</artifactId>
+        </exclusion>
+      </exclusions>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-connect-jdbc_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <exclusions>
         <exclusion>
@@ -228,6 +229,20 @@
               <executable>cp</executable>
               <arguments>
                 <argument>${basedir}/../sql/connect/client/jvm/target/spark-connect-client-jvm_${scala.binary.version}-${project.version}.jar</argument>
+                <argument>${basedir}/target/scala-${scala.binary.version}/jars/connect-repl</argument>
+              </arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>copy-connect-jdbc-jar</id>
+            <phase>package</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>cp</executable>
+              <arguments>
+                <argument>${basedir}/../sql/connect/client/jdbc/target/spark-connect-jdbc_${scala.binary.version}-${project.version}.jar</argument>
                 <argument>${basedir}/target/scala-${scala.binary.version}/jars/connect-repl</argument>
               </arguments>
             </configuration>
