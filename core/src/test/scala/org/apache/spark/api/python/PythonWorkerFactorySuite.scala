@@ -76,7 +76,7 @@ class PythonWorkerFactorySuite extends SparkFunSuite with SharedSparkContext {
       assert(factory.idleWorkers.size === 3)
 
     } finally {
-      mockWorkers.foreach(factory.stopWorker)
+      mockWorkers.foreach(factory.stopWorker(_, None))
     }
   }
 
@@ -106,7 +106,7 @@ class PythonWorkerFactorySuite extends SparkFunSuite with SharedSparkContext {
       factory.releaseWorker(worker3)
       assert(factory.idleWorkers.size === 2)
     } finally {
-      mockWorkers.foreach(factory.stopWorker)
+      mockWorkers.foreach(factory.stopWorker(_, None))
     }
   }
 }
