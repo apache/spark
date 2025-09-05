@@ -138,6 +138,25 @@ class PySparkException(Exception):
         """
         return f"[{self.getCondition()}] {self._message}"
 
+
+    def getBreakingChangeInfo(self):
+        """
+        Returns the breaking change info for an error, or None.
+
+        Breaking change info is a dict with two fields:
+
+        migration_message: list of str
+            A message explaining how the user can migrate their job to work
+                with the breaking change.
+
+        mitigation_spark_config:
+            A dict with key: str and value: str fields.
+            A spark config flag that can be used to mitigate the
+                breaking change.
+        """
+        return self._error_reader.get_breaking_change_info(cast(str, self._errorClass))
+
+
     def getQueryContext(self) -> List["QueryContext"]:
         """
         Returns :class:`QueryContext`.
