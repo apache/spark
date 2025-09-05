@@ -430,12 +430,13 @@ class SparkSession private[sql] (
     f(builder)
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
 
-    val rootBuilder = if (references.length == 0) {
+    val rootBuilder = if (references.isEmpty) {
       builder
     } else {
       val rootBuilder = proto.Relation.newBuilder()
       rootBuilder.getWithRelationsBuilder
         .setRoot(builder)
+        .setResolutionMethod(proto.WithRelations.ResolutionMethod.BY_REFERENCE_ID)
         .addAllReferences(references.asJava)
       rootBuilder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
       rootBuilder

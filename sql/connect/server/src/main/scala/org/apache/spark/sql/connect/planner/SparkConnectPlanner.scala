@@ -4049,9 +4049,23 @@ class SparkConnectPlanner(
 
   private def transformWithRelations(getWithRelations: proto.WithRelations): LogicalPlan = {
     val root = getWithRelations.getRoot
-    getWithRelations.getResolutionMethod match {
+    val references = getWithRelations.getReferencesList
+    // Before Spark 4.1 WithRelations did not have a ResolutionMethod. Whenever a ResolutionMethod
+    // is not set we default to the LEGACY resolution mode. The semantics for LEGACY mode are a bit
+    // special: In general it behaves like BY_REFERENCE_ID resolution, however it behaves like a CTE
+    // when it has SQL node as its input.
+    val resolutionMethod = getWithRelations.getResolutionMethod match {
+      case proto.WithRelations.ResolutionMethod.LEGACY =>
+        if (root.hasSql && !references.isEmpty && references.asScala.forall(_.hasSubqueryAlias)) {
+          proto.WithRelations.ResolutionMethod.BY_NAME
+        } else {
+          proto.WithRelations.ResolutionMethod.BY_REFERENCE_ID
+        }
+      case method => method
+    }
+    resolutionMethod match {
       case proto.WithRelations.ResolutionMethod.BY_NAME =>
-        val cteRelations = getWithRelations.getReferencesList.asScala.map { ref =>
+        val cteRelations = references.asScala.map { ref =>
           transformRelation(ref) match {
             case alias: SubqueryAlias => (alias.alias, alias, None)
             case _ => throw InvalidInputErrors.invalidWithRelationReference()
@@ -4062,7 +4076,7 @@ class SparkConnectPlanner(
       case proto.WithRelations.ResolutionMethod.BY_REFERENCE_ID =>
         // Register the plans in the relation cache, so they can be resolved while transforming the
         // root relation into a LogicalPlan.
-        getWithRelations.getReferencesList.forEach { ref =>
+        references.forEach { ref =>
           val common = ref.getCommon
           if (!common.hasPlanId) {
             throw InvalidInputErrors.invalidWithRelationReference()

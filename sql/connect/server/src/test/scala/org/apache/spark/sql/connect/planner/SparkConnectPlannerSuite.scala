@@ -31,7 +31,7 @@ import org.apache.spark.connect.proto.WithRelations.ResolutionMethod
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.{analysis, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedFunction, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, InSubquery, ListQuery, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.{logical, Inner, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, JoinHint, LogicalPlan, Project, SubqueryAlias, Union, UnresolvedWith}
 import org.apache.spark.sql.catalyst.trees.TreePattern
@@ -1130,17 +1130,93 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(message == "Invalid WithRelation reference")
   }
 
+  // TODO figure out how pyspark deals with subqueries in a SQL statement...
+  test("WithRelation - LEGACY - SQL") {
+    val builder = proto.Relation.newBuilder()
+    builder
+      .setCommon(newRelationCommon())
+      .getWithRelationsBuilder
+      .addReferences(namedRange("xx"))
+      .addReferences(namedRange("yy"))
+      .getRootBuilder
+      .setCommon(newRelationCommon())
+      .getSqlBuilder
+      .setQuery("select * from xx join yy on xx.id = yy.id")
+    val plan = builder.build()
+    assert(plan.getWithRelations.getResolutionMethod == ResolutionMethod.LEGACY)
+    val transformed = transform(plan)
+    val expected = logical.UnresolvedWith(
+      Project(
+        analysis.UnresolvedStar(None) :: Nil,
+        Join(
+          UnresolvedRelation("xx" :: Nil),
+          UnresolvedRelation("yy" :: Nil),
+          Inner,
+          Option(
+            EqualTo(
+              analysis.UnresolvedAttribute("xx" :: "id" :: Nil),
+              analysis.UnresolvedAttribute("yy" :: "id" :: Nil))),
+          JoinHint.NONE)),
+      Seq(
+        ("xx", logical.SubqueryAlias("xx", logical.Range(0, 10, 1, 10)), None),
+        ("yy", logical.SubqueryAlias("yy", logical.Range(0, 10, 1, 10)), None)))
+    compareUnresolvedPlans(transformed, expected)
+  }
+
+  test("WithRelation - LEGACY - Subqueries") {
+    val builder = proto.Relation.newBuilder()
+    val rel1 = namedRange("xx")
+    val subqueryExprBuilder = proto.Expression.newBuilder()
+    subqueryExprBuilder.getSubqueryExpressionBuilder
+      .setPlanId(rel1.getCommon.getPlanId)
+      .setSubqueryType(proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_IN)
+      .addInSubqueryValuesBuilder()
+      .getUnresolvedAttributeBuilder
+      .setUnparsedIdentifier("id")
+    builder
+      .setCommon(newRelationCommon())
+      .getWithRelationsBuilder
+      .addReferences(rel1)
+      .getRootBuilder
+      .setCommon(newRelationCommon())
+      .getFilterBuilder
+      .setCondition(subqueryExprBuilder)
+      .setInput(readRel())
+    val plan = builder.build()
+    assert(plan.getWithRelations.getResolutionMethod == ResolutionMethod.LEGACY)
+    val transformed = transform(plan)
+    val expected = Project(
+      analysis.UnresolvedStar(None) :: Nil,
+      logical.Filter(
+        InSubquery(
+          analysis.UnresolvedAttribute("id" :: Nil) :: Nil,
+          ListQuery(logical.SubqueryAlias("xx", logical.Range(0, 10, 1, 10)))),
+        UnresolvedRelation("table" :: Nil)))
+    compareUnresolvedPlans(transformed, expected)
+  }
+
   test("WithRelation - BY_REFERENCE_ID") {
     val rel1 = readRel("tbl1")
     val ref1 = reference(rel1)
     val rel2 = readRel("tbl2")
     val ref2 = reference(rel2)
+    val rel3Builder = proto.Relation.newBuilder()
+    rel3Builder
+      .setCommon(newRelationCommon())
+      .getProjectBuilder
+      .setInput(ref1)
+      .addExpressionsBuilder()
+      .getUnresolvedAttributeBuilder
+      .setUnparsedIdentifier("id")
+    val rel3 = rel3Builder.build()
+    val ref3 = reference(rel3)
     val common = newRelationCommon()
     val builder = proto.Relation.newBuilder()
     builder
       .setCommon(common)
       .getWithRelationsBuilder
       .setResolutionMethod(ResolutionMethod.BY_REFERENCE_ID)
+      .addReferences(rel3) // This uses rel1 as its input. This is to test unordered references.
       .addReferences(rel1)
       .addReferences(rel2)
       .getRootBuilder
@@ -1148,14 +1224,18 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .getSetOpBuilder
       .setIsAll(true)
       .setSetOpType(SetOpType.SET_OP_TYPE_UNION)
-      .setLeftInput(ref1)
+      .setLeftInput(ref3)
       .setRightInput(ref2)
     val plan = builder.build()
     val transformed = transform(plan)
     assert(transformed.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(common.getPlanId))
     val expected = Project(
       analysis.UnresolvedStar(None) :: Nil,
-      Union(UnresolvedRelation("tbl1" :: Nil), UnresolvedRelation("tbl2" :: Nil)))
+      Union(
+        Project(
+          analysis.UnresolvedAttribute("id" :: Nil) :: Nil,
+          UnresolvedRelation("tbl1" :: Nil)),
+        UnresolvedRelation("tbl2" :: Nil)))
     compareUnresolvedPlans(transformed, expected)
   }
 
@@ -1233,6 +1313,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val joinBuilder = builder
       .setCommon(common)
       .getWithRelationsBuilder
+      .setResolutionMethod(ResolutionMethod.BY_NAME)
       .addReferences(rel1)
       .addReferences(rel2)
       .getRootBuilder
@@ -1251,9 +1332,6 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .getSubqueryAliasBuilder
       .setAlias("a")
       .setInput(readRel("aa"))
-    // Make sure we default to BY_NAME resolution.
-    assert(builder.build().getWithRelations.getResolutionMethod == ResolutionMethod.BY_NAME)
-    builder.getWithRelationsBuilder.setResolutionMethod(ResolutionMethod.BY_NAME)
     val plan = builder.build()
     val transformed = transform(plan)
     assert(transformed.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(common.getPlanId))
@@ -1281,6 +1359,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       .setCommon(newRelationCommon())
       .getWithRelationsBuilder
       .setRoot(readRel("x"))
+      .setResolutionMethod(ResolutionMethod.BY_NAME)
       .addReferencesBuilder()
       .setCommon(newRelationCommon())
       .getLimitBuilder

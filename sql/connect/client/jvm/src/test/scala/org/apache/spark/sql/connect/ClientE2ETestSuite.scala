@@ -1671,6 +1671,22 @@ class ClientE2ETestSuite
     checkAnswer(df, (0 until 6).map(i => Row(i)))
   }
 
+  private def compressionRatio(df: Dataset[_]): Double = {
+    df.optimizedPlan.getSerializedSize.toDouble / df.plan.getSerializedSize.toDouble
+  }
+
+  test("Execute optimized plan - canary") {
+    val input = spark.range(10).as("r")
+    val df = input
+      .union(input)
+      .union(input)
+      .filter(col("id").isin(input.filter(col("id") < 5)))
+      .groupBy(col("id"))
+      .count()
+    assert(compressionRatio(df) < 1.0)
+    checkAnswer(df, Seq.tabulate(5)(n => Row(n.toLong, 3)))
+  }
+
   test("Execute optimized plan - 33 duplicate local relations") {
     val implicits = spark.implicits
     import implicits._
@@ -1686,9 +1702,7 @@ class ClientE2ETestSuite
       .filter($"key".isin(input.select($"key").filter($"key" < 5)))
       .groupBy($"key", $"value")
       .count()
-    val compressionRatio =
-      df.optimizedPlan.getSerializedSize.toDouble / df.plan.getSerializedSize.toDouble
-    assert(compressionRatio < (1.0d / 32.0d)) // It should be very close to a 1/33 ratio.
+    assert(compressionRatio(df) < (1.0d / 32.0d)) // It should be very close to a 1/33 ratio.
     checkAnswer(df, data.take(5).map(kv => Row(kv._1, kv._2, 32L)))
   }
 
