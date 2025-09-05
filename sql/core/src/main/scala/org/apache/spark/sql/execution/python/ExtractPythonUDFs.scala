@@ -25,6 +25,7 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.REASON
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.PythonUDF.{correctEvalType, isScalarPythonUDF}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -47,8 +48,7 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
 
   private def hasPythonUdfOverAggregate(expr: Expression, agg: Aggregate): Boolean = {
     expr.exists {
-      e => PythonUDF.isScalarPythonUDF(e) &&
-        (e.references.isEmpty || e.exists(belongAggregate(_, agg)))
+      e => isScalarPythonUDF(e) && (e.references.isEmpty || e.exists(belongAggregate(_, agg)))
     }
   }
 
@@ -91,7 +91,7 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
  */
 object ExtractGroupingPythonUDFFromAggregate extends Rule[LogicalPlan] {
   private def hasScalarPythonUDF(e: Expression): Boolean = {
-    e.exists(PythonUDF.isScalarPythonUDF)
+    e.exists(isScalarPythonUDF)
   }
 
   private def extract(agg: Aggregate): LogicalPlan = {
@@ -165,7 +165,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
   private type EvalTypeChecker = EvalType => Boolean
 
   private def hasScalarPythonUDF(e: Expression): Boolean = {
-    e.exists(PythonUDF.isScalarPythonUDF)
+    e.exists(isScalarPythonUDF)
   }
 
   /**
@@ -193,11 +193,14 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
    * separate nodes.
    */
   @scala.annotation.tailrec
-  private def shouldExtractUDFExpressionTree(e: PythonUDF): Boolean = {
+  private def shouldExtractUDFExpressionTree(
+      e: PythonUDF,
+      pythonUDFArrowFallbackOnUDT: Boolean): Boolean = {
     e.children match {
       case Seq(child: PythonUDF) =>
-        PythonUDF.correctEvalType(e) == PythonUDF.correctEvalType(child) &&
-          shouldExtractUDFExpressionTree(child)
+        correctEvalType(e, pythonUDFArrowFallbackOnUDT) ==
+          correctEvalType(child, pythonUDFArrowFallbackOnUDT) &&
+          shouldExtractUDFExpressionTree(child, pythonUDFArrowFallbackOnUDT)
       // Python UDF can't be evaluated directly in JVM
       case children => !children.exists(hasScalarPythonUDF)
     }
@@ -226,7 +229,9 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
    *   But we can chain udf1 and udf2, so a later call to collectEvaluableUDFsFromExpressions will
    *   return Seq(udf1, udf2).
    */
-  private def collectEvaluableUDFsFromExpressions(expressions: Seq[Expression]): Seq[PythonUDF] = {
+  private def collectEvaluableUDFsFromExpressions(
+      expressions: Seq[Expression],
+      pythonUDFArrowFallbackOnUDT: Boolean): Seq[PythonUDF] = {
     // If first UDF is SQL_SCALAR_PANDAS_ITER_UDF or SQL_SCALAR_ARROW_ITER_UDF,
     // then only return this UDF,
     // otherwise check if subsequent UDFs are of the same type as the first UDF. (since we can only
@@ -244,14 +249,14 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
     }
 
     def collectEvaluableUDFs(expr: Expression): Seq[PythonUDF] = expr match {
-      case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf)
-        && shouldExtractUDFExpressionTree(udf)
+      case udf: PythonUDF if isScalarPythonUDF(udf)
+        && shouldExtractUDFExpressionTree(udf, pythonUDFArrowFallbackOnUDT)
         && firstVisitedScalarUDFEvalType.isEmpty =>
-        firstVisitedScalarUDFEvalType = Some(PythonUDF.correctEvalType(udf))
+        firstVisitedScalarUDFEvalType = Some(correctEvalType(udf, pythonUDFArrowFallbackOnUDT))
         Seq(udf)
-      case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf)
-        && shouldExtractUDFExpressionTree(udf)
-        && canChainWithParallelUDFs(PythonUDF.correctEvalType(udf)) =>
+      case udf: PythonUDF if isScalarPythonUDF(udf)
+        && shouldExtractUDFExpressionTree(udf, pythonUDFArrowFallbackOnUDT)
+        && canChainWithParallelUDFs(correctEvalType(udf, pythonUDFArrowFallbackOnUDT)) =>
         Seq(udf)
       case e => e.children.flatMap(collectEvaluableUDFs)
     }
@@ -290,7 +295,10 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
    * Extract all the PythonUDFs from the current operator and evaluate them before the operator.
    */
   private def extract(plan: LogicalPlan): LogicalPlan = {
-    val udfs = ExpressionSet(collectEvaluableUDFsFromExpressions(plan.expressions))
+    val pythonUDFArrowFallbackOnUDT = conf.pythonUDFArrowFallbackOnUDT
+
+    val udfs = ExpressionSet(
+      collectEvaluableUDFsFromExpressions(plan.expressions, pythonUDFArrowFallbackOnUDT))
       // ignore the PythonUDF that come from second/third aggregate, which is not used
       .filter(udf => udf.references.subsetOf(plan.inputSet))
       .toSeq.asInstanceOf[Seq[PythonUDF]]
@@ -308,14 +316,14 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
         }
         if (validUdfs.nonEmpty) {
           require(
-            validUdfs.forall(PythonUDF.isScalarPythonUDF),
+            validUdfs.forall(isScalarPythonUDF),
             "Can only extract scalar vectorized udf or sql batch udf")
 
           val resultAttrs = validUdfs.zipWithIndex.map { case (u, i) =>
             AttributeReference(s"pythonUDF$i", u.dataType)()
           }
 
-          val evalTypes = validUdfs.map(PythonUDF.correctEvalType).toSet
+          val evalTypes = validUdfs.map(correctEvalType(_, pythonUDFArrowFallbackOnUDT)).toSet
           if (evalTypes.size != 1) {
             throw SparkException.internalError(
               "Expected udfs have the same evalType but got different evalTypes: " +

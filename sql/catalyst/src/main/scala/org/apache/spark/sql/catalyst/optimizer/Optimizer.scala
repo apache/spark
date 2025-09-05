@@ -24,6 +24,7 @@ import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.PythonUDF.{correctEvalType, isScalarPythonUDF}
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression.hasCorrelatedSubquery
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -1168,13 +1169,16 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
   }
 
   def apply(plan: LogicalPlan, alwaysInline: Boolean): LogicalPlan = {
-    traverse(plan, alwaysInline, Set.empty)
+    val pythonUDFArrowFallbackOnUDT = conf.pythonUDFArrowFallbackOnUDT
+
+    traverse(plan, alwaysInline, Set.empty, pythonUDFArrowFallbackOnUDT)
   }
 
   private def traverse(
       plan: LogicalPlan,
       alwaysInline: Boolean,
-      pythonUDFEvalTypesInUpperProjects: Set[Int]): LogicalPlan = {
+      pythonUDFEvalTypesInUpperProjects: Set[Int],
+      pythonUDFArrowFallbackOnUDT: Boolean): LogicalPlan = {
     if (!plan.containsPattern(PROJECT)) {
       return plan
     }
@@ -1189,28 +1193,34 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       // Extend the set of types with the new types found in the current project node
       case p: Project =>
         pythonUDFEvalTypesInUpperProjects ++ p.projectList.flatMap(_.collect {
-          case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf) =>
-            PythonUDF.correctEvalType(udf)
+          case udf: PythonUDF if isScalarPythonUDF(udf) =>
+            correctEvalType(udf, pythonUDFArrowFallbackOnUDT)
         }).toSet
 
       // Project group end so reset the set of types
       case _ => Set.empty[Int]
     }
 
-    plan.mapChildren(traverse(_, alwaysInline, newPythonUDFEvalTypesInUpperProjects)) match {
+    plan.mapChildren(traverse(
+      _,
+      alwaysInline,
+      newPythonUDFEvalTypesInUpperProjects,
+      pythonUDFArrowFallbackOnUDT)) match {
       case p1 @ Project(_, p2: Project)
           if canCollapseExpressions(
             p1.projectList,
             getAliasMap(p2.projectList),
             alwaysInline,
-            newPythonUDFEvalTypesInUpperProjects) =>
+            newPythonUDFEvalTypesInUpperProjects,
+            pythonUDFArrowFallbackOnUDT) =>
         p2.copy(projectList = buildCleanedProjectList(p1.projectList, p2.projectList))
       case p @ Project(_, agg: Aggregate)
           if canCollapseExpressions(
             p.projectList,
             getAliasMap(agg.aggregateExpressions),
             alwaysInline,
-            newPythonUDFEvalTypesInUpperProjects)
+            newPythonUDFEvalTypesInUpperProjects,
+            pythonUDFArrowFallbackOnUDT)
           && canCollapseAggregate(p, agg) =>
         agg.copy(aggregateExpressions = buildCleanedProjectList(
           p.projectList, agg.aggregateExpressions))
@@ -1246,11 +1256,13 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       consumers: Seq[Expression],
       producerMap: Map[Attribute, Expression],
       alwaysInline: Boolean = false,
-      pythonUDFEvalTypesInUpperProjects: Set[Int] = Set.empty): Boolean = {
+      pythonUDFEvalTypesInUpperProjects: Set[Int] = Set.empty,
+      pythonUDFArrowFallbackOnUDT: Boolean = conf.pythonUDFArrowFallbackOnUDT): Boolean = {
     val inline = alwaysInline || producerMap.values.exists(_.exists {
       case udf: PythonUDF =>
-        PythonUDF.isScalarPythonUDF(udf) &&
-          pythonUDFEvalTypesInUpperProjects.contains(PythonUDF.correctEvalType(udf))
+        isScalarPythonUDF(udf) &&
+          pythonUDFEvalTypesInUpperProjects.contains(
+            correctEvalType(udf, pythonUDFArrowFallbackOnUDT))
       case _ => false
     })
 
