@@ -838,19 +838,6 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
 
 
 
-  test("EXEC IMMEDIATE - INTO specified for COMMAND query") {
-    val execImmediateSetVariablePlan = UnresolvedExecuteImmediate(
-      Literal("SET VAR testVarA = 1"),
-      Seq.empty,
-      Seq(UnresolvedAttribute("testVarA")))
-
-    assertAnalysisErrorCondition(
-      inputPlan = execImmediateSetVariablePlan,
-      expectedErrorCondition = "INVALID_STATEMENT_FOR_EXECUTE_INTO",
-      expectedMessageParameters = Map(
-        "sqlString" -> "SET VAR TESTVARA = 1"
-      ))
-  }
 
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)

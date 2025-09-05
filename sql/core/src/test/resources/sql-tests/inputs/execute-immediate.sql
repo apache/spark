@@ -87,6 +87,10 @@ EXECUTE IMMEDIATE 'SELECT \'invalid_cast_error_expected\'' INTO res_id;
 -- require query when using INTO
 EXECUTE IMMEDIATE 'INSERT INTO x VALUES (?)' INTO res_id USING 1;
 
+-- require query when using INTO with SET VAR command
+DECLARE OR REPLACE testvarA INT;
+EXECUTE IMMEDIATE 'SET VAR testVarA = 1' INTO testVarA;
+
 -- use column in using - should fail as we expect variable here
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view WHERE ? = id' USING id;
 

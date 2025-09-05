@@ -373,6 +373,26 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+DECLARE OR REPLACE testvarA INT
+-- !query analysis
+CreateVariable defaultvalueexpression(null, null), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.testvarA
+
+
+-- !query
+EXECUTE IMMEDIATE 'SET VAR testVarA = 1' INTO testVarA
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_STATEMENT_FOR_EXECUTE_INTO",
+  "sqlState" : "07501",
+  "messageParameters" : {
+    "sqlString" : "SET VAR TESTVARA = 1"
+  }
+}
+
+
+-- !query
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view WHERE ? = id' USING id
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException

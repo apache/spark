@@ -423,6 +423,29 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+DECLARE OR REPLACE testvarA INT
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+EXECUTE IMMEDIATE 'SET VAR testVarA = 1' INTO testVarA
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_STATEMENT_FOR_EXECUTE_INTO",
+  "sqlState" : "07501",
+  "messageParameters" : {
+    "sqlString" : "SET VAR TESTVARA = 1"
+  }
+}
+
+
+-- !query
 EXECUTE IMMEDIATE 'SELECT * FROM tbl_view WHERE ? = id' USING id
 -- !query schema
 struct<>
