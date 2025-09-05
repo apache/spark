@@ -122,8 +122,8 @@ class NumMulDivTestsMixin:
                 self.assert_eq(pser % pser, psser % psser)
                 self.assert_eq(pser % pser.astype(bool), psser % psser.astype(bool))
                 self.assert_eq(pser % True, psser % True)
-                # TODO: align the data type to pandas when ints % False
-                # self.assert_eq(pser % False, psser % False)
+                # TODO: decide if to follow pser % False
+                self.assert_eq(pser % 0, psser % False)
 
             # modulo with non-numeric columns
             for n_col in self.non_numeric_df_cols:
