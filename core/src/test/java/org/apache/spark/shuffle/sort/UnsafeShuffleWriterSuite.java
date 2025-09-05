@@ -180,7 +180,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager);
   }
 
-  private void resetDependency(boolean rowBasedCheckSumEnabled) {
+  private void resetDependency(boolean rowBasedChecksumEnabled) {
     when(shuffleDep.serializer()).thenReturn(serializer);
     when(shuffleDep.partitioner()).thenReturn(hashPartitioner);
     final int checksumSize = rowBasedCheckSumEnabled ? NUM_PARTITIONS : 0;
