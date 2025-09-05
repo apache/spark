@@ -507,7 +507,7 @@ class SparkThrowableSuite extends SparkFunSuite {
   test("breaking changes info") {
     withTempDir { dir =>
       val json = new File(dir, "errors.json")
-      FileUtils.writeStringToFile(json,
+      Files.writeString(json.toPath,
         """
           |{
           |  "TEST_ERROR": {
