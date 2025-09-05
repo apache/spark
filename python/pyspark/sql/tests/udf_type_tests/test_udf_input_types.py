@@ -115,7 +115,34 @@ class UDFInputTypeTests(ReusedSQLTestCase):
                     return x
 
                 def value_str(x):
-                    return str(x)
+                    class NpPrintable:
+                        def __init__(self, x):
+                            self.x = x
+
+                        def __repr__(self):
+                            return f"np.{self.x.dtype}({self.x.item()})"
+
+                    # Numpy 1.x __repr__ returns a different format. We only care about
+                    # types and values of the elements,
+                    # so we accept this difference and implement our own repr to make
+                    # tests with numpy 1 return the same format as numpy 2.
+                    def convert_to_numpy_printable(x):
+                        if isinstance(x, Row):
+                            return Row(
+                                **{k: convert_to_numpy_printable(v) for k, v in x.asDict().items()}
+                            )
+                        elif isinstance(x, (list)):
+                            return [convert_to_numpy_printable(elem) for elem in x]
+                        elif isinstance(x, tuple):
+                            return tuple(convert_to_numpy_printable(elem) for elem in x)
+                        elif isinstance(x, dict):
+                            return {k: convert_to_numpy_printable(v) for k, v in x.items()}
+                        elif hasattr(x, "dtype") and hasattr(x, "item"):
+                            return NpPrintable(x)
+                        else:
+                            return x
+
+                    return str(convert_to_numpy_printable(x))
 
                 type_test_udf = udf(type_udf, returnType=StringType(), useArrow=use_arrow)
                 value_test_udf = udf(value_udf, returnType=spark_type, useArrow=use_arrow)
