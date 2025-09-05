@@ -25,7 +25,11 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.LocalTimeEncoder
 import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.types.TimeType
 
-class TimeTypeApiOps(t: TimeType) extends TypeApiOps with EncodeTypeOps with FormatTypeOps {
+class TimeTypeApiOps(t: TimeType)
+    extends TypeApiOps
+    with EncodeTypeOps
+    with FormatTypeOps
+    with Serializable {
   private lazy val fracFormatter = TimeFormatter.getFractionFormatter()
 
   override def getEncoder: AgnosticEncoder[_] = LocalTimeEncoder
