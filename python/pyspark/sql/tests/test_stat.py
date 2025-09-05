@@ -536,7 +536,7 @@ class DataFrameStatTestsMixin:
         with self.subTest(desc="with multiple identifier columns but none given value columns"):
             for ids in [["id", "str"], ("id", "str")]:
                 with self.subTest(ids=ids):
-                    actual = df.unpivot(ids, None, "var", "val").sort(sf.col("id"), sf.desc("val"))
+                    actual = df.unpivot(ids, None, "var", "val").sort("id", sf.desc("val"))
                     self.assertEqual(
                         actual.schema.simpleString(),
                         "struct<id:bigint,str:string,var:string,val:double>",
