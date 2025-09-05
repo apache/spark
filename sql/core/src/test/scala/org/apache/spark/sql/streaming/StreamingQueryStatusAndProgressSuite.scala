@@ -403,37 +403,13 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually wi
 
   test("SPARK-53491: inputRowsPerSecond and processedRowsPerSecond " +
     "should never be with scientific notation") {
-    import testImplicits._
+    val progress = testProgress4.jsonValue
 
-    val inputData = MemoryStream[Int]
-    val df = inputData.toDF()
-    val query = df.writeStream
-      .format("memory")
-      .queryName("SPARK_53491_test_formatting")
-      .start()
+    // This should fail if inputRowsPerSecond contains E notation
+    (progress \ "inputRowsPerSecond").values.toString should not include "E"
 
-    try {
-      // Submitting a very large batch to inputStream
-      // Using bigger range may repro the issue easily
-      // However, that will also cause OOM while running the test case.
-      // Hence limiting the range.
-      val bigBatch = 1 to 600000
-      inputData.addData(bigBatch: _*)
-
-      query.processAllAvailable()
-
-      // JSON representation of the latest query progress
-      val progress = query.lastProgress.jsonValue
-
-      // This should fail if inputRowsPerSecond contains E notiation
-      (progress \ "inputRowsPerSecond").values.toString should not include "E"
-
-      // This should fail if processedRowsPerSecond contains E notiation
-      (progress \ "processedRowsPerSecond").values.toString should not include "E"
-    } finally {
-      query.stop()
-      spark.streams.awaitAnyTermination(1000) // Waiting to allow cleaning all threads
-    }
+    // This should fail if processedRowsPerSecond contains E notation
+    (progress \ "processedRowsPerSecond").values.toString should not include "E"
   }
 
   def waitUntilBatchProcessed: AssertOnQuery = Execute { q =>
@@ -556,6 +532,44 @@ object StreamingQueryStatusAndProgressSuite {
     sources = Array(),
     sink = SinkProgress("sink", None),
     observedMetrics = null
+  )
+
+  val testProgress4 = new StreamingQueryProgress(
+    id = UUID.randomUUID,
+    runId = UUID.randomUUID,
+    name = "myName",
+    timestamp = "2025-09-05T20:54:20.827Z",
+    batchId = 2L,
+    batchDuration = 0L,
+    durationMs = new java.util.HashMap(Map("total" -> 0L).transform((_, v) => long2Long(v)).asJava),
+    eventTime = new java.util.HashMap(Map(
+      "max" -> "2025-09-05T20:54:20.827Z",
+      "min" -> "2025-09-05T20:54:20.827Z",
+      "avg" -> "2025-09-05T20:54:20.827Z",
+      "watermark" -> "2025-09-05T20:54:20.827Z").asJava),
+    stateOperators = Array(new StateOperatorProgress(operatorName = "op1",
+      numRowsTotal = 0, numRowsUpdated = 1, allUpdatesTimeMs = 1, numRowsRemoved = 2,
+      allRemovalsTimeMs = 34, commitTimeMs = 23, memoryUsedBytes = 3, numRowsDroppedByWatermark = 0,
+      numShufflePartitions = 2, numStateStoreInstances = 2,
+      customMetrics = new java.util.HashMap(Map("stateOnCurrentVersionSizeBytes" -> 2L,
+        "loadedMapCacheHitCount" -> 1L, "loadedMapCacheMissCount" -> 0L)
+        .transform((_, v) => long2Long(v)).asJava)
+    )),
+    sources = Array(
+      new SourceProgress(
+        description = "source",
+        startOffset = "123",
+        endOffset = "456",
+        latestOffset = "789",
+        numInputRows = 678,
+        inputRowsPerSecond = 6.923076923076923E7, // Large double value having exponentials
+        processedRowsPerSecond = 2.923076923076923E7
+      )
+    ),
+    sink = SinkProgress("sink", None),
+    observedMetrics = new java.util.HashMap(Map(
+      "event1" -> row(schema1, 1L, 3.0d),
+      "event2" -> row(schema2, 1L, "hello", "world")).asJava)
   )
 
   val testStatus = new StreamingQueryStatus("active", true, false)
