@@ -122,22 +122,28 @@ class UDFInputTypeTests(ReusedSQLTestCase):
                         def __repr__(self):
                             return f"np.{self.x.dtype}({self.x.item()})"
 
-                    # Numpy 1.x __repr__ returns a different format. We only care about
-                    # types and values of the elements,
+                    # Numpy 1.x __repr__ returns a different format, see
+                    # https://numpy.org/doc/stable/release/2.0.0-notes.html#representation-of-numpy-scalars-changed # noqa: E501
+                    # We only care about types and values of the elements,
                     # so we accept this difference and implement our own repr to make
                     # tests with numpy 1 return the same format as numpy 2.
                     def convert_to_numpy_printable(x):
+                        import numpy as np
+
                         if isinstance(x, Row):
-                            return Row(
-                                **{k: convert_to_numpy_printable(v) for k, v in x.asDict().items()}
-                            )
+                            converted_values = tuple(convert_to_numpy_printable(v) for v in x)
+                            new_row = Row(*converted_values)
+                            new_row.__fields__ = x.__fields__
+                            return new_row
                         elif isinstance(x, (list)):
                             return [convert_to_numpy_printable(elem) for elem in x]
                         elif isinstance(x, tuple):
                             return tuple(convert_to_numpy_printable(elem) for elem in x)
                         elif isinstance(x, dict):
                             return {k: convert_to_numpy_printable(v) for k, v in x.items()}
-                        elif hasattr(x, "dtype") and hasattr(x, "item"):
+                        elif (
+                            isinstance(x, np.generic) and hasattr(x, "dtype") and hasattr(x, "item")
+                        ):
                             return NpPrintable(x)
                         else:
                             return x
