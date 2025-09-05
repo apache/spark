@@ -525,7 +525,7 @@ class SparkSession private(
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
         if (args.nonEmpty) {
-          // Create a unified parameter query that can handle both positional and named parameters
+          // Create a general parameter query that can handle both positional and named parameters
           // The query itself will determine which type to use based on its parameter markers
           GeneralParameterizedQuery(
             parsedPlan,

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.UnresolvedPlanId
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, InSubquery, SubqueryExpression, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{ExecutableDuringAnalysis, LocalRelation, LogicalPlan, SetVariable, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -90,47 +91,47 @@ class ResolveExecuteImmediate(
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
       case node @ UnresolvedExecuteImmediate(sqlStmtStr, args, targetVariables) =>
         if (sqlStmtStr.resolved && targetVariables.forall(_.resolved) && args.forall(_.resolved)) {
-        // Validate that expressions don't contain unsupported constructs (like subqueries)
-        validateExpressions(args :+ sqlStmtStr)
+          // Validate expressions before transformation
+          validateExpressions(args :+ sqlStmtStr)
 
-        // All resolved - transform based on whether we have target variables
-        if (targetVariables.nonEmpty) {
-          // EXECUTE IMMEDIATE ... INTO should generate SetVariable plan
-          // At this point, all targetVariables are resolved, so we only expect VariableReference
-          // or Alias containing VariableReference
-          val finalTargetVars = targetVariables.map {
-            case alias: Alias =>
-              // Extract the VariableReference from the alias
-              alias.child match {
-                case varRef: VariableReference =>
-                  // Use resolved VariableReference directly with canFold = false
-                  varRef.copy(canFold = false)
-                case _ =>
-                  throw QueryCompilationErrors.unsupportedParameterExpression(alias.child)
-              }
-            case varRef: VariableReference =>
-              // Use resolved VariableReference directly with canFold = false
-              varRef.copy(canFold = false)
-            case other =>
-              throw QueryCompilationErrors.unsupportedParameterExpression(other)
+          // All resolved - transform based on whether we have target variables
+          if (targetVariables.nonEmpty) {
+            // EXECUTE IMMEDIATE ... INTO should generate SetVariable plan
+            // At this point, all targetVariables are resolved, so we only expect VariableReference
+            // or Alias containing VariableReference
+            val finalTargetVars = targetVariables.map {
+              case alias: Alias =>
+                // Extract the VariableReference from the alias
+                alias.child match {
+                  case varRef: VariableReference =>
+                    // Use resolved VariableReference directly with canFold = false
+                    varRef.copy(canFold = false)
+                  case _ =>
+                    throw QueryCompilationErrors.unsupportedParameterExpression(alias.child)
+                }
+              case varRef: VariableReference =>
+                // Use resolved VariableReference directly with canFold = false
+                varRef.copy(canFold = false)
+              case other =>
+                throw QueryCompilationErrors.unsupportedParameterExpression(other)
+            }
+
+            // Check for duplicate variable names (same logic as ResolveSetVariable)
+            val dups = finalTargetVars.groupBy(_.identifier).filter(kv => kv._2.length > 1)
+            if (dups.nonEmpty) {
+              throw new AnalysisException(
+                errorClass = "DUPLICATE_ASSIGNMENTS",
+                messageParameters = Map("nameList" ->
+                  dups.keys.map(key => toSQLId(key.name())).mkString(", ")))
+            }
+
+            // Create SetVariable plan with the execute immediate query as source
+            val sourceQuery = ExecuteImmediateCommand(sqlStmtStr, args, hasIntoClause = true)
+            SetVariable(finalTargetVars, sourceQuery)
+          } else {
+            // Regular EXECUTE IMMEDIATE without INTO
+            ExecuteImmediateCommand(sqlStmtStr, args, hasIntoClause = false)
           }
-
-          // Check for duplicate variable names (same logic as ResolveSetVariable)
-          val dups = finalTargetVars.groupBy(_.identifier).filter(kv => kv._2.length > 1)
-          if (dups.nonEmpty) {
-            throw new AnalysisException(
-              errorClass = "DUPLICATE_ASSIGNMENTS",
-              messageParameters = Map("nameList" ->
-                dups.keys.map(key => toSQLId(key.name())).mkString(", ")))
-          }
-
-          // Create SetVariable plan with the execute immediate query as source
-          val sourceQuery = ExecuteImmediateCommand(sqlStmtStr, args, hasIntoClause = true)
-          SetVariable(finalTargetVars, sourceQuery)
-        } else {
-          // Regular EXECUTE IMMEDIATE without INTO
-          ExecuteImmediateCommand(sqlStmtStr, args, hasIntoClause = false)
-        }
         } else {
           // Not all resolved yet - wait for next iteration
           node
@@ -140,16 +141,21 @@ class ResolveExecuteImmediate(
   /**
    * Validates that expressions don't contain unsupported constructs like subqueries.
    * Variable references and expressions like string concatenation are allowed.
+   * This validation catches both resolved and unresolved subqueries.
    */
   private def validateExpressions(expressions: Seq[Expression]): Unit = {
     expressions.foreach { expr =>
       // Check the expression and its children for unsupported constructs
       expr.foreach {
         case subquery: SubqueryExpression =>
+          // Resolved subqueries (ScalarSubquery, ListQuery, etc.)
           throw QueryCompilationErrors.unsupportedParameterExpression(subquery)
         case inSubquery: InSubquery =>
           // InSubquery doesn't extend SubqueryExpression directly but contains a subquery
           throw QueryCompilationErrors.unsupportedParameterExpression(inSubquery)
+        case unresolvedPlanId: UnresolvedPlanId =>
+          // Unresolved subqueries (UnresolvedScalarSubqueryPlanId, etc.)
+          throw QueryCompilationErrors.unsupportedParameterExpression(unresolvedPlanId)
         case _ => // Other expressions including variables and concatenations are fine
       }
     }

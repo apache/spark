@@ -40,22 +40,22 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
   }
 
   private def executeImmediate(cmd: ExecuteImmediateCommand): LogicalPlan = {
-      // Extract the query string from the queryParam expression
+    // Extract the query string from the queryParam expression
     val sqlStmtStr = extractQueryString(cmd.sqlStmtStr)
 
-      // Parse and validate the query
+    // Parse and validate the query
     val parsedPlan = sparkSession.sessionState.sqlParser.parsePlan(sqlStmtStr)
     validateQuery(sqlStmtStr, parsedPlan)
 
     // Execute the query recursively with isolated local variable context
-      val result = if (cmd.args.isEmpty) {
-        // No parameters - execute directly
+    val result = if (cmd.args.isEmpty) {
+      // No parameters - execute directly
       withIsolatedLocalVariableContext {
         sparkSession.sql(sqlStmtStr)
-        }
-      } else {
-        // For parameterized queries, build unified parameter arrays
-        val (paramValues, paramNames) = buildUnifiedParameters(cmd.args)
+      }
+    } else {
+      // For parameterized queries, build parameter arrays
+      val (paramValues, paramNames) = buildUnifiedParameters(cmd.args)
 
       withIsolatedLocalVariableContext {
         sparkSession.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
@@ -121,7 +121,7 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
   }
 
   /**
-   * Builds unified parameter arrays for the sql() API.
+   * Builds parameter arrays for the sql() API.
    */
   private def buildUnifiedParameters(args: Seq[Expression]): (Array[Any], Array[String]) = {
     val values = scala.collection.mutable.ListBuffer[Any]()
@@ -148,7 +148,7 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
    */
   private def evaluateParameterExpression(expr: Expression): Any = {
     expr match {
-          case varRef: VariableReference =>
+      case varRef: VariableReference =>
         // Variable references should be evaluated to their values
         varRef.eval(EmptyRow)
       case foldable if foldable.foldable =>
@@ -158,7 +158,6 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
         throw QueryCompilationErrors.unsupportedParameterExpression(other)
     }
   }
-
 
   /**
    * Temporarily isolates the SQL scripting context during EXECUTE IMMEDIATE execution.
