@@ -37,29 +37,33 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
 
     val executeHolder = SparkConnectService.executionManager.getExecuteHolder(executeKey)
     val opStatus = sessionHolder.getOperationStatus(executeKey.operationId)
+    val abandoned = SparkConnectService.executionManager.getAbandonedTombstone(executeKey)
 
-    (executeHolder, opStatus) match {
-      case (None, None) =>
+    (executeHolder, opStatus, abandoned) match {
+      case (None, None, _) =>
         // Create a new execute holder and attach to it.
         SparkConnectService.executionManager
           .createExecuteHolderAndAttach(executeKey, v, sessionHolder, responseObserver)
-      case (Some(executeHolder), _) if executeHolder.request.getPlan.equals(v.getPlan) =>
+      case (Some(executeHolder), _, _) if executeHolder.request.getPlan.equals(v.getPlan) =>
         // If the execute holder already exists with the same plan, reattach to it.
         SparkConnectService.executionManager
           .reattachExecuteHolder(executeHolder, responseObserver, None)
-      case (Some(_), _) =>
-        logInfo(
-          log"ExecuteHolder ${MDC(LogKeys.EXECUTE_KEY, executeKey)} already exists " +
-            log"with different plan.")
+      case (Some(_), _, _) =>
+        logInfo(log"ExecuteHolder ${MDC(LogKeys.EXECUTE_KEY, executeKey)} exists.")
         throw new SparkSQLException(
           errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
           messageParameters = Map("handle" -> executeKey.operationId))
-      case (None, Some(_)) =>
-        logInfo(
-          log"Operation ${MDC(LogKeys.EXECUTE_KEY, executeKey)} already exists " +
-            log"but ExecuteHolder not found.")
+      case (None, Some(_), None) =>
+        logInfo(log"No active ExecuteHolder ${MDC(LogKeys.EXECUTE_KEY, executeKey)} but " +
+          log"operation Id was seen previously but not abandoned.")
         throw new SparkSQLException(
           errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
+          messageParameters = Map("handle" -> executeKey.operationId))
+      case (None, Some(_), Some(_)) =>
+        logInfo(log"No active ExecuteHolder ${MDC(LogKeys.EXECUTE_KEY, executeKey)} but " +
+          log"operation Id was seen previously and abandoned.")
+        throw new SparkSQLException(
+          errorClass = "INVALID_HANDLE.OPERATION_ABANDONED",
           messageParameters = Map("handle" -> executeKey.operationId))
     }
   }
