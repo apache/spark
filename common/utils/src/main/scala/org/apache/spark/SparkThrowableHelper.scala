@@ -74,7 +74,11 @@ private[spark] object SparkThrowableHelper {
   }
 
   def getBreakingChangeInfo(errorClass: String): Option[BreakingChangeInfo] = {
-    errorReader.getBreakingChangeInfo(errorClass)
+    if (errorClass == null) {
+      None
+    } else {
+      errorReader.getBreakingChangeInfo(errorClass)
+    }
   }
 
   def isInternalError(errorClass: String): Boolean = {

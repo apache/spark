@@ -505,6 +505,14 @@ class SparkThrowableSuite extends SparkFunSuite {
   }
 
   test("breaking changes info") {
+    assert(SparkThrowableHelper.getBreakingChangeInfo(null).isEmpty)
+
+    val nonBreakingChangeError = new SparkException(
+      errorClass = "CANNOT_PARSE_DECIMAL",
+      messageParameters = Map.empty[String, String],
+      cause = null)
+    assert(!nonBreakingChangeError.getBreakingChangeInfo.isPresent)
+
     withTempDir { dir =>
       val json = new File(dir, "errors.json")
       Files.writeString(json.toPath,
