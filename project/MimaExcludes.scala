@@ -93,6 +93,9 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.network.util.ByteUnit"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.network.util.JavaUtils"),
 
+    // SPARK-53501: PythonWorker JVM class is internal
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.api.python.PythonWorker"),
+
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
           !cls.fullName.startsWith("org.sparkproject.dmg.pmml")
