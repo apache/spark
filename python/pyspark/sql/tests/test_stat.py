@@ -17,7 +17,7 @@
 
 import unittest
 
-from pyspark.sql import Row
+from pyspark.sql import Row, functions as sf
 from pyspark.sql.types import (
     StringType,
     IntegerType,
@@ -430,24 +430,26 @@ class DataFrameStatTestsMixin:
         with self.subTest(desc="with no identifier"):
             for id in [[], ()]:
                 with self.subTest(ids=id):
-                    actual = df.unpivot(id, ["int", "double"], "var", "val")
+                    actual = df.unpivot(id, ["int", "double"], "var", "val").sort("var", "val")
                     self.assertEqual(actual.schema.simpleString(), "struct<var:string,val:double>")
                     self.assertEqual(
                         actual.collect(),
                         [
-                            Row(var="int", val=10.0),
                             Row(var="double", val=1.0),
-                            Row(var="int", val=20.0),
                             Row(var="double", val=2.0),
-                            Row(var="int", val=30.0),
                             Row(var="double", val=3.0),
+                            Row(var="int", val=10.0),
+                            Row(var="int", val=20.0),
+                            Row(var="int", val=30.0),
                         ],
                     )
 
         with self.subTest(desc="with single identifier column"):
             for id in ["id", ["id"], ("id",)]:
                 with self.subTest(ids=id):
-                    actual = df.unpivot(id, ["int", "double"], "var", "val")
+                    actual = df.unpivot(id, ["int", "double"], "var", "val").sort(
+                        "id", sf.desc("val")
+                    )
                     self.assertEqual(
                         actual.schema.simpleString(),
                         "struct<id:bigint,var:string,val:double>",
@@ -467,7 +469,9 @@ class DataFrameStatTestsMixin:
         with self.subTest(desc="with multiple identifier columns"):
             for ids in [["id", "double"], ("id", "double")]:
                 with self.subTest(ids=ids):
-                    actual = df.unpivot(ids, ["int", "double"], "var", "val")
+                    actual = df.unpivot(ids, ["int", "double"], "var", "val").sort(
+                        "id", sf.desc("val")
+                    )
                     self.assertEqual(
                         actual.schema.simpleString(),
                         "struct<id:bigint,double:double,var:string,val:double>",
@@ -486,20 +490,22 @@ class DataFrameStatTestsMixin:
 
         with self.subTest(desc="with no identifier columns but none value columns"):
             # select only columns that have common data type (double)
-            actual = df.select("id", "int", "double").unpivot([], None, "var", "val")
+            actual = (
+                df.select("id", "int", "double").unpivot([], None, "var", "val").sort("var", "val")
+            )
             self.assertEqual(actual.schema.simpleString(), "struct<var:string,val:double>")
             self.assertEqual(
                 actual.collect(),
                 [
-                    Row(var="id", val=1.0),
-                    Row(var="int", val=10.0),
                     Row(var="double", val=1.0),
-                    Row(var="id", val=2.0),
-                    Row(var="int", val=20.0),
                     Row(var="double", val=2.0),
-                    Row(var="id", val=3.0),
-                    Row(var="int", val=30.0),
                     Row(var="double", val=3.0),
+                    Row(var="id", val=1.0),
+                    Row(var="id", val=2.0),
+                    Row(var="id", val=3.0),
+                    Row(var="int", val=10.0),
+                    Row(var="int", val=20.0),
+                    Row(var="int", val=30.0),
                 ],
             )
 
@@ -507,7 +513,11 @@ class DataFrameStatTestsMixin:
             for ids in ["id", ["id"], ("id",)]:
                 with self.subTest(ids=ids):
                     # select only columns that have common data type (double)
-                    actual = df.select("id", "int", "double").unpivot(ids, None, "var", "val")
+                    actual = (
+                        df.select("id", "int", "double")
+                        .unpivot(ids, None, "var", "val")
+                        .sort("id", sf.desc("val"))
+                    )
                     self.assertEqual(
                         actual.schema.simpleString(), "struct<id:bigint,var:string,val:double>"
                     )
@@ -526,7 +536,7 @@ class DataFrameStatTestsMixin:
         with self.subTest(desc="with multiple identifier columns but none given value columns"):
             for ids in [["id", "str"], ("id", "str")]:
                 with self.subTest(ids=ids):
-                    actual = df.unpivot(ids, None, "var", "val")
+                    actual = df.unpivot(ids, None, "var", "val").sort(sf.col("id"), sf.desc("val"))
                     self.assertEqual(
                         actual.schema.simpleString(),
                         "struct<id:bigint,str:string,var:string,val:double>",
@@ -546,7 +556,7 @@ class DataFrameStatTestsMixin:
         with self.subTest(desc="with single value column"):
             for values in ["int", ["int"], ("int",)]:
                 with self.subTest(values=values):
-                    actual = df.unpivot("id", values, "var", "val")
+                    actual = df.unpivot("id", values, "var", "val").sort("id")
                     self.assertEqual(
                         actual.schema.simpleString(), "struct<id:bigint,var:string,val:bigint>"
                     )
@@ -562,7 +572,7 @@ class DataFrameStatTestsMixin:
         with self.subTest(desc="with multiple value columns"):
             for values in [["int", "double"], ("int", "double")]:
                 with self.subTest(values=values):
-                    actual = df.unpivot("id", values, "var", "val")
+                    actual = df.unpivot("id", values, "var", "val").sort("id", sf.desc("val"))
                     self.assertEqual(
                         actual.schema.simpleString(), "struct<id:bigint,var:string,val:double>"
                     )
