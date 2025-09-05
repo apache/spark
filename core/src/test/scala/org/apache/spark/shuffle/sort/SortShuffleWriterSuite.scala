@@ -79,7 +79,7 @@ class SortShuffleWriterSuite
     }
   }
 
-  private def resetDependency(rowBasedCheckSumEnabled: Boolean): Unit = {
+  private def resetDependency(rowBasedChecksumEnabled: Boolean): Unit = {
     reset(dependency)
     when(dependency.partitioner).thenReturn(partitioner)
     when(dependency.serializer).thenReturn(serializer)
