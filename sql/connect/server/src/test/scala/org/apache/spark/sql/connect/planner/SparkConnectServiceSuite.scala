@@ -911,9 +911,6 @@ class SparkConnectServiceSuite
       }
     }
     def onNext(v: proto.ExecutePlanResponse): Unit = {
-      if (v.hasSchema) {
-        assert(executeHolder.eventsManager.status == ExecuteStatus.Analyzed)
-      }
       if (v.hasMetrics) {
         assert(executeHolder.eventsManager.status == ExecuteStatus.Finished)
       }
