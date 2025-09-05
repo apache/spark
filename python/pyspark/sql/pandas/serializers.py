@@ -1630,7 +1630,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
             """
 
             batches_gent_1, batches_gent_2 = tee(batches)
-            columns_map: dict[str, Optional[list[str]]] = {"inputData": None, "initState": None}
+            columns_map = {"inputData": None, "initState": None}
 
             def data_stream(batch_iter, field_name, key_offsets):
                 nonlocal columns_map
