@@ -69,6 +69,16 @@ class AdaptiveQueryExecSuite
 
   setupTestData()
 
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    sqlConf.setConf(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, false)
+  }
+
+  protected override def afterAll(): Unit = {
+    sqlConf.setConf(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, true)
+    super.afterAll()
+  }
+
   private def runAdaptiveAndVerifyResult(query: String,
       skipCheckAnswer: Boolean = false): (SparkPlan, SparkPlan) = {
     var finalPlanCnt = 0
@@ -2036,9 +2046,7 @@ class AdaptiveQueryExecSuite
     }
 
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
-      // Disabling cleanup as the test assertions depend on them
-      SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key -> "false") {
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
       val df = sql(
         """
           |SELECT * FROM (
