@@ -17,8 +17,13 @@
 
 package org.apache.spark.sql.catalyst.types.ops
 
+import java.time.LocalTime
+
+import org.apache.spark.sql.catalyst.CatalystTypeConverters.CatalystTypeConverter
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, MutableLong, MutableValue}
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalLongType}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.TimeType
 import org.apache.spark.sql.types.ops.TimeTypeApiOps
 
@@ -26,7 +31,8 @@ case class TimeTypeOps(t: TimeType)
   extends TimeTypeApiOps(t)
   with TypeOps
   with PhyTypeOps
-  with LiteralTypeOps {
+  with LiteralTypeOps
+  with CatalystTypeConverter[LocalTime, LocalTime, Any] {
 
   override def getPhysicalType: PhysicalDataType = PhysicalLongType
   override def getJavaClass: Class[_] = classOf[PhysicalLongType.InternalType]
@@ -34,4 +40,14 @@ case class TimeTypeOps(t: TimeType)
 
   override def getDefaultLiteral: Literal = Literal.create(0L, t)
   override def getJavaLiteral(v: Any): String = s"${v}L"
+
+  override def toCatalystImpl(scalaValue: LocalTime): Long = {
+    DateTimeUtils.localTimeToNanos(scalaValue)
+  }
+  override def toScala(catalystValue: Any): LocalTime = {
+    if (catalystValue == null) null
+    else DateTimeUtils.nanosToLocalTime(catalystValue.asInstanceOf[Long])
+  }
+  override def toScalaImpl(row: InternalRow, column: Int): LocalTime =
+    DateTimeUtils.nanosToLocalTime(row.getLong(column))
 }
