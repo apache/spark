@@ -140,7 +140,7 @@
     <kafka.version>3.9.1</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
-    <parquet.version>1.15.2</parquet.version>
+    <parquet.version>1.16.0</parquet.version>
     <orc.version>2.2.0</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.25</jetty.version>
@@ -217,7 +217,7 @@
     <bouncycastle.version>1.81</bouncycastle.version>
     <tink.version>1.16.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.1.124.Final</netty.version>
+    <netty.version>4.1.126.Final</netty.version>
     <netty-tcnative.version>2.0.72.Final</netty-tcnative.version>
     <icu4j.version>77.1</icu4j.version>
     <junit-jupiter.version>5.13.1</junit-jupiter.version>
