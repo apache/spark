@@ -5285,10 +5285,10 @@ object DAGSchedulerSuite {
   val mergerLocs = ArrayBuffer[BlockManagerId]()
 
   def makeMapStatus(
-    host: String,
-    reduces: Int,
-    sizes: Byte = 2,
-    mapTaskId: Long = -1,
+      host: String,
+      reduces: Int,
+      sizes: Byte = 2,
+      mapTaskId: Long = -1,
     checksumVal: Long = 0): MapStatus =
     MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes), mapTaskId, checksumVal)
 
