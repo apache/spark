@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.types.ops
 
 import java.time.LocalTime
 
-import org.apache.spark.sql.catalyst.CatalystTypeConverters.CatalystTypeConverter
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, MutableLong, MutableValue}
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalLongType}
@@ -32,7 +31,7 @@ case class TimeTypeOps(t: TimeType)
   with TypeOps
   with PhyTypeOps
   with LiteralTypeOps
-  with CatalystTypeConverter[LocalTime, LocalTime, Any] {
+  with ExternalTypeOps[LocalTime, LocalTime, Any] {
 
   override def getPhysicalType: PhysicalDataType = PhysicalLongType
   override def getJavaClass: Class[_] = classOf[PhysicalLongType.InternalType]

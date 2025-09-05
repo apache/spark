@@ -21,12 +21,14 @@ import org.apache.spark.sql.catalyst.CatalystTypeConverters.CatalystTypeConverte
 import org.apache.spark.sql.types.{DataType, TimeType}
 
 // Conversion operations to external types
-trait ExternalTypeOps extends CatalystTypeConverter[Any, Any, Any]
+trait ExternalTypeOps[SIN, SOUT, CT] extends CatalystTypeConverter[SIN, SOUT, CT]
 
 object ExternalTypeOps {
   private val supportedDataTypes: Set[DataType] =
     Set(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*)
 
   def supports(dt: DataType): Boolean = supportedDataTypes.contains(dt)
-  def apply(dt: DataType): ExternalTypeOps = TypeOps(dt).asInstanceOf[ExternalTypeOps]
+  def apply(dt: DataType): ExternalTypeOps[_, _, _] = {
+    TypeOps(dt).asInstanceOf[ExternalTypeOps[_, _, _]]
+  }
 }
