@@ -38,6 +38,5 @@ object PhyTypeOps {
     Set(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*)
 
   def supports(dt: DataType): Boolean = supportedDataTypes.contains(dt)
-
   def apply(dt: DataType): PhyTypeOps = TypeOps(dt).asInstanceOf[PhyTypeOps]
 }

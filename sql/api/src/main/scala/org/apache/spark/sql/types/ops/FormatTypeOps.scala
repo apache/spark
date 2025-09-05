@@ -33,7 +33,6 @@ object FormatTypeOps {
     Set(TimeType.MIN_PRECISION to TimeType.MAX_PRECISION map TimeType.apply: _*)
 
   def supports(dt: DataType): Boolean = supportedDataTypes.contains(dt)
-
   def apply(dt: DataType): FormatTypeOps = TypeApiOps(dt).asInstanceOf[FormatTypeOps]
 }
 
