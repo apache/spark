@@ -27,8 +27,8 @@ import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.util.Utils
 
-class MasterDecommisionSuite extends MasterSuiteBase {
-  test("SPARK-46888: master should reject worker kill request if decommision is disabled") {
+class MasterDecommissionSuite extends MasterSuiteBase {
+  test("SPARK-46888: master should reject worker kill request if decommission is disabled") {
     implicit val formats = org.json4s.DefaultFormats
     val conf = new SparkConf()
       .set(DECOMMISSION_ENABLED, false)
