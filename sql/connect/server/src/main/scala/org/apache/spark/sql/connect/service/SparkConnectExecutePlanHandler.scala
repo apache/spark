@@ -54,14 +54,16 @@ class SparkConnectExecutePlanHandler(responseObserver: StreamObserver[proto.Exec
           errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
           messageParameters = Map("handle" -> executeKey.operationId))
       case (None, Some(_), None) =>
-        logInfo(log"No active ExecuteHolder ${MDC(LogKeys.EXECUTE_KEY, executeKey)} but " +
-          log"operation Id was seen previously but not abandoned.")
+        logInfo(
+          log"No active ExecuteHolder ${MDC(LogKeys.EXECUTE_KEY, executeKey)} but " +
+            log"operation Id was seen previously but not abandoned.")
         throw new SparkSQLException(
           errorClass = "INVALID_HANDLE.OPERATION_ALREADY_EXISTS",
           messageParameters = Map("handle" -> executeKey.operationId))
       case (None, Some(_), Some(_)) =>
-        logInfo(log"No active ExecuteHolder ${MDC(LogKeys.EXECUTE_KEY, executeKey)} but " +
-          log"operation Id was seen previously and abandoned.")
+        logInfo(
+          log"No active ExecuteHolder ${MDC(LogKeys.EXECUTE_KEY, executeKey)} but " +
+            log"operation Id was seen previously and abandoned.")
         throw new SparkSQLException(
           errorClass = "INVALID_HANDLE.OPERATION_ABANDONED",
           messageParameters = Map("handle" -> executeKey.operationId))
