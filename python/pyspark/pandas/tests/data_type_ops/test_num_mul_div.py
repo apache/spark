@@ -111,6 +111,36 @@ class NumMulDivTestsMixin:
             self.assertRaises(TypeError, lambda: psdf["decimal"] // 0.1)
             self.assertRaises(TypeError, lambda: 0.1 // psdf["decimal"])
 
+    def test_mod(self):
+        pdf, psdf = self.pdf, self.psdf
+
+        # element-wise modulo for numeric columns
+        for col in self.numeric_df_cols:
+            pser, psser = pdf[col], psdf[col]
+
+            if psser.dtype in [float, int, np.int32]:
+                self.assert_eq(pser % pser, psser % psser)
+                self.assert_eq(pser % pser.astype(bool), psser % psser.astype(bool))
+                self.assert_eq(pser % True, psser % True)
+                # TODO: align the data type to pandas when ints % False
+                # self.assert_eq(pser % False, psser % False)
+
+            # modulo with non-numeric columns
+            for n_col in self.non_numeric_df_cols:
+                if n_col == "bool":
+                    # follow pandas semantics for modulo with a boolean Series
+                    self.assert_eq(pdf["float"] % pdf["bool"], psdf["float"] % psdf["bool"])
+                else:
+                    self.assertRaises(TypeError, lambda: psser % psdf[n_col])
+
+        if is_ansi_mode_test:
+            self.assertRaises(TypeError, lambda: psdf["decimal"] % psdf["float"])
+            self.assertRaises(TypeError, lambda: psdf["float"] % psdf["decimal"])
+            self.assertRaises(TypeError, lambda: psdf["decimal"] % psdf["float32"])
+            self.assertRaises(TypeError, lambda: psdf["float32"] % psdf["decimal"])
+            self.assertRaises(TypeError, lambda: psdf["decimal"] % 0.1)
+            self.assertRaises(TypeError, lambda: 0.1 % psdf["decimal"])
+
 
 class NumMulDivTests(
     NumMulDivTestsMixin,
