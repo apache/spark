@@ -5289,7 +5289,7 @@ object DAGSchedulerSuite {
       reduces: Int,
       sizes: Byte = 2,
       mapTaskId: Long = -1,
-    checksumVal: Long = 0): MapStatus =
+      checksumVal: Long = 0): MapStatus =
     MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes), mapTaskId, checksumVal)
 
   def makeBlockManagerId(host: String, execId: Option[String] = None): BlockManagerId = {
