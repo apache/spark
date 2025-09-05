@@ -145,7 +145,7 @@ class BypassMergeSortShuffleWriterSuite
     }
   }
 
-  private def resetDependency(sc: SparkConf, rowBasedCheckSumEnabled: Boolean): Unit = {
+  private def resetDependency(sc: SparkConf, rowBasedChecksumEnabled: Boolean): Unit = {
     reset(dependency)
     val numPartitions = 7
     when(dependency.partitioner).thenReturn(new HashPartitioner(numPartitions))
