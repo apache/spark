@@ -58,7 +58,8 @@ case class ExecuteImmediateCommands(sparkSession: SparkSession) extends Rule[Log
       val (paramValues, paramNames) = buildUnifiedParameters(cmd.args)
 
       withIsolatedLocalVariableContext {
-        sparkSession.sql(sqlStmtStr, paramValues, paramNames)
+        sparkSession.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
+          .sql(sqlStmtStr, paramValues, paramNames)
       }
     }
 

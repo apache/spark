@@ -514,7 +514,7 @@ class SparkSession private(
    * returning the result as a `DataFrame`. This method allows the inner query to determine
    * whether to use positional or named parameters based on its parameter markers.
    */
-  def sql(sqlText: String, args: Array[_], paramNames: Array[String]): DataFrame = {
+  private[sql] def sql(sqlText: String, args: Array[_], paramNames: Array[String]): DataFrame = {
     sql(sqlText, args, paramNames, new QueryPlanningTracker)
   }
 

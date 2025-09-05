@@ -271,8 +271,8 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         }.toMap
         val positionalArgsMap = if (positionalParams.nonEmpty) {
           val sortedPositions = positionalParams.toSeq.sorted
-          sortedPositions.zipWithIndex.map { case (pos, index) =>
-            pos -> (if (index < args.length) args(index) else args.last)
+          sortedPositions.zipWithIndex.collect { case (pos, index) if index < args.length =>
+            pos -> args(index)
           }.toMap
         } else Map.empty[Int, Expression]
 
