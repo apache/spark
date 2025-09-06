@@ -32,6 +32,7 @@ import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
+import org.apache.spark.sql.connect.execution.command.ConnectLeafRunnableCommand
 import org.apache.spark.sql.connect.planner.{InvalidInputErrors, SparkConnectPlanner}
 import org.apache.spark.sql.connect.service.ExecuteHolder
 import org.apache.spark.sql.connect.utils.MetricGenerator
@@ -90,6 +91,15 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
               shuffleCleanupMode = shuffleCleanupMode)
             qe.assertCommandExecuted()
             executeHolder.eventsManager.postFinished()
+            qe.logical match {
+              case connectCommand: ConnectLeafRunnableCommand =>
+                connectCommand.handleConnectResponse(
+                  responseObserver,
+                  sessionHolder.sessionId,
+                  sessionHolder.serverSessionId)
+              case _ =>
+              // Do nothing
+            }
           case None =>
             planner.process(command, responseObserver)
         }
