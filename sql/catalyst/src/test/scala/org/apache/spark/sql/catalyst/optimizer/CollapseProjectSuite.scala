@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -297,5 +298,65 @@ class CollapseProjectSuite extends PlanTest {
         .analyze
       comparePlans(optimized, expected)
     }
+  }
+
+  test("SPARK-53399: Always merge Python UDFs with same evalType") {
+    val pythonUdf = (e: Expression) => {
+      PythonUDF("udf", null, IntegerType, Seq(e), PythonEvalType.SQL_BATCHED_UDF, true)
+    }
+
+    val query = testRelation
+      .select(pythonUdf($"a") as "udf_a", $"b", $"b" + 1 as "b_plus_1")
+      .select($"udf_a", pythonUdf($"b") as "udf_b", $"b_plus_1" + $"b_plus_1" as "2b_plus_2")
+      .analyze
+
+    val optimized = Optimize.execute(query)
+
+    val expected = testRelation
+      .select(
+        pythonUdf($"a") as "udf_a",
+        pythonUdf($"b") as "udf_b",
+        ($"b" + 1) + ($"b" + 1) as "2b_plus_2")
+      .analyze
+
+    comparePlans(optimized, expected)
+
+    val query2 = testRelation
+      .select(pythonUdf($"a") as "udf_a", $"b", $"b" + 1 as "b_plus_1")
+      .select($"udf_a", $"b", $"b_plus_1" + $"b_plus_1" as "2b_plus_2")
+      .select($"udf_a", pythonUdf($"b") as "udf_b", $"2b_plus_2" + $"2b_plus_2" as "4b_plus_4")
+      .analyze
+
+    val optimized2 = Optimize.execute(query2)
+
+    val expected2 = testRelation
+      .select(
+        pythonUdf($"a") as "udf_a",
+        pythonUdf($"b") as "udf_b",
+        (($"b" + 1) + ($"b" + 1)) + (($"b" + 1) + ($"b" + 1)) as "4b_plus_4")
+      .analyze
+
+    comparePlans(optimized2, expected2)
+  }
+
+  test("SPARK-53399: Don't merge Python UDFs with different evalType") {
+    val pythonUdfA = (e: Expression) => {
+      PythonUDF("udf", null, IntegerType, Seq(e), PythonEvalType.SQL_BATCHED_UDF, true)
+    }
+
+    val pythonUdfB = (e: Expression) => {
+      PythonUDF("udf", null, IntegerType, Seq(e), PythonEvalType.SQL_ARROW_BATCHED_UDF, true)
+    }
+
+    val query = testRelation
+      .select(pythonUdfA($"a") as "udf_a", $"b", $"b" + 1 as "b_plus_1")
+      .select($"udf_a", pythonUdfB($"b") as "udf_b", $"b_plus_1" + $"b_plus_1" as "2b_plus_2")
+      .analyze
+
+    val optimized = Optimize.execute(query)
+
+    val expected = query
+
+    comparePlans(optimized, expected)
   }
 }
