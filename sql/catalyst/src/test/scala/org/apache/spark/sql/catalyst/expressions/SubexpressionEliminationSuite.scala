@@ -278,11 +278,10 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
         ExprCode(TrueLiteral, oneVar),
         ExprCode(TrueLiteral, twoVar))
 
-      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(exprs)
+      val subExprs = ctx.subexpressionElimination(exprs)
       ctx.withSubExprEliminationExprs(subExprs.states) {
         exprs.map(_.genCode(ctx))
       }
-      val subExprsCode = ctx.evaluateSubExprEliminationState(subExprs.states.values)
 
       val codeBody = s"""
         public java.lang.Object generate(Object[] references) {
@@ -296,7 +295,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
           }
 
           public void initialize(int partitionIndex) {
-            ${subExprsCode}
+            ${subExprs.subExprCode}
           }
 
           ${ctx.declareAddedFunctions()}
@@ -408,16 +407,12 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
 
     val exprs = Seq(add1, add1, add2, add2)
     val ctx = new CodegenContext()
-    val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(exprs)
+    val subExprs = ctx.subexpressionElimination(exprs)
 
     val add2State = subExprs.states(ExpressionEquals(add2))
     val add1State = subExprs.states(ExpressionEquals(add1))
     assert(add2State.children.contains(add1State))
 
-    subExprs.states.values.foreach { state =>
-      assert(state.eval.code != EmptyBlock)
-    }
-    ctx.evaluateSubExprEliminationState(subExprs.states.values)
     subExprs.states.values.foreach { state =>
       assert(state.eval.code == EmptyBlock)
     }
