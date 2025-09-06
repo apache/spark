@@ -85,6 +85,26 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         callSitePattern = getCurrentClassCallSitePattern))
   }
 
+  test("REMAINDER_BY_ZERO: can't take modulo of an integer by zero") {
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        sql("select 6 % 0").collect()
+      },
+      condition = "REMAINDER_BY_ZERO",
+      sqlState = "22012",
+      parameters = Map("config" -> ansiConf),
+      context = ExpectedContext(fragment = "6 % 0", start = 7, stop = 11))
+
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        sql("select pmod(6, 0)").collect()
+      },
+      condition = "REMAINDER_BY_ZERO",
+      sqlState = "22012",
+      parameters = Map("config" -> ansiConf),
+      context = ExpectedContext(fragment = "pmod(6, 0)", start = 7, stop = 16))
+  }
+
   test("INTERVAL_DIVIDED_BY_ZERO: interval divided by zero") {
     checkError(
       exception = intercept[SparkArithmeticException] {
