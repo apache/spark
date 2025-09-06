@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEProp
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.util.Utils
 
 class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -205,6 +206,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     sql("analyze table bf5part compute statistics for columns a5, b5, c5, d5, e5, f5")
     sql("analyze table bf5filtered compute statistics for columns a5, b5, c5, d5, e5, f5")
 
+    conf.setConf(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, false)
     // `MergeScalarSubqueries` can duplicate subqueries in the optimized plan and would make testing
     // complicated.
     conf.setConfString(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, MergeScalarSubqueries.ruleName)
@@ -213,6 +215,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
   protected override def afterAll(): Unit = try {
     conf.setConfString(SQLConf.OPTIMIZER_EXCLUDED_RULES.key,
       SQLConf.OPTIMIZER_EXCLUDED_RULES.defaultValueString)
+    conf.setConf(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED, Utils.isTesting)
 
     sql("DROP TABLE IF EXISTS bf1")
     sql("DROP TABLE IF EXISTS bf2")
