@@ -18,16 +18,15 @@ package org.apache.hive.service.cli.operation;
 
 import java.util.Map;
 
-import org.apache.hadoop.hive.ql.session.OperationLog;
 import org.apache.hive.service.cli.OperationType;
 import org.apache.hive.service.cli.session.HiveSession;
 
 public abstract class ExecuteStatementOperation extends Operation {
   protected String statement = null;
 
-  public ExecuteStatementOperation(HiveSession parentSession, String statement,
+  public ExecuteStatementOperation(HiveSession parentSession, OperationManager operationManager, String statement,
       Map<String, String> confOverlay, boolean runInBackground) {
-    super(parentSession, confOverlay, OperationType.EXECUTE_STATEMENT, runInBackground);
+    super(parentSession, operationManager, confOverlay, OperationType.EXECUTE_STATEMENT, runInBackground);
     this.statement = statement;
   }
 
@@ -43,7 +42,7 @@ public abstract class ExecuteStatementOperation extends Operation {
         isOperationLogEnabled = false;
         return;
       }
-      OperationLog.setCurrentOperationLog(operationLog);
+      operationManager.setCurrentOperationLog(operationLog, operationLogFile);
     }
   }
 }

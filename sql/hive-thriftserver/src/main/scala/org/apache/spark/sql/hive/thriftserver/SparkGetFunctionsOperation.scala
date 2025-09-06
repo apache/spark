@@ -23,7 +23,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObjectUtils}
 import org.apache.hive.service.cli._
-import org.apache.hive.service.cli.operation.GetFunctionsOperation
+import org.apache.hive.service.cli.operation.{GetFunctionsOperation, OperationManager}
 import org.apache.hive.service.cli.operation.MetadataOperation.DEFAULT_HIVE_CATALOG
 import org.apache.hive.service.cli.session.HiveSession
 
@@ -42,10 +42,12 @@ import org.apache.spark.sql.SparkSession
 private[hive] class SparkGetFunctionsOperation(
     val session: SparkSession,
     parentSession: HiveSession,
+    operationManager: OperationManager,
     catalogName: String,
     schemaName: String,
     functionName: String)
-  extends GetFunctionsOperation(parentSession, catalogName, schemaName, functionName)
+  extends GetFunctionsOperation(parentSession, operationManager, catalogName, schemaName,
+    functionName)
   with SparkOperation
   with Logging {
 
