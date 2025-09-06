@@ -34,15 +34,16 @@ import org.apache.spark.util.SparkExitCode
  */
 object SparkPipelines extends Logging {
   def main(args: Array[String]): Unit = {
-    val sparkHome = sys.env("SPARK_HOME")
-    SparkSubmit.main(constructSparkSubmitArgs(args, sparkHome).toArray)
+    val pipelinesCliFile = args(0)
+    val sparkSubmitAndPipelinesArgs = args.slice(1, args.length)
+    SparkSubmit.main(
+      constructSparkSubmitArgs(pipelinesCliFile, sparkSubmitAndPipelinesArgs).toArray)
   }
 
   protected[deploy] def constructSparkSubmitArgs(
-      args: Array[String],
-      sparkHome: String): Seq[String] = {
+      pipelinesCliFile: String,
+      args: Array[String]): Seq[String] = {
     val (sparkSubmitArgs, pipelinesArgs) = splitArgs(args)
-    val pipelinesCliFile = s"$sparkHome/python/pyspark/pipelines/cli.py"
     (sparkSubmitArgs ++ Seq(pipelinesCliFile) ++ pipelinesArgs)
   }
 
