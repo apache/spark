@@ -19,10 +19,10 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, LeafExpression, Literal, MapFromArrays, MapFromEntries, SubqueryExpression, Unevaluable, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SupervisingCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LogicalPlan, SupervisingCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
-import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, SqlScriptingErrors}
 import org.apache.spark.sql.types.DataType
 
 sealed trait Parameter extends LeafExpression with Unevaluable {
@@ -105,6 +105,28 @@ case class PosParameterizedQuery(child: LogicalPlan, args: Seq[Expression])
 }
 
 /**
+ * The logical plan representing a parameterized query with general parameter support.
+ * This allows the query to use either positional or named parameters based on the
+ * parameter markers found in the query, with optional parameter names provided.
+ *
+ * @param child The parameterized logical plan.
+ * @param args The literal values or collection constructor functions such as `map()`,
+ *             `array()`, `struct()` of parameters.
+ * @param paramNames Optional parameter names corresponding to args. If provided for an argument,
+ *                   that argument can be used for named parameter binding. If not provided
+ *                   parameters are treated as positional.
+ */
+case class GeneralParameterizedQuery(
+    child: LogicalPlan,
+    args: Seq[Expression],
+    paramNames: Seq[String])
+  extends ParameterizedQuery(child) {
+  assert(args.nonEmpty)
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(child = newChild)
+}
+
+/**
  * Moves `ParameterizedQuery` inside `SupervisingCommand` for their supervised plans to be
  * resolved later by the analyzer.
  *
@@ -143,7 +165,7 @@ object MoveParameterizedQueriesDown extends Rule[LogicalPlan] {
 }
 
 /**
- * Finds all named parameters in `ParameterizedQuery` and substitutes them by literals or
+ * Binds all named parameters in `ParameterizedQuery` and substitutes them by literals or
  * by collection constructor functions such as `map()`, `array()`, `struct()`
  * from the user-specified arguments.
  */
@@ -191,6 +213,12 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
       case PosParameterizedQuery(child, args)
         if !child.containsPattern(UNRESOLVED_WITH) &&
           args.forall(_.resolved) =>
+
+        // Validate: positional parameters are not supported for SQL scripting
+        if (child.isInstanceOf[CompoundBody]) {
+          throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+        }
+
         val indexedArgs = args.zipWithIndex
         checkArgs(indexedArgs.map(arg => (s"_${arg._2}", arg._1)))
 
@@ -201,6 +229,69 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         bind(child) {
           case PosParameter(pos) if posToIndex.contains(pos) && args.size > posToIndex(pos) =>
             args(posToIndex(pos))
+        }
+
+      case GeneralParameterizedQuery(child, args, paramNames)
+        if !child.containsPattern(UNRESOLVED_WITH) &&
+          args.forall(_.resolved) =>
+
+        // Collect parameter types used in the query and validate no mixing
+        val namedParams = scala.collection.mutable.Set.empty[String]
+        val positionalParams = scala.collection.mutable.Set.empty[Int]
+        bind(child) {
+          case NamedParameter(name) => namedParams.add(name); NamedParameter(name)
+          case p @ PosParameter(pos) => positionalParams.add(pos); p
+        }
+
+        // Validate: no mixing of positional and named parameters
+        if (namedParams.nonEmpty && positionalParams.nonEmpty) {
+          throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
+        }
+
+        // Validate: positional parameters are not supported for SQL scripting
+        if (positionalParams.nonEmpty && child.isInstanceOf[CompoundBody]) {
+          throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+        }
+
+        // Validate: if query uses named parameters, all USING expressions must have names
+        if (namedParams.nonEmpty && positionalParams.isEmpty) {
+          val unnamedExpressions = paramNames.zipWithIndex.collect {
+            case (null, index) => index
+            case ("", index) => index // empty strings are unnamed
+          }
+          if (unnamedExpressions.nonEmpty) {
+            val unnamedExprs = unnamedExpressions.map(args(_))
+            throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedExprs)
+          }
+        }
+
+        // Check all arguments for validity (args are already evaluated expressions/literals)
+        val allArgs = args.zipWithIndex.map { case (arg, idx) =>
+          val name = if (idx < paramNames.length && paramNames(idx) != null) {
+            paramNames(idx)
+          } else {
+            s"_$idx"
+          }
+          (name, arg)
+        }
+        checkArgs(allArgs)
+
+        // Single pass binding - args are already literals/evaluated expressions
+        val namedArgsMap = paramNames.zipWithIndex.collect {
+          case (name, index) if name != null => name -> args(index)
+        }.toMap
+        val positionalArgsMap = if (positionalParams.nonEmpty) {
+          val sortedPositions = positionalParams.toSeq.sorted
+          sortedPositions.zipWithIndex.collect { case (pos, index) if index < args.length =>
+            pos -> args(index)
+          }.toMap
+        } else Map.empty[Int, Expression]
+
+        bind(child) {
+          case NamedParameter(name) if namedArgsMap.contains(name) =>
+            namedArgsMap(name)
+          case PosParameter(pos) if positionalArgsMap.contains(pos) =>
+            positionalArgsMap(pos)
         }
 
       case other => other

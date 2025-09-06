@@ -4131,10 +4131,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def invalidExecuteImmediateVariableType(dataType: DataType): Throwable = {
+  def invalidExecuteImmediateExpressionType(dataType: DataType): Throwable = {
     throw new AnalysisException(
-      errorClass = "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
-      messageParameters = Map("varType" -> toSQLType(dataType)))
+      errorClass = "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+      messageParameters = Map("exprType" -> toSQLType(dataType)))
   }
 
   def nullSQLStringExecuteImmediate(varName: String): Throwable = {
@@ -4146,12 +4146,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def invalidStatementForExecuteInto(queryString: String): Throwable = {
     throw new AnalysisException(
       errorClass = "INVALID_STATEMENT_FOR_EXECUTE_INTO",
-      messageParameters = Map("sqlString" -> toSQLStmt(queryString)))
-  }
-
-  def nestedExecuteImmediate(queryString: String): Throwable = {
-    throw new AnalysisException(
-      errorClass = "NESTED_EXECUTE_IMMEDIATE",
       messageParameters = Map("sqlString" -> toSQLStmt(queryString)))
   }
 

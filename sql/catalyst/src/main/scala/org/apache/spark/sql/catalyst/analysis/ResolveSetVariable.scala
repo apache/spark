@@ -42,8 +42,7 @@ class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[Logica
       val resolvedVars = setVariable.targetVariables.map {
         case u: UnresolvedAttribute =>
           variableResolution.lookupVariable(
-            nameParts = u.nameParts,
-            resolvingExecuteImmediate = AnalysisContext.get.isExecuteImmediate
+            nameParts = u.nameParts
           ) match {
             case Some(variable) => variable.copy(canFold = false)
             case _ => throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))

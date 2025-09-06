@@ -250,6 +250,7 @@ class SparkSession private[sql] (
     sql(query, Array.empty)
   }
 
+
   private def sql(sqlCommand: proto.SqlCommand): DataFrame = {
     // Send the SQL once to the server and then check the output.
     executeCommandWithDataFrameReturn(newCommand(_.setSqlCommand(sqlCommand)))

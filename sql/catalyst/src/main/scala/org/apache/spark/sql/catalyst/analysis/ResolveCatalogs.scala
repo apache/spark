@@ -142,8 +142,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   }
 
   private def withinSqlScript: Boolean =
-    SqlScriptingContextManager.get().map(_.getVariableManager).isDefined &&
-      !AnalysisContext.get.isExecuteImmediate
+    SqlScriptingContextManager.get().map(_.getVariableManager).isDefined
 
   private def assertValidSessionVariableNameParts(
       nameParts: Seq[String],

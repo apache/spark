@@ -17,202 +17,148 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.util.{Either, Left, Right}
-
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, VariableReference}
-import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LogicalPlan, SetVariable}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.UnresolvedPlanId
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, InSubquery, SubqueryExpression, VariableReference}
+import org.apache.spark.sql.catalyst.plans.logical.{ExecutableDuringAnalysis, LocalRelation, LogicalPlan, SetVariable, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.StringType
 
 /**
  * Logical plan representing execute immediate query.
  *
- * @param args parameters of query
- * @param query query string or variable
+ * @param sqlStmtStr the query expression (first child)
+ * @param args parameters from USING clause (subsequent children)
  * @param targetVariables variables to store the result of the query
  */
-case class ExecuteImmediateQuery(
+case class UnresolvedExecuteImmediate(
+    sqlStmtStr: Expression,
     args: Seq[Expression],
-    query: Either[String, UnresolvedAttribute],
-    targetVariables: Seq[UnresolvedAttribute])
+    targetVariables: Seq[Expression])
   extends UnresolvedLeafNode {
+
   final override val nodePatterns: Seq[TreePattern] = Seq(EXECUTE_IMMEDIATE)
 }
 
 /**
- * This rule substitutes execute immediate query node with fully analyzed
- * plan that is passed as string literal or session parameter.
+ * Logical plan representing a resolved execute immediate command that will recursively
+ * invoke SQL execution.
+ *
+ * @param sqlStmtStr the resolved query expression
+ * @param args parameters from USING clause
+ * @param hasIntoClause whether this EXECUTE IMMEDIATE has an INTO clause
  */
-class SubstituteExecuteImmediate(
-    val catalogManager: CatalogManager,
-    resolveChild: LogicalPlan => LogicalPlan,
-    checkAnalysis: LogicalPlan => Unit)
-  extends Rule[LogicalPlan] {
-  private val variableResolution = new VariableResolution(catalogManager.tempVariableManager)
+case class ExecuteImmediateCommand(
+    sqlStmtStr: Expression,
+    args: Seq[Expression],
+    hasIntoClause: Boolean = false)
+  extends UnaryNode with ExecutableDuringAnalysis {
 
-  def resolveVariable(e: Expression): Expression = {
+  final override val nodePatterns: Seq[TreePattern] = Seq(EXECUTE_IMMEDIATE)
 
-    /**
-     * We know that the expression is either UnresolvedAttribute, Alias or Parameter, as passed from
-     * the parser. If it is an UnresolvedAttribute, we look it up in the catalog and return it. If
-     * it is an Alias, we resolve the child and return an Alias with the same name. If it is
-     * a Parameter, we leave it as is because the parameter belongs to another parameterized
-     * query and should be resolved later.
-     */
-    e match {
-      case u: UnresolvedAttribute =>
-        getVariableReference(u, u.nameParts)
-      case a: Alias =>
-        Alias(resolveVariable(a.child), a.name)()
-      case p: Parameter => p
-      case other =>
-        throw QueryCompilationErrors.unsupportedParameterExpression(other)
-    }
+  override def child: LogicalPlan = LocalRelation(Nil, Nil)
+
+  override def output: Seq[Attribute] = child.output
+
+  override lazy val resolved: Boolean = {
+    // ExecuteImmediateCommand should not be considered resolved until it has been
+    // executed and replaced by ExecuteImmediateCommands rule.
+    // This ensures that SetVariable waits for execution to complete.
+    false
   }
 
-  def resolveArguments(expressions: Seq[Expression]): Seq[Expression] = {
-    expressions.map { exp =>
-      if (exp.resolved) {
-        exp
-      } else {
-        resolveVariable(exp)
-      }
-    }
+  override def stageForExplain(): LogicalPlan = {
+    // For EXPLAIN, just show the command without executing it
+    copy()
   }
 
-  def extractQueryString(either: Either[String, UnresolvedAttribute]): String = {
-    either match {
-      case Left(v) => v
-      case Right(u) =>
-        val varReference = getVariableReference(u, u.nameParts)
-
-        if (!varReference.dataType.sameType(StringType)) {
-          throw QueryCompilationErrors.invalidExecuteImmediateVariableType(varReference.dataType)
-        }
-
-        // Call eval with null value passed instead of a row.
-        // This is ok as this is variable and invoking eval should
-        // be independent of row value.
-        val varReferenceValue = varReference.eval(null)
-
-        if (varReferenceValue == null) {
-          throw QueryCompilationErrors.nullSQLStringExecuteImmediate(u.name)
-        }
-
-        varReferenceValue.toString
-    }
+  override protected def withNewChildInternal(
+      newChild: LogicalPlan): ExecuteImmediateCommand = {
+    copy()
   }
+}
 
+/**
+ * This rule resolves execute immediate query node into a command node
+ * that will handle recursive SQL execution.
+ */
+class ResolveExecuteImmediate(
+    val catalogManager: CatalogManager) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
-      case e @ ExecuteImmediateQuery(expressions, _, _) if expressions.exists(!_.resolved) =>
-        e.copy(args = resolveArguments(expressions))
+      case node @ UnresolvedExecuteImmediate(sqlStmtStr, args, targetVariables) =>
+        if (sqlStmtStr.resolved && targetVariables.forall(_.resolved) && args.forall(_.resolved)) {
+          // Validate expressions before transformation
+          validateExpressions(args :+ sqlStmtStr)
 
-      case ExecuteImmediateQuery(expressions, query, targetVariables)
-        if expressions.forall(_.resolved) =>
+          // All resolved - transform based on whether we have target variables
+          if (targetVariables.nonEmpty) {
+            // EXECUTE IMMEDIATE ... INTO should generate SetVariable plan
+            // At this point, all targetVariables are resolved, so we only expect VariableReference
+            // or Alias containing VariableReference
+            val finalTargetVars = targetVariables.map {
+              case alias: Alias =>
+                // Extract the VariableReference from the alias
+                alias.child match {
+                  case varRef: VariableReference =>
+                    // Use resolved VariableReference directly with canFold = false
+                    varRef.copy(canFold = false)
+                  case _ =>
+                    throw QueryCompilationErrors.unsupportedParameterExpression(alias.child)
+                }
+              case varRef: VariableReference =>
+                // Use resolved VariableReference directly with canFold = false
+                varRef.copy(canFold = false)
+              case other =>
+                throw QueryCompilationErrors.unsupportedParameterExpression(other)
+            }
 
-        val queryString = extractQueryString(query)
-        val plan = parseStatement(queryString, targetVariables)
+            // Check for duplicate variable names (same logic as ResolveSetVariable)
+            val dups = finalTargetVars.groupBy(_.identifier).filter(kv => kv._2.length > 1)
+            if (dups.nonEmpty) {
+              throw new AnalysisException(
+                errorClass = "DUPLICATE_ASSIGNMENTS",
+                messageParameters = Map("nameList" ->
+                  dups.keys.map(key => toSQLId(key.name())).mkString(", ")))
+            }
 
-        val posNodes = plan.collect { case p: LogicalPlan =>
-          p.expressions.flatMap(_.collect { case n: PosParameter => n })
-        }.flatten
-        val namedNodes = plan.collect { case p: LogicalPlan =>
-          p.expressions.flatMap(_.collect { case n: NamedParameter => n })
-        }.flatten
-
-        val queryPlan = if (expressions.isEmpty || (posNodes.isEmpty && namedNodes.isEmpty)) {
-          plan
-        } else if (posNodes.nonEmpty && namedNodes.nonEmpty) {
-          throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
-        } else {
-          if (posNodes.nonEmpty) {
-            PosParameterizedQuery(plan, expressions)
+            // Create SetVariable plan with the execute immediate query as source
+            val sourceQuery = ExecuteImmediateCommand(sqlStmtStr, args, hasIntoClause = true)
+            SetVariable(finalTargetVars, sourceQuery)
           } else {
-            val aliases = expressions.collect {
-              case e: Alias => e
-              case u: VariableReference => Alias(u, u.identifier.name())()
-            }
-
-            if (aliases.size != expressions.size) {
-              val nonAliases = expressions.filter(attr =>
-                !attr.isInstanceOf[Alias] && !attr.isInstanceOf[VariableReference])
-
-              throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(nonAliases)
-            }
-
-            NameParameterizedQuery(
-              plan,
-              aliases.map(_.name),
-              // We need to resolve arguments before Resolution batch to make sure
-              // that some rule does not accidentally resolve our parameters.
-              // We do not want this as they can resolve some unsupported parameters.
-              aliases)
+            // Regular EXECUTE IMMEDIATE without INTO
+            ExecuteImmediateCommand(sqlStmtStr, args, hasIntoClause = false)
           }
+        } else {
+          // Not all resolved yet - wait for next iteration
+          node
         }
-
-        // Fully analyze the generated plan. AnalysisContext.withExecuteImmediateContext makes sure
-        // that SQL scripting local variables will not be accessed from the plan.
-        val finalPlan = AnalysisContext.withExecuteImmediateContext {
-          resolveChild(queryPlan)
-        }
-        checkAnalysis(finalPlan)
-
-        if (targetVariables.nonEmpty) {
-          SetVariable(targetVariables, finalPlan)
-        } else { finalPlan }
     }
 
-  private def parseStatement(
-      queryString: String,
-      targetVariables: Seq[Expression]): LogicalPlan = {
-    // If targetVariables is defined, statement needs to be a query.
-    // Otherwise, it can be anything.
-    val plan = if (targetVariables.nonEmpty) {
-      try {
-        catalogManager.v1SessionCatalog.parser.parseQuery(queryString)
-      } catch {
-        case e: ParseException =>
-          // Since we do not have a way of telling that parseQuery failed because of
-          // actual parsing error or because statement was passed where query was expected,
-          // we need to make sure that parsePlan wouldn't throw
-          catalogManager.v1SessionCatalog.parser.parsePlan(queryString)
-
-          // Plan was successfully parsed, but query wasn't - throw.
-          throw QueryCompilationErrors.invalidStatementForExecuteInto(queryString)
+  /**
+   * Validates that expressions don't contain unsupported constructs like subqueries.
+   * Variable references and expressions like string concatenation are allowed.
+   * This validation catches both resolved and unresolved subqueries.
+   */
+  private def validateExpressions(expressions: Seq[Expression]): Unit = {
+    expressions.foreach { expr =>
+      // Check the expression and its children for unsupported constructs
+      expr.foreach {
+        case subquery: SubqueryExpression =>
+          // Resolved subqueries (ScalarSubquery, ListQuery, etc.)
+          throw QueryCompilationErrors.unsupportedParameterExpression(subquery)
+        case inSubquery: InSubquery =>
+          // InSubquery doesn't extend SubqueryExpression directly but contains a subquery
+          throw QueryCompilationErrors.unsupportedParameterExpression(inSubquery)
+        case unresolvedPlanId: UnresolvedPlanId =>
+          // Unresolved subqueries (UnresolvedScalarSubqueryPlanId, etc.)
+          throw QueryCompilationErrors.unsupportedParameterExpression(unresolvedPlanId)
+        case _ => // Other expressions including variables and concatenations are fine
       }
-    } else {
-      catalogManager.v1SessionCatalog.parser.parsePlan(queryString)
-    }
-
-    if (plan.isInstanceOf[CompoundBody]) {
-      throw QueryCompilationErrors.sqlScriptInExecuteImmediate(queryString)
-    }
-
-    // do not allow nested execute immediate
-    if (plan.containsPattern(EXECUTE_IMMEDIATE)) {
-      throw QueryCompilationErrors.nestedExecuteImmediate(queryString)
-    }
-
-    plan
-  }
-
-  private def getVariableReference(expr: Expression, nameParts: Seq[String]): VariableReference = {
-    variableResolution.lookupVariable(
-      nameParts = nameParts,
-      resolvingExecuteImmediate = AnalysisContext.get.isExecuteImmediate
-    ) match {
-      case Some(variable) => variable
-      case _ =>
-        throw QueryCompilationErrors
-          .unresolvedVariableError(
-            nameParts,
-            Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE),
-            expr.origin)
     }
   }
+
 }

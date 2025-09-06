@@ -52,9 +52,6 @@ class VariableResolution(tempVariableManager: TempVariableManager) extends SQLCo
    *   (e.g., ["catalog", "schema", "variable", "field1", "field2"])
    * @param resolvingView Whether this resolution is happening within a view context.
    *   When true, only variables explicitly referred to in the view definition are accessible.
-   * @param resolvingExecuteImmediate Whether this resolution is happening within an
-   *   EXECUTE IMMEDIATE context. When true, local variables are not accessible, only session
-   *   variables.
    * @param referredTempVariableNames When resolving within a view, this contains the list of
    *   variable names that the view explicitly references and should have access to.
    *
@@ -65,7 +62,6 @@ class VariableResolution(tempVariableManager: TempVariableManager) extends SQLCo
   def resolveMultipartName(
       nameParts: Seq[String],
       resolvingView: Boolean,
-      resolvingExecuteImmediate: Boolean,
       referredTempVariableNames: Seq[Seq[String]]): Option[Expression] = {
     var resolvedVariable: Option[Expression] = None
     // We only support temp variables for now, so the variable name can at most have 3 parts.
@@ -76,7 +72,6 @@ class VariableResolution(tempVariableManager: TempVariableManager) extends SQLCo
       resolvedVariable = resolveVariable(
         nameParts = nameParts.dropRight(numInnerFields),
         resolvingView = resolvingView,
-        resolvingExecuteImmediate = resolvingExecuteImmediate,
         referredTempVariableNames = referredTempVariableNames
       )
 
@@ -99,16 +94,12 @@ class VariableResolution(tempVariableManager: TempVariableManager) extends SQLCo
 
   /**
    * Look up variable by nameParts.
-   * If in SQL Script, first check local variables, unless in EXECUTE IMMEDIATE
-   * (EXECUTE IMMEDIATE generated query cannot access local variables).
-   * if not found fall back to session variables.
+   * If in SQL Script, first check local variables.
+   * If not found fall back to session variables.
    * @param nameParts NameParts of the variable.
-   * @param resolvingExecuteImmediate Whether the current context is in EXECUTE IMMEDIATE.
    * @return Reference to the variable.
    */
-  def lookupVariable(
-      nameParts: Seq[String],
-      resolvingExecuteImmediate: Boolean): Option[VariableReference] = {
+  def lookupVariable(nameParts: Seq[String]): Option[VariableReference] = {
     val namePartsCaseAdjusted = if (conf.caseSensitiveAnalysis) {
       nameParts
     } else {
@@ -118,8 +109,6 @@ class VariableResolution(tempVariableManager: TempVariableManager) extends SQLCo
     SqlScriptingContextManager
       .get()
       .map(_.getVariableManager)
-      // If we are in EXECUTE IMMEDIATE lookup only session variables.
-      .filterNot(_ => resolvingExecuteImmediate)
       // If variable name is qualified with session.<varName> treat it as a session variable.
       .filterNot(
         _ =>
@@ -156,16 +145,15 @@ class VariableResolution(tempVariableManager: TempVariableManager) extends SQLCo
   private def resolveVariable(
       nameParts: Seq[String],
       resolvingView: Boolean,
-      resolvingExecuteImmediate: Boolean,
       referredTempVariableNames: Seq[Seq[String]]): Option[Expression] = {
     if (resolvingView) {
       if (referredTempVariableNames.contains(nameParts)) {
-        lookupVariable(nameParts = nameParts, resolvingExecuteImmediate = resolvingExecuteImmediate)
+        lookupVariable(nameParts = nameParts)
       } else {
         None
       }
     } else {
-      lookupVariable(nameParts = nameParts, resolvingExecuteImmediate = resolvingExecuteImmediate)
+      lookupVariable(nameParts = nameParts)
     }
   }
 

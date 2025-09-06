@@ -994,24 +994,25 @@ CreateVariable defaultvalueexpression(null, null), false
 -- !query
 EXECUTE IMMEDIATE 'SELECT 1 UNION SELECT 2 UNION SELECT 3' INTO v1
 -- !query analysis
-SetVariable [variablereference(system.session.v1=CAST(NULL AS INT))]
-+- Project [1 AS UNION#x]
-   +- OneRowRelation
+org.apache.spark.SparkException
+{
+  "errorClass" : "ROW_SUBQUERY_TOO_MANY_ROWS",
+  "sqlState" : "21000"
+}
 
 
 -- !query
 SELECT v1
 -- !query analysis
-Project [variablereference(system.session.v1=1) AS v1#x]
+Project [variablereference(system.session.v1=CAST(NULL AS INT)) AS v1#x]
 +- OneRowRelation
 
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT 1 UNION SELECT 1 UNION SELECT 1' INTO v1
 -- !query analysis
-SetVariable [variablereference(system.session.v1=1)]
-+- Project [1 AS UNION#x]
-   +- OneRowRelation
+SetVariable [variablereference(system.session.v1=CAST(NULL AS INT))]
++- LocalRelation [1#x]
 
 
 -- !query
@@ -1025,8 +1026,7 @@ Project [variablereference(system.session.v1=1) AS v1#x]
 EXECUTE IMMEDIATE 'SELECT 1 EXCEPT SELECT 2 EXCEPT SELECT 3' INTO v1
 -- !query analysis
 SetVariable [variablereference(system.session.v1=1)]
-+- Project [1 AS EXCEPT#x]
-   +- OneRowRelation
++- LocalRelation [1#x]
 
 
 -- !query
@@ -1040,38 +1040,35 @@ Project [variablereference(system.session.v1=1) AS v1#x]
 EXECUTE IMMEDIATE 'SELECT 1 EXCEPT SELECT 1 EXCEPT SELECT 1' INTO v1
 -- !query analysis
 SetVariable [variablereference(system.session.v1=1)]
-+- Project [1 AS EXCEPT#x]
-   +- OneRowRelation
++- LocalRelation <empty>, [1#x]
 
 
 -- !query
 SELECT v1
 -- !query analysis
-Project [variablereference(system.session.v1=1) AS v1#x]
+Project [variablereference(system.session.v1=CAST(NULL AS INT)) AS v1#x]
 +- OneRowRelation
 
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT 1 INTERSECT SELECT 2 INTERSECT SELECT 3' INTO v1
 -- !query analysis
-SetVariable [variablereference(system.session.v1=1)]
-+- Project [1 AS INTERSECT#x]
-   +- OneRowRelation
+SetVariable [variablereference(system.session.v1=CAST(NULL AS INT))]
++- LocalRelation <empty>, [1#x]
 
 
 -- !query
 SELECT v1
 -- !query analysis
-Project [variablereference(system.session.v1=1) AS v1#x]
+Project [variablereference(system.session.v1=CAST(NULL AS INT)) AS v1#x]
 +- OneRowRelation
 
 
 -- !query
 EXECUTE IMMEDIATE 'SELECT 1 INTERSECT SELECT 1 INTERSECT SELECT 1' INTO v1
 -- !query analysis
-SetVariable [variablereference(system.session.v1=1)]
-+- Project [1 AS INTERSECT#x]
-   +- OneRowRelation
+SetVariable [variablereference(system.session.v1=CAST(NULL AS INT))]
++- LocalRelation [1#x]
 
 
 -- !query
@@ -1084,9 +1081,22 @@ Project [variablereference(system.session.v1=1) AS v1#x]
 -- !query
 EXECUTE IMMEDIATE 'SELECT 1 JOIN SELECT 2' INTO v1
 -- !query analysis
-SetVariable [variablereference(system.session.v1=1)]
-+- Project [1 AS JOIN#x]
-   +- OneRowRelation
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'SELECT'",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 50,
+    "fragment" : "EXECUTE IMMEDIATE 'SELECT 1 JOIN SELECT 2' INTO v1"
+  } ]
+}
 
 
 -- !query
@@ -1099,9 +1109,22 @@ Project [variablereference(system.session.v1=1) AS v1#x]
 -- !query
 EXECUTE IMMEDIATE 'SELECT 1 VALUES (1)' INTO v1
 -- !query analysis
-SetVariable [variablereference(system.session.v1=1)]
-+- Project [1 AS VALUES#x]
-   +- OneRowRelation
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 47,
+    "fragment" : "EXECUTE IMMEDIATE 'SELECT 1 VALUES (1)' INTO v1"
+  } ]
+}
 
 
 -- !query
@@ -1114,9 +1137,22 @@ Project [variablereference(system.session.v1=1) AS v1#x]
 -- !query
 EXECUTE IMMEDIATE 'SELECT 1 alias garbage garbage garbage' INTO v1
 -- !query analysis
-SetVariable [variablereference(system.session.v1=1)]
-+- Project [1 AS alias#x]
-   +- OneRowRelation
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'garbage'",
+    "hint" : ""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 66,
+    "fragment" : "EXECUTE IMMEDIATE 'SELECT 1 alias garbage garbage garbage' INTO v1"
+  } ]
+}
 
 
 -- !query
@@ -1129,9 +1165,22 @@ Project [variablereference(system.session.v1=1) AS v1#x]
 -- !query
 EXECUTE IMMEDIATE 'SELECT 1 WITH abc' INTO v1
 -- !query analysis
-SetVariable [variablereference(system.session.v1=1)]
-+- Project [1 AS WITH#x]
-   +- OneRowRelation
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'abc'",
+    "hint" : ": extra input 'abc'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 45,
+    "fragment" : "EXECUTE IMMEDIATE 'SELECT 1 WITH abc' INTO v1"
+  } ]
+}
 
 
 -- !query

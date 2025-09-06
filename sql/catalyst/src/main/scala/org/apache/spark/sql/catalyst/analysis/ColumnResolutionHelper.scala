@@ -241,7 +241,6 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       variableResolution.resolveMultipartName(
         nameParts = nameParts,
         resolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty,
-        resolvingExecuteImmediate = AnalysisContext.get.isExecuteImmediate,
         referredTempVariableNames = AnalysisContext.get.referredTempVariableNames
       ).map(e => Alias(e, nameParts.last)())
     }
