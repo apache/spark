@@ -286,7 +286,8 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
         cteDefMap.get(ref.cteId).map { cteDef =>
           // cteDef is certainly resolved, otherwise it would not have been in the map.
           CTERelationRef(
-            cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming, maxRows = cteDef.maxRows)
+            cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming, maxRows = cteDef.maxRows,
+              isUnlimitedRecursion = ref.isUnlimitedRecursion)
         }.getOrElse {
           ref
         }
