@@ -82,7 +82,7 @@ spark_rotate_log ()
       num=${SPARK_LOG_MAX_FILES}
     else
       echo "Error: SPARK_LOG_MAX_FILES must be a positive number, but got ${SPARK_LOG_MAX_FILES}"
-      exit -1
+      exit 1
     fi
 
     if [ -f "$log" ]; then # rotate logs
