@@ -414,6 +414,49 @@ private[sql] class SparkConnectClient(
       .build()
     artifactManager.cacheArtifact(localRelation.toByteArray)
   }
+
+  /**
+   * Clone this client session, creating a new session with the same configuration
+   * and shared state as the current session but with independent runtime state.
+   *
+   * @return A new SparkConnectClient instance with the cloned session.
+   */
+  def cloneSession(): SparkConnectClient = {
+    clone(None)
+  }
+
+  /**
+   * Clone this client session with a custom session ID, creating a new session with the same
+   * configuration and shared state as the current session but with independent runtime state.
+   *
+   * @param newSessionId Custom session ID to use for the cloned session (must be a valid UUID).
+   * @return A new SparkConnectClient instance with the cloned session.
+   */
+  def clone(newSessionId: String): SparkConnectClient = {
+    clone(Some(newSessionId))
+  }
+
+  private def clone(newSessionId: Option[String]): SparkConnectClient = {
+    val requestBuilder = proto.CloneSessionRequest.newBuilder()
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setClientType("scala")
+
+    newSessionId.foreach(requestBuilder.setNewSessionId)
+
+    val response: proto.CloneSessionResponse = bstub.cloneSession(requestBuilder.build())
+
+    // Assert that the returned session ID matches the requested ID if one was provided
+    newSessionId.foreach { expectedId =>
+      require(response.getNewSessionId == expectedId,
+        s"Returned session ID '${response.getNewSessionId}' does not match " +
+        s"requested ID '$expectedId'")
+    }
+
+    // Create a new client with the cloned session ID
+    val newConfiguration = configuration.copy(sessionId = Some(response.getNewSessionId))
+    new SparkConnectClient(newConfiguration, configuration.createChannel())
+  }
 }
 
 object SparkConnectClient {
