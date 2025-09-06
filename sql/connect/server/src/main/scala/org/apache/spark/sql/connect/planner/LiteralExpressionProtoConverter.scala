@@ -105,7 +105,7 @@ object LiteralExpressionProtoConverter {
         expressions.Literal(lit.getTime.getNano, TimeType(precision))
 
       case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
-        val arrayData = LiteralValueProtoConverter.toCatalystArray(lit.getArray)
+        val arrayData = LiteralValueProtoConverter.toScalaArray(lit.getArray)
         val dataType = DataTypeProtoConverter.toCatalystType(
           proto.DataType.newBuilder
             .setArray(LiteralValueProtoConverter.getProtoArrayType(lit.getArray))
@@ -113,7 +113,7 @@ object LiteralExpressionProtoConverter {
         expressions.Literal.create(arrayData, dataType)
 
       case proto.Expression.Literal.LiteralTypeCase.MAP =>
-        val mapData = LiteralValueProtoConverter.toCatalystMap(lit.getMap)
+        val mapData = LiteralValueProtoConverter.toScalaMap(lit.getMap)
         val dataType = DataTypeProtoConverter.toCatalystType(
           proto.DataType.newBuilder
             .setMap(LiteralValueProtoConverter.getProtoMapType(lit.getMap))
@@ -121,7 +121,7 @@ object LiteralExpressionProtoConverter {
         expressions.Literal.create(mapData, dataType)
 
       case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
-        val structData = LiteralValueProtoConverter.toCatalystStruct(lit.getStruct)
+        val structData = LiteralValueProtoConverter.toScalaStruct(lit.getStruct)
         val dataType = DataTypeProtoConverter.toCatalystType(
           proto.DataType.newBuilder
             .setStruct(LiteralValueProtoConverter.getProtoStructType(lit.getStruct))

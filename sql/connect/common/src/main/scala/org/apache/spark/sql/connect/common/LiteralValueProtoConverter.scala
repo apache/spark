@@ -365,7 +365,7 @@ object LiteralValueProtoConverter {
       throw new UnsupportedOperationException(s"Unsupported component type $clz in arrays.")
   }
 
-  def toCatalystValue(literal: proto.Expression.Literal): Any = {
+  def toScalaValue(literal: proto.Expression.Literal): Any = {
     literal.getLiteralTypeCase match {
       case proto.Expression.Literal.LiteralTypeCase.NULL => null
 
@@ -412,10 +412,10 @@ object LiteralValueProtoConverter {
         SparkIntervalUtils.microsToDuration(literal.getDayTimeInterval)
 
       case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
-        toCatalystArray(literal.getArray)
+        toScalaArray(literal.getArray)
 
       case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
-        toCatalystStruct(literal.getStruct)
+        toScalaStruct(literal.getStruct)
 
       case other =>
         throw new UnsupportedOperationException(
@@ -445,11 +445,11 @@ object LiteralValueProtoConverter {
           val interval = v.getCalendarInterval
           new CalendarInterval(interval.getMonths, interval.getDays, interval.getMicroseconds)
       case proto.DataType.KindCase.ARRAY =>
-        v => toCatalystArrayInternal(v.getArray, dataType.getArray)
+        v => toScalaArrayInternal(v.getArray, dataType.getArray)
       case proto.DataType.KindCase.MAP =>
-        v => toCatalystMapInternal(v.getMap, dataType.getMap)
+        v => toScalaMapInternal(v.getMap, dataType.getMap)
       case proto.DataType.KindCase.STRUCT =>
-        v => toCatalystStructInternal(v.getStruct, dataType.getStruct)
+        v => toScalaStructInternal(v.getStruct, dataType.getStruct)
       case _ =>
         throw InvalidPlanInput(s"Unsupported Literal Type: ${dataType.getKindCase}")
     }
@@ -580,7 +580,7 @@ object LiteralValueProtoConverter {
     Some(builder.build())
   }
 
-  private def toCatalystArrayInternal(
+  private def toScalaArrayInternal(
       array: proto.Expression.Literal.Array,
       arrayType: proto.DataType.Array): Array[_] = {
     def makeArrayData[T](converter: proto.Expression.Literal => T)(implicit
@@ -615,11 +615,11 @@ object LiteralValueProtoConverter {
     }
   }
 
-  def toCatalystArray(array: proto.Expression.Literal.Array): Array[_] = {
-    toCatalystArrayInternal(array, getProtoArrayType(array))
+  def toScalaArray(array: proto.Expression.Literal.Array): Array[_] = {
+    toScalaArrayInternal(array, getProtoArrayType(array))
   }
 
-  private def toCatalystMapInternal(
+  private def toScalaMapInternal(
       map: proto.Expression.Literal.Map,
       mapType: proto.DataType.Map): mutable.Map[_, _] = {
     def makeMapData[K, V](
@@ -661,11 +661,11 @@ object LiteralValueProtoConverter {
     }
   }
 
-  def toCatalystMap(map: proto.Expression.Literal.Map): mutable.Map[_, _] = {
-    toCatalystMapInternal(map, getProtoMapType(map))
+  def toScalaMap(map: proto.Expression.Literal.Map): mutable.Map[_, _] = {
+    toScalaMapInternal(map, getProtoMapType(map))
   }
 
-  private def toCatalystStructInternal(
+  private def toScalaStructInternal(
       struct: proto.Expression.Literal.Struct,
       structType: proto.DataType.Struct): Any = {
     def toTuple[A <: Object](data: Seq[A]): Product = {
@@ -703,7 +703,7 @@ object LiteralValueProtoConverter {
     }
   }
 
-  def toCatalystStruct(struct: proto.Expression.Literal.Struct): Any = {
-    toCatalystStructInternal(struct, getProtoStructType(struct))
+  def toScalaStruct(struct: proto.Expression.Literal.Struct): Any = {
+    toScalaStructInternal(struct, getProtoStructType(struct))
   }
 }
