@@ -199,13 +199,13 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
         CatalystSqlParser.parseDataType("time(-1)")
       },
       condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'('", "hint" -> ""))
+      parameters = Map("error" -> "'-'", "hint" -> ""))
     checkError(
       exception = intercept[ParseException] {
         CatalystSqlParser.parseDataType("time(-100) WITHOUT TIME ZONE")
       },
       condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'('", "hint" -> ""))
+      parameters = Map("error" -> "'-'", "hint" -> ""))
   }
 
   test("invalid TIME suffix") {

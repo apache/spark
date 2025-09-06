@@ -40,10 +40,10 @@ import org.apache.spark.sql
 import org.apache.spark.sql.{Artifact, DataSourceRegistration, Encoder, Encoders, ExperimentalMethods, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions, SparkSessionExtensionsProvider, UDTFRegistration}
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.parser.ParserInterface
+import org.apache.spark.sql.catalyst.parser.{NamedParameterContext, ParserInterface, PositionalParameterContext, ThreadLocalParameterContext}
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, Range}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -447,19 +447,104 @@ class SparkSession private(
    */
   private[sql] def sql(sqlText: String, args: Array[_], tracker: QueryPlanningTracker): DataFrame =
     withActive {
-      val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-        val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-        if (args.nonEmpty) {
-          if (parsedPlan.isInstanceOf[CompoundBody]) {
+      // Always set parameter context if we have actual parameters
+      if (args.nonEmpty) {
+        val paramContext = PositionalParameterContext(args.map(lit(_).expr).toSeq)
+        ThreadLocalParameterContext.withContext(paramContext) {
+          val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
+            val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
+            if (parsedPlan.isInstanceOf[CompoundBody] && args.nonEmpty) {
+              // Positional parameters are not supported for SQL scripting.
+              throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+            }
+            // In legacy mode, wrap the parsed plan with PosParameterizedQuery
+            // so that the BindParameters analyzer rule can bind the parameters
+            if (sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
+              import org.apache.spark.sql.catalyst.analysis.PosParameterizedQuery
+              PosParameterizedQuery(parsedPlan, paramContext.params)
+            } else {
+              parsedPlan
+            }
+          }
+
+        // Apply position mapping to any exceptions that bubble up from the entire execution cycle
+        try {
+          Dataset.ofRows(self, plan, tracker)
+        } catch {
+          case e: Throwable with org.apache.spark.sql.catalyst.trees.WithOrigin =>
+            // Extract contexts once to avoid duplication
+            val contexts = e match {
+              case ae: org.apache.spark.sql.AnalysisException => ae.getQueryContext
+              case _ => Array.empty[org.apache.spark.QueryContext]
+            }
+
+            // Check if parameter substitution occurred and apply position mapping
+            if (!sessionState.conf.legacyParameterSubstitutionConstantsOnly && args.nonEmpty) {
+              sessionState.sqlParser match {
+                case sparkParser: org.apache.spark.sql.execution.SparkSqlParser =>
+                  sparkParser.getPositionMapper match {
+                    case Some(positionMapper) =>
+
+                      // Only apply position mapping if we have existing contexts
+                      // - don't create artificial ones
+                      if (contexts.nonEmpty) {
+                        // Apply position mapping to existing contexts
+                        val translatedContexts = contexts.map { context =>
+                          context match {
+                            case sqlContext:
+                                org.apache.spark.sql.catalyst.trees.SQLQueryContext =>
+                              org.apache.spark.sql.catalyst.parser.PositionTranslationUtils
+                                .translateSqlContext(sqlContext, positionMapper)
+                            case _ => context
+                          }
+                        }
+
+                        val translatedError = e match {
+                          case pe: org.apache.spark.sql.catalyst.parser.ParseException =>
+                            new org.apache.spark.sql.catalyst.parser.ParseException(
+                              pe.command,
+                              pe.start,
+                              pe.getCondition,
+                              pe.messageParameters,
+                              translatedContexts
+                            )
+                          case _ =>
+                            // For other exception types, try the generic updateQueryContext
+                            e.updateQueryContext(_ => translatedContexts)
+                              .asInstanceOf[Throwable]
+                        }
+                        throw translatedError
+                      } else {
+                        // No existing contexts - don't create artificial ones, just throw original
+                        throw e
+                      }
+                    case None =>
+                      throw e
+                  }
+                case _ =>
+                  throw e
+              }
+            } else {
+              throw e
+            }
+          case e: Throwable =>
+
+            // No WithOrigin trait, throw as-is
+            throw e
+        }
+        }
+      } else {
+        // No parameters - parse normally without parameter context
+        val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
+          val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
+          if (parsedPlan.isInstanceOf[CompoundBody] && args.nonEmpty) {
             // Positional parameters are not supported for SQL scripting.
             throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
           }
-          PosParameterizedQuery(parsedPlan, args.map(lit(_).expr).toImmutableArraySeq)
-        } else {
           parsedPlan
         }
+        Dataset.ofRows(self, plan, tracker)
       }
-      Dataset.ofRows(self, plan, tracker)
     }
 
   /** @inheritdoc */
@@ -483,20 +568,105 @@ class SparkSession private(
    *             such as `map()`, `array()`, `struct()`, in that case it is taken as is.
    * @param tracker A tracker that can notify when query is ready for execution
    */
-  private[sql] def sql(
+    private[sql] def sql(
       sqlText: String,
       args: Map[String, Any],
       tracker: QueryPlanningTracker): DataFrame =
     withActive {
-      val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-        val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-        if (args.nonEmpty) {
-          NameParameterizedQuery(parsedPlan, args.transform((_, v) => lit(v).expr))
-        } else {
-          parsedPlan
+      // Always set parameter context if we have actual parameters
+      if (args.nonEmpty) {
+        val paramContext = NamedParameterContext(args.transform((_, v) => lit(v).expr))
+        ThreadLocalParameterContext.withContext(paramContext) {
+          val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
+            val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
+            // In legacy mode, wrap the parsed plan with NameParameterizedQuery
+            // so that the BindParameters analyzer rule can bind the parameters
+            if (sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
+              import org.apache.spark.sql.catalyst.analysis.NameParameterizedQuery
+              NameParameterizedQuery(parsedPlan, paramContext.params)
+            } else {
+              parsedPlan
+            }
+          }
+
+          // Apply position mapping to any exceptions that bubble up from the entire execution cycle
+          try {
+            Dataset.ofRows(self, plan, tracker)
+          } catch {
+            case e: Throwable with org.apache.spark.sql.catalyst.trees.WithOrigin =>
+              val contexts = e match {
+                case ae: org.apache.spark.sql.AnalysisException => ae.getQueryContext
+                case _ => Array.empty[org.apache.spark.QueryContext]
+              }
+
+              // Check if parameter substitution occurred and apply position mapping
+              if (!sessionState.conf.legacyParameterSubstitutionConstantsOnly && args.nonEmpty) {
+                sessionState.sqlParser match {
+                  case sparkParser: org.apache.spark.sql.execution.SparkSqlParser =>
+                    sparkParser.getPositionMapper match {
+                      case Some(positionMapper) =>
+                        val contexts = e match {
+                          case ae: org.apache.spark.sql.AnalysisException => ae.getQueryContext
+                          case _ => Array.empty[org.apache.spark.QueryContext]
+                        }
+
+                        // Only apply position mapping if we have existing contexts
+                        // - don't create artificial ones
+                        if (contexts.nonEmpty) {
+                          // Apply position mapping to existing contexts
+                          val translatedContexts = contexts.map { context =>
+                            context match {
+                              case sqlContext:
+                                  org.apache.spark.sql.catalyst.trees.SQLQueryContext =>
+                                org.apache.spark.sql.catalyst.parser.PositionTranslationUtils
+                                  .translateSqlContext(sqlContext, positionMapper)
+                              case _ => context
+                            }
+                          }
+
+                          // For ParseException, create a new instance with translated contexts
+                          val translatedError = e match {
+                            case pe: org.apache.spark.sql.catalyst.parser.ParseException =>
+                              new org.apache.spark.sql.catalyst.parser.ParseException(
+                                pe.command,
+                                pe.start,
+                                pe.getCondition,
+                                pe.messageParameters,
+                                translatedContexts
+                              )
+                            case _ =>
+                              // For other exception types, try the generic updateQueryContext
+                              e.updateQueryContext(_ => translatedContexts)
+                                .asInstanceOf[Throwable]
+                          }
+                          throw translatedError
+                        } else {
+                          // No existing contexts - don't create artificial ones,
+                          // just throw original
+                          throw e
+                        }
+                      case None =>
+                        throw e
+                    }
+                  case _ =>
+                    throw e
+                }
+              } else {
+                throw e
+              }
+            case e: Throwable =>
+
+              // No WithOrigin trait, throw as-is
+              throw e
+          }
         }
+      } else {
+        // No parameters - parse normally without parameter context
+        val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
+          sessionState.sqlParser.parsePlan(sqlText)
+        }
+        Dataset.ofRows(self, plan, tracker)
       }
-      Dataset.ofRows(self, plan, tracker)
     }
 
   /** @inheritdoc */

@@ -50,6 +50,7 @@ private[sql] trait SqlApiConf {
   def manageParserCaches: Boolean
   def parserDfaCacheFlushThreshold: Int
   def parserDfaCacheFlushRatio: Double
+  def legacyParameterSubstitutionConstantsOnly: Boolean
 }
 
 private[sql] object SqlApiConf {
@@ -99,4 +100,5 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def manageParserCaches: Boolean = false
   override def parserDfaCacheFlushThreshold: Int = -1
   override def parserDfaCacheFlushRatio: Double = -1.0
+  override def legacyParameterSubstitutionConstantsOnly: Boolean = false
 }

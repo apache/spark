@@ -19,8 +19,9 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.util.{Either, Left, Right}
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, VariableReference}
-import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.analysis.{NamedParameter, PosParameter}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Literal, VariableReference}
+import org.apache.spark.sql.catalyst.parser.{ParameterHandler, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXECUTE_IMMEDIATE, TreePattern}
@@ -53,6 +54,8 @@ class SubstituteExecuteImmediate(
     checkAnalysis: LogicalPlan => Unit)
   extends Rule[LogicalPlan] {
   private val variableResolution = new VariableResolution(catalogManager.tempVariableManager)
+
+  private val parameterHandler = new ParameterHandler()
 
   def resolveVariable(e: Expression): Expression = {
 
@@ -107,6 +110,50 @@ class SubstituteExecuteImmediate(
     }
   }
 
+  /**
+   * Performs constant folding on expressions to convert foldable expressions to literals.
+   * Uses the same approach as the ConstantFolding optimizer rule and tryEvalExpr pattern.
+   */
+  private def foldToLiteral(expr: Expression): Expression = {
+    expr match {
+      case alias: Alias =>
+        if (alias.child.foldable) {
+          Literal.create(alias.child.eval(), alias.child.dataType)
+        } else {
+          alias.child
+        }
+      case e if e.foldable =>
+          Literal.create(e.eval(), e.dataType)
+      case other => other
+    }
+  }
+
+
+
+  /**
+   * Convert an expression to its SQL string representation.
+   */
+  private def expressionToSqlValue(expr: Expression): String = expr match {
+    case lit: Literal => lit.sql
+    case _ =>
+      try {
+        expr.sql
+      } catch {
+        case _: Exception =>
+          // Fall back to constant folding if SQL generation fails and expression is foldable
+          if (expr.foldable) {
+            try {
+              val literal = Literal.create(expr.eval(), expr.dataType)
+              literal.sql
+            } catch {
+              case _: Exception => expr.toString
+            }
+          } else {
+            expr.toString
+          }
+      }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
       case e @ ExecuteImmediateQuery(expressions, _, _) if expressions.exists(!_.resolved) =>
@@ -116,22 +163,52 @@ class SubstituteExecuteImmediate(
         if expressions.forall(_.resolved) =>
 
         val queryString = extractQueryString(query)
-        val plan = parseStatement(queryString, targetVariables)
+        // Apply parameter substitution to the query string before parsing
+        val substitutedQueryString = applyParameterSubstitution(queryString, expressions)
 
-        val posNodes = plan.collect { case p: LogicalPlan =>
-          p.expressions.flatMap(_.collect { case n: PosParameter => n })
+        // Create origin context for the inner query to support proper error reporting
+        val innerQueryOrigin = org.apache.spark.sql.catalyst.trees.Origin(
+          sqlText = Some(substitutedQueryString),
+          startIndex = Some(0),
+          stopIndex = Some(substitutedQueryString.length - 1)
+        )
+        val parsedPlan = org.apache.spark.sql.catalyst.trees.CurrentOrigin
+          .withOrigin(innerQueryOrigin) {
+            parseStatement(substitutedQueryString, targetVariables)
+          }
+        // Attempt to update Parameter node origins for better error context (experimental)
+        // Note: This approach may not fully resolve position mapping issues for EXECUTE IMMEDIATE
+        val planWithUpdatedParameterOrigins = parsedPlan.transformAllExpressions {
+          case namedParam: NamedParameter =>
+            org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(innerQueryOrigin) {
+              NamedParameter(namedParam.name)
+            }
+          case posParam: PosParameter =>
+            org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(innerQueryOrigin) {
+              PosParameter(posParam.pos)
+            }
+          case expr => expr
+        }
+
+        // Collect parameter nodes in a single pass for efficiency
+        val allParameterNodes = planWithUpdatedParameterOrigins.collect { case p: LogicalPlan =>
+          p.expressions.flatMap(_.collect {
+            case n: PosParameter => Left(n)
+            case n: NamedParameter => Right(n)
+          })
         }.flatten
-        val namedNodes = plan.collect { case p: LogicalPlan =>
-          p.expressions.flatMap(_.collect { case n: NamedParameter => n })
-        }.flatten
+        val posNodes = allParameterNodes.collect { case Left(p) => p }
+        val namedNodes = allParameterNodes.collect { case Right(n) => n }
 
         val queryPlan = if (expressions.isEmpty || (posNodes.isEmpty && namedNodes.isEmpty)) {
-          plan
+          planWithUpdatedParameterOrigins
         } else if (posNodes.nonEmpty && namedNodes.nonEmpty) {
           throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
         } else {
           if (posNodes.nonEmpty) {
-            PosParameterizedQuery(plan, expressions)
+            // Apply constant folding to positional parameters
+            val foldedArgs = expressions.map(foldToLiteral)
+            PosParameterizedQuery(planWithUpdatedParameterOrigins, foldedArgs)
           } else {
             val aliases = expressions.collect {
               case e: Alias => e
@@ -145,27 +222,104 @@ class SubstituteExecuteImmediate(
               throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(nonAliases)
             }
 
+            // Extract names before folding
+            val names = aliases.map(_.name)
+            // Apply constant folding to named parameters
+            val values = aliases.map(foldToLiteral)
+
             NameParameterizedQuery(
-              plan,
-              aliases.map(_.name),
+              planWithUpdatedParameterOrigins,
+              names,
               // We need to resolve arguments before Resolution batch to make sure
               // that some rule does not accidentally resolve our parameters.
               // We do not want this as they can resolve some unsupported parameters.
-              aliases)
+              values)
           }
         }
 
         // Fully analyze the generated plan. AnalysisContext.withExecuteImmediateContext makes sure
         // that SQL scripting local variables will not be accessed from the plan.
-        val finalPlan = AnalysisContext.withExecuteImmediateContext {
-          resolveChild(queryPlan)
+        // Use the inner query origin for proper error context during analysis
+        val finalPlan = org.apache.spark.sql.catalyst.trees.CurrentOrigin
+          .withOrigin(innerQueryOrigin) {
+            AnalysisContext.withExecuteImmediateContext {
+              resolveChild(queryPlan)
+            }
+          }
+        org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin(innerQueryOrigin) {
+          checkAnalysis(finalPlan)
         }
-        checkAnalysis(finalPlan)
 
         if (targetVariables.nonEmpty) {
           SetVariable(targetVariables, finalPlan)
         } else { finalPlan }
     }
+
+  /**
+   * Apply parameter substitution to a query string using the provided expressions.
+   */
+  private def applyParameterSubstitution(
+      queryString: String,
+      expressions: Seq[Expression]): String = {
+
+    // Quick pre-check: if there are no parameter markers in the text, skip parsing entirely
+    if (!queryString.contains("?") && !queryString.contains(":")) {
+      return queryString  // No parameter markers possible
+    }
+
+    // Detect parameter types and validate consistency
+    val (hasPositional, hasNamed) = parameterHandler.detectParameters(queryString)
+    if (!hasPositional && !hasNamed) {
+      return queryString  // No parameters to substitute
+    }
+
+    // Check for mixed parameters before substitution
+    if (hasPositional && hasNamed) {
+      throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
+    }
+
+    // Always resolve expressions first
+    val resolvedExprs = resolveArguments(expressions)
+
+    // Convert expressions to parameter values based on what the SQL query needs
+    if (hasNamed) {
+      val namedParams = extractNamedParametersFromExpressions(resolvedExprs)
+      parameterHandler.substituteNamedParameters(queryString, namedParams)
+    } else {
+      // For positional parameters, process all resolved expressions positionally
+      val positionalParams = resolvedExprs.map(foldToLiteral)
+      parameterHandler.substitutePositionalParameters(queryString, positionalParams)
+    }
+  }
+
+  /**
+   * Extract named parameters from expressions, handling aliases and variable references.
+   * Throws an error if any expression cannot provide a parameter name.
+   */
+  private def extractNamedParametersFromExpressions(
+      expressions: Seq[Expression]): Map[String, Expression] = {
+    val namedParamsBuilder = scala.collection.mutable.Map[String, Expression]()
+    val unnamedExprs = scala.collection.mutable.ListBuffer[Expression]()
+
+    expressions.foreach {
+      case Alias(child, name) =>
+        // Explicit alias provides the name
+        namedParamsBuilder(name) = foldToLiteral(child)
+      case vr: VariableReference =>
+        // Variable reference provides name from variable identifier
+        namedParamsBuilder(vr.identifier.name()) = foldToLiteral(vr)
+      case other =>
+        // Expression that can't provide a name for named parameters
+        unnamedExprs += other
+    }
+
+    // If we have unnamed expressions for named parameters, error
+    if (unnamedExprs.nonEmpty) {
+      throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedExprs.toSeq)
+    }
+
+    namedParamsBuilder.toMap
+  }
 
   private def parseStatement(
       queryString: String,
