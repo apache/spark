@@ -17,7 +17,7 @@
 
 import decimal
 import numbers
-from typing import Any, Union, Callable
+from typing import Any, Union, Callable, cast
 
 import numpy as np
 import pandas as pd
@@ -275,7 +275,13 @@ class NumericOps(DataTypeOps):
             if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession):
                 if _should_return_all_false(left, right):
                     left_scol = left._with_new_scol(F.lit(False))
-                    return left_scol.rename(None)  # type: ignore[attr-defined]
+                    if isinstance(right, IndexOpsMixin):
+                        # When comparing with another Series/Index, drop the name
+                        # to align with pandas behavior
+                        return left_scol.rename(None)  # type: ignore[attr-defined]
+                    else:
+                        # When comparing with scalar-like, keep the name of left operand
+                        return cast(SeriesOrIndex, left_scol)
                 if _is_boolean_type(right):  # numeric vs. bool
                     right = transform_boolean_operand_to_numeric(
                         right, spark_type=left.spark.data_type
