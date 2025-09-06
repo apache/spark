@@ -297,7 +297,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
     expected match {
       case None => assert(deserialized == None)
       case Some(d) =>
-        assert(checkResult(d, deserialized.get, dataType, exprNullable = false))
+        assert(checkResult(deserialized.get, d, dataType, exprNullable = false))
     }
   }
 
