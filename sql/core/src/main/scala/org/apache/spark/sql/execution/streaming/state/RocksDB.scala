@@ -681,9 +681,14 @@ class RocksDB(
    *         Note that the instance will be read-only since this method is only used in State Data
    *         Source.
    */
-  def loadFromSnapshot(snapshotVersion: Long, endVersion: Long): RocksDB = {
+  def loadFromSnapshot(
+      snapshotVersion: Long,
+      endVersion: Long,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None): RocksDB = {
     val startTime = System.currentTimeMillis()
 
+    assert(snapshotVersionStateStoreCkptId.isDefined == endVersionStateStoreCkptId.isDefined)
     assert(snapshotVersion >= 0 && endVersion >= snapshotVersion)
     recordedMetrics = None
     loadMetrics.clear()
@@ -692,7 +697,11 @@ class RocksDB(
       log"Loading snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
       log"changelog files to version ${MDC(LogKeys.VERSION_NUM, endVersion)}.")
     try {
-      replayFromCheckpoint(snapshotVersion, endVersion)
+      replayFromCheckpoint(
+        snapshotVersion,
+        endVersion,
+        snapshotVersionStateStoreCkptId,
+        endVersionStateStoreCkptId)
 
       logInfo(
         log"Loaded snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
@@ -721,10 +730,16 @@ class RocksDB(
    * @param snapshotVersion start checkpoint version
    * @param endVersion end version
    */
-  private def replayFromCheckpoint(snapshotVersion: Long, endVersion: Long): Any = {
+  private def replayFromCheckpoint(
+      snapshotVersion: Long,
+      endVersion: Long,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None): Any = {
+    assert(snapshotVersionStateStoreCkptId.isDefined == endVersionStateStoreCkptId.isDefined)
+
     closeDB()
     val metadata = fileManager.loadCheckpointFromDfs(snapshotVersion,
-      workingDir, rocksDBFileMapping)
+      workingDir, rocksDBFileMapping, snapshotVersionStateStoreCkptId)
     loadedVersion = snapshotVersion
     lastSnapshotVersion = snapshotVersion
 
@@ -756,7 +771,17 @@ class RocksDB(
 
     if (loadedVersion != endVersion) {
       val versionsAndUniqueIds: Array[(Long, Option[String])] =
+      if (endVersionStateStoreCkptId.isDefined) {
+        val fullVersionLineage = getFullLineage(
+          loadedVersion + 1,
+          endVersion,
+          endVersionStateStoreCkptId)
+        fullVersionLineage
+          .sortBy(_.version)
+          .map(item => (item.version, Some(item.checkpointUniqueId)))
+      } else {
         (loadedVersion + 1 to endVersion).map((_, None)).toArray
+      }
       replayChangelog(versionsAndUniqueIds)
       loadedVersion = endVersion
     }

@@ -95,15 +95,20 @@ abstract class SymmetricHashJoinStateManager(
     stateFormatVersion: Int,
     skippedNullValueCount: Option[SQLMetric] = None,
     useStateStoreCoordinator: Boolean = true,
-    snapshotStartVersion: Option[Long] = None,
+    snapshotOptions: Option[SnapshotOptions] = None,
     joinStoreGenerator: JoinStateManagerStoreGenerator) extends Logging {
   import SymmetricHashJoinStateManager._
 
   protected val keySchema = StructType(
     joinKeys.zipWithIndex.map { case (k, i) => StructField(s"field$i", k.dataType, k.nullable) })
   protected val keyAttributes = toAttributes(keySchema)
-  protected val keyToNumValues = new KeyToNumValuesStore(stateFormatVersion)
-  protected val keyWithIndexToValue = new KeyWithIndexToValueStore(stateFormatVersion)
+
+  protected val keyToNumValues = new KeyToNumValuesStore(
+    stateFormatVersion,
+    snapshotOptions.map(_.getKeyToNumValuesHandlerOpts()))
+  protected val keyWithIndexToValue = new KeyWithIndexToValueStore(
+    stateFormatVersion,
+    snapshotOptions.map(_.getKeyWithIndexToValueHandlerOpts()))
 
   /*
   =====================================================
@@ -456,7 +461,8 @@ abstract class SymmetricHashJoinStateManager(
   /** Helper trait for invoking common functionalities of a state store. */
   protected abstract class StateStoreHandler(
       stateStoreType: StateStoreType,
-      stateStoreCkptId: Option[String]) extends Logging {
+      stateStoreCkptId: Option[String],
+      handlerSnapshotOptions: Option[HandlerSnapshotOptions] = None) extends Logging {
     private var stateStoreProvider: StateStoreProvider = _
 
     /** StateStore that the subclasses of this class is going to operate on */
@@ -497,7 +503,7 @@ abstract class SymmetricHashJoinStateManager(
       }
       val storeProviderId = StateStoreProviderId(stateInfo.get, partitionId, storeName)
       val store = if (useStateStoreCoordinator) {
-        assert(snapshotStartVersion.isEmpty, "Should not use state store coordinator " +
+        assert(handlerSnapshotOptions.isEmpty, "Should not use state store coordinator " +
           "when reading state as data source.")
         joinStoreGenerator.getStore(
           storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
@@ -509,13 +515,19 @@ abstract class SymmetricHashJoinStateManager(
           storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
           useColumnFamilies = useVirtualColumnFamilies, storeConf, hadoopConf,
           useMultipleValuesPerKey = false, stateSchemaProvider = None)
-        if (snapshotStartVersion.isDefined) {
+        if (handlerSnapshotOptions.isDefined) {
           if (!stateStoreProvider.isInstanceOf[SupportsFineGrainedReplay]) {
             throw StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
               stateStoreProvider.getClass.toString)
           }
+          val opts = handlerSnapshotOptions.get
           stateStoreProvider.asInstanceOf[SupportsFineGrainedReplay]
-            .replayStateFromSnapshot(snapshotStartVersion.get, stateInfo.get.storeVersion)
+            .replayStateFromSnapshot(
+              opts.snapshotVersion,
+              opts.endVersion,
+              readOnly = false,
+              opts.startStateStoreCkptId,
+              opts.endStateStoreCkptId)
         } else {
           stateStoreProvider.getStore(stateInfo.get.storeVersion, stateStoreCkptId)
         }
@@ -539,9 +551,12 @@ abstract class SymmetricHashJoinStateManager(
 
 
   /** A wrapper around a [[StateStore]] that stores [key -> number of values]. */
-  protected class KeyToNumValuesStore(val stateFormatVersion: Int)
-    extends StateStoreHandler(KeyToNumValuesType, keyToNumValuesStateStoreCkptId) {
-
+  protected class KeyToNumValuesStore(
+      val stateFormatVersion: Int,
+      val handlerSnapshotOptions: Option[HandlerSnapshotOptions] = None)
+    extends StateStoreHandler(
+      KeyToNumValuesType, keyToNumValuesStateStoreCkptId, handlerSnapshotOptions) {
+SnapshotOptions
     private val useVirtualColumnFamilies = stateFormatVersion == 3
     private val longValueSchema = new StructType().add("value", "long")
     private val longToUnsafeRow = UnsafeProjection.create(longValueSchema)
@@ -707,8 +722,11 @@ abstract class SymmetricHashJoinStateManager(
    * A wrapper around a [[StateStore]] that stores the mapping; the mapping depends on the
    * state format version - please refer implementations of [[KeyWithIndexToValueRowConverter]].
    */
-  protected class KeyWithIndexToValueStore(stateFormatVersion: Int)
-    extends StateStoreHandler(KeyWithIndexToValueType, keyWithIndexToValueStateStoreCkptId) {
+  protected class KeyWithIndexToValueStore(
+    stateFormatVersion: Int,
+    handlerSnapshotOptions: Option[HandlerSnapshotOptions] = None)
+    extends StateStoreHandler(
+      KeyWithIndexToValueType, keyWithIndexToValueStateStoreCkptId, handlerSnapshotOptions) {
 
     private val useVirtualColumnFamilies = stateFormatVersion == 3
     private val keyWithIndexExprs = keyAttributes :+ Literal(1L)
@@ -848,11 +866,11 @@ class SymmetricHashJoinStateManagerV1(
     stateFormatVersion: Int,
     skippedNullValueCount: Option[SQLMetric] = None,
     useStateStoreCoordinator: Boolean = true,
-    snapshotStartVersion: Option[Long] = None,
+    snapshotOptions: Option[SnapshotOptions] = None,
     joinStoreGenerator: JoinStateManagerStoreGenerator) extends SymmetricHashJoinStateManager(
   joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
   partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
-  stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotStartVersion,
+  stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotOptions,
   joinStoreGenerator) {
 
   /** Commit all the changes to all the state stores */
@@ -927,11 +945,11 @@ class SymmetricHashJoinStateManagerV2(
     stateFormatVersion: Int,
     skippedNullValueCount: Option[SQLMetric] = None,
     useStateStoreCoordinator: Boolean = true,
-    snapshotStartVersion: Option[Long] = None,
+    snapshotOptions: Option[SnapshotOptions] = None,
     joinStoreGenerator: JoinStateManagerStoreGenerator) extends SymmetricHashJoinStateManager(
   joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
   partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
-  stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotStartVersion,
+  stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotOptions,
   joinStoreGenerator) {
 
   /** Commit all the changes to the state store */
@@ -1034,20 +1052,20 @@ object SymmetricHashJoinStateManager {
       stateFormatVersion: Int,
       skippedNullValueCount: Option[SQLMetric] = None,
       useStateStoreCoordinator: Boolean = true,
-      snapshotStartVersion: Option[Long] = None,
+      snapshotOptions: Option[SnapshotOptions] = None,
       joinStoreGenerator: JoinStateManagerStoreGenerator): SymmetricHashJoinStateManager = {
     if (stateFormatVersion == 3) {
       new SymmetricHashJoinStateManagerV2(
         joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
         partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
-        stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotStartVersion,
+        stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotOptions,
         joinStoreGenerator
       )
     } else {
       new SymmetricHashJoinStateManagerV1(
         joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
         partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
-        stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotStartVersion,
+        stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotOptions,
         joinStoreGenerator
       )
     }
@@ -1280,3 +1298,35 @@ object SymmetricHashJoinStateManager {
     }
   }
 }
+
+/**
+ * Options controlling snapshot-based state replay.
+ */
+case class SnapshotOptions(
+    snapshotVersion: Long,
+    endVersion: Long,
+    startKeyToNumValuesStateStoreCkptId: Option[String] = None,
+    startKeyWithIndexToValueStateStoreCkptId: Option[String] = None,
+    endKeyToNumValuesStateStoreCkptId: Option[String] = None,
+    endKeyWithIndexToValueStateStoreCkptId: Option[String] = None) {
+      def getKeyToNumValuesHandlerOpts(): HandlerSnapshotOptions =
+        HandlerSnapshotOptions(
+          snapshotVersion = snapshotVersion,
+          endVersion = endVersion,
+          startStateStoreCkptId = startKeyToNumValuesStateStoreCkptId,
+          endStateStoreCkptId = endKeyToNumValuesStateStoreCkptId)
+
+      def getKeyWithIndexToValueHandlerOpts(): HandlerSnapshotOptions =
+        HandlerSnapshotOptions(
+          snapshotVersion = snapshotVersion,
+          endVersion = endVersion,
+          startStateStoreCkptId = startKeyWithIndexToValueStateStoreCkptId,
+          endStateStoreCkptId = endKeyWithIndexToValueStateStoreCkptId)
+    }
+
+/** Snapshot options specialized for a single state store handler. */
+case class HandlerSnapshotOptions(
+    snapshotVersion: Long,
+    endVersion: Long,
+    startStateStoreCkptId: Option[String],
+    endStateStoreCkptId: Option[String])

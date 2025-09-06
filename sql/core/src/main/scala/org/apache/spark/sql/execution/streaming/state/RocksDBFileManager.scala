@@ -42,7 +42,6 @@ import org.apache.spark.internal.LogKeys.{DFS_FILE, VERSION_NUM}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -1032,7 +1031,7 @@ case class RocksDBCheckpointMetadata(
 
 /** Helper class for [[RocksDBCheckpointMetadata]] */
 object RocksDBCheckpointMetadata {
-  val VERSION = SQLConf.get.stateStoreCheckpointFormatVersion
+  val VERSION = 1
 
   implicit val format: Formats = Serialization.formats(NoTypeHints)
 

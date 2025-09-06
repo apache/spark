@@ -975,7 +975,16 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
    * @return [[HDFSBackedStateStore]]
    */
   override def replayStateFromSnapshot(
-      snapshotVersion: Long, endVersion: Long, readOnly: Boolean): StateStore = {
+      snapshotVersion: Long,
+      endVersion: Long,
+      readOnly: Boolean,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None): StateStore = {
+    if (snapshotVersionStateStoreCkptId.isDefined || endVersionStateStoreCkptId.isDefined) {
+      throw StateStoreErrors.stateStoreCheckpointIdsNotSupported(
+        "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1 " +
+        "but a state store checkpointID is passed in")
+    }
     val newMap = replayLoadedMapFromSnapshot(snapshotVersion, endVersion)
     logInfo(log"Retrieved snapshot at version " +
       log"${MDC(LogKeys.STATE_STORE_VERSION, snapshotVersion)} and apply delta files to version " +
@@ -992,8 +1001,17 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
    * @param endVersion   checkpoint version to end with
    * @return [[HDFSBackedReadStateStore]]
    */
-  override def replayReadStateFromSnapshot(snapshotVersion: Long, endVersion: Long):
+  override def replayReadStateFromSnapshot(
+      snapshotVersion: Long,
+      endVersion: Long,
+      snapshotVersionStateStoreCkptId: Option[String] = None,
+      endVersionStateStoreCkptId: Option[String] = None):
     ReadStateStore = {
+    if (snapshotVersionStateStoreCkptId.isDefined || endVersionStateStoreCkptId.isDefined) {
+      throw StateStoreErrors.stateStoreCheckpointIdsNotSupported(
+        "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1 " +
+        "but a state store checkpointID is passed in")
+    }
     val newMap = replayLoadedMapFromSnapshot(snapshotVersion, endVersion)
     logInfo(log"Retrieved snapshot at version " +
       log"${MDC(LogKeys.STATE_STORE_VERSION, snapshotVersion)} and apply delta files to version " +
