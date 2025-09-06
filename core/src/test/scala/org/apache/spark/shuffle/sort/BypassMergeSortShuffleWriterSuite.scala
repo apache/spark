@@ -22,6 +22,7 @@ import java.util.UUID
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Random
 
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
@@ -74,8 +75,7 @@ class BypassMergeSortShuffleWriterSuite
     )
     val memoryManager = new TestMemoryManager(conf)
     val taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
-    when(dependency.partitioner).thenReturn(new HashPartitioner(7))
-    when(dependency.serializer).thenReturn(new JavaSerializer(conf))
+    resetDependency(conf, rowBasedChecksumEnabled = false)
     when(taskContext.taskMetrics()).thenReturn(taskMetrics)
     when(blockResolver.getDataFile(0, 0)).thenReturn(outputFile)
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)
@@ -143,6 +143,20 @@ class BypassMergeSortShuffleWriterSuite
     } finally {
       super.afterEach()
     }
+  }
+
+  private def resetDependency(sc: SparkConf, rowBasedChecksumEnabled: Boolean): Unit = {
+    reset(dependency)
+    val numPartitions = 7
+    when(dependency.partitioner).thenReturn(new HashPartitioner(numPartitions))
+    when(dependency.serializer).thenReturn(new JavaSerializer(sc))
+    val checksumSize = if (rowBasedChecksumEnabled) {
+      numPartitions
+    } else {
+      0
+    }
+    val rowBasedChecksums = createPartitionRowBasedChecksums(checksumSize)
+    when(dependency.rowBasedChecksums).thenReturn(rowBasedChecksums)
   }
 
   test("write empty iterator") {
@@ -293,5 +307,45 @@ class BypassMergeSortShuffleWriterSuite
     assert(checksumFile.exists())
     assert(checksumFile.length() === 8 * numPartition)
     compareChecksums(numPartition, checksumAlgorithm, checksumFile, dataFile, indexFile)
+  }
+
+  test("Row-based checksums are independent of input row order") {
+    val records: List[(Int, Int)] = List(
+      (1, 1), (1, 2), (1, 3), (1, 4), (1, 5),
+      (2, 2), (2, 3), (2, 4), (2, 5), (2, 6),
+      (3, 3), (3, 4), (3, 5), (3, 6), (3, 7),
+      (4, 4), (4, 5), (4, 6), (4, 7), (4, 8),
+      (5, 5), (5, 6), (5, 7), (5, 8), (5, 9),
+      (6, 6), (6, 7), (6, 8), (6, 9), (6, 10),
+      (7, 7), (7, 8), (7, 9), (7, 10), (7, 11))
+
+    var checksumValues : Array[Long] = Array[Long]()
+    var aggregatedChecksumValue = 0L
+    for (i <- 1 to 100) {
+      resetDependency(conf, rowBasedChecksumEnabled = true)
+      val writer = new BypassMergeSortShuffleWriter[Int, Int](
+        blockManager,
+        shuffleHandle,
+        0L, // MapId
+        conf,
+        taskContext.taskMetrics().shuffleWriteMetrics,
+        shuffleExecutorComponents)
+
+      writer.write(Random.shuffle(records).iterator)
+      writer.stop(/* success = */ true)
+
+      if(i == 1) {
+        checksumValues = getRowBasedChecksumValues(writer.getRowBasedChecksums)
+        assert(checksumValues.length > 0)
+        assert(checksumValues.forall(_ > 0))
+
+        aggregatedChecksumValue = writer.getAggregatedChecksumValue()
+        assert(aggregatedChecksumValue != 0)
+      } else {
+        assert(checksumValues.sameElements(
+          getRowBasedChecksumValues(writer.getRowBasedChecksums)))
+        assert(aggregatedChecksumValue == writer.getAggregatedChecksumValue())
+      }
+    }
   }
 }

@@ -1166,7 +1166,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       stageId: Int,
       attemptIdx: Int,
       numShufflePartitions: Int,
-      hostNames: Seq[String] = Seq.empty[String]): Unit = {
+      hostNames: Seq[String] = Seq.empty[String],
+      checksumVal: Long = 0): Unit = {
     def compareStageAttempt(taskSet: TaskSet): Boolean = {
       taskSet.stageId == stageId && taskSet.stageAttemptId == attemptIdx
     }
@@ -1181,7 +1182,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         } else {
           s"host${('A' + idx).toChar}"
         }
-        (Success, makeMapStatus(hostName, numShufflePartitions))
+        (Success, makeMapStatus(hostName, numShufflePartitions, checksumVal = checksumVal))
     }.toSeq)
   }
 
@@ -4852,6 +4853,44 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(mapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
   }
 
+  /**
+   * In this test, we simulate a job where some tasks in a stage fail, and it triggers the retry
+   * of the task in its previous stage. The two attempts of the same task in the previous stage
+   * produce different shuffle checksums.
+   */
+  test("Tasks that produce different checksum across retries") {
+    setupStageAbortTest(sc)
+
+    val parts = 8
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, (0 until parts).toArray)
+
+    // Complete stage 0 and then fail stage 1, and tasks in stage 0 produce a checksum of 100.
+    completeShuffleMapStageSuccessfully(0, 0, numShufflePartitions = parts, checksumVal = 100)
+    completeNextStageWithFetchFailure(1, 0, shuffleDep)
+
+    // Resubmit and confirm that now all is well.
+    scheduler.resubmitFailedStages()
+    assert(scheduler.runningStages.nonEmpty)
+    assert(!ended)
+
+    // Complete stage 0 and then stage 1, and the retried task in stage 0 produces a different
+    // checksum of 200.
+    completeShuffleMapStageSuccessfully(0, 1, numShufflePartitions = parts, checksumVal = 200)
+    completeNextResultStageWithSuccess(1, 1)
+
+    // Confirm job finished successfully.
+    sc.listenerBus.waitUntilEmpty()
+    assert(ended)
+    assert(results == (0 until parts).map { idx => idx -> 42 }.toMap)
+    assert(
+      mapOutputTracker.shuffleStatuses(shuffleDep.shuffleId).checksumMismatchIndices.size == 1)
+    assertDataStructuresEmpty()
+    mapOutputTracker.unregisterShuffle(shuffleDep.shuffleId)
+  }
+
   Seq(true, false).foreach { registerMergeResults =>
     test("SPARK-40096: Send finalize events even if shuffle merger blocks indefinitely " +
       s"with registerMergeResults is ${registerMergeResults}") {
@@ -5245,8 +5284,13 @@ class DAGSchedulerAbortStageOffSuite extends DAGSchedulerSuite {
 object DAGSchedulerSuite {
   val mergerLocs = ArrayBuffer[BlockManagerId]()
 
-  def makeMapStatus(host: String, reduces: Int, sizes: Byte = 2, mapTaskId: Long = -1): MapStatus =
-    MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes), mapTaskId)
+  def makeMapStatus(
+      host: String,
+      reduces: Int,
+      sizes: Byte = 2,
+      mapTaskId: Long = -1,
+      checksumVal: Long = 0): MapStatus =
+    MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes), mapTaskId, checksumVal)
 
   def makeBlockManagerId(host: String, execId: Option[String] = None): BlockManagerId = {
     BlockManagerId(execId.getOrElse(host + "-exec"), host, 12345)
