@@ -199,6 +199,22 @@ object SQLExecution extends Logging {
                   }
                 }
               }
+
+              // Cancel all spark jobs associated with this executionID, but only if it's the
+              // root execution.
+
+              // TODO: Consider enhancing this logic to cancel jobs earlier when nested
+              // query executions are completed.
+              if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == executionId.toString) {
+                sparkSession.sparkContext.cancelJobsWithTag(
+                  executionIdJobTag(sparkSession, executionId))
+                logWarning("the executionID is " + executionId.toString + "" +
+                  " and the SQLExecution is " + this + "" +
+                  " queyexecution is " + queryExecution + " " +
+                  "and sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) is" +
+                  " " + sc.getLocalProperty(EXECUTION_ROOT_ID_KEY))
+              }
+
               val event = SparkListenerSQLExecutionEnd(
                 executionId,
                 System.currentTimeMillis(),

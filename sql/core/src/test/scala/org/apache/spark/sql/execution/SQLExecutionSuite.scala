@@ -54,7 +54,7 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
     val spark = SparkSession.builder()
       .master("local[*]")
       .appName("test")
-      .getOrCreate()
+      .create()
 
     import spark.implicits._
     try {
