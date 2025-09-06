@@ -313,6 +313,8 @@ private case class PostgresDialect()
   }
 
   class PostgresSQLBuilder extends JDBCSQLBuilder {
+    override protected def translateBooleanLiteralsAsComparison: Boolean = false
+
     override def visitExtract(field: String, source: String): String = {
       // SECOND, MINUTE, HOUR, DAY, MONTH, QUARTER, YEAR are identical on postgres and spark for
       // both datetime and interval types.

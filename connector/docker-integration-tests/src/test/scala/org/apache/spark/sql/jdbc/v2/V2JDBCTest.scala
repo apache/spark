@@ -17,16 +17,21 @@
 
 package org.apache.spark.sql.jdbc.v2
 
+import java.util.Locale
+
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.connector.DataSourcePushdownTestUtils
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.NullOrdering
+import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -45,6 +50,17 @@ private[v2] trait V2JDBCTest
 
   private def catalogAndNamespace =
     namespaceOpt.map(namespace => s"$catalogName.$namespace").getOrElse(catalogName)
+
+  def getExternalEngineQuery(executedPlan: SparkPlan): String = {
+    getExternalEngineRdd(executedPlan).asInstanceOf[JDBCRDD].getExternalEngineQuery
+  }
+
+  def getExternalEngineRdd(executedPlan: SparkPlan): RDD[InternalRow] = {
+    val queryNode = executedPlan.collect { case r: RowDataSourceScanExec =>
+      r
+    }.head
+    queryNode.rdd
+  }
 
   // dialect specific update column type test
   def testUpdateColumnType(tbl: String): Unit
@@ -1280,5 +1296,50 @@ private[v2] trait V2JDBCTest
       }
       assert(e.getCondition !== "FAILED_JDBC.TABLE_EXISTS")
     }
+  }
+
+  val alwaysTrueFalseTestCases = Seq(("true", "1=1"), ("false", "1=0"))
+
+  protected def dialectTranslatesBooleanLiteralsAsComparison: Boolean
+
+  gridTest("Test literal pushdown")(alwaysTrueFalseTestCases) {
+    case (condition, expected) =>
+      import org.apache.spark.sql._
+      val rows: Seq[Row] = withSQLConf(
+        "spark.databricks.connector.jdbcTranslateAlwaysTrueFalseToComparissonExpression" -> "false"
+      ) {
+        val df = spark.sql(
+          s"""
+             |SELECT *
+             |FROM $catalogAndNamespace
+             |WHERE $condition
+             |""".stripMargin)
+
+        df.collect().toIndexedSeq
+      }
+
+      withSQLConf(
+        (SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.PruneFilters"),
+        (SQLConf.LEGACY_JDBC_CONNECTOR_BOOLEAN_LITERAL_TRANSLATION.key ->
+          "true")
+      ) {
+        val df = sql(
+          s"""
+             |SELECT *
+             |FROM $catalogAndNamespace
+             |WHERE $condition
+             |""".stripMargin)
+
+        val sqlText = getExternalEngineQuery(df.queryExecution.sparkPlan)
+
+        if (dialectTranslatesBooleanLiteralsAsComparison) {
+          assert(sqlText.toLowerCase(Locale.ROOT).contains(s"where ($expected)"))
+        } else {
+          assert(sqlText.toLowerCase(Locale.ROOT).contains(s"where ($condition)"))
+        }
+
+        checkAnswer(df, rows)
+      }
   }
 }

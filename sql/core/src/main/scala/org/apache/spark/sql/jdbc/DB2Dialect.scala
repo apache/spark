@@ -52,6 +52,7 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
   }
 
   class DB2SQLBuilder extends JDBCSQLBuilder {
+    override protected def translateBooleanLiteralsAsComparison = false
 
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =

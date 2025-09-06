@@ -20,11 +20,7 @@ package org.apache.spark.sql.jdbc.v2
 import java.sql.Connection
 
 import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.MsSQLServerDatabaseOnDocker
 import org.apache.spark.sql.types._
@@ -44,17 +40,6 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
   object JdbcClientTypes {
     val INTEGER = "int"
     val STRING = "nvarchar"
-  }
-
-  def getExternalEngineQuery(executedPlan: SparkPlan): String = {
-    getExternalEngineRdd(executedPlan).asInstanceOf[JDBCRDD].getExternalEngineQuery
-  }
-
-  def getExternalEngineRdd(executedPlan: SparkPlan): RDD[InternalRow] = {
-    val queryNode = executedPlan.collect { case r: RowDataSourceScanExec =>
-      r
-    }.head
-    queryNode.rdd
   }
 
   // Following tests are disabled for both single and multiple partition read
@@ -166,6 +151,8 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
       },
       condition = "UNSUPPORTED_FEATURE.UPDATE_COLUMN_NULLABILITY")
   }
+
+  override def dialectTranslatesBooleanLiteralsAsComparison: Boolean = true
 
   test("SPARK-47440: SQLServer does not support boolean expression in binary comparison") {
     val df1 = sql("SELECT name FROM " +
