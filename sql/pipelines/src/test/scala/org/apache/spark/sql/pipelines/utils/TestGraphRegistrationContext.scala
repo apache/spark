@@ -41,10 +41,12 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 class TestGraphRegistrationContext(
     val spark: SparkSession,
-    val sqlConf: Map[String, String] = Map.empty)
+    val sqlConf: Map[String, String] = Map.empty,
+    val catalog: String = TestGraphRegistrationContext.DEFAULT_CATALOG,
+    val database: String = TestGraphRegistrationContext.DEFAULT_DATABASE)
     extends GraphRegistrationContext(
-      defaultCatalog = TestGraphRegistrationContext.DEFAULT_CATALOG,
-      defaultDatabase = TestGraphRegistrationContext.DEFAULT_DATABASE,
+      defaultCatalog = catalog,
+      defaultDatabase = database,
       defaultSqlConf = sqlConf
     ) {
 
